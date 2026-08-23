@@ -1,7 +1,11 @@
 # RFC 0002 amendment A9: `kind` has no unknown form
 
-- **Status:** Accepted, staged. Stages 0 and 1 are implemented; stage 2 is gated
-  on stage 0's measurement and is not implemented.
+- **Status:** Accepted, staged. Stages 0 and 1 are implemented **and measured**
+  (2026-08-24, 416 rows, checker `ddb0ecd8…`). **Stage 2's gate is now closed
+  against it: measured payoff 0 rows, so it must not be built** — see
+  "[Re-measurement plan](#re-measurement-plan)" for the measured outcome beside
+  each prediction, and
+  [docs/ecosystem-benchmark.md](../ecosystem-benchmark.md) for the run.
 - **Date:** 2026-08-23
 - **Amends:** [RFC 0002](0002-machine-verified-contracts.md) §"Claim taxonomy",
   amendment A1, and unresolved questions 2 and 5
@@ -557,16 +561,22 @@ bounded by the rows without that overlap. All three are the conservative
 direction, and all three keep the corpus's `probe-failed`, `incompleteness` and
 `closure-note` root-cause counts comparable across the re-measure.
 
-### Stage 2 — narrow on observed absence (option C, restricted) — gated on stage 0
+### Stage 2 — narrow on observed absence (option C, restricted) — gate closed, do not build
 
-**Not implemented, and not to be implemented until stage 0's numbers are read.**
-Exclude, from the modes a `kind` claim must be observed in, exactly those modes
-whose probe outcome for that `(entrypoint, export)` was `export-missing`. Record
-the exclusion in the verify sidecar per claim, so a reader sees *"not required in
-`server`: the export is not in that namespace"* rather than a silently smaller
-mode set. Payoff: whatever stage 0 measures, bounded by 43. The gate is not
-ceremony: if stage 0 shows the server-only gaps are session deaths rather than
-absences, stage 2 buys nothing and must not be built.
+**Not implemented, and — as of the 2026-08-24 re-measurement — not to be
+implemented at all.** The design was: exclude, from the modes a `kind` claim must
+be observed in, exactly those modes whose probe outcome for that
+`(entrypoint, export)` was `export-missing`, recording the exclusion in the verify
+sidecar per claim so a reader sees *"not required in `server`: the export is not
+in that namespace"* rather than a silently smaller mode set. Payoff: whatever
+stage 0 measures, bounded by 43.
+
+The gate was not ceremony, and it fired. Stage 0's numbers say the gaps are
+overwhelmingly import failures and session deaths: **45 of 6,962 gap
+(claim, mode) pairs are absences, 0 of the 64 rows this stage exists to serve
+carries even one**, and the three rows that do carry an absence have an
+independent `probe-failed` blocker. Measured payoff **0 rows**. See
+"[Stage 2's gate, closed](#stage-2s-gate-closed)".
 
 Its one implementation prerequisite: the driver needs to surface the *outcome*
 (not only the English reason) on the claim record, so the verifier can branch on
@@ -692,9 +702,85 @@ no analyzer behavior, so no findings snapshot and no ownership-gate case moves.
 
 ## Re-measurement plan
 
-Re-run `verify-corpus.mjs` over the same 416 rows with the same pinned binaries,
-and report the honest directions alongside the flattering one. Stage 1's payoff
-is a *prediction* until that run: nothing in this document measured it.
+The plan, as written before the run: re-run `verify-corpus.mjs` over the same 416
+rows with the same pinned binaries, and report the honest directions alongside the
+flattering one. Stage 1's payoff was a *prediction* until that run — nothing
+elsewhere in this document measured it. **That run has since happened; its results
+are the next subsection, and each prediction below is answered there.**
+
+### Measured outcome (2026-08-24, 416 rows, checker `ddb0ecd8…`)
+
+The run happened. Baseline was the 2026-08-24 export-kind-proof state
+(267 verified / 129 refused / 24 failing claims / `kind-observed` root cause 74),
+against an engine **byte-identical** to it, so every movement is the verifier's.
+Each prediction below is answered in place; the full account is in
+[docs/ecosystem-benchmark.md](../ecosystem-benchmark.md).
+
+| Prediction | Measured | Verdict |
+| --- | --- | --- |
+| verified up, +10 at most from stage 1 | 267 → **275** (+8), nothing lost | held, under the bound |
+| entrypoints refused at verification: 0 → some | **30**, across 8 rows | held |
+| `kind-observed` root cause down, never to 0 | 74 → **64** | held |
+| the undriven `other` bucket → 0, all one class | **671 → 0**, all `probe session aborted by package code` | held; the *834* was stale, see below |
+| blocker lines classed `kind-observed` down, unattributable | 322 → **160** | held; read the row count (88 → 68) |
+| failing claims must NOT move: 24, of which 13 `kind` | **24, of which 13 `kind`**, same five shapes | held |
+| `incompleteness` and `probe-failed` root causes must not move | **38** and **15** | held |
+| the `kind-observed` co-blocker rows must stay refused | all **14** still refused | held |
+| per surviving row, no document may certify more | 267 surviving rows: conversions, `probedRows`, promoted exports and `verificationRefusedEntrypoints` **identical on every one** | held |
+| `verificationRefusedEntrypoints` on a previously verified row: 0 | **0** on all 267 | held |
+| publish once: how many newly verified rows carry a probed behavioral row | **0 of 8**; corpus stays 3 of 275 | the answer is the bad one |
+
+Three things this document got wrong or under-specified, recorded because the
+point of a re-measurement is to catch them:
+
+- **The 834 was stale.** The undriven `other` bucket was 834 in the journal this
+  document was written against, but **671** in the state stage 1 actually
+  baselines on — the export-kind proof shrank the claim plan in between. It
+  resolved 671 → 0, entirely to `probe session aborted by package code`, which is
+  the predicted *shape* at a corrected magnitude. Re-bucketing the baseline
+  journal reproduces the same 671, so the classification is a property of the
+  rules rather than of the run.
+- **The stage-1 shortfall is fully explained, and this document named the cause
+  in advance.** Of the previous state's 74 kind-rooted refusals, 18 were
+  multi-entrypoint: **8 converted**, **8 had no surviving entrypoint at all**, and
+  **2 had a survivor but kept refusing on a closure note** —
+  `@solidjs/start@2.0.3` (12 entrypoints) and `@tanstack/charts@0.14.0` (110
+  entrypoints, 91 blocker lines, the row this document singled out). Their root
+  cause moved `kind-observed` → `closure-note`, which is the whole of that count's
+  2 → 4. The carve-out being correlated with the population is exactly what
+  "Payoff" predicted.
+- **The 29 co-blocker rows were 14 by the time stage 1 ran.** The count came from
+  the 77-row state; the export-kind proof had already removed half of them. All 14
+  still refuse, which is what the invariant was actually testing.
+
+### Stage 2's gate, closed
+
+**Measured payoff: 0 rows. Stage 2 must not be built**, on this document's own
+gate condition — *"if stage 0 shows the server-only gaps are session deaths
+rather than absences, stage 2 buys nothing and must not be built."*
+
+Of **6,962 gap (claim, mode) pairs** across 84 rows, only **45 (0.65%)** are the
+`export-missing` observation of absence stage 2 would narrow on. The rest are
+import throws (3,878), sessions aborted by package code (2,629), sessions that
+wrote no report (328), and unresolvable summary sets (82). Sharper still:
+
+- **3 rows of 84** carry any `export-missing` gap, and in none of the three is it
+  the only gap reason, so excluding the absences would promote none of them.
+- All three (`solid-js@1.9.14` and both `@solidjs/web@2.0.0-rc.1` probes) are
+  root-caused **`probe-failed`** — an independent blocker no option here may
+  absorb — so they are outside the addressable population by definition.
+- Against the **64 rows root-caused `kind-observed`**, the population stage 2
+  exists for: **zero** carry a single `export-missing` pair.
+
+The bound this document set was "at most 43 rows, and the report cannot tell us
+how much of the 43 is real." The answer is none of it. The gaps really are import
+failures and session deaths, and the one narrowing this amendment could defend
+has almost nothing in the corpus to narrow.
+
+Separately, the contradiction separation held exactly as required: **7 rows, 13
+claims, 52 (claim, mode) pairs**, and that 13 is the same 13 as the failing-claim
+total's wrong-`kind` count — no contradiction leaked into a gap table, and no gap
+was counted as a contradiction.
 
 **Should go UP**
 
@@ -757,11 +843,19 @@ question 1's own stated risk.
   absent from a present entrypoint raises `SC9005` at the consumer or resolves
   silently to no summary.
 - **A package the probe cannot import at all remains unverifiable**, which is
-  A1's deliberate consequence and is unchanged: 34 all-mode refusals, plus
-  whichever of the remaining 43 stage 0 shows to be gaps rather than absences.
-  `contract review` is where an unimportable package belongs.
+  A1's deliberate consequence and is unchanged. Measured 2026-08-24: **the
+  remaining 43 are gaps, not absences** — so this is the whole population rather
+  than a part of it, and 64 rows stay refused on `kind-observed` with no stage
+  left that could reach them. `contract review` is where an unimportable package
+  belongs.
 - **A closure note still refuses the document**, including on an entrypoint
-  stage 1 would otherwise refuse on its own, so some of the 10 may not convert.
-- **The two generator defects behind the 53 failing `kind` claims** are
-  unaddressed here, and one of them is publishing a maximal certified negative
-  for callback-taking functions right now.
+  stage 1 would otherwise refuse on its own. Measured: it cost exactly **2 of the
+  10** candidate rows — `@solidjs/start@2.0.3` and `@tanstack/charts@0.14.0`.
+- **The generator defects behind the failing `kind` claims** are unaddressed here.
+  The 53 have since been reconciled to **13** by the export-kind proof pass (25
+  corrected, 15 withdrawn with a refused entrypoint), and those 13 are still
+  wrong: one family, a binding whose type is a class reached only through a value
+  expression, needing a constructability fact from the Type Facts producer. The
+  `@solid-devtools/locator` case that published a maximal certified negative for
+  callback-taking functions is among the 15 whose entrypoint generation now
+  refuses outright.

@@ -942,11 +942,15 @@ the numbers are a measurement of*, and each is recorded in the report's
 wall budget is its own outcome class and is counted as neither verified nor
 refused. So is a row for which no Solid runtime can honestly be chosen.
 
-### Measured state (2026-08-24, export-kind proof pass, full corpus, 416 probe rows)
+### Measured state (2026-08-24, A9 stage 1 — per-entrypoint `kind` refusal, full corpus, 416 probe rows)
 
 Binaries were **copied out of the repository before the run and used from the
 copies**, so a concurrent rebuild could not change the engine mid-measurement.
-The hash is the identity these numbers belong to:
+The hash is the identity these numbers belong to — and it is **the same hash as
+the export-kind proof state below**, deliberately: this change set is
+verifier-side and probe-report-side JavaScript only, so the analysis engine is
+byte-identical and every movement here is attributable to the verifier rather
+than shared between it and a new engine:
 
 - native `solid-checker-rust`
   `ddb0ecd860d4c77f50d1d6c7a0af003bc3adb34ff46a0fcee81715c84ac574b1`
@@ -958,40 +962,129 @@ The hash is the identity these numbers belong to:
 Budgets: install 240 s, generate 120 s, probe 20 s per condition mode and
 90 s + 500 ms per planned claim (cap 900 s) for the whole phase, verify 90 s;
 concurrency 6. No subsetting — every one of the manifest's 416 probe rows ran.
-Wall clock 6 m 54 s.
+Wall clock 7 m 08 s.
 
-**This supersedes the 2026-08-23 render-edge state**, which supersedes the
-execution-kind one, which supersedes the probe-environment one, which supersedes
-2026-08-22; all are kept as labelled columns because the movement between them is
-the result. The third column is the state the previous change set left behind and
-the one the checked-in reports carried until this run:
+**This supersedes the 2026-08-24 export-kind proof state**, which supersedes the
+render-edge one, which supersedes the execution-kind one, which supersedes the
+probe-environment one, which supersedes 2026-08-22; all are kept as labelled
+columns because the movement between them is the result. The fourth column is the
+state the previous change set left behind and the one the checked-in reports
+carried until this run:
 
-| Figure | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds + render edges) | 2026-08-24 (export-kind proof, current) |
+| Figure | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds + render edges) | 2026-08-24 (export-kind proof) | 2026-08-24 (A9 stage 1, current) |
+| --- | --- | --- | --- | --- | --- |
+| Probe rows run | 416 | 416 | 416 | 416 | 416 |
+| Reached a generated contract | 409/416 (98.32%) | 409/416 (98.32%) | 409/416 (98.32%) | 398/416 (95.67%) | **398/416 (95.67%)** |
+| **Reached `verified`** | **194/416 (46.63%)** | **222/416 (53.37%)** | **261/416 (62.74%)** | **267/416 (64.18%)** | **275/416 (66.11%)** |
+| Reached `verified`, of the rows that produced a contract | 194/409 (47.43%) | 222/409 (54.28%) | 261/409 (63.81%) | 267/398 (67.09%) | **275/398 (69.10%)** |
+| Refused by `contract verify` | 210/416 (50.48%) | 185/416 (44.47%) | 146/416 (35.10%) | 129/416 (31.01%) | **121/416 (29.09%)** |
+| Claims planned | 11,444 | 13,206 | 12,948 | 12,509 | **12,509** |
+| Claims driven | 6,039 (52.77%) | 7,809 (59.13%) | 7,647 (59.06%) | 7,504 (59.99%) | **7,504 (59.99%)** |
+| Claims that passed | 5,686 | 7,591 | 7,584 | 7,480 | **7,480** |
+| Claims that failed | 353 | 218 | 63 | 24 | **24** |
+| — of which a wrong `callbacks[].execution` | not measured | 159 | 10 | 11 | **11** |
+| — of which a wrong `kind` | 53 | 53 | 53 | 13 | **13** |
+| Incompleteness findings | 1,091 | 1,080 | 734 | 594 | **594** |
+| Exports certified by a verified contract | 449 | 752 | 1,018 | 890 | **929** |
+| Entrypoints refused by *verification* inside a promoted document | 0 | 0 | 0 | 0 | **30, across 8 rows** |
+| Verified rows carrying a probed behavioral row | 6 | 15 | 3 | 3 | **3** |
+| Probed behavioral row markers kept | 12 | 25 | 3 | 3 | **3** |
+| Probe timeouts | 3 | 0 | 0 | 0 | **0** |
+| Never reached verification | 3 install, 4 generation, 2 probe errors, 3 timeouts | 3 install, 4 generation, 2 no-runtime, 0 timeouts | 3 install, 4 generation, 2 no-runtime, 0 timeouts | 3 install, 15 generation, 2 no-runtime, 0 timeouts | **3 install, 15 generation, 2 no-runtime, 0 timeouts** |
+
+Solid 1.x verifies at 105/168 (62.50%) and Solid 2.x at 170/248 (68.55%),
+against 58.93% and 67.74% in the previous state, 58.33% and 65.73% before that,
+49.40% and 56.05% before that, and 41.67% and 50.00% in the first.
+
+**Every claim figure in that column is unchanged to the claim, and that is the
+first thing to read.** Claims planned, driven, passed, failed, undriven and the
+incompleteness findings are identical to the previous state — 12,509 / 7,504 /
+7,480 / 24 / 5,005 / 594 — as are the session counts (17,336 started, 15,796
+restarts, 63 failed) and the whole probe environment. Nothing was observed
+differently. What changed is what verification does with the same observations:
+where an unobserved `kind` used to refuse the document, it now refuses the
+*entrypoint*, and the document only when nothing would certify anything.
+
+**Eight rows moved `refused → verified`, nothing moved the other way, and no
+other outcome class moved at all.** 3 install failures, 15 generation failures,
+2 `no-runtime` and 0 timeouts, probe-for-probe identical. The measured payoff is
+therefore **+8 of the design-time upper bound of 10** — the bound A9 stage 1
+predicted against the 77-row state, and the shortfall is the correlated
+carve-out the amendment named rather than a surprise: see "The eight, and the two
+the carve-outs kept" below.
+
+#### The eight, and the two the carve-outs kept
+
+Every one of the eight is a **multi-entrypoint package with at least one
+entrypoint the probe could import**, and the mechanism was read back from each
+row's own refusal list rather than inferred. The `kind`-refused entrypoints and
+the promoted document's export count are both recorded per row, so the two
+numbers together say the document is smaller than the draft:
+
+| Row | Draft entrypoints | Verification refused | Promoted exports (of draft) | What survived |
 | --- | --- | --- | --- | --- |
-| Probe rows run | 416 | 416 | 416 | 416 |
-| Reached a generated contract | 409/416 (98.32%) | 409/416 (98.32%) | 409/416 (98.32%) | **398/416 (95.67%)** |
-| **Reached `verified`** | **194/416 (46.63%)** | **222/416 (53.37%)** | **261/416 (62.74%)** | **267/416 (64.18%)** |
-| Reached `verified`, of the rows that produced a contract | 194/409 (47.43%) | 222/409 (54.28%) | 261/409 (63.81%) | **267/398 (67.09%)** |
-| Refused by `contract verify` | 210/416 (50.48%) | 185/416 (44.47%) | 146/416 (35.10%) | **129/416 (31.01%)** |
-| Claims planned | 11,444 | 13,206 | 12,948 | **12,509** |
-| Claims driven | 6,039 (52.77%) | 7,809 (59.13%) | 7,647 (59.06%) | **7,504 (59.99%)** |
-| Claims that passed | 5,686 | 7,591 | 7,584 | **7,480** |
-| Claims that failed | 353 | 218 | 63 | **24** |
-| — of which a wrong `callbacks[].execution` | not measured | 159 | 10 | **11** |
-| — of which a wrong `kind` | 53 | 53 | 53 | **13** |
-| Incompleteness findings | 1,091 | 1,080 | 734 | **594** |
-| Exports certified by a verified contract | 449 | 752 | 1,018 | **890** |
-| Verified rows carrying a probed behavioral row | 6 | 15 | 3 | **3** |
-| Probed behavioral row markers kept | 12 | 25 | 3 | **3** |
-| Probe timeouts | 3 | 0 | 0 | **0** |
-| Never reached verification | 3 install, 4 generation, 2 probe errors, 3 timeouts | 3 install, 4 generation, 2 no-runtime, 0 timeouts | 3 install, 4 generation, 2 no-runtime, 0 timeouts | **3 install, 15 generation, 2 no-runtime, 0 timeouts** |
+| `@solidjs/image@0.1.0` (1.x) | 2 | 1 (`.`, on `SolidImage` in all four modes) | 1 / 2 | the non-`.` subpath |
+| `@solid-devtools/debugger@0.28.1` (1.x) | 4 | 3 (`.`, `./bundled`, `./index`, 19 exports each) | 5 / 62 | one subpath of four |
+| `@solid-devtools/ui@0.10.3` (1.x) | 3 | 2 (`.` 12 exports, `./icons` 3, all `server`-only gaps) | 2 / 17 | one subpath of three |
+| `@tanstack/devtools-ui@0.7.1` (1.x) | 3 | 2 (`.` 25 exports, `./icons` 21, `server`-only) | 8 / 54 | one subpath of three |
+| `@tanstack/devtools-utils@0.7.0` (1.x) | 7 | 4 (`./preact`, `./react`, `./svelte`, `./vue`, 2 exports each, all four modes) | 7 / 15 | the three non-framework subpaths |
+| `@tanstack/solid-start@2.0.0-rc.1` (2.x floor) | 10 | 7 (incl. `.` 36 exports and `./server` 39) | 3 / 91 | three subpaths of ten |
+| `@tanstack/solid-start@2.0.0-rc.1` (2.x head) | 10 | 7 (same set) | 3 / 91 | three subpaths of ten |
+| `corvu@0.7.2` (1.x) | 9 | 4 (`./otp-field`, `./popover`, `./resizable`, `./tooltip`, `server`-only) | 43 / 74 | five subpaths of nine |
 
-Solid 1.x verifies at 99/168 (58.93%) and Solid 2.x at 168/248 (67.74%), against
-58.33% and 65.73% in the previous state, 49.40% and 56.05% before that, and
-41.67% and 50.00% in the first.
+**A9's own warning about what this buys is confirmed, not softened.** The
+amendment predicted that "the surviving half is the less behavioral half,"
+because by construction the entrypoints that survive are the ones the probe
+*could* import. Measured: the eight rows contribute **zero** probed behavioral
+rows — `probedRowsKept` stays at 3 corpus-wide, the same three
+`@tanstack/solid-query` rows as the previous four states — and only one of the
+eight (`corvu@0.7.2`, 11) contributes any conversion at all. Six of the eight
+promote a document with **fewer than nine exports**. These are `kind`-only
+negatives on narrow subpaths, which is exactly what the amendment said the count
+would be worth and why it argued the durable value is consistency rather than the
+number.
 
-**This is the first state whose headline gain is smaller than its gross
-movement, and the difference is the point.** Thirteen rows moved
+**Ten rows had a survivor; eight of them converted, and the two that did not are
+the correlated carve-out.** Of the 74 rows root-caused `kind-observed` in the
+previous state, 18 were multi-entrypoint, and they split three ways:
+
+- **8 converted** — every entrypoint that was not `kind`-blocked survived, and no
+  document-wide blocker stood beside it.
+- **8 had no survivor at all** — every entrypoint they declare was `kind`-blocked,
+  so the document still certifies nothing and still refuses:
+  `@solid-devtools/shared@0.20.0`, `@tanstack/solid-pacer-devtools@0.14.0`,
+  `@tanstack/solid-router` on both majors, `@tanstack/solid-start-client` on all
+  three of its rows, and `@tanstack/solid-start@1.168.46`.
+- **2 had a survivor and kept refusing anyway**, on a **closure note**:
+  `@solidjs/start@2.0.3` (12 entrypoints, 28 kind blocker lines) and
+  `@tanstack/charts@0.14.0` (110 entrypoints, 91). Their root cause moves
+  `kind-observed` → `closure-note`, which is the whole of the `closure-note`
+  root-cause movement 2 → **4**.
+
+That second carve-out is the one A9 said would subtract from the 10
+*correlated* with the population — "a package with dozens of entrypoints is
+exactly the kind most likely to also carry a closure note" — and it landed on
+precisely the two widest rows in the population, including the 91-blocker-line
+row the amendment named in advance. The prediction was not merely right in
+direction; it identified the two rows.
+
+**`kind-observed` as a root cause falls 74 → 64, and the arithmetic is
+closed**: 8 rows verified and 2 were reattributed to `closure-note`.
+`incompleteness` (38) and `probe-failed` (15) are unchanged, as are all 14
+baseline rows where `kind-observed` was a *co*-blocker rather than the root
+cause — every one still refuses, because each has an independent blocker that
+stage 1 deliberately leaves document-wide.
+
+**Read the blocker *rows*, not the blocker *lines*.** `kind-observed` lines fall
+322 → 160 and that number attributes to nothing on its own, exactly as the
+amendment warned: a refused document now raises one summary line *plus* one line
+per refused entrypoint, while a row leaving the refused set removes all of its
+lines. The row count (88 → 68) is the readable figure.
+
+#### The previous state (2026-08-24, export-kind proof) — history
+
+**That state was the first whose headline gain was smaller than its gross
+movement, and the difference was the point.** Thirteen rows moved
 `refused → verified`, seven moved `verified → generate-failure`, and the net is
 +6. Nothing moved `verified → refused`. Both directions are the same change:
 generation stopped publishing a `kind: "value"` summary it could not prove, which
@@ -1085,13 +1178,21 @@ mode, where both audited Solid releases resolve `node` to a build that re-runs
 nothing (1.9.14's `dist/server.js` has an empty `createEffect`; 2.0.0-rc's
 `flush()` is a no-op). In such a runtime `inline`, `tracked` and `deferred` are
 indistinguishable, so a *matching* observation was never evidence. Those markers
-were unearned. Losing them is the point; the residue — **3 of 267 verified rows
-carry any observed behavior at all**, against 3 of 261 and 15 of 222 — is the
-honest floor this measurement reports, and it is worse than the one the
-probe-environment state advertised. This change set did not move it in either
-direction: the same three rows keep the same three markers
+were unearned. Losing them is the point; the residue — **3 of 275 verified rows
+carry any observed behavior at all**, against 3 of 267, 3 of 261 and 15 of 222 —
+is the honest floor this measurement reports, and it is worse than the one the
+probe-environment state advertised. Neither that change set nor this one moved it
+in either direction: the same three rows keep the same three markers
 (`@tanstack/solid-query@5.101.4` and both `@tanstack/solid-query@6.0.0-rc.0`
-probes), so the ratio fell only because the denominator rose.
+probes), so the ratio fell only because the denominator rose — twice.
+
+**That floor is the answer to the question A9 said would decide whether this
+line of work matters.** The amendment asked to publish, once, how many of the
+newly verified contracts carry any probed behavioral row. Measured: **zero of
+eight.** It stays at 3 of 275 corpus-wide. So the honest conclusion is the one
+RFC 0002 unresolved question 1 stated as its own risk: machine verification is
+certifying negatives and `typeof`, and the human tier is still the useful one for
+positives.
 
 #### The staged decomposition (2026-08-23)
 
@@ -1226,29 +1327,35 @@ reader to assume a browser.
 
 ### Per family
 
-2026-08-24 export-kind proof pass, with the previous state's contract and
-verified counts beside each row:
+2026-08-24 A9 stage 1 pass, with the export-kind proof state's verified counts
+beside each row. Contract counts are unchanged from that state throughout —
+generation did not move — so only the verified/refused split does:
 
-| Family | Rows | Contracts (prev → now) | Verified (prev → now) | Refused (prev → now) | Root causes now |
-| --- | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 23 → 23 | 7 → 7 (30.43%) | 14 → 14 | `kind-observed` 6, `probe-failed` 4, `closure-note` 2, `incompleteness` 2 |
-| Kobalte | 6 | 4 → **3** | 1 → 1 (16.67%) | 3 → **2** | `incompleteness` 2 |
-| Solid Primitives | 289 | 288 → **281** | 221 → **220** (76.12%) | 67 → **61** | `kind-observed` 28, `incompleteness` 27, `probe-failed` 6 |
-| Corvu | 28 | 28 → 28 | 16 → **17** (60.71%) | 12 → **11** | `kind-observed` 9, `incompleteness` 2 |
-| TanStack | 52 | 50 → **48** | 13 → **17** (32.69%) | 37 → **31** | `kind-observed` 23, `probe-failed` 5, `incompleteness` 3 |
-| Solid Devtools | 12 | 10 → **9** | 2 → **3** (25.00%) | 8 → **6** | `kind-observed` 6 |
-| Solid Recharts | 3 | 3 → 3 | 0 → **1** (33.33%) | 3 → **2** | `kind-observed` 2 |
-| Motion for Solid | 3 | 3 → 3 | 1 → 1 (33.33%) | 2 → 2 | `incompleteness` 2 |
+| Family | Rows | Contracts | Verified (prev → now) | Refused (prev → now) | Root causes now | Entrypoints verification refused |
+| --- | --- | --- | --- | --- | --- | --- |
+| Official Solid | 23 | 23 | 7 → **8** (34.78%) | 14 → **13** | `kind-observed` 4, `probe-failed` 4, `closure-note` 3, `incompleteness` 2 | 1 |
+| Kobalte | 6 | 3 | 1 → 1 (16.67%) | 2 → 2 | `incompleteness` 2 | 0 |
+| Solid Primitives | 289 | 281 | 220 → 220 (76.12%) | 61 → 61 | `kind-observed` 28, `incompleteness` 27, `probe-failed` 6 | 0 |
+| Corvu | 28 | 28 | 17 → **18** (64.29%) | 11 → **10** | `kind-observed` 8, `incompleteness` 2 | 4 |
+| TanStack | 52 | 48 | 17 → **21** (40.38%) | 31 → **27** | `kind-observed` 18, `probe-failed` 5, `incompleteness` 3, `closure-note` 1 | 20 |
+| Solid Devtools | 12 | 9 | 3 → **5** (41.67%) | 6 → **4** | `kind-observed` 4 | 5 |
+| Solid Recharts | 3 | 3 | 1 → 1 (33.33%) | 2 → 2 | `kind-observed` 2 | 0 |
+| Motion for Solid | 3 | 3 | 1 → 1 (33.33%) | 2 → 2 | `incompleteness` 2 | 0 |
 
-TanStack moves the most this round — 13/52 to 17/52, the largest proportional gain
-in the corpus and the family the bundled-class shape is most concentrated in — and
-Solid Devtools and Solid Recharts each gain their first row in three states.
-Solid Primitives is the only family whose verified count *fell*, by one, and that
-is arithmetic rather than regression: it lost seven contracts to whole-package
-refusal, and every one of the seven was a verified row, while gaining six back on
-`map`, `set` and `trigger` — 221 − 7 + 6 = 220. `kind-observed` remains the binding constraint everywhere it was:
-across Official Solid, Solid Devtools and Solid Recharts it is still the root
-cause of 14 of their 22 refusals.
+**Four families gain and none loses**, which is what a change that only ever
+*removes* entrypoints from an otherwise-promotable document should look like.
+TanStack moves the most for the second state running — 17/52 to 21/52, and it
+also absorbs 20 of the corpus's 30 verification-refused entrypoints, because the
+per-framework and per-plugin subpath is a TanStack idiom. Solid Devtools nearly
+doubles, 3 → 5 of 9 contracts.
+
+**Solid Primitives does not move at all, and that is the corpus's own shape
+rather than a limitation.** It is the largest family, the cleanest, and 220 of
+its 281 contracts already verified — but its 28 remaining `kind-observed`
+refusals are single-entrypoint primitives, so there is no second entrypoint for
+stage 1 to keep. Nothing in the family gains an entrypoint refusal: 0 of 30. The
+small-single-purpose-package shape that makes it the best-verifying family is
+exactly the shape per-entrypoint granularity cannot help.
 
 ### Why verification refuses
 
@@ -1257,28 +1364,35 @@ row counts are the number of refused rows raising each blocker at least once:
 
 | Blocker (RFC 0002 §3) | Rows raising it | Blocker lines | Previous state (rows / lines) |
 | --- | --- | --- | --- |
-| `kind-observed` | 88 | 322 | 106 / 357 |
-| `probe-report-includes-evidence-write` | 50 | 50 | 63 / 63 |
-| `incompleteness` | 40 | 594 | 45 / 734 |
-| `probe-failed` | 15 | 24 | 27 / 63 |
-| `closure-note` | 7 | 31 | 7 / 32 |
+| `kind-observed` | **68** | **160** | 88 / 322 |
+| `probe-report-includes-evidence-write` | 50 | 50 | 50 / 50 |
+| `incompleteness` | 40 | 594 | 40 / 594 |
+| `probe-failed` | 15 | 24 | 15 / 24 |
+| `closure-note` | 7 | 31 | 7 / 31 |
 
 `probe-report-includes-evidence-write` is a **consequence, not a cause**:
 `contract probe --write` declines to write evidence once a probe failed or
 reported an incompleteness, so verification then sees passing claims that never
 reached the contract. Attributed to one root cause per row instead:
 
-| Root cause | Refused rows | Previous state | 2026-08-23 (probe env) | 2026-08-22 |
-| --- | --- | --- | --- | --- |
-| `kind-observed` | 74 | 77 | 71 | 82 |
-| `incompleteness` | 38 | 40 | 37 | 42 |
-| `probe-failed` | 15 | 27 | 75 | 84 |
-| `closure-note` | 2 | 2 | 2 | 2 |
+| Root cause | Refused rows | Previous state | 2026-08-24 (export-kind) | 2026-08-23 (probe env) | 2026-08-22 |
+| --- | --- | --- | --- | --- | --- |
+| `kind-observed` | **64** | 74 | 77 | 71 | 82 |
+| `incompleteness` | 38 | 38 | 40 | 37 | 42 |
+| `probe-failed` | 15 | 15 | 27 | 75 | 84 |
+| `closure-note` | **4** | 2 | 2 | 2 | 2 |
 
 **No row refused with the evidence-write blocker standing alone**, which is the
-check that the consequence really is one. `probe-failed` is now the smallest root
-cause by a wide margin — 84 → 75 → 27 → **15** across four states — and
-`kind-observed` remains the binding constraint on the corpus's rate.
+check that the consequence really is one. `probe-failed` holds at **15** — the
+smallest root cause by a wide margin, 84 → 75 → 27 → 15 → 15 across five states
+— and `kind-observed` remains the binding constraint on the corpus's rate even
+after this change set narrowed it, which is the honest reading of a −10.
+
+**`closure-note` rising 2 → 4 is not a regression and not new refusals.** Both
+new rows were already refused; their *worst* blocker changed, because stage 1
+scoped their `kind` refusals to the entrypoints and left the closure note
+standing document-wide. See "The eight, and the two the carve-outs kept" above:
+they are `@solidjs/start@2.0.3` and `@tanstack/charts@0.14.0`.
 
 Three blockers, in plain terms:
 
@@ -1294,39 +1408,96 @@ Three blockers, in plain terms:
   24 is named individually in the report with its export, claim, observed value
   and the modes it failed in, because "deferred in server only" and "deferred
   everywhere" are different findings.
-- **`kind-observed` (74 rows as root cause)** — `kind` is the one claim schema
+- **`kind-observed` (64 rows as root cause)** — `kind` is the one claim schema
   v1 has no unknown sentinel for, so verification requires a passing `kind`
-  observation in *every* mode an export is stated for. It has been the largest
-  cause in all four states (82 → 71 → 77 → **74**) and it moves only sideways:
-  this change set cleared it on three rows by making the unobservable `value`
-  either an observable `function` or a refusal, and the arithmetic ends within
-  three rows of where it started because the refused rows left the denominator.
+  observation in every mode an export is stated for, and since
+  [RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) stage 1 it
+  refuses the *entrypoint* rather than the document, which is refused only when
+  no entrypoint would certify anything. It has been the largest cause in all
+  five states (82 → 71 → 77 → 74 → **64**), and this is the first change set to
+  move it for the reason the rule is about: 8 rows verified on a surviving
+  entrypoint and 2 were reattributed to `closure-note`. It is still the binding
+  constraint, and A9's own condition holds — it fell but **not to zero**, which
+  is what would have meant gaps were being narrowed away rather than scoped.
 - **`incompleteness` (38 rows)** — discovery planted a callback where the
-  **The rule has since changed and these 74 rows are pre-change.**
-  [RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) scopes the
-  refusal to the *entrypoint* — the document is refused only when no entrypoint
-  survives — predicted at design time (against the 77-row state) to move at most
-  10 rows, the multi-entrypoint packages among them. The next run of this
-  harness is what measures it, and it carries two new fields for reading the
-  rest: a per-row and corpus-wide `kindGaps` breakdown of *why* each `kind`
-  mode was unobserved (an observation of absence versus a gap, rendered as
-  "Why a `kind` observation is missing", with contradicted claims counted in a
-  separate `contradictions` object and rendered as their own section, because a
-  contradiction is never a gap), and `verificationRefusedEntrypoints`, which
-  counts what a promoted document left out. Both are additive; `verified`,
-  `refused`, `conversions` and `probedRowsKept` keep their definitions, so
-  every dated table here stays comparable. One table deliberately changes
-  shape: "The composite a consumer feels" gains a state for the exports a
-  promotion dropped with a refused entrypoint, kept inside its denominator, so
-  the certified share cannot rise by unobservable exports leaving the
-  population.
   contract states none, and the package invoked it. A negative claim a probe
-  falsified is wrong, not incomplete, so this refuses rather than converting. The
-  *findings* fell again, 734 → **594** blocker lines, this time because an export
-  republished as `function` with `callbacks: {"status":"unknown"}` states no
-  negative for a planted callback to falsify. The refused-row count fell only
-  40 → 38, which is the same width mismatch as before: a row is refused by its
-  worst blocker, not by how many findings it carries.
+  falsified is wrong, not incomplete, so this refuses rather than converting.
+  Unchanged in this state at 594 blocker lines across 38 rows: stage 1
+  deliberately leaves an incompleteness finding document-wide, so a row carrying
+  one cannot be rescued by scoping a `kind` refusal, and none was.
+
+#### Why a `kind` observation is missing — the stage-2 gate, measured
+
+This is the number [RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md)
+stage 2 is gated on, and the reason stage 0 exists. Stage 2 would exclude, from
+the modes a `kind` claim must be observed in, exactly those where the probe
+**observed the export to be absent** (`export-missing`: the namespace loaded and
+the binding was not in it) — an observation that the export does not exist there,
+not a gap. Every other non-observation must keep blocking.
+
+Across the corpus, 84 rows carry at least one gapped stated `kind` mode, over
+2,777 `kind` obligations and **6,962 (claim, mode) pairs**:
+
+| Why the mode produced no passing `kind` observation | (claim, mode) pairs | Share | Gap or absence |
+| --- | --- | --- | --- |
+| entrypoint import threw | 3,878 | 55.70% | gap |
+| probe session aborted by package code | 2,629 | 37.76% | gap |
+| probe session wrote no report | 328 | 4.71% | gap |
+| no unambiguous summary resolves in the mode (no `kind` claim exists) | 82 | 1.18% | gap |
+| **`export-missing` in this mode** | **45** | **0.65%** | **absence** |
+
+By mode: `server` 2,525, `production` 1,499, `development` 1,492, `client`
+1,446 — so the gaps are not a server-artifact story either; they are spread
+across all four modes because an entrypoint that will not import fails in each
+of them.
+
+**The verdict: stage 2 is a measured no-op, and must not be built.** The gate
+condition A9 wrote for itself was *"if stage 0 shows the server-only gaps are
+session deaths rather than absences, stage 2 buys nothing and must not be
+built."* Measured, three ways, each stricter than the last:
+
+1. **0.65% of gap pairs are observations of absence.** 45 of 6,962. The other
+   99.35% are import throws, session deaths, and unreadable reports.
+2. **3 rows of 84 carry any `export-missing` gap at all**, and in *none* of the
+   three is it the only gap reason — each is mixed with gaps that keep blocking,
+   so excluding the absences would not promote any of them. All three are
+   `solid-js@1.9.14` and both `@solidjs/web@2.0.0-rc.1` probes, and all 45 pairs
+   are in the Official Solid family.
+3. **All three are root-caused `probe-failed`, not `kind-observed`.** They carry a
+   contradicted claim, which is an independent blocker stage 2 may never absorb.
+   So they are outside stage 2's addressable population by definition.
+
+And against the population stage 2 exists to serve — the **64 rows root-caused
+`kind-observed`** — the answer is exact: **zero** of them carry a single
+`export-missing` gap pair. Their 2,956 gap pairs are 2,226 import throws, 401
+session aborts, 328 unreadable reports, and 1 unresolvable summary. The
+addressable share is not small; it is empty.
+
+A9's design-time bound for stage 2 was "at most 43 rows, and the report cannot
+tell us how much of the 43 is real." It is now measured, and the answer is **0
+rows**. The amendment's stated risk — that implementing stage 2 blind would
+"narrow on gaps" — is precisely what it would do, since there are almost no
+absences to narrow on. Stage 2 should be closed as measured-worthless rather than
+left open as pending work.
+
+#### `kind` claims the probe contradicted, counted separately
+
+A mode whose observation **exists and disagreed**. A9 requires these to live in
+their own object and never share a number with a gap, because absorbing a
+contradicted `kind` is exactly what the amendment forbids. Measured: **7 rows, 13
+claims, 52 (claim, mode) pairs** — 13 in each of the four modes, so every one of
+them is contradicted in every mode it is stated for.
+
+**That 13 is the same 13 as the failing-claim total's `kind: claimed value,
+observed function` count**, which is the check that the separation is real: no
+contradiction leaked into the gap tables, and no gap was counted as a
+contradiction. The rows are `@solidjs/web@2.0.0-rc.1` (both probes, 3 claims
+each), `@tanstack/devtools-a11y@0.2.2` (2), `@tanstack/pacer-devtools@1.4.0` (2),
+`@tanstack/form-devtools@1.0.0-alpha.2` (1),
+`@tanstack/hotkeys-devtools@0.9.0` (1) and `@tanstack/table-devtools@9.2.0` (1)
+— the same residue the export-kind proof state named, still needing a
+constructability fact from the Type Facts producer rather than more syntax
+chasing.
 
 ### Drivability
 
@@ -1338,6 +1509,14 @@ Three blockers, in plain terms:
 | Failed | 353 | 218 | 63 | **24** |
 | Undriven | 5,405 (47.23%) | 5,397 (40.87%) | 5,301 (40.94%) | **5,005 (40.01%)** |
 | Incompleteness findings | 1,091 | 1,080 | 734 | **594** |
+
+**The A9 stage-1 state does not appear as a column here, deliberately: every one
+of these figures is unchanged to the claim.** The change set is verifier-side, so
+the claim plan, what was driven, what passed, what failed and the whole undriven
+distribution are identical to the export-kind proof column — 12,509 / 7,504 /
+7,480 / 24 / 5,005 / 594. Only *what verification did with the results* moved. One
+thing in the undriven distribution did change, and it changed name rather than
+value: see "The `other` bucket, resolved" below.
 
 The planned total rose in the probe-environment state because `@solidjs/web` being
 installed changes which dependency contracts `contract generate` can resolve, so
@@ -1367,9 +1546,35 @@ plantable reactive source, 91 to a session that wrote no readable report, and th
 three withdrawal buckets the previous state added — **49 to a runtime that
 re-runs nothing, 25 to a callback that ran more often than the call site, and 6 to
 a callback that re-ran with nothing written**. **`probe session hit the per-mode
-timeout` is 56 → 0**, the only bucket this change set emptied, and it emptied for
-a mechanical reason rather than a semantic one: the wide-surface rows whose modes
-were running out of time plan fewer claims now.
+timeout` is 56 → 0**, the only bucket the export-kind state emptied, and it
+emptied for a mechanical reason rather than a semantic one: the wide-surface rows
+whose modes were running out of time plan fewer claims now.
+
+#### The `other` bucket, resolved — A9 stage 0
+
+The remaining **671** claims were an unnamed `other` bucket in every state up to
+and including the export-kind proof one, and it was the second-largest bucket in
+the corpus. A9 stage 0 gave every reason the probe pipeline can emit a named
+bucket, and the measurement is unambiguous: **`other` is 671 → 0, and all 671 are
+`probe session aborted by package code`** — one class, a session-death class,
+which is a gap and keeps blocking.
+
+Two properties make that a measurement rather than a relabelling. The **total is
+unchanged at 5,005** and every other bucket holds to the claim, so nothing moved
+*between* buckets — only out of the unnamed one. And it reproduces from the
+**previous state's own journal**: re-bucketing the 416-row baseline journal with
+the new rules gives the identical 671, so the classification is a property of the
+rules rather than of this run.
+
+**One prediction in the amendment needed correcting, and it is a magnitude, not a
+direction.** A9 recorded this bucket as **834** claims and predicted `834 → 0`.
+That 834 was measured against an *earlier* journal, before the export-kind proof
+reduced the claim plan; against the state this run actually baselines on the
+bucket was already 671, and 671 is what resolved. The shape of the finding — one
+class, all of it package code aborting the probe session — is exactly as
+predicted. `UNDRIVABLE.owner`, `export is not callable` and the two
+`returns`-distinguisher reasons account for **zero** claims in it, as stage 0
+also predicted.
 
 33 rows still had at least one entrypoint import throw, against the same 34 in the
 three earlier states; the one that went is `@solid-primitives/platform`, whose
@@ -1438,88 +1643,122 @@ runtime they pinned only half of, 27 rows had a peer install (37 peer packages
 in total), and 4 rows' peer installs failed or moved a pin and were reverted to
 the pinned-only tree.
 
+**Every figure in this section is identical in the A9 stage-1 state**, to the row
+and to the session: 393 rows shimmed with the same fifteen names, the same
+382/393/382 mode split, 17,336 worker processes with 15,796 restarts and 63
+deaths, the same install-environment counts. The change set does not touch the
+probe environment, and the measurement confirms it did not.
+
 ### What a verified contract actually certifies
 
-This is still the number that should govern how the 64.18% is read, and it is
+This is still the number that should govern how the 66.11% is read, and it is
 still the one place where more coverage buys less certification per row:
 
-| Figure | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds + render edges) | 2026-08-24 (current) |
-| --- | --- | --- | --- | --- |
-| Claim domains converted to unknown | 379 | 595 (`returns` 316, `callbacks` 267, `asyncBehavior` 12) | 739 (`returns` 407, `callbacks` 320, `asyncBehavior` 12) | **811 (`returns` 443, `callbacks` 356, `asyncBehavior` 12)** |
-| Exports carrying an unknown in the verified rows, at generation | 150/880 (17.05%) | 797/1,885 (42.28%) | 939/2,434 (38.58%) | **1,204/2,608 (46.17%)** |
-| Exports carrying an unknown in the verified rows, after verification | 431/880 (48.98%) | 1,133/1,885 (60.11%) | 1,416/2,434 (58.18%) | **1,718/2,608 (65.87%)** |
-| Verified rows carrying at least one **probed behavioral row** | 6/194 (3.09%) | 15/222 (6.76%) | 3/261 (1.15%) | **3/267 (1.12%)** |
-| Probed behavioral row markers kept across the whole corpus | 12 | 25 | 3 | **3** |
-| Inferred row markers dropped by verification | 1,118 | 2,292 | 2,955 | **3,115** |
-| Probed markers discarded as unwitnessed by this run's report | 11 | 29 | 105 | **125** |
+| Figure | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds + render edges) | 2026-08-24 (export-kind proof) | 2026-08-24 (A9 stage 1, current) |
+| --- | --- | --- | --- | --- | --- |
+| Claim domains converted to unknown | 379 | 595 (`returns` 316, `callbacks` 267, `asyncBehavior` 12) | 739 (`returns` 407, `callbacks` 320, `asyncBehavior` 12) | 811 (`returns` 443, `callbacks` 356, `asyncBehavior` 12) | **822 (`returns` 448, `callbacks` 362, `asyncBehavior` 12)** |
+| Exports carrying an unknown in the verified rows, at generation | 150/880 (17.05%) | 797/1,885 (42.28%) | 939/2,434 (38.58%) | 1,204/2,608 (46.17%) | **1,293/3,014 (42.90%)** |
+| Exports carrying an unknown in the verified rows, after verification | 431/880 (48.98%) | 1,133/1,885 (60.11%) | 1,416/2,434 (58.18%) | 1,718/2,608 (65.87%) | **1,751/3,014 (58.10%)** |
+| Verified rows carrying at least one **probed behavioral row** | 6/194 (3.09%) | 15/222 (6.76%) | 3/261 (1.15%) | 3/267 (1.12%) | **3/275 (1.09%)** |
+| Probed behavioral row markers kept across the whole corpus | 12 | 25 | 3 | 3 | **3** |
+| Inferred row markers dropped by verification | 1,118 | 2,292 | 2,955 | 3,115 | **3,200** |
+| Probed markers discarded as unwitnessed by this run's report | 11 | 29 | 105 | 125 | **129** |
 
-**98.88% of verified contracts certify no observed behavior at all.** The three
-surviving rows are the same three as the previous state —
+**98.91% of verified contracts certify no observed behavior at all.** The three
+surviving rows are the same three as the previous two states —
 `@tanstack/solid-query@5.101.4` and both `@tanstack/solid-query@6.0.0-rc.0`
-probes, one marker each — so this change set did not touch the observed-behavior
+probes, one marker each — so neither change set touched the observed-behavior
 floor in either direction; the ratio moved only because the denominator did.
 
-**Exports certified by a verified contract fell, 1,018 → 890, while verified rows
-rose 261 → 267**, and that is the sharpest single reading in this pass. It is not
-a regression: a `kind: "value"` export with no claim domains counted as
-*certified* in every earlier state, and 128 net of those have either become a
-`function` with an unknown `callbacks` — which moves them from column (a) to
-column (b) below — or left with a refused entrypoint. More rows verify and each
-verified row certifies less, because what it used to certify included claims
-nobody had proven.
+**Exports certified by a verified contract rise 890 → 929, and this time the rise
+is real rather than a population effect.** The previous state's reading — more
+rows verifying while each certifies less — still holds as history; what is new is
+that the +39 arrives while **334 exports were dropped from promoted documents**
+with their refused entrypoints. Those 334 are counted in the composite below as
+their own state and stay inside its denominator, so the certified share cannot
+have risen by unobservable exports leaving the population. The generation-side
+figures rise too — the verified rows' draft export total goes 2,608 → 3,014, since
+eight more rows' drafts are now counted — and the denominators in the two
+"carrying an unknown" rows move with it, which is why those two percentages fall
+while their absolute counts rise.
+
+**The 11 new conversions are one row.** `corvu@0.7.2` contributes all of them
+(`returns` +5, `callbacks` +6); the other seven newly verified rows convert
+nothing, because what survived their promotion states almost nothing to convert.
 
 ### The composite a consumer feels
 
-Of all 8,696 exports the corpus's generated contracts describe — 319 fewer than
-the previous state's 9,015, because eleven packages describe none:
+Of all 8,696 exports the corpus's generated contracts describe — unchanged from
+the previous state, because generation did not move:
 
-| State | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds + render edges) | 2026-08-24 (current) |
-| --- | --- | --- | --- | --- |
-| (a) certified by a verified contract | 449 (4.98%) | 752 (8.34%) | 1,018 (11.29%) | **890 (10.23%)** |
-| (b) honest unknown inside a verified contract | 431 (4.78%) | 1,133 (12.57%) | 1,416 (15.71%) | **1,718 (19.76%)** |
-| (c) inside a contract that never reached `verified` | 8,135 (90.24%) | 7,130 (79.09%) | 6,581 (73.00%) | **6,088 (70.01%)** |
+| State | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds + render edges) | 2026-08-24 (export-kind proof) | 2026-08-24 (A9 stage 1, current) |
+| --- | --- | --- | --- | --- | --- |
+| (a) certified by a verified contract | 449 (4.98%) | 752 (8.34%) | 1,018 (11.29%) | 890 (10.23%) | **929 (10.68%)** |
+| (b) honest unknown inside a verified contract | 431 (4.78%) | 1,133 (12.57%) | 1,416 (15.71%) | 1,718 (19.76%) | **1,751 (20.14%)** |
+| (c) dropped from a verified contract with its refused entrypoint | 0 | 0 | 0 | 0 | **334 (3.84%)** |
+| (d) inside a contract that never reached `verified` | 8,135 (90.24%) | 7,130 (79.09%) | 6,581 (73.00%) | 6,088 (70.01%) | **5,682 (65.34%)** |
 
-(c) is every export of a contract that was generated and then refused, timed
-out, or errored. Rows whose install or generation failed describe no exports and
-are in none of the four states. (a) and (b) together are now **29.99%**, from
-27.00%, 20.91% and 9.76% — but the split inside that total moved the other way:
-(a) fell for the first time while (b) rose by 302. A consumer touching one of
-those 302 exports now reads an honest unknown where they previously read a
-certified negative the package could contradict.
+**The table gains a state, exactly as A9 said it would**, and the old (c) becomes
+(d). (c) is the new one: exports a promotion *dropped* because their entrypoint
+was `kind`-refused. They are not certified, they carry no honest unknown a
+consumer can read, and they are not in a refused document either — the document
+verified without them, so a consumer importing one gets the fail-closed
+pre-contract state.
 
-**The next run's table has four states.**
-[RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) stage 1 lets a
-verified document omit an entrypoint, so its exports get a state of their own —
-"dropped from a verified contract with its refused entrypoint" — and this (c)
-becomes (d). The denominator stays every export the *drafts* describe, which is
-what makes (a) comparable to the columns above: it cannot rise because
-unobservable exports left the population.
+**The denominator is unchanged at 8,696, which is the invariant that makes (a)
+readable.** A9 required the dropped exports to stay inside it precisely so the
+certified *share* could not rise by unobservable exports leaving the population.
+It held: 929 + 1,751 + 334 + 5,682 = 8,696, and the arithmetic of the movement
+closes exactly — **406 exports left (d)**, of which **334 became (c)** and **72
+became (a) or (b)** (+39 and +33). So (a)'s rise from 10.23% to 10.68% is 39
+exports newly certified against a fixed denominator, not a shrinking one.
+
+(d) is every export of a contract that was generated and then refused, timed out,
+or errored. Rows whose install or generation failed describe no exports and are in
+none of the states. (a) and (b) together are now **30.82%**, from 29.99%, 27.00%,
+20.91% and 9.76%.
+
+**Read (c) as the cost this change set made visible.** 334 exports — 3.84% of the
+corpus — sit in a state that did not exist before, and they are there because a
+document was promoted without them rather than refused with them. Whether that is
+better for a consumer than the previous state's whole-document refusal is the
+consistency argument A9 makes, not something this measurement decides: the same
+export is uncertifiable either way, and what changed is that the other 72 exports
+of the same eight documents are now usable.
 
 ### What it costs
 
 | Phase | Rows | Median | p90 | Max |
 | --- | --- | --- | --- | --- |
-| `npm install` | 416 | 346 ms | 1,231 ms | 21,130 ms |
-| `contract generate` | 413 | 113 ms | 551 ms | 17,147 ms |
-| `contract probe` | 396 | 642 ms | 3,076 ms | 187,847 ms |
-| `contract verify` | 396 | 49 ms | 58 ms | 96 ms |
-| generate + probe + verify | 413 | **859 ms** | **3,606 ms** | 204,274 ms |
-| whole row, install included | 416 | 1,429 ms | 4,526 ms | 204,801 ms |
+| `npm install` | 416 | 677 ms | 1,517 ms | 20,915 ms |
+| `contract generate` | 413 | 105 ms | 582 ms | 16,213 ms |
+| `contract probe` | 396 | 615 ms | 3,169 ms | 189,372 ms |
+| `contract verify` | 396 | 47 ms | 55 ms | 108 ms |
+| generate + probe + verify | 413 | **804 ms** | **3,751 ms** | 199,061 ms |
+| whole row, install included | 416 | 1,537 ms | 4,893 ms | 201,383 ms |
 
 Under a second at the median for the checker's own three phases, unchanged across
-all five states. The maximum is the four wide-surface rows the scaled budget
-rescued two states ago — `@kobalte/core@0.13.13`,
-`@tanstack/solid-table@9.1.2`, `motion-solidjs@0.7.0-beta.4`, `@kobalte/utils` —
-still completing rather than timing out, except that `@kobalte/utils` no longer
-generates a contract to probe at all. The whole 416-row corpus took 6 m 54 s of
-wall clock at concurrency 6, against 7 m 18 s, 7 m 10 s, 7 m 11 s and 6 m 30 s.
-**Do not read the `npm install` row as a speedup this change set caused**: its
-median halves, 716 ms → 346 ms, because this run followed the generation
-benchmark minutes earlier on the same host with a warm npm cache, and no
-change in this engine touches installs. The run's tail is still one row
-(`@tanstack/solid-table@9.1.2`, 194 s) finishing alone after the other 415, so the
-total is bounded by the longest row plus how late it is dispatched rather than by
-the corpus's total cost.
+all six states. **`contract verify` does strictly more work now and it is not
+measurable**: the median falls 49 ms → 47 ms and the max rises 96 ms → 108 ms, so
+computing per-entrypoint refusals, rewriting the review plan and reading per-mode
+observations for `kindGaps` costs nothing a reader should account for.
+
+The maximum is the four wide-surface rows the scaled budget rescued three states
+ago — `@kobalte/core@0.13.13`, `@tanstack/solid-table@9.1.2`,
+`motion-solidjs@0.7.0-beta.4`, `@kobalte/utils` — still completing rather than
+timing out, except that `@kobalte/utils` no longer generates a contract to probe
+at all. The whole 416-row corpus took 7 m 08 s of wall clock at concurrency 6,
+against 6 m 54 s, 7 m 18 s, 7 m 10 s, 7 m 11 s and 6 m 30 s. **Do not read the
+`npm install` row in either direction as something a change set caused**: its
+median doubles back, 346 ms → 677 ms, purely because the previous state's run
+followed the generation benchmark minutes earlier on the same host with a warm npm
+cache and this one did not. No change in either state touches installs, and
+`pipelineWithoutInstall` is the row to compare. The run's tail is still one row
+finishing alone after the other 415 — `@tanstack/solid-table@9.1.2` at 196 s,
+2 m 27 s after the 415th — so the total is bounded by the longest row plus how
+late it is dispatched rather than by the corpus's total cost. The single longest
+row is `@kobalte/core@0.13.13` at 201 s, but it was dispatched early enough not to
+be the tail.
 
 ### Caveats
 
@@ -1547,6 +1786,14 @@ the corpus's total cost.
   combination the corpus deliberately did not.
 - **Per probe row, not per package**, exactly as everywhere else in this
   document.
+- **A `verified` row may now describe less than its package's export map.** Since
+  A9 stage 1, eight of the 275 verified rows promoted a document with an
+  entrypoint omitted — 30 entrypoints and 334 exports in total — so "this row
+  verified" no longer implies "every subpath the draft described was certified or
+  honestly unknown". The dropped subpaths are named in each row's
+  `<contract>.verify.json` and in its rewritten review plan's
+  `refused-entrypoint` items, and counted as their own state in "The composite a
+  consumer feels". Six of the eight promote fewer than nine exports.
 - **A callback claim driven by a server *build* is not verifiable in this corpus,
   in either direction.** Both audited Solid releases resolve the `node` condition
   to a build that re-runs nothing, and every session that measured one answered

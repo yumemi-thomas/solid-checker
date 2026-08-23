@@ -3237,8 +3237,8 @@ document-level blocker when this was written; since
 [RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) it refuses the
 *entrypoint*, and the document only when no entrypoint would certify anything —
 see
-"[`kind` has no unknown form, and 77 refusals turn on
-it](#open-kind-has-no-unknown-form-and-77-refusals-turn-on-it-2026-08-23)" for
+"[`kind` has no unknown form, and 64 refusals turn on
+it](#open-kind-has-no-unknown-form-and-64-refusals-turn-on-it-2026-08-23-re-measured-2026-08-24)" for
 the measurement and the staged plan. Also in
 this slice: discovery probes now run for `value` summaries, which are the
 maximal negative claim and were exempt from their own falsifier; and the probe
@@ -4577,15 +4577,17 @@ to refuse such an entrypoint rather than publish the members under the wrong
 names — which is what the `kind` refusal already does for the `./ns` case in
 that experiment, but for the wrong reason.
 
-## Open: `kind` has no unknown form, and 77 refusals turn on it (2026-08-23)
+## Open: `kind` has no unknown form, and 64 refusals turn on it (2026-08-23, re-measured 2026-08-24)
 
 The blocker recorded above under "[`contract verify` certified what no run had
 observed](#closed-2026-08-23-contract-verify-certified-what-no-run-had-observed)"
 item 2 — a `kind` claim not probed-passed in every stated mode cannot be
 certified, because schema v1 has no sentinel to convert it to — is the **largest
 single reason a real package does not machine-verify**: `kind-observed` is the
-root cause of 77 of 146 refusals in the 2026-08-23 corpus run, more than
-incompleteness (40) and probe failure (27) combined.
+root cause of **64 of 121 refusals** in the 2026-08-24 A9-stage-1 corpus run,
+more than incompleteness (38) and probe failure (15) combined. It was 77 of 146
+when this item was opened, and 74 of 129 in the state stage 1 was measured
+against.
 
 The decision on whether to relax it, the measurement behind it, and the three
 rejected options are
@@ -4596,7 +4598,9 @@ schema-v1 sentinel for `kind` is **rejected** (`kind` is `required` with
 one contract; and an unknown `kind` is only honest if every domain of that
 summary becomes unknown too, at which point the summary is informationally
 identical to omitting the export). Nothing in the plan may absorb a
-*contradicted* `kind`: the 63 failing claims stay failures.
+*contradicted* `kind`: the failing claims stay failures, and the re-measurement
+asserted it — **24 failing claims before and after, 13 of them `kind`, in the
+same five shapes**.
 
 **Staged, and the last stage is gated on data rather than on a decision.**
 
@@ -4616,17 +4620,25 @@ identical to omitting the export). Nothing in the plan may absorb a
   rather than cosmetic: a session death forwards the child's stderr verbatim, so
   the `export-missing` rule sits below every session rule and is anchored to the
   end of the reason string — otherwise a crash quoting a bundler's `'x' is not
-  exported by y` was counted as the one outcome stage 2 may narrow away. What the
-  classification already shows, by re-bucketing the same 416-row journal rather
-  than re-running it: the 834-claim `other` bucket is **one class**, `probe
-  session aborted by package code` (834 of 834, in 16 shapes, each carrying the
-  package's own uncaught error and stack). `callbacks[].owner` — which the
-  amendment predicted was part of it — accounts for **zero**. And
-  `export-missing` is *absent from that distribution by construction*: a claim
+  exported by y` was counted as the one outcome stage 2 may narrow away.
+  **Measured, 2026-08-24: `other` is 671 → 0, and all 671 are `probe session
+  aborted by package code`** — one class, a session-death class, which is a gap
+  and keeps blocking. `UNDRIVABLE.owner`, `export is not callable` and the two
+  `returns`-distinguisher reasons account for **zero**, as predicted. Two things
+  make that a measurement rather than a relabelling: the undriven total holds at
+  5,005 with every other bucket unchanged to the claim, so nothing moved *between*
+  buckets; and re-bucketing the previous state's own 416-row journal with the new
+  rules reproduces the identical 671, so the classification is a property of the
+  rules and not of the run. **One magnitude in the amendment needed correcting:**
+  it recorded this bucket as **834** and predicted `834 → 0`. That 834 was
+  measured against an earlier journal, before the export-kind proof shrank the
+  claim plan; against the state stage 1 actually baselines on the bucket was
+  already 671. The shape of the finding was right; the number was stale.
+  And `export-missing` is *absent from that distribution by construction*: a claim
   observed in one mode and absent in another settles as `passed` and contributes
-  no undriven reason at all, so stage 2's number has to come from the per-mode
-  `kindGaps` figures and still needs the re-measure. The undriven bucket is not
-  where the addressable share was hiding.
+  no undriven reason at all, so stage 2's number had to come from the per-mode
+  `kindGaps` figures. The undriven bucket was not where the addressable share was
+  hiding — and, as stage 2 below now records, neither was anywhere else.
 - **Stage 1 — done.** An unobserved `kind` claim refuses its **entrypoint**, not
   the document: the entrypoint is omitted from the promoted contract exactly as
   `contract generate` omits one it cannot certify, `<contract>.verify.json`
@@ -4634,41 +4646,82 @@ identical to omitting the export). Nothing in the plan may absorb a
   item naming the exports it dropped (so the reviewed tier is not silent about
   the omission either), and the document is refused only when no entrypoint
   would certify anything — an entrypoint with an empty export map is not a
-  survivor. Predicted payoff **at most 10 of the 77** and **not yet measured**;
-  the honest case for it is not the count. The three document-wide carve-outs
-  subtract from the 10 *correlated* with the population (the multi-entrypoint
-  packages are the ones most likely to also carry a closure note or a
-  contradicted claim), and by construction the surviving half of such a package
-  is the half the probe could import — the browser/types-shaped subpath rather
-  than the behavioral one — so the newly verified documents will be
-  disproportionately `kind`-only negatives. What stage 1 durably buys is
-  consistency: generation and verification refuse on the same unit, so one
-  unimportable subpath stops sinking twenty observed ones.
-- **Stage 2 — gated on stage 0's numbers, not implemented.** Exclude from the
-  modes a `kind` claim must be observed in exactly those whose probe outcome was
-  `export-missing` — the namespace loaded and the binding was not in it, which is
-  an observation that the export does not exist there rather than a gap. Bounded
-  above by 43 rows. If stage 0 shows those gaps are session deaths rather than
-  absences, stage 2 buys nothing and must not be built.
+  survivor. **Measured, 2026-08-24: +8 rows** (267 → **275** of 416 verified,
+  129 → **121** refused), against a design-time bound of at most 10, with
+  **nothing moving the other way** and no other outcome class moving at all. The
+  30 entrypoints it refused inside a promoted document are the cost, made visible.
+  Every prediction the amendment made about the *shape* of the payoff held: the
+  two rows that had a survivor and still refused are the closure-note carve-out
+  (`@solidjs/start@2.0.3` and `@tanstack/charts@0.14.0` — the two widest rows in
+  the population, one of them the 91-blocker-line row the amendment named in
+  advance), and the surviving half really is the less behavioral half — the eight
+  newly verified rows contribute **zero** probed behavioral rows and only one
+  contributes any conversion, six of them promoting fewer than nine exports. What
+  stage 1 durably buys is consistency: generation and verification refuse on the
+  same unit. The count is not the case for it, and the measurement says so.
+- **Stage 2 — gate measured 2026-08-24, and it is a no-op. Do not build it.**
+  Stage 2 would exclude from the modes a `kind` claim must be observed in exactly
+  those whose probe outcome was `export-missing` — an observation that the export
+  does not exist there rather than a gap. The amendment bounded it above at 43
+  rows and could not say how much of the 43 was real. Now it can, and the
+  addressable population is **empty**:
+  - **45 of 6,962 gap (claim, mode) pairs (0.65%)** are observations of absence.
+    The rest are import throws (3,878), sessions aborted by package code (2,629),
+    sessions that wrote no report (328) and one unresolvable summary set (82) —
+    every one a gap that must keep blocking.
+  - **3 rows of 84 carry any `export-missing` gap**, and in none of them is it the
+    only gap reason, so excluding the absences promotes nothing. All three are
+    root-caused `probe-failed`, which is an independent blocker stage 2 may never
+    absorb, so they are outside its population by definition.
+  - Against the **64 rows root-caused `kind-observed`** — the population stage 2
+    exists for — **zero** carry a single `export-missing` pair. Their 2,956 gap
+    pairs are 2,226 import throws, 401 session aborts, 328 unreadable reports and
+    1 unresolvable summary.
 
-**Remaining fail-closed cases, unchanged by stages 0 and 1.**
+  The amendment's own gate was *"if stage 0 shows the server-only gaps are session
+  deaths rather than absences, stage 2 buys nothing and must not be built."* That
+  is what was measured. Building it would narrow on gaps, since there are
+  essentially no absences to narrow on. **Stage 2 should be closed as
+  measured-worthless rather than left open as pending work.**
 
-- **34 all-mode refusals stay refused**, plus whichever of the 43 stage 0 shows
-  to be gaps. A package the probe cannot import at all remains unverifiable,
+**Remaining fail-closed cases after stages 0 and 1, re-measured 2026-08-24.**
+
+- **The 64 rows root-caused `kind-observed` stay refused**, and stage 2 cannot
+  help any of them. 8 of the previous state's 74 verified on a surviving
+  entrypoint and 2 were reattributed to `closure-note`; what is left is
+  single-entrypoint packages and packages every one of whose entrypoints is
+  `kind`-blocked. A package the probe cannot import at all remains unverifiable,
   which is amendment A1's deliberate consequence; `contract review` is where an
   unimportable package belongs.
-- **The 29 rows where `kind-observed` is a co-blocker stay refused** — they have
-  an independent blocker (`probe-failed` 21, `incompleteness` 8).
-- **A closure note still refuses the whole document**, including on an entrypoint
-  stage 1 would otherwise refuse on its own, so some of the predicted 10 may not
-  convert. Same for a failed probe or an incompleteness finding naming a claim of
-  a refused entrypoint: a contradiction must be fixed, not dropped.
+- **The 14 rows where `kind-observed` was a co-blocker rather than the root cause
+  all still refuse** — every one has an independent blocker, and the
+  re-measurement asserted it row by row rather than by eye.
+- **A closure note still refuses the whole document.** Measured: it cost stage 1
+  exactly 2 of its 10 candidate rows, and `closure-note` as a root cause rose
+  2 → 4 for that reason and no other. Same for a failed probe or an
+  incompleteness finding naming a claim of a refused entrypoint: a contradiction
+  must be fixed, not dropped. `incompleteness` (38) and `probe-failed` (15) did
+  not move.
+- **334 exports are now dropped from otherwise-verified documents** with their
+  refused entrypoints — a state that did not exist before stage 1. They are
+  counted as their own state inside the corpus composite's unchanged 8,696
+  denominator, so nothing certifies more than it did; a consumer importing one
+  gets the fail-closed pre-contract state, and the omission is named in the verify
+  sidecar and the rewritten review plan.
 - **Per-export omission is out** until it is established whether an export absent
   from a *present* entrypoint raises `SC9005` at the consumer or resolves
   silently to no summary.
-- **The 53 `kind: claimed value, observed function` failures are a generator
-  defect**, not a sentinel gap: 45 class-shaped exports re-exported across a
-  module or package boundary, and 8 plain functions whose callability is
-  unresolved through a barrel. One of them (`@solid-devtools/locator`) publishes
-  a maximal certified negative for callback-taking functions today. Their own
-  queue item, with their own fixtures.
+- **The 13 remaining `kind: claimed value, observed function` failures are a
+  generator defect**, not a sentinel gap, and they are unchanged by stages 0 and 1
+  by design — 7 rows, 13 claims, contradicted in all four modes each, counted in
+  their own `contradictions` object so no relaxation of the `kind` rule can
+  quietly absorb one. They are the residue of the 53 the export-kind proof pass
+  reconciled (25 corrected, 15 withdrawn with a refused entrypoint, 13 still
+  wrong): a binding whose *type* is a class reached only through a value
+  expression, needing a constructability fact from the Type Facts producer. Their
+  own queue item, with their own fixtures.
+- **The verified tier still rests on almost no observed behavior**, which is the
+  number A9 asked to have published once: **3 of 275 verified rows** carry any
+  probed behavioral row, and **0 of the 8** stage 1 added. Machine verification is
+  certifying negatives and `typeof`; the human tier is still the useful one for
+  positives, exactly as RFC 0002 unresolved question 1 warned.
