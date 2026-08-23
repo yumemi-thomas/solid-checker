@@ -75,14 +75,38 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solid_facts::compiler::{AnalysisRequest, CompilerOptions, ExecutionMap};
-use solid_facts::core::{Generation, Span};
+use solid_facts::compiler::{
+    AnalysisRequest, COMPILER_FACTS_PROTOCOL, CompilerOptions, ExecutionMap,
+};
+use solid_facts::core::{Generation, SourceHash, Span};
 
 use crate::dialect::Dialect;
 use solid_facts::{FileFacts, ProjectFacts, TypeScriptChanges, TypeScriptTable};
 use thiserror::Error;
 
 pub use solid_facts::compiler::{CompilerFactsProvider, CompilerProviderError};
+
+/// The [`ExecutionMap`] for a `.json` module: no dialect compiler runs on it.
+///
+/// `solid_facts::ast::is_json_module_path` already routed this file's syntax
+/// facts to [`solid_facts::ast::AstFacts::empty`] instead of the JS/JSX
+/// parser; a JSON module has no tracked/untracked regions, ownership
+/// regions, callback roles, or JSX operations for the same reason its
+/// syntax table is empty -- there is no executable code for the compiler to
+/// trace. Asking the dialect compiler (a JS/JSX grammar) to analyze JSON
+/// text would either error or, worse, silently misparse it; recording the
+/// proven-empty map is the correct fact, not a fallback.
+fn inert_execution_map(source_hash: SourceHash) -> ExecutionMap {
+    ExecutionMap {
+        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+        source_hash,
+        tracked_regions: Vec::new(),
+        untracked_regions: Vec::new(),
+        ownership_regions: Vec::new(),
+        callback_roles: Vec::new(),
+        jsx_operations: Vec::new(),
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum BackendError {
@@ -767,7 +791,11 @@ pub fn build_project_native_measured_with_demands(
                     Arc::clone(&file.source),
                     file.compiler_options.clone(),
                 );
-                let execution = compiler.analyze(&request)?;
+                let execution = if solid_facts::ast::is_json_module_path(&file.path) {
+                    inert_execution_map(request.source_hash.clone())
+                } else {
+                    compiler.analyze(&request)?
+                };
                 execution.validate(&file.source)?;
                 Ok((
                     start + offset,
@@ -1068,7 +1096,11 @@ fn prepare_native_compiler_parallel(
                     Arc::clone(&file.source),
                     file.compiler_options.clone(),
                 );
-                let execution = compiler.analyze(&request)?;
+                let execution = if solid_facts::ast::is_json_module_path(&file.path) {
+                    inert_execution_map(request.source_hash.clone())
+                } else {
+                    compiler.analyze(&request)?
+                };
                 execution.validate(&file.source)?;
                 Ok((*index, key.clone(), execution))
             })
@@ -1106,7 +1138,11 @@ pub fn build_project_cached(
         let execution = if let Some(cached) = cache.compiler.get(&compiler_key) {
             cached.clone()
         } else {
-            let execution = Arc::new(compiler.analyze(&request)?);
+            let execution = Arc::new(if solid_facts::ast::is_json_module_path(&file.path) {
+                inert_execution_map(request.source_hash.clone())
+            } else {
+                compiler.analyze(&request)?
+            });
             cache.compiler.insert(compiler_key, Arc::clone(&execution));
             execution
         };
@@ -2071,6 +2107,149 @@ mod tests {
             compiler_cache_key(&STUB_DIALECT, &request).unwrap(),
             compiler_cache_key(dialect::default_dialect(), &request).unwrap(),
             "an execution map cached by one dialect must never answer for another"
+        );
+    }
+
+    /// Regression for the real defect in `@solidjs/start@2.0.3`'s
+    /// `dist/shared/dev-toolbar/index.jsx`, which imports its own
+    /// `package.json`: the TypeScript program legitimately hands a `.json`
+    /// module to the native build alongside ordinary JS/TS sources, and the
+    /// build must certify it inert -- not crash, and not invoke a JS/JSX
+    /// compiler that has no grammar for JSON -- rather than merely tolerate
+    /// it.
+    /// Stands in for a retained session the same way [`Types`] does, but
+    /// over an arbitrary source set: this regression needs digests for both
+    /// the JS entry and the JSON module it imports, and [`Types`] only ever
+    /// carries one.
+    struct MultiSourceTypes {
+        project_id: String,
+        generation: u64,
+        sources: Vec<SourceDigest>,
+    }
+    impl TypeFactsProvider for MultiSourceTypes {
+        fn semantic_grouped(
+            &mut self,
+            _groups: &[SemanticDemandGroup<'_>],
+        ) -> Result<TypeScriptTable, BackendError> {
+            let generation = self.generation;
+            self.generation += 1;
+            Ok(TypeScriptTable::from_parts(
+                STUB_SCHEMA,
+                generation,
+                self.project_id.clone(),
+                self.sources.clone(),
+                vec![],
+                vec![],
+                vec![],
+            ))
+        }
+    }
+
+    #[test]
+    fn a_json_import_source_is_certified_inert_without_invoking_the_compiler() {
+        let index_source =
+            "import pkg from \"./package.json\";\nexport const version = pkg.version;\n";
+        let json_source = r#"{"name": "demo", "version": "1.0.0"}"#;
+        let mut types = MultiSourceTypes {
+            project_id: "project/tsconfig.json".into(),
+            generation: 1,
+            sources: vec![
+                SourceDigest {
+                    path: "index.mjs".into(),
+                    sha256: typefacts::SourceHash::of(index_source),
+                },
+                SourceDigest {
+                    path: "package.json".into(),
+                    sha256: typefacts::SourceHash::of(json_source),
+                },
+            ],
+        };
+        let sources = vec![
+            SourceFile {
+                path: "index.mjs".into(),
+                source: index_source.into(),
+                compiler_options: CompilerOptions::default(),
+            },
+            SourceFile {
+                path: "package.json".into(),
+                source: json_source.into(),
+                compiler_options: CompilerOptions::default(),
+            },
+        ];
+        // `build_project` takes its `CompilerFactsProvider` directly rather
+        // than the dialect constructing one internally, so a local counter
+        // proves how many files it ran on without racing another test's
+        // shared dialect-compiler counter.
+        let mut compiler = CountingCompiler(0);
+        let facts = build_project(
+            dialect::default_dialect(),
+            "project/tsconfig.json",
+            1,
+            sources,
+            &mut compiler,
+            &mut types,
+        )
+        .unwrap();
+
+        let json_file = facts
+            .files
+            .iter()
+            .find(|file| file.path.as_str() == "package.json")
+            .expect("the JSON module must still be enrolled as an analyzed file");
+        assert!(json_file.ast.calls.is_empty());
+        assert!(json_file.ast.bindings.is_empty());
+        assert!(json_file.ast.functions.is_empty());
+        assert!(json_file.ast.imports.is_empty());
+        assert!(json_file.ast.exports.is_empty());
+        assert!(json_file.ast.members.is_empty());
+        assert!(json_file.compiler.tracked_regions.is_empty());
+        assert!(json_file.compiler.untracked_regions.is_empty());
+        assert!(json_file.compiler.ownership_regions.is_empty());
+        assert!(json_file.compiler.callback_roles.is_empty());
+
+        // Only `index.mjs` needed the dialect's compiler; the JSON module's
+        // inertness is a proof from its module kind, not a question the JS/JSX
+        // compiler was asked and happened to answer favorably.
+        assert_eq!(
+            compiler.0, 1,
+            "the dialect compiler must run for index.mjs only, never for the JSON module"
+        );
+    }
+
+    /// The JSON fix is an extension/module-kind rule, not a blanket "skip
+    /// anything unparseable": a source reached through a genuinely
+    /// unsupported extension must still fail the native build closed, exactly
+    /// as it did before the JSON module kind got its own path.
+    #[test]
+    fn a_non_json_unsupported_extension_still_fails_the_native_build() {
+        let source = "binary";
+        let mut types = Types {
+            project_id: "project/tsconfig.json".into(),
+            generation: 1,
+            source: SourceDigest {
+                path: "asset.wasm".into(),
+                sha256: typefacts::SourceHash::of(source),
+            },
+        };
+        let sources = vec![SourceFile {
+            path: "asset.wasm".into(),
+            source: source.into(),
+            compiler_options: CompilerOptions::default(),
+        }];
+        let error = build_project_native(
+            &STUB_DIALECT,
+            "project/tsconfig.json",
+            1,
+            sources,
+            &mut types,
+        )
+        .expect_err("a non-JSON unsupported extension must still fail closed, not be skipped");
+        assert!(
+            matches!(
+                error,
+                BackendError::Ast(solid_facts::ast::AstFactsError::SourceType { .. })
+            ),
+            "unexpected error variant: {error:?}"
         );
     }
 
