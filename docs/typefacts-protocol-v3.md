@@ -5,11 +5,13 @@ Every deterministic-CBOR frame carries `schema: 3`, a non-zero `requestId`,
 the normalized absolute tsconfig `projectId`, and a monotonic `generation`.
 
 Before accepting requests, the service emits one deterministic-CBOR startup
-frame containing handshake protocol `1`, the SHA-256 identity of the frozen
+frame containing handshake protocol `2`, the SHA-256 identity of the frozen
 v2 schema, and the build ID compiled into both executables. Rust waits at most
 five seconds and rejects a missing or mismatched handshake. CLI/LSP launchers
 surface this compatibility failure with exit code `3`; there is no fallback
-to an unverified service.
+to an unverified service. Protocol `2` added the `modules` operation below; the
+handshake is what makes a consumer's use of it safe, because a producer that
+does not advertise `2` is refused rather than probed.
 
 Operations:
 
@@ -25,6 +27,19 @@ Operations:
   retained TypeScript-Go project, including overlay bytes. Rust orchestration
   uses this operation instead of approximating tsconfig semantics with a
   filesystem walk;
+- `modules` returns the resolved module graph: every file the program actually
+  included — declaration and library files among them — and, for the importing
+  files the request names, where each module specifier resolved and what the
+  resolver recorded on the way (`resolution`, `resolvedPath`, `includedPath`,
+  `symlinkPath`, `extension`, `pathsPattern`, and optionally the owning
+  package). Like `sources` it is a read of the retained program: no state
+  token, no demand mutation, no effect on a materialized analysis. A backend
+  that cannot report the graph fails the request rather than answering a partial
+  one, and a scoped answer that covered fewer files than were asked about says
+  so (`unknownImportPaths`) instead of shrinking silently. `--emit-module-
+  inventory` is the checker's only consumer today: it is what makes a generated
+  contract's closure record an attestation rather than a reconstruction, and it
+  is issued on generation runs only;
 - `cancel` acknowledges a request identity;
 - `close` completes the retained session.
 

@@ -26,8 +26,8 @@ const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 // "ok" writes a minimal normalized contract document, "refuse" reproduces a
 // native fail-closed contract-emission refusal, "crash" reproduces a panic.
 const STUB_NATIVE = `#!/usr/bin/env node
-import { appendFileSync, writeFileSync } from "node:fs";
-import { basename } from "node:path";
+import { appendFileSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
 
 const args = process.argv.slice(2);
 const value = flag => {
@@ -111,6 +111,59 @@ writeFileSync(
     evidence: { kind: "inferred" }
   })
 );
+
+// The module inventory \`--emit-module-inventory\` writes, in the shape
+// \`write_module_inventory\` writes it (rust/crates/solid-facts-backend/src/
+// main.rs): realpaths, sorted, with \`complete\` carrying the producer's own
+// \`ModuleGraph::is_complete\`.
+//
+// The stub cannot resolve modules, so its default answer is the tsconfig
+// \`files\` list and *no* import facts. That is not a loosening: for every
+// specifier shape these tests drive -- an asset import, a relative specifier
+// naming nothing, an \`#imports\` branch no bundler condition selects -- the real
+// compiler answers \`resolution: "unresolved"\`, which reconciles identically to
+// no fact at all (verified against the pinned producer). A test that needs the
+// compiler to have resolved something the walk missed says so through
+// \`STUB_MODULE_IMPORTS\` / \`STUB_INVENTORY_EXTRA_MODULES\` rather than getting it
+// for free, and \`STUB_INVENTORY_ABSENT\` / \`STUB_INVENTORY_INCOMPLETE\` drive the
+// two fail-closed shapes no real run can produce on demand.
+const inventoryPath = value("--emit-module-inventory");
+if (inventoryPath && !process.env.STUB_INVENTORY_ABSENT) {
+  const packageRoot = realpathSync(value("--contract-package-root") ?? ".");
+  const project = JSON.parse(readFileSync(value("--project"), "utf8"));
+  const extra = JSON.parse(process.env.STUB_INVENTORY_EXTRA_MODULES ?? "[]");
+  const declared = JSON.parse(process.env.STUB_MODULE_IMPORTS ?? "[]");
+  const modules = [
+    ...(project.files ?? []).map(file => ({ path: realpathSync(file) })),
+    ...extra.map(entry =>
+      typeof entry === "string"
+        ? { path: resolve(packageRoot, entry) }
+        : { path: resolve(packageRoot, entry.path), declarationFile: true }
+    )
+  ].sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+  writeFileSync(
+    inventoryPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      projectId: value("--project"),
+      packageRoot,
+      complete: !process.env.STUB_INVENTORY_INCOMPLETE,
+      modules,
+      imports: declared.map(entry => ({
+        path: resolve(packageRoot, entry.from),
+        startByte: 0,
+        endByte: 0,
+        text: entry.text,
+        resolution: entry.resolution ?? "relative",
+        ...(entry.resolved ? { resolvedPath: resolve(packageRoot, entry.resolved) } : {}),
+        ...(entry.extension ? { extension: entry.extension } : {})
+      })),
+      unknownImportPaths: process.env.STUB_INVENTORY_INCOMPLETE
+        ? [resolve(packageRoot, process.env.STUB_INVENTORY_INCOMPLETE)]
+        : []
+    })
+  );
+}
 `;
 
 function makeWorkspace(exports_, { dependency, files } = {}) {
@@ -159,7 +212,15 @@ function makeWorkspace(exports_, { dependency, files } = {}) {
   return { directory, packageRoot, stub };
 }
 
-function generate({ packageRoot, stub, plan = {}, args = [], dependencyModule, argvLog }) {
+function generate({
+  packageRoot,
+  stub,
+  plan = {},
+  args = [],
+  dependencyModule,
+  argvLog,
+  inventory = {}
+}) {
   return spawnSync(process.execPath, [cli, "contract", "generate", ...args], {
     cwd: packageRoot,
     env: {
@@ -167,7 +228,18 @@ function generate({ packageRoot, stub, plan = {}, args = [], dependencyModule, a
       SOLID_CHECKER_NATIVE_BIN: stub,
       STUB_NATIVE_PLAN: JSON.stringify(plan),
       ...(dependencyModule ? { STUB_DEPENDENCY_MODULE: dependencyModule } : {}),
-      ...(argvLog ? { STUB_ARGV_LOG: argvLog } : {})
+      ...(argvLog ? { STUB_ARGV_LOG: argvLog } : {}),
+      // What the analyzing program attests it opened, for the shapes a stub
+      // cannot produce by resolving anything. See `STUB_MODULE_IMPORTS` in the
+      // stub for why the default is deliberately empty rather than generous.
+      ...(inventory.absent ? { STUB_INVENTORY_ABSENT: "1" } : {}),
+      ...(inventory.incomplete ? { STUB_INVENTORY_INCOMPLETE: inventory.incomplete } : {}),
+      ...(inventory.imports
+        ? { STUB_MODULE_IMPORTS: JSON.stringify(inventory.imports) }
+        : {}),
+      ...(inventory.extraModules
+        ? { STUB_INVENTORY_EXTRA_MODULES: JSON.stringify(inventory.extraModules) }
+        : {})
     },
     encoding: "utf8"
   });
@@ -273,9 +345,12 @@ test("a barrel entry is bound at the entry artifact only and counts the rest", (
     // But the semantics come from `internal.mjs` too, and nothing pins its
     // bytes -- so the review plan must not read as full byte binding.
     const review = readFileSync(join(packageRoot, "solid-reactivity.review.md"), "utf8");
+    // The count is the attested one -- how many modules the analyzing program
+    // opened under this package beyond the entry -- not a second walk of the
+    // same entrypoint.
     assert.match(
       review,
-      /- \[ \] contract is byte-bound to its entry artifact only: \.\/index\.mjs pulls in 1 further runtime module\(s\)/
+      /- \[ \] contract is byte-bound to its entry artifact only: \.\/index\.mjs pulls in 1 further module\(s\) the analysis read/
     );
     assert.doesNotMatch(review, /## contract artifact binding\n\n- \[x\] none observed/);
   } finally {
@@ -643,14 +718,19 @@ test("--format json reports the sweep as one document and keeps stdout parseable
   }
 });
 
-// What the closure walker records, and what it refuses to leave unsaid.
+// What the closure record says, and what it refuses to leave unsaid.
 //
-// The walk decides three things at once: the TypeScript project's `files` list,
-// the unpinned-module count on the review plan, and the per-entrypoint hash set
-// a review transfers against. A module it misses is not a smaller closure but a
-// false one -- the hash set says "these are the bytes the summaries came from"
-// while the file that produced them sits outside it. Each shape below silently
-// produced that record before.
+// The walk still decides the TypeScript project's `files` list -- it is the
+// seeder, because a published ESM barrel's `.js` specifiers resolve to adjacent
+// `.d.ts` files when only the entry is seeded. What it no longer decides is the
+// record: the unpinned-module count and the per-entrypoint hash set a review
+// transfers against come from the analyzing program's own module inventory, and
+// the walk's own problems are reconciled against it. A module either side names
+// and the other does not is a named note, in both directions.
+//
+// The cases below therefore pin two things at once: that the record is the
+// attested one, and that reconciliation drops exactly the notes the compiler
+// agrees name nothing -- never a note about a module it did resolve.
 
 function closureOf(packageRoot, entrypoint = ".") {
   const plan = JSON.parse(readFileSync(join(packageRoot, "solid-reactivity.review.json"), "utf8"));
@@ -678,7 +758,7 @@ test("a .js specifier that resolves to a TypeScript sibling is recorded", () => 
     assert.equal(closure.notes, undefined);
 
     const review = readFileSync(join(packageRoot, "solid-reactivity.review.md"), "utf8");
-    assert.match(review, /pulls in 1 further runtime module\(s\)/);
+    assert.match(review, /pulls in 1 further module\(s\) the analysis read/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -712,9 +792,28 @@ test("a #imports specifier is resolved through the package's imports map", () =>
   }
 });
 
-test("an unresolvable #imports branch is noted rather than guessed", () => {
-  // Two conditional targets and no selection: picking one would put a browser
-  // build's bytes behind a node build's summaries.
+test("an unresolvable #imports branch is a runtime claim, not a record note", () => {
+  // Two conditional targets and no selection: the walk refuses to guess, because
+  // picking one would put a browser build's bytes behind a node build's
+  // summaries. The record, though, is not a guess either way -- the analyzing
+  // program resolved `#internal` to nothing (`bundler` resolution selects
+  // neither `browser` nor `node`), so it read neither branch, and naming only
+  // `index.js` is the complete and correct answer *about the bytes the analysis
+  // read*.
+  //
+  // And that is where saying nothing would be a wrong certification. Node, under
+  // its own conditions, loads `node.mjs`; a bundler targeting the browser loads
+  // `browser.mjs`. Both are package code the analysis never read, and a
+  // side-effect import of such a branch is exactly where a package patches a
+  // global or calls into `solid-js/web`. So the claim that survives is the same
+  // one a non-literal `import()` makes -- the runtime may load a module the
+  // analysis never read -- and it rides the same field: `runtimeNotes`, blocking
+  // promotion, not a transfer between two identical records.
+  //
+  // What separates this from `./styles.css` is a fact and not an extension
+  // guess: `runtimeTargets` names the existing runtime modules a runtime can
+  // select for the specifier. An asset import names none, so no runtime loads a
+  // module for it and there is nothing left to say.
   const { directory, packageRoot, stub } = makeWorkspace(
     { ".": "./index.js" },
     {
@@ -734,15 +833,23 @@ test("an unresolvable #imports branch is noted rather than guessed", () => {
     assert.equal(result.status, 0, result.stderr);
     const closure = closureOf(packageRoot);
     assert.deepEqual(closure.modules.map(module => module.path), ["index.js"]);
-    assert.equal(closure.notes.length, 1);
-    assert.match(closure.notes[0], /closure could not be fully enumerated: #internal resolves to 2 conditional targets/);
+    // Not a record note: the record is not short, and saying it might be would
+    // be false now that the program's own file list is what it names.
+    assert.equal(closure.notes, undefined);
+    assert.equal(closure.runtimeNotes.length, 1);
+    assert.match(
+      closure.runtimeNotes[0],
+      /^index\.js: the module record is attested .* except for what #internal may load at runtime: the analyzing program resolved nothing for it \(.*\), while browser\.mjs, node\.mjs exist on disk and a runtime selecting one of them reads package bytes this analysis did not/
+    );
 
-    // A note is not only a machine fact: it is the difference between "the
-    // contract is bound to its entry artifact" and "bound to less than that",
-    // and the artifact-binding section is where a reviewer is told which.
+    // And no branch was *recorded*: naming the reachable branches in the note is
+    // not a way of hashing one of them into the record after all.
+    assert.deepEqual(
+      closure.modules.filter(module => /browser\.mjs|node\.mjs/.test(module.path)),
+      []
+    );
     const review = readFileSync(join(packageRoot, "solid-reactivity.review.md"), "utf8");
-    assert.match(review, /## contract artifact binding/);
-    assert.match(review, /- \[ \] \. index\.js: closure could not be fully enumerated: #internal/);
+    assert.match(review, /- \[ \] \. index\.js: the module record is attested/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -775,7 +882,18 @@ test("a string containing a comment opener does not hide the imports below it", 
   }
 });
 
-test("a relative specifier that resolves to nothing is noted, never dropped", () => {
+test("a specifier naming nothing drops its note; a non-literal import() keeps one", () => {
+  // The two halves of what the walk used to say with one sentence each.
+  //
+  // `./gone.js` names no file, and the analyzing program resolved nothing for it
+  // either -- so the analysis read no bytes for it and the record is complete.
+  // The note goes.
+  //
+  // A non-literal `import()` is the compiler resolving nothing too, and the
+  // record is complete for the same reason. What is *not* established is that
+  // the runtime loads no module the analysis never read, and no module graph can
+  // establish it. That is a different claim, it rides `runtimeNotes`, and it
+  // still refuses promotion.
   const { directory, packageRoot, stub } = makeWorkspace(
     { ".": "./index.js" },
     {
@@ -790,14 +908,283 @@ test("a relative specifier that resolves to nothing is noted, never dropped", ()
     const result = generate({ packageRoot, stub });
     assert.equal(result.status, 0, result.stderr);
     const closure = closureOf(packageRoot);
-    assert.equal(closure.notes.length, 2);
-    assert.ok(
-      closure.notes.some(note => /\.\/gone\.js names no runtime module inside the package/.test(note))
+    assert.equal(closure.notes, undefined);
+    assert.equal(closure.runtimeNotes.length, 1);
+    assert.match(
+      closure.runtimeNotes[0],
+      /the module record is attested .* and complete except for what a dynamic import\(\) whose specifier is not a string literal may load at runtime/
     );
-    assert.ok(
-      closure.notes.some(note =>
-        /a dynamic import\(\) whose specifier is not a string literal/.test(note)
-      )
+
+    // A reviewer sees it in the same section a closure note appears in: the two
+    // kinds differ in which gate they block, not in whether a human must look.
+    const review = readFileSync(join(packageRoot, "solid-reactivity.review.md"), "utf8");
+    assert.match(review, /## contract artifact binding/);
+    assert.match(review, /- \[ \] \. index\.js: the module record is attested/);
+    assert.doesNotMatch(review, /gone\.js/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a module the analyzing program opened and the walk never seeded is noted", () => {
+  // The residue an attested record exists to expose, in the shape that produced
+  // it: the walk's clause scanner gives up after 300 tokens at depth zero, so a
+  // long import clause hides its own `from` specifier -- silently, with no note,
+  // because the scanner never saw a specifier to fail on. The compiler resolved
+  // it and read the module. Nothing before this could observe that.
+  const names = Array.from({ length: 200 }, (_, index) => `z${index + 1}`);
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js":
+          `import { ${names.join(", ")} } from "./big.js";\n` +
+          "export const thing = z1;\n",
+        "big.js": `${names.map(name => `export const ${name} = 1;`).join("\n")}\n`
+      }
+    }
+  );
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      inventory: { extraModules: ["big.js"] }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    // The record names it, because the analysis read it.
+    assert.deepEqual(closure.modules.map(module => module.path).sort(), ["big.js", "index.js"]);
+    assert.equal(closure.notes.length, 1);
+    assert.match(
+      closure.notes[0],
+      /^big\.js: the analyzing program opened this module and the closure walk did not seed it/
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a specifier the walk could not resolve and the program did keeps a restated note", () => {
+  // The other reconciliation branch: the compiler resolved what the walk could
+  // not, so the note stays -- and it stays with the attested path attached,
+  // which is strictly more than "names no runtime module inside the package"
+  // could say. `.cjs`/`.cts` is the real shape (the walk's runtime extensions
+  // omit them deliberately; `bundler` resolution substitutes them).
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js": 'export { thing } from "./impl.cjs";\n',
+        "impl.cts": "export const thing = 1;\n"
+      }
+    }
+  );
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      inventory: {
+        extraModules: ["impl.cts"],
+        imports: [
+          {
+            from: "index.js",
+            text: "./impl.cjs",
+            resolution: "relative",
+            resolved: "impl.cts",
+            extension: ".cts"
+          }
+        ]
+      }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    assert.deepEqual(closure.modules.map(module => module.path).sort(), ["impl.cts", "index.js"]);
+    assert.equal(closure.notes.length, 1);
+    assert.match(
+      closure.notes[0],
+      /^index\.js: closure could not be fully enumerated: \.\/impl\.cjs names no runtime module inside the package \(.*\); the analyzing program resolved it to impl\.cts \(relative, \.cts\), so the analysis read a module this walk did not seed$/
+    );
+
+    // One cause, one note: the module is not also reported as an unseeded
+    // module by the inventory sweep.
+    assert.equal(
+      closure.notes.filter(note => /did not seed it/.test(note)).length,
+      0
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a dependency's own bytes are not recorded as this package's", () => {
+  // The record answers "which bytes of *this* package did the summaries come
+  // from", and a nested `node_modules/` inside the package root is not this
+  // package. Hashing it would bind the record to the install layout -- hoisted
+  // and the file is absent, nested and it is present -- and to a dependency's
+  // version, so two generations over byte-identical package bytes would refuse
+  // to transfer a review. What the analysis read from a dependency is described
+  // by that package's own contract; see docs/precision-backlog.md for the
+  // residue when it has none.
+  //
+  // And the exclusion is not a hole in the seeding sweep either: an excluded
+  // module must not come back as "the program opened this and the walk did not
+  // seed it".
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    { files: { "index.js": 'import { dep } from "dep";\nexport const thing = dep;\n' } }
+  );
+  mkdirSync(join(packageRoot, "node_modules", "dep"), { recursive: true });
+  writeFileSync(join(packageRoot, "node_modules", "dep", "index.js"), "export const dep = 1;\n");
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      inventory: { extraModules: ["node_modules/dep/index.js"] }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    assert.deepEqual(closure.modules.map(module => module.path), ["index.js"]);
+    assert.equal(closure.notes, undefined);
+    assert.equal(closure.runtimeNotes, undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("two spellings of one file are one module, on either kind of filesystem", () => {
+  // A case-insensitive filesystem -- APFS, HFS+, NTFS -- accepts `./Impl.js` for
+  // a file named `impl.js`, so the walk seeds two roots for one file and the
+  // analyzing program answers with whichever spelling it was handed. The record
+  // used to name the wrong-cased one, which exists on no case-sensitive
+  // filesystem, *and* report the real one as seeded-but-never-opened -- a false
+  // note about a file that was read.
+  //
+  // Both assertions below hold on both kinds of filesystem, which is the point:
+  // on a case-sensitive one the walk resolves only `./impl.js` and the other
+  // specifier names nothing (no existing runtime module, so no runtime loads one
+  // either, so no note); on a case-insensitive one both spellings resolve and
+  // `realpathSync.native` folds them onto the name the filesystem holds.
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js": 'export { helper } from "./Impl.js";\nexport { other } from "./impl.js";\n',
+        "impl.js": "export const helper = 1;\nexport const other = 2;\n"
+      }
+    }
+  );
+  try {
+    const result = generate({ packageRoot, stub });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    assert.deepEqual(closure.modules.map(module => module.path).sort(), ["impl.js", "index.js"]);
+    assert.equal(closure.notes, undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("a module the analysis read from outside the package is named, not dropped", () => {
+  // The third reconciliation direction, and the one that had no note at all: a
+  // file the analyzing program opened that the record's own scope excludes. The
+  // record may exclude it -- it is not this package's bytes and no hash here
+  // pins it -- but it may not be silent about having excluded something the
+  // summaries were derived from.
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    { files: { "index.js": "export const thing = 1;\n" } }
+  );
+  writeFileSync(join(directory, "outside.js"), "export const helper = 1;\n");
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      inventory: { extraModules: ["../outside.js"] }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    assert.deepEqual(closure.modules.map(module => module.path), ["index.js"]);
+    assert.equal(closure.notes.length, 1);
+    assert.match(
+      closure.notes[0],
+      /^\.\.\/outside\.js: the analyzing program opened this module and it is not inside this package, so the record excludes bytes the summaries were derived from$/
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("an absent module inventory leaves the record unattested and says so", () => {
+  // The fail-closed half. A generation that cannot read the analyzing program's
+  // own file list must not present its own walk as the record: it records the
+  // walk, names it as unattested, and the entrypoint transfers and verifies
+  // nothing. Silently trusting the weaker source is the one outcome this must
+  // never have.
+  //
+  // **This pins a contract, not an observed behavior, and the stub is the only
+  // way to reach it.** Against the pinned producer the shape cannot occur: a run
+  // that cannot write an inventory exits non-zero and aborts the generation
+  // before any contract or plan exists. What the test defends is what must
+  // happen the day a producer answers differently -- see `readModuleInventory`,
+  // and docs/package-contracts.md, which says the same thing in prose rather
+  // than advertising a tier users can see.
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js": 'export { thing } from "./impl.mjs";\n',
+        "impl.mjs": "export const thing = 1;\n"
+      }
+    }
+  );
+  try {
+    const result = generate({ packageRoot, stub, inventory: { absent: true } });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    // The walk's own answer is still recorded -- a reviewer should see which
+    // bytes were found -- but it is labelled, not passed off as attested.
+    assert.deepEqual(closure.modules.map(module => module.path).sort(), ["impl.mjs", "index.js"]);
+    assert.equal(closure.notes.length, 1);
+    assert.match(
+      closure.notes[0],
+      /^\.\/index\.js: closure not attested: the analyzing program wrote no module inventory \(.*\)\. The record below is this generator's own syntax walk/
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("an incomplete module graph is fail-closed, not reconciled against the walk", () => {
+  // `ModuleGraph::is_complete` false means the answer covers fewer files than it
+  // asked about. Reconciling a short answer against the walk would let the walk
+  // decide the difference, which is the weaker source deciding.
+  //
+  // Defensive, like the case above, and for a structural reason: the producer
+  // builds its import request out of the program's own inventory answer, so the
+  // request is always a subset of the holdings and `complete` is always `true`.
+  // The stub drives the branch because nothing else can; it pins the contract a
+  // future producer must be met with, not a shape this repository has observed.
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js": 'export { thing } from "./impl.mjs";\n',
+        "impl.mjs": "export const thing = 1;\n"
+      }
+    }
+  );
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      inventory: { incomplete: "impl.mjs" }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    assert.equal(closure.notes.length, 1);
+    assert.match(
+      closure.notes[0],
+      /closure not attested: the analyzing program reported its resolved module graph incomplete/
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });

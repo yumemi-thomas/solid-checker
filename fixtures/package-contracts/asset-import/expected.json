@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "asset-import",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "value-1": {
+      "kind": "value",
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "value-1": [
+          "thing"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

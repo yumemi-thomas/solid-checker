@@ -2230,6 +2230,220 @@ list, and emitting it would turn the closure from a reconstruction into an
 attestation. Until that exists, unresolvable specifiers fail closed via notes
 and the record stays a generator-side claim.
 
+### Closed: the record is attested, and the walk is now the thing being checked (2026-08-24)
+
+The protocol addition exists and the checker consumes it. TypeFacts handshake
+protocol `2` carries a `modules` operation reporting the program's own file list
+and, for the importing files a request names, where each specifier resolved;
+`--emit-module-inventory` asks for it on a generation run
+(`write_module_inventory`, rust/crates/solid-facts-backend/src/main.rs), and the
+generator builds `generation.entrypoints[*].modules` from that instead of from
+its own walk (`attestedClosure`,
+packages/cli/scripts/generate-package-contract.mjs).
+
+The walk is **not** deleted. It seeds the analyzed program's `files` list, and it
+has to: seeding only the entrypoint makes a published barrel's `.js` specifiers
+resolve to the adjacent `.d.ts`, so the analysis would read declarations where it
+now reads runtime bytes. What changed is that the walk's output is no longer a
+claim about anything — it is a seed, and the attestation both replaces the record
+and *verifies the seed*. A module the program opened that the walk never seeded,
+or the reverse, is a named note in either direction.
+
+The residue above was not theoretical, and the mechanism that produced it was not
+one of the three shapes listed. `moduleSpecifiers` scans an import/export clause
+for its `from` under a 300-token bound at depth 0, so a clause naming more than
+~150 bindings hides its own specifier — and records **no problem**, because the
+scanner never saw a specifier to fail on. The walk returned the entry alone with
+an empty `notes`, which is exactly the false record this entry is about.
+`fixtures/package-contracts/seed-attestation-discrepancy` pins it.
+
+What was measured on real packages, reproduced locally against the pinned
+producer (npm tarballs, no peer installs, so these are not the ecosystem
+benchmark's own rows):
+
+| Package | Before | After |
+| --- | --- | --- |
+| `@solidjs/vite-plugin@3.0.0-next.31` | 1 note (non-literal `import()`) | 0 notes, 1 `runtimeNotes` |
+| `@solidjs/start@2.0.3` | 4 notes (2× `./styles.css`, `../../../package.json`, non-literal `import()`) | 1 note (restated), 1 `runtimeNotes`; 80 → 158 modules |
+| `@tanstack/charts@0.14.0` | 1 note (`./Chart.svelte`) | 1 note (restated); 834 → 2423 modules |
+
+Re-measured after the fixes below, against the same three tarballs and the same
+producer: identical note counts, identical module counts, and
+`@solidjs/vite-plugin`'s sole blocker — the non-literal `import()` — now
+classifies as `attested-closure-note` rather than `unclassified-refusal`, both on
+the full refusal line and on the 260-character head the corpus harness stores.
+
+**Measured across the whole ecosystem corpus** (2026-08-24, 416 probe rows,
+release binary `0356938638a2d6594452dd574dcff4a82332b2f0a4d58abed21b578a759a3588`;
+the full account is in
+[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-eighth-measurement-state-release-binary-416-probes)):
+
+| Figure | Before attestation | After |
+| --- | --- | --- |
+| Closure notes | 31, across 7 probes | **5, across 2 probes** |
+| Attested closure notes (`runtimeNotes`) | field did not exist | **17, across 5 probes** |
+| Probes fully proven | 125 / 398 | **125 / 398** |
+| Rows reaching `verified` | 275 / 416 | **275 / 416** |
+| `closure-note` as root cause | 4 rows | **2 rows** |
+| `attested-closure-note` as root cause | class did not exist | **2 rows** |
+| `unclassified-refusal` rows | 0 | **0** |
+
+The 31 notes split three ways and every one lands in exactly one bucket: **17
+reclassified** to `runtimeNotes` (all of them the non-literal dynamic `import()`
+shape — no corpus package exercises the unselected-conditional-branch shape that
+`conditional-imports-side-effect` pins), **9 answered and dropped** (asset imports
+— `./styles.css` on `@solidjs/start`, `./style.css` on
+`@tanstack/form-devtools` — for which the compiler resolved nothing either and no
+runtime target exists on disk), and **5 retained and restated** with the module
+the analyzing program actually resolved the specifier to.
+
+**Nothing was certified by a note disappearing.** No probe gained fully-proven
+status, no row moved `refused → verified`, every claim figure in both harnesses is
+unchanged to the claim, and the one row that lost its closure blocker outright
+(`@tanstack/form-devtools@1.0.0-alpha.2`) is still refused on `kind-observed` and
+`probe-failed`. Measured on real packages rather than argued: the module *record*
+roughly doubled at the same time — `@solidjs/start@2.0.3`'s sum over its 12
+entrypoints goes 215 → 428, distinct modules 96 → 184, with 209 of the 428 being
+declaration files — so the record now names substantially more bytes while
+certifying nothing extra.
+
+**The `834 → 2423` figure is a sum over entrypoints, not a file count**, and it
+should not be quoted as "what the analysis read under this package". The package
+declares 110 entrypoints; their records name **337 distinct modules**, ranging
+from 1 (`./export`) to 195 (`.`), and a file shared by twenty entrypoints is
+counted twenty times in the sum. None of the three tarballs carries an installed
+dependency, so the scope rule below does not move any of these numbers.
+
+**Two of the design's predictions were wrong, and the direction matters.** The
+`./Chart.svelte` note was classified as an asset import that would disappear; it
+does not. The package ships `dist/svelte/Chart.svelte.d.ts` and the compiler
+resolves the specifier to it, so the walk's note was *correct* and attestation
+makes it more precise rather than removing it. The walk's declaration probe
+appends `.d.ts` to the *stem* (`Chart.d.ts`) while TypeScript appends to the
+whole specifier (`Chart.svelte.d.ts`) — a walk bug that only an attestation could
+surface. Likewise `../../../package.json` resolves for real. So the asset-import
+class is narrower than the 5-of-13 sample suggested: only a specifier with no
+sibling declaration at all disappears.
+
+**The named remaining approximations**, all deliberate:
+
+1. **The declaration-sibling split is visible in the record and not otherwise
+   reported.** An import that resolves to a `.d.ts` with an empty `includedPath`
+   is a module the analysis read declarations for while runtime bytes sit beside
+   it, and nothing joins the two — the producer says so explicitly and forbids
+   pairing by file name. That is now *recorded* (the `.d.ts` is in the module set
+   and its bytes are hashed) but it raises no closure note of its own, because
+   the analyzer already reports the same fact as an incompleteness finding —
+   `fixtures/package-contracts/declaration-sibling-reach` pins it — and a second
+   report would fire on nearly every published package for one cause.
+2. **The runtime is still unbounded.** Two shapes refuse promotion under
+   `runtimeNotes`, and no module graph can close either: a non-literal dynamic
+   `import()`, and a specifier the compiler resolved nothing for that names
+   existing runtime modules inside the package a runtime *can* still select — an
+   unselected conditional `imports` branch. The second was a **wrong
+   certification** in the first cut of this change: "the compiler resolved
+   nothing" was read as licence to say nothing, which is true about the record and
+   silent about Node, which loads the `node` branch. The predicate is now a fact
+   about files on disk (`runtimeTargets` in
+   packages/cli/scripts/runtime-module-closure.mjs) rather than a judgement about
+   a file suffix, so an asset import and a missing file still drop while a real
+   branch does not.
+   `fixtures/package-contracts/conditional-imports-side-effect` pins it, and its
+   README records why the re-export form of the same package was never affected
+   (the analyzer refuses the entrypoint on an `Unknown` runtime kind). A permanent
+   limit, not a backlog item.
+3. **`--emit-module-inventory` is a generation-run flag.** An ordinary analysis
+   does not ask for the graph, so nothing on the diagnostic path is
+   identity-bound to a resolved module yet — that is the separate open entry on
+   contracts bound to a module *name*, below.
+4. **The two processes spell paths differently and neither derives the other's.**
+   TypeScript takes a realpath only where resolution walked a symlink under
+   `node_modules`, so a package generated inside a symlinked temporary directory
+   is reachable by two spellings at once. Every path is normalized through
+   `realpathSync.native` before comparison and the record is written back in the
+   generator's own spelling; a filter that assumed one spelling silently matched
+   nothing and turned the scoped import request into an unscoped one. Two
+   corollaries the first cut got wrong, both now pinned in
+   `scripts/contract-closure-record.test.mjs`:
+   - **The scope test accepts either spelling**, because the checker's own
+     inventory filter does. Canonicalizing first and filtering second dropped an
+     intra-package directory symlink (`src -> ../shared`) out of the record *and*
+     out of both reconciliation sweeps — a record reading as a complete
+     attestation while the file every summary came from went unnamed, which is
+     the defect class this entry exists to close. The record and the sweeps now
+     share one scoped view, and a module the analysis read that the scope excludes
+     is itself a note.
+   - **`realpathSync` does not canonicalize case; `realpathSync.native` does.** On
+     a case-insensitive filesystem the walk accepts `./Impl.js` for `impl.js`, so
+     one file arrived as two keys: the record named a spelling that exists on no
+     case-sensitive filesystem, and the seed sweep reported the real file as
+     seeded-but-never-opened. A record is transferred between machines, so the
+     verdict may not depend on which one wrote it.
+
+5. **A dependency's bytes are excluded from the record, and nothing here pins
+   them.** The record is scoped to this package's own files, so a dependency the
+   analysis read — nested under the package root or hoisted above it — is named by
+   *that* package's contract and closure record, not by this one. That is
+   deliberate: hashing it would bind the record to the install layout and to a
+   dependency's version, so two generations over byte-identical package bytes
+   would refuse to transfer a review, and the first cut of this change did exactly
+   that. **The residue is a dependency with no contract of its own**: its bytes
+   determined summaries here and no artifact in this repository pins them. The
+   dependency-contract boundary is where that belongs (`dependencyContracts`, and
+   the unresolved-dependency refusal that demands one), so this is a named
+   approximation rather than a hole the closure record should paper over.
+6. **A file the analysis read from outside the package is noted, not recorded.**
+   The record cannot hash it and cannot claim it, so it says it excluded it. In a
+   workspace install where a sibling package is reached through a `node_modules`
+   symlink the note does not fire — the resolver's own `node_modules` spelling
+   classifies it as a dependency — but a workspace dependency reached by a path
+   with no `node_modules` segment at all would note. That direction is
+   fail-closed and preferred to silence; if it proves noisy on a real monorepo the
+   fix is a manifest-aware dependency test, not a wider silence.
+
+**The fail-closed tier under all of this is defence, and calling it a tier would
+overstate it.** An absent inventory or a `complete: false` graph leaves the record
+labelled unattested and blocks everything, but against the pinned producer neither
+shape can occur: a run that cannot write an inventory exits non-zero and aborts
+the generation before a contract exists, and the producer builds its import
+request out of the program's own inventory answer, so the request is always a
+subset of the holdings. The two stub-driven tests
+(`STUB_INVENTORY_ABSENT` / `STUB_INVENTORY_INCOMPLETE`) pin the contract a future
+producer must be met with, not behavior this repository has observed, and they say
+so. No generated contract here has ever carried the sentence.
+
+**The blocker had to stay measurable, and did not at first.** `runtimeNotes`
+raises its own refusal sentence, one word away from the closure-note one
+("carries an **attested** closure note"), and the corpus classifier matched on
+the shorter phrase — so every row whose only blocker was this one was counted as
+an `unclassified-refusal`, the number amendment A9's stage 2 gate reads. It is now
+its own blocker kind (`attested-closure-note`) in the verifier's `BLOCKERS`, its
+own class in the classifier, and its own root cause ordered just after
+`closure-note`. `verify-corpus.test.mjs` now holds *every* kind the verifier
+declares to being nameable here, which is the assertion whose absence let the
+first one through.
+
+**Cost**: two extra round trips on a generation run, both reads of an
+already-built program. Measured on the widest single program the corpus's widest
+package produces (`@tanstack/charts@0.14.0`, 156 root files, 344 modules and 623
+import facts answered): 4767 ms → 5201 ms mean over five runs, median 4779 ms →
+5031 ms. Nothing on the analysis path pays it.
+
+Corpus-wide the same cost is **+2.4% of the generation phase**: 197,685 ms →
+202,504 ms of aggregate worker generation time over the ecosystem benchmark's 416
+probes. Whole-run wall clock is noise-dominated at this scale and moved the other
+way (100.820 s → 97.054 s), which is why the phase figure is the one quoted.
+
+**One-time re-review.** The record's shape changed, so no review recorded against
+a pre-attestation record transfers onto a regenerated plan: `contract review
+--transfer-from` reports `its runtime module closure changed` and transfers
+nothing. Verified end to end on `declaration-sibling-reach` (`transferred 0 of 9
+review item(s)`). This is correct — the older record did not name declaration
+bytes the summaries demonstrably depend on — and it is documented in
+[package-contracts.md](package-contracts.md). No compatibility shim: one that
+accepted the old record would be accepting a review of a file set nobody
+enumerated.
+
 Two adjacent facts belong with it. `contract generate --missing` writes
 project-owned contracts under `.solid-checker/contracts/<package>/`, which are
 outside the package by construction and therefore never byte-bound at the loader
@@ -2652,8 +2866,15 @@ forthcoming):
 - **Closure notes, not unknowns, are the harder blocker.** An unknown is an
   honest uncertifiable result a consumer can route around; a closure note means
   the contract cannot be byte-attested at all, so no amount of verification
-  binds it to an artifact. 7 probes and 32 notes today, 29 of them in Official
-  Solid. See "[The runtime-module closure is walked, not
+  binds it to an artifact. 7 probes and 32 notes when this section was written,
+  29 of them in Official Solid. **Re-measured on the corpus after attestation
+  (2026-08-24): 6 probes and 22 notes — 5 closure notes on 2 probes and 17
+  attested closure notes on 5 — with 21 of the 22 still in Official Solid.** Both
+  kinds still block promotion, so the blocker did not shrink by a third; what
+  changed is that 9 of the notes were asset-import gaps that the analyzing
+  program's own module list showed do not exist. The full account, including the
+  two note classes that turned out not to disappear, is in "[The runtime-module
+  closure is walked, not
   attested](#the-runtime-module-closure-is-walked-not-attested-2026-08-22)".
 - These figures are the **demand-insensitive upper bound on the work**, and
   should never be quoted as a defect rate. An unknown becomes a finding only
@@ -2740,7 +2961,7 @@ same 305-row / 416-probe manifest; before = the 2026-08-22 run recorded above).
 > direction; part of its magnitude was that inflation. The `corrected` column
 > was the current state when this entry was written and is now four measurement
 > states old — see
-> [ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-seventh-measurement-state-release-binary-416-probes)
+> [ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-eighth-measurement-state-release-binary-416-probes)
 > for the current figures, including the outcome classes, which have moved since
 > ("moved once and have not moved since" below was true until 2026-08-24).
 
@@ -4464,7 +4685,7 @@ differ only by 4 undriven `reactiveReads` claims and by 6 proven exports of
 `@tanstack/ai-solid-ui@0.7.18`, where they overlap on one export. So none of the
 movement above is an interaction between them. Both numbers are stated once, with
 the family breakdowns, in
-[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-seventh-measurement-state-release-binary-416-probes).
+[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-eighth-measurement-state-release-binary-416-probes).
 
 ## The refusal path costs enums and untyped values (2026-08-24)
 
@@ -4701,7 +4922,10 @@ same five shapes**.
   2 → 4 for that reason and no other. Same for a failed probe or an
   incompleteness finding naming a claim of a refused entrypoint: a contradiction
   must be fixed, not dropped. `incompleteness` (38) and `probe-failed` (15) did
-  not move.
+  not move. (Those 4 root-caused rows later split 2 `closure-note` / 2
+  `attested-closure-note` when the record became compiler-attested, with no row
+  leaving the refused set — see "[The runtime-module closure is walked, not
+  attested](#the-runtime-module-closure-is-walked-not-attested-2026-08-22)".)
 - **334 exports are now dropped from otherwise-verified documents** with their
   refused entrypoints — a state that did not exist before stage 1. They are
   counted as their own state inside the corpus composite's unchanged 8,696

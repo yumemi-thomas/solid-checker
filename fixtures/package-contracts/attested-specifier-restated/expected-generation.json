@@ -1,0 +1,14 @@
+{
+  ".": {
+    "targets": [
+      "./index.js"
+    ],
+    "modules": [
+      "impl.cts",
+      "index.js"
+    ],
+    "notes": [
+      "index.js: closure could not be fully enumerated: ./impl.cjs names no runtime module inside the package (looked for impl.cjs, impl.cts); the analyzing program resolved it to impl.cts (relative, .cts), so the analysis read a module this walk did not seed"
+    ]
+  }
+}

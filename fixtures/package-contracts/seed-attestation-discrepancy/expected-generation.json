@@ -1,0 +1,14 @@
+{
+  ".": {
+    "targets": [
+      "./index.js"
+    ],
+    "modules": [
+      "big.js",
+      "index.js"
+    ],
+    "notes": [
+      "big.js: the analyzing program opened this module and the closure walk did not seed it, so the analysis read package bytes the walk did not enumerate"
+    ]
+  }
+}

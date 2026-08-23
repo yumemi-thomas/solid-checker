@@ -226,6 +226,12 @@ export function blockerClass(line) {
   if (line.includes("discovery")) return "probe-report-includes-discovery";
   if (line.startsWith("a probe failed")) return "probe-failed";
   if (line.startsWith("an incompleteness finding")) return "incompleteness";
+  // Before the `closure-note` rule and matching a phrase of its own: the two
+  // sentences are one word apart ("carries an *attested* closure note"), they
+  // block for different reasons, and merging them would make the effect of
+  // attestation on this corpus unmeasurable -- which is the whole reason the
+  // generator emits them on separate fields.
+  if (line.includes("carries an attested closure note")) return "attested-closure-note";
   if (line.includes("carries a closure note")) return "closure-note";
   if (line.includes("no passing kind observation")) return "kind-observed";
   // The floor under amendment A9's per-entrypoint refusal: a document that would
@@ -253,6 +259,9 @@ export const ROOT_CAUSE_ORDER = [
   "kind-observed",
   "certifies-nothing",
   "closure-note",
+  // After `closure-note`: a row carrying both is a row whose record is not
+  // established at all, and that is the cause a reader has to resolve first.
+  "attested-closure-note",
   "probe-report-binds-contract",
   "probe-report-includes-discovery",
   "document-validates",

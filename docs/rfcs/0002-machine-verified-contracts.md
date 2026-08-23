@@ -379,8 +379,18 @@ one clear line each, contract untouched — unless **all** of the following hold
    auto-verification outright: the summaries were derived from a file set the
    generator itself declines to claim it enumerated, and no probe covers the
    negative claims that file set determines. This is the
-   [walked-not-attested residue](../precision-backlog.md) and Stage 3 is its
-   fix.
+   [walked-not-attested residue](../precision-backlog.md); Stage 3 landed and
+   **split the condition rather than removing it**. `notes` keeps this exact
+   sentence, for the cases where the record still cannot be established. A
+   second field, `runtimeNotes`, carries the other half: the record *is* the
+   analyzing program's own file list and complete for what it read, and what
+   remains unproven is that the runtime loads nothing else — which a non-literal
+   dynamic `import()`, and an unselected conditional `imports` branch whose
+   targets are real modules on disk, both make unprovable by any module graph.
+   Both fields block, under two blocker kinds (`closure-note` and
+   `attested-closure-note`) so a corpus measurement can attribute them. Only
+   `notes` blocks a review transfer, because two generations with identical
+   attested records do describe the same bytes.
 5. **Artifact binding is recorded where schema v1 can carry it.** That means:
    the contract's emitted entrypoints resolve to exactly one runtime artifact
    inside the contract's own directory. Where they do not, the review plan's
@@ -543,21 +553,23 @@ says nothing about a case nobody wrote.
 
 **Closure notes fail closed**, and block promotion outright per §2 condition 4.
 
-**Stage 3 upgrades the closure from walked to attested.** The closure in a
-review plan's `generation.entrypoints` block is produced by
+**Stage 3 upgraded the closure from walked to attested, and it has landed.** The
+closure in a review plan's `generation.entrypoints` block used to be produced by
 `packages/cli/scripts/runtime-module-closure.mjs`, a scanner in the Node
-process — *not* the file list the analyzing program opened. It is now
-fail-closed for every static specifier form it recognizes, but the residue is
-real: "a syntax walk can still disagree with the compiler in ways neither side
+process — *not* the file list the analyzing program opened. That left a real
+residue: "a syntax walk can still disagree with the compiler in ways neither side
 reports — a `paths` mapping, a resolution the bundler condition resolves
 differently, a specifier form the scanner classifies as external that the
-analyzed program in fact opened." The exact fix is a TypeFacts protocol
-addition emitting the compiler's own module list.
+analyzed program in fact opened." The record is now the analyzing program's own
+module list (`modules`, via `--emit-module-inventory`), the walk survives as the
+seeder of that program's `files` list, and a disagreement between the two is a
+named note in either direction. The scanner is still fail-closed for every
+static specifier form it recognizes, and its problems are now reconciled against
+the attestation instead of being quoted blind.
 
-**And here is what none of them do.** Until Stage 3, generator soundness is the
-trust root, and even after Stage 3 it remains the trust root for the *analysis*
-— Stage 3 attests which files were read, not that the conclusions drawn from
-them are right. A generator bug can emit a wrong family-(A) claim, including a
+**And here is what none of them do.** Generator soundness is the trust root for
+the *analysis*, before Stage 3 and after it — Stage 3 attests which files were
+read, not that the conclusions drawn from them are right. A generator bug can emit a wrong family-(A) claim, including a
 wrong negative claim, and every mechanism above can pass. The differential
 harness would catch it only if the bug reproduces in its one fixture; the
 torture corpus only if it reproduces in one of six; probes only if the bug is
@@ -732,17 +744,42 @@ check` cannot distinguish it from `reviewed` (question 6) and that callback
 loader already accepts `verified`, and `certification` already rejects inferred
 rows inside a certifying document.
 
-**Stage 3 — compiler-attested closure.** Extend the TypeFacts protocol so the
-analyzing program returns the module list it actually resolved, and use it in
-place of `runtime-module-closure.mjs`'s syntax walk. This is the only stage
-that touches Rust and TypeFacts, and it **moves an upstream pin**: TypeFacts is
-pinned by revision, so this follows [monorepo.md](../monorepo.md) — update the
-pin and its notice, rebuild with `scripts/build-typefacts.sh`, and re-run the
-process-test set. Until it lands, condition 4 of §2 blocks auto-verification
-for every entrypoint with a closure note, and generator soundness is the trust
-root for every negative claim. After it lands, the closure record becomes an
-attestation rather than a reconstruction — and generator soundness is still the
-trust root for the claims, which question 7 owns.
+**Stage 3 — compiler-attested closure. Landed.** The TypeFacts protocol returns
+the module list the analyzing program actually resolved (`modules`, handshake
+protocol `2`), the checker asks for it with `--emit-module-inventory` on a
+generation run, and the generator's closure record is derived from it.
+
+Two things this stage's text got wrong, corrected here rather than edited above:
+
+- **It does not move an upstream pin.** The proposal said Stage 3 "moves an
+  upstream pin" and should follow [monorepo.md](../monorepo.md). By the time it
+  was implemented the pin was already at the revision carrying the operation
+  (`rust/Cargo.toml`, and `bin/solid-typefacts.buildinfo` stamped to match), so
+  no pin move, no notice change, and no `scripts/build-typefacts.sh` run was
+  part of the work. The process-test set was re-run regardless.
+- **The walk is not replaced.** It said the attested list would be used "in
+  place of `runtime-module-closure.mjs`'s syntax walk". The walk survives as the
+  *seeder* of the analyzed program's `files` list, because seeding only the entry
+  and letting TypeScript discover the graph makes the analysis read adjacent
+  `.d.ts` files where it now reads runtime bytes — the pinned rationale in
+  `analyzeTarget`. What the attestation replaces is the **record**, and what it
+  adds is a **verifier** for the seed: a module one side names and the other does
+  not is a named, fail-closed note.
+
+Condition 4 of §2 still blocks, and it now blocks for a split reason. Where the
+record cannot be established — a seed the program disagreed with, a module the
+analysis read that the record's scope excludes, unreadable bytes, or (defensively,
+and unreachable against the pinned producer) no attestation or an incomplete graph
+— it blocks as before. Where the record *is* established and the runtime may still
+load a module the analysis never read, it blocks under its own sentence
+(`generation.entrypoints[*].runtimeNotes`) and its own blocker kind
+(`attested-closure-note`, so the corpus can attribute it rather than counting it
+unclassified), because no module graph can bound the runtime. Two shapes reach
+that field: a non-literal `import()`, and an unselected conditional `imports`
+branch whose targets exist on disk — the second one nearly went unsaid, and
+`fixtures/package-contracts/conditional-imports-side-effect` exists so it cannot
+again. Generator soundness remains the trust root for the claims themselves,
+which question 7 owns.
 
 ## Amendments
 

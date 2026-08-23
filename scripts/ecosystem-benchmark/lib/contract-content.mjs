@@ -198,6 +198,16 @@ export function summarizeContractDocument(contract) {
  * describes. Under a machine-verification scheme that is decisive: a contract
  * carrying a closure note cannot be byte-attested, however few unknowns its
  * claims contain.
+ *
+ * `attestedRuntimeNotes` are `generation.entrypoints[*].runtimeNotes`, and they
+ * are counted apart from `closureNotes` on purpose. There the record could not
+ * be established; here it is the analyzing program's own file list and what
+ * cannot be established is that the *runtime* loads nothing else — a non-literal
+ * dynamic `import()`, or an unselected conditional `imports` branch whose targets
+ * are real modules on disk. Both block promotion, so `fullyProven` reads their
+ * sum — but a corpus measurement that merged them could not attribute a note's
+ * disappearance to attestation. The refusal classifier keeps them apart for the
+ * same reason (`blockerClass`, `attested-closure-note`).
  */
 export function summarizeReviewPlan(plan) {
   if (!plan || typeof plan !== "object") return null;
@@ -217,12 +227,17 @@ export function summarizeReviewPlan(plan) {
 
   const closures = plan.generation?.entrypoints ?? {};
   const closureNotes = [];
+  const attestedRuntimeNotes = [];
   for (const [entrypoint, record] of Object.entries(closures)) {
     for (const note of Array.isArray(record?.notes) ? record.notes : []) {
       closureNotes.push(`${entrypoint} ${note}`);
     }
+    for (const note of Array.isArray(record?.runtimeNotes) ? record.runtimeNotes : []) {
+      attestedRuntimeNotes.push(`${entrypoint} ${note}`);
+    }
   }
   closureNotes.sort();
+  attestedRuntimeNotes.sort();
 
   return {
     checklistItems: items.length,
@@ -233,7 +248,9 @@ export function summarizeReviewPlan(plan) {
     // Bounded: a note is prose of unbounded length and the JSON report already
     // carries one line per probe. Three is enough to recognize the shape; the
     // count above is the measurement.
-    closureNoteSamples: closureNotes.slice(0, 3)
+    closureNoteSamples: closureNotes.slice(0, 3),
+    attestedRuntimeNotes: attestedRuntimeNotes.length,
+    attestedRuntimeNoteSamples: attestedRuntimeNotes.slice(0, 3)
   };
 }
 
@@ -264,6 +281,7 @@ export function summarizeContract({ contract, reviewPlan, refusedEntrypointsFrom
   const plan = summarizeReviewPlan(reviewPlan);
   const refusedEntrypoints = plan ? plan.refusedEntrypoints : refusedEntrypointsFromStdout;
   const closureNotes = plan ? plan.closureNotes : null;
+  const attestedRuntimeNotes = plan ? plan.attestedRuntimeNotes : null;
 
   // The two independent statements about refusals. They come from different
   // artifacts (the generator's stdout line and the review plan's items), so a
@@ -279,6 +297,7 @@ export function summarizeContract({ contract, reviewPlan, refusedEntrypointsFrom
     document.exportsWithoutSummary === 0 &&
     (refusedEntrypoints ?? 0) === 0 &&
     (closureNotes ?? 0) === 0 &&
+    (attestedRuntimeNotes ?? 0) === 0 &&
     plan !== null;
 
   return {
@@ -298,6 +317,8 @@ export function summarizeContract({ contract, reviewPlan, refusedEntrypointsFrom
     behavioralRows: document.behavioralRows,
     closureNotes: closureNotes ?? null,
     closureNoteSamples: plan?.closureNoteSamples ?? [],
+    attestedRuntimeNotes: attestedRuntimeNotes ?? null,
+    attestedRuntimeNoteSamples: plan?.attestedRuntimeNoteSamples ?? [],
     reviewPlanItems: plan?.checklistItems ?? null,
     reviewPlanItemsByKind: plan?.itemsByKind ?? null,
     ...(plan === null ? { note: "review plan missing or unparsable" } : {}),

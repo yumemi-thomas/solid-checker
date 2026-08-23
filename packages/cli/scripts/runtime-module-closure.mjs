@@ -1,25 +1,29 @@
-// Which runtime modules an entrypoint's summaries were derived from.
+// Which runtime modules an entrypoint's analysis should be seeded with.
 //
-// The closure this file computes is load-bearing twice over. It is the
-// TypeScript project's `files` list in `analyzeTarget`, so it decides what the
-// analysis can see; and it is the per-entrypoint hash set the review plan
-// records, so it decides whether a previous review may transfer onto a
-// regenerated contract. A module the walker misses is therefore not a smaller
-// closure -- it is a *false* one: the hash set claims "these are the bytes the
-// summaries came from" while a file that changed every summary sits outside it,
-// and `contract review --transfer-from` promotes a review nobody performed.
+// This walk decides one thing: the TypeScript project's `files` list in
+// `analyzeTarget`, and therefore what the analysis can see. It has to exist,
+// because seeding only the entrypoint makes a published ESM barrel's `.js`
+// specifiers resolve to the adjacent `.d.ts` files, so the analysis would read
+// declarations where it now reads runtime bytes.
 //
-// So the enumeration is fail-closed rather than best-effort. Every static
+// It no longer decides the *record*. The per-entrypoint hash set a review
+// transfers against is the analyzing program's own module list
+// (`--emit-module-inventory`), so a module this walk misses is no longer a
+// *false* record -- it is a seeding gap, and the attestation names it. That
+// division is the whole design: the walk seeds, the attestation records and
+// verifies the seed.
+//
+// The enumeration is still fail-closed rather than best-effort. Every static
 // specifier form a runtime module can carry is either resolved to a file that
 // is recorded, resolved to something with no runtime semantics (a declaration
 // file), classified as external (a bare specifier, which the package-contract
-// boundary owns instead), or noted. A note makes the entrypoint's closure
-// record incomplete, and an incomplete record transfers nothing.
-//
-// The one thing this is not is compiler-attested: it is a syntax walk in this
-// process, not the file list the analyzing program actually opened. See
-// docs/precision-backlog.md for that residue and the protocol addition that
-// would close it.
+// boundary owns instead), or reported as a problem. What changed is what happens
+// to a problem: every one is returned *structured* as well as as a note, and the
+// generator reconciles it against the attestation instead of quoting it blind --
+// the compiler can say whether it resolved the same specifier to a file this walk
+// never recorded, resolved nothing for it either, or never saw it at all. See
+// `attestedClosure` in generate-package-contract.mjs and
+// docs/precision-backlog.md.
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
@@ -278,12 +282,22 @@ export function tokenize(source) {
 
 /// Every static module specifier a runtime module names, plus what could not
 /// be read as one.
+///
+/// A problem is `{ kind, reason }`, not a sentence, because the two kinds
+/// reconcile differently against an attested module inventory. A `scan` problem
+/// is a specifier this scanner could not read, so the compiler's own import list
+/// settles whether anything was missed. A `dynamic-import` problem is a
+/// specifier *nothing* can resolve statically -- the compiler resolves no file
+/// for it either -- so the attested record is complete and what stays unproven
+/// is what the runtime may load, which is a different claim and carries its own
+/// note kind.
 export function moduleSpecifiers(source) {
   const { tokens, unterminated } = tokenize(source);
   const specifiers = [];
   const problems = [];
+  const problem = (kind, reason) => problems.push({ kind, reason });
   if (unterminated) {
-    problems.push(`the module could not be scanned: unterminated ${unterminated}`);
+    problem("scan", `the module could not be scanned: unterminated ${unterminated}`);
   }
   const isPunctuation = (token, value) => token?.kind === "other" && token.value === value;
 
@@ -307,7 +321,7 @@ export function moduleSpecifiers(source) {
       if (tokens[index + 2]?.kind === "string" && isPunctuation(tokens[index + 3], ")")) {
         specifiers.push(tokens[index + 2].value);
       } else {
-        problems.push("a dynamic import() whose specifier is not a string literal");
+        problem("dynamic-import", "a dynamic import() whose specifier is not a string literal");
       }
       continue;
     }
@@ -335,14 +349,23 @@ export function moduleSpecifiers(source) {
       if (clause.value === "from") {
         const specifier = tokens[cursor + 1];
         if (specifier?.kind === "string") specifiers.push(specifier.value);
-        else problems.push("an import/export whose module specifier is not a string literal");
+        else problem("scan", "an import/export whose module specifier is not a string literal");
         index = cursor + 1;
         break;
       }
       if (CLAUSE_TERMINATORS.has(clause.value)) break;
     }
   }
-  return { specifiers: [...new Set(specifiers)], problems: [...new Set(problems)] };
+  const seen = new Set();
+  return {
+    specifiers: [...new Set(specifiers)],
+    problems: problems.filter(entry => {
+      const key = `${entry.kind} ${entry.reason}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+  };
 }
 
 function patternCapture(pattern, candidate) {
@@ -487,11 +510,24 @@ export function createModuleResolver({ packageRoot, manifest = {}, conditions = 
     if (candidates.length > 1) {
       // Guessing which conditional branch this generation resolves would put
       // one branch's bytes behind every branch's summaries.
+      //
+      // Which of those branches *is* a runtime module that exists is a fact,
+      // not a guess, and the caller needs it: the compiler resolves nothing for
+      // an unselected conditional specifier, so reconciliation would otherwise
+      // read "the analysis read no file for it, the record is complete" and say
+      // nothing -- while Node, under its own conditions, loads one of these
+      // files. `runtimeTargets` is what lets `attestedClosure` separate that
+      // from `./styles.css` and `./gone.js`, which name no runtime module at
+      // all and which therefore no runtime loads either.
       return {
         problem:
           `${specifier} resolves to ${candidates.length} conditional targets ` +
           `(${candidates.join(", ")}) and this generation selects none of them; ` +
-          "regenerate with --conditions to fix the branch"
+          "regenerate with --conditions to fix the branch",
+        runtimeTargets: candidates.flatMap(value => {
+          const branch = resolveTarget(value, specifier);
+          return branch.file ? [branch.file] : [];
+        })
       };
     }
     return resolveTarget(candidates[0], specifier);
@@ -519,17 +555,51 @@ export function createModuleResolver({ packageRoot, manifest = {}, conditions = 
 /// The entry module plus every runtime module it statically pulls in, and the
 /// reasons that set may be incomplete.
 ///
-/// `notes` is the fail-closed channel: it is what `contract review
-/// --transfer-from` reads to decide that an entrypoint's closure record does
-/// not establish which bytes the summaries came from, and what the review
-/// plan's artifact-binding section quotes. An empty `notes` is a claim, so
-/// nothing may be dropped from this walk without adding one.
+/// `notes` is the fail-closed channel, and an empty `notes` is still a claim, so
+/// nothing may be dropped from this walk without adding one. What reads it
+/// changed: the review plan's own notes come from `attestedClosure`'s
+/// reconciliation of `problems` below, and `notes` is what a caller quotes when
+/// it has no attestation to reconcile against.
+///
+/// `problems` carries the same set structured -- `{ file, specifier, kind,
+/// reason, runtimeTargets }` -- so the generator can reconcile each one against
+/// the analyzing program's own module inventory instead of quoting it blind.
+/// `runtimeTargets` is the one field a reconciler cannot derive: the existing
+/// runtime modules a *runtime* could still select for a specifier the compiler
+/// resolved nothing for. `notes` is
+/// derived from `problems` and nothing else, so a caller that reconciles cannot
+/// disagree with a caller that quotes. `noteFor` renders one problem in exactly
+/// the spelling `notes` uses, which is what lets a reconciled note keep the
+/// sentence a reviewer already knows.
+export function noteFor(problem) {
+  return `${problem.spelled}: closure could not be fully enumerated: ${problem.reason}`;
+}
+
 export function runtimeModuleClosure({ packageRoot, entryFile, excludedFiles, resolver }) {
   const files = [];
-  const notes = new Set();
+  const problems = [];
+  const seen = new Set();
   const pending = [entryFile];
   const visited = new Set();
   const spell = file => relative(packageRoot, file).replaceAll(sep, "/") || file;
+  const record = (file, kind, reason, specifier, runtimeTargets) => {
+    const problem = {
+      file,
+      spelled: spell(file),
+      kind,
+      reason,
+      ...(specifier ? { specifier } : {}),
+      // Existing runtime modules inside this package that a runtime could
+      // select for the specifier and the analysis did not read. Empty is the
+      // normal answer and means what it says: nothing on disk answers this
+      // specifier, so no runtime loads a module for it either.
+      ...(runtimeTargets?.length ? { runtimeTargets } : {})
+    };
+    const key = noteFor(problem);
+    if (seen.has(key)) return;
+    seen.add(key);
+    problems.push(problem);
+  };
   while (pending.length) {
     const file = pending.pop();
     if (visited.has(file) || (file !== entryFile && excludedFiles.has(file))) continue;
@@ -539,25 +609,25 @@ export function runtimeModuleClosure({ packageRoot, entryFile, excludedFiles, re
     try {
       scanned = moduleSpecifiers(readFileSync(file, "utf8"));
     } catch (error) {
-      notes.add(
-        `${spell(file)}: closure could not be fully enumerated: the module could not be read (${String(
-          error?.message ?? error
-        )})`
+      record(
+        file,
+        "unreadable",
+        `the module could not be read (${String(error?.message ?? error)})`
       );
       continue;
     }
     for (const problem of scanned.problems) {
-      notes.add(`${spell(file)}: closure could not be fully enumerated: ${problem}`);
+      record(file, problem.kind, problem.reason);
     }
     for (const specifier of scanned.specifiers) {
       const resolved = resolver.resolve(file, specifier);
       if (resolved.external) continue;
       if (resolved.problem) {
-        notes.add(`${spell(file)}: closure could not be fully enumerated: ${resolved.problem}`);
+        record(file, "specifier", resolved.problem, specifier, resolved.runtimeTargets);
         continue;
       }
       if (resolved.file && !visited.has(resolved.file)) pending.push(resolved.file);
     }
   }
-  return { files, notes: [...notes].sort() };
+  return { files, problems, notes: [...new Set(problems.map(noteFor))].sort() };
 }

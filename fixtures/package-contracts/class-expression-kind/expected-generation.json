@@ -1,0 +1,11 @@
+{
+  ".": {
+    "targets": [
+      "./index.ts"
+    ],
+    "modules": [
+      "index.ts",
+      "sibling.js"
+    ]
+  }
+}

@@ -460,6 +460,7 @@ function emptyContentAccumulator() {
     unknownByDomain: emptyDomainCounts(),
     behavioralRows: emptyBehavioralRows(),
     closureNotes: 0,
+    attestedRuntimeNotes: 0,
     packageStates: new Map()
   };
 }
@@ -479,6 +480,7 @@ function accumulateContent(accumulator, result) {
   addDomainCounts(accumulator.unknownByDomain, content.unknownByDomain);
   addBehavioralRows(accumulator.behavioralRows, content.behavioralRows);
   accumulator.closureNotes += content.closureNotes ?? 0;
+  accumulator.attestedRuntimeNotes += content.attestedRuntimeNotes ?? 0;
   if (content.fullyProven) accumulator.probesFullyProven += 1;
   if ((content.exportsWithUnknown ?? 0) > 0) accumulator.probesWithUnknowns += 1;
   if ((content.entrypointsRefused ?? 0) > 0) accumulator.probesWithRefusals += 1;
@@ -977,6 +979,13 @@ function renderContractContentSection(content) {
     `- Entrypoints: ${content.entrypointsEmitted} emitted, ${content.entrypointsRefused} refused`
   );
   lines.push(`- Closure notes (block byte-attested verification): ${content.closureNotes}`);
+  // Counted apart from the line above because the two say different things: a
+  // closure note means the record could not be established, an attested runtime
+  // note means it was and the runtime may still load something outside it. Both
+  // block, and merging them would make attestation's effect unmeasurable.
+  lines.push(
+    `- Attested closure notes (record complete, runtime unbounded): ${content.attestedRuntimeNotes}`
+  );
   lines.push("");
 
   lines.push("### Unknown claims by domain");

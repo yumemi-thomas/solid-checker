@@ -1,0 +1,10 @@
+{
+  ".": {
+    "targets": [
+      "./index.js"
+    ],
+    "modules": [
+      "index.js"
+    ]
+  }
+}

@@ -238,28 +238,120 @@ until the contract is regenerated. An edit that answers its own item without
 changing what the export certifies, such as filling in a callback's `owner`,
 promotes normally.
 
-The plan's `generation` block records, per emitted entrypoint, the exact
-runtime-module closure the summaries were derived from — contract-directory-
-relative paths, `..` spellings included, with `sha256:` hashes of the exact
-bytes — plus the generator identity that produced it and, for a legacy root, the
-manifest field and artifact it resolved from. It answers the question the
-contract's single `artifacts` pair cannot — *which bytes was this reviewed
-against* — and nothing loads it as evidence.
+The plan's `generation` block records, per emitted entrypoint, the exact modules
+the summaries were derived from — contract-directory-relative paths, `..`
+spellings included, with `sha256:` hashes of the exact bytes — plus the generator
+identity that produced it and, for a legacy root, the manifest field and artifact
+it resolved from. It answers the question the contract's single `artifacts` pair
+cannot — *which bytes was this reviewed against* — and nothing loads it as
+evidence.
 
-That enumeration is **fail-closed**. Every static specifier a runtime module
-names is resolved to a file that is recorded, to something with no runtime
-semantics (a declaration file), or to an external package boundary, which the
-dependency contract owns and no closure hash could pin. Anything else — a
+**That record is an attestation, not a reconstruction.** The module list is the
+analyzing program's own: the checker asks the compiler for it (`modules`, via
+`--emit-module-inventory`) on the same run that emits the contract, and the
+generator scopes it to the package being described. It therefore names every
+file the analysis opened under the package, declaration files included — a
+`.d.ts` the analysis bound an import to determines the summaries exactly as much
+as a runtime module does, and leaving it out would be the record lying by
+omission.
+
+**What "scoped to the package" means, and what each exclusion costs**
+(`packageScope` in `packages/cli/scripts/generate-package-contract.mjs`):
+
+- A file is this package's own when *either* spelling puts it inside the package
+  root — the path the analyzing program answered with, or its realpath. Both are
+  accepted for the same reason the checker's own inventory filter accepts both:
+  TypeScript takes a realpath only where resolution walked a symlink under
+  `node_modules`, so a directory symlink *inside* a package (`src -> ../shared`)
+  is held under the spelled path while its realpath leaves the root. The record
+  names the canonical spelling where it has one, so one file is one module on a
+  case-insensitive filesystem too, and the verdict does not depend on which
+  machine generated it.
+- **A dependency's bytes are excluded**, whether the install hoisted them or
+  nested them under this package. They are not this package's bytes, no republish
+  of it changes them, and hashing them would bind the record to the install layout
+  and to a dependency's version — so two generations over byte-identical package
+  bytes would refuse to transfer a review. What the analysis read from a
+  dependency is described by *that* package's own contract and closure record.
+  The residue — a dependency with no contract of its own — is a named
+  approximation in `docs/precision-backlog.md`, not a claim this record makes.
+- The compiler's bundled library declarations are excluded: they are not files on
+  disk that any record could hash.
+- **Anything else the analysis read is noted, not dropped.** A record that
+  excludes bytes the summaries were derived from says so.
+
+The generator's own syntax walk
+(`packages/cli/scripts/runtime-module-closure.mjs`) survives, and its job is now
+narrower and named: it **seeds** the analyzed program's `files` list. It cannot be
+dropped, because seeding only the entrypoint makes a published ESM barrel's `.js`
+specifiers resolve to the adjacent `.d.ts` files, so the analysis would read
+declarations where it now reads runtime bytes. The attestation is both the record
+and the **verifier of that seed**.
+
+So the walk still fails closed on every static specifier form it recognizes — a
 relative or `#` specifier that names no runtime module inside the package, a
-conditional `imports` branch this generation cannot choose between, a dynamic
-`import()` whose specifier is not a string literal, a module whose bytes are
-unreadable — adds a `notes` entry to that entrypoint's closure record *and* a
-`contract artifact binding` line reading `closure could not be fully
-enumerated: <specifier>`. A note is an omission, and an entrypoint whose record
-carries one transfers nothing. Silent omission is not a possible outcome for a
-static specifier form. The closure is still a syntax walk in the generator
-rather than the analyzing program's own file list; see
-[precision-backlog.md](precision-backlog.md).
+conditional `imports` branch this generation cannot choose between, a
+non-literal dynamic `import()`, a module whose bytes are unreadable — and each
+problem is then reconciled against the attestation, never quoted blind:
+
+- **The compiler resolved it.** The analysis read a module the walk did not
+  seed, so the note is **kept and restated** with the attested path, resolution
+  kind, and extension — strictly more than the walk could say.
+- **The compiler resolved nothing, and no runtime can either.** The analysis read
+  no file for the specifier *and* no existing runtime module inside the package
+  answers it, so nothing loads anything here and the note is **dropped**. This is
+  the asset-import class (`./styles.css`, `./style.css`), a relative specifier
+  naming a file that does not exist, and a specifier escaping the package root —
+  whose boundary the dependency contract owns, exactly as a bare specifier's
+  does.
+- **The compiler resolved nothing, and a runtime still can.** An unselected
+  conditional `imports` branch whose targets are real modules on disk: `bundler`
+  resolution selects neither, so the record is complete, while Node loads the
+  `node` branch and a bundler loads the `browser` one. The record's completeness
+  is not in question and the runtime's boundedness is, so this rides
+  `runtimeNotes` with the reachable branches named. The distinction is a fact
+  about files on disk, never a judgement about a file suffix.
+- **A non-literal dynamic `import()`** makes the same claim, on the same field:
+  the record names every byte the analysis read, and no module graph can
+  enumerate what the runtime resolves.
+- **A module the program opened that the walk never seeded**, a module the walk
+  seeded that the program never opened, or a module the program opened that the
+  record's scope excludes, is its own **note**, in all three directions. This is
+  the residue that had no observer before: a walk can disagree with the compiler
+  in ways neither side reported, because the process that resolved the modules was
+  the other one.
+
+A `notes` entry blocks a review transfer and refuses promotion, exactly as
+before. A second field, `runtimeNotes`, carries the claim attestation makes
+separable: the record *is* complete for what the analysis read, and something
+outside every module graph may still load a module it never read. That refuses
+promotion too — it is the other half of RFC 0002 §2 condition 4, raised under its
+own `attested-closure-note` blocker kind so the two are countable apart — but it
+does **not** block a transfer, because two generations with byte-identical
+attested records do describe the same bytes. Both kinds appear on the `contract
+artifact binding` checklist section, because either way a human has to look.
+
+**The fail-closed tier below all of that is defence, not a tier users see.** If
+the analyzing program's file list were absent, or its module graph reported
+itself incomplete, the record would be the generator's own walk, labelled
+unattested, blocking every transfer and every promotion; falling back to the
+weaker source silently is not a possible outcome. Against the pinned producer
+neither shape can occur: a run that cannot write an inventory exits non-zero and
+aborts the generation before any contract exists, and the producer builds its
+import request out of the program's own inventory answer, so the request is always
+a subset of the holdings and `complete` is always true. The code and its tests
+pin the contract a future producer must be met with. No generated contract in
+this repository has ever carried the sentence.
+
+**One-time re-review after the upgrade.** The record changed shape when
+attestation landed: it names the files the program opened rather than the files
+the walk found, which adds every declaration file the analysis read. No review
+recorded against a pre-attestation record therefore transfers onto a regenerated
+plan — `contract review --transfer-from` reports `its runtime module closure
+changed` and carries nothing. That is correct rather than unfortunate: the older
+record did not name bytes the summaries demonstrably depend on. Regenerate and
+re-review once; there is no compatibility path, and a shim that accepted the old
+record would be accepting a review of a file set nobody enumerated.
 
 ### Probing a generated contract
 
@@ -1716,9 +1808,15 @@ conclusion about this one.
 Then, per entrypoint, all of these must hold:
 
 - both blocks record a closure for it, and neither record carries a `notes`
-  entry (a note is an omission: a target whose closure could not be walked, or a
-  module whose bytes were unreadable, and an incomplete record establishes
-  nothing);
+  entry (a note is an omission: a record that is not attested, a module the
+  program opened that the seed did not name, a module the program opened that the
+  record's scope excludes, or a module whose bytes were unreadable, and an
+  incomplete record establishes nothing). A `runtimeNotes` entry does **not**
+  block here — the record it sits beside is complete, and what it names is
+  unbounded in both generations equally. Both halves of that rule are pinned:
+  `scripts/contract-review.test.mjs` drives the comparison directly, and
+  `scripts/contract-verify.test.mjs` pins that the same `runtimeNotes` entry still
+  refuses the promotion;
 - the `targets` lists are identical;
 - the `modules` lists are identical — the same module paths, each with the same
   sha256;

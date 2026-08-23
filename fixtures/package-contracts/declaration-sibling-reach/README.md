@@ -47,3 +47,22 @@ rust/crates/solid-facts-backend/src/main.rs). Attribution widens to
   `parameter-member` row and carries no unknown claim, exactly as in
   `parameter-member-forwarded`. A regression that widened unconditionally would
   break here.
+
+## The closure record is part of this fixture's claim
+
+`expected-generation.json` pins it, because here the record is the only place the
+split is visible as *bytes*: `.`'s record names `channel.d.ts` **and**
+`channel.js`, which is the analysis reading a declaration where a runtime module
+sits beside it. A record that dropped declaration files would erase the evidence
+for the very finding this fixture is about, and one that reported the pair as a
+seeding gap would double-report it (see `attestedClosure`).
+
+`./direct` pins the mirror: its entry file *is* `channel.js`, and its record
+names that file alone. The sibling target `./index.js` is excluded from it
+exactly as the analysis excludes it, so the two records cannot silently merge.
+
+Neither record names anything under `node_modules/`. The solid-js stub is a
+dependency's bytes: excluded from the record deliberately, because hashing it
+would bind this fixture's record to the stub's version and to whether the install
+was hoisted or nested. What the analysis read from a dependency is described by
+that package's own contract; see docs/precision-backlog.md for the residue.

@@ -62,6 +62,19 @@ struct Request {
     validate_contract_paths: Vec<String>,
     #[serde(default)]
     emit_contract: String,
+    /// Where to write the analyzing program's own module inventory, as JSON.
+    ///
+    /// The generator's runtime-module closure is a syntax walk in *its*
+    /// process; this is the file list the program in *this* process actually
+    /// opened. Asking for it turns the generator's closure record from a
+    /// reconstruction into an attestation, and makes the walk's own output
+    /// checkable against it.
+    ///
+    /// Only a generation run asks: it is a read of a program that is already
+    /// built, but it is still two round trips, and an ordinary analysis has no
+    /// consumer for the answer.
+    #[serde(default)]
+    emit_module_inventory: String,
     #[serde(default)]
     package_name: String,
     #[serde(default)]
@@ -122,6 +135,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     request.presets.dedup();
     request.enable_rules.sort();
     request.enable_rules.dedup();
+    // The inventory attests *the generation run's* program. Asking for one
+    // without asking for a contract would hand a caller an attestation with
+    // nothing to attest, so it is refused rather than silently written.
+    if !request.emit_module_inventory.is_empty() && request.emit_contract.is_empty() {
+        return Err("--emit-module-inventory requires --emit-contract".into());
+    }
     let dialect = match request.dialect.as_deref() {
         Some(id) => dialect::by_id(id).ok_or_else(|| {
             format!(
@@ -305,6 +324,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         )?;
         if !request.emit_contract.is_empty() {
             emit_package_contract(dialect, &request, &analysis.program, &facts)?;
+            // After the contract, not before: a run that cannot emit a
+            // contract has no closure record to attest, and writing the
+            // inventory first would leave an attestation of a generation that
+            // produced nothing.
+            if !request.emit_module_inventory.is_empty() {
+                write_module_inventory(&mut typescript, &request)?;
+            }
             // Emission normally produces no stdout, and the generator depends
             // on that. `--format json` is a caller explicitly asking for the
             // diagnostics of the same analysis, which is otherwise only
@@ -371,6 +397,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut check_contracts = false;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
+    let mut emit_module_inventory = String::new();
     let mut package_name = String::new();
     let mut package_version = String::new();
     let mut declaration_artifact = String::new();
@@ -421,6 +448,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--emit-contract=") {
             emit_contract = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--emit-module-inventory=") {
+            emit_module_inventory = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--package-name=") {
@@ -503,6 +534,9 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             }
             "--emit-contract" => {
                 emit_contract = args.next().ok_or("--emit-contract needs a path")?
+            }
+            "--emit-module-inventory" => {
+                emit_module_inventory = args.next().ok_or("--emit-module-inventory needs a path")?
             }
             "--package-name" => package_name = args.next().ok_or("--package-name needs a value")?,
             "--package-version" => {
@@ -590,6 +624,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         check_contracts,
         validate_contract_paths,
         emit_contract,
+        emit_module_inventory,
         package_name,
         package_version,
         declaration_artifact,
@@ -678,6 +713,11 @@ fn print_help() {
            --emit-contract <PATH>       Write a generated solid-reactivity.json contract.\n\
                                         With --format json the same analysis also writes\n\
                                         its diagnostics to stdout\n\
+           --emit-module-inventory <PATH>\n\
+                                        Write the analyzing program's own module inventory\n\
+                                        beside the emitted contract: the files it included\n\
+                                        and where each package-local specifier resolved.\n\
+                                        Requires --emit-contract\n\
            --package-name <NAME>        Package name used by --emit-contract\n\
            --package-version <VERSION>  Exact package version used by --emit-contract\n\
            --declaration-artifact <PATH> Hash a declaration artifact into the contract\n\
@@ -1322,6 +1362,154 @@ fn report_unknown_claim_attribution(
         "exports": exports,
     });
     eprintln!("{UNKNOWN_CLAIM_ATTRIBUTION_MARKER}{note}");
+}
+
+/// One import specifier as the analyzing program's own resolver answered it.
+///
+/// Every field is read off the producer's `ModuleImportFact` and none is
+/// derived from another: `resolvedPath` is already a realpath, `symlinkPath` is
+/// the path before that realpath was taken and is empty when the resolver saw
+/// no divergence, and `includedPath` is the compiler's own declaration-to-input
+/// redirect and is empty for an ordinary shipped `.d.ts`. A consumer that needs
+/// the declaration-to-implementation edge and finds `includedPath` empty does
+/// not have it, and must not reconstruct it by pairing file names.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryImport<'a> {
+    /// The importing file. Together with the byte range this joins to a
+    /// consumer's own syntax facts by exact span rather than by specifier text.
+    path: &'a str,
+    start_byte: u64,
+    end_byte: u64,
+    text: &'a str,
+    resolution: &'static str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    resolved_path: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    included_path: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    symlink_path: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    extension: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    paths_pattern: &'a str,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryModule<'a> {
+    path: &'a str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    declaration_file: bool,
+}
+
+/// Writes the analyzing program's own module inventory beside the contract.
+///
+/// Two demands, in this order, because the second is scoped by the first: the
+/// inventory names every file the program included, and import provenance is
+/// then asked only of the files inside the package being described. A
+/// package-local importer is the only one whose specifiers can disagree with
+/// the generator's own walk of that package, so asking about every file in the
+/// program would pay for the whole `node_modules` closure to answer a question
+/// about one directory. With no `--contract-package-root` there is no such
+/// directory and every included file is asked about.
+///
+/// `complete` is [`ModuleGraph::is_complete`] verbatim: a scoped answer that
+/// covered less than it asked for. The consumer's contract is to fail closed on
+/// a `false` rather than to reconcile it against its own walk, which is the
+/// weaker source this file exists to replace.
+fn write_module_inventory(
+    typescript: &mut TypeFactsSession,
+    request: &Request,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let inventory = typescript.module_graph(&typefacts::ModuleGraphDemand::inventory())?;
+    // Both spellings of the package directory, because the program's own is not
+    // predictable from here. TypeScript takes a realpath only where resolution
+    // walked a symlink under `node_modules`, so a project whose tsconfig names
+    // files through a symlinked path -- `/var/folders/...` on macOS, and every
+    // temporary directory an ecosystem probe generates in -- holds those files
+    // under that spelling while `canonicalize` reports the other. Filtering by
+    // one alone silently matched nothing, which turned the scoped import request
+    // into an unscoped one: the same answer, computed for the whole program.
+    // Both name the same directory, so accepting either is not a widening.
+    let package_root = if request.contract_package_root.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(&request.contract_package_root))
+    };
+    let canonical_root = package_root
+        .as_deref()
+        .and_then(|root| root.canonicalize().ok());
+    let local = |path: &str| match &package_root {
+        None => true,
+        Some(root) => {
+            Path::new(path).starts_with(root)
+                || canonical_root
+                    .as_deref()
+                    .is_some_and(|canonical| Path::new(path).starts_with(canonical))
+        }
+    };
+    let import_paths = inventory
+        .modules
+        .iter()
+        .filter(|module| local(&module.path))
+        .map(|module| module.path.to_string())
+        .collect::<Vec<_>>();
+    let graph = typescript
+        .module_graph(&typefacts::ModuleGraphDemand::default().import_paths(import_paths))?;
+    let document = serde_json::json!({
+        "schemaVersion": 1,
+        "projectId": request.project_id,
+        // The spelling the caller used, not the canonical one: it is the
+        // namespace the consumer's own paths are in, and the consumer normalizes
+        // both sides itself rather than deriving one from the other.
+        "packageRoot": package_root
+            .as_deref()
+            .map(|root| root.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        "complete": graph.is_complete(),
+        // Already ordered by path, and by importing path then specifier start
+        // byte, by the producer -- so the file is deterministic without a sort
+        // here, and a sort here would hide it if that ever stopped being true.
+        "modules": graph
+            .modules
+            .iter()
+            .map(|module| InventoryModule {
+                path: &module.path,
+                declaration_file: module.declaration_file,
+            })
+            .collect::<Vec<_>>(),
+        "imports": graph
+            .imports
+            .iter()
+            .map(|import| InventoryImport {
+                path: &import.specifier.path,
+                start_byte: import.specifier.start_byte,
+                end_byte: import.specifier.end_byte,
+                text: &import.text,
+                resolution: match import.resolution {
+                    typefacts::ModuleResolution::Unresolved => "unresolved",
+                    typefacts::ModuleResolution::Relative => "relative",
+                    typefacts::ModuleResolution::NodeModules => "nodeModules",
+                    typefacts::ModuleResolution::NonRelative => "nonRelative",
+                },
+                resolved_path: &import.resolved_path,
+                included_path: &import.included_path,
+                symlink_path: &import.symlink_path,
+                extension: &import.extension,
+                paths_pattern: &import.paths_pattern,
+            })
+            .collect::<Vec<_>>(),
+        "unknownImportPaths": graph.unknown_import_paths,
+    });
+    let output = Path::new(&request.emit_module_inventory);
+    if let Some(directory) = output.parent()
+        && !directory.as_os_str().is_empty()
+    {
+        fs::create_dir_all(directory)?;
+    }
+    fs::write(output, json_output::go_compatible(&document, true)?)?;
+    Ok(())
 }
 
 fn emit_package_contract(
