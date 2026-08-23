@@ -198,7 +198,10 @@ test("a deliberate refusal omits one entrypoint and generation continues", () =>
     // is the only place a reviewer learns it was refused rather than absent
     // from the package.
     const review = readFileSync(join(packageRoot, "solid-reactivity.review.md"), "utf8");
-    assert.match(review, /## entrypoints the generator refused/);
+    // The section is no longer the generator's alone: `contract verify` pushes
+    // the same item kind for an entrypoint whose `kind` claims no run observed
+    // (RFC 0002 amendment A9), so its title names the refusal, not the refuser.
+    assert.match(review, /## entrypoints refused as uncertifiable/);
     assert.match(review, /- \[ \] \.\/b: .*is not part of the TypeScript project/);
   } finally {
     rmSync(directory, { recursive: true, force: true });

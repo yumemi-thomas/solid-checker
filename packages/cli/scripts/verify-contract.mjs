@@ -49,7 +49,9 @@ import {
   buildVerifyReport,
   collectBlockers,
   convertUnconfirmedClaims,
-  dropInferredRowEvidence
+  dropInferredRowEvidence,
+  unobservedKindRefusals,
+  withoutRefusedEntrypoints
 } from "./contract-verification.mjs";
 
 export const contractVerifyHelp = `Usage:
@@ -76,6 +78,14 @@ when a probe contradicted a negative claim, when any emitted entrypoint carries
 a closure note, when the probe report is missing or is not the report for these
 exact bytes, when a review of this contract has already recorded anything, or
 when the promoted document does not validate.
+
+An entrypoint whose kind claims this run did not observe in every stated mode is
+refused and omitted instead, exactly as contract generate refuses an entrypoint
+it cannot certify: the other entrypoints are still promoted, <contract>.verify.json
+names each refusal, the rewritten review plan carries a refused-entrypoint item
+naming the exports it dropped, and one unimportable subpath no longer costs a
+package its other twenty. A document where no entrypoint would certify anything
+is still refused whole.
 
 A verified contract is not a reviewed one. Callback owner rows are permanently
 out of a machine's reach, and every converted domain is an SC9005 uncertifiable
@@ -154,6 +164,24 @@ function expandedContract(document) {
 /// them. `collectReviewItems` pushes exactly these before it walks the
 /// entrypoints, so concatenating them in front reproduces the original order,
 /// and therefore the original ids.
+/// What a verification refusal costs, in one sentence a reviewer can act on.
+///
+/// It names the exports rather than counting them: the reviewed tier is the only
+/// remaining route to a claim about this subpath, and "3 exports" is not a
+/// reviewable question. Capped at five names for the same reason the blocker
+/// lines are, with the count carrying the rest.
+export function refusedEntrypointReason(refusal) {
+  const names = (refusal.exports ?? []).map(item => item.export);
+  const shown = names.slice(0, 5).join(", ");
+  const rest = names.length > 5 ? `, and ${names.length - 5} more` : "";
+  return (
+    `verification observed no passing \`kind\` claim for ${names.length} export(s) in every mode ` +
+    "they are stated for, so this entrypoint was refused and omitted from the verified contract: " +
+    `${shown}${rest}. Nothing in the contract now describes it, and a human's reading of an ` +
+    "entrypoint the probe could not observe is what this tier is for"
+  );
+}
+
 const GENERATION_ITEM_KINDS = new Set([
   "refused-entrypoint",
   "legacy-root-field",
@@ -195,7 +223,28 @@ const GENERATION_ITEM_KINDS = new Set([
 /// conversion record in `<contract>.verify.json`. A reviewer facing a converted
 /// domain now reads the same thing the sidecar says: the claim the machine held
 /// and the reason the probe could not reach it.
-export function rewriteReviewPlan({ plan, contract, contractHash, conversions = [] }) {
+///
+/// **A refused entrypoint gets a plan item, in generation's own vocabulary.**
+/// The rewrite derives its items from the promoted bytes, and a
+/// verification-refused entrypoint is not in them -- so without this, every
+/// question about that subpath left the plan as well as the document, and
+/// `contract review` (which never reads `<contract>.verify.json`) had no way to
+/// learn the subpath had ever been claimed. That is precisely what
+/// `collectReviewItems` refuses to do for a *generation*-refused entrypoint:
+/// "a partial contract must never be silent about what it omits: a refused
+/// entrypoint is the difference between 'this package has no such export' and
+/// 'we could not certify it', and only the second is true here". The sentence is
+/// as true of a verification refusal, so this pushes the same
+/// `refused-entrypoint` item through the same collector -- kept open fail-closed
+/// by review transfer (`review-contract.mjs`), and naming the exports the
+/// promotion dropped.
+export function rewriteReviewPlan({
+  plan,
+  contract,
+  contractHash,
+  conversions = [],
+  refusedEntrypoints = []
+}) {
   const preserved = plan.items.filter(item => GENERATION_ITEM_KINDS.has(item.kind));
   const carried = new Map(
     plan.items.filter(item => item.because).map(item => [item.id, item.because])
@@ -206,7 +255,19 @@ export function rewriteReviewPlan({ plan, contract, contractHash, conversions = 
       conversion
     ])
   );
-  const items = [...preserved, ...collectReviewItems(contract.entrypoints)].map(item => {
+  // `collectReviewItems` pushes refusals before it walks the entrypoints, and
+  // item ids are derived from what an item is *about*, so a verification refusal
+  // can never collide with a generation refusal: a generation-refused entrypoint
+  // is absent from the document verification reads, so the two name disjoint
+  // entrypoints.
+  const verificationRefusals = refusedEntrypoints.map(refusal => ({
+    entrypoint: refusal.entrypoint,
+    reason: refusedEntrypointReason(refusal)
+  }));
+  const items = [
+    ...preserved,
+    ...collectReviewItems(contract.entrypoints, new Map(), verificationRefusals)
+  ].map(item => {
     const inherited = carried.get(item.id);
     const conversion =
       item.kind === "unknown-sentinel"
@@ -406,7 +467,18 @@ export async function verifyContract(arguments_) {
   });
   if (blockers.length) return refuse(blockers, { report, plan: plan ?? null });
 
-  const converted = convertUnconfirmedClaims(contract, report);
+  // The entrypoints whose `kind` claims this run did not observe are refused and
+  // omitted, exactly as `contract generate` refuses an entrypoint it cannot
+  // certify. `collectBlockers` has already refused the document if that would
+  // leave nothing, so at least one entrypoint survives here -- and conversion
+  // runs over the survivors only, so nothing a refused entrypoint stated can
+  // reach the promoted bytes or the probed-row count.
+  const refusedEntrypoints = unobservedKindRefusals(contract, report);
+  const surviving = withoutRefusedEntrypoints(
+    contract,
+    refusedEntrypoints.map(refusal => refusal.entrypoint)
+  );
+  const converted = convertUnconfirmedClaims(surviving, report);
   const droppedMarkers = dropInferredRowEvidence(converted.contract.entrypoints);
   // The one and only evidence write. The generator string is deliberately not
   // carried over: what a verified document attests is a mechanical check, not
@@ -440,7 +512,8 @@ export async function verifyContract(arguments_) {
     conversions: converted.conversions,
     probed: converted.probed,
     staleMarkers: converted.staleMarkers,
-    droppedMarkers
+    droppedMarkers,
+    refusedEntrypoints
   });
   writeFileSync(verifyPath, `${JSON.stringify(verifyReport, null, 2)}\n`);
 
@@ -448,7 +521,8 @@ export async function verifyContract(arguments_) {
     plan,
     contract: expandedContract(JSON.parse(next)),
     contractHash: afterHash,
-    conversions: verifyReport.conversions
+    conversions: verifyReport.conversions,
+    refusedEntrypoints: verifyReport.refusedEntrypoints
   });
   writeFileSync(planPath, `${JSON.stringify(rewritten.document, null, 2)}\n`);
   writeFileSync(
@@ -467,6 +541,14 @@ export async function verifyContract(arguments_) {
         `${conversion.claims[0]?.reason ?? "not observed"}\n`
     );
   }
+  for (const refusal of verifyReport.refusedEntrypoints) {
+    process.stdout.write(
+      `refused and omitted entrypoint ${refusal.entrypoint}: ${refusal.exports.length} export(s) ` +
+        "with no passing kind observation in every stated mode; a consumer importing it now gets an " +
+        "explicit uncertifiable result rather than a claim nothing observed, and the review plan " +
+        "carries a `refused-entrypoint` item naming what was dropped\n"
+    );
+  }
   for (const stale of verifyReport.staleProbedMarkers) {
     process.stdout.write(
       `stale probed marker ${stale.entrypoint}:${stale.export} ${stale.field} ` +
@@ -478,7 +560,11 @@ export async function verifyContract(arguments_) {
     `verified ${contractFile}: ${verifyReport.summary.probedRows} probed row(s) kept, ` +
       `${verifyReport.summary.conversions} claim domain(s) converted to unknown, ` +
       `${verifyReport.summary.staleProbedMarkers} unwitnessed probed marker(s) discarded, ` +
-      `${droppedMarkers} inferred row marker(s) dropped; report ${verifyPath}\n`
+      `${droppedMarkers} inferred row marker(s) dropped` +
+      (verifyReport.summary.refusedEntrypoints
+        ? `, ${verifyReport.summary.refusedEntrypoints} entrypoint(s) refused and omitted`
+        : "") +
+      `; report ${verifyPath}\n`
   );
   process.stdout.write(
     `${rewritten.items.length} review item(s) remain for the optional reviewed tier at ` +

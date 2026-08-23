@@ -46,6 +46,11 @@ export const BLOCKERS = [
   "probe-failed",
   "incompleteness",
   "kind-observed",
+  // Not in RFC 0002 §3's list: it is the floor under amendment A9's
+  // per-entrypoint `kind` refusal. A promoted document has to certify
+  // *something*, and "no entrypoint certifies anything" is the one shape the
+  // finer refusal can produce that the coarse one could not.
+  "certifies-nothing",
   "closure-note",
   "review-under-way",
   "document-validates"
@@ -304,10 +309,12 @@ export function convertUnconfirmedClaims(contract, report) {
 
     // `kind` is not converted here, and that is not an exemption: schema v1 has
     // no sentinel for it, so there is nothing honest to convert it *to*. It is
-    // handled entirely by `unobservedKindBlockers` below -- a kind claim this
-    // run did not observe in every stated mode blocks the promotion outright.
-    // Relying on "a disagreeing kind is a failed probe" was the hole: a probe
-    // that observed *nothing* disagrees with nothing.
+    // handled entirely by `unobservedKindRefusals` below -- a kind claim this
+    // run did not observe in every stated mode refuses its entrypoint, and
+    // refuses the document when no entrypoint would certify anything. Relying
+    // on "a
+    // disagreeing kind is a failed probe" was the hole: a probe that observed
+    // *nothing* disagrees with nothing.
 
     if (Array.isArray(summary.callbacks) && summary.callbacks.length) {
       const reasons = summary.callbacks
@@ -477,7 +484,22 @@ export function dropInferredRowEvidence(value) {
   return dropped;
 }
 
-/// The `kind` claims this run did not observe, as promotion blockers.
+/// Why one entrypoint's `kind` claims are not certifiable, as one line.
+///
+/// The entrypoint name leads, because the line is an attribution: the sidecar
+/// records it against that entrypoint, and the document-level blocker below
+/// quotes it verbatim.
+function kindRefusalDetail(entrypoint, unobserved) {
+  const named = unobserved.map(item => `${item.export} (${item.modes.join(", ")})`);
+  const shown = named.slice(0, 5).join(", ");
+  const rest = named.length > 5 ? `, and ${named.length - 5} more` : "";
+  return (
+    `${entrypoint}: the probe report records no passing kind observation for ${unobserved.length} ` +
+    `export(s) in every mode they are stated for: ${shown}${rest}`
+  );
+}
+
+/// The entrypoints whose `kind` claims this run did not observe.
 ///
 /// `kind` is the one family-(B) claim with no sentinel to convert to. Schema v1
 /// requires it on every export summary and its two values are the whole
@@ -489,17 +511,32 @@ export function dropInferredRowEvidence(value) {
 /// load promoted with none of its claims observed at all.
 ///
 /// So the rule is the other one available: a `kind` claim not probed-passed in
-/// every mode the export is stated for **blocks**. The consequence is
+/// every mode the export is stated for cannot be certified. The consequence is
 /// deliberate and worth stating plainly -- a package this checker cannot import
 /// cannot be machine-verified. It can still be reviewed, and `contract review`
 /// is where a human's reading of an unimportable package belongs.
 ///
+/// **The unit of that refusal is the entrypoint, not the document.** This
+/// function used to return blocker lines, and one of them refused everything:
+/// a package whose `./server` subpath would not load lost the twenty
+/// entrypoints the probe *did* observe. Generation has never worked that way --
+/// an entrypoint it cannot certify is refused and omitted while the rest are
+/// emitted (docs/package-contracts.md "Refused entrypoints versus failed
+/// generation") -- and a refused entrypoint is already an explicit
+/// uncertifiable result at the consumer rather than a wrong claim, because
+/// `exports_for_module` finds no summary for a name the document does not
+/// carry. Verification refusing an entrypoint for the same reason generation
+/// does is a consistency fix, not new semantics; nothing is newly certified,
+/// strictly less is. `collectBlockers` still refuses the *document* when no
+/// entrypoint would certify anything, because such a contract certifies nothing
+/// and the loader rejects it anyway.
+///
 /// This is a recorded deviation from RFC 0002's taxonomy table, which lists
 /// `kind` as plain family (B); see docs/rfcs/0002-machine-verified-contracts.md
-/// "Amendments".
-export function unobservedKindBlockers(contract, report, contractPath) {
+/// "Amendments" A1 and A9.
+export function unobservedKindRefusals(contract, report) {
   const index = reasonIndex(report);
-  const blockers = [];
+  const refusals = [];
   for (const [entrypoint, entry] of Object.entries(contract.entrypoints ?? {})) {
     const modes = new Set(statedModes(entry));
     const unobserved = [];
@@ -519,21 +556,115 @@ export function unobservedKindBlockers(contract, report, contractPath) {
           missing.push(mode.name);
         }
       }
-      if (missing.length) unobserved.push(`${name} (${missing.join(", ")})`);
+      if (missing.length) unobserved.push({ export: name, modes: missing });
     }
     if (!unobserved.length) continue;
-    const shown = unobserved.slice(0, 5).join(", ");
-    const rest = unobserved.length > 5 ? `, and ${unobserved.length - 5} more` : "";
-    blockers.push(
-      `${entrypoint}: the probe report records no passing kind observation for ${unobserved.length} ` +
-        `export(s) in every mode they are stated for: ${shown}${rest}. \`kind\` is the one claim ` +
-        "schema v1 has no unknown sentinel for, so it cannot be converted and an unobserved one " +
-        "would be certified from nothing. Re-run `solid-checker contract probe " +
-        `${contractPath} --write` +
-        "` against an installed release the probe can import, in every stated mode"
-    );
+    refusals.push({
+      entrypoint,
+      exports: unobserved,
+      blocker: kindRefusalDetail(entrypoint, unobserved)
+    });
   }
-  return blockers;
+  return refusals;
+}
+
+/// The entrypoints a promoted document would actually certify something through.
+///
+/// Not `entrypoints.length - refusals.length`: an entrypoint whose export map is
+/// **empty** certifies nothing either, so counting it as a survivor is how a
+/// document that says literally nothing gets past the empty-set blocker below.
+/// The loader agrees -- `rust/crates/solid-reactive-ir/src/lib.rs` rejects an
+/// entrypoint with an empty `exports`, and
+/// `rust/crates/solid-facts-backend/src/contract_document.rs` rejects the
+/// neither-`exports`-nor-`sameAs` shape -- so the alternative to failing here is
+/// a `--validate-contract` complaint about document shape instead of a sentence
+/// about what happened.
+export function certifyingEntrypoints(contract, refused = []) {
+  const drop = new Set(refused);
+  return Object.entries(contract.entrypoints ?? {})
+    .filter(([name, entry]) => !drop.has(name) && Object.keys(entry.exports ?? {}).length > 0)
+    .map(([name]) => name);
+}
+
+/// The contract minus the entrypoints verification refused.
+///
+/// Dropped from the *expanded* document, so an entrypoint another one pointed at
+/// through `sameAs` keeps its materialized exports and the dedup is recomputed
+/// over the survivors when the promoted document is normalized.
+export function withoutRefusedEntrypoints(contract, refused) {
+  const drop = new Set(refused);
+  return {
+    ...contract,
+    entrypoints: Object.fromEntries(
+      Object.entries(contract.entrypoints ?? {}).filter(([name]) => !drop.has(name))
+    )
+  };
+}
+
+/// Why a document that would certify nothing is refused whole, one line each.
+///
+/// **Shape matters here twice.**
+///
+/// The classifying phrase leads the line. The corpus harness truncates every
+/// blocker to a 260-character head *before* classifying it
+/// (scripts/ecosystem-benchmark/verify-corpus.mjs `blockerClass`), so a phrase
+/// pushed past that by a long entrypoint name silently reclassifies the row as
+/// an unclassified refusal -- and this class is the one number amendment A9's
+/// stage 2 gate reads. The enumeration therefore comes last, where growing it
+/// costs nothing.
+///
+/// And every refusal keeps a **named line of its own** beside the summary. One
+/// line naming five entrypoints and "and N more" was a real loss of evidence:
+/// the refusal sidecar's `blockers.raised` is the only durable record of a
+/// refusal, and the corpus has a row with 91 of them. The summary line says why
+/// the *document* was refused; the per-entrypoint lines say which entrypoints
+/// were unobservable, and in which modes.
+function noCertifyingEntrypointBlockers({ contract, kindRefusals, contractPath }) {
+  const entrypoints = Object.entries(contract.entrypoints ?? {});
+  const refusedNames = kindRefusals.map(refusal => refusal.entrypoint);
+  if (certifyingEntrypoints(contract, refusedNames).length) return [];
+
+  const refusedSet = new Set(refusedNames);
+  const empty = entrypoints.filter(
+    ([name, entry]) => !refusedSet.has(name) && Object.keys(entry.exports ?? {}).length === 0
+  );
+  const remedy =
+    "`kind` is the one claim schema v1 has no unknown sentinel for, so it cannot be converted " +
+    "and an unobserved one would be certified from nothing. Re-run `solid-checker contract " +
+    `probe ${contractPath} --write\` against an installed release the probe can import, in ` +
+    "every stated mode";
+
+  // No `kind` refusal at all, and still nothing to certify: the contract emits
+  // no entrypoint, or every entrypoint it emits carries an empty export map.
+  // Not reachable from a generated draft today -- generation omits an
+  // entrypoint with no summaries and records a `no-export-summary` plan item --
+  // so this is the fail-closed floor rather than a path with a population.
+  if (!kindRefusals.length) {
+    return [
+      "no entrypoint certifies anything: " +
+        (entrypoints.length
+          ? `all ${entrypoints.length} emitted entrypoint(s) carry an empty export map`
+          : "the contract emits no entrypoint at all") +
+        ", so the promoted document would certify nothing and the loader would reject it. " +
+        "Regenerate the contract against an installed release whose entrypoints resolve to " +
+        "exports"
+    ];
+  }
+
+  const details = kindRefusals.map(refusal => refusal.blocker);
+  const shown = details.slice(0, 5).join("; ");
+  const rest = details.length > 5 ? `; and ${details.length - 5} more entrypoint(s)` : "";
+  return [
+    "no passing kind observation for any entrypoint that certifies anything: of " +
+      `${entrypoints.length} emitted entrypoint(s), ${kindRefusals.length} refused for an ` +
+      "unobserved `kind` claim" +
+      (empty.length ? ` and ${empty.length} carrying no export at all` : "") +
+      ", so the promoted document would certify nothing. " +
+      `${remedy}. The refused entrypoint(s): ${shown}${rest}`,
+    // HEAD's shape, kept: one attribution per refused entrypoint, naming its
+    // unobserved exports and the modes they were stated for.
+    ...details.map(detail => `${detail}. ${remedy}`)
+  ];
 }
 
 /// Every reason this contract must not be promoted, one line each.
@@ -544,7 +675,21 @@ export function unobservedKindBlockers(contract, report, contractPath) {
 ///
 /// Refused entrypoints, unbindable artifacts, undrivable claims and missing
 /// callback `owner` rows are deliberately absent: each is already an explicit
-/// uncertifiable result at the consumer rather than a wrong claim.
+/// uncertifiable result at the consumer rather than a wrong claim. That now
+/// includes an entrypoint *this* command refuses for an unobserved `kind`
+/// claim -- it is dropped from the promoted document instead of blocking it, and
+/// the document is refused only when no entrypoint would certify anything at
+/// all (`noCertifyingEntrypointBlockers`).
+///
+/// What stays document-wide, deliberately: a failed probe and an incompleteness
+/// finding, even when both name a claim of an entrypoint this run would refuse
+/// anyway. Both mean the package answered a claim differently, which is a
+/// generator bug or a package change; scoping them to the entrypoint would let
+/// a contradiction be dropped rather than fixed, and RFC 0002 §3 does not allow
+/// that. A closure note stays document-wide for the same reason it always
+/// did -- fail-closed on a file set the generator declines to claim it
+/// enumerated -- so a note on a `kind`-refused entrypoint still refuses the
+/// whole document.
 export function collectBlockers({
   contract,
   contractHash,
@@ -631,7 +776,17 @@ export function collectBlockers({
     );
   }
 
-  blockers.push(...unobservedKindBlockers(contract, report, contractPath));
+  // An unobserved `kind` claim refuses its *entrypoint* (see
+  // `unobservedKindRefusals`). It refuses the document only when that leaves no
+  // entrypoint that certifies anything -- see `certifyingEntrypoints` for why
+  // "survives" is not the same as "was not refused".
+  blockers.push(
+    ...noCertifyingEntrypointBlockers({
+      contract,
+      kindRefusals: unobservedKindRefusals(contract, report),
+      contractPath
+    })
+  );
 
   if (!plan) {
     blockers.push(
@@ -688,7 +843,8 @@ export function buildVerifyReport({
   conversions,
   probed,
   staleMarkers,
-  droppedMarkers
+  droppedMarkers,
+  refusedEntrypoints = []
 }) {
   return {
     schemaVersion: VERIFY_REPORT_SCHEMA_VERSION,
@@ -731,7 +887,11 @@ export function buildVerifyReport({
       conversions: conversions.length,
       probedRows: probed.length,
       staleProbedMarkers: (staleMarkers ?? []).length,
-      droppedInferredMarkers: droppedMarkers
+      droppedInferredMarkers: droppedMarkers,
+      // The entrypoints this promotion left out. `exports` above counts the
+      // promoted document, so this is the only figure that says the document is
+      // smaller than the draft it came from.
+      refusedEntrypoints: refusedEntrypoints.length
     },
     conversions: [...conversions].sort(
       (left, right) =>
@@ -744,6 +904,17 @@ export function buildVerifyReport({
         left.entrypoint.localeCompare(right.entrypoint) ||
         left.export.localeCompare(right.export) ||
         left.field.localeCompare(right.field)
+    ),
+    // The entrypoints verification refused and omitted, each with the blocker
+    // that refused it and the exports whose `kind` was unobserved. They are
+    // enumerated rather than counted for the same reason `conversions` is: this
+    // sidecar is the only artifact that can say what a promotion left out, and
+    // "the package verified" without "minus `./server`" is the misreading the
+    // file exists to prevent. A consumer importing one gets an explicit
+    // uncertifiable result, because the promoted document carries no summary
+    // for it at all.
+    refusedEntrypoints: [...refusedEntrypoints].sort((left, right) =>
+      left.entrypoint.localeCompare(right.entrypoint)
     ),
     // The markers the document carried that this run's report did not witness,
     // and the summary-level markers whose claims are gone. Recorded rather than

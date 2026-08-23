@@ -1302,6 +1302,24 @@ Three blockers, in plain terms:
   either an observable `function` or a refusal, and the arithmetic ends within
   three rows of where it started because the refused rows left the denominator.
 - **`incompleteness` (38 rows)** — discovery planted a callback where the
+  **The rule has since changed and these 74 rows are pre-change.**
+  [RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) scopes the
+  refusal to the *entrypoint* — the document is refused only when no entrypoint
+  survives — predicted at design time (against the 77-row state) to move at most
+  10 rows, the multi-entrypoint packages among them. The next run of this
+  harness is what measures it, and it carries two new fields for reading the
+  rest: a per-row and corpus-wide `kindGaps` breakdown of *why* each `kind`
+  mode was unobserved (an observation of absence versus a gap, rendered as
+  "Why a `kind` observation is missing", with contradicted claims counted in a
+  separate `contradictions` object and rendered as their own section, because a
+  contradiction is never a gap), and `verificationRefusedEntrypoints`, which
+  counts what a promoted document left out. Both are additive; `verified`,
+  `refused`, `conversions` and `probedRowsKept` keep their definitions, so
+  every dated table here stays comparable. One table deliberately changes
+  shape: "The composite a consumer feels" gains a state for the exports a
+  promotion dropped with a refused entrypoint, kept inside its denominator, so
+  the certified share cannot rise by unobservable exports leaving the
+  population.
   contract states none, and the package invoked it. A negative claim a probe
   falsified is wrong, not incomplete, so this refuses rather than converting. The
   *findings* fell again, 734 → **594** blocker lines, this time because an export
@@ -1468,6 +1486,14 @@ are in none of the four states. (a) and (b) together are now **29.99%**, from
 (a) fell for the first time while (b) rose by 302. A consumer touching one of
 those 302 exports now reads an honest unknown where they previously read a
 certified negative the package could contradict.
+
+**The next run's table has four states.**
+[RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) stage 1 lets a
+verified document omit an entrypoint, so its exports get a state of their own —
+"dropped from a verified contract with its refused entrypoint" — and this (c)
+becomes (d). The denominator stays every export the *drafts* describe, which is
+what makes (a) comparable to the columns above: it cannot rise because
+unobservable exports left the population.
 
 ### What it costs
 

@@ -24,7 +24,10 @@ export const SENTINEL_CLAIMS = [
 
 /// Section title per item kind, in the order the checklist renders them.
 const SECTIONS = [
-  ["entrypoints the generator refused", "refused-entrypoint"],
+  // Generation's refusals, and -- since RFC 0002 amendment A9 -- verification's:
+  // `contract verify` pushes the same item for an entrypoint whose `kind` claims
+  // no run observed, so the section is no longer the generator's alone.
+  ["entrypoints refused as uncertifiable", "refused-entrypoint"],
   ["legacy entrypoint resolution", "legacy-root-field"],
   ["contract artifact binding", "artifact-binding"],
   ["exports with no summary", "no-export-summary"],
@@ -107,6 +110,10 @@ export function collectReviewItems(
   // A partial contract must never be silent about what it omits: a refused
   // entrypoint is the difference between "this package has no such export"
   // and "we could not certify it", and only the second is true here.
+  //
+  // `contract verify` passes its own refusals through here for the same reason
+  // (`rewriteReviewPlan`), so `refusal.reason` may describe an entrypoint
+  // generation emitted and verification could not observe.
   for (const refusal of refusedEntrypoints) {
     push(
       "refused-entrypoint",

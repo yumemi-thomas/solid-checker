@@ -3231,8 +3231,15 @@ claim schema v1 has no sentinel for, so `convertUnconfirmedClaims` exempted it
 vacuous when the probe observed nothing. An import that threw, a missing
 export, a crashed session, or a `--modes` narrowing all produced zero
 observations and a verified contract. A `kind` claim not probed-passed in every
-stated mode is now a **blocker**, with the deliberate consequence that a
-package this checker cannot import cannot be machine-verified at all. Also in
+stated mode is now uncertifiable, with the deliberate consequence that a
+package this checker cannot import cannot be machine-verified at all. It was a
+document-level blocker when this was written; since
+[RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) it refuses the
+*entrypoint*, and the document only when no entrypoint would certify anything —
+see
+"[`kind` has no unknown form, and 77 refusals turn on
+it](#open-kind-has-no-unknown-form-and-77-refusals-turn-on-it-2026-08-23)" for
+the measurement and the staged plan. Also in
 this slice: discovery probes now run for `value` summaries, which are the
 maximal negative claim and were exempt from their own falsifier; and the probe
 report's family labels were realigned with what verification does — see 3.
@@ -4569,3 +4576,99 @@ object. Schema v1 has no namespace `kind`, so the honest first step is probably
 to refuse such an entrypoint rather than publish the members under the wrong
 names — which is what the `kind` refusal already does for the `./ns` case in
 that experiment, but for the wrong reason.
+
+## Open: `kind` has no unknown form, and 77 refusals turn on it (2026-08-23)
+
+The blocker recorded above under "[`contract verify` certified what no run had
+observed](#closed-2026-08-23-contract-verify-certified-what-no-run-had-observed)"
+item 2 — a `kind` claim not probed-passed in every stated mode cannot be
+certified, because schema v1 has no sentinel to convert it to — is the **largest
+single reason a real package does not machine-verify**: `kind-observed` is the
+root cause of 77 of 146 refusals in the 2026-08-23 corpus run, more than
+incompleteness (40) and probe failure (27) combined.
+
+The decision on whether to relax it, the measurement behind it, and the three
+rejected options are
+[RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md). In short: a
+schema-v1 sentinel for `kind` is **rejected** (`kind` is `required` with
+`additionalProperties: false`, so a new spelling fails `validate_export` inside
+`decode` — the malformed path that fails the whole analysis rather than refusing
+one contract; and an unknown `kind` is only honest if every domain of that
+summary becomes unknown too, at which point the summary is informationally
+identical to omitting the export). Nothing in the plan may absorb a
+*contradicted* `kind`: the 63 failing claims stay failures.
+
+**Staged, and the last stage is gated on data rather than on a decision.**
+
+- **Stage 0 — done.** Every reason the probe pipeline can emit now lands in a
+  named `undriven` bucket in `scripts/ecosystem-benchmark/verify-corpus.mjs`,
+  and `verify-corpus.test.mjs` asserts that totality against the driver's own
+  reason tables so the next new string fails the test instead of widening
+  `other` (834 claims, the bucket that made stage 2 undecidable). Each row also
+  carries a `kindGaps` breakdown — per (unobserved `kind` claim, mode), why it
+  was unobserved — surfaced per refusal and aggregated as "Why a `kind`
+  observation is missing", with a contradicted claim counted in a separate
+  `contradictions` object under its own heading (a contradiction is never a gap,
+  and the two sharing a number is what the amendment forbids), and with a mode
+  the run never attempted and a mode where no unambiguous summary resolves each
+  a labelled category rather than a silence. Label-only: nothing in the pipeline
+  reaches a verdict by reading a reason string. One rule ordering is load-bearing
+  rather than cosmetic: a session death forwards the child's stderr verbatim, so
+  the `export-missing` rule sits below every session rule and is anchored to the
+  end of the reason string — otherwise a crash quoting a bundler's `'x' is not
+  exported by y` was counted as the one outcome stage 2 may narrow away. What the
+  classification already shows, by re-bucketing the same 416-row journal rather
+  than re-running it: the 834-claim `other` bucket is **one class**, `probe
+  session aborted by package code` (834 of 834, in 16 shapes, each carrying the
+  package's own uncaught error and stack). `callbacks[].owner` — which the
+  amendment predicted was part of it — accounts for **zero**. And
+  `export-missing` is *absent from that distribution by construction*: a claim
+  observed in one mode and absent in another settles as `passed` and contributes
+  no undriven reason at all, so stage 2's number has to come from the per-mode
+  `kindGaps` figures and still needs the re-measure. The undriven bucket is not
+  where the addressable share was hiding.
+- **Stage 1 — done.** An unobserved `kind` claim refuses its **entrypoint**, not
+  the document: the entrypoint is omitted from the promoted contract exactly as
+  `contract generate` omits one it cannot certify, `<contract>.verify.json`
+  records each refusal, the rewritten review plan carries a `refused-entrypoint`
+  item naming the exports it dropped (so the reviewed tier is not silent about
+  the omission either), and the document is refused only when no entrypoint
+  would certify anything — an entrypoint with an empty export map is not a
+  survivor. Predicted payoff **at most 10 of the 77** and **not yet measured**;
+  the honest case for it is not the count. The three document-wide carve-outs
+  subtract from the 10 *correlated* with the population (the multi-entrypoint
+  packages are the ones most likely to also carry a closure note or a
+  contradicted claim), and by construction the surviving half of such a package
+  is the half the probe could import — the browser/types-shaped subpath rather
+  than the behavioral one — so the newly verified documents will be
+  disproportionately `kind`-only negatives. What stage 1 durably buys is
+  consistency: generation and verification refuse on the same unit, so one
+  unimportable subpath stops sinking twenty observed ones.
+- **Stage 2 — gated on stage 0's numbers, not implemented.** Exclude from the
+  modes a `kind` claim must be observed in exactly those whose probe outcome was
+  `export-missing` — the namespace loaded and the binding was not in it, which is
+  an observation that the export does not exist there rather than a gap. Bounded
+  above by 43 rows. If stage 0 shows those gaps are session deaths rather than
+  absences, stage 2 buys nothing and must not be built.
+
+**Remaining fail-closed cases, unchanged by stages 0 and 1.**
+
+- **34 all-mode refusals stay refused**, plus whichever of the 43 stage 0 shows
+  to be gaps. A package the probe cannot import at all remains unverifiable,
+  which is amendment A1's deliberate consequence; `contract review` is where an
+  unimportable package belongs.
+- **The 29 rows where `kind-observed` is a co-blocker stay refused** — they have
+  an independent blocker (`probe-failed` 21, `incompleteness` 8).
+- **A closure note still refuses the whole document**, including on an entrypoint
+  stage 1 would otherwise refuse on its own, so some of the predicted 10 may not
+  convert. Same for a failed probe or an incompleteness finding naming a claim of
+  a refused entrypoint: a contradiction must be fixed, not dropped.
+- **Per-export omission is out** until it is established whether an export absent
+  from a *present* entrypoint raises `SC9005` at the consumer or resolves
+  silently to no summary.
+- **The 53 `kind: claimed value, observed function` failures are a generator
+  defect**, not a sentinel gap: 45 class-shaped exports re-exported across a
+  module or package boundary, and 8 plain functions whose callability is
+  unresolved through a barrel. One of them (`@solid-devtools/locator`) publishes
+  a maximal certified negative for callback-taking functions today. Their own
+  queue item, with their own fixtures.

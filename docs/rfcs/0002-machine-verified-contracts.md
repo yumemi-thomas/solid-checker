@@ -746,13 +746,13 @@ trust root for the claims, which question 7 owns.
 
 ## Amendments
 
-The RFC above is the design as proposed. Implementation and one corpus-scale
-measurement found eight places where it was wrong or underspecified — A1–A6
+The RFC above is the design as proposed. Implementation and corpus-scale
+measurement found nine places where it was wrong or underspecified — A1–A6
 from building the pipeline, A7 and A8 from running it across 416 real probe
-rows — and each was resolved *against* the text rather
-than by bending the implementation to it. They are recorded here rather than
-edited into the sections above, so that a reader can still see what was
-proposed and what the proposal turned out to miss.
+rows, and A9 from reading what that run cost — and each was resolved *against*
+the text rather than by bending the implementation to it. They are recorded here
+rather than edited into the sections above, so that a reader can still see what
+was proposed and what the proposal turned out to miss.
 
 ### A1. `kind` is family (B) with no sentinel, so it blocks
 
@@ -946,3 +946,41 @@ check tests `contract.after`, which a refusal has not got, so a refusal sidecar
 is overwritten by a later successful verification rather than read as one.
 Success behavior is unchanged in every other respect, and `blockers.raised`
 stays `[]` there for the reason it always did: that document was promoted.
+
+### A9. `kind` has no unknown form, and the refusal it forces belongs to the entrypoint
+
+**A1 says** a `kind` claim not probed-passed in every stated mode blocks the
+promotion, because schema v1 cannot convert it.
+
+**What the first corpus-scale run showed** is what that costs: `kind-observed`
+is the root cause of **77 of 146 refusals**, more than incompleteness (40) and
+probe failure (27) combined — and that the obvious relaxations all pay for the
+metric with the tier's only observational content. `kind` is nearly the only
+thing a probe actually witnessed in the verified tier: 3 of 261 verified
+contracts carry even one probed *behavioral* row.
+
+**The amendment**, in full in
+[0002-a9-kind-has-no-unknown-form.md](0002-a9-kind-has-no-unknown-form.md),
+which carries the measurement, the three rejected options and the staged plan:
+
+- **A schema-v1 unknown sentinel for `kind` is rejected.** `kind` is `required`
+  with `additionalProperties: false`, so any new spelling fails
+  `validate_export` inside `decode` — the malformed path of unresolved question
+  5, which fails the whole analysis rather than refusing one contract. And an
+  unknown `kind` is only honest if every domain of that summary becomes unknown
+  too, at which point the summary is informationally identical to omitting the
+  export. The question is deferred to the single schema-v2 decision UQ5 frames.
+- **The refusal is scoped to the entrypoint, not the document.** An entrypoint
+  whose `kind` claims this run did not observe is refused and omitted, exactly as
+  `contract generate` refuses an entrypoint it cannot certify; the document is
+  refused only when no entrypoint would certify anything, and that blocker names
+  the empty surviving set and every refusal in it. A failed probe, an incompleteness finding and a closure note
+  stay document-wide, deliberately.
+- **Narrowing the stated modes is allowed only on an observation of absence.**
+  A mode whose probe outcome was `export-missing` — the namespace loaded and the
+  binding was not in it — states no `kind` claim to observe. Every other
+  non-observation stays a gap and keeps blocking. This is gated on a measurement
+  that did not exist when the amendment was written, and is not implemented.
+- **No option may absorb a contradicted `kind`.** The 63 failing claims stay
+  failures; 53 of them are two generator defects, one of which publishes a
+  maximal certified negative for callback-taking functions today.
