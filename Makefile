@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean
 
 build: build-rust
 
@@ -44,6 +44,14 @@ test-cli:
 
 verify:
 	scripts/verify.sh
+
+# AGENTS.md's "which check to run" table, mechanized: it maps every changed
+# path to the checks that own it, prints each mapping decision, and appends the
+# universal handoff set. A path the table does not claim escalates to the full
+# `verify` above -- which remains the handoff authority regardless. Add
+# `--dry-run` to see the plan without running it.
+verify-delta:
+	node scripts/verify-delta.mjs
 
 # "Does TypeScript already report this?", as a checkable claim. Provisioning
 # installs the audited Solid versions into rust/target/tsc-oracle and refuses
