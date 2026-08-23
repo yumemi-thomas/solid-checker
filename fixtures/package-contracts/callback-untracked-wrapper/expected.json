@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "callback-untracked-wrapper",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "cleanup",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-3": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-4": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-1": [
+          "deferredWrapper"
+        ],
+        "function-4": [
+          "ownerWrapper"
+        ],
+        "function-2": [
+          "rootWrapper",
+          "untrackedWrapper"
+        ],
+        "function-3": [
+          "trackedWrapper"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

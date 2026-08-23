@@ -11,7 +11,8 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, TrackedCallbackTiming,
+    Version, lookup, reverse,
 };
 
 /// Solid 2.0.
@@ -514,6 +515,16 @@ impl Dialect for Solid2 {
     /// `flushSync(fn)` does invoke `fn`, so the row is the truthful one; its
     /// callbacks are deferred scopes, so that reachability changes no read
     /// or owner diagnostic.
+    ///
+    /// This row now also decides contract bytes, through
+    /// [`Dialect::runs_callback_synchronously`], so the evidence is worth
+    /// stating exactly: `@solidjs/signals`' `flush(fn)` is
+    /// `syncDepth++; try { return fn() } finally { flush(); syncDepth-- }`
+    /// (2.0.0-rc dev bundle), so the callback is invoked and its value returned
+    /// **during** the call. Moving it to `Deferred` would publish
+    /// `execution: "deferred"` for every package export that forwards a
+    /// callback through `flush`, promising the callback has not run when the
+    /// export returns — which the runtime contradicts.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
@@ -551,6 +562,68 @@ impl Dialect for Solid2 {
             // models for its `solid-js/web` pair.
             Primitive::Render | Primitive::Hydrate => &[(0, Execution::Inline)],
             _ => &[],
+        }
+    }
+
+    /// Read from `@solidjs/signals@2.0.0-rc.0` `dist/dev.js`, the bundle the
+    /// oracle install under `rust/target/tsc-oracle/v2` resolves — line numbers
+    /// are that file's. Every answer below was also measured against that
+    /// bundle under `--conditions browser` with the probe worker's own
+    /// observation shape.
+    ///
+    /// One line decides most of it: `setupComputedNode` ends with
+    /// `!options?.lazy && recompute(self, true)` (`:2845`), so any node built by
+    /// `computed(fn, options)` (`:2707-2757`) whose options do not set `lazy`
+    /// runs its compute *during* the creating call. That covers:
+    ///
+    /// - `createMemo` (`:4558-4560`, `accessor(computed(compute, options))`) —
+    ///   the public `MemoOptions` has no `lazy` member, so this is
+    ///   unconditional. 2.0's memo is **not** pull-based on creation;
+    /// - `createSignal(fn)` (`:4548-4552`, the derived overload's
+    ///   `computed(first, second)`);
+    /// - `createOptimistic(fn)` (`:4778-4790` → `optimisticComputed`,
+    ///   `:2888-2892`, which is `computed` plus one field);
+    /// - `createProjection` (`:5634-5675`, `node = computed(() => { … }, …)` at
+    ///   `:5670` with options that carry only `loadingValue`/`name`).
+    ///
+    /// `createEffect` (`:4561-4581`) and `createRenderEffect` (`:4610-4612`)
+    /// both go through `effect()` (`:4107-4121`), which calls
+    /// `recompute(node, true)` unconditionally before queueing the *effect*
+    /// function. So the tracked **compute** at argument 0 runs during the call
+    /// in 2.0 — the opposite of 1.x's `createEffect`, and the headline dialect
+    /// difference on this axis. (Argument 1 is [`Execution::Deferred`], which
+    /// is not this method's domain.)
+    ///
+    /// `createTrackedEffect` (`:4642-4644` → `trackedEffect`, `:4253-4309`) is
+    /// the one deferring member: it builds its computed with `lazy: true` and
+    /// ends with `node._queue.enqueue(EFFECT_USER, run)` (`:4294`), so nothing
+    /// runs before the creating call returns.
+    ///
+    /// Deliberately unestablished: `createStore` and `createOptimisticStore`
+    /// (their derived overloads did not accept the probe's call shape, so no
+    /// measurement backs a claim), `dynamic`, `useHead`, the two boundary
+    /// primitives and `mapArray`/`repeat`. Contract emission answers the
+    /// unknown sentinel for those rather than assuming they follow `computed`.
+    fn tracked_callback_timing(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<TrackedCallbackTiming> {
+        if self.callback_execution_at(primitive, argument, argument_count)
+            != Some(Execution::Tracked)
+        {
+            return None;
+        }
+        match primitive {
+            Primitive::CreateMemo
+            | Primitive::CreateSignal
+            | Primitive::CreateOptimistic
+            | Primitive::CreateProjection
+            | Primitive::CreateEffect
+            | Primitive::CreateRenderEffect => Some(TrackedCallbackTiming::DuringCall),
+            Primitive::CreateTrackedEffect => Some(TrackedCallbackTiming::AfterCall),
+            _ => None,
         }
     }
 

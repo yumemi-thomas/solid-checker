@@ -2133,17 +2133,48 @@ claim about the server build, which needs its own contract and does not yet have
 one. Restricting the modes records that boundary; it does not weaken the ones
 that remain, and any claim inside a stated mode is still probed.
 
-**`inline`, `deferred` and `tracked` classify attribution, not timing**, so a
-probe asks who owns the reads rather than when the callback ran. An `inline`
-probe puts the export call inside a memo and checks that the memo re-runs when a
-signal the callback read changes; a `deferred` probe checks that it does not.
-`startTransition` is the case that fixes the definition: its callback runs in a
-microtask, and it is inline because the runtime restores the captured listener,
-so a read inside subscribes exactly as at the call site. `untrack`, `createRoot`
-and `runWithOwner` stay inline while clearing the listener, which the dialect
-states separately through `runs_callback_deferred`, and their probes assert the
-opposite attribution. Every claim of a probed contract is probed; there are no
-exemptions.
+**`inline`, `deferred` and `tracked` are one word over two axes**, and knowing
+which axis decides which word is what makes a row checkable:
+
+- **`tracked`** is an *attribution* claim: the export establishes its own
+  tracking scope around the callback, so reads inside it subscribe that
+  computation and it re-runs on its own. Nothing about when it first ran is
+  promised — a tracked computation that has not run yet still owns the reads it
+  will make.
+- **`inline`** and **`deferred`** are *schedule* claims, and they only ever
+  describe a callback the export does **not** subscribe. `inline` promises the
+  export invoked the callback before returning; `deferred` promises it did not.
+
+So `tracked` is decided first, on the attribution axis, and the schedule axis
+then separates the rest. A probe measures accordingly: an `inline` probe puts
+the export call inside a memo and checks the callback ran during the call; a
+`tracked` probe checks the callback re-runs when a signal it read changes; a
+`deferred` probe checks neither. `untrack`, `createRoot`, `runWithOwner` and
+2.0's `flush` stay `inline` while *clearing* the listener — they run the
+callback during the call, and the clearing travels separately through the
+dialect's `runs_callback_synchronously`. Every claim of a probed contract is
+probed; there are no exemptions.
+
+The exception sits on the attribution axis, and it is where the dialect's own
+`Execution` vocabulary and a contract row diverge. `Execution` (solid-dialect)
+classifies attribution *only*, because its other consumer — the checker's
+`callback_runs_outside_tracking` — asks nothing else. 1.x `startTransition` is
+`Execution::Inline` and correct there: its callback runs in a
+`Promise.resolve().then()` microtask, and the runtime restores the captured
+listener, so a read inside subscribes exactly as at the call site.
+`createResource`'s fetcher is `Execution::Deferred` even though the sourced
+overload runs it during the call, for the same reason. Neither word states a
+schedule, so **contract emission does not read one out of them**: both
+primitives are absent from the schedule table in
+`solid-reactive-ir/src/interproc.rs`, and a callback wrapped in either is
+refused rather than published. Where emission does need a schedule it asks the
+dialect for one — `runs_callback_synchronously` for the clearing-but-immediate
+primitives and `tracked_callback_timing` for when a tracked computation runs
+relative to the call that creates it — and publishes the unknown sentinel where
+the dialect states none. That last fact is not cosmetic: in 1.x only
+`createEffect` defers among the tracked primitives, so reading `tracked` as
+"runs later" made `createMemo(() => untrack(cb))` claim `deferred` where the
+runtime, and the probe, say `inline`.
 
 The corollary is that a claim stated for one variant and not another is
 registered only in that variant's modes. Solid 2.0's server build re-runs

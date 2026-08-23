@@ -12,7 +12,8 @@
 //! export with nothing to say about reactivity, and it is not here.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, TrackedCallbackTiming,
+    Version, lookup, reverse,
 };
 
 /// Solid 1.x.
@@ -579,6 +580,72 @@ impl Dialect for Solid1x {
             .iter()
             .find(|(index, _)| *index == argument)
             .map(|(_, execution)| *execution)
+    }
+
+    /// Read from `solid-js@1.9.14` `dist/solid.js`, the artifact the oracle
+    /// install under `rust/target/tsc-oracle/v1` resolves for the client
+    /// conditions — line numbers are that file's.
+    ///
+    /// Eager, all four via `updateComputation(c)` on the creating call:
+    ///
+    /// - `createMemo` (`:244-256`) — `updateComputation(c)` before it returns
+    ///   `readSignal.bind(c)`;
+    /// - `createRenderEffect` (`:218-221`) — the same line, no queue;
+    /// - `createComputed` (`:214-217`) — likewise (contract emission cannot
+    ///   currently reach it, because `primitive_callback_execution` has no
+    ///   schedule row for it; the fact is still this dialect's to state);
+    /// - `createResource`'s *source* (`:283`,
+    ///   `dynamic = typeof source === "function" && createMemo(source)`) — a
+    ///   memo, so eager for the same reason. Only the two-argument overload has
+    ///   a tracked source; the one-argument form's single callback is the
+    ///   fetcher, and [`Execution::Deferred`] is not this method's domain;
+    /// - `mergeProps` (`:1329`,
+    ///   `sources[i] = typeof s === "function" ? (proxy = true, createMemo(s)) : s`)
+    ///   — every function-valued source becomes a memo, at every index.
+    ///
+    /// Deferring: `createEffect` (`:222-229`,
+    /// `Effects ? Effects.push(c) : updateComputation(c)`). The push branch is
+    /// the one an export takes: `createRoot` runs its body through
+    /// `runUpdates(updateFn, true)` (`:192`), which installs `Effects = []`
+    /// (`:820`), so under any owner — and a package export that creates an
+    /// effect has one — the computation runs from `completeUpdates` after the
+    /// creating call returned. This is what makes 1.x's own `onMount`
+    /// (`createEffect(() => untrack(fn))`) `deferred` rather than `inline`.
+    ///
+    /// One documented caveat on the eager four: each is written
+    /// `if (Scheduler && Transition && Transition.running) Updates.push(c); else
+    /// updateComputation(c)`. `Scheduler` is null until an application calls
+    /// `enableScheduling()`, and the audited default configuration — the one the
+    /// probe measures and the one a contract describes — never installs one, so
+    /// the else branch is unconditional there. A contract cannot describe both
+    /// configurations with one word; it describes the default.
+    ///
+    /// Everything else is deliberately absent. 1.x's `createSignal(fn)` and
+    /// `createStore(fn)` never invoke the argument at all
+    /// ([`Dialect::stores_function_argument_as_value`] states the first), so no
+    /// schedule is honest for them, and `children`/`createDeferred`/
+    /// `createSelector`/`createDynamic`/`mapArray` have no schedule row in
+    /// `primitive_callback_execution` either.
+    fn tracked_callback_timing(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<TrackedCallbackTiming> {
+        if self.callback_execution_at(primitive, argument, argument_count)
+            != Some(Execution::Tracked)
+        {
+            return None;
+        }
+        match primitive {
+            Primitive::CreateMemo
+            | Primitive::CreateRenderEffect
+            | Primitive::CreateComputed
+            | Primitive::CreateResource
+            | Primitive::MergeProps => Some(TrackedCallbackTiming::DuringCall),
+            Primitive::CreateEffect => Some(TrackedCallbackTiming::AfterCall),
+            _ => None,
+        }
     }
 
     fn reports_untracked_reads_at(

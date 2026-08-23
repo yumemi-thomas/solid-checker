@@ -350,28 +350,67 @@ pub enum Execution {
     Inline,
 }
 
-// These three classify **attribution, not timing**, and the distinction is
-// load-bearing rather than pedantic.
+// These three classify **attribution**, and the distinction from timing is
+// load-bearing rather than pedantic. There are two consumers, they ask
+// different questions, and only one of them is answered by this word alone.
 //
-// `callback_runs_outside_tracking` in solid-reactive-ir is the consumer that
-// settles it: Deferred is "outside the current tracking pass" unconditionally,
+// `callback_runs_outside_tracking` in solid-reactive-ir is the attribution
+// consumer: Deferred is "outside the current tracking pass" unconditionally,
 // Inline "inherits the caller's Listener" unless the primitive is separately
 // marked as listener-clearing, and Tracked creates its own observer unless
-// `tracks_reads` overrides. Nothing downstream asks when the callback ran.
+// `tracks_reads` overrides.
 //
-// 1.x `startTransition` is the case that proves it. Its callback runs in a
-// `Promise.resolve().then()` microtask, so by timing it is plainly not
-// immediate — and it is Inline, correctly, because the runtime restores the
-// captured Listener around it and a read inside subscribes exactly as at the
-// call site. Probed: `batch`, `catchError`'s first argument and
-// `startTransition` all subscribe an enclosing memo; `untrack` and
-// `createRoot`, both listener-clearing, do not; `createResource`'s fetcher
-// does not, which is why it is Deferred even though the sourced overload runs
-// it during the call.
+// 1.x `startTransition` is the case that proves attribution is the right axis
+// *for that consumer*. Its callback runs in a `Promise.resolve().then()`
+// microtask, so by timing it is plainly not immediate — and it is Inline,
+// correctly, because the runtime restores the captured Listener around it and a
+// read inside subscribes exactly as at the call site. Probed: `batch`,
+// `catchError`'s first argument and `startTransition` all subscribe an
+// enclosing memo; `untrack` and `createRoot`, both listener-clearing, do not;
+// `createResource`'s fetcher does not, which is why it is Deferred even though
+// the sourced overload runs it during the call. Classifying *that* consumer by
+// timing would move `startTransition` to Deferred and tell the engine that
+// reads inside it escape the caller's scope, which the runtime contradicts.
 //
-// Classifying by timing instead would move `startTransition` to Deferred and
-// tell the engine that reads inside it escape the caller's scope, which the
-// runtime contradicts.
+// **Package-contract emission is the second consumer, and it does ask when the
+// callback ran.** `callback_wrapper_at` (solid-reactive-ir/src/interproc.rs)
+// reads these same rows to compose an `execution` row for an export, and a
+// contract row is a promise a probe measures against the clock: `inline`
+// promises the export invoked the callback before returning, `deferred`
+// promises it did not. So emission never reads the schedule *out of* this word.
+// It reads the word for attribution and takes the schedule from separate
+// dialect facts — [`Dialect::runs_callback_synchronously`] for the
+// listener-clearing primitives that nonetheless run during the call, and
+// [`Dialect::tracked_callback_timing`] for when a tracked computation runs
+// relative to the call that creates it. Where a dialect states no schedule
+// fact, emission publishes no row rather than reading one off the word.
+//
+// The two divergences above are exactly where the readings differ, and both are
+// closed by that split rather than papered over: `startTransition` and
+// `createResource` are absent from `primitive_callback_execution`'s schedule
+// table, so contract emission refuses them instead of restating their
+// attribution as a schedule.
+
+/// When a primitive's [`Execution::Tracked`] callback runs, relative to the
+/// primitive's own call returning.
+///
+/// Orthogonal to [`Execution`], which says who owns the reads. A tracked
+/// computation is tracked either way; this says whether the export that created
+/// it has already run it by the time it returns, which is the only thing a
+/// package-contract `execution` row can promise about a callback the package
+/// detached from tracking. There is deliberately no third member for "never
+/// runs": that is the absence of an answer, spelled `None` by
+/// [`Dialect::tracked_callback_timing`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrackedCallbackTiming {
+    /// The computation runs to completion before the creating call returns —
+    /// 1.x `createMemo`/`createRenderEffect`, 2.0's `effect()` compute.
+    DuringCall,
+    /// The creating call only queues the computation, so it has not run when
+    /// that call returns — 1.x `createEffect` under any owner, 2.0
+    /// `createTrackedEffect`.
+    AfterCall,
+}
 
 /// The complete callback contract for one argument of one concrete primitive
 /// call. Consumers ask one question and receive the execution, ownership,
@@ -470,6 +509,68 @@ pub trait Dialect: Sync {
     /// Asking only about position would classify a memo's compute as deferred
     /// and stop reporting reads inside it.
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool;
+
+    /// Whether this primitive clears tracking around a callback it nonetheless
+    /// runs **before its own call returns**.
+    ///
+    /// [`Dialect::runs_callback_deferred`] answers one boolean for two
+    /// independent questions — "the listener is cleared" and "it runs later" —
+    /// because its attribution consumer, `callback_runs_outside_tracking`, asks
+    /// only the first. Package contracts ask the second: an `execution` row is
+    /// a promise about *when* the
+    /// export invokes a caller-supplied callback, and the contract vocabulary
+    /// keeps `untrack`, `createRoot` and `runWithOwner` at `inline` while the
+    /// listener-clearing fact travels separately
+    /// (docs/package-contracts.md, "callback execution").
+    ///
+    /// This is the "detached, not later" half, and it is **derived rather than
+    /// enumerated** so the two answers cannot drift: exactly the members of
+    /// [`Dialect::runs_callback_deferred`] whose own
+    /// [`Dialect::callback_executions`] rows are all [`Execution::Inline`]. A
+    /// primitive the dialect models no callback for answers `false` — absence
+    /// of a row is not evidence of synchrony. `the_synchronous_clearing_set_*`
+    /// pins the resulting set per dialect.
+    fn runs_callback_synchronously(&self, primitive: Primitive) -> bool {
+        let rows = self.callback_executions(primitive);
+        self.runs_callback_deferred(primitive)
+            && !rows.is_empty()
+            && rows
+                .iter()
+                .all(|(_, execution)| *execution == Execution::Inline)
+    }
+
+    /// When this primitive's [`Execution::Tracked`] callback at `argument` runs,
+    /// relative to the primitive's own call returning.
+    ///
+    /// The second half of the schedule split described above
+    /// ([`Dialect::runs_callback_synchronously`] is the first), and the fact
+    /// that decides what a *clearing wrapper nested inside a tracked one*
+    /// composes to for package-contract emission. Reading `Tracked` as "runs
+    /// later" is false for most of 1.x's own tracked primitives: `createMemo`
+    /// and `createRenderEffect` run the computation during the call, and only
+    /// `createEffect` queues it.
+    ///
+    /// **`None` is a refusal, not a default.** It means this dialect has
+    /// established no schedule for that callback — because the audited runtime
+    /// was not read for it, because the primitive never invokes the argument at
+    /// all (1.x `createSignal(fn)` stores it), or because the shape resisted
+    /// measurement. Contract emission answers the unknown sentinel there rather
+    /// than guessing, so a missing answer costs precision and never
+    /// correctness. It is the direction to fail in, and *not* a licence to
+    /// leave a member out because its name looks like a neighbour's: the two
+    /// dialects disagree on `createEffect`, so the neighbour argument is
+    /// exactly the one that produces a wrong claim. Every implemented answer
+    /// cites the audited runtime source it was read from, and
+    /// `the_tracked_callback_schedule_*` pins the resulting sets per dialect.
+    fn tracked_callback_timing(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<TrackedCallbackTiming> {
+        let _ = (primitive, argument, argument_count);
+        None
+    }
 
     /// Whether this dialect's children-forbidden leaf callbacks
     /// ([`CallbackOwner::Leaf`]) are legal write/action regions.
@@ -1348,6 +1449,198 @@ mod tests {
         assert!(!one.runs_callback_deferred(Primitive::StartTransition));
         assert!(one.runs_callback_deferred(Primitive::CreateRoot));
         assert!(!one.runs_callback_deferred(Primitive::CreateMemo));
+    }
+
+    /// The set every synchronous-clearing name resolves to, per dialect.
+    fn synchronous_clearing_names(dialect: &'static dyn Dialect) -> Vec<&'static str> {
+        let mut names = dialect_names(dialect)
+            .into_iter()
+            .filter(|name| {
+                dialect
+                    .primitive(name)
+                    .is_some_and(|primitive| dialect.runs_callback_synchronously(primitive))
+            })
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
+    /// `runs_callback_synchronously` is derived, so this test is not checking
+    /// an enumeration against itself: it pins the *concrete* set the derivation
+    /// produces, which is what package contracts publish as `inline`. A row
+    /// moving into or out of `callback_executions`, or a primitive joining
+    /// `runs_callback_deferred`, changes contract bytes for every package that
+    /// forwards a callback through it, and has to be a deliberate edit here.
+    #[test]
+    fn the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set() {
+        let one = Version::V1.dialect();
+        let two = Version::V2.dialect();
+
+        assert_eq!(
+            synchronous_clearing_names(one),
+            vec!["createRoot", "runWithOwner", "untrack"]
+        );
+        // `flush` earns its place on the rc runtime's own bytes, not on its
+        // name: `@solidjs/signals` `flush(fn)` runs `fn()` inside a
+        // `try { return fn() } finally { flush(); syncDepth-- }`, so the
+        // callback is invoked and returned from *during* the call
+        // (2.0.0-rc dev bundle, `flush`). `createRevealOrder` is here for the
+        // same reason `createRoot` is — it clears tracking while establishing
+        // an owner and runs its callback immediately.
+        assert_eq!(
+            synchronous_clearing_names(two),
+            vec![
+                "createRevealOrder",
+                "createRoot",
+                "flush",
+                "runWithOwner",
+                "untrack"
+            ]
+        );
+
+        // The two halves of `runs_callback_deferred` stay separable: a
+        // genuinely later callback is never synchronous, and a primitive the
+        // dialect models no callback for is never either.
+        for primitive in [Primitive::OnCleanup, Primitive::CreateReaction] {
+            assert!(!one.runs_callback_synchronously(primitive), "{primitive:?}");
+        }
+        for primitive in [Primitive::OnSettled, Primitive::Action, Primitive::Lazy] {
+            assert!(!two.runs_callback_synchronously(primitive), "{primitive:?}");
+        }
+        // Inline but not listener-clearing: `batch` is transparent to its call
+        // site, so it is not in this set either.
+        assert!(!one.runs_callback_synchronously(Primitive::Batch));
+        assert!(!two.runs_callback_synchronously(Primitive::Latest));
+    }
+
+    /// Every name whose tracked callback this dialect gives `timing` for, at
+    /// any argument index a two-argument call could carry.
+    fn tracked_schedule_names(
+        dialect: &'static dyn Dialect,
+        timing: TrackedCallbackTiming,
+    ) -> Vec<&'static str> {
+        let mut names = dialect_names(dialect)
+            .into_iter()
+            .filter(|name| {
+                dialect.primitive(name).is_some_and(|primitive| {
+                    (0..2).any(|argument| {
+                        dialect.tracked_callback_timing(primitive, argument, 2) == Some(timing)
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
+    /// The eager/deferring/unestablished partition, pinned per dialect.
+    ///
+    /// These sets decide what a clearing wrapper *inside* a tracked one
+    /// publishes, so a name entering or leaving one changes contract bytes for
+    /// every package with that shape. The unestablished side is pinned too: it
+    /// is the fail-closed arm, and silently promoting a member out of it is how
+    /// a guessed schedule would ship.
+    #[test]
+    fn the_tracked_callback_schedule_partitions_each_dialect() {
+        let one = Version::V1.dialect();
+        let two = Version::V2.dialect();
+
+        // 1.x: everything that reaches `updateComputation` on the creating
+        // call, and `createEffect`, which pushes onto `Effects` instead.
+        // Source lines in `Solid1x::tracked_callback_timing`.
+        assert_eq!(
+            tracked_schedule_names(one, TrackedCallbackTiming::DuringCall),
+            vec![
+                "createComputed",
+                "createMemo",
+                "createRenderEffect",
+                "createResource",
+                // `solid-js/web`'s `effect`, which 1.x aliases to
+                // `createRenderEffect` (`Solid1x::ALIASES`) — the same eager
+                // primitive under a second published name.
+                "effect",
+                "mergeProps"
+            ]
+        );
+        assert_eq!(
+            tracked_schedule_names(one, TrackedCallbackTiming::AfterCall),
+            vec!["createEffect"]
+        );
+
+        // 2.0 disagrees with 1.x on `createEffect` — `effect()` recomputes the
+        // tracked compute during the call there — and its one deferring member
+        // is `createTrackedEffect`, which only enqueues.
+        assert_eq!(
+            tracked_schedule_names(two, TrackedCallbackTiming::DuringCall),
+            vec![
+                "createEffect",
+                "createMemo",
+                "createOptimistic",
+                "createProjection",
+                "createRenderEffect",
+                "createSignal"
+            ]
+        );
+        assert_eq!(
+            tracked_schedule_names(two, TrackedCallbackTiming::AfterCall),
+            vec!["createTrackedEffect"]
+        );
+
+        // The refusals, named rather than merely absent. 1.x `createSignal`
+        // never invokes its argument, `children`/`createSelector` have no
+        // schedule row in contract emission, and 2.0's store pair resisted
+        // measurement.
+        for primitive in [
+            Primitive::CreateSignal,
+            Primitive::Children,
+            Primitive::CreateSelector,
+            Primitive::CreateDeferred,
+        ] {
+            assert_eq!(
+                one.tracked_callback_timing(primitive, 0, 2),
+                None,
+                "{primitive:?}"
+            );
+        }
+        for primitive in [
+            Primitive::CreateStore,
+            Primitive::CreateOptimisticStore,
+            Primitive::Dynamic,
+            Primitive::MapArray,
+        ] {
+            assert_eq!(
+                two.tracked_callback_timing(primitive, 0, 2),
+                None,
+                "{primitive:?}"
+            );
+        }
+
+        // A schedule is only ever stated for a callback this dialect calls
+        // `Tracked`. `createEffect`'s second argument is 1.x's seed value and
+        // 2.0's deferred apply; neither is this method's domain.
+        assert_eq!(
+            one.tracked_callback_timing(Primitive::CreateEffect, 1, 2),
+            None
+        );
+        assert_eq!(
+            two.tracked_callback_timing(Primitive::CreateEffect, 1, 2),
+            None
+        );
+        assert_eq!(one.tracked_callback_timing(Primitive::Untrack, 0, 1), None);
+        assert_eq!(two.tracked_callback_timing(Primitive::Untrack, 0, 1), None);
+        // 1.x's `createResource(fetcher)` one-argument form has a deferred
+        // fetcher at 0 and no tracked source, so the two-argument answer must
+        // not leak into it.
+        assert_eq!(
+            one.tracked_callback_timing(Primitive::CreateResource, 0, 1),
+            None
+        );
+        assert_eq!(
+            one.tracked_callback_timing(Primitive::CreateResource, 0, 2),
+            Some(TrackedCallbackTiming::DuringCall)
+        );
     }
 
     #[test]

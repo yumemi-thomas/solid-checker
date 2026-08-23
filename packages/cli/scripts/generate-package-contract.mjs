@@ -871,6 +871,44 @@ function mergeClaimRows(left, right, compare) {
   return mergeUnique(left, right, compare);
 }
 
+/// Whether merged `callbacks` rows claim two executions for one parameter.
+///
+/// The per-target sentinel in `contract_export_function` (solid-reactive-ir)
+/// cannot see this: it runs once per analyzed target, and the union above then
+/// puts both targets' rows in one list. Schema v1 has one execution axis per
+/// parameter and the runtime has one behavior *per selected target*, so a base
+/// carrying `parameter: 0` as both `deferred` and `inline` states two mutually
+/// exclusive things and a consumer picking either is guessing. The exact
+/// per-branch claims survive in `variants` beside the base, which is what the
+/// export map states outright — the same trade `returns` and `asyncBehavior`
+/// already make one function down.
+///
+/// `mergeUnique`'s comparator breaks ties on `execution` precisely because two
+/// executions per parameter were expected here; that tiebreaker now only orders
+/// rows on the way to this check.
+///
+/// Rows agreeing on `execution` and differing elsewhere (argument descriptors,
+/// owner) are not contradictory — they are extra facts about one schedule.
+/// One-sided *presence* is a wider question this deliberately does not answer:
+/// a parameter with a row in one branch and none in the other is a positive
+/// against a certified negative, the same hole `claimDomainsDiverge` closed for
+/// `returns`, and closing it for callbacks needs its own measurement. Recorded
+/// in docs/precision-backlog.md.
+///
+/// Returns "" when there is no contradiction, and otherwise the shape of it.
+export function callbackRowsContradict(rows) {
+  if (isUnknownClaim(rows) || !Array.isArray(rows)) return "";
+  const executions = new Map();
+  for (const row of rows) {
+    const seen = executions.get(row.parameter);
+    if (seen !== undefined && seen !== row.execution) {
+      return `the branches prove different executions for parameter ${row.parameter}`;
+    }
+    executions.set(row.parameter, row.execution);
+  }
+  return "";
+}
+
 /// Whether two branches disagree about a single-valued claim domain.
 ///
 /// One-sided presence is a disagreement, and missing that was a real hole. When
@@ -934,11 +972,14 @@ function mergeSummaries(left, right, onDiverge = () => {}) {
       ? { status: "unknown" }
       : left.returns ?? right.returns;
   if (returns) merged.returns = returns;
-  const callbacks = mergeClaimRows(
+  const united = mergeClaimRows(
     left.callbacks,
     right.callbacks,
     (a, b) => a.parameter - b.parameter || a.execution.localeCompare(b.execution)
   );
+  const callbacksDiverge = callbackRowsContradict(united);
+  if (callbacksDiverge) onDiverge("callbacks", callbacksDiverge);
+  const callbacks = callbacksDiverge ? { status: "unknown" } : united;
   if (isUnknownClaim(callbacks) || callbacks.length) merged.callbacks = callbacks;
   const ownerRequirements = mergeClaimRows(
     left.ownerRequirements,

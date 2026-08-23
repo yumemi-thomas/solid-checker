@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "callback-deferred-untracked-chain",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "cleanup",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-3": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-4": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-5": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-6": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-7": {
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-8": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result",
+        "evidence": {
+          "kind": "inferred"
+        }
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-1": [
+          "cleanupShape"
+        ],
+        "function-3": [
+          "inlineShape",
+          "inlineThroughLocalUntrack",
+          "mergePropsShape"
+        ],
+        "function-5": [
+          "memoInsideUntrack"
+        ],
+        "function-8": [
+          "memoShape",
+          "memoThroughLocalUntrack"
+        ],
+        "function-2": [
+          "mountShape",
+          "mountShapeArrow",
+          "mountThroughLocalUntrack"
+        ],
+        "function-4": [
+          "renderEffectShape"
+        ],
+        "function-6": [
+          "trackedShape",
+          "trackedThroughLocalHelper"
+        ],
+        "function-7": [
+          "unestablishedDirectShape",
+          "unestablishedScheduleShape",
+          "unestablishedThroughLocalHelper"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

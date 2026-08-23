@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": {
-    "name": "torture-conditional-semantics-package",
+    "name": "conditional-callback-conflict-package",
     "version": "1.0.0"
   },
   "compilerFactsProtocol": 1,
@@ -14,30 +14,7 @@
       "variants": [
         {
           "conditions": [
-            "browser",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline",
-                "evidence": {
-                  "kind": "inferred"
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "inferred"
-            }
-          },
-          "precedence": 0
-        },
-        {
-          "conditions": [
-            "import",
-            "node"
+            "default"
           ],
           "summary": {
             "kind": "function",
@@ -55,14 +32,29 @@
             }
           },
           "precedence": 1
+        },
+        {
+          "conditions": [
+            "development"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "inline",
+                "evidence": {
+                  "kind": "inferred"
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "inferred"
+            }
+          },
+          "precedence": 0
         }
       ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "value-1": {
-      "kind": "value",
       "evidence": {
         "kind": "inferred"
       }
@@ -71,17 +63,13 @@
   "entrypoints": {
     ".": {
       "exports": {
-        "value-1": [
-          "mode"
-        ],
         "function-1": [
           "schedule"
         ]
       },
       "conditions": [
-        "browser",
-        "import",
-        "node"
+        "default",
+        "development"
       ]
     }
   },

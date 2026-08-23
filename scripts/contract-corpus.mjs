@@ -110,7 +110,29 @@ const fixtures = [
   // Pins that an exported class is `kind: "function"` through all three
   // resolution shapes, with its callbacks domain fail-closed, while a real
   // non-callable value stays `kind: "value"`.
-  "exported-class"
+  "exported-class",
+  // Pins the synchronous-clearing vocabulary: a callback invoked inside
+  // `untrack`/`createRoot`/`runWithOwner` claims `inline`, a tracked wrapper
+  // stays `tracked`, and a genuinely deferring wrapper stays `deferred`.
+  "callback-untracked-wrapper",
+  // Pins the wrapper-chain fold's order sensitivity in both directions --
+  // `untrack(() => createMemo(cb))` stays `tracked`, `createEffect(() =>
+  // untrack(cb))` is `deferred` -- including through the same-file forwarding
+  // seam solid-js's own dist uses (the `onMount` shape).
+  "callback-deferred-untracked-chain",
+  // Pins the contradiction sentinel: one parameter invoked at sites with
+  // different execution kinds opens the unknown sentinel instead of shipping
+  // two rows a probe can only half-satisfy.
+  "multi-role-callback-parameter",
+  // The cross-target twin of the row above, and the reason it needs its own
+  // pin: the Rust sentinel runs once per analyzed target, so a contradiction
+  // assembled by `mergeSummaries`'s union of two targets' rows is invisible to
+  // it. This fixture's base carried `parameter: 0` as `deferred` *and*
+  // `inline` until `callbackRowsContradict` applied the same rule in the JS
+  // merge. `conditional-returns-divergence` is the same shape on the `returns`
+  // axis; without this entry a regression of the callbacks union shows up in
+  // no gate.
+  "conditional-callback-conflict"
 ];
 
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? defaultNative;

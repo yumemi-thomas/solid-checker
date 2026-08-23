@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "multi-role-callback-parameter",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        },
+        {
+          "parameter": 1,
+          "execution": "tracked",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-3": {
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-4": {
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      },
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-5": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result",
+        "evidence": {
+          "kind": "inferred"
+        }
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-4": [
+          "contradictOnZeroOnly",
+          "inlineAndTracked"
+        ],
+        "function-3": [
+          "inlineAndReturned"
+        ],
+        "function-5": [
+          "oneInlineSite"
+        ],
+        "function-2": [
+          "oneTrackedSite",
+          "twoTrackedSites"
+        ],
+        "function-1": [
+          "twoParameters"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}
