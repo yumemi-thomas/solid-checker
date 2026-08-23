@@ -45,6 +45,7 @@ import {
   verifyReportPath
 } from "./contract-review-plan.mjs";
 import {
+  buildRefusalReport,
   buildVerifyReport,
   collectBlockers,
   convertUnconfirmedClaims,
@@ -64,6 +65,11 @@ recording exactly what was lost and why.
 Run contract probe --write first. Verification certifies what a probe observed,
 so a contract with no probed evidence verifies to a document that claims almost
 nothing.
+
+A refusal also writes <contract>.verify.json, with the blockers it raised and
+no evidence, conversion or promotion fields. The refusal path used to write
+nothing at all, which left stderr as the only record of the most common
+outcome.
 
 It refuses -- one clear line each, contract untouched -- when a probe failed,
 when a probe contradicted a negative claim, when any emitted entrypoint carries
@@ -288,20 +294,97 @@ export async function verifyContract(arguments_) {
   // written -- in particular the probe report, whose hash the promotion moved
   // past, is not re-checked into a refusal.
   const existing = readJsonIfPresent(verifyPath, "verify report");
+  // A refusal sidecar is not a verification, and the idempotence check must not
+  // read one as though it were. It carries no `contract.after`, so the test
+  // below already fails on it -- but the sidecar it leaves behind is exactly
+  // what a later successful run must be free to overwrite, which is why every
+  // refusal path writes rather than appends.
   if (document.evidence?.kind === "verified" && existing?.contract?.after === contractHash) {
     process.stdout.write(
       `already verified ${contractFile} at ${existing.contract.before} -> ${contractHash}; nothing to do\n`
     );
     return existing;
   }
-  if (document.evidence?.kind && document.evidence.kind !== "inferred" && document.evidence.kind !== "generated") {
-    process.stderr.write(
-      `solid-checker: not verified: ${contractFile} already carries ${document.evidence.kind} evidence; ` +
-        "mechanical verification promotes a generated draft and would replace a stronger claim with a " +
-        "weaker one. Regenerate the contract, probe it, and verify the fresh document\n"
+  /// Refuses, on stderr and on disk.
+  ///
+  /// Every `not verified` exit goes through here, so the sidecar exists for the
+  /// same set of outcomes the stderr lines describe -- not for the subset one
+  /// path happened to reach. The probe report is re-read leniently when the
+  /// caller has not got one yet: a refusal that cannot parse it still records
+  /// the refusal, because the blockers are the product and the report block is
+  /// context.
+  const refuse = (lines, context = {}) => {
+    for (const line of lines) process.stderr.write(`solid-checker: not verified: ${line}\n`);
+    // A refusal never overwrites a record of a promotion. A sidecar that
+    // carries `evidence` is the audit trail of a verification that actually
+    // happened -- of some other bytes, if it is still here after a
+    // regeneration, and self-invalidating either way -- and replacing history
+    // with the record of a failed attempt is a strictly worse artifact. A
+    // refusal record replaces a refusal record; that is the only overwrite.
+    if (existing && !existing.outcome && existing.evidence) {
+      process.stdout.write(
+        `not verified: ${lines.length} blocker(s); ${verifyPath} already records a verification of ` +
+          `${existing.contract?.after ?? "other bytes"} and was left in place, so the refusal is on ` +
+          "stderr only\n"
+      );
+      process.exitCode = 1;
+      return undefined;
+    }
+    let refusalReport;
+    try {
+      refusalReport = context.report ?? readJsonIfPresent(reportPath, "probe report");
+    } catch {
+      refusalReport = undefined;
+    }
+    let refusalPlan = context.plan;
+    if (refusalPlan === undefined) {
+      try {
+        refusalPlan = readJsonIfPresent(reviewPlanJsonPath(contractFile), "review plan");
+      } catch {
+        refusalPlan = undefined;
+      }
+    }
+    writeFileSync(
+      verifyPath,
+      `${JSON.stringify(
+        buildRefusalReport({
+          contract,
+          contractPath: contractFile,
+          before: contractHash,
+          report: refusalReport,
+          reportPath,
+          identities: {
+            generator: refusalPlan?.generation?.generator ?? null,
+            probeDriver: refusalReport?.identities?.probeDriver ?? null,
+            verifier: verifierIdentity(),
+            dialect: refusalReport?.identities?.dialect ?? null,
+            runtime: refusalReport?.identities?.runtime ?? null,
+            installed: {
+              version: refusalReport?.package?.installedVersion ?? contract.package?.version,
+              ...(refusalReport?.package?.integrity
+                ? { integrity: refusalReport.package.integrity }
+                : {})
+            }
+          },
+          blockers: lines
+        }),
+        null,
+        2
+      )}\n`
+    );
+    process.stdout.write(
+      `not verified: ${lines.length} blocker(s) recorded in ${verifyPath}; the contract is unchanged\n`
     );
     process.exitCode = 1;
     return undefined;
+  };
+
+  if (document.evidence?.kind && document.evidence.kind !== "inferred" && document.evidence.kind !== "generated") {
+    return refuse([
+      `${contractFile} already carries ${document.evidence.kind} evidence; ` +
+        "mechanical verification promotes a generated draft and would replace a stronger claim with a " +
+        "weaker one. Regenerate the contract, probe it, and verify the fresh document"
+    ]);
   }
 
   const planPath = reviewPlanJsonPath(contractFile);
@@ -321,13 +404,7 @@ export async function verifyContract(arguments_) {
     reviewState,
     reviewStatePath: statePath
   });
-  if (blockers.length) {
-    for (const blocker of blockers) {
-      process.stderr.write(`solid-checker: not verified: ${blocker}\n`);
-    }
-    process.exitCode = 1;
-    return undefined;
-  }
+  if (blockers.length) return refuse(blockers, { report, plan: plan ?? null });
 
   const converted = convertUnconfirmedClaims(contract, report);
   const droppedMarkers = dropInferredRowEvidence(converted.contract.entrypoints);
@@ -339,11 +416,7 @@ export async function verifyContract(arguments_) {
   const next = `${JSON.stringify(normalizeContract(promoted), null, 2)}\n`;
 
   const refusal = writeContract(contractFile, next);
-  if (refusal) {
-    process.stderr.write(`solid-checker: not verified: ${refusal}\n`);
-    process.exitCode = 1;
-    return undefined;
-  }
+  if (refusal) return refuse([refusal], { report, plan: plan ?? null });
   const afterHash = sha256Bytes(readFileSync(contractFile));
 
   const verifyReport = buildVerifyReport({

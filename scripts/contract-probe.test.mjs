@@ -20,11 +20,14 @@ import {
 } from "../packages/cli/scripts/contract-review-plan.mjs";
 import {
   ARGUMENT_SYNTHESIS,
+  BROWSER_SHIM_GLOBALS,
   PROBE_MODES,
   applyProbeEvidence,
   attemptedModes,
   buildProbePlan,
+  buildProbeReport,
   classifyExecution,
+  environmentForMode,
   interpretSession,
   settleClaims,
   synthesizeArguments,
@@ -685,7 +688,7 @@ test("a worker that stopped at a throw is restarted for what is left", () => {
     probes: [{ id: "p1" }, { id: "p2" }, { id: "p3" }, { id: "p4" }]
   };
   const attempts = [];
-  const results = runSessionWithRestarts({
+  const { results, accounting } = runSessionWithRestarts({
     session,
     spawn: probes => {
       attempts.push(probes.map(probe => probe.id));
@@ -706,6 +709,14 @@ test("a worker that stopped at a throw is restarted for what is left", () => {
     results.map(result => result.id),
     ["p1", "p2", "p3", "p4"]
   );
+  // The restart is now accounted rather than only inferable from wall time.
+  assert.deepEqual(accounting, {
+    mode: "development",
+    started: 2,
+    restarts: 1,
+    failed: 0,
+    completed: true
+  });
 });
 
 test("a crashed or timed-out mode records what is left undriven rather than retrying", () => {
@@ -715,7 +726,7 @@ test("a crashed or timed-out mode records what is left undriven rather than retr
     probes: [{ id: "p1" }, { id: "p2" }]
   };
   let attempts = 0;
-  const results = runSessionWithRestarts({
+  const { results, accounting } = runSessionWithRestarts({
     session,
     spawn: () => {
       attempts += 1;
@@ -727,6 +738,13 @@ test("a crashed or timed-out mode records what is left undriven rather than retr
     results.map(result => result.outcome),
     ["session-failed", "session-failed"]
   );
+  assert.deepEqual(accounting, {
+    mode: "client",
+    started: 1,
+    restarts: 0,
+    failed: 1,
+    completed: false
+  });
 });
 
 /// A project on disk: an installed package, a solid-js the runtime resolver can
@@ -1099,4 +1117,358 @@ test("drives a real tracked-callback claim against an installed Solid release", 
     calls: 1
   });
   assert.equal(written.evidence.kind, "inferred", "Stage 1 promotes nothing");
+});
+
+// ---------------------------------------------------------------------------
+// The import environment
+// ---------------------------------------------------------------------------
+
+test("only browser-condition modes get a shim, and server never does", () => {
+  // The whole honesty of the shim rests on this line. A `server` import that
+  // throws on `window` is a truthful observation of that entrypoint under
+  // `--conditions node`; faking a DOM there would manufacture a pass.
+  const byName = Object.fromEntries(PROBE_MODES.map(mode => [mode.name, mode]));
+  for (const name of ["client", "development", "production"]) {
+    const environment = environmentForMode(byName[name]);
+    assert.equal(environment.kind, "browser-globals");
+    assert.deepEqual(environment.globals, [...BROWSER_SHIM_GLOBALS]);
+  }
+  const server = environmentForMode(byName.server);
+  assert.equal(server.kind, "none");
+  assert.deepEqual(server.globals, []);
+});
+
+test("the shim can be switched off, which is the environment every earlier run had", () => {
+  for (const mode of PROBE_MODES) {
+    assert.deepEqual(environmentForMode(mode, { shim: false }), { kind: "none", globals: [] });
+  }
+});
+
+test("every session of a plan carries the environment its mode resolves to", () => {
+  const plan = buildProbePlan(expandContract(CONTRACT));
+  assert.ok(plan.sessions.length > 0);
+  for (const session of plan.sessions) {
+    assert.equal(
+      session.environment.kind,
+      session.mode === "server" ? "none" : "browser-globals",
+      `session ${session.mode}`
+    );
+  }
+  const bare = buildProbePlan(expandContract(CONTRACT), { environmentShim: false });
+  for (const session of bare.sessions) assert.equal(session.environment.kind, "none");
+});
+
+/// Runs the real worker in a staged directory, exactly as `defaultRunSessions`
+/// does, against a package whose module body reports what the environment
+/// looked like while it was being evaluated.
+function runWorker({ body, environment, mode = "client", probeCount = 1 }) {
+  const directory = workspace("solid-checker-worker-");
+  const modules = join(directory, "node_modules");
+  // The worker builds its probe runtime from `solid-js` before it touches any
+  // probe, so a staging directory without one answers every probe "no probe
+  // runtime" and tests nothing about the environment. Nothing here drives a
+  // reactive claim -- these are `kind` probes -- so the stub only has to exist.
+  mkdirSync(join(modules, "solid-js"), { recursive: true });
+  writeFileSync(
+    join(modules, "solid-js", "package.json"),
+    JSON.stringify({ name: "solid-js", version: "1.9.14", type: "module", main: "index.mjs" })
+  );
+  writeFileSync(join(modules, "solid-js", "index.mjs"), "export const createSignal = () => [];\n");
+  mkdirSync(join(modules, "env-fixture"), { recursive: true });
+  writeFileSync(
+    join(modules, "env-fixture", "package.json"),
+    JSON.stringify({ name: "env-fixture", version: "1.0.0", type: "module", main: "index.mjs" })
+  );
+  writeFileSync(join(modules, "env-fixture", "index.mjs"), body);
+  const worker = join(modules, "contract-probe-worker.mjs");
+  writeFileSync(
+    worker,
+    readFileSync(join(root, "packages/cli/scripts/contract-probe-worker.mjs"), "utf8")
+  );
+  const requestFile = join(directory, "request.json");
+  writeFileSync(
+    requestFile,
+    JSON.stringify({
+      mode,
+      dialect: "solid-v1",
+      environment,
+      probes: Array.from({ length: probeCount }, (_, index) => ({
+        id: `p${index + 1}`,
+        type: "kind",
+        specifier: "env-fixture",
+        export: "report"
+      }))
+    })
+  );
+  const child = spawnSync(process.execPath, [worker, requestFile], {
+    cwd: directory,
+    encoding: "utf8"
+  });
+  assert.equal(child.status, 0, child.stderr);
+  return JSON.parse(child.stdout);
+}
+
+test("the worker defines the requested globals before it imports anything", () => {
+  // The failure the shim exists for is a *module-evaluation-time* dereference,
+  // so the fixture reads `window` bare at the top level of its own body --
+  // the position that throws `ReferenceError` in a bare Node process.
+  const body = `const seen = { width: window.innerWidth, ready: document.readyState };\nexport const report = seen;\n`;
+  const shimmed = runWorker({
+    body,
+    environment: { kind: "browser-globals", globals: ["window", "document"] }
+  });
+  assert.equal(shimmed.results[0].outcome, "observed");
+  assert.deepEqual(shimmed.environment, {
+    kind: "browser-globals",
+    shimmed: ["window", "document"],
+    present: []
+  });
+
+  const bare = runWorker({ body, environment: { kind: "none", globals: [] } });
+  assert.equal(bare.results[0].outcome, "import-failed");
+  assert.match(bare.results[0].error, /window is not defined/);
+  assert.deepEqual(bare.environment, { kind: "none", shimmed: [], present: [] });
+});
+
+test("a typeof guard never threw, so the shim changes which branch it takes", () => {
+  // The honest half of the premise. `typeof window` is legal on an undeclared
+  // identifier and never threw, so the shim buys nothing for a module that
+  // guards that way -- it *redirects* it. A package that took its server path
+  // in every earlier measurement now takes its browser path, and what is then
+  // observed is behavior given a fake DOM. This is exactly why the shimmed
+  // list is recorded rather than assumed harmless.
+  const body = "export const report = typeof window === 'undefined' ? 'server' : 'browser';";
+  const bare = runWorker({ body, environment: { kind: "none", globals: [] } });
+  assert.equal(bare.results[0].outcome, "observed");
+  const shimmed = runWorker({
+    body,
+    environment: { kind: "browser-globals", globals: ["window"] }
+  });
+  assert.equal(shimmed.results[0].outcome, "observed");
+  assert.deepEqual(shimmed.environment.shimmed, ["window"]);
+});
+
+test("a shimmed value admits that it is one, and the record is readable from inside", () => {
+  // Inert-observable: a probe body that ever needs to know the DOM was fake
+  // must be able to find out. Both markers are non-enumerable accessors, so a
+  // package's own feature detection sees exactly what a browser would.
+  const body = [
+    "export const report = {",
+    "  windowIsShim: window.__solidCheckerProbeShim === true,",
+    "  documentIsShim: window.document.__solidCheckerProbeShim === true,",
+    "  record: globalThis.__solidCheckerProbeEnvironment.shimmed,",
+    "  selfIsWindow: self === window,",
+    "  documentIsSameObject: window.document === document,",
+    "  markerHidden: Object.keys(window).includes('__solidCheckerProbeShim'),",
+    "  windowInGlobal: 'window' in globalThis",
+    "};"
+  ].join("\n");
+  const answer = runWorker({
+    body,
+    environment: { kind: "browser-globals", globals: ["window", "self", "document"] }
+  });
+  assert.equal(answer.results[0].outcome, "observed");
+  assert.deepEqual(answer.environment.shimmed, ["window", "self", "document"]);
+});
+
+test("the fake DOM closes the back-references a real one has", () => {
+  // Not decoration. A package that reaches `node.ownerDocument.addEventListener`
+  // from a *deferred* callback throws inside a timer, which is an uncaught
+  // exception that kills the worker process rather than one probe -- and takes
+  // every remaining claim of that mode, `kind` observations included, with it.
+  // Two corpus rows were lost exactly that way.
+  const body = [
+    "const node = document.createElement('div');",
+    "export const report = {",
+    "  ownerDocumentIsDocument: node.ownerDocument === document,",
+    "  defaultViewIsWindow: document.defaultView === window,",
+    "  listenerRegisters: (node.ownerDocument.addEventListener('x', () => {}), true),",
+    "  bodyOwnerDocument: document.body.ownerDocument === document",
+    "};"
+  ].join("\n");
+  const answer = runWorker({
+    body,
+    environment: { kind: "browser-globals", globals: ["window", "document"] }
+  });
+  assert.equal(answer.results[0].outcome, "observed");
+});
+
+test("a global Node already provides is left alone rather than replaced by a fake", () => {
+  // `navigator` is real in modern Node. Overwriting it would make the
+  // observation weaker than it has to be, so it is reported as present.
+  const answer = runWorker({
+    body: "export const report = typeof navigator;",
+    environment: { kind: "browser-globals", globals: ["navigator", "window"] }
+  });
+  assert.deepEqual(answer.environment.shimmed, ["window"]);
+  assert.deepEqual(answer.environment.present, ["navigator"]);
+});
+
+test("an import that still throws with the shim in place is undriven exactly as before", () => {
+  // Rule (d): the shim removes one reason an import fails. It does not make a
+  // failing import into an observation.
+  const answer = runWorker({
+    body: "throw new Error('module body refuses');\nexport const report = 1;",
+    environment: { kind: "browser-globals", globals: ["window"] }
+  });
+  assert.equal(answer.results[0].outcome, "import-failed");
+  assert.match(answer.results[0].error, /module body refuses/);
+  assert.deepEqual(answer.environment.shimmed, ["window"]);
+});
+
+test("the probe report records the environment per mode and the session accounting", () => {
+  const report = buildProbeReport({
+    contract: { package: { name: "p", version: "1.0.0" } },
+    contractHash: "sha256:x",
+    contractPath: "/tmp/p.json",
+    installed: { version: "1.0.0" },
+    generator: null,
+    probeDriver: "solid-checker@test",
+    dialect: "solid-v1",
+    runtime: { package: "solid-js", version: "1.9.14" },
+    modes: PROBE_MODES,
+    discovery: { enabled: true, parameters: [0, 1] },
+    environment: {
+      client: { kind: "browser-globals", shimmed: ["window", "document"], present: ["navigator"] },
+      server: { kind: "none", shimmed: [], present: [] }
+    },
+    sessions: [
+      { mode: "client", started: 3, restarts: 2, failed: 0, completed: true },
+      { mode: "server", started: 1, restarts: 0, failed: 1, completed: false }
+    ],
+    claims: [],
+    incompleteness: []
+  });
+  assert.equal(report.environment.shimmedAnyMode, true);
+  assert.deepEqual(report.environment.modes.client.shimmed, ["document", "window"]);
+  assert.deepEqual(report.environment.modes.server, { kind: "none", shimmed: [], present: [] });
+  assert.deepEqual(report.sessions, {
+    started: 4,
+    restarts: 2,
+    failed: 1,
+    byMode: {
+      client: { started: 3, restarts: 2, failed: 0, completed: true },
+      server: { started: 1, restarts: 0, failed: 1, completed: false }
+    }
+  });
+});
+
+test("a report with no shimmed mode says so rather than omitting the block", () => {
+  const report = buildProbeReport({
+    contract: { package: { name: "p", version: "1.0.0" } },
+    contractHash: "sha256:x",
+    contractPath: "/tmp/p.json",
+    installed: { version: "1.0.0" },
+    generator: null,
+    probeDriver: "solid-checker@test",
+    dialect: "solid-v1",
+    runtime: { package: "solid-js", version: "1.9.14" },
+    modes: PROBE_MODES,
+    discovery: { enabled: true, parameters: [0, 1] },
+    environment: { client: { kind: "none", shimmed: [], present: [] } },
+    sessions: [],
+    claims: [],
+    incompleteness: []
+  });
+  assert.equal(report.environment.shimmedAnyMode, false);
+  assert.deepEqual(report.sessions, { started: 0, restarts: 0, failed: 0, byMode: {} });
+});
+
+test("an asynchronous throw from package code costs the process, not the mode", () => {
+  // A deferred callback the probe planted, or a promise the package left
+  // rejected, throws outside every `try` in the worker. Before the guard the
+  // process died with status 1 and an empty stdout, so the parent had *no*
+  // results for that mode: every probe already answered was discarded, and a
+  // whole-process failure names no probe to retry past, so the mode ended
+  // there. Two corpus rows lost their verification exactly that way.
+  const answer = runWorker({
+    // Queued as a microtask rather than a timer so the throw lands while the
+    // worker is still awaiting its next probe -- the position a real deferred
+    // package callback throws from, and the one this test can make
+    // deterministic.
+    body: [
+      "queueMicrotask(() => { throw new Error('deferred package throw'); });",
+      "export const report = 1;"
+    ].join("\n"),
+    probeCount: 3,
+    environment: { kind: "browser-globals", globals: ["window"] }
+  });
+  // The process still writes a readable report and exits 0 -- `runWorker`
+  // asserts the exit status -- instead of dying with status 1 and an empty
+  // stdout. Whatever it had answered survives, and `completed: false` tells the
+  // parent to restart for the rest.
+  assert.equal(answer.completed, false);
+  assert.ok(Array.isArray(answer.results));
+  assert.match(answer.aborted, /uncaughtException/);
+  assert.match(answer.aborted, /deferred package throw/);
+});
+
+test("an aborted session names the abort as the reason it could not reach a claim", () => {
+  const session = {
+    mode: "client",
+    conditions: ["browser"],
+    probes: [{ id: "p1" }, { id: "p2" }]
+  };
+  let attempts = 0;
+  const { results, accounting } = runSessionWithRestarts({
+    session,
+    spawn: () => {
+      attempts += 1;
+      return { completed: false, aborted: "uncaughtException: Error: boom", results: [] };
+    }
+  });
+  // No progress was made, so it does not restart into the same abort.
+  assert.equal(attempts, 1);
+  assert.equal(accounting.failed, 1);
+  assert.deepEqual(
+    results.map(result => result.outcome),
+    ["session-failed", "session-failed"]
+  );
+  assert.match(results[0].error, /aborted by package code running outside a probe/);
+  assert.match(results[0].error, /boom/);
+});
+
+test("a session that aborted after answering something is restarted for the rest", () => {
+  const session = {
+    mode: "development",
+    conditions: ["browser", "development"],
+    probes: [{ id: "p1" }, { id: "p2" }, { id: "p3" }]
+  };
+  const attempts = [];
+  const { results, accounting } = runSessionWithRestarts({
+    session,
+    spawn: probes => {
+      attempts.push(probes.map(probe => probe.id));
+      return probes.length > 1
+        ? {
+            completed: false,
+            aborted: "uncaughtException: Error: boom",
+            results: [{ id: probes[0].id, outcome: "observed" }]
+          }
+        : { completed: true, results: [{ id: probes[0].id, outcome: "observed" }] };
+    }
+  });
+  assert.deepEqual(attempts, [["p1", "p2", "p3"], ["p2", "p3"], ["p3"]]);
+  assert.deepEqual(
+    results.map(result => result.outcome),
+    ["observed", "observed", "observed"]
+  );
+  assert.equal(accounting.restarts, 2);
+  assert.equal(accounting.completed, true);
+});
+
+test("the fake element carries the members a cleanup path reaches for", () => {
+  // `el.remove()` in an `onCleanup` is the shape that cost a row: a primitive
+  // that appends a measuring element and removes it on dispose throws where the
+  // worker cannot attribute the throw to a probe.
+  const answer = runWorker({
+    body: [
+      "const el = document.createElement('div');",
+      "document.body.appendChild(el);",
+      "el.remove();",
+      "export const report = { matched: el.matches('div'), walker: !!document.createTreeWalker(el) };"
+    ].join("\n"),
+    environment: { kind: "browser-globals", globals: ["window", "document"] }
+  });
+  assert.equal(answer.results[0].outcome, "observed");
 });

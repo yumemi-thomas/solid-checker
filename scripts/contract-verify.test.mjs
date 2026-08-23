@@ -25,6 +25,8 @@ import {
   verifyReportPath
 } from "../packages/cli/scripts/contract-review-plan.mjs";
 import {
+  BLOCKERS,
+  buildVerifyReport,
   collectBlockers,
   convertUnconfirmedClaims,
   dropInferredRowEvidence,
@@ -902,7 +904,7 @@ test("verifying twice is a no-op rather than a hash refusal", { skip: !canWrite 
   process.exitCode = 0;
 });
 
-test("a blocked verification leaves the contract, plan and sidecar untouched", { skip: !canWrite }, async () => {
+test("a blocked verification leaves the contract and plan untouched", { skip: !canWrite }, async () => {
   const fixture = draft({
     generation: {
       generator: "solid-checker@test",
@@ -915,7 +917,91 @@ test("a blocked verification leaves the contract, plan and sidecar untouched", {
   assert.equal(process.exitCode, 1);
   assert.equal(readFileSync(fixture.contractFile, "utf8"), before);
   assert.equal(readFileSync(fixture.planFile, "utf8"), planBefore);
-  assert.equal(existsSync(verifyReportPath(fixture.contractFile)), false);
+  process.exitCode = 0;
+});
+
+test("a refusal writes the sidecar, with the blockers and no promotion fields", { skip: !canWrite }, async () => {
+  // The refusal path used to write nothing, so the only record of why a
+  // contract was not promoted was the stderr of the process that refused it --
+  // which is exactly the record a CI run or a corpus measurement does not keep.
+  const fixture = draft({
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: { ".": { modules: [], notes: ["unreadable module bytes"] } }
+    }
+  });
+  await verifyContract([fixture.contractFile]);
+  assert.equal(process.exitCode, 1);
+  const sidecar = JSON.parse(readFileSync(verifyReportPath(fixture.contractFile), "utf8"));
+  assert.equal(sidecar.outcome, "refused");
+  assert.equal(sidecar.kind, "contract-verify-refusal");
+  assert.ok(sidecar.blockers.raised.length > 0);
+  assert.ok(sidecar.blockers.raised.some(line => line.includes("carries a closure note")));
+  assert.deepEqual(sidecar.blockers.checked, [...BLOCKERS]);
+  // Nothing in the shape may read as a promotion.
+  assert.equal(sidecar.evidence, undefined);
+  assert.equal(sidecar.conversions, undefined);
+  assert.equal(sidecar.probed, undefined);
+  assert.equal(sidecar.summary, undefined);
+  assert.equal(sidecar.staleProbedMarkers, undefined);
+  assert.equal("after" in sidecar.contract, false);
+  assert.equal(sidecar.contract.before, sha256(readFileSync(fixture.contractFile)));
+  assert.equal(sidecar.probeReport.present, true);
+  assert.equal(sidecar.identities.verifier.startsWith("solid-checker"), true);
+  process.exitCode = 0;
+});
+
+test("a refusal for stronger existing evidence records itself too", { skip: !canWrite }, async () => {
+  const document = structuredClone(CONTRACT);
+  document.evidence = { kind: "reviewed" };
+  const fixture = draft({ document });
+  await verifyContract([fixture.contractFile]);
+  assert.equal(process.exitCode, 1);
+  const sidecar = JSON.parse(readFileSync(verifyReportPath(fixture.contractFile), "utf8"));
+  assert.equal(sidecar.outcome, "refused");
+  assert.equal(sidecar.blockers.raised.length, 1);
+  assert.ok(sidecar.blockers.raised[0].includes("already carries reviewed evidence"));
+  process.exitCode = 0;
+});
+
+test("a refusal's sidecar does not block the verification that follows it", { skip: !canWrite }, async () => {
+  // A refusal sidecar and a verification sidecar live at the same path, so the
+  // one the failure wrote must be overwritten rather than read as a prior
+  // promotion by the idempotence check.
+  const blocked = draft({
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: { ".": { modules: [], notes: ["unreadable module bytes"] } }
+    }
+  });
+  await verifyContract([blocked.contractFile]);
+  assert.equal(process.exitCode, 1);
+  assert.equal(
+    JSON.parse(readFileSync(verifyReportPath(blocked.contractFile), "utf8")).outcome,
+    "refused"
+  );
+  process.exitCode = 0;
+
+  // The same contract with the closure note gone: the plan is rewritten in
+  // place, so this is the identical bytes reaching a run that can promote them.
+  writeFileSync(
+    blocked.planFile,
+    `${JSON.stringify(
+      {
+        ...JSON.parse(readFileSync(blocked.planFile, "utf8")),
+        generation: { generator: "solid-checker@test", entrypoints: { ".": { modules: [], notes: [] } } }
+      },
+      null,
+      2
+    )}\n`
+  );
+  const report = await verifyContract([blocked.contractFile]);
+  assert.equal(process.exitCode ?? 0, 0);
+  assert.equal(report.evidence.kind, "verified");
+  const sidecar = JSON.parse(readFileSync(verifyReportPath(blocked.contractFile), "utf8"));
+  assert.equal(sidecar.outcome, undefined);
+  assert.equal(sidecar.evidence.kind, "verified");
+  assert.deepEqual(sidecar.blockers.raised, []);
   process.exitCode = 0;
 });
 
@@ -1291,7 +1377,14 @@ test(
     const document = structuredClone(CONTRACT);
     document.evidence = { kind: "verified" };
     writeFileSync(output, `${JSON.stringify(document, null, 2)}\n`);
-    writeFileSync(sibling(".verify.json"), '{"schemaVersion": 1}\n');
+    // Shaped like a real verify sidecar, not merely present: `contract verify`
+    // writes this file on its refusal path too, so what marks a *promotion* is
+    // the `evidence` block and the absence of `outcome: "refused"` -- and a
+    // regeneration must snapshot for the first and not for the second.
+    writeFileSync(
+      sibling(".verify.json"),
+      '{"schemaVersion": 1, "evidence": {"kind": "verified"}}\n'
+    );
     writeFileSync(sibling(".probe.json"), '{"schemaVersion": 1}\n');
 
     const generated = spawnSync(
@@ -1330,5 +1423,136 @@ test(
     assert.equal(existsSync(sibling(".verify.json")), false, "the fresh draft carries no verification");
     assert.equal(existsSync(sibling(".probe.json")), false);
     assert.equal(JSON.parse(readFileSync(output, "utf8")).evidence.kind, "inferred");
+  }
+);
+
+test("the verify sidecar carries the probe environment and session accounting forward", () => {
+  // A contract verified from observations made against a faked `window`
+  // certifies something weaker than one verified from a bare process, and this
+  // sidecar is the only artifact that can say so: schema v1 has nowhere on the
+  // contract to put it.
+  const environment = {
+    shimmedAnyMode: true,
+    modes: {
+      client: { kind: "browser-globals", shimmed: ["document", "window"], present: ["navigator"] },
+      server: { kind: "none", shimmed: [], present: [] }
+    }
+  };
+  const sessions = { started: 9, restarts: 5, failed: 0, byMode: {} };
+  const report = buildVerifyReport({
+    contract: { package: { name: "p", version: "1.0.0" }, entrypoints: {} },
+    contractPath: "/tmp/p.json",
+    before: "sha256:a",
+    after: "sha256:b",
+    report: {
+      contract: { hash: "sha256:a" },
+      summary: { driven: 3, passed: 3, undriven: 0 },
+      discovery: { enabled: true, parameters: [0, 1] },
+      environment,
+      sessions
+    },
+    reportPath: "/tmp/p.probe.json",
+    identities: {},
+    conversions: [],
+    probed: [],
+    staleMarkers: [],
+    droppedMarkers: 0
+  });
+  assert.deepEqual(report.probeReport.environment, environment);
+  assert.deepEqual(report.probeReport.sessions, sessions);
+  assert.deepEqual(report.blockers.raised, []);
+});
+
+test("a report that predates the environment block records null, not an assumption", () => {
+  const report = buildVerifyReport({
+    contract: { package: { name: "p", version: "1.0.0" }, entrypoints: {} },
+    contractPath: "/tmp/p.json",
+    before: "sha256:a",
+    after: "sha256:b",
+    report: { contract: { hash: "sha256:a" }, summary: {}, discovery: { enabled: true } },
+    reportPath: "/tmp/p.probe.json",
+    identities: {},
+    conversions: [],
+    probed: [],
+    staleMarkers: [],
+    droppedMarkers: 0
+  });
+  assert.equal(report.probeReport.environment, null);
+  assert.equal(report.probeReport.sessions, null);
+});
+
+test("a refusal never overwrites the record of a promotion", { skip: !canWrite }, async () => {
+  // The refusal sidecar and the promotion sidecar share a path. A verification
+  // that actually happened is audit history -- of some other bytes, if it is
+  // still here after a regeneration, and self-invalidating either way -- and
+  // replacing it with the record of a failed attempt is a strictly worse
+  // artifact. `contract generate` also reads this file to decide whether a
+  // previous machine-verified contract is worth snapshotting.
+  const fixture = draft();
+  const verified = await verifyContract([fixture.contractFile]);
+  assert.equal(process.exitCode ?? 0, 0);
+  assert.equal(verified.evidence.kind, "verified");
+  const before = readFileSync(verifyReportPath(fixture.contractFile), "utf8");
+
+  // Move the bytes on, so the idempotence check no longer short-circuits and
+  // the promotion refuses on the stronger-evidence blocker instead.
+  const document = JSON.parse(readFileSync(fixture.contractFile, "utf8"));
+  document.package = { ...document.package, description: "moved" };
+  writeFileSync(fixture.contractFile, `${JSON.stringify(document, null, 2)}\n`);
+  await verifyContract([fixture.contractFile]);
+  assert.equal(process.exitCode, 1);
+  assert.equal(readFileSync(verifyReportPath(fixture.contractFile), "utf8"), before);
+  process.exitCode = 0;
+});
+
+test(
+  "a refusal sidecar does not make a regeneration claim a machine-verified contract",
+  { skip: !canGenerate },
+  () => {
+    // `contract verify` writes `<contract>.verify.json` on its refusal path as
+    // well, so the mere presence of that file stopped being evidence that a
+    // verification happened. A refused draft has no conclusion to preserve:
+    // it must not trigger the `.previous` snapshot, and the message must not
+    // say a machine-verified contract was kept.
+    const directory = workspace("solid-checker-refusal-sidecar-");
+    const output = join(directory, "solid-reactivity.json");
+    const sibling = suffix => output.replace(/\.json$/, suffix);
+    writeFileSync(
+      output,
+      `${JSON.stringify(
+        { schemaVersion: 1, package: { name: "x", version: "1.0.0" }, entrypoints: {} },
+        null,
+        2
+      )}\n`
+    );
+    writeFileSync(
+      sibling(".verify.json"),
+      `${JSON.stringify(
+        { schemaVersion: 1, outcome: "refused", blockers: { checked: [], raised: ["a probe failed"] } },
+        null,
+        2
+      )}\n`
+    );
+
+    const generated = spawnSync(
+      process.execPath,
+      [
+        cli,
+        "contract",
+        "generate",
+        "--package-root",
+        join(root, "fixtures/package-contracts/shorthand-block-scope"),
+        "--output",
+        output
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, SOLID_CHECKER_NATIVE_BIN: native, SOLID_TYPEFACTS_BIN: typeFacts }
+      }
+    );
+    assert.equal(generated.status, 0, generated.stdout + generated.stderr);
+    assert.doesNotMatch(generated.stdout, /machine-verified contract/);
+    assert.equal(existsSync(output.replace(/\.json$/, ".previous.json")), false);
   }
 );

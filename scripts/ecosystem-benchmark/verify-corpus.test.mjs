@@ -7,19 +7,24 @@ import {
   buildVerificationReport,
   classifyExports,
   notVerifiedLines,
+  peerSpecsFor,
   percentile,
+  probeBudgetFor,
   probeErrorBucket,
+  probeFailureShape,
+  renderVerificationMarkdown,
   rootCause,
+  runtimeSpecsFor,
   siblingPath,
   stats,
   undrivenBucket
 } from "./verify-corpus.mjs";
 
 // Real captured refusal lines from `contract verify` against the pinned
-// corpus. They matter verbatim: the command writes no sidecar when it refuses,
-// so this text is the only record of which RFC 0002 blocker was raised, and
-// each line embeds an absolute contract path that pushes the distinguishing
-// clause far into the string.
+// corpus. They matter verbatim: they are what the refusal sidecar's
+// `blockers.raised` carries and what an older journal captured from stderr,
+// and each line embeds an absolute contract path that pushes the
+// distinguishing clause far into the string.
 const CONTRACT = "/tmp/out-qd2X28/solid-reactivity.json";
 const PROBE_REPORT = "/tmp/out-qd2X28/solid-reactivity.probe.json";
 
@@ -266,4 +271,256 @@ test("buildVerificationReport attributes a refusal to one root cause and keeps e
   assert.equal(report.refusals[0].rootCause, "incompleteness");
   assert.equal(report.overall.exports.inUnverifiedContract, 5);
   assert.equal(report.overall.claims.driven, 4);
+});
+
+// ---------------------------------------------------------------------------
+// The install environment
+// ---------------------------------------------------------------------------
+
+const RELEASES = {
+  solidReleases: {
+    "@solidjs/web": { v2: ["2.0.0-rc.0", "2.0.0-rc.1"] }
+  }
+};
+
+test("a Solid 2 row pinning only solid-js gets the @solidjs/web half of the same runtime", () => {
+  const completed = runtimeSpecsFor({
+    probe: { solid: { "solid-js": "2.0.0-rc.1" } },
+    manifest: RELEASES
+  });
+  assert.deepEqual(completed.pinned, { "solid-js": "2.0.0-rc.1", "@solidjs/web": "2.0.0-rc.1" });
+  assert.deepEqual(completed.added, ["@solidjs/web"]);
+});
+
+test("a Solid 1 row is never given a Solid 2 companion", () => {
+  const untouched = runtimeSpecsFor({ probe: { solid: { "solid-js": "1.9.14" } }, manifest: RELEASES });
+  assert.deepEqual(untouched.pinned, { "solid-js": "1.9.14" });
+  assert.deepEqual(untouched.added, []);
+});
+
+test("a version the corpus never audited is not substituted in to make a row work", () => {
+  const unaudited = runtimeSpecsFor({
+    probe: { solid: { "solid-js": "2.0.0-beta.19" } },
+    manifest: RELEASES
+  });
+  assert.deepEqual(unaudited.pinned, { "solid-js": "2.0.0-beta.19" });
+  assert.deepEqual(unaudited.added, []);
+});
+
+test("a row that already pins both is left exactly as the manifest wrote it", () => {
+  const both = { "solid-js": "2.0.0-rc.0", "@solidjs/web": "2.0.0-rc.0" };
+  const result = runtimeSpecsFor({ probe: { solid: both }, manifest: RELEASES });
+  assert.deepEqual(result.pinned, both);
+  assert.deepEqual(result.added, []);
+});
+
+test("peers come from the installed artifact, and a runtime peer is skipped with a reason", () => {
+  const { specs, skipped } = peerSpecsFor({
+    installedManifest: {
+      peerDependencies: {
+        "solid-js": ">=1.9.7",
+        "@solidjs/web": "^2.0.0-rc.0",
+        vinxi: "^0.5.7",
+        typescript: "^5.0.0"
+      },
+      peerDependenciesMeta: { typescript: { optional: true } }
+    },
+    pinned: { "solid-js": "1.9.14" }
+  });
+  assert.deepEqual(specs, [{ package: "vinxi", range: "^0.5.7" }]);
+  assert.deepEqual(skipped, [
+    { package: "@solidjs/web", reason: "a Solid runtime package the row does not pin" },
+    { package: "solid-js", reason: "already pinned by the manifest row" },
+    { package: "typescript", reason: "declared optional by the package" }
+  ]);
+});
+
+test("a package declaring no peers asks for no second install", () => {
+  assert.deepEqual(peerSpecsFor({ installedManifest: {}, pinned: {} }), { specs: [], skipped: [] });
+});
+
+// ---------------------------------------------------------------------------
+// The probe budget
+// ---------------------------------------------------------------------------
+
+test("the probe budget scales with the planned claim count and is capped", () => {
+  const budget = { base: 60_000, perClaim: 150, cap: 420_000 };
+  // A one-export primitive gets the base and nothing more.
+  assert.equal(probeBudgetFor({ claims: 8, ...budget }), 61_200);
+  // A wide surface gets proportionally more...
+  assert.equal(probeBudgetFor({ claims: 1000, ...budget }), 210_000);
+  // ...until the cap, which is what keeps one package from holding a worker
+  // for the length of the run.
+  assert.equal(probeBudgetFor({ claims: 100_000, ...budget }), 420_000);
+});
+
+test("a row whose claim count could not be planned falls back to the base budget", () => {
+  const budget = { base: 60_000, perClaim: 150, cap: 420_000 };
+  assert.equal(probeBudgetFor({ claims: null, ...budget }), 60_000);
+  assert.equal(probeBudgetFor({ claims: 0, ...budget }), 60_000);
+});
+
+// ---------------------------------------------------------------------------
+// Probe failures
+// ---------------------------------------------------------------------------
+
+test("a failure is reduced to the claim, what was claimed, and what was observed", () => {
+  assert.equal(
+    probeFailureShape({ claim: "callbacks[0]=tracked", observed: "deferred" }),
+    "callbacks[n]: claimed tracked, observed deferred"
+  );
+  assert.equal(
+    probeFailureShape({ claim: "callbacks[2]=tracked", observed: "inline" }),
+    "callbacks[n]: claimed tracked, observed inline"
+  );
+  assert.equal(
+    probeFailureShape({ claim: "returns=accessor", observed: "object" }),
+    "returns: claimed accessor, observed object"
+  );
+});
+
+test("a failure with no recorded observation recovers one from the reason, or says so", () => {
+  assert.equal(
+    probeFailureShape({ claim: "kind=function", reason: "runtime kind is value" }),
+    "kind: claimed function, observed value"
+  );
+  assert.equal(
+    probeFailureShape({ claim: "callbacks[0]=inline" }),
+    "callbacks[n]: claimed inline, observed not observed"
+  );
+});
+
+test("the report groups probe failures by shape and names every one of them", () => {
+  const failures = [
+    { entrypoint: ".", export: "a", claim: "callbacks[0]=tracked", observed: "deferred", modes: ["client"] },
+    { entrypoint: ".", export: "b", claim: "callbacks[1]=tracked", observed: "deferred", modes: ["server"] },
+    { entrypoint: ".", export: "c", claim: "returns=accessor", observed: "object", modes: ["client"] }
+  ];
+  const report = buildVerificationReport({
+    records: [
+      record({
+        probeId: "z",
+        outcome: "refused",
+        generated: { exports: 3, unknownBearing: 0 },
+        final: { exports: 3, unknownBearing: 0 },
+        blockerCount: 1,
+        blockerHeads: [PROBE_FAILED],
+        probe: {
+          summary: { claims: 3, driven: 3, passed: 0, failed: 3, undriven: 0, incompleteness: 0 },
+          failures
+        }
+      })
+    ],
+    manifest: MANIFEST,
+    budgets: BUDGETS,
+    checker: CHECKER
+  });
+  assert.equal(report.probeFailures.rows.length, 3);
+  assert.equal(report.probeFailures.shapes["callbacks[n]: claimed tracked, observed deferred"], 2);
+  assert.equal(report.probeFailures.shapes["returns: claimed accessor, observed object"], 1);
+  const markdown = renderVerificationMarkdown(report);
+  assert.match(markdown, /## Probe failures: claims the package answered differently/);
+  assert.match(markdown, /callbacks\[n\]: claimed tracked, observed deferred/);
+  // The individual rows carry the modes, because "deferred in server only" and
+  // "deferred everywhere" are different findings.
+  assert.match(markdown, /\| `z` \| `\.:a` \| `callbacks\[0\]=tracked` \| deferred \| client \|/);
+});
+
+// ---------------------------------------------------------------------------
+// The environment and session records
+// ---------------------------------------------------------------------------
+
+test("the report says which globals were faked, in which modes, and on how many rows", () => {
+  const environment = {
+    shimmedAnyMode: true,
+    modes: {
+      client: { kind: "browser-globals", shimmed: ["document", "window"], present: ["navigator"] },
+      development: { kind: "browser-globals", shimmed: ["window"], present: [] },
+      server: { kind: "none", shimmed: [], present: [] }
+    }
+  };
+  const report = buildVerificationReport({
+    records: [
+      record({
+        probeId: "s",
+        outcome: "verified",
+        generated: { exports: 1, unknownBearing: 0 },
+        final: { exports: 1, unknownBearing: 0 },
+        verify: { summary: { conversions: 0, probedRows: 0 }, conversions: [] },
+        probe: {
+          summary: { claims: 1, driven: 1, passed: 1, failed: 0, undriven: 0, incompleteness: 0 },
+          environment,
+          sessions: { started: 6, restarts: 2, failed: 1, byMode: {} }
+        }
+      })
+    ],
+    manifest: MANIFEST,
+    budgets: BUDGETS,
+    checker: CHECKER
+  });
+  assert.equal(report.probeEnvironment.shim.rowsShimmed, 1);
+  assert.equal(report.probeEnvironment.shim.shimmedGlobals.window, 1);
+  assert.equal(report.probeEnvironment.shim.shimmedGlobals.document, 1);
+  assert.equal(report.probeEnvironment.shim.modesShimmed.client, 1);
+  assert.equal(report.probeEnvironment.shim.modesShimmed.server, undefined);
+  assert.deepEqual(report.probeEnvironment.sessions, { started: 6, restarts: 2, failed: 1 });
+  const markdown = renderVerificationMarkdown(report);
+  assert.match(markdown, /### The globals the probe worker faked/);
+  assert.match(markdown, /weaker observation than one made in a browser/);
+  assert.match(markdown, /`server` sessions are never shimmed/);
+});
+
+// ---------------------------------------------------------------------------
+// No runtime
+// ---------------------------------------------------------------------------
+
+test("a row with no honest Solid runtime is its own class, not an error and not a refusal", () => {
+  const report = buildVerificationReport({
+    records: [
+      record({
+        probeId: "@solidjs/signals@2.0.0-rc.1|solid2|head",
+        outcome: "no-runtime",
+        generated: { exports: 20, unknownBearing: 0 },
+        detail: "the manifest pins {} for this row"
+      })
+    ],
+    manifest: MANIFEST,
+    budgets: BUDGETS,
+    checker: CHECKER
+  });
+  assert.equal(report.overall.verified, 0);
+  assert.equal(report.overall.refused, 0);
+  assert.equal(report.overall.outcomes["no-runtime"], 1);
+  assert.equal(report.preContractFailures.noRuntime.length, 1);
+  // It generated a contract, so its exports are in the composite's third state.
+  assert.equal(report.overall.exports.inUnverifiedContract, 20);
+  assert.match(renderVerificationMarkdown(report), /no Solid runtime the row could honestly be probed against/);
+});
+
+test("the install record reaches the report", () => {
+  const report = buildVerificationReport({
+    records: [
+      record({
+        probeId: "i",
+        outcome: "verified",
+        generated: { exports: 1, unknownBearing: 0 },
+        final: { exports: 1, unknownBearing: 0 },
+        verify: { summary: { conversions: 0, probedRows: 0 }, conversions: [] },
+        install: {
+          pinned: ["p@1.0.0", "solid-js@2.0.0-rc.1"],
+          runtimeCompleted: ["@solidjs/web"],
+          peers: ["vinxi@^0.5.7"],
+          peersSkipped: [],
+          peerInstall: "complete"
+        }
+      })
+    ],
+    manifest: MANIFEST,
+    budgets: BUDGETS,
+    checker: CHECKER
+  });
+  assert.equal(report.installEnvironment.runtimeCompleted, 1);
+  assert.equal(report.installEnvironment.peerComplete, 1);
+  assert.equal(report.installEnvironment.peersInstalled, 1);
+  assert.match(renderVerificationMarkdown(report), /## The install environment/);
 });
