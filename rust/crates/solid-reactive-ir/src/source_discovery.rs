@@ -190,7 +190,8 @@ fn effective_call_return(
         .entities
         .at(context.file.path.as_str(), inner.callee)
         .and_then(|symbol| context.resolved_contracts.by_symbol.get(symbol))
-        .and_then(|contracted| contracted.summary.returns.as_ref())
+        .and_then(|contracted| contracted.summary.returns.known())
+        .and_then(Option::as_ref)
     {
         return effective_call_return(contracted, inner, context, depth - 1);
     }
@@ -540,7 +541,8 @@ pub(crate) fn discover_file_sources(
             .get(&location(file.path.shared(), call.callee))
             .and_then(|symbol| resolved_contracts.by_symbol.get(symbol));
         if let Some(contracted) = contracted
-            && let Some(contracted_return) = contracted.summary.returns.as_ref()
+            && let Some(contracted_return) =
+                contracted.summary.returns.known().and_then(Option::as_ref)
         {
             let context = EffectiveReturnContext {
                 file,
@@ -840,7 +842,8 @@ pub(crate) fn discover_file_sources(
             .and_then(|callee| resolved_contracts.by_symbol.get(callee));
         if let Some((symbol, (contracted_return, contracted))) = symbol.zip(
             contracted
-                .and_then(|contracted| contracted.summary.returns.as_ref())
+                .and_then(|contracted| contracted.summary.returns.known())
+                .and_then(Option::as_ref)
                 .and_then(|returned| returned.elements.first())
                 .and_then(Option::as_ref)
                 .zip(contracted),
@@ -942,7 +945,8 @@ pub(crate) fn discover_file_sources(
         else {
             continue;
         };
-        let Some(contracted_return) = contracted.summary.returns.as_ref() else {
+        let Some(contracted_return) = contracted.summary.returns.known().and_then(Option::as_ref)
+        else {
             continue;
         };
         let property = file.source_text(member.property).unwrap_or_default();
@@ -1168,6 +1172,7 @@ pub(crate) struct SourceDiscovery {
     /// construction form is unknown is absent, keeping refresh acceptance.
     pub(crate) value_form_stores: HashSet<SymbolId>,
     pub(crate) contract_reads: HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    pub(crate) contract_parameter_reads: HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
     pub(crate) contract_callbacks: HashMap<SymbolId, Vec<ContractCallback>>,
     pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
@@ -1291,7 +1296,8 @@ pub(crate) fn discover_sources(
                 .filter_map(|(name, summary)| {
                     summary
                         .returns
-                        .clone()
+                        .known()
+                        .and_then(Clone::clone)
                         .map(|returned| (symbol_id(name), returned))
                 })
                 .collect::<HashMap<_, _>>()
@@ -1310,34 +1316,56 @@ pub(crate) fn discover_sources(
     let mut source_async_options = HashMap::<SymbolId, AsyncSourceOptions>::new();
     let mut value_form_stores = HashSet::<SymbolId>::new();
     let mut contract_reads = HashMap::<SymbolId, Vec<(String, String, Location, String)>>::new();
+    let mut contract_parameter_reads =
+        HashMap::<SymbolId, Vec<(usize, String, String, Location)>>::new();
     let mut contract_callbacks = HashMap::<SymbolId, Vec<ContractCallback>>::new();
     let mut contract_returns = HashMap::<SymbolId, (ContractReturn, Location)>::new();
     let mut contracted_accessor_symbols = HashSet::<SymbolId>::new();
 
     for contracted in &resolved_contracts.bindings {
-        if !contracted.summary.reactive_reads.is_empty() {
-            contract_reads.insert(
-                contracted.symbol.clone(),
-                contracted
-                    .summary
-                    .reactive_reads
-                    .iter()
-                    .map(|read| {
-                        (
-                            format!("{}.{}", contracted.package_name, contracted.imported_name),
-                            contracted.local_name.clone(),
-                            contracted.contract_location.clone(),
-                            read.kind.clone(),
-                        )
-                    })
-                    .collect(),
-            );
+        let direct_reads = contracted
+            .summary
+            .reactive_reads
+            .known()
+            .into_iter()
+            .flatten()
+            .filter(|read| matches!(read.kind.as_str(), "accessor" | "store-path"))
+            .map(|read| {
+                (
+                    format!("{}.{}", contracted.package_name, contracted.imported_name),
+                    contracted.local_name.clone(),
+                    contracted.contract_location.clone(),
+                    read.kind.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        if !direct_reads.is_empty() {
+            contract_reads.insert(contracted.symbol.clone(), direct_reads);
         }
-        contract_callbacks.insert(
-            contracted.symbol.clone(),
-            contracted.summary.callbacks.clone(),
-        );
-        if let Some(returned) = &contracted.summary.returns {
+        let parameter_reads = contracted
+            .summary
+            .reactive_reads
+            .known()
+            .into_iter()
+            .flatten()
+            .filter_map(|read| {
+                read.parameter.map(|parameter| {
+                    (
+                        parameter,
+                        format!("{}.{}", contracted.package_name, contracted.imported_name),
+                        contracted.local_name.clone(),
+                        contracted.contract_location.clone(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        if !parameter_reads.is_empty() {
+            contract_parameter_reads.insert(contracted.symbol.clone(), parameter_reads);
+        }
+        if let Some(callbacks) = contracted.summary.callbacks.known() {
+            contract_callbacks.insert(contracted.symbol.clone(), callbacks.clone());
+        }
+        if let Some(returned) = contracted.summary.returns.known().and_then(Option::as_ref) {
             contract_returns.insert(
                 contracted.symbol.clone(),
                 (returned.clone(), contracted.contract_location.clone()),
@@ -1642,6 +1670,42 @@ pub(crate) fn discover_sources(
         // hand them to the mapper. Keep that contract in the dialect beside
         // the JSX-children equivalent above.
         for call in &file.ast.calls {
+            if let Some(symbol) = semantic_lookup.callee_symbol(file, call.callee)
+                && let Some(callbacks) = contract_callbacks.get(symbol)
+            {
+                for callback in callbacks {
+                    let Some(argument) = call.arguments.get(callback.parameter) else {
+                        continue;
+                    };
+                    let Some(function) = file.ast.functions.iter().find(|function| {
+                        function.span == file.ast.peel_ts_sugar_span(argument.span)
+                    }) else {
+                        continue;
+                    };
+                    for (parameter_index, descriptor) in callback.arguments.iter().enumerate() {
+                        let Some(descriptor) = descriptor else {
+                            continue;
+                        };
+                        if descriptor.kind != "accessor" {
+                            continue;
+                        }
+                        let Some(parameter) = function
+                            .parameters
+                            .get(parameter_index)
+                            .and_then(|parameter| parameter.names.first())
+                        else {
+                            continue;
+                        };
+                        let declaration = location(file.path.shared(), parameter.span);
+                        if let Some(parameter_symbol) = entities.get(&declaration) {
+                            accessors.entry(parameter_symbol.clone()).or_insert((
+                                symbol_id(file.source_text(parameter.span).unwrap_or_default()),
+                                declaration,
+                            ));
+                        }
+                    }
+                }
+            }
             let Some(primitive) = primitive_name(
                 file.path.as_str(),
                 call.callee,
@@ -1969,6 +2033,7 @@ pub(crate) fn discover_sources(
         source_async_options,
         value_form_stores,
         contract_reads,
+        contract_parameter_reads,
         contract_callbacks,
         contract_returns,
         contracted_accessor_symbols,

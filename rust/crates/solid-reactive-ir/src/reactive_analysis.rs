@@ -82,6 +82,7 @@ pub(crate) fn collect_project<'facts>(
         ),
         source_declarations,
         contract_reads: &source.contract_reads,
+        contract_parameter_reads: &source.contract_parameter_reads,
         contract_returns: &source.contract_returns,
         bundled_returns: &source.bundled_returns,
         source_kinds: ctx.source_kinds,
@@ -129,6 +130,7 @@ pub(crate) fn collect_project<'facts>(
         source_phases: &source.source_phases,
         source_kinds: ctx.source_kinds,
         contract_reads: &source.contract_reads,
+        contract_parameter_reads: &source.contract_parameter_reads,
         contract_callbacks: &source.contract_callbacks,
         contract_returns: &source.contract_returns,
         bundled_returns: &source.bundled_returns,
@@ -240,6 +242,7 @@ pub(crate) fn collect_project<'facts>(
         async_reads,
         strict_read_obligations,
         write_action_obligations,
+        dispatch_obligations,
     } = local_access.result;
     draft.reads = reads
         .into_iter()
@@ -256,35 +259,42 @@ pub(crate) fn collect_project<'facts>(
         .collect();
     draft.strict_read_obligations = strict_read_obligations;
     draft.write_action_obligations = write_action_obligations;
+    // Unresolved-dispatch obligations and contract-incomplete consumer
+    // obligations travel in one vector because the same interprocedural walk
+    // discovers both, but they are two different finding kinds: `SC9012`
+    // versus `SC9005`. Under one dedup identity two findings that merely start
+    // at the same byte suppressed one another, and which survived depended on
+    // push order. `push_defect` therefore derives the identity from the defect
+    // kind's family and never from the vector it arrived in.
+    for obligation in dispatch_obligations {
+        draft.push_defect(obligation);
+    }
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
     for obligation in interprocedural.dispatch_obligations.iter() {
-        draft.push_defect("reactive-dispatch-unresolved", obligation.clone());
+        draft.push_defect(obligation.clone());
     }
     static_rules::component_returns_conditionally(ctx, draft);
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
     for obligation in interprocedural.contract_generation_obligations.iter() {
-        draft.push_defect(
-            "unknown-callback-execution",
-            crate::StaticDefect {
-                kind: crate::StaticDefectKind::UnknownCallbackExecution {
-                    package: obligation.package.clone(),
-                    entrypoint: obligation.entrypoint.clone(),
-                    function: obligation.function.clone(),
-                    parameter: obligation.parameter,
-                    parameter_type: obligation.parameter_type.clone(),
-                    required_execution: obligation.required_execution.clone(),
-                    contract_stub: obligation.contract_stub.clone(),
-                },
-                location: obligation.location.clone(),
-                analysis_context: obligation.message.clone(),
-                fixes: vec![],
-                uncertain: false,
+        draft.push_defect(crate::StaticDefect {
+            kind: crate::StaticDefectKind::UnknownCallbackExecution {
+                package: obligation.package.clone(),
+                entrypoint: obligation.entrypoint.clone(),
+                function: obligation.function.clone(),
+                parameter: obligation.parameter,
+                parameter_type: obligation.parameter_type.clone(),
+                required_execution: obligation.required_execution.clone(),
+                contract_stub: obligation.contract_stub.clone(),
             },
-        );
+            location: obligation.location.clone(),
+            analysis_context: obligation.message.clone(),
+            fixes: vec![],
+            uncertain: false,
+        });
     }
     upstream_compat::check_project(
         ctx,
@@ -296,4 +306,153 @@ pub(crate) fn collect_project<'facts>(
         draft,
     );
     interprocedural.factory_instances
+}
+
+#[cfg(test)]
+mod tests {
+    use typefacts::Location;
+
+    use crate::pipeline::ProgramDraft;
+    use crate::{StaticDefect, StaticDefectFamily, StaticDefectKind};
+
+    /// Contract-incomplete consumer obligations ride the same vector as
+    /// unresolved-dispatch obligations, but they are two finding kinds
+    /// (`SC9005` and `SC9012`). Under one dedup identity the pair that a
+    /// contract-driven call site naturally produces at one start byte
+    /// suppressed each other, and which one survived depended on push order.
+    #[test]
+    fn contract_and_dispatch_obligations_do_not_deduplicate_each_other() {
+        let location = Location {
+            path: "App.tsx".into(),
+            start_byte: 12,
+            end_byte: 20,
+        };
+        let contract = StaticDefect {
+            kind: StaticDefectKind::PackageContractExportMissing {
+                module: "reactive-package".into(),
+                export: "mapValue".into(),
+                reexported: false,
+            },
+            location: location.clone(),
+            analysis_context: "unbound-contract-claims:callback arguments".into(),
+            fixes: vec![],
+            uncertain: false,
+        };
+        let dispatch = StaticDefect {
+            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: "mapValue".into(),
+                member: None,
+            },
+            location,
+            analysis_context: "contract-parameter-member-argument-unresolved".into(),
+            fixes: vec![],
+            uncertain: true,
+        };
+        assert_ne!(
+            contract.kind.dedup_identity(),
+            dispatch.kind.dedup_identity()
+        );
+        let mut draft = ProgramDraft::default();
+        draft.push_defect(contract.clone());
+        draft.push_defect(dispatch);
+        assert_eq!(draft.static_defects.len(), 2);
+        // The identity still deduplicates its own kind at the same byte.
+        draft.push_defect(contract);
+        assert_eq!(draft.static_defects.len(), 2);
+    }
+
+    /// A contract-generation obligation projects to the same dialect rule as
+    /// a contract-incomplete consumer obligation (`SC9005`) but keeps its own
+    /// dedup identity: one call site can produce both at one start byte, and
+    /// a shared identity would drop whichever was pushed second.
+    #[test]
+    fn generation_obligations_keep_their_own_identity_within_the_contract_rule() {
+        let generation = StaticDefectKind::UnknownCallbackExecution {
+            package: "partial-package".into(),
+            entrypoint: ".".into(),
+            function: "withValue".into(),
+            parameter: 0,
+            parameter_type: "() => void".into(),
+            required_execution: "synchronous".into(),
+            contract_stub: "{}".into(),
+        };
+        let consumer = StaticDefectKind::PackageContractExportMissing {
+            module: "partial-package".into(),
+            export: "withValue".into(),
+            reexported: false,
+        };
+        assert_eq!(
+            generation.family(),
+            StaticDefectFamily::UnknownCallbackExecution
+        );
+        assert_eq!(
+            consumer.family(),
+            StaticDefectFamily::PackageContractIncomplete
+        );
+        assert_ne!(generation.dedup_identity(), consumer.dedup_identity());
+    }
+
+    /// The identity strings are load-bearing: they are the keys of one
+    /// identity space shared by every stage that files a static defect, so a
+    /// rename silently merges or splits dedup groups. Pin the mapping of every
+    /// kind that reaches [`ProgramDraft::push_defect`].
+    #[test]
+    fn dedup_identities_are_pinned_per_finding_family() {
+        assert_eq!(
+            StaticDefectFamily::PackageContractIncomplete.dedup_identity(),
+            "package-contract-incomplete"
+        );
+        assert_eq!(
+            StaticDefectFamily::ReactiveDispatchUnresolved.dedup_identity(),
+            "reactive-dispatch-unresolved"
+        );
+        assert_eq!(
+            StaticDefectFamily::UnknownCallbackExecution.dedup_identity(),
+            "unknown-callback-execution"
+        );
+        assert_eq!(
+            StaticDefectFamily::ReactiveObjectDestructure.dedup_identity(),
+            "no-destructure"
+        );
+        assert_eq!(
+            StaticDefectFamily::ReactiveReadAfterAwait.dedup_identity(),
+            "reactive-read-after-await"
+        );
+        assert_eq!(
+            StaticDefectFamily::ComponentReturnsConditionally.dedup_identity(),
+            "components-return-once"
+        );
+
+        // Kinds that share a dialect rule share the identity; the two
+        // contract families deliberately do not.
+        assert_eq!(
+            StaticDefectKind::ReactiveCallbackUnresolved {
+                callee: "map".into()
+            }
+            .dedup_identity(),
+            StaticDefectKind::ReactiveDispatchUnresolved {
+                callee: "map".into(),
+                member: None
+            }
+            .dedup_identity()
+        );
+        assert_eq!(
+            StaticDefectKind::StructuredReturnUnresolved {
+                function: "make".into(),
+                property: "value".into(),
+                reason: "shorthand".into(),
+            }
+            .dedup_identity(),
+            StaticDefectFamily::ReactiveDispatchUnresolved.dedup_identity()
+        );
+        assert_eq!(
+            StaticDefectKind::PackageContractEnvironmentDependent {
+                module: "pkg".into(),
+                export: "value".into(),
+                reexported: false,
+            }
+            .dedup_identity(),
+            StaticDefectFamily::PackageContractIncomplete.dedup_identity()
+        );
+    }
 }

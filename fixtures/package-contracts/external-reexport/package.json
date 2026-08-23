@@ -2,6 +2,9 @@
   "name": "external-reexport-package",
   "version": "1.0.0",
   "type": "module",
+  "dependencies": {
+    "dependency-package": "1.0.0"
+  },
   "exports": {
     ".": "./index.ts"
   }

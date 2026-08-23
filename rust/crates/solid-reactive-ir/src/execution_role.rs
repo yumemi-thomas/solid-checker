@@ -1160,18 +1160,36 @@ pub(super) fn allowed_callback_spans(
                     })
                     .collect()
             });
-        if let Some(symbol) = lookup.callee_symbol(file, call.callee)
-            && let Some(callbacks) = lookup.contract_callbacks(symbol)
-        {
-            for callback in callbacks {
-                let exclusively_deferred = callbacks.iter().all(|candidate| {
-                    candidate.parameter != callback.parameter || candidate.execution == "deferred"
-                });
-                if callback.execution == "deferred"
-                    && exclusively_deferred
-                    && !indices.contains(&callback.parameter)
-                {
-                    indices.push(callback.parameter);
+        if let Some(symbol) = lookup.callee_symbol(file, call.callee) {
+            if let Some(callbacks) = lookup.contract_callbacks(symbol) {
+                for callback in callbacks {
+                    let exclusively_deferred = callbacks.iter().all(|candidate| {
+                        candidate.parameter != callback.parameter
+                            || candidate.execution == "deferred"
+                    });
+                    if callback.execution == "deferred"
+                        && exclusively_deferred
+                        && !indices.contains(&callback.parameter)
+                    {
+                        indices.push(callback.parameter);
+                    }
+                }
+            } else if lookup.unknown_contract_callback_export(symbol).is_some() {
+                // The contract explicitly does not prove when this callee runs
+                // a caller-supplied callback. The call site already carries
+                // that as an SC9005 obligation; additionally reporting a read
+                // inside the callback as a *proven* untracked read would
+                // assert exactly the timing the contract says it does not
+                // have. Treat every argument whose syntax leaves callability
+                // open as an unproven-timing callback so the read stays
+                // uncertifiable instead of becoming a violation.
+                for (index, argument) in call.arguments.iter().enumerate() {
+                    if !crate::runtime_semantics::literal_argument_is_not_callable(
+                        argument.runtime_value_kind,
+                    ) && !indices.contains(&index)
+                    {
+                        indices.push(index);
+                    }
                 }
             }
         }

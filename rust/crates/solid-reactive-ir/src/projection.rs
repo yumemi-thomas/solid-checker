@@ -73,28 +73,58 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             module,
             export,
             reexported,
-        } => (
-            format!(
-                "the reactivity contract for {module} has no entrypoint/export summary for {} export {export}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-                if *reexported { "re-exported" } else { "imported" }
-            ),
-            (terms.removed_export_hint)(module, export).unwrap_or_else(|| {
-                format!(
-                    "Add an export summary for {export} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+        } => {
+            if let Some(claims) = defect
+                .analysis_context
+                .strip_prefix("unbound-contract-claims:")
+            {
+                (
+                    format!(
+                        "the reactivity contract for {module} states {claims} for {} export {export}, but this call site gives the claim nothing to bind to, so what the callback receives cannot be certified",
+                        if *reexported { "re-exported" } else { "imported" }
+                    ),
+                    format!(
+                        "Pass the callback to {export} as an inline function literal so the contract's argument claims land on its parameters. A callback passed by name, or a claim shape solid-checker does not model, keeps the call uncertifiable. See docs/package-contracts.md for the format."
+                    ),
                 )
-            }),
-        ),
+            } else if let Some(claims) = defect
+                .analysis_context
+                .strip_prefix("unknown-contract-claims:")
+            {
+                (
+                    format!(
+                        "the reactivity contract for {module} leaves {claims} unknown for {} export {export}; code whose proof depends on those claims cannot be certified",
+                        if *reexported { "re-exported" } else { "imported" }
+                    ),
+                    format!(
+                        "Audit {module} export {export} against the exact runtime artifact, then replace each unknown claim with its behavior or remove the field to certify that behavior is absent. See docs/package-contracts.md for the format."
+                    ),
+                )
+            } else {
+                (
+                    format!(
+                        "the reactivity contract for {module} has no entrypoint/export summary for {} export {export}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+                        if *reexported { "re-exported" } else { "imported" }
+                    ),
+                    (terms.removed_export_hint)(module, export).unwrap_or_else(|| {
+                        format!(
+                            "Add an export summary for {export} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+                        )
+                    }),
+                )
+            }
+        }
         StaticDefectKind::PackageContractEnvironmentDependent {
             module,
             export,
             reexported,
         } => (
             format!(
-                "the reactivity contract for {module} has different certified behavior for conditional runtime targets at {} export {export}; solid-checker has no selected environment and cannot apply one variant without guessing",
+                "the reactivity contract for {module} has different certified behavior for conditional runtime targets at {} export {export}; no contract branch matches the selected runtime environment, so applying one would be a guess",
                 if *reexported { "re-exported" } else { "imported" }
             ),
             format!(
-                "Select and pin the package's runtime conditions before certifying {export}, or publish one environment-independent contract summary. See docs/package-contracts.md for the format."
+                "Select the package's runtime conditions to match one of its contract branches before certifying {export}, or publish one environment-independent contract summary. A contract generated with --conditions only applies where those exact conditions are selected. See docs/package-contracts.md for the format."
             ),
         ),
         StaticDefectKind::UnknownCallbackExecution {
@@ -243,6 +273,20 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
         }
+        StaticDefectKind::PackageContractExportMissing { .. }
+            if defect
+                .analysis_context
+                .starts_with("unbound-contract-claims:") =>
+        {
+            "the imported package contract carries a claim about this callback that the call site does not let solid-checker bind"
+        }
+        StaticDefectKind::PackageContractExportMissing { .. }
+            if defect
+                .analysis_context
+                .starts_with("unknown-contract-claims:") =>
+        {
+            "the imported package contract explicitly marks a required effect claim as unknown"
+        }
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"
         }
@@ -361,6 +405,22 @@ pub enum PackageContractIssueKind {
     StaleBundled {
         audited_version: String,
         installed_version: String,
+    },
+    /// A contract records the npm integrity of the tarball it was audited
+    /// against, and the project's lockfile records a different integrity for
+    /// the installed copy of the same version.
+    ///
+    /// A version string is not a pin — a republished, patched, or
+    /// locally-overridden install keeps its version — so this is the same
+    /// epistemic state as [`Self::Stale`] reached through a different fact,
+    /// and it is refused the same way. `bundled` splits the remedy, exactly as
+    /// [`Self::Stale`] and [`Self::StaleBundled`] do: a consumer can
+    /// regenerate a project-owned contract but not this checker's own audited
+    /// artifact.
+    IntegrityMismatch {
+        contract_integrity: String,
+        installed_integrity: String,
+        bundled: bool,
     },
 }
 

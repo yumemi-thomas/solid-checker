@@ -227,6 +227,7 @@ pub(crate) struct InterproceduralGraphContribution {
         Option<String>,
     )>,
     pub(crate) contract_generation_obligations: Vec<(Span, ContractGenerationObligation)>,
+    pub(crate) contract_consumer_obligations: Vec<StaticDefect>,
     pub(crate) returned_bindings: Vec<(SymbolId, SymbolId)>,
     pub(crate) factory_calls: Vec<(Span, SymbolId)>,
 }
@@ -495,6 +496,7 @@ pub(crate) struct LocalAccessResult {
     pub(crate) async_reads: Vec<Arc<AsyncRead>>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
+    pub(crate) dispatch_obligations: Vec<StaticDefect>,
 }
 
 pub(crate) struct LocalAccessBuild {
@@ -517,6 +519,7 @@ pub(crate) struct LocalAccessSymbolState {
     /// a fixed import elsewhere invalidates every file reading this source.
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
     pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
+    pub(crate) contract_parameter_reads: Option<Vec<(usize, String, String, Location)>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
     pub(crate) prop_source: Option<(
         SymbolId,

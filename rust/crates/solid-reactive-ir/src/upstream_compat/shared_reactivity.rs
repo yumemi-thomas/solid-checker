@@ -154,6 +154,31 @@ fn reactive_source_uncaptured(
             continue;
         }
         let callee_text = text(file, call.callee);
+        let callee_is_parameter = context
+            .entities
+            .at(file.path.as_str(), call.callee)
+            .is_some_and(|callee_symbol| {
+                file.ast
+                    .functions_body_containing(call.span)
+                    .min_by_key(|function| function.body.end - function.body.start)
+                    .is_some_and(|function| {
+                        function.parameters.iter().any(|parameter| {
+                            parameter.names.iter().any(|name| {
+                                context
+                                    .entities
+                                    .at(file.path.as_str(), name.span)
+                                    .is_some_and(|symbol| symbol == callee_symbol)
+                            })
+                        })
+                    })
+            });
+        // Calling a callback parameter with an accessor does not read or lose
+        // that source inside this helper. Interprocedural contract generation
+        // records the accessor at the callback argument position, so the
+        // consumer can classify the callback parameter exactly.
+        if callee_is_parameter {
+            continue;
+        }
         for (argument_index, argument) in call.arguments.iter().enumerate() {
             // Only a bare reference to the source itself. A call, a member
             // read, or an expression built from one passes a *value*, whose

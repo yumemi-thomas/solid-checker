@@ -54,12 +54,75 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) server_rendering: crate::source_discovery::ServerRenderingPremise,
     pub(crate) source_declarations: &'a HashMap<SymbolId, Declaration>,
     pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    pub(crate) contract_parameter_reads:
+        &'a HashMap<SymbolId, Vec<(usize, String, String, Location)>>,
     pub(crate) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
     pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
+}
+
+/// Whether a `parameter-member` argument is proven not to be a reactive
+/// source, so the package's member call on it cannot read reactively.
+///
+/// A Solid store is a proxy typed as the object it wraps, so a declared type
+/// never proves the negative. Two things do:
+///
+/// * the argument's own syntax -- an inline literal is a value created at the
+///   call site, and `createStore` never produced it. This holds for a literal
+///   that *spreads* a store too, and deliberately so: `[...storeArray]` copies
+///   out of the proxy at the call site, so what the callee receives really is
+///   snapshot data, and the reactive read is the spread itself. The spread
+///   pass below owns that read and reports it in its own execution role;
+///   claiming the callee's parameter read as well would report one dependency
+///   twice. What stays uncovered is a *nested* proxy surviving the shallow
+///   copy — see docs/precision-backlog.md; and
+/// * an analyzed local binding initialized by a resolved standard-library
+///   call, such as `document.createElement("button")`. That value's origin is
+///   platform code, which cannot return a Solid store.
+///
+/// Anything the project cannot see the origin of -- a parameter, a prop, an
+/// import, a bare `declare const` -- stays unproven and keeps its SC9012
+/// obligation. This is the negative proof, never a default.
+pub(crate) fn argument_proves_non_reactive(
+    file: &solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    entities: &EntitySymbols,
+    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    use solid_facts::ast::RuntimeValueKind;
+    if matches!(
+        argument.runtime_value_kind,
+        RuntimeValueKind::Primitive
+            | RuntimeValueKind::Array
+            | RuntimeValueKind::Object
+            | RuntimeValueKind::Nullish
+    ) {
+        return true;
+    }
+    let Some(symbol) = entities.get(&location(file.path.shared(), argument.span)) else {
+        return false;
+    };
+    if source_kinds.contains_key(symbol.as_str()) {
+        return false;
+    }
+    file.ast.bindings.iter().any(|binding| {
+        binding.names.iter().any(|name| {
+            entities
+                .at(file.path.as_str(), name.span)
+                .is_some_and(|candidate| candidate == symbol)
+        }) && binding.call_initializer.is_some_and(|initializer| {
+            file.ast.call_at(initializer).is_some_and(|call| {
+                lookup
+                    .resolved_callee_call(file, call.callee)
+                    .and_then(|resolved| resolved.declaration.as_ref())
+                    .is_some_and(|declaration| declaration.standard_library)
+            })
+        })
+    })
 }
 
 pub(crate) struct LocalAccessReuse<'a> {
@@ -290,6 +353,7 @@ impl LocalAccessContext<'_, '_> {
             async_source: self.async_sources.contains(symbol),
             async_options: self.effective_async_options(symbol),
             contract_reads: self.contract_reads.get(symbol).cloned(),
+            contract_parameter_reads: self.contract_parameter_reads.get(symbol).cloned(),
             source_kind: self.source_kinds.get(symbol).copied(),
             prop_source: self.prop_state(symbol),
             source_declaration: self.source_declarations.get(symbol).cloned(),
@@ -591,6 +655,75 @@ impl LocalAccessContext<'_, '_> {
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
                         }
+                    }
+                }
+            }
+            if let Some(contracted) = self.contract_parameter_reads.get(symbol)
+                && !inside_non_component_function(file, call.callee, self.lookup)
+            {
+                for (parameter, name, via, declaration) in contracted {
+                    let Some(argument) = call.arguments.get(*parameter) else {
+                        result.dispatch_obligations.push(crate::StaticDefect {
+                            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: name.clone(),
+                                member: None,
+                            },
+                            location: location(file.path.shared(), call.span),
+                            analysis_context: format!(
+                                "package contract parameter-member read requires argument {parameter}, but the call has no exact argument at that position"
+                            ),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                        continue;
+                    };
+                    let argument_location = location(file.path.shared(), argument.span);
+                    let reactive_symbol = self.entities.get(&argument_location).filter(|symbol| {
+                        self.source_kinds.get(symbol.as_str()) == Some(&ReactiveSourceKind::Store)
+                    });
+                    if let Some(reactive_symbol) = reactive_symbol {
+                        result.reads.push(Arc::new(ReactiveRead {
+                            kind: "store-path".into(),
+                            accessor: file
+                                .source_text(argument.span)
+                                .unwrap_or(reactive_symbol.as_str())
+                                .to_string()
+                                .into(),
+                            location: location(file.path.shared(), call.span),
+                            declaration: self
+                                .accessors
+                                .get(reactive_symbol.as_str())
+                                .map(|(_, location)| location.clone())
+                                .unwrap_or_else(|| declaration.clone()),
+                            execution,
+                            context: read_analysis_context(file, call.span, execution).into(),
+                            via: via.clone().into(),
+                            origin: Some(declaration.clone()),
+                            origin_context: via.clone().into(),
+                            uncertain: self.lookup.inside_possible_component(file, call.span),
+                        }));
+                        if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
+                            result.strict_read_obligations += 1;
+                        }
+                    } else if !argument_proves_non_reactive(
+                        file,
+                        argument,
+                        self.entities,
+                        self.source_kinds,
+                        self.lookup,
+                    ) {
+                        result.dispatch_obligations.push(crate::StaticDefect {
+                            kind: crate::StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: name.clone(),
+                                member: None,
+                            },
+                            location: location(file.path.shared(), call.span),
+                            analysis_context: format!(
+                                "argument {parameter} to {name} is neither a proven reactive store nor proven plain data"
+                            ),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
                     }
                 }
             }
@@ -938,6 +1071,9 @@ pub(crate) fn append_local_access_result(
     target
         .write_action_obligations
         .extend(source.write_action_obligations.iter().cloned());
+    target
+        .dispatch_obligations
+        .extend(source.dispatch_obligations.iter().cloned());
 }
 
 pub(crate) fn append_local_access_result_owned(
@@ -952,4 +1088,7 @@ pub(crate) fn append_local_access_result_owned(
     target
         .write_action_obligations
         .extend(source.write_action_obligations);
+    target
+        .dispatch_obligations
+        .extend(source.dispatch_obligations);
 }

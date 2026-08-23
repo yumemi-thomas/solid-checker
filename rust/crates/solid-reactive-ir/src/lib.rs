@@ -1,3 +1,4 @@
+mod attribution;
 mod cache;
 mod cleanup;
 mod contracts;
@@ -23,6 +24,8 @@ mod symbols;
 mod timings;
 mod upstream_compat;
 
+pub use attribution::ObligationReach;
+pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_contracts, build_with_contracts_measured};
 
 pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
@@ -165,6 +168,12 @@ pub enum RuntimeRendering {
     StreamingSsr,
 }
 
+/// The export-map conditions that name a host runtime. At most one of them
+/// describes any single environment, which is what makes them the one
+/// dimension of an entrypoint's recorded condition union a consumer can read
+/// as scope rather than as alternatives.
+const HOST_TARGET_CONDITIONS: &[&str] = &["browser", "node", "deno", "worker"];
+
 impl RuntimeEnvironment {
     pub fn validate(&self) -> Result<(), String> {
         if self
@@ -189,7 +198,7 @@ impl RuntimeEnvironment {
         }
         let selected = self.selected_conditions();
         for (label, alternatives) in [
-            ("runtime target", &["browser", "node", "deno", "worker"][..]),
+            ("runtime target", HOST_TARGET_CONDITIONS),
             ("build mode", &["development", "production"][..]),
             (
                 "rendering mode",
@@ -252,10 +261,23 @@ impl RuntimeEnvironment {
     #[must_use]
     pub fn matches_conditions(&self, required: &[String]) -> bool {
         let selected = self.selected_conditions();
+        // With nothing selected there is no environment to match against, and
+        // picking any branch -- including the fallback -- would be a guess.
+        if selected.is_empty() {
+            return false;
+        }
         !required.is_empty()
-            && required
-                .iter()
-                .all(|condition| selected.contains(condition))
+            && required.iter().all(|condition| {
+                // `default` is the export map's unconditional branch: it names
+                // no host condition, and no selector ever produces it as a
+                // *selected* condition. Requiring it to appear in
+                // `selected_conditions` made every generated fallback variant
+                // unmatchable, so a consumer that had selected a real
+                // environment still fell through to an environment-dependent
+                // uncertifiable result. Which branch actually wins among
+                // several matches is `precedence`'s job, not this predicate's.
+                condition == "default" || selected.contains(condition)
+            })
     }
 
     pub fn matches_entrypoint_conditions(&self, supported: &[String]) -> bool {
@@ -272,9 +294,40 @@ impl RuntimeEnvironment {
                 .iter()
                 .all(|condition| matches!(condition.as_str(), "default" | "import" | "require"));
         }
+        // An entrypoint's condition list is the *union of the export-map
+        // branches* it resolves through, not one environment's requirement
+        // set: the bundled solid-js root entrypoint records
+        // `browser, deno, development, import, node, worker` for a map no
+        // single environment satisfies at once. Requiring every recorded
+        // condition would make each such entrypoint unmatchable, so membership
+        // -- not containment -- is the base test, and variant selection
+        // (`matches_conditions`, which does require all of a variant's
+        // conditions) is what narrows an export afterwards.
+        //
+        // `--conditions` generation records the asserted selection into the
+        // same union field, where the list is scope rather than alternatives.
+        // The host target is the one dimension where the difference is
+        // decidable: an entrypoint that names host targets and not the
+        // consumer's was either scoped away from that environment or reaches
+        // it only through a branch this contract does not describe. Applying
+        // the summary anyway -- through a shared resolver condition such as
+        // `import` -- would be a guess, so it fails closed. `default` is the
+        // export map's unconditional branch and really is reachable from every
+        // environment, so recording it keeps the entrypoint open.
+        if !supported.iter().any(|condition| condition == "default")
+            && supported
+                .iter()
+                .any(|condition| HOST_TARGET_CONDITIONS.contains(&condition.as_str()))
+            && let Some(host) = HOST_TARGET_CONDITIONS
+                .iter()
+                .find(|condition| selected.contains(**condition))
+            && !supported.iter().any(|condition| condition == host)
+        {
+            return false;
+        }
         supported
             .iter()
-            .any(|condition| selected.contains(condition))
+            .any(|condition| condition == "default" || selected.contains(condition))
     }
 }
 
@@ -443,6 +496,17 @@ pub struct StaticViolation {
 /// Unlike [`StaticViolation`], this carries no external rule identity or
 /// user-facing prose. Each dialect catalog projects the structured defect
 /// into its own rule, message, and hint.
+/// [`StaticDefect::analysis_context`] of the obligation an exported helper
+/// raises when it invokes a member supplied by one of its own parameters.
+///
+/// Named here rather than spelled twice because contract emission has to
+/// recognize the class in order to ask whether the published
+/// `parameter-member` reactive-read row already carries the same uncertainty
+/// — a question only that class raises. Producer:
+/// `solid-reactive-ir/src/interproc.rs`; consumer:
+/// `solid-facts-backend/src/main.rs`.
+pub const EXPORTED_PARAMETER_MEMBER_DISPATCH: &str = "exported-parameter-member-dispatch";
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticDefect {
@@ -548,7 +612,135 @@ pub enum StaticDefectKind {
     },
 }
 
+/// The finding family a [`StaticDefectKind`] projects to.
+///
+/// Two consumers need the same grouping and must not drift apart:
+///
+/// - every dialect rule catalog maps a defect kind to its own rule name
+///   (`rust/dialects/solid-v{1,2}/rules/src/lib.rs`), and the *grouping* of
+///   kinds is identical across dialects even though the rule names are not;
+/// - the analysis pipeline deduplicates a static defect once per family,
+///   path, and offset, because obligations discovered by different semantic
+///   routes share one identity space.
+///
+/// Keeping the grouping in one exhaustive `match` — [`StaticDefectKind::family`]
+/// — means a newly added defect kind is a compile error in both consumers
+/// instead of silently falling into a catch-all arm and deduplicating against
+/// an unrelated finding.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum StaticDefectFamily {
+    ReactiveObjectDestructure,
+    ReactiveReadAfterAwait,
+    ComponentReturnsConditionally,
+    /// The contract-incomplete family: an import whose package contract does
+    /// not describe the surface the project uses.
+    PackageContractIncomplete,
+    /// Projects to the same dialect rule as
+    /// [`Self::PackageContractIncomplete`] but keeps its own dedup identity.
+    /// A contract-generation obligation and a contract-incomplete consumer
+    /// obligation are two separate claims about the same import, and a call
+    /// site can produce both at one start byte; sharing an identity would let
+    /// whichever the walk pushed first swallow the other.
+    UnknownCallbackExecution,
+    MissingEffectFunction,
+    ReactiveSourceUncaptured,
+    ReactiveDispatchUnresolved,
+    ExpectedFunctionGotExpression,
+    UncalledAccessor,
+    DirectMutation,
+}
+
+impl StaticDefectFamily {
+    /// The stable dedup identity for this family, used as the key of the
+    /// draft's one-diagnostic-per-(identity, path, offset) set.
+    #[must_use]
+    pub const fn dedup_identity(self) -> &'static str {
+        match self {
+            Self::ReactiveObjectDestructure => "no-destructure",
+            Self::ReactiveReadAfterAwait => "reactive-read-after-await",
+            Self::ComponentReturnsConditionally => "components-return-once",
+            Self::PackageContractIncomplete => "package-contract-incomplete",
+            Self::UnknownCallbackExecution => "unknown-callback-execution",
+            Self::MissingEffectFunction => "missing-effect-function",
+            Self::ReactiveSourceUncaptured => "reactive-source-uncaptured",
+            Self::ReactiveDispatchUnresolved => "reactive-dispatch-unresolved",
+            Self::ExpectedFunctionGotExpression => "expected-function-got-expression",
+            Self::UncalledAccessor => "uncalled-accessor",
+            Self::DirectMutation => "no-direct-mutation",
+        }
+    }
+}
+
 impl StaticDefectKind {
+    /// The finding family this defect kind projects to.
+    ///
+    /// This match is deliberately exhaustive with no catch-all arm: it is the
+    /// single place the kind-to-finding grouping is written down, and both the
+    /// dialect rule projection and the pipeline's dedup identity read it.
+    #[must_use]
+    pub const fn family(&self) -> StaticDefectFamily {
+        match self {
+            Self::ReactiveObjectDestructure { .. } => StaticDefectFamily::ReactiveObjectDestructure,
+            Self::ReactiveReadAfterAwait { .. } => StaticDefectFamily::ReactiveReadAfterAwait,
+            Self::ComponentReturnsConditionally => {
+                StaticDefectFamily::ComponentReturnsConditionally
+            }
+            Self::PackageContractExportMissing { .. }
+            | Self::PackageContractEnvironmentDependent { .. } => {
+                StaticDefectFamily::PackageContractIncomplete
+            }
+            Self::UnknownCallbackExecution { .. } => StaticDefectFamily::UnknownCallbackExecution,
+            Self::MissingEffectFunction => StaticDefectFamily::MissingEffectFunction,
+            Self::ReactiveSourceUncaptured { .. } => StaticDefectFamily::ReactiveSourceUncaptured,
+            Self::ReactiveDispatchUnresolved { .. }
+            | Self::ReactiveCallbackUnresolved { .. }
+            | Self::StructuredReturnUnresolved { .. } => {
+                StaticDefectFamily::ReactiveDispatchUnresolved
+            }
+            Self::ReactiveHandlerRead { .. } | Self::HandlerValueUnresolved { .. } => {
+                StaticDefectFamily::ExpectedFunctionGotExpression
+            }
+            Self::UncalledAccessor { .. } => StaticDefectFamily::UncalledAccessor,
+            Self::DirectMutation { .. } => StaticDefectFamily::DirectMutation,
+        }
+    }
+
+    /// The defect kind's own name, for the machine-readable channels that must
+    /// name the exact obligation rather than its finding family.
+    ///
+    /// Exhaustive with no catch-all: a new kind is a compile error here rather
+    /// than a silently mislabelled attribution note on a review plan.
+    #[must_use]
+    pub const fn variant_name(&self) -> &'static str {
+        match self {
+            Self::ReactiveObjectDestructure { .. } => "ReactiveObjectDestructure",
+            Self::ReactiveReadAfterAwait { .. } => "ReactiveReadAfterAwait",
+            Self::ComponentReturnsConditionally => "ComponentReturnsConditionally",
+            Self::PackageContractExportMissing { .. } => "PackageContractExportMissing",
+            Self::PackageContractEnvironmentDependent { .. } => {
+                "PackageContractEnvironmentDependent"
+            }
+            Self::UnknownCallbackExecution { .. } => "UnknownCallbackExecution",
+            Self::MissingEffectFunction => "MissingEffectFunction",
+            Self::ReactiveSourceUncaptured { .. } => "ReactiveSourceUncaptured",
+            Self::ReactiveDispatchUnresolved { .. } => "ReactiveDispatchUnresolved",
+            Self::ReactiveCallbackUnresolved { .. } => "ReactiveCallbackUnresolved",
+            Self::StructuredReturnUnresolved { .. } => "StructuredReturnUnresolved",
+            Self::ReactiveHandlerRead { .. } => "ReactiveHandlerRead",
+            Self::HandlerValueUnresolved { .. } => "HandlerValueUnresolved",
+            Self::UncalledAccessor { .. } => "UncalledAccessor",
+            Self::DirectMutation { .. } => "DirectMutation",
+        }
+    }
+
+    /// The dedup identity this defect carries into the draft's static-defect
+    /// table. Derived from [`Self::family`] so it can never disagree with the
+    /// finding kind the dialects project.
+    #[must_use]
+    pub const fn dedup_identity(&self) -> &'static str {
+        self.family().dedup_identity()
+    }
+
     /// Whether this defect is an unresolved proof obligation — the `SC9xxx`
     /// uncertifiable class — rather than a proven violation. Contract
     /// emission refuses to describe a surface these are open against, and
@@ -855,6 +1047,89 @@ pub struct ContractClaimEvidence {
     pub version: String,
 }
 
+/// A package-contract claim whose value is either known or explicitly
+/// unknown.
+///
+/// The wire representation is deliberately untagged. Existing schema-v1
+/// values retain their exact JSON shape, while `{ "status": "unknown" }`
+/// has the wrong type for every legacy claim field. Old readers therefore
+/// reject new unknown claims instead of silently interpreting them as empty.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ContractClaim<T> {
+    Unknown(ContractUnknownClaim),
+    Known(T),
+}
+
+impl<T: Default> Default for ContractClaim<T> {
+    fn default() -> Self {
+        Self::Known(T::default())
+    }
+}
+
+impl<T> From<T> for ContractClaim<T> {
+    fn from(value: T) -> Self {
+        Self::Known(value)
+    }
+}
+
+impl<T> ContractClaim<T> {
+    #[must_use]
+    pub fn known(&self) -> Option<&T> {
+        match self {
+            Self::Known(value) => Some(value),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn known_mut(&mut self) -> Option<&mut T> {
+        match self {
+            Self::Known(value) => Some(value),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_unknown(&self) -> bool {
+        matches!(self, Self::Unknown(_))
+    }
+}
+
+impl<T: Default + PartialEq> ContractClaim<T> {
+    #[must_use]
+    pub fn is_known_default(&self) -> bool {
+        matches!(self, Self::Known(value) if value == &T::default())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContractUnknownClaim {
+    pub status: ContractUnknownStatus,
+}
+
+impl ContractUnknownClaim {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            status: ContractUnknownStatus::Unknown,
+        }
+    }
+}
+
+impl Default for ContractUnknownClaim {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ContractUnknownStatus {
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContractExport {
@@ -868,16 +1143,16 @@ pub struct ContractExport {
     /// when this field is present rather than apply that union as a guess.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub variants: Vec<ContractExportVariant>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub reactive_reads: Vec<ContractReactiveRead>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub returns: Option<ContractReturn>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub callbacks: Vec<ContractCallback>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub owner_requirements: Vec<ContractOwnerRequirement>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub async_behavior: String,
+    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
+    pub reactive_reads: ContractClaim<Vec<ContractReactiveRead>>,
+    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
+    pub returns: ContractClaim<Option<ContractReturn>>,
+    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
+    pub callbacks: ContractClaim<Vec<ContractCallback>>,
+    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
+    pub owner_requirements: ContractClaim<Vec<ContractOwnerRequirement>>,
+    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
+    pub async_behavior: ContractClaim<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -885,6 +1160,15 @@ pub struct ContractExport {
 pub struct ContractExportVariant {
     pub conditions: Vec<String>,
     pub summary: Box<ContractExport>,
+    /// Zero-based position of the branch in the export map that produced
+    /// this variant. `package.json#exports` is ordered and resolved
+    /// first-match-wins, so when multiple variants match the runtime
+    /// environment, the lowest `precedence` is the branch Node itself would
+    /// resolve. Optional: contracts generated before this field existed, or
+    /// generated for export maps whose overlapping branches could not be
+    /// ordered, carry no precedence and must stay fail-closed on ambiguity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precedence: Option<u32>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -892,8 +1176,10 @@ pub struct ContractExportVariant {
 pub struct ContractReactiveRead {
     #[serde(default)]
     pub kind: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<ContractClaimEvidence>,
 }
@@ -903,6 +1189,12 @@ pub struct ContractReactiveRead {
 pub struct ContractCallback {
     pub parameter: usize,
     pub execution: String,
+    /// Runtime arguments supplied when this callback is invoked. `null`
+    /// preserves an unmodeled ordinary value at that position; a structured
+    /// descriptor uses the same bounded accessor/store/tuple/object vocabulary
+    /// as exported returns.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub arguments: Vec<Option<ContractReturn>>,
     /// The owner context in which the runtime invokes this callback. Missing
     /// means the package contract describes timing only; consumers must keep
     /// the existing fail-closed owner behavior for that callback.
@@ -1067,17 +1359,33 @@ impl PackageContract {
             evidence_is_certifiable(summary.evidence.as_ref())
                 && summary
                     .reactive_reads
-                    .iter()
+                    .known()
+                    .into_iter()
+                    .flatten()
                     .all(|read| evidence_is_certifiable(read.evidence.as_ref()))
                 && summary
                     .callbacks
-                    .iter()
-                    .all(|callback| evidence_is_certifiable(callback.evidence.as_ref()))
+                    .known()
+                    .into_iter()
+                    .flatten()
+                    .all(|callback| {
+                        evidence_is_certifiable(callback.evidence.as_ref())
+                            && callback
+                                .arguments
+                                .iter()
+                                .flatten()
+                                .all(returned_is_certifiable)
+                    })
                 && summary
                     .owner_requirements
-                    .iter()
+                    .known()
+                    .into_iter()
+                    .flatten()
                     .all(|requirement| evidence_is_certifiable(requirement.evidence.as_ref()))
-                && summary.returns.as_ref().is_none_or(returned_is_certifiable)
+                && summary
+                    .returns
+                    .known()
+                    .is_none_or(|returned| returned.as_ref().is_none_or(returned_is_certifiable))
                 && summary
                     .variants
                     .iter()
@@ -1118,27 +1426,43 @@ impl PackageContract {
                     "package contract export {entrypoint}:{name} has invalid conditional summary conditions"
                 ));
             }
-            if variant.summary.kind != summary.kind {
-                return Err(format!(
-                    "package contract export {entrypoint}:{name} has a conditional summary with kind {:?}, expected {:?}",
-                    variant.summary.kind, summary.kind
-                ));
-            }
             self.validate_export(entrypoint, name, &variant.summary)?;
         }
         if summary.kind == "value"
-            && (!summary.reactive_reads.is_empty()
-                || summary.returns.is_some()
-                || !summary.callbacks.is_empty()
-                || !summary.owner_requirements.is_empty()
-                || !summary.async_behavior.is_empty())
+            && (summary.reactive_reads.is_unknown()
+                || summary
+                    .reactive_reads
+                    .known()
+                    .is_some_and(|reads| !reads.is_empty())
+                || summary.returns.is_unknown()
+                || summary.returns.known().is_some_and(Option::is_some)
+                || summary.callbacks.is_unknown()
+                || summary
+                    .callbacks
+                    .known()
+                    .is_some_and(|callbacks| !callbacks.is_empty())
+                || summary.owner_requirements.is_unknown()
+                || summary
+                    .owner_requirements
+                    .known()
+                    .is_some_and(|requirements| !requirements.is_empty())
+                || summary.async_behavior.is_unknown()
+                || summary
+                    .async_behavior
+                    .known()
+                    .is_some_and(|behavior| !behavior.is_empty()))
         {
             return Err(format!(
                 "package contract value export {entrypoint}:{name} cannot have function effects"
             ));
         }
-        for read in &summary.reactive_reads {
-            if !matches!(read.kind.as_str(), "accessor" | "store-path") || read.label.is_empty() {
+        for read in summary.reactive_reads.known().into_iter().flatten() {
+            let valid = match read.kind.as_str() {
+                "accessor" | "store-path" => !read.label.is_empty() && read.parameter.is_none(),
+                "parameter-member" => read.label.is_empty() && read.parameter.is_some(),
+                _ => false,
+            };
+            if !valid {
                 return Err(format!(
                     "package contract export {entrypoint}:{name} has an invalid reactive read"
                 ));
@@ -1149,24 +1473,30 @@ impl PackageContract {
                 )
             })?;
         }
-        if let Some(returned) = &summary.returns {
+        if let Some(returned) = summary.returns.known().and_then(Option::as_ref) {
             validate_contract_return(returned).map_err(|reason| {
                 format!(
                     "package contract export {entrypoint}:{name} has an invalid reactive return: {reason}"
                 )
             })?;
         }
-        if summary.callbacks.iter().any(|callback| {
-            !matches!(
-                callback.execution.as_str(),
-                "inline" | "tracked" | "deferred"
-            )
-        }) {
+        if summary
+            .callbacks
+            .known()
+            .into_iter()
+            .flatten()
+            .any(|callback| {
+                !matches!(
+                    callback.execution.as_str(),
+                    "inline" | "tracked" | "deferred"
+                )
+            })
+        {
             return Err(format!(
                 "package contract export {entrypoint}:{name} has an invalid callback execution"
             ));
         }
-        for callback in &summary.callbacks {
+        for callback in summary.callbacks.known().into_iter().flatten() {
             if callback.owner.as_deref().is_some_and(|owner| {
                 !matches!(
                     owner,
@@ -1182,23 +1512,28 @@ impl PackageContract {
                     "package contract export {entrypoint}:{name} has invalid callback evidence: {reason}"
                 )
             })?;
+            for argument in callback.arguments.iter().flatten() {
+                validate_contract_return(argument).map_err(|reason| {
+                    format!(
+                        "package contract export {entrypoint}:{name} has an invalid callback argument: {reason}"
+                    )
+                })?;
+            }
         }
-        for requirement in &summary.owner_requirements {
+        for requirement in summary.owner_requirements.known().into_iter().flatten() {
             validate_claim_evidence(requirement.evidence.as_ref()).map_err(|reason| {
                 format!(
                     "package contract export {entrypoint}:{name} has invalid owner requirement evidence: {reason}"
                 )
             })?;
         }
-        if !summary.async_behavior.is_empty()
-            && !matches!(
-                summary.async_behavior.as_str(),
-                "promise" | "async-iterable"
-            )
+        if let Some(async_behavior) = summary.async_behavior.known()
+            && !async_behavior.is_empty()
+            && !matches!(async_behavior.as_str(), "promise" | "async-iterable")
         {
             return Err(format!(
                 "package contract export {entrypoint}:{name} has unsupported async behavior {:?}",
-                summary.async_behavior
+                async_behavior
             ));
         }
         Ok(())
@@ -1301,6 +1636,13 @@ pub struct Program {
     pub async_reads: Vec<AsyncRead>,
     pub contract_exports: Arc<BTreeMap<String, ContractExport>>,
     pub contract_generation_obligations: Vec<ContractGenerationObligation>,
+    /// Which project functions can reach each unresolved proof obligation.
+    ///
+    /// Contract emission attributes an unknown claim to exactly the exports
+    /// that can reach the obligation; see [`ObligationReach`]. Empty when the
+    /// build produced no unresolved obligation, and empty for an obligation
+    /// whose location is outside every function body.
+    pub obligation_reach: Vec<ObligationReach>,
     pub obligation_counts: ObligationCounts,
 }
 
@@ -1671,6 +2013,38 @@ fn functions_for_path<'a, T>(
         .map(|index| (index, &functions[index]))
 }
 
+struct FunctionLookup {
+    by_symbol: HashMap<SymbolId, usize>,
+    by_span: HashMap<Span, usize>,
+    parameter_owner: HashMap<SymbolId, (usize, usize)>,
+}
+
+fn function_lookup_for_path(
+    functions: &[SummaryNode],
+    by_path: &HashMap<String, Vec<usize>>,
+    path: &str,
+) -> FunctionLookup {
+    let mut by_symbol = HashMap::new();
+    let mut by_span = HashMap::new();
+    let mut parameter_owner = HashMap::new();
+    for (index, function) in functions_for_path(functions, by_path, path) {
+        by_span.entry(function.span).or_insert(index);
+        if let Some(symbol) = &function.symbol {
+            by_symbol.entry(symbol.clone()).or_insert(index);
+        }
+        for (parameter, symbol) in function.parameters.iter().enumerate() {
+            parameter_owner
+                .entry(symbol.clone())
+                .or_insert((index, parameter));
+        }
+    }
+    FunctionLookup {
+        by_symbol,
+        by_span,
+        parameter_owner,
+    }
+}
+
 fn containing_function_indexed<T>(
     functions: &[T],
     by_path: &HashMap<String, Vec<usize>>,
@@ -1698,6 +2072,24 @@ fn containing_summary_function_indexed(
     span: Span,
 ) -> Option<usize> {
     containing_function_indexed(functions, by_path, path, span)
+}
+
+fn items_by_containing_function<'a, T, U>(
+    functions: &[T],
+    by_path: &HashMap<String, Vec<usize>>,
+    items: impl IntoIterator<Item = (&'a str, &'a U)>,
+    span: impl Fn(&U) -> Span,
+) -> Vec<Vec<&'a U>>
+where
+    T: FunctionBoundary,
+{
+    let mut buckets = vec![Vec::new(); functions.len()];
+    for (path, item) in items {
+        if let Some(owner) = containing_function_indexed(functions, by_path, path, span(item)) {
+            buckets[owner].push(item);
+        }
+    }
+    buckets
 }
 
 trait FunctionBoundary {
@@ -1991,6 +2383,20 @@ mod tests {
         assert!(unselected.matches_entrypoint_conditions(&["default".into(), "import".into()]));
         assert!(!unselected.matches_entrypoint_conditions(&["browser".into(), "import".into()]));
 
+        // `default` is the export map's unconditional branch. No selector ever
+        // produces it as a selected condition, so requiring it to appear in
+        // `selected_conditions` made every generated fallback variant
+        // unmatchable and sent consumers that *had* selected an environment to
+        // an environment-dependent uncertifiable result.
+        assert!(!environment.selected_conditions().contains("default"));
+        assert!(environment.matches_conditions(&["default".into()]));
+        assert!(environment.matches_entrypoint_conditions(&["default".into()]));
+        // With nothing selected there is no environment to match against, so
+        // even the fallback stays unmatched rather than being guessed at.
+        assert!(!unselected.matches_conditions(&["default".into()]));
+        // `default` never rescues a named condition the environment lacks.
+        assert!(!environment.matches_conditions(&["default".into(), "node".into()]));
+
         environment.target = Some(RuntimeTarget::Node);
         assert!(environment.validate().is_err());
         environment.target = Some(RuntimeTarget::Browser);
@@ -2002,6 +2408,60 @@ mod tests {
         environment.conditions.remove("node");
         environment.conditions.insert("development".into());
         assert!(environment.validate().is_err());
+    }
+
+    /// An entrypoint's `conditions` are a union of the export-map branches it
+    /// resolves through, so membership is the base test — with the host target
+    /// read as scope, which is the one dimension a `--conditions`-scoped
+    /// contract makes decidable.
+    #[test]
+    fn entrypoint_conditions_are_alternatives_except_for_the_host_target() {
+        let browser = RuntimeEnvironment {
+            target: Some(RuntimeTarget::Browser),
+            build: Some(RuntimeBuild::Production),
+            rendering: Some(RuntimeRendering::Csr),
+            conditions: BTreeSet::from(["import".into()]),
+            framework_transforms: BTreeSet::default(),
+            program_boundary: None,
+        };
+        assert!(browser.validate().is_ok());
+        // The bundled solid-js root entrypoint, verbatim. No environment
+        // satisfies all of it at once, so requiring containment would make the
+        // contract this checker ships unmatchable — and a production consumer
+        // still resolves it even though only `development` is recorded.
+        let bundled_root = [
+            "browser".to_owned(),
+            "deno".to_owned(),
+            "development".to_owned(),
+            "import".to_owned(),
+            "node".to_owned(),
+            "worker".to_owned(),
+        ];
+        assert!(browser.matches_entrypoint_conditions(&bundled_root));
+        // An entrypoint that names no host target at all stays open: `import`
+        // and `development` are resolver/build branches, not scope.
+        assert!(browser.matches_entrypoint_conditions(&["development".into(), "import".into()]));
+        assert!(browser.matches_entrypoint_conditions(&["import".into()]));
+        // A `--conditions node,import` contract records exactly that scope. A
+        // browser consumer must not reach it through the shared `import` leg.
+        assert!(!browser.matches_entrypoint_conditions(&["import".into(), "node".into()]));
+        // ... and the unconditional branch keeps the entrypoint reachable even
+        // beside a host target the consumer did not select.
+        assert!(browser.matches_entrypoint_conditions(&["default".into(), "node".into()]));
+        // A consumer that selected no host target is not scoped away by one.
+        let untargeted = RuntimeEnvironment {
+            target: None,
+            build: None,
+            rendering: None,
+            conditions: BTreeSet::from(["import".into()]),
+            framework_transforms: BTreeSet::default(),
+            program_boundary: None,
+        };
+        assert!(untargeted.validate().is_ok());
+        assert!(untargeted.matches_entrypoint_conditions(&["import".into(), "node".into()]));
+        // Membership still gates: nothing here is selected, and no `default`
+        // makes the entrypoint unconditional.
+        assert!(!browser.matches_entrypoint_conditions(&["require".into()]));
     }
 
     #[test]
@@ -2054,6 +2514,82 @@ mod tests {
     }
 
     #[test]
+    fn contract_claims_distinguish_legacy_none_from_explicit_unknown() {
+        let legacy_json = r#"{"kind":"function"}"#;
+        let legacy: ContractExport = serde_json::from_str(legacy_json).unwrap();
+        assert!(legacy.reactive_reads.is_known_default());
+        assert!(legacy.returns.is_known_default());
+        assert!(legacy.callbacks.is_known_default());
+        assert!(legacy.owner_requirements.is_known_default());
+        assert!(legacy.async_behavior.is_known_default());
+        assert_eq!(serde_json::to_string(&legacy).unwrap(), legacy_json);
+
+        let unknown_json = r#"{
+            "kind":"function",
+            "reactiveReads":{"status":"unknown"},
+            "returns":{"status":"unknown"},
+            "callbacks":{"status":"unknown"},
+            "ownerRequirements":{"status":"unknown"},
+            "asyncBehavior":{"status":"unknown"}
+        }"#;
+        let unknown: ContractExport = serde_json::from_str(unknown_json).unwrap();
+        assert!(unknown.reactive_reads.is_unknown());
+        assert!(unknown.returns.is_unknown());
+        assert!(unknown.callbacks.is_unknown());
+        assert!(unknown.owner_requirements.is_unknown());
+        assert!(unknown.async_behavior.is_unknown());
+        assert_eq!(
+            serde_json::to_value(&unknown).unwrap(),
+            serde_json::from_str::<serde_json::Value>(unknown_json).unwrap()
+        );
+        assert!(
+            serde_json::from_str::<ContractExport>(
+                r#"{"kind":"function","callbacks":{"status":"maybe"}}"#
+            )
+            .is_err()
+        );
+        assert!(
+            serde_json::from_str::<ContractExport>(
+                r#"{"kind":"function","callbacks":{"status":"unknown","reason":"opaque"}}"#
+            )
+            .is_err()
+        );
+
+        let contract_with = |name: &str, summary: ContractExport| PackageContract {
+            schema_version: 1,
+            package: ContractPackage {
+                name: "claim-test".into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            compiler_facts_protocol: 1,
+            artifacts: ContractArtifacts::default(),
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: BTreeMap::from([(name.into(), summary)]),
+                    conditions: Vec::new(),
+                },
+            )]),
+            evidence: ContractEvidence {
+                kind: "reviewed".into(),
+                generator: String::new(),
+            },
+            contract_hash: String::new(),
+            source_path: String::new(),
+        };
+        assert!(contract_with("partial", unknown).validate().is_ok());
+
+        let value_with_unknown: ContractExport =
+            serde_json::from_str(r#"{"kind":"value","callbacks":{"status":"unknown"}}"#).unwrap();
+        assert!(
+            contract_with("value", value_with_unknown)
+                .validate()
+                .is_err()
+        );
+    }
+
+    #[test]
     fn claim_evidence_is_optional_but_certification_rejects_inferred_rows() {
         let mut contract = PackageContract {
             schema_version: 1,
@@ -2074,12 +2610,14 @@ mod tests {
                             callbacks: vec![ContractCallback {
                                 parameter: 0,
                                 execution: "tracked".into(),
+                                arguments: Vec::new(),
                                 owner: None,
                                 evidence: Some(ContractClaimEvidence {
                                     kind: "inferred".into(),
                                     ..ContractClaimEvidence::default()
                                 }),
-                            }],
+                            }]
+                            .into(),
                             ..ContractExport::default()
                         },
                     )]),
@@ -2103,7 +2641,9 @@ mod tests {
             .exports
             .get_mut("createValue")
             .unwrap()
-            .callbacks[0]
+            .callbacks
+            .known_mut()
+            .unwrap()[0]
             .evidence = Some(ContractClaimEvidence {
             kind: "probed".into(),
             modes: vec!["browser".into(), "server".into()],
@@ -2121,7 +2661,9 @@ mod tests {
             .exports
             .get_mut("createValue")
             .unwrap()
-            .callbacks[0]
+            .callbacks
+            .known_mut()
+            .unwrap()[0]
             .evidence = Some(ContractClaimEvidence {
             kind: "inherited-from".into(),
             package: "solid-js".into(),
@@ -2144,6 +2686,7 @@ mod tests {
                 callbacks: vec![ContractCallback {
                     parameter: 0,
                     execution: "tracked".into(),
+                    arguments: Vec::new(),
                     owner: None,
                     evidence: Some(ContractClaimEvidence {
                         kind: "probed".into(),
@@ -2151,9 +2694,11 @@ mod tests {
                         calls: Some(2),
                         ..ContractClaimEvidence::default()
                     }),
-                }],
+                }]
+                .into(),
                 ..ContractExport::default()
             }),
+            precedence: None,
         }];
         assert!(conditional.validate().is_ok());
         assert!(conditional.claims_are_certifiable());
@@ -2165,7 +2710,9 @@ mod tests {
             .exports
             .get_mut("createValue")
             .unwrap()
-            .callbacks[0]
+            .callbacks
+            .known_mut()
+            .unwrap()[0]
             .owner = Some("leaf".into());
         assert!(conditional.validate().is_ok());
 
@@ -2203,7 +2750,8 @@ mod tests {
                                     kind: "inferred".into(),
                                     ..ContractClaimEvidence::default()
                                 }),
-                            }],
+                            }]
+                            .into(),
                             ..ContractExport::default()
                         },
                     )]),
@@ -2226,7 +2774,9 @@ mod tests {
             .exports
             .get_mut("requiresOwner")
             .unwrap()
-            .owner_requirements[0]
+            .owner_requirements
+            .known_mut()
+            .unwrap()[0]
             .evidence
             .as_mut()
             .unwrap()
@@ -2241,9 +2791,34 @@ mod tests {
             .exports
             .get_mut("createValue")
             .unwrap()
-            .callbacks[0]
+            .callbacks
+            .known_mut()
+            .unwrap()[0]
             .owner = Some("unknown".into());
         assert!(invalid_owner.validate().is_err());
+    }
+
+    #[test]
+    fn export_variant_without_precedence_reserializes_byte_identically() {
+        // No `precedence` key: the field must round-trip as absent, not as
+        // `null`, so every contract generated before this field existed
+        // re-serializes identically.
+        let json = r#"{"conditions":["browser"],"summary":{"kind":"function"}}"#;
+        let variant: ContractExportVariant = serde_json::from_str(json).unwrap();
+        assert_eq!(variant.precedence, None);
+        assert_eq!(serde_json::to_string(&variant).unwrap(), json);
+
+        // A declared `precedence` round-trips too, and is not silently
+        // dropped.
+        let json_with_precedence =
+            r#"{"conditions":["browser"],"summary":{"kind":"function"},"precedence":1}"#;
+        let variant_with_precedence: ContractExportVariant =
+            serde_json::from_str(json_with_precedence).unwrap();
+        assert_eq!(variant_with_precedence.precedence, Some(1));
+        assert_eq!(
+            serde_json::to_string(&variant_with_precedence).unwrap(),
+            json_with_precedence
+        );
     }
 
     #[test]
@@ -3031,6 +3606,79 @@ mod tests {
                 Span { start: 35, end: 40 },
             ),
             Some(1)
+        );
+    }
+
+    #[test]
+    fn containing_function_buckets_assign_each_item_to_one_innermost_owner() {
+        let nodes = vec![
+            summary_node(
+                "fixture.tsx",
+                Span { start: 0, end: 100 },
+                Span { start: 10, end: 90 },
+            ),
+            summary_node(
+                "fixture.tsx",
+                Span { start: 20, end: 60 },
+                Span { start: 30, end: 50 },
+            ),
+        ];
+        let by_path = function_indices_by_path(&nodes);
+        let items = [
+            ("fixture.tsx", Span { start: 35, end: 40 }),
+            ("fixture.tsx", Span { start: 70, end: 75 }),
+            (
+                "fixture.tsx",
+                Span {
+                    start: 110,
+                    end: 115,
+                },
+            ),
+        ];
+
+        let buckets = items_by_containing_function(
+            &nodes,
+            &by_path,
+            items.iter().map(|(path, span)| (*path, span)),
+            |span| *span,
+        );
+
+        assert_eq!(buckets[0], vec![&items[1].1]);
+        assert_eq!(buckets[1], vec![&items[0].1]);
+    }
+
+    #[test]
+    fn function_lookup_preserves_first_symbol_and_parameter_owner_for_a_path() {
+        let mut first = summary_node(
+            "fixture.tsx",
+            Span { start: 0, end: 40 },
+            Span { start: 10, end: 30 },
+        );
+        first.symbol = Some("first-function".into());
+        first.parameters = vec!["shared-parameter".into()];
+        let mut second = summary_node(
+            "fixture.tsx",
+            Span { start: 50, end: 90 },
+            Span { start: 60, end: 80 },
+        );
+        second.symbol = Some("second-function".into());
+        second.parameters = vec!["shared-parameter".into(), "second-parameter".into()];
+        let nodes = vec![first, second];
+        let by_path = function_indices_by_path(&nodes);
+
+        let lookup = function_lookup_for_path(&nodes, &by_path, "fixture.tsx");
+
+        assert_eq!(lookup.by_symbol.get("first-function"), Some(&0));
+        assert_eq!(lookup.by_symbol.get("second-function"), Some(&1));
+        assert_eq!(lookup.by_span.get(&Span { start: 0, end: 40 }), Some(&0));
+        assert_eq!(lookup.by_span.get(&Span { start: 50, end: 90 }), Some(&1));
+        assert_eq!(
+            lookup.parameter_owner.get("shared-parameter"),
+            Some(&(0, 0))
+        );
+        assert_eq!(
+            lookup.parameter_owner.get("second-parameter"),
+            Some(&(1, 1))
         );
     }
 

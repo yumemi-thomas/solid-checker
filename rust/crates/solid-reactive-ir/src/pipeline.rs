@@ -18,9 +18,10 @@ use crate::symbols::{add_solid_import_names, patch_typescript_indexes};
 use crate::timings::{ReactiveIrStage, StageClock};
 use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
-    ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, OwnerRequirement,
-    PackageContract, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
-    RuleOptions, Solid1xRuleOptions, StaticDefect, StaticViolation, location_order,
+    ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, ObligationReach,
+    OwnerRequirement, PackageContract, PrimitiveCreation, Program, ReactiveRead,
+    ReactiveSourceKind, ReactiveWrite, RuleOptions, Solid1xRuleOptions, StaticDefect,
+    StaticViolation, location_order,
 };
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
@@ -53,12 +54,17 @@ pub(crate) struct ProgramDraft {
 }
 
 impl ProgramDraft {
-    /// Adds a version-neutral static defect once per rule, path, and offset.
-    /// Several passes can discover the same fact through different semantic
-    /// routes, so the draft owns deduplication for all of them.
-    pub(crate) fn push_defect(&mut self, identity: &'static str, defect: StaticDefect) {
+    /// Adds a version-neutral static defect once per finding family, path,
+    /// and offset. Several passes can discover the same fact through
+    /// different semantic routes, so the draft owns deduplication for all of
+    /// them.
+    ///
+    /// The identity is derived from the defect kind's family rather than
+    /// passed in, so a caller cannot file a defect under another finding
+    /// kind's identity and silently suppress it.
+    pub(crate) fn push_defect(&mut self, defect: StaticDefect) {
         if self.seen_diagnostics.insert((
-            identity,
+            defect.kind.dedup_identity(),
             defect.location.path.clone(),
             defect.location.start_byte,
         )) {
@@ -67,7 +73,11 @@ impl ProgramDraft {
     }
 
     /// Orders every table by location and assembles the final [`Program`].
-    pub(crate) fn into_program(mut self, factory_instances: usize) -> Program {
+    pub(crate) fn into_program(
+        mut self,
+        factory_instances: usize,
+        obligation_reach: Vec<ObligationReach>,
+    ) -> Program {
         self.reads
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.writes
@@ -98,6 +108,7 @@ impl ProgramDraft {
             async_reads: self.async_reads,
             contract_exports: self.contract_exports,
             contract_generation_obligations: self.contract_generation_obligations,
+            obligation_reach,
             obligation_counts: ObligationCounts {
                 strict_reads: self.strict_read_obligations,
                 writes_and_actions: self.write_action_obligations.len(),
@@ -457,7 +468,18 @@ pub(crate) fn build_with_contracts_measured_incremental(
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
-    let program = draft.into_program(factory_instances);
+    // Every stage that can file an unresolved obligation has run, so the
+    // attribution question is answerable exactly once, over the final defect
+    // list, rather than per stage over a partial one.
+    let obligation_reach = crate::attribution::obligation_reach(
+        facts,
+        semantic_lookup,
+        entities,
+        aliases,
+        &typescript_indexes.symbols_by_root,
+        &draft.static_defects,
+    );
+    let program = draft.into_program(factory_instances, obligation_reach);
     clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))

@@ -16,9 +16,9 @@ use solid_facts::ProjectFacts;
 use typefacts::{Callability, Location, ReferenceSpace};
 
 use super::{
-    ContractCallback, ContractExport, ContractReactiveRead, ContractReturn, EntitySymbols,
-    PackageContract, ReactiveSourceKind, RuntimeEnvironment, StaticDefect, StaticDefectKind,
-    SummaryNode, SummaryRead, SummaryReads, SymbolId, location, location_order,
+    ContractCallback, ContractExport, ContractExportVariant, ContractReactiveRead, ContractReturn,
+    EntitySymbols, PackageContract, ReactiveSourceKind, RuntimeEnvironment, StaticDefect,
+    StaticDefectKind, SummaryNode, SummaryRead, SummaryReads, SymbolId, location, location_order,
 };
 use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
 use crate::pipeline::parallel_slice_results;
@@ -217,6 +217,49 @@ fn push_environment_dependent_export(
     });
 }
 
+/// Keep the known parts of a partial export usable while opening the existing
+/// per-export contract obligation for every non-callback claim that cannot yet
+/// be consumed demand-sensitively. Unknown callbacks are handled separately:
+/// omitting their symbol from the callback map preserves the existing
+/// callable-argument obligation and stays quiet for calls with no callable
+/// argument.
+fn push_unknown_contract_claims(
+    missing_exports: &mut Vec<StaticDefect>,
+    summary: &ContractExport,
+    module: &str,
+    export: &str,
+    reexported: bool,
+    location: Location,
+) {
+    let mut claims = Vec::new();
+    if summary.reactive_reads.is_unknown() {
+        claims.push("reactiveReads");
+    }
+    if summary.returns.is_unknown() {
+        claims.push("returns");
+    }
+    if summary.owner_requirements.is_unknown() {
+        claims.push("ownerRequirements");
+    }
+    if summary.async_behavior.is_unknown() {
+        claims.push("asyncBehavior");
+    }
+    if claims.is_empty() {
+        return;
+    }
+    missing_exports.push(StaticDefect {
+        kind: StaticDefectKind::PackageContractExportMissing {
+            module: module.to_owned(),
+            export: export.to_owned(),
+            reexported,
+        },
+        location,
+        analysis_context: format!("unknown-contract-claims:{}", claims.join(",")),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
 fn selected_contract_export(
     contract: &PackageContract,
     module: &str,
@@ -245,7 +288,65 @@ fn selected_contract_export(
         .iter()
         .filter(|variant| environment.matches_conditions(&variant.conditions))
         .collect::<Vec<_>>();
-    (matching.len() == 1).then(|| *matching[0].summary.clone())
+    match matching.len() {
+        0 => None,
+        1 => Some(*matching[0].summary.clone()),
+        _ => selected_variant(&matching).map(|variant| *variant.summary.clone()),
+    }
+}
+
+/// Choose between several export-map branches that all match this environment.
+///
+/// Generated contracts carry `precedence` on every variant, which is the
+/// export map's own first-match-wins order and therefore the exact answer.
+/// A handwritten contract carries none; there the only thing that can be
+/// proven without inventing an order is that an explicitly named branch is
+/// more specific than the unconditional `default` fallback. Anything else --
+/// two named branches with no recorded order, or a tie in `precedence` --
+/// stays fail-closed.
+fn selected_variant<'a>(
+    matching: &'a [&'a ContractExportVariant],
+) -> Option<&'a ContractExportVariant> {
+    if matching.iter().all(|variant| variant.precedence.is_some()) {
+        return lowest_unique_precedence(matching);
+    }
+    let mut named = matching.iter().filter(|variant| {
+        !variant
+            .conditions
+            .iter()
+            .any(|condition| condition == "default")
+    });
+    let winner = *named.next()?;
+    named.next().is_none().then_some(winner)
+}
+
+/// Resolve two or more overlapping export-map branches by `precedence`.
+///
+/// `package.json#exports` is an ordered map resolved first-match-wins, so
+/// when several variants match the runtime environment, the branch with the
+/// lowest `precedence` is the one Node itself would have resolved. That
+/// substitution is only safe when it removes ambiguity rather than guessing
+/// through it: every matching variant must declare a `precedence`, and the
+/// minimum among them must be unique. A tie, or any matching variant missing
+/// `precedence`, leaves the choice undetermined and must stay fail-closed.
+fn lowest_unique_precedence<'a>(
+    matching: &'a [&'a ContractExportVariant],
+) -> Option<&'a ContractExportVariant> {
+    let mut precedences = Vec::with_capacity(matching.len());
+    for variant in matching {
+        precedences.push(variant.precedence?);
+    }
+    let min = *precedences.iter().min()?;
+    let mut winner = None;
+    for (variant, precedence) in matching.iter().zip(precedences.iter()) {
+        if *precedence == min {
+            if winner.is_some() {
+                return None;
+            }
+            winner = Some(*variant);
+        }
+    }
+    winner
 }
 
 pub(super) fn resolve_contract_imports(
@@ -327,6 +428,14 @@ pub(super) fn resolve_contract_imports(
                             );
                             continue;
                         };
+                        push_unknown_contract_claims(
+                            &mut missing_exports,
+                            &summary,
+                            &import.module,
+                            &imported,
+                            false,
+                            member_location.clone(),
+                        );
                         let resolved = ResolvedContractBinding {
                             local_name: imported.clone(),
                             imported_name: imported.clone(),
@@ -409,6 +518,14 @@ pub(super) fn resolve_contract_imports(
                     );
                     continue;
                 };
+                push_unknown_contract_claims(
+                    &mut missing_exports,
+                    &summary,
+                    &import.module,
+                    imported,
+                    false,
+                    binding_location.clone(),
+                );
                 let resolved = ResolvedContractBinding {
                     local_name: file
                         .source_text(binding.local.span)
@@ -486,6 +603,14 @@ pub(super) fn resolve_contract_imports(
                     );
                     continue;
                 };
+                push_unknown_contract_claims(
+                    &mut missing_exports,
+                    &summary,
+                    module,
+                    imported,
+                    true,
+                    specifier_location.clone(),
+                );
                 let resolved = ResolvedContractBinding {
                     local_name: specifier.exported.to_string(),
                     imported_name: imported.to_owned(),
@@ -536,6 +661,7 @@ pub(super) struct ContractAnalysis<'a> {
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ContractReturn>],
     pub(super) callbacks: &'a [Vec<ContractCallback>],
+    pub(super) invoked_parameter_members: &'a [Vec<(usize, String)>],
     pub(super) semantics: ContractSemantics<'a>,
 }
 
@@ -545,10 +671,11 @@ fn contract_export_function(
     returned_summary: &SummaryReads,
     structured_return: Option<&ContractReturn>,
     callbacks: &[ContractCallback],
+    invoked_parameter_members: &[(usize, String)],
     semantics: &ContractSemantics<'_>,
 ) -> ContractExport {
     let mut seen_reactive_reads = HashSet::new();
-    let reactive_reads = summary
+    let mut reactive_reads = summary
         .iter()
         .filter_map(|read| {
             let reactive_read = ContractReactiveRead {
@@ -562,12 +689,23 @@ fn contract_export_function(
                         |returned| returned.label.clone(),
                     ),
                 evidence: None,
+                parameter: None,
             };
             seen_reactive_reads
                 .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
                 .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
+    for (parameter, _) in invoked_parameter_members {
+        if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string())) {
+            reactive_reads.push(ContractReactiveRead {
+                kind: "parameter-member".into(),
+                label: String::new(),
+                parameter: Some(*parameter),
+                evidence: None,
+            });
+        }
+    }
     let first_returned =
         returned_summary
             .iter()
@@ -605,14 +743,14 @@ fn contract_export_function(
         kind: "function".into(),
         evidence: None,
         variants: Vec::new(),
-        reactive_reads,
-        callbacks: callback_summary,
-        owner_requirements: Vec::new(),
-        returns,
+        reactive_reads: reactive_reads.into(),
+        callbacks: callback_summary.into(),
+        owner_requirements: Vec::new().into(),
+        returns: returns.into(),
         async_behavior: if node.r#async {
-            "promise".into()
+            String::from("promise").into()
         } else {
-            String::new()
+            String::new().into()
         },
     }
 }
@@ -999,6 +1137,7 @@ pub(super) fn contract_export_summaries_incremental(
             &analysis.returned[*index],
             analysis.structured_returns[*index].as_ref(),
             &analysis.callbacks[*index],
+            &analysis.invoked_parameter_members[*index],
             &analysis.semantics,
         )
     });
@@ -1114,6 +1253,7 @@ pub(super) fn contract_export_summaries(
                     &analysis.returned[index],
                     analysis.structured_returns[index].as_ref(),
                     &analysis.callbacks[index],
+                    &analysis.invoked_parameter_members[index],
                     &analysis.semantics,
                 ),
             )
@@ -1218,4 +1358,63 @@ fn promote_callable_export(
         summary.kind = "function".into();
     }
     summary
+}
+
+#[cfg(test)]
+mod variant_selection_tests {
+    use super::{ContractExport, ContractExportVariant, selected_variant};
+
+    fn variant(conditions: &[&str], precedence: Option<u32>) -> ContractExportVariant {
+        ContractExportVariant {
+            conditions: conditions.iter().map(|value| (*value).to_owned()).collect(),
+            summary: Box::new(ContractExport {
+                kind: conditions.join("+"),
+                ..ContractExport::default()
+            }),
+            precedence,
+        }
+    }
+
+    #[test]
+    fn generated_variants_resolve_by_export_map_order() {
+        // Both branches match a development environment once `default` is
+        // satisfiable; `precedence` is the export map's own first-match-wins
+        // order, so the earlier `development` branch wins.
+        let development = variant(&["development"], Some(0));
+        let fallback = variant(&["default"], Some(1));
+        let matching = [&fallback, &development];
+        assert_eq!(
+            selected_variant(&matching).map(|winner| winner.summary.kind.as_str()),
+            Some("development")
+        );
+    }
+
+    #[test]
+    fn a_handwritten_named_branch_beats_the_unconditional_fallback() {
+        // No `precedence` anywhere: the only thing provable without inventing
+        // an order is that an explicitly named branch is more specific than
+        // the unconditional fallback.
+        let browser = variant(&["browser"], None);
+        let fallback = variant(&["default"], None);
+        let matching = [&fallback, &browser];
+        assert_eq!(
+            selected_variant(&matching).map(|winner| winner.summary.kind.as_str()),
+            Some("browser")
+        );
+    }
+
+    #[test]
+    fn ambiguity_with_no_recorded_order_stays_fail_closed() {
+        // Two named branches and nothing that says which one the resolver
+        // picks, and a tie in `precedence`, both stay undetermined.
+        let browser = variant(&["browser"], None);
+        let node = variant(&["node"], None);
+        let matching = [&browser, &node];
+        assert!(selected_variant(&matching).is_none());
+
+        let left = variant(&["browser"], Some(2));
+        let right = variant(&["node"], Some(2));
+        let tied = [&left, &right];
+        assert!(selected_variant(&tied).is_none());
+    }
 }

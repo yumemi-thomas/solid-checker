@@ -101,38 +101,62 @@
       "properties": {
         "kind": { "enum": ["function", "value"] },
         "evidence": { "$ref": "#/$defs/claimEvidence" },
-        "returns": { "$ref": "#/$defs/return" },
+        "returns": {
+          "oneOf": [
+            { "$ref": "#/$defs/return" },
+            { "$ref": "#/$defs/unknownClaim" }
+          ]
+        },
         "callbacks": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["parameter", "execution"],
-            "properties": {
-              "parameter": { "type": "integer", "minimum": 0 },
-              "execution": { "enum": ["inline", "tracked", "deferred"] },
-              "owner": {
-                "enum": ["inherited", "created", "unowned", "conditional", "leaf"]
-              },
-              "evidence": { "$ref": "#/$defs/claimEvidence" }
-            }
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["parameter", "execution"],
+                "properties": {
+                  "parameter": { "type": "integer", "minimum": 0 },
+                  "execution": { "enum": ["inline", "tracked", "deferred"] },
+                  "owner": {
+                    "enum": ["inherited", "created", "unowned", "conditional", "leaf"]
+                  },
+                  "arguments": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        { "$ref": "#/$defs/return" },
+                        { "type": "null" }
+                      ]
+                    }
+                  },
+                  "evidence": { "$ref": "#/$defs/claimEvidence" }
+                }
+              }
+            },
+            { "$ref": "#/$defs/unknownClaim" }
+          ]
         },
         "ownerRequirements": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["operation"],
-            "properties": {
-              "operation": {
-                "enum": ["effect", "cleanup", "boundary", "settled-cleanup"]
-              },
-              "evidence": { "$ref": "#/$defs/claimEvidence" }
-            }
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["operation"],
+                "properties": {
+                  "operation": {
+                    "enum": ["effect", "cleanup", "boundary", "settled-cleanup"]
+                  },
+                  "evidence": { "$ref": "#/$defs/claimEvidence" }
+                }
+              }
+            },
+            { "$ref": "#/$defs/unknownClaim" }
+          ]
         },
         "variants": {
           "type": "array",
@@ -149,24 +173,57 @@
                 "uniqueItems": true,
                 "items": { "type": "string", "minLength": 1 }
               },
-              "summary": { "$ref": "#/$defs/export" }
+              "summary": { "$ref": "#/$defs/export" },
+              "precedence": { "type": "integer", "minimum": 0 }
             }
           }
         },
-        "asyncBehavior": { "enum": ["promise", "async-iterable"] },
+        "asyncBehavior": {
+          "oneOf": [
+            { "enum": ["promise", "async-iterable"] },
+            { "$ref": "#/$defs/unknownClaim" }
+          ]
+        },
         "reactiveReads": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["kind", "label"],
-            "properties": {
-              "kind": { "enum": ["accessor", "store-path"] },
-              "label": { "type": "string", "minLength": 1 },
-              "evidence": { "$ref": "#/$defs/claimEvidence" }
-            }
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "label"],
+                    "properties": {
+                      "kind": { "enum": ["accessor", "store-path"] },
+                      "label": { "type": "string", "minLength": 1 },
+                      "evidence": { "$ref": "#/$defs/claimEvidence" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "parameter"],
+                    "properties": {
+                      "kind": { "const": "parameter-member" },
+                      "parameter": { "type": "integer", "minimum": 0 },
+                      "evidence": { "$ref": "#/$defs/claimEvidence" }
+                    }
+                  }
+                ]
+              }
+            },
+            { "$ref": "#/$defs/unknownClaim" }
+          ]
         }
+      }
+    },
+    "unknownClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "const": "unknown" }
       }
     },
     "return": {

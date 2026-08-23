@@ -12,7 +12,7 @@ mod rules;
 use solid_reactive_ir::{
     CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, OwnerRequirementOperation,
     PackageContractIssue, PackageContractIssueKind, Program, ReactiveSourceKind,
-    ReactiveWriteOperation, StaticDefect, StaticDefectKind, project_finding, project_findings,
+    ReactiveWriteOperation, StaticDefect, StaticDefectFamily, project_finding, project_findings,
     strict_read_evidence, strict_read_message,
 };
 
@@ -108,6 +108,26 @@ impl CatalogWording for Catalog {
                             "Bundled contracts describe one exact release. Install {} {audited_version}, or upgrade solid-checker to a release that audits {installed_version}.",
                             issue.package
                         ),
+                    ),
+                    PackageContractIssueKind::IntegrityMismatch {
+                        contract_integrity,
+                        installed_integrity,
+                        bundled,
+                    } => (
+                        format!(
+                            "has a reactivity contract audited against npm integrity {contract_integrity}, but the project's lockfile installs {installed_integrity}"
+                        ),
+                        if *bundled {
+                            format!(
+                                "A version string is not a pin: the installed bytes were republished, patched, or overridden. Install the artifact this checker audited for {}, or upgrade solid-checker to a release that audits the installed one.",
+                                issue.package
+                            )
+                        } else {
+                            format!(
+                                "A version string is not a pin: the installed bytes were republished, patched, or overridden, so the contract is evidence about a tarball this project does not have. Regenerate it with `solid-checker contract generate --package-root node_modules/{package} --output .solid-checker/contracts/{package}/solid-reactivity.json`, then review the checklist written beside it.",
+                                package = issue.package
+                            )
+                        },
                     ),
                     PackageContractIssueKind::Unverified => (
                         "has only an unverified generated reactivity contract".to_owned(),
@@ -218,22 +238,22 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
 }
 
 fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
-    let rule = match &defect.kind {
-        StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::NoDestructure,
-        StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
-        StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentsReturnOnce,
-        StaticDefectKind::PackageContractExportMissing { .. }
-        | StaticDefectKind::PackageContractEnvironmentDependent { .. }
-        | StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractIncomplete,
-        StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
-        StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
-        StaticDefectKind::ReactiveDispatchUnresolved { .. }
-        | StaticDefectKind::ReactiveCallbackUnresolved { .. }
-        | StaticDefectKind::StructuredReturnUnresolved { .. } => Rule::ReactiveDispatchUnresolved,
-        StaticDefectKind::ReactiveHandlerRead { .. }
-        | StaticDefectKind::HandlerValueUnresolved { .. } => Rule::ExpectedFunctionGotExpression,
-        StaticDefectKind::UncalledAccessor { .. } => Rule::UncalledAccessor,
-        StaticDefectKind::DirectMutation { .. } => Rule::NoDirectMutation,
+    // The grouping of defect kinds into finding families lives once, in
+    // `StaticDefectKind::family`; this dialect only names its own rule for
+    // each family. A new defect kind therefore cannot reach the catalog
+    // without both the family mapping and this arm being written.
+    let rule = match defect.kind.family() {
+        StaticDefectFamily::ReactiveObjectDestructure => Rule::NoDestructure,
+        StaticDefectFamily::ReactiveReadAfterAwait => Rule::ReactiveReadAfterAwait,
+        StaticDefectFamily::ComponentReturnsConditionally => Rule::ComponentsReturnOnce,
+        StaticDefectFamily::PackageContractIncomplete
+        | StaticDefectFamily::UnknownCallbackExecution => Rule::PackageContractIncomplete,
+        StaticDefectFamily::MissingEffectFunction => Rule::MissingEffectFunction,
+        StaticDefectFamily::ReactiveSourceUncaptured => Rule::ReactiveSourceUncaptured,
+        StaticDefectFamily::ReactiveDispatchUnresolved => Rule::ReactiveDispatchUnresolved,
+        StaticDefectFamily::ExpectedFunctionGotExpression => Rule::ExpectedFunctionGotExpression,
+        StaticDefectFamily::UncalledAccessor => Rule::UncalledAccessor,
+        StaticDefectFamily::DirectMutation => Rule::NoDirectMutation,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V1_STATIC_TERMS);
     FindingWording::new(rule.metadata(), text.message, text.hint).with_evidence(vec![
