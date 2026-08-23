@@ -558,6 +558,15 @@ pub struct JsxElementFact {
     #[serde(default)]
     pub opening: Span,
     pub name: NamedSpan,
+    /// The closing tag's name span, when the element has a closing tag.
+    /// `<Panel></Panel>` writes the tag name twice, and TypeScript reports
+    /// both occurrences as references to the same symbol, so a consumer that
+    /// enumerates references to a component has to account for this one too.
+    /// It is the *same* name as `name`, not a second element: nothing about a
+    /// closing tag is an independent operation, and `self_closing` already
+    /// says whether it exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closing_name: Option<Span>,
     /// The object and final property of a dotted JSX name. Keeping these
     /// spans separate lets semantic consumers prove `<Context.Provider>`
     /// from the `Context` binding without parsing the name text.
@@ -2288,6 +2297,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             name: NamedSpan {
                 span: span(name_span),
             },
+            closing_name: element
+                .closing_element
+                .as_ref()
+                .map(|closing| span(closing.name.span())),
             member_object,
             member_property,
             properties: element
@@ -3326,6 +3339,43 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
         assert_eq!(facts.object_properties.len(), 1);
         assert_eq!(facts.logical_expressions.len(), 1);
         assert_eq!(facts.conditional_expressions.len(), 1);
+    }
+
+    #[test]
+    fn records_the_closing_tags_name_span_beside_the_opening_ones() {
+        // A closing tag writes the element's name a second time, and
+        // TypeScript reports that occurrence as another reference to the same
+        // symbol. A consumer enumerating references to a component has to be
+        // able to see it, so the span is recorded — as the same name, not as
+        // another element.
+        let source = "<Panel><dotted.Inner></dotted.Inner><Leaf /></Panel>";
+        let facts = extract("closing.tsx", source).unwrap();
+        let text = |span: Span| source.get(span.start as usize..span.end as usize);
+        let named = facts
+            .jsx_elements
+            .iter()
+            .map(|element| {
+                (
+                    text(element.name.span),
+                    element.closing_name.and_then(text),
+                    element.self_closing,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            named,
+            vec![
+                (Some("Panel"), Some("Panel"), false),
+                (Some("dotted.Inner"), Some("dotted.Inner"), false),
+                (Some("Leaf"), None, true),
+            ]
+        );
+        // The two spans of a paired tag are distinct positions, which is the
+        // whole point: the second one is unaccounted for unless something
+        // records it.
+        let panel = &facts.jsx_elements[0];
+        assert_ne!(Some(panel.name.span), panel.closing_name);
     }
 
     #[test]

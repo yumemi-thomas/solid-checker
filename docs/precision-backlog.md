@@ -3994,6 +3994,193 @@ set (unattributable message, idle death, queued-task settling on close, fatal
 answer), and the self-referential `threadId` assertion is replaced. It is
 recorded here only so the review's numbering has no silent gaps.
 
+## Closed 2026-08-23: a rendered component is a call, not an escape
+
+The row *Private component rendered (`<Panel/>`)* in **Closed 2026-08-23:
+under-marking in the attribution ladder** ends at "every export marked
+(`fallback-all`)". That was the fail-closed answer to an unsound one, not the
+right answer: the checker already resolves a tag to its exact component
+function — `SemanticLookup::function_called_at`, which is how
+`jsx_call_sites` decides component identity and Loading placement — while
+`all_function_call_sites` enumerated only `ast.calls`. A private helper whose
+one caller was `<PanelView/>` therefore had a *known* caller and a call graph
+that said it had escaped, so every export of the entrypoint was marked.
+
+**The fix.** `all_function_call_sites`
+(rust/crates/solid-reactive-ir/src/indexes.rs) emits a call edge for each JSX
+element whose tag name resolves through `function_called_at` to exactly one
+project function. The callee is the tag *name* span — the component's own
+reference — so the escape test in
+`compute_entered_only_through_calls`/`reference_is_accounted_for`
+(rust/crates/solid-reactive-ir/src/attribution.rs) accepts that reference
+through the branch it already had: `known_call_sites`, built from the same
+edges. There is deliberately no branch that accepts a reference *because* it is
+a tag. A syntactic short-circuit would also accept the tags that emit no edge —
+unresolvable names, an escaped component rendered elsewhere — and each of those
+is a case where the honest answer is that something the graph cannot enumerate
+renders it.
+
+Both halves are one commit for that reason: the edge without the acceptance
+leaves the widening in place, and an acceptance not backed by the edge is the
+unsound direction.
+
+**Both spellings of a render, and only one edge for each.** `<Panel></Panel>`
+writes the component's name twice, and TypeScript reports both occurrences as
+references to the same symbol, so the edge alone accounted for the self-closing
+form and nothing else: the paired form — the dominant real-world spelling for a
+component with content — kept widening to every export. `solid-facts` records
+the closing tag's name span (`JsxElementFact::closing_name`, `visit_jsx_element`
+in rust/crates/solid-facts/src/ast/mod.rs), and `FunctionCallSite` carries it as
+`also_referenced` beside the callee. `function_call_sites` is unchanged — one
+entry per invocation, which is what the three consumers that count calls read —
+and the escape test alone reads `function_call_site_references`, which is the
+same sites plus that extra span. The closing span cannot mint an edge or account
+for anything on its own: it is stored on the edge the *opening* tag's resolution
+created, so a tag whose opening name resolves to nothing has no site to carry
+it, and no consumer sees a caller that the runtime does not have. Pinned by
+`escaping-private-helper` (`./closed`, `./children`, and the two
+`indexes::tests` closing-tag cases, one of which is exactly the
+opening-unresolved counterfactual).
+
+**One authority for "which tags resolve".** `jsx_call_sites` (component
+identity, Loading placement) and `all_function_call_sites` (the render edges)
+both iterate `SemanticLookup::jsx_rendered_functions`. They had two literal
+copies of the same resolution, and the argument that the new edges cannot move a
+finding depends on their agreeing: a rendered function is
+`jsx_call_site_loading(..).any`, which short-circuits
+`compute_function_is_component` before `directly_called` ever sees a JSX edge. A
+filter added to one copy would have silently broken that; one iterator cannot
+drift from itself.
+
+**Blast radius.** Three arms of `escaping-private-helper` are new (`./closed`,
+`./children`, `./member-tag-children`) and one moved: `./rendered` became
+shape-identical to its `./called` control (`reachability`, not `fallback-all`, in
+the review plan). No findings snapshot moved — a JSX-rendered function already
+short-circuits `compute_function_is_component` through `jsx_call_site_loading`
+before `directly_called` is consulted, so the new edges cannot flip component
+identity. The two other consumers of `function_call_sites` see a callee span
+that is not a call expression: `member_parameter_symbols_at` finds no `CallFact`
+there and marks the site unresolved, which clears the symbol set (fail closed),
+and `semantic_write_execution_role_within` classifies the tag span's own
+execution context, which is the render position the component actually runs at —
+real evidence about a caller that was previously invisible, not a substitute for
+it. Neither moved a finding across the 83 coverage projects; a write whose only
+caller is a render site can now be classified where it previously stayed
+`Unknown`, and that is the intended direction. For a function that is both
+called and rendered, `all_function_call_sites` appends call expressions before
+render sites, so `semantic_write_execution_role_within` — which takes the first
+non-`Unknown` role — resolves the tie by an argued rule (a call expression is
+the more direct evidence: its own syntax names the invocation) rather than by
+which file happens to hold the call.
+
+**Still fail-closed after this.**
+
+- **A dotted tag stays an escape, in both spellings.** `<ns.Panel/>` *does*
+  resolve — TypeScript reports the symbol at the whole `ns.Panel` name span, so
+  the edge is emitted with that whole span as its callee, a member expression
+  rather than an identifier. What fails closed is the span mismatch: the
+  reference the escape test walks is the `Panel` property inside the name, and
+  the test is byte-exact span membership, not containment. Adding the closing
+  name changes nothing there, because both of a dotted tag's spans are the whole
+  dotted name. Pinned by `escaping-private-helper` (`./member-tag`,
+  `./member-tag-children`) and by
+  `indexes::tests::a_resolvable_dotted_tag_is_an_edge_whose_callee_is_the_whole_name`.
+  Closing it needs the member reference and the tag edge to name the same span,
+  which is a resolution question, not a widening one.
+- **A tag that resolves to nothing stays an escape**, which is the point: an
+  unresolved import or an ambiguous computed name emits no edge, and a
+  conservative caller set is the only sound one.
+- **A component used as a value is an escape, and must stay one.**
+  `<Wrap child={Panel}/>`, `return Panel`, `apply(Panel)` — the receiver decides
+  whether and when to invoke it. Pinned by `escaping-private-helper`
+  (`./prop-value`), beside `./argument` and `./returned`.
+
+The two spellings that could have made the edge name-matched rather than
+resolved are pinned in the same fixture: `./shadowed` renders a project function
+named `Show`, a Solid 1.x built-in spelling in the dialect vocabulary, and gets
+the edge because the symbol is the project's; `./intrinsic` renders `<div/>`
+beside an unused project function named `div`, and gets none, because TypeScript
+binds a lowercase tag name as an intrinsic element name and never against the
+value scope.
+
+**Measured on the ecosystem corpus (2026-08-23), and the honest headline is that
+it moves two probes of 416.** Both full-corpus harnesses were re-run against the
+release binary
+`068b04bb1fe98268ccf37fb7a29780f5a194207149972bdbfdb1b73bf28a44b6` and the
+checked-in reports under `benchmarks/ecosystem/` are that state (the account is in
+[ecosystem-benchmark.md](ecosystem-benchmark.md)):
+
+- **Content**: exports proven 5,410 → **5,417** of 8,358, exports carrying an
+  unknown 2,948 → **2,941**, unknown claims 6,776 → **6,762** (`reactiveReads`
+  −7, `returns` −7), reactive-read rows 1,198 → **1,202**. `callbacks`,
+  `ownerRequirements` and `asyncBehavior` are unchanged to the claim, no probe or
+  package gained or lost fully-proven status, and the outcome classes are
+  identical probe-for-probe.
+- **Verification**: **nothing moved** — the same 261 verified and 146 refused
+  *rows*, zero gained and zero lost, the same 63 failing claims in the same five
+  shapes, the same root causes, conversions, exports certified and session
+  counts. The claim plan grows by the four `reactiveReads` rows the content
+  measurement gained, and all four are `no probe form: reactiveReads`: static
+  claims no probe can drive.
+- **Where it lands.** `@tanstack/ai-solid-ui@0.7.18` is the whole content delta.
+  Its `MessagePart` is a private component whose only caller is `<MessagePart …/>`
+  inside `ChatMessage`, and it holds the `ReactiveDispatchUnresolved` obligation
+  `props.toolsRenderer[props.part.name]?.(toolProps)`. That obligation's
+  `mechanism` moves `fallback-all` → `reachability` and its reach enumerates
+  `MessagePart` → `ChatMessage` → `ChatMessages` — two chained render edges, the
+  second being `<ChatMessage message={message} />`. Eighteen unknown sentinels
+  across nine exports become four across the two exports that reach it.
+- **The second probe moved without moving a number.**
+  `@solid-primitives/start@0.0.4` has three `solid-start` obligations, in
+  `root/InlineStyles.tsx` and `root/Links.tsx`, whose components are each rendered
+  exactly once (`<InlineStyles />` in `root/Scripts.tsx`, `<Links />` in
+  `root/Document.tsx`). Their reach is now complete *and empty* — no export of the
+  entrypoint reaches them — so they stop marking `createServerCookie` and
+  `createUserTheme` and are disclosed as `artifact-binding` notes instead (5 → 8).
+  Its four sentinels remain, raised by other obligations that still answer
+  `fallback-all`.
+- **Nothing certified without an edge behind it.** Every export that changed
+  state, in both probes, traces to a render site the graph resolved; no probe in
+  the corpus lost proven surface, and no unknown became proven anywhere else.
+
+Two probes is a small result and it is not evidence that the shape is rare in
+real projects: the rendered-only private helper is a component-library idiom, and
+this corpus is dominated by Solid Primitives, whose 288 contracts are hooks and
+primitives rather than components. The corpus measures published packages'
+*contract generation*, which is the one place this shape is least represented.
+The reports carry no attribution-mechanism field, so the `fallback-all` →
+`reachability` counts above were read from the review plans' `because` blocks by
+regenerating both probes against the previous and current binaries; a corpus-wide
+count of the ladder's rungs is not available from `report.json` today.
+
+## Open: the contract generator's tsconfig sets no `jsxImportSource`
+
+`analyzeTarget` (packages/cli/scripts/generate-package-contract.mjs) writes
+`jsx: "preserve"` with no `jsxImportSource`. solid-js declares its `JSX`
+namespace as an `export namespace` inside the module — the published package
+contributes no *global* `JSX`, which is why a real Solid project sets
+`jsxImportSource: "solid-js"` — so during contract generation no `JSX` namespace
+is in scope for any package, and TypeScript treats every JSX element as
+implicitly `any`.
+
+Surfaced while making `escaping-private-helper`'s `solid-js` stub faithful
+(its README carries the measurements). Two observable effects:
+
+- A built-in with a required `children` prop and a JSX child reports `TS2741`
+  during generation — `escaping-private-helper`'s `builtin.jsx` does. The
+  diagnostic is *identical with the real published package installed*, so it is
+  a property of this tsconfig, not of any stub, and it changed no claim in the
+  generated contract.
+- Any future claim that depends on intrinsic-element *typing* would be untested
+  during generation. Nothing depends on it today: `./intrinsic`'s claim is about
+  TypeScript's tag-name **binding** rule, which holds with or without
+  `JSX.IntrinsicElements`, and was verified against the published typings under
+  `jsxImportSource: "solid-js"`.
+
+Setting the option would need a dialect-aware value (`solid-js` for 1.x,
+`@solidjs/web` for 2.0, and nothing for a non-Solid package) and would move
+whatever pins currently depend on JSX expressions being `any`, so it is recorded
+rather than done here.
 ## The `kind` claim a bundled artifact contradicts (2026-08-23)
 
 The corpus measurement's 53 failing `kind: claimed value, observed function`

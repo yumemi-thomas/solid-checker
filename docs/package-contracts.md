@@ -1953,11 +1953,30 @@ rung above the last resolves an exact identity, never a name-text match.
 
    Escape is decided on the *export specifier*, never on containment in an
    `ExportNamedDeclaration`'s span, which covers the declaration's whole body:
-   `apply(Panel, …)`, `return Panel`, and `<Panel/>` written inside an exported
-   function are escapes, and reading them as export surface left the
-   enumeration incomplete-but-trusted. A reaching function the ladder cannot
-   name also makes the answer unavailable rather than empty — "I cannot tell
-   what this function is" is not "it is not an export".
+   `apply(Panel, …)` and `return Panel` written inside an exported function are
+   escapes, and reading them as export surface left the enumeration
+   incomplete-but-trusted. A reaching function the ladder cannot name also
+   makes the answer unavailable rather than empty — "I cannot tell what this
+   function is" is not "it is not an export".
+
+   A rendered tag is not an escape: rendering a component invokes it, so the
+   call graph enumerates the tag as a call site (`all_function_call_sites`)
+   whenever the tag name resolves to exactly one project function, and the
+   escape test accepts that reference because the edge exists — not because the
+   reference is a tag. Both spellings are covered: `<Panel/>`, and
+   `<Panel></Panel>` (with or without children), whose closing tag is a second
+   TypeScript reference to the same symbol. The closing name span
+   (`JsxElementFact::closing_name`) rides on the edge the opening tag's
+   resolution created — one render is one call site, and a closing tag with no
+   resolved opening tag has no edge to ride — so the escape test accounts for
+   both spans without the call graph gaining a second caller.
+
+   What still stays an escape: a tag that resolves to nothing; a dotted tag,
+   where the edge *is* emitted with the whole `ns.Panel` name span as its callee
+   but the reference the escape test walks is the `Panel` property inside that
+   name, and the test is byte-exact span membership; and a component handed to
+   something else as a value (`<Wrap child={Panel}/>`).
+   `escaping-private-helper` pins every one of these, one entrypoint per claim.
 5. **`fallback-all`** — nothing identified the obligation's containing function
    at all. Every function export of the entrypoint is marked. This rung is
    fail-closed and still reachable; it is not the ordinary case.
