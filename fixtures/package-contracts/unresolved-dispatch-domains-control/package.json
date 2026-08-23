@@ -1,0 +1,14 @@
+{
+  "name": "unresolved-dispatch-domains-control",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "solid-js": "1.9.14"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

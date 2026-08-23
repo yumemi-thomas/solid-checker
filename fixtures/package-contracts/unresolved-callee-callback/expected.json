@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "unresolved-callee-callback-package",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "reactiveReads": [
+        {
+          "kind": "parameter-member",
+          "parameter": 0,
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "callbacks": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-2": [
+          "mapParam"
+        ],
+        "function-1": [
+          "noMember"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

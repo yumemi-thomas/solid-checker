@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "conditional-export-absence-package",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "inline",
+                "evidence": {
+                  "kind": "inferred"
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "inferred"
+            }
+          },
+          "precedence": 0
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "value-1": {
+      "kind": "value",
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-1": [
+          "observe"
+        ],
+        "value-1": [
+          "shared"
+        ]
+      },
+      "conditions": [
+        "browser",
+        "node"
+      ]
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

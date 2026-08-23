@@ -1,0 +1,6 @@
+{
+  "name": "legacy-dual-root-package",
+  "version": "1.0.0",
+  "main": "./dist/node.cjs",
+  "module": "./dist/browser.js"
+}
