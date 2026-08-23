@@ -8,11 +8,11 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 > ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran
 > under both a per-mode timeout and a whole-phase wall budget.
 
-- Started: 2026-08-23T11:10:42.836Z
-- Finished: 2026-08-23T11:17:52.412Z
+- Started: 2026-08-23T12:56:52.765Z
+- Finished: 2026-08-23T13:04:11.160Z
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Probe rows run: 416
-- Checker native binary: `f0a80fc3240a72358d53fbe59b54d38b452f693f149d2b3cd7d73f4bf590cfb8` (14602048 bytes, mtime 2026-08-23T11:01:33.859Z)
+- Checker native binary: `068b04bb1fe98268ccf37fb7a29780f5a194207149972bdbfdb1b73bf28a44b6` (14619536 bytes, mtime 2026-08-23T12:56:39.075Z)
 - Type Facts binary: `2bbdef833749ed8c9fdda60ed9245b54baeaa9ceb98b1a880853a2c90ac56f2d` (28389218 bytes, mtime 2026-08-23T11:01:33.885Z)
 - Budgets: install 240000 ms, generate 120000 ms, probe 20000 ms per condition mode / 90000 ms + 500 ms per planned claim, capped at 900000 ms, whole phase, verify 90000 ms; concurrency 6
 - Import-environment shim: enabled (client, development and production sessions only; server sessions never)
@@ -45,7 +45,7 @@ Outcome classes, raw:
 | Kobalte | 6 | 4 | 1/6 (16.67%) | 3 | 892/1708 (52.22%) | 888/892 (99.55%) | 4 | 6 | 4 |
 | Solid Primitives | 289 | 288 | 221/289 (76.47%) | 67 | 1994/3264 (61.09%) | 1978/1994 (99.20%) | 557 | 714 | 713 |
 | Corvu | 28 | 28 | 16/28 (57.14%) | 12 | 289/426 (67.84%) | 289/289 (100.00%) | 25 | 56 | 20 |
-| TanStack | 52 | 50 | 13/52 (25.00%) | 37 | 1730/2743 (63.07%) | 1705/1730 (98.55%) | 125 | 198 | 293 |
+| TanStack | 52 | 50 | 13/52 (25.00%) | 37 | 1730/2747 (62.98%) | 1705/1730 (98.55%) | 125 | 198 | 293 |
 | Solid Devtools | 12 | 10 | 2/12 (16.67%) | 8 | 146/363 (40.22%) | 138/146 (94.52%) | 0 | 2 | 1 |
 | Solid Recharts | 3 | 3 | 0/3 (0.00%) | 3 | 124/366 (33.88%) | 124/124 (100.00%) | 0 | 0 | 0 |
 | Motion for Solid | 3 | 3 | 1/3 (33.33%) | 2 | 908/966 (94.00%) | 908/908 (100.00%) | 0 | 24 | 333 |
@@ -80,18 +80,18 @@ Attributed to one root cause per row instead. `probe-report-includes-evidence-wr
 
 | Figure | Count |
 | --- | --- |
-| Claims planned across every probed contract | 12944 |
-| Driven | 7647/12944 (59.08%) |
-| Passed | 7584/12944 (58.59%) |
+| Claims planned across every probed contract | 12948 |
+| Driven | 7647/12948 (59.06%) |
+| Passed | 7584/12948 (58.57%) |
 | Failed | 63 |
-| Undriven | 5297/12944 (40.92%) |
+| Undriven | 5301/12948 (40.94%) |
 | Incompleteness findings | 734 |
 
 Undriven claims by reason:
 
 | Reason | Claims |
 | --- | --- |
-| no probe form: reactiveReads | 1354 |
+| no probe form: reactiveReads | 1358 |
 | other | 834 |
 | entrypoint import threw | 637 |
 | no probe form: ownerRequirements | 565 |
@@ -311,12 +311,12 @@ Of every export the corpus's generated contracts describe:
 
 | Phase | Rows | Median | p90 | Max | Mean |
 | --- | --- | --- | --- | --- | --- |
-| install | 416 | 697 ms | 1556 ms | 15934 ms | 874 ms |
-| generate | 413 | 110 ms | 573 ms | 15611 ms | 435 ms |
-| probe | 407 | 664 ms | 3389 ms | 203034 ms | 3599 ms |
-| verify | 407 | 48 ms | 56 ms | 121 ms | 48 ms |
-| pipelineWithoutInstall | 413 | 908 ms | 4077 ms | 218698 ms | 4030 ms |
-| total | 416 | 1652 ms | 5752 ms | 221203 ms | 4909 ms |
+| install | 416 | 716 ms | 1776 ms | 15574 ms | 943 ms |
+| generate | 413 | 108 ms | 598 ms | 15781 ms | 446 ms |
+| probe | 407 | 657 ms | 3433 ms | 203847 ms | 3635 ms |
+| verify | 407 | 48 ms | 56 ms | 84 ms | 48 ms |
+| pipelineWithoutInstall | 413 | 888 ms | 4114 ms | 219683 ms | 4075 ms |
+| total | 416 | 1682 ms | 5964 ms | 222585 ms | 5023 ms |
 
 `install` may run against a warm npm cache, so it is a lower bound; `pipelineWithoutInstall` is the number that describes the checker's own cost.
 

@@ -291,7 +291,7 @@ class: `403 / 6 / 7` became `406 / 3 / 7` when the whole-summary unknown
 collapse was fixed, and `406 / 3 / 7` is still the split today. **The
 checked-in reports under `benchmarks/ecosystem/` are always the current
 measurement state**; the figures they carry are stated once, under
-"[Headline numbers](#headline-numbers-2026-08-23-fifth-measurement-state-release-binary-416-probes)",
+"[Headline numbers](#headline-numbers-2026-08-23-sixth-measurement-state-release-binary-416-probes)",
 and every historical figure in this document is marked as superseded where it
 appears.
 
@@ -377,51 +377,102 @@ An emitted contract that cannot be parsed is recorded as `measured: false` and
 named in `unmeasuredProbes`, never as a row of zeroes — a hole reported as zero
 unknowns is the one wrong answer this measurement could give.
 
-### Headline numbers (2026-08-23, fifth measurement state, release binary, 416 probes)
+### Headline numbers (2026-08-23, sixth measurement state, release binary, 416 probes)
 
 Of the **409 probes that produced a contract**, covering 207 distinct packages.
-This is the fifth measurement of the same 305-row / 416-probe manifest, and the
-earlier four are kept beside it because **the numbers got worse again and that
-is the result**. Nothing in the corpus, the analysis facts, or the harness
-changed between any of them; what changed is how much the generator is willing
-to certify.
+This is the sixth measurement of the same 305-row / 416-probe manifest, and the
+earlier five are kept beside it because the first four transitions are the record
+of a generator getting steadily *less* willing to certify. Nothing in the corpus,
+the analysis facts, or the harness changed between any of them; what changed is
+how much the generator is willing to certify. The sixth is the first transition
+that moves the other way, and it moves **one probe**.
 
 The checked-in `benchmarks/ecosystem/report.{json,md}` are this state: the full
 corpus from the release binary
-`f0a80fc3240a72358d53fbe59b54d38b452f693f149d2b3cd7d73f4bf590cfb8` at a
-600-second budget (94.495 s wall, against 94.675 s for the fourth state's
-`8dde96e8…`). `report-sentinel.{json,md}` were **not** re-run and still describe
+`068b04bb1fe98268ccf37fb7a29780f5a194207149972bdbfdb1b73bf28a44b6` at a
+600-second budget (94.955 s wall, against 94.495 s for the fifth state's
+`f0a80fc3…`). `report-sentinel.{json,md}` were **not** re-run and still describe
 the third state; the sentinel figures quoted below are labelled accordingly.
 
-| Figure | 2026-08-22 (first) | 2026-08-23 (second) | 2026-08-23 (third) | 2026-08-23 (fourth) | 2026-08-23 (fifth, current) |
-| --- | --- | --- | --- | --- | --- |
-| Probes fully proven | 300 / 409 (73.35%) | 304 / 409 (74.33%) | 288 / 409 (70.42%) | 229 / 409 (55.99%) | **205 / 409 (50.12%)** |
-| Packages fully proven (every probe) | 126 / 207 (60.87%) | 128 / 207 (61.84%) | 111 / 207 (53.62%) | 91 / 207 (43.96%) | **86 / 207 (41.55%)** |
-| Probes with at least one unknown claim | 102 | 99 | 116 | 177 | **201** |
-| Probes with at least one refused entrypoint | 6 | 3 | 3 | 3 | **3** |
-| Probes with at least one closure note | 7 | 7 | 7 | 7 | **7** |
-| Exports proven | 5,415 / 8,113 (66.74%) | 6,520 / 8,320 (78.37%) | 6,095 / 8,358 (72.92%) | 5,477 / 8,358 (65.53%) | **5,410 / 8,358 (64.73%)** |
-| Exports carrying an unknown | 2,698, of which 2,077 in all five domains | 1,800, of which 492 in all five | 2,263, of which 527 in all five | 2,881, of which 528 in all five | **2,948, of which 528 in all five** |
-| Unknown claims, total | 11,013 | 4,898 | 5,903 | 6,672 | **6,776** |
-| Entrypoints | 847 emitted, 7 refused | 850 emitted, 4 refused | 850 emitted, 4 refused | 850 emitted, 4 refused | **850 emitted, 4 refused** |
-| Closure notes | 32 | 32 | 32 | 32 | **32** |
-| Outcome classes | 403 / 6 / 7 | 406 / 3 / 7 | 406 / 3 / 7 | 406 / 3 / 7 | **406 / 3 / 7** |
+| Figure | 2026-08-22 (first) | 2026-08-23 (second) | 2026-08-23 (third) | 2026-08-23 (fourth) | 2026-08-23 (fifth) | 2026-08-23 (sixth, current) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Probes fully proven | 300 / 409 (73.35%) | 304 / 409 (74.33%) | 288 / 409 (70.42%) | 229 / 409 (55.99%) | 205 / 409 (50.12%) | **205 / 409 (50.12%)** |
+| Packages fully proven (every probe) | 126 / 207 (60.87%) | 128 / 207 (61.84%) | 111 / 207 (53.62%) | 91 / 207 (43.96%) | 86 / 207 (41.55%) | **86 / 207 (41.55%)** |
+| Probes with at least one unknown claim | 102 | 99 | 116 | 177 | 201 | **201** |
+| Probes with at least one refused entrypoint | 6 | 3 | 3 | 3 | 3 | **3** |
+| Probes with at least one closure note | 7 | 7 | 7 | 7 | 7 | **7** |
+| Exports proven | 5,415 / 8,113 (66.74%) | 6,520 / 8,320 (78.37%) | 6,095 / 8,358 (72.92%) | 5,477 / 8,358 (65.53%) | 5,410 / 8,358 (64.73%) | **5,417 / 8,358 (64.81%)** |
+| Exports carrying an unknown | 2,698, of which 2,077 in all five domains | 1,800, of which 492 in all five | 2,263, of which 527 in all five | 2,881, of which 528 in all five | 2,948, of which 528 in all five | **2,941, of which 528 in all five** |
+| Unknown claims, total | 11,013 | 4,898 | 5,903 | 6,672 | 6,776 | **6,762** |
+| Entrypoints | 847 emitted, 7 refused | 850 emitted, 4 refused | 850 emitted, 4 refused | 850 emitted, 4 refused | 850 emitted, 4 refused | **850 emitted, 4 refused** |
+| Closure notes | 32 | 32 | 32 | 32 | 32 | **32** |
+| Outcome classes | 403 / 6 / 7 | 406 / 3 / 7 | 406 / 3 / 7 | 406 / 3 / 7 | 406 / 3 / 7 | **406 / 3 / 7** |
 
 Unknown claims by domain — read together, not separately, since 528 of the
-2,948 unknown exports appear in every column:
+2,941 unknown exports appear in every column:
 
-| Domain | 2026-08-22 | 2026-08-23 (second) | 2026-08-23 (third) | 2026-08-23 (fourth) | 2026-08-23 (fifth) |
-| --- | --- | --- | --- | --- | --- |
-| callbacks | 2,205 | 630 | 693 | 1,368 | **1,472** |
-| reactiveReads | 2,577 | 1,657 | 2,019 | 2,065 | **2,065** |
-| returns | 2,077 | 1,627 | 2,136 | 2,182 | **2,182** |
-| ownerRequirements | 2,077 | 492 | 527 | 528 | **528** |
-| asyncBehavior | 2,077 | 492 | 528 | 529 | **529** |
+| Domain | 2026-08-22 | 2026-08-23 (second) | 2026-08-23 (third) | 2026-08-23 (fourth) | 2026-08-23 (fifth) | 2026-08-23 (sixth) |
+| --- | --- | --- | --- | --- | --- | --- |
+| callbacks | 2,205 | 630 | 693 | 1,368 | 1,472 | **1,472** |
+| reactiveReads | 2,577 | 1,657 | 2,019 | 2,065 | 2,065 | **2,058** |
+| returns | 2,077 | 1,627 | 2,136 | 2,182 | 2,182 | **2,175** |
+| ownerRequirements | 2,077 | 492 | 527 | 528 | 528 | **528** |
+| asyncBehavior | 2,077 | 492 | 528 | 529 | 529 | **529** |
 
 Positive behavioral rows a probe step would have to drive: 1,319 callback
-executions, 1,202 return trees, 1,198 reactive reads, 542 owner requirements,
-100 async behaviors — **4,361 rows**, against 4,812 in the fourth state, 5,005 in
-the third, 5,545 in the second and 4,199 in the first.
+executions, 1,202 return trees, 1,202 reactive reads, 542 owner requirements,
+100 async behaviors — **4,365 rows**, against 4,361 in the fifth state, 4,812 in
+the fourth, 5,005 in the third, 5,545 in the second and 4,199 in the first.
+
+**The fifth → sixth movement is one probe, and it is a gain.** A rendered
+component is now a call-graph edge, so a private helper whose only caller is
+`<Helper/>` no longer looks like an escaped function value and attribution no
+longer widens to every export of the entrypoint (recorded in the precision
+backlog as "[a rendered component is a call, not an
+escape](precision-backlog.md)"). Corpus-wide that is **exports proven +7,
+exports carrying an unknown −7, unknown claims −14** (`reactiveReads` −7,
+`returns` −7), **reactive-read rows +4**, and nothing else: `callbacks`,
+`ownerRequirements` and `asyncBehavior` are unchanged to the claim, no probe
+gained or lost fully-proven status, no package did, the entrypoint and
+closure-note figures are identical, and the outcome classes are identical
+probe-for-probe.
+
+Two probes' review plans moved and no others, and both moved for a render edge
+that resolved:
+
+- **`@tanstack/ai-solid-ui@0.7.18` (Solid 1.x)** is the whole content delta.
+  `MessagePart` is a private component in `src/chat-message.tsx` whose only
+  caller is `<MessagePart …/>` inside `ChatMessage`; it holds a
+  `ReactiveDispatchUnresolved` obligation (`computed-call-target-unresolved`, the
+  `props.toolsRenderer[props.part.name]?.(toolProps)` dispatch). That obligation's
+  attribution mechanism moves `fallback-all` → `reachability`, and the reach it
+  enumerates is `MessagePart` → `ChatMessage` → `ChatMessages` — the second link
+  is a second render edge, `<ChatMessage message={message} />` in
+  `src/chat-messages.tsx`. The 18 unknown sentinels (9 exports × `reactiveReads`
+  and `returns`) become **4** on the two exports that actually reach it, and
+  `Chat`, `ChatInput`, `TextPart`, `ThinkingPart`, `ToolApproval`, `useChat` and
+  `useChatContext` are proven instead.
+- **`@solid-primitives/start@0.0.4` (Solid 1.x)** moves no content figure and is
+  the more interesting one: three `solid-start` obligations — two in
+  `root/InlineStyles.tsx`, one in `root/Links.tsx` — stop being attributed to
+  this package's exports at all. Both components are rendered exactly once,
+  `<InlineStyles />` in `root/Scripts.tsx` and `<Links />` in `root/Document.tsx`,
+  so the enumeration is now complete *and empty*: no export of the entrypoint
+  reaches them. Its four sentinels stay, because other obligations in
+  `solid-start/api/index.ts` and `solid-start/islands/server-router.tsx` still
+  answer `fallback-all`; what changes is that the three render-reached ones are
+  now disclosed as `artifact-binding` notes (5 → 8) rather than marking exports
+  they cannot reach.
+
+Both spellings of the ladder's answer moved in the same direction — narrower, or
+empty — and no export was certified anywhere that a resolved render edge does not
+stand behind.
+
+#### How the earlier states moved (history)
+
+The five transitions below are kept because each records a cause that was
+measured rather than assumed, and because the first four together are the record
+of a generator that got *less* willing to certify on every pass.
 
 **The fourth → fifth movement is the callbacks domain and nothing else.**
 `reactiveReads`, `returns` and `ownerRequirements` are unchanged to the claim,
@@ -455,12 +506,6 @@ trade is stated there.
 **No outcome class regressed.** 406 complete / 3 partial / 3 install failures /
 2 `no-esm-runtime-target` / 1 `cjs-only-entrypoint` / 1 `no-exported-surface`,
 probe-for-probe identical to the fourth state.
-
-#### How the earlier states moved (history)
-
-The four transitions below are kept because each records a cause that was
-measured rather than assumed, and because together they are the record of a
-generator that has been getting *less* willing to certify on every pass.
 
 **The third → fourth movement is one change, and the arithmetic says so.** Two
 generator fixes landed between the states — an exported class is `kind:
@@ -568,35 +613,62 @@ full corpus.
 
 ### Per family
 
-2026-08-23 fifth state, matching the headline table above; the fourth state's
-column is kept beside it because the whole movement is in one family:
+2026-08-23 sixth state, matching the headline table above; the fifth state's
+column is kept beside it because the whole movement is in one family, and the
+fourth → fifth column below it because that one was in a different one:
 
-| Family | Contracts | Fully proven (fourth → fifth) | Exports proven (fourth → fifth) | Unknown claims (fourth → fifth) |
+| Family | Contracts | Fully proven (fifth → sixth) | Exports proven (fifth → sixth) | Unknown claims (fifth → sixth) |
 | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 3 → **3** (13.04%) | 1120 → **1114** / 1546 | 585 → **601** |
-| Kobalte | 4 | 0 → **0** | 364 → **363** / 1206 | 2,266 → **2,269** |
-| Solid Primitives | 288 | 176 → **152** (52.78%) | 1684 → **1638** / 2038 | 642 → **693** |
+| Official Solid | 23 | 3 → **3** (13.04%) | 1114 → **1114** / 1546 | 601 → **601** |
+| Kobalte | 4 | 0 → **0** | 363 → **363** / 1206 | 2,269 → **2,269** |
+| Solid Primitives | 288 | 152 → **152** (52.78%) | 1638 → **1638** / 2038 | 693 → **693** |
 | Corvu | 28 | 23 → **23** (82.14%) | 229 → **229** / 266 | 74 → **74** |
-| TanStack | 50 | 24 → **24** (48%) | 1575 → **1561** / 2124 | 990 → **1,024** |
+| TanStack | 50 | 24 → **24** (48%) | 1561 → **1568** / 2124 | 1,024 → **1,010** |
 | Solid Devtools | 10 | 3 → **3** (30%) | 206 → **206** / 233 | 60 → **60** |
 | Solid Recharts | 3 | 0 → **0** | 16 → **16** / 327 | 639 → **639** |
 | Motion for Solid | 3 | 0 → **0** | 283 → **283** / 618 | 1,416 → **1,416** |
 
-Only Solid Primitives lost a fully-proven probe — all 24 of the corpus's losses
-are in it — while Official Solid, Kobalte and TanStack lost exports without
-losing a probe that was already clean. Corvu, Solid Devtools, Solid Recharts and
-Motion for Solid are unchanged export-for-export, which keeps them the useful
-controls: neither sentinel reaches them. *Why* — whether they never invoke one
-parameter twice, or invoke it twice with the same schedule — is not established
-by this measurement; it is a per-package question the report has no field for.
+**Only TanStack moved, and only by the seven exports of one probe.** Every other
+family is unchanged export-for-export and claim-for-claim, and no family gained
+or lost a fully-proven probe. The render-edge fix reaches exactly the shape that
+`@tanstack/ai-solid-ui` has — a private component rendered once by a public one —
+and the corpus turns out to contain very little of it inside the *analyzed*
+package: the rendered-only private helper is a component-library idiom, and this
+corpus's largest family ships hooks and primitives instead. That is a fact about
+the corpus and not a bound on the fix.
+
+The fourth → fifth state, kept because its movement was in the other large
+family:
+
+| Family | Fully proven (fourth → fifth) | Exports proven (fourth → fifth) | Unknown claims (fourth → fifth) |
+| --- | --- | --- | --- |
+| Official Solid | 3 → 3 | 1120 → 1114 | 585 → 601 |
+| Kobalte | 0 → 0 | 364 → 363 | 2,266 → 2,269 |
+| Solid Primitives | 176 → 152 | 1684 → 1638 | 642 → 693 |
+| Corvu | 23 → 23 | 229 → 229 | 74 → 74 |
+| TanStack | 24 → 24 | 1575 → 1561 | 990 → 1,024 |
+| Solid Devtools | 3 → 3 | 206 → 206 | 60 → 60 |
+| Solid Recharts | 0 → 0 | 16 → 16 | 639 → 639 |
+| Motion for Solid | 0 → 0 | 283 → 283 | 1,416 → 1,416 |
+
+Only Solid Primitives lost a fully-proven probe there — all 24 of that state's
+losses are in it — while Official Solid, Kobalte and TanStack lost exports
+without losing a probe that was already clean. Corvu, Solid Devtools, Solid
+Recharts and Motion for Solid were unchanged export-for-export, which keeps them
+the useful controls: neither sentinel reaches them. *Why* — whether they never
+invoke one parameter twice, or invoke it twice with the same schedule — is not
+established by this measurement; it is a per-package question the report has no
+field for.
 
 **Solid Primitives is still the clean end of the ecosystem** and it is also the
 largest family: 288 of the corpus's 409 contracts, zero refusals and zero
 closure notes. It is also where every loss lands, in every round: 230 → 217 fully
 proven to the soundness rounds, 217 → 176 to the retained-callback sentinel, and
-176 → **152** here. The small-single-purpose-package shape is what the generator
-handles best *and* the shape most likely to invoke one parameter from two call
-sites, which is exactly what the new sentinel refuses to average.
+176 → **152** to the contradiction sentinels. The
+small-single-purpose-package shape is what the generator handles best *and* the
+shape most likely to invoke one parameter from two call sites, which is exactly
+what that sentinel refuses to average. The render-edge fix does not reach it at
+all: it holds at 152 fully proven and 1,638 exports proven.
 
 **The remaining unknowns still concentrate in two packages, and they are still
 not one summary shape.** `@kobalte/core@2.0.0-alpha.0` and
@@ -610,9 +682,11 @@ instead of five.
 second state had them nearly gone — 98.21% of exports proven, 111 unknown claims
 — and the reading that 318 of its 322 unknown exports had been the all-five
 whole-summary shape was correct: it was measuring the attribution defect, not
-TanStack. The three fail-closed rounds since have taken it to **1,561 / 2,124
-(73.5%) proven and 1,024 unknown claims**, all of it retained or
-multiply-scheduled callbacks rather than the options-object pattern. Both
+TanStack. The three fail-closed rounds since took it to 1,561 / 2,124 (73.5%)
+proven and 1,024 unknown claims, all of it retained or multiply-scheduled
+callbacks rather than the options-object pattern; the render-edge fix gives back
+seven of those exports, to **1,568 / 2,124 (73.8%) proven and 1,010 unknown
+claims**, and every one of the seven is in `@tanstack/ai-solid-ui`. Both
 `@tanstack/solid-query` majors still
 declare a non-standard `"@tanstack/custom-condition": "./src/index.ts"` branch
 pointing at TypeScript source; that remains the only structural oddity in the
@@ -719,15 +793,15 @@ the numbers are a measurement of*, and each is recorded in the report's
 wall budget is its own outcome class and is counted as neither verified nor
 refused. So is a row for which no Solid runtime can honestly be chosen.
 
-### Measured state (2026-08-23, execution-kind pass, full corpus, 416 probe rows)
+### Measured state (2026-08-23, render-edge pass, full corpus, 416 probe rows)
 
 Binaries were **copied out of the repository before the run and used from the
 copies**, so a concurrent rebuild could not change the engine mid-measurement.
 The hash is the identity these numbers belong to:
 
 - native `solid-checker-rust`
-  `f0a80fc3240a72358d53fbe59b54d38b452f693f149d2b3cd7d73f4bf590cfb8`
-  (14,602,048 bytes, source `rust/target/release/solid-checker-rust`)
+  `068b04bb1fe98268ccf37fb7a29780f5a194207149972bdbfdb1b73bf28a44b6`
+  (14,619,536 bytes, source `rust/target/release/solid-checker-rust`)
 - `solid-typefacts`
   `2bbdef833749ed8c9fdda60ed9245b54baeaa9ceb98b1a880853a2c90ac56f2d`
   (28,389,218 bytes, source `bin/solid-typefacts`)
@@ -735,22 +809,36 @@ The hash is the identity these numbers belong to:
 Budgets: install 240 s, generate 120 s, probe 20 s per condition mode and
 90 s + 500 ms per planned claim (cap 900 s) for the whole phase, verify 90 s;
 concurrency 6. No subsetting — every one of the manifest's 416 probe rows ran.
-Wall clock 7 m 10 s.
+Wall clock 7 m 18 s, against 7 m 10 s for the execution-kind pass.
+
+**The render-edge pass changed no verification figure that this section reports
+except the claim plan.** It is a full 416-row run against the engine above, and
+it reproduces the execution-kind state row-for-row: the same 261 verified rows and
+the same 146 refused ones — *the same rows*, not merely the same counts, with zero
+gained and zero lost — the same 63 failing claims in the same five shapes, the
+same four root-cause counts, the same 739 conversions, 1,018 exports certified, 3
+probed behavioral rows, 20,070 worker sessions, and the same three install / four
+generation / two `no-runtime` pre-contract outcomes. The one movement is **claims
+planned 12,944 → 12,948**: `@tanstack/ai-solid-ui@0.7.18` regains four
+`reactiveReads` rows from the attribution fix described in the content
+measurement above, and all four are `no probe form: reactiveReads` — static
+claims no probe harness can drive — so driven, passed and failed are unchanged to
+the claim. The table below therefore still reads as the current state, with those
+two cells updated; a fourth column would have been nineteen repeated values.
 
 **This supersedes the earlier 2026-08-23 state**, which supersedes 2026-08-22;
 both are kept as labelled columns because the movement between them is the
-result. The middle column is the state the previous change set left behind and
-the one the checked-in reports carried until this run:
+result. The middle column is the state the previous change set left behind:
 
-| Figure | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds, current) |
+| Figure | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (execution kinds + render edges, current) |
 | --- | --- | --- | --- |
 | Probe rows run | 416 | 416 | 416 |
 | Reached a generated contract | 409/416 (98.32%) | 409/416 (98.32%) | 409/416 (98.32%) |
 | **Reached `verified`** | **194/416 (46.63%)** | **222/416 (53.37%)** | **261/416 (62.74%)** |
 | Reached `verified`, of the rows that produced a contract | 194/409 (47.43%) | 222/409 (54.28%) | 261/409 (63.81%) |
 | Refused by `contract verify` | 210/416 (50.48%) | 185/416 (44.47%) | 146/416 (35.10%) |
-| Claims planned | 11,444 | 13,206 | 12,944 |
-| Claims driven | 6,039 (52.77%) | 7,809 (59.13%) | 7,647 (59.08%) |
+| Claims planned | 11,444 | 13,206 | 12,948 (12,944 before render edges) |
+| Claims driven | 6,039 (52.77%) | 7,809 (59.13%) | 7,647 (59.06%) |
 | Claims that passed | 5,686 | 7,591 | 7,584 |
 | Claims that failed | 353 | 218 | 63 |
 | — of which a wrong `callbacks[].execution` | not measured | 159 | **10** |
@@ -994,18 +1082,22 @@ Three blockers, in plain terms:
 
 | Figure | 2026-08-22 | 2026-08-23 (probe environment) | 2026-08-23 (current) |
 | --- | --- | --- | --- |
-| Claims planned across every probed contract | 11,444 | 13,206 | 12,944 |
-| Driven | 6,039 (52.77%) | 7,809 (59.13%) | 7,647 (59.08%) |
+| Claims planned across every probed contract | 11,444 | 13,206 | 12,948 |
+| Driven | 6,039 (52.77%) | 7,809 (59.13%) | 7,647 (59.06%) |
 | Passed | 5,686 | 7,591 | 7,584 |
 | Failed | 353 | 218 | 63 |
-| Undriven | 5,405 (47.23%) | 5,397 (40.87%) | 5,297 (40.92%) |
+| Undriven | 5,405 (47.23%) | 5,397 (40.87%) | 5,301 (40.94%) |
 | Incompleteness findings | 1,091 | 1,080 | 734 |
 
 The planned total rose in the previous state because `@solidjs/web` being
 installed changes which dependency contracts `contract generate` can resolve, so
-the contracts themselves were larger. It **falls** here, 13,206 → 12,944, for the
+the contracts themselves were larger. It **falls** here, 13,206 → 12,948, for the
 opposite reason: the contradiction sentinels replace a parameter's rows with one
-unknown, so there is less to plan.
+unknown, so there is less to plan. The render-edge pass adds four back — 12,944
+→ 12,948 — for the opposite reason again: narrower attribution means an export
+keeps a `reactiveReads` row instead of an unknown sentinel. All four are
+undriven, so the driven, passed and failed rows above are unchanged and only the
+percentages move against the wider denominator.
 
 Passed claims fall by only 7 corpus-wide and that flatness hides real movement:
 per row, 20 rows lost 52 passing claims and 18 gained 45. The rows that lost them
@@ -1015,8 +1107,8 @@ shape a withdrawal is supposed to have. The gains are the mirror image: a claim
 whose only failing observation was withdrawn is confirmed by the modes that
 remain, so it moves from `failed` to `passed` rather than to `undriven`.
 
-The undriven half still splits into two very different things. **2,818 claims
-have no probe form at all** — `reactiveReads` 1,354, `ownerRequirements` 565,
+The undriven half still splits into two very different things. **2,822 claims
+have no probe form at all** — `reactiveReads` 1,358, `ownerRequirements` 565,
 parameter identity 421, nested return leaves 257, `asyncBehavior` 100, no
 unambiguous summary for the mode 85, callback arguments 13, store paths 23 — and
 no probe harness will ever reach them; they are static claims or claims schema v1
@@ -1139,20 +1231,21 @@ keep reading it that way.
 
 | Phase | Rows | Median | p90 | Max |
 | --- | --- | --- | --- | --- |
-| `npm install` | 416 | 697 ms | 1,556 ms | 15,934 ms |
-| `contract generate` | 413 | 110 ms | 573 ms | 15,611 ms |
-| `contract probe` | 407 | 664 ms | 3,389 ms | 203,034 ms |
-| `contract verify` | 407 | 48 ms | 56 ms | 121 ms |
-| generate + probe + verify | 413 | **908 ms** | **4,077 ms** | 218,698 ms |
-| whole row, install included | 416 | 1,652 ms | 5,752 ms | 221,203 ms |
+| `npm install` | 416 | 716 ms | 1,776 ms | 15,574 ms |
+| `contract generate` | 413 | 108 ms | 598 ms | 15,781 ms |
+| `contract probe` | 407 | 657 ms | 3,433 ms | 203,847 ms |
+| `contract verify` | 407 | 48 ms | 56 ms | 84 ms |
+| generate + probe + verify | 413 | **888 ms** | **4,114 ms** | 219,683 ms |
+| whole row, install included | 416 | 1,682 ms | 5,964 ms | 222,585 ms |
 
 Under a second at the median for the checker's own three phases, unchanged across
-all three states. The maximum is the four wide-surface rows the scaled budget
-rescued in the previous state — `@kobalte/core@0.13.13`,
+all four states. The maximum is the four wide-surface rows the scaled budget
+rescued two states ago — `@kobalte/core@0.13.13`,
 `@tanstack/solid-table@9.1.2`, `motion-solidjs@0.7.0-beta.4`, `@kobalte/utils` —
-still completing rather than timing out. The whole 416-row corpus took 7 m 10 s of
-wall clock at concurrency 6, against 7 m 11 s and 6 m 30 s; the extra control
-settle per callback observation is not visible in the total.
+still completing rather than timing out. The whole 416-row corpus took 7 m 18 s of
+wall clock at concurrency 6, against 7 m 10 s, 7 m 11 s and 6 m 30 s. The
+render-edge change touches no phase's cost: every figure in this table moves
+inside the run-to-run spread these numbers have always had, in both directions.
 
 ### Caveats
 
