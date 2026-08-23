@@ -1,0 +1,4 @@
+{
+  "target": "browser",
+  "conditions": ["browser", "import"]
+}

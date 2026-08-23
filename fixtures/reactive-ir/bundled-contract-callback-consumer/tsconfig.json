@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve"
+  },
+  "include": ["App.tsx", "solid-js.d.ts", "jsx.d.ts"]
+}
