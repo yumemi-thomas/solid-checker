@@ -8,12 +8,12 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 > ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran
 > under both a per-mode timeout and a whole-phase wall budget.
 
-- Started: 2026-08-23T20:07:11.982Z
-- Finished: 2026-08-23T20:14:19.805Z
+- Started: 2026-08-23T22:33:21.496Z
+- Finished: 2026-08-23T22:39:45.956Z
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Probe rows run: 416
-- Checker native binary: `ddb0ecd860d4c77f50d1d6c7a0af003bc3adb34ff46a0fcee81715c84ac574b1` (14631488 bytes, mtime 2026-08-23T20:06:46.047Z)
-- Type Facts binary: `2bbdef833749ed8c9fdda60ed9245b54baeaa9ceb98b1a880853a2c90ac56f2d` (28389218 bytes, mtime 2026-08-23T20:06:46.055Z)
+- Checker native binary: `0356938638a2d6594452dd574dcff4a82332b2f0a4d58abed21b578a759a3588` (14654736 bytes, mtime 2026-08-23T22:31:05.221Z)
+- Type Facts binary: `2bbdef833749ed8c9fdda60ed9245b54baeaa9ceb98b1a880853a2c90ac56f2d` (28389218 bytes, mtime 2026-08-23T22:31:05.229Z)
 - Budgets: install 240000 ms, generate 120000 ms, probe 20000 ms per condition mode / 90000 ms + 500 ms per planned claim, capped at 900000 ms, whole phase, verify 90000 ms; concurrency 6
 - Import-environment shim: enabled (client, development and production sessions only; server sessions never)
 
@@ -61,11 +61,12 @@ Outcome classes, raw:
 
 | Blocker (RFC 0002 §3) | Rows raising it | Blocker lines |
 | --- | --- | --- |
-| `kind-observed` | 68 | 160 |
+| `kind-observed` | 69 | 165 |
 | `probe-report-includes-evidence-write` | 50 | 50 |
-| `incompleteness` | 40 | 594 |
+| `incompleteness` | 40 | 592 |
 | `probe-failed` | 15 | 24 |
-| `closure-note` | 7 | 31 |
+| `attested-closure-note` | 5 | 17 |
+| `closure-note` | 2 | 5 |
 
 Attributed to one root cause per row instead. `probe-report-includes-evidence-write` is a *consequence*: `contract probe --write` declines to write evidence once a probe failed or an incompleteness was reported, so verification then sees passing claims that never reached the contract. It is counted as a root cause only on a row where it stands alone.
 
@@ -74,7 +75,8 @@ Attributed to one root cause per row instead. `probe-report-includes-evidence-wr
 | `kind-observed` | 64 |
 | `incompleteness` | 38 |
 | `probe-failed` | 15 |
-| `closure-note` | 4 |
+| `attested-closure-note` | 2 |
+| `closure-note` | 2 |
 
 ## Drivability
 
@@ -85,7 +87,7 @@ Attributed to one root cause per row instead. `probe-report-includes-evidence-wr
 | Passed | 7480/12509 (59.80%) |
 | Failed | 24 |
 | Undriven | 5005/12509 (40.01%) |
-| Incompleteness findings | 594 |
+| Incompleteness findings | 592 |
 
 Undriven claims by reason:
 
@@ -96,9 +98,9 @@ Undriven claims by reason:
 | entrypoint import threw | 634 |
 | no probe form: ownerRequirements | 556 |
 | no probe form: parameter identity | 398 |
-| synthesized call threw | 336 |
+| synthesized call threw | 334 |
 | no probe form: nested return leaf | 257 |
-| synthesized call did not invoke the callback | 228 |
+| synthesized call did not invoke the callback | 227 |
 | no plantable reactive source | 212 |
 | no probe form: asyncBehavior | 100 |
 | probe session wrote no report | 91 |
@@ -109,29 +111,31 @@ Undriven claims by reason:
 | no probe form: callback arguments | 13 |
 | planted write was never re-read | 9 |
 | callback re-ran with nothing written | 6 |
+| probe session hit the per-mode timeout | 3 |
 | callback ownership ambiguous in the driver's read scope | 1 |
 
 ### Why a `kind` observation is missing
 
 `kind` is the one claim schema v1 has no unknown sentinel for, so an unobserved one blocks rather than converting — which makes *why* it was unobserved the number the rule's next revision turns on. An **observation of absence** (`export-missing`: the namespace loaded and the binding was not in it) says the export does not exist in that artifact, so there is no consumer claim about that mode to certify. Every other non-observation is a **gap** — an import that threw, a session that died, a mode never attempted, a mode where no unambiguous summary resolves — and a gap must keep blocking. Every number in this section counts gaps only: a mode that was observed and *disagreed* is a failing claim, and it has its own section below rather than a row here, because amendment A9 forbids the two sharing a number.
 
-- Rows with at least one gap in a stated `kind` mode: 84
-- `kind` obligations with at least one gapped stated mode: 2777
+- Rows with at least one gap in a stated `kind` mode: 85
+- `kind` obligations with at least one gapped stated mode: 3083
 
 | Why the mode produced no passing `kind` observation | (claim, mode) pairs |
 | --- | --- |
 | entrypoint import threw | 3878 |
 | probe session aborted by package code | 2629 |
 | probe session wrote no report | 328 |
+| probe session hit the per-mode timeout | 306 |
 | no unambiguous summary resolves in the mode (no kind claim exists) | 82 |
 | export-missing in this mode | 45 |
 
 | Mode | Gapped `kind` obligations |
 | --- | --- |
 | `server` | 2525 |
+| `client` | 1752 |
 | `production` | 1499 |
 | `development` | 1492 |
-| `client` | 1446 |
 
 ### `kind` claims the probe contradicted
 
@@ -207,9 +211,9 @@ A worker stops at its first throw and the mode is restarted for what is left —
 
 | Figure | Count |
 | --- | --- |
-| Worker processes started | 17336 |
-| Of those, restarts after a throw | 15796 |
-| Sessions that died (crash, timeout, unreadable output) | 63 |
+| Worker processes started | 16822 |
+| Of those, restarts after a throw | 15282 |
+| Sessions that died (crash, timeout, unreadable output) | 64 |
 
 ## The install environment
 
@@ -315,12 +319,12 @@ Of every export the corpus's generated contracts describe:
 
 | Phase | Rows | Median | p90 | Max | Mean |
 | --- | --- | --- | --- | --- | --- |
-| install | 416 | 677 ms | 1517 ms | 20915 ms | 906 ms |
-| generate | 413 | 105 ms | 582 ms | 16213 ms | 419 ms |
-| probe | 396 | 615 ms | 3169 ms | 189372 ms | 2913 ms |
-| verify | 396 | 47 ms | 55 ms | 108 ms | 47 ms |
-| pipelineWithoutInstall | 413 | 804 ms | 3751 ms | 199061 ms | 3257 ms |
-| total | 416 | 1537 ms | 4893 ms | 201383 ms | 4172 ms |
+| install | 416 | 351 ms | 615 ms | 14336 ms | 507 ms |
+| generate | 413 | 121 ms | 667 ms | 18554 ms | 470 ms |
+| probe | 396 | 663 ms | 3242 ms | 202807 ms | 3063 ms |
+| verify | 396 | 52 ms | 61 ms | 81 ms | 52 ms |
+| pipelineWithoutInstall | 413 | 879 ms | 4031 ms | 221421 ms | 3457 ms |
+| total | 416 | 1348 ms | 4962 ms | 221942 ms | 3975 ms |
 
 `install` may run against a warm npm cache, so it is a lower bound; `pipelineWithoutInstall` is the number that describes the checker's own cost.
 
@@ -442,16 +446,16 @@ Generation failures by class:
 | `@solidjs/router@1.0.0|solid1|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x152 |
 | `@solidjs/start-devtools@1.0.0-next.3|solid2|floor` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x2, no unambiguous summary resolves in the mode (no kind claim exists) x1 |
 | `@solidjs/start-devtools@1.0.0-next.3|solid2|head` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x3 |
-| `@solidjs/start@2.0.3|solid1|only` | official-solid | `closure-note` | 19 | closure-note | entrypoint import threw x332 |
+| `@solidjs/start@2.0.3|solid1|only` | official-solid | `closure-note` | 11 | attested-closure-note, closure-note | entrypoint import threw x332 |
 | `@solidjs/testing-library@0.8.10|solid1|only` | official-solid | `probe-failed` | 5 | incompleteness, probe-failed, probe-report-includes-evidence-write | — |
-| `@solidjs/vite-plugin@3.0.0-next.31|solid2|floor` | official-solid | `closure-note` | 1 | closure-note | — |
-| `@solidjs/vite-plugin@3.0.0-next.31|solid2|head` | official-solid | `closure-note` | 1 | closure-note | — |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | official-solid | `probe-failed` | 8 | closure-note, probe-failed, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x35, export-missing in this mode x22, **contradicted** x3 |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | official-solid | `probe-failed` | 8 | closure-note, probe-failed, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x38, export-missing in this mode x22, **contradicted** x3 |
+| `@solidjs/vite-plugin@3.0.0-next.31|solid2|floor` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
+| `@solidjs/vite-plugin@3.0.0-next.31|solid2|head` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
+| `@solidjs/web@2.0.0-rc.1|solid2|floor` | official-solid | `probe-failed` | 8 | attested-closure-note, probe-failed, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x35, export-missing in this mode x22, **contradicted** x3 |
+| `@solidjs/web@2.0.0-rc.1|solid2|head` | official-solid | `probe-failed` | 8 | attested-closure-note, probe-failed, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x38, export-missing in this mode x22, **contradicted** x3 |
 | `@tanstack/ai-solid-ui@0.7.18|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x36 |
 | `@tanstack/charts@0.14.0|solid1|only` | tanstack | `closure-note` | 1 | closure-note | probe session aborted by package code x957, entrypoint import threw x8, no unambiguous summary resolves in the mode (no kind claim exists) x3 |
 | `@tanstack/devtools-a11y@0.2.2|solid1|only` | tanstack | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write | entrypoint import threw x24, **contradicted** x2 |
-| `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | tanstack | `probe-failed` | 4 | closure-note, kind-observed, probe-failed | **contradicted** x1 |
+| `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | tanstack | `probe-failed` | 3 | kind-observed, probe-failed | **contradicted** x1 |
 | `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | tanstack | `probe-failed` | 3 | kind-observed, probe-failed | **contradicted** x1 |
 | `@tanstack/pacer-devtools@1.4.0|solid1|only` | tanstack | `probe-failed` | 5 | kind-observed, probe-failed | **contradicted** x2 |
 | `@tanstack/solid-charts@0.14.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
@@ -473,7 +477,7 @@ Generation failures by class:
 | `@tanstack/solid-start-server@2.0.0-rc.1|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
 | `@tanstack/solid-start@1.168.46|solid1|only` | tanstack | `kind-observed` | 11 | kind-observed | probe session aborted by package code x180, entrypoint import threw x88 |
 | `@tanstack/solid-store@0.11.1|solid1|only` | tanstack | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write | — |
-| `@tanstack/solid-table@9.1.2|solid1|only` | tanstack | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write | — |
+| `@tanstack/solid-table@9.1.2|solid1|only` | tanstack | `incompleteness` | 10 | incompleteness, kind-observed, probe-report-includes-evidence-write | probe session hit the per-mode timeout x306 |
 | `@tanstack/table-devtools@9.2.0|solid1|only` | tanstack | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write | **contradicted** x1 |
 | `motion-solidjs@0.6.0|solid1|only` | motion-solidjs | `incompleteness` | 19 | incompleteness, probe-report-includes-evidence-write | — |
 | `motion-solidjs@0.7.0-beta.4|solid2|head` | motion-solidjs | `incompleteness` | 31 | incompleteness, probe-report-includes-evidence-write | — |
