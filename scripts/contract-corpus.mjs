@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -11,7 +12,12 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
+import { ancestorChainDigest, hashTree, openGateCache } from "./lib/gate-cache.mjs";
+import { gateConcurrency, mapPool } from "./lib/pool.mjs";
+
+const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 const defaultNative = join(root, "rust/target/debug/solid-checker-rust");
@@ -122,66 +128,127 @@ const coverage = join(temporary, "coverage");
 const expectedGenerator = pathToFileURL(
   join(root, "packages/cli/scripts/generate-package-contract.mjs")
 ).href;
-const generated = [];
 
-function runFixture(name) {
+// One coverage directory per fixture, not one shared by all of them.
+//
+// V8 already writes one file per process, so a shared directory is safe to
+// write concurrently -- but it makes the dumps unattributable, and attribution
+// is what the cache needs: a replayed fixture must contribute the coverage
+// *that fixture* produced. Per-fixture directories give that for free and cost
+// nothing.
+const fixtureCoverage = name => join(coverage, name);
+
+/**
+ * The V8 coverage this fixture's processes contributed to the generator.
+ *
+ * Reduced to the one range per function that `generatorCoverage` consumes, so
+ * a cache entry stores a few hundred bytes rather than a full dump.
+ */
+function collectFixtureCoverage(name) {
+  const directory = fixtureCoverage(name);
+  const contributions = [];
+  if (!existsSync(directory)) return contributions;
+  for (const file of readdirSync(directory)) {
+    if (!file.endsWith(".json")) continue;
+    const document = JSON.parse(readFileSync(join(directory, file), "utf8"));
+    for (const script of document.result ?? []) {
+      if (script.url !== expectedGenerator) continue;
+      for (const entry of script.functions ?? []) {
+        const range = entry.ranges?.[0];
+        if (!range) continue;
+        contributions.push({
+          functionName: entry.functionName,
+          startOffset: range.startOffset,
+          endOffset: range.endOffset,
+          count: range.count
+        });
+      }
+    }
+  }
+  return contributions;
+}
+
+async function generate(name) {
   const packageRoot = join(root, "fixtures/package-contracts", name);
   const output = join(temporary, `${name}.json`);
-  const result = spawnSync(
-    process.execPath,
-    [cli, "contract", "generate", "--package-root", packageRoot, "--output", output],
-    {
-      cwd: root,
-      env: {
-        ...process.env,
-        SOLID_CHECKER_NATIVE_BIN: native,
-        SOLID_TYPEFACTS_BIN: typeFacts,
-        NODE_V8_COVERAGE: coverage
-      },
-      encoding: "utf8"
-    }
-  );
-  if (result.status !== 0) {
+  const directory = fixtureCoverage(name);
+  mkdirSync(directory, { recursive: true });
+  // A non-zero exit throws, so nothing is cached for a fixture whose
+  // generation crashed -- the cache never learns a result the run did not
+  // actually produce.
+  try {
+    await run(
+      process.execPath,
+      [cli, "contract", "generate", "--package-root", packageRoot, "--output", output],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          SOLID_CHECKER_NATIVE_BIN: native,
+          SOLID_TYPEFACTS_BIN: typeFacts,
+          NODE_V8_COVERAGE: directory
+        },
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024
+      }
+    );
+  } catch (error) {
     throw new Error(
-      `${name} generation failed:\n${result.stdout}\n${result.stderr}`.trim()
+      `${name} generation failed:\n${error.stdout ?? ""}\n${error.stderr ?? error.message}`.trim()
     );
   }
-  const expectedPath = join(packageRoot, "expected.json");
-  const actual = JSON.parse(readFileSync(output, "utf8"));
+  return {
+    contract: JSON.parse(readFileSync(output, "utf8")),
+    coverage: collectFixtureCoverage(name)
+  };
+}
+
+/** Compares one fixture's generated contract against its checked-in pin. */
+function compare(name, contract) {
+  const expectedPath = join(root, "fixtures/package-contracts", name, "expected.json");
   const expected = JSON.parse(readFileSync(expectedPath, "utf8"));
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  if (JSON.stringify(contract) !== JSON.stringify(expected)) {
     throw new Error(
       `${name} drifted from ${expectedPath}; review the generated contract before updating the pin`
     );
   }
-  generated.push(name);
 }
 
 function lineAt(source, offset) {
   return source.slice(0, offset).split("\n").length;
 }
 
-function generatorCoverage() {
+/**
+ * The generator coverage the corpus achieved, over live and replayed runs alike.
+ *
+ * Why unioning a cache entry's recorded coverage with this run's live coverage
+ * is sound: the cache key includes the content digest of the whole
+ * `packages/cli` tree, which is where the generator lives. A replayable entry
+ * is therefore an entry produced by *these exact generator bytes*, so "this
+ * function executed" is a claim about the same function at the same offsets.
+ * Change the generator and every entry's key changes, so no recorded coverage
+ * can outlive the code it attests. The assertion below then holds over the
+ * union, which is exactly the set of functions the corpus executes -- a warm
+ * cache cannot turn an uncovered claim emitter green, and cannot turn a covered
+ * one red either.
+ */
+function generatorCoverage(contributions) {
   const source = readFileSync(fileURLToPath(expectedGenerator), "utf8");
   const functions = new Map();
-  for (const file of readdirSync(coverage)) {
-    if (!file.endsWith(".json")) continue;
-    const document = JSON.parse(readFileSync(join(coverage, file), "utf8"));
-    for (const script of document.result ?? []) {
-      if (script.url !== expectedGenerator) continue;
-      for (const entry of script.functions ?? []) {
-        const range = entry.ranges?.[0];
-        if (!range) continue;
-        const current = functions.get(entry.functionName) ?? {
-          count: 0,
-          line: lineAt(source, range.startOffset),
-          ranges: []
-        };
-        current.count += range.count;
-        current.ranges.push(range);
-        functions.set(entry.functionName, current);
-      }
-    }
+  for (const entry of contributions) {
+    const range = {
+      startOffset: entry.startOffset,
+      endOffset: entry.endOffset,
+      count: entry.count
+    };
+    const current = functions.get(entry.functionName) ?? {
+      count: 0,
+      line: lineAt(source, range.startOffset),
+      ranges: []
+    };
+    current.count += range.count;
+    current.ranges.push(range);
+    functions.set(entry.functionName, current);
   }
   const claimEmitters = [
     "mergeSummaries",
@@ -207,14 +274,56 @@ function generatorCoverage() {
   return { functions: functions.size, uncoveredRanges: [...zeroRanges] };
 }
 
+// Each fixture is a self-contained package directory the generator reads and
+// nothing writes to, so the fixtures are independent -- and a fixture's
+// generated contract is a function of exactly its tree, the dialect-selection
+// chain above it (the checker walks ancestors for the nearest
+// `node_modules/solid-js`, exactly as coverage's key comment explains), the
+// CLI that generates it, and the two binaries underneath. That is the cache key.
+const cache = openGateCache({
+  gate: "contract-corpus",
+  scriptPath: import.meta.filename,
+  binaries: [native, typeFacts, `${typeFacts}.buildinfo`],
+  trees: [join(root, "packages/cli")]
+});
+const concurrency = gateConcurrency();
+
 try {
-  for (const fixture of fixtures) runFixture(fixture);
-  const coverageResult = generatorCoverage();
+  const computed = await mapPool(
+    fixtures,
+    fixture =>
+      // A thunk, not an array: the tree digest is of mutable state, so the
+      // cache re-evaluates it after `generate` has read the fixture and refuses
+      // to store a unit whose tree moved mid-run. See `openGateCache().run`.
+      cache.run(
+        () => [
+          `fixture:${fixture}`,
+          hashTree(join(root, "fixtures/package-contracts", fixture)),
+          ancestorChainDigest(
+            join(root, "fixtures/package-contracts", fixture),
+            "node_modules/solid-js/package.json"
+          )
+        ],
+        () => generate(fixture)
+      ),
+    { concurrency }
+  );
+  // Comparison against the checked-in pin runs fresh, in fixture order,
+  // whichever fixtures were replayed: `expected.json` is never in the key.
+  const generated = [];
+  const contributions = [];
+  for (const [index, fixture] of fixtures.entries()) {
+    compare(fixture, computed[index].value.contract);
+    contributions.push(...computed[index].value.coverage);
+    generated.push(fixture);
+  }
+  const coverageResult = generatorCoverage(contributions);
   const uncovered = coverageResult.uncoveredRanges.length;
   console.log(
     `contract corpus: ${generated.length} packages, ${uncovered} uncovered generator ranges`
   );
   if (uncovered) console.log(`uncovered ranges: ${coverageResult.uncoveredRanges.join(", ")}`);
+  console.log(`${cache.summary()}; concurrency ${concurrency}`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }
