@@ -2738,7 +2738,11 @@ same 305-row / 416-probe manifest; before = the 2026-08-22 run recorded above).
 > unknown-claim counts and *raised* the "exports proven" figure by certifying
 > something that was not proven. The improvement recorded here is real in
 > direction; part of its magnitude was that inflation. The `corrected` column
-> is the current state and the one to compare future work against.
+> was the current state when this entry was written and is now three measurement
+> states old — see
+> [ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-sixth-measurement-state-release-binary-416-probes)
+> for the current figures, including the outcome classes, which have moved since
+> ("moved once and have not moved since" below was true until 2026-08-24).
 
 | | before | after (superseded) | corrected |
 | --- | --- | --- | --- |
@@ -2766,7 +2770,9 @@ conditional-merge one-sided fix: the engine soundness rounds account for 15
 fully-proven probes and 316 proven exports across 48 probes, and the merge fix
 for 1 probe and exactly 109 exports (108 `returns`, 1 `asyncBehavior`) across 8.
 The per-cause table is in
-[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-23-third-measurement-state-release-binary-416-probes).
+[ecosystem-benchmark.md](ecosystem-benchmark.md#how-the-earlier-states-moved-history),
+under the second → third transition; the heading it used to link to is renamed on
+every measurement pass, so it points at the stable history section instead.
 
 **Fixtures.** `fixtures/package-contracts/unresolved-dispatch-attribution` pins
 the `joined` and `enclosing-chain` rungs and the surviving `callbacks` claim,
@@ -3552,7 +3558,9 @@ so `probe-failed` rises 65 → 75 as a root cause while `kind-observed` falls
   above and in "[Closed 2026-08-23: execution-kind vocabularies, tracked-wrapper
   schedules, and one parameter with two
   executions](#closed-2026-08-23-execution-kind-vocabularies-tracked-wrapper-schedules-and-one-parameter-with-two-executions)"
-  below, not here. **Re-measured 2026-08-23: 159 → 10 of 63.**
+  below, not here. **Re-measured 2026-08-23: 159 → 10 of 63. Re-measured
+  2026-08-24: 11 of 24, the 53 `kind` failures having fallen to 13 in the same
+  run, so neither class dominates any longer.**
 
 ## Closed 2026-08-23: `contract verify` refused without writing anything down
 
@@ -3624,6 +3632,13 @@ The cost is stated there and here: 445 `callbackExecution` rows and 67 proven
 exports withdrawn from the generated corpus, and 12 of the 15 verified rows that
 carried probed behavioral evidence lost it, because 22 of those 25 markers had
 been promoted from observations made in a runtime that re-runs nothing.
+
+**Re-measured 2026-08-24.** The class is **11 of 24** failing claims and the
+corpus verifies at **267/416 (64.18%)**. The one claim it gained is a genuine
+finding the previous state could not see: `@solidjs/testing-library@0.8.10`'s
+`testEffect callbacks[0]=deferred`, observed `inline`, reachable only once 48 of
+that package's exports stopped being unobservable `kind: "value"` summaries. Its
+ten predecessors are unchanged claim-for-claim.
 
 ### A clearing wrapper stays `inline`
 
@@ -3978,3 +3993,367 @@ by the four regression tests added to `scripts/pool.test.mjs` in the same change
 set (unattributable message, idle death, queued-task settling on close, fatal
 answer), and the self-referential `threadId` assertion is replaced. It is
 recorded here only so the review's numbering has no silent gaps.
+
+## The `kind` claim a bundled artifact contradicts (2026-08-23)
+
+The corpus measurement's 53 failing `kind: claimed value, observed function`
+claims (`benchmarks/ecosystem/verification-report.json`) were two generator
+defects, not a sentinel gap. Both are fixed here; the RFC 0002 amendment's
+honesty check stands — no contradicted `kind` was absorbed into an unknown,
+because `kind` still has none.
+
+**1. A bundler's class expression (45 of the 53).** The exported-class fix read
+declaration kinds and class-name spans, which is what *source* contains.
+Rolldown, esbuild and tsdown all lower `export class C {}` to `var C = class
+{ … }` and re-export it by specifier, so a published artifact has an
+**anonymous** class expression and a variable declarator: no class-name span
+covers the exported binding, and `nonCallable` is the truthful callability of a
+class type. Every class-shaped failing row had exactly that shape —
+`ReactiveMap`/`ReactiveWeakMap`, `ReactiveSet`/`ReactiveWeakSet`,
+`TriggerCache`, `ResponseEnvelope`, `SelectionManager`, `ListCollection`,
+`AsyncBatcher`/`Debouncer`/`Queuer`/`RateLimiter`/`Throttler`, and the
+`*DevtoolsCore`/`*DevtoolsPanel` family. The initial diagnosis — a re-export
+hop the alias walk could not follow — was wrong: `@tanstack/pacer@0.22.0`'s `.`
+entrypoint was already correct (its barrel's imports resolve to `batcher.d.ts`,
+whose `declare class` the alias walk does reach) while `./batcher`, the same
+class entered through the `.js` artifact, was not. `BindingFact` now carries
+`initializer_class`, and it decides class-ness for a plain-identifier
+declarator.
+
+**2. A `kind` no closed type answers (the other 8).** `@solid-devtools/locator@0.16.7`'s
+`addClickInterceptor`, `addHighlightingSource`, `addLocatorModeSource`,
+`highlightedComponent`, `highlightingEnabled`, `locatorModeEnabled`,
+`setTarget` and `useLocator` are destructured from a value whose type comes
+through an untyped dependency, so Type Facts answers `Callability::Unknown`.
+`promote_callable_export`/`promote_entry_callable` treated that exactly like
+`NonCallable` and published `kind: "value"` — and because `validate_export`
+bars a `value` summary from carrying any claim domain, that is the **maximal
+certified negative**: reads nothing reactive, returns nothing reactive, invokes
+no caller-supplied callback, requires no owner. For functions whose whole
+purpose is to take a callback. This was a live wrong-claim class in ordinary
+`inferred` contracts, independent of verification. Generation now refuses the
+entrypoint instead, through the existing refusal path.
+
+Reproduced before and after against the pinned real packages:
+`@tanstack/pacer@0.22.0` and `@tanstack/solid-pacer@0.22.0` (20 rows across 11
+entrypoints, `value` → `function` with `callbacks: {"status":"unknown"}`),
+`@solid-primitives/trigger@3.0.0-next.2` (`TriggerCache`), and
+`@solid-devtools/locator@0.16.7` (now refused, with no wrong claim published).
+
+Remaining fail-closed and residual cases:
+
+- **A location with no callability fact at all keeps `value`.**
+  `demand_plan.rs` requests callability exactly where it requests a type
+  descriptor, so `entity.callability == None` is missing evidence about the
+  span, not an answer about the type; refusing on it would refuse for a
+  demand-coverage accident rather than for an unprovable kind. Closing it means
+  widening the demand plan for export-specifier spans first, then measuring.
+
+  **This hole is narrower than it was first described.** An adversarial review
+  could construct no shape that publishes a `value` through it:
+  `demand_plan.rs:130-135` demands `type_descriptor`, and therefore
+  callability, for *every* export specifier and declaration, and
+  `entry_export_entity` only ever looks at those spans — relative `export *`,
+  `export * as ns`, renamed specifiers, string export names,
+  `export default <expr>` and destructured `export const { … }` were all tried
+  and all refused. Bare-specifier `export *` bottoms out in dependency-contract
+  recursion, which is the carried path below rather than an undemanded publish.
+  So the residual publish-without-proof risk is a carried claim, not the demand
+  plan. `export_kind_proof`'s `Undemanded` arm is still the correct fail-open
+  for an absent fact; it is simply not a reachable publisher today.
+- **A locally declared type exported by specifier still refuses.**
+  `export type { T }` and `export interface T {}` are dropped by their
+  `type_only` marker, and an unmarked re-export is now dropped by following the
+  relative import/re-export chain to a `type_only` export of the same name
+  (`export_is_type_only` in the backend). `interface T {} export { T }` has no
+  `type_only` fact anywhere: the interface is not an exported *declaration*, so
+  nothing records that its name is type space. Reproduced: such a package still
+  refuses its entrypoint. Closing it means recording type declarations in
+  solid-facts (an `AstFacts` addition next to `classes`), which is a fact-domain
+  change rather than a generator one.
+- **`Callability::Mixed` refuses rather than describing the union.** A union
+  with callable and non-callable constituents has no single `typeof`, and
+  schema v1 has no way to say "either". Refusal is right for the document, but
+  a consumer of such an entrypoint loses every other export's claim with it.
+- **The project-wide analysis map keeps the `value` default.**
+  `promote_callable_export` feeds `Program::contract_exports`, cannot refuse,
+  and so still records `value` for an unprovable kind. Emission is what
+  refuses, and every real `contract generate` invocation goes through it
+  (`--contract-entry-file` is always passed); the `contract_entry_file`-empty
+  emission mode does not, and would publish that default.
+- **A carried summary is trusted on provenance, not on trust.** A dependency
+  contract's `kind` is not re-decided locally *when* that contract was either
+  generated by this same run from the dependency's own sources
+  (`--generated-contract`) or carries evidence that a human or a verifier stood
+  behind it. That is the right call for those two — the local facts are
+  strictly worse — but it does mean a wrong `kind` in a *reviewed* dependency
+  contract propagates into every package that re-exports it.
+
+  **A contract with neither provenance was the laundering channel, and is
+  closed.** `dependencyContracts()`
+  (`packages/cli/scripts/generate-package-contract.mjs:766`) discovers
+  `node_modules/<dep>/solid-reactivity.json` by walking upward with no
+  `--contract` flag and no evidence check, so an `inferred` contract written by
+  any earlier solid-checker — including one with the `Unknown ⇒ value` defect
+  this pass fixes — carried its `kind` verbatim. Reproduced: an untyped
+  dependency with a hand-written `inferred` contract calling
+  `addClickInterceptor(fn)` a `value` republished that exact
+  `@solid-devtools/locator` claim through the one door the refusal left open.
+  Such a contract's `kind` now goes through `export_kind_proof` like a local
+  claim (`fixtures/package-contracts/carried-value-kind`'s `./laundered`
+  entrypoint, refused; `addTypedInterceptor` on `.`, corrected to `function`).
+  Only `kind` is gated this way — every other claim in a discovered contract is
+  used as before, because a contract is the only evidence there is about a
+  package the project cannot see into.
+
+**The measured residue of these two fixes.** First reproduced package by package
+with the benchmark's own install shape (`buildSpecs`: the pinned package plus the
+pinned Solid runtime), which put 36 of the 53 rows as resolved and 17 as still
+wrong. **Superseded 2026-08-24 by the full-corpus run**, which is the authority
+here because it exercises every row rather than the ones the reproduction chose:
+**40 of the 53 are resolved — 25 corrected to `kind: "function"` and 15 withdrawn
+because their entrypoint is now refused — and 13 remain wrong.** The
+per-reproduction table below is corrected against
+`benchmarks/ecosystem/verification-report.json`; three rows moved against the
+reproduction's prediction. `@tanstack/form-devtools`'s `./production` entrypoint
+refuses (the reproduction expected neither of its two to);
+`@tanstack/ai-devtools-core`'s two rows were counted as remaining `value` when in
+fact the whole package is refused; and `@tanstack/solid-table-devtools`'s one row
+resolves by *refusal* rather than by correction — its `.` entrypoint is refused
+and the row verifies on the other one.
+
+| Package (probe pin) | Rows | After (measured 2026-08-24) |
+| --- | --- | --- |
+| `@kobalte/core@0.13.13` | 4 | `function` |
+| `@solid-primitives/map@1.0.0-next.2` | 4 | `function` |
+| `@solid-primitives/set@1.0.0-next.2` | 4 | `function` |
+| `@solid-primitives/trigger@3.0.0-next.2` | 2 | `function` |
+| `@tanstack/solid-pacer@0.22.0` | 10 | `function` |
+| `@tanstack/devtools@0.14.2` | 1 | `function` |
+| `@solid-devtools/locator@0.16.7` | 8 | refused (whole package) |
+| `@tanstack/ai-devtools-core@0.5.6` | 2 | refused (whole package) |
+| `@tanstack/solid-hotkeys-devtools@0.7.0` | 1 | refused (whole package) |
+| `@tanstack/table-devtools@9.2.0` `.` | 1 | refused (1 of 2 entrypoints) |
+| `@tanstack/hotkeys-devtools@0.9.0` `.` | 1 | refused (1 of 2 entrypoints) |
+| `@tanstack/solid-table-devtools@9.2.0` `.` | 1 | refused (1 of 2 entrypoints) |
+| `@tanstack/form-devtools@1.0.0-alpha.2` `./production` | 1 | refused (1 of 2 entrypoints) |
+| `@solidjs/web@2.0.0-rc.1` `ResponseEnvelope` | 6 | **still `value`** |
+| `@tanstack/*-devtools` `*DevtoolsCore` | 7 | **still `value`** |
+
+The seven surviving `*DevtoolsCore` rows are `@tanstack/devtools-a11y@0.2.2`
+(`./core` and `./core/production`), `@tanstack/pacer-devtools@1.4.0` (`.` and
+`./production`), `@tanstack/form-devtools@1.0.0-alpha.2`'s `.`, and the
+`./production` entrypoint of `@tanstack/hotkeys-devtools@0.9.0` and
+`@tanstack/table-devtools@9.2.0`. In every one of those packages the *sibling*
+entrypoint refuses and this one does not, which is the reason split measured
+directly: the refused sibling reports *"which destructures a member of another
+value"* or *"whose runtime kind no closed type answers (Unknown)"*, while the
+survivor reaches the class only as a **tuple element type** and so gets a truthful
+`NonCallable`. 25 + 15 + 13 = 53.
+
+The residue is **one family**, not two shapes: a binding whose *type* is a
+class but which the syntax reaches only through a value expression, so
+`Callability::NonCallable` is the truthful call-signature answer and no
+class-ness fact contradicts it. The measured instances:
+
+- `const ResponseEnvelope = /* @__PURE__ */ (() => { class ResponseEnvelope
+  {…}; ResponseEnvelope.prototype[ENVELOPE] = true; return ResponseEnvelope;
+  })()` — the IIFE a bundler emits for a class with static prototype patches.
+  The initializer is a *call*, so no syntactic hop reaches the class. **Still
+  publishes `value`.**
+- `const coreClasses = constructCoreClass(Component.preload); const
+  TableDevtoolsCore = coreClasses[0]` — the class is a tuple *element type*
+  declared in `@tanstack/devtools-utils`, reachable only through the type, and
+  the binding is a member access on a plain-identifier declarator. **Still
+  publishes `value`.**
+- `const { Inner } = Container` (a static class member) and
+  `const [Core] = pair` (a tuple element whose element type is a class) — the
+  same family behind a *binding pattern*. An adversarial review found these
+  after the first measurement, and one of them was a regression: pre-fix the
+  ungated `binding_initializer_symbol` hopped `Inner → Container → class` and
+  answered `function` by accident, while the shape gate — which is right, since
+  `const { name } = class Named {}` is a string — made it a certified negative.
+  **Refused now, not published:** for a destructuring pattern the class search
+  cannot run at all, so `nonCallable` is not a `value` proof
+  (`ExportKindProof::DestructuredMember`).
+
+The cost of that last refusal, stated plainly: a destructured binding whose
+type really is a primitive — `(class Named {}).name`, a string — is provably
+not a function and is refused with the rest. Two facts would separate it, and
+neither is demanded at an export-specifier span today: `primitive_value_domain`
+(a demand-plan widening, measurable) or the constructability fact below.
+
+No amount of further syntax chasing closes the first two: there is no class
+expression anywhere in the analyzed package. The exact fix is a
+**constructability fact** — `GetSignaturesOfType(…, SignatureKindConstruct)`
+beside the existing `Callability` in the Type Facts producer. With it, `kind`
+reduces to one rule (callable or constructable ⇒ `function`; neither ⇒
+`value`; no closed answer ⇒ refuse), the whole syntactic class-ness search in
+`binding_declares_class` becomes redundant, and the destructured-pattern
+refusal above becomes a decision. That is a producer change at a pinned
+revision (`typefacts` rev `e2f7ac5`), so it belongs to a deliberate pin move
+per docs/monorepo.md, not to this pass.
+
+Two consequences of the refusal path that the next corpus measurement will
+see, and should not be read as regressions:
+
+- **Newly refused entrypoints. Measured 2026-08-24, and four times wider than
+  this entry first estimated.** The estimate was "five entrypoints across twelve
+  real packages"; the full corpus reports **21 newly refused entrypoints across 19
+  probe rows and 17 distinct packages**. Of those, **11 rows (9 packages, since
+  `@solid-primitives/platform` contributes three) lose every entrypoint they had**
+  and so fail generation outright, and **9 further entrypoints** are omitted from
+  a contract that still emits. `@kobalte/core` (69 entrypoints), `@solidjs/web`
+  (13) and `@tanstack/pacer` (14) gained no refusal at all, as predicted.
+
+  The estimate was narrow because it was reproduced only against the packages
+  that already had a *failing* `kind` claim. Most of the refusals are somewhere
+  else entirely, and they are a distinct backlog item recorded below
+  ("[The refusal path costs enums and untyped values, measured
+  2026-08-24](#the-refusal-path-costs-enums-and-untyped-values-2026-08-24)").
+- **The ecosystem classifier has no marker for these refusals yet.** Confirmed by
+  measurement: all 11 all-refused packages landed in `unclassified`, with their
+  full stderr retained, which is what made them diagnosable from the completed
+  run. `scripts/ecosystem-benchmark/lib/classify.mjs` is the benchmark's own
+  taxonomy and is left to the measurement pass; the two marker texts to key on
+  are exactly `whose runtime kind no closed type answers` and
+  `which destructures a member of another value`. Only an *all-refused* package
+  reaches `unclassified` at all — a partial refusal is classified from the
+  generator's own "N entrypoint(s) refused and omitted" note, independently of
+  the reason text, and all 9 partials were classified that way — and
+  `unclassified` is a report bucket, not a gate failure. Both phrases are pinned
+  by assertions in rust/crates/solid-facts-backend/tests/contracts_process.rs, so
+  the coupling cannot rot silently.
+
+**Re-measured after the adversarial review's fixes.** Reproduced against the
+same local installs: `@tanstack/pacer@0.22.0` (14 entrypoints, 75 exports) and
+`@tanstack/solid-pacer@0.22.0` (13 entrypoints, 108 exports) move **no export
+at all** from the numbers above, and `@solid-devtools/locator@0.16.7` still
+refuses with the same message. `@tanstack/solid-pacer`'s `./types` entrypoint is
+refused for an unrelated pre-existing reason (its dependency contract has no
+entrypoint matching `@tanstack/pacer/types`), not by any `kind` decision.
+
+**The corpus-level cost and gain, measured 2026-08-24.** The full ecosystem
+benchmark was re-run against a release build of this change set
+(`34e97be60c60291debbae66239082cd1e252ff53831f7f1eb977647207f31aec`), both
+harnesses, all 416 probe rows. Machine verification: **261 → 267 verified**
+(+13 rows gained, −7 lost, none moved `verified → refused`), **146 → 129
+refused**, failing claims **63 → 24**, and generation failures **4 → 15**.
+Contract content: exports proven **5,410/8,358 → 4,444/8,082**, exports carrying
+an unknown **2,948 → 3,638**, probes fully proven **205/409 → 125/398**. The
+arithmetic closes exactly — proven −966 = 276 exports that stopped existing plus
+690 that moved to unknown, and exports-with-unknown +690 — so nothing in the
+movement is unattributed. Both numbers are stated once, with the family
+breakdowns, in
+[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-sixth-measurement-state-release-binary-416-probes).
+
+## The refusal path costs enums and untyped values (2026-08-24)
+
+**Open.** The `kind` refusal above is the right call for the *document* and it is
+much more expensive than the entry that introduced it estimated, because most of
+what it refuses is not a class at all. Measured across the full corpus: 21 newly
+refused entrypoints, 11 probe rows failing generation outright, 9 further
+entrypoints omitted from a contract that still emits. Every refusal's reason was
+read back from the review plan of a fresh generation against the pinned package,
+not inferred: **17 report `whose runtime kind no closed type answers (Unknown)`
+and 4 report `which destructures a member of another value`**. Only **6 of the 21
+name a class-shaped export** — the `*DevtoolsCore` / `*DevtoolsPanel` family the
+fix was written for. The other 15 are exports that are **provably not functions,
+and whose own published `.d.ts` says so**, refused because the analyzed `.js`
+artifact leaves `Callability::Unknown`.
+
+Three shapes, each reproduced against the pinned real package:
+
+- **A downleveled TypeScript enum** — five packages, and the single largest
+  cause. `@kobalte/utils@0.9.2`'s `EventKey`,
+  `@solid-primitives/audio@1.4.5`'s `AudioState`,
+  `@solid-primitives/intersection-observer@2.2.5`'s `DirectionX`,
+  `@solid-primitives/analytics@0.2.1`'s `EventType` and
+  `@solid-primitives/cookies-store@1.1.11`'s `CookieSitePolicy`. Every one is
+  published as `var E; (function (E) { E[E.A = 0] = "A"; … })(E || {});` with
+  `export declare enum E` in the sibling `.d.ts`. The declarator has no
+  initializer, so no syntactic hop reaches a type and no callability fact closes.
+  Each of these five is a *single* export that costs its package its only
+  entrypoint.
+- **A value computed from an untyped global.**
+  `@solid-primitives/platform@0.2.1` and `@1.0.0-next.2` (three probe rows)
+  refuse on `isBrave`, which is
+  `export const isBrave = !!n.brave && n.brave.isBrave && …` in the artifact and
+  `export declare const isBrave: boolean` in the declaration.
+- **`Object.assign(Object.create(null), …)`.** `solid-js@1.9.14`'s **`./web`**
+  entrypoint — 76 exports, including `render`, `hydrate`, `Portal` and `Dynamic`
+  — is refused because `web/dist/server.js` has
+  `const Aliases = Object.assign(Object.create(null), { … })`. `Object.create(null)`
+  is `any`, so the `Object.assign` result is `any`. The declaration says
+  `Record<string, string>`. **This is the most consequential single refusal in the
+  corpus**: `solid-js` is the anchor package, and a project generating its own
+  `solid-js` contract now gets no `./web` claims at all. It does not affect the
+  bundled 1.x contract, which is checked in rather than generated per project.
+- **A destructured member that is not a class either.**
+  `@solid-devtools/ui@0.10.3`'s `./theme` refuses on `color`, reported as
+  *"which destructures a member of another value, so no fact here rules out a
+  class"*. It is a theme colour table, and the refusal is the deliberate cost the
+  `ExportKindProof::DestructuredMember` bullet above already states — measured
+  here rather than hypothesised.
+
+What all four have in common is that **the fact is present in the package and
+the analysis does not reach it**. `export_kind_proof` asks the analyzed
+implementation for a call signature and gets no closed answer; the `.d.ts` beside
+it answers definitively. Two candidate closures, in order of how much they buy:
+
+1. **A constructability fact** —
+   `GetSignaturesOfType(…, SignatureKindConstruct)` beside the existing
+   `Callability` in the Type Facts producer — is already recorded above as the
+   fix for the *class* residue. It does **not** close this one: an enum object and
+   `isBrave` are neither callable nor constructable, so the rule "callable or
+   constructable ⇒ `function`; neither ⇒ `value`; no closed answer ⇒ refuse"
+   still refuses them, because `Callability::Unknown` is the absence of an answer
+   rather than a `NonCallable` one.
+2. **A `primitive_value_domain` or object-literal-domain fact at an export
+   specifier span**, which the demand plan does not request today. This is the one
+   that would actually close it, and it is the same demand-plan widening the
+   destructured-pattern refusal above needs. It is measurable: the 17
+   `Callability::Unknown` refusals are a concrete before/after target.
+
+Until then this is a stated, measured cost rather than a silent one. **The
+direction is still correct** — a `kind: "value"` summary is barred from carrying
+any claim domain, so publishing one for an unprovable kind certifies "invokes no
+caller-supplied callback" about an export nobody analyzed — and losing a
+whole package's contract is a strictly better failure than publishing a false
+negative for it. But "refused because we could not tell an enum from a function"
+is a *demand-coverage* limit dressed up as a soundness result, and the entry
+above should not be read as though the seventeen packages were doing something
+wrong.
+
+## `export * as ns` loses its alias (2026-08-24)
+
+Pre-existing, out of scope for the `kind` pass that found it, and real.
+`rust/crates/solid-facts/src/ast/mod.rs:1986` records an `ExportAllDeclaration`
+without `declaration.exported`, so `export * as ns from "./m"` is
+indistinguishable from `export * from "./m"` everywhere downstream:
+`ExportFact { kind: All, module: Some("./m") }` in both cases.
+
+**Reproduced.** A package whose only entrypoint is
+
+~~~ts
+// index.ts
+export * as ns from "./typed.js";
+// typed.ts
+export function f(cb: () => void): void { cb(); }
+export const v = { a: 1 };
+~~~
+
+publishes `f` (with a `callbacks` row) and `v` — two names the package does not
+export — and omits `ns`, the one it does. Both halves are wrong in the
+dangerous direction: claims filed under names that do not exist, and no claim
+at all for the name a consumer actually imports. A consumer of
+`import { ns } from "pkg"` then reads `ns.f(cb)` against no contract row.
+
+The fix is two-sided: record the alias on `ExportFact` (a new optional field,
+so no snapshot moves for the unaliased form), and teach
+`exported_names_for_file` and `external_export_summary_for_file` that an
+aliased `export *` contributes exactly one name whose value is a namespace
+object. Schema v1 has no namespace `kind`, so the honest first step is probably
+to refuse such an entrypoint rather than publish the members under the wrong
+names — which is what the `kind` refusal already does for the `./ns` case in
+that experiment, but for the wrong reason.
