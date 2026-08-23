@@ -62,7 +62,7 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # rust/dialects/solid-v1/compiler) sits on top of all of the above; an earlier
 # main briefly lacked it, so verify it is present before moving this rev again.
 solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "ad2c9452041c757138bb972416d8abc4798ea6b9", default-features = false }
-typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "479b74159f86e538cfecad327b508ff864d1d764" }
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4" }
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"
 oxc_ast = "0.118"
