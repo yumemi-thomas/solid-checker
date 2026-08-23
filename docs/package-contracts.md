@@ -780,6 +780,118 @@ demand-sensitive: constructing with no callable argument is still clean.
 `fixtures/package-contracts/exported-class` pins the three resolution shapes
 and the `kind: "value"` negative.
 
+**A class expression counts, because that is what ships.** Rolldown, esbuild
+and tsdown all lower `export class C {}` to a `var` bound to an *anonymous*
+class expression, and re-export it by specifier. In that artifact no
+class-name span covers the exported binding and no alias hop reaches a class
+declaration, so reading only declaration kinds and class-name spans left every
+bundled class `kind: "value"` — 45 of the 53 failing `kind` claims in the
+corpus measurement, across Solid Primitives (`ReactiveMap`, `ReactiveSet`,
+`TriggerCache`), `@solidjs/web` (`ResponseEnvelope`), `@kobalte/core`
+(`SelectionManager`) and `@tanstack/*` (`AsyncBatcher`, `Debouncer`, `Queuer`,
+`Throttler`, the `*DevtoolsCore` family). The fact that answers it is the
+declarator's own initializer shape (`BindingFact::initializer_class`), gated on
+the binding being a plain identifier: an object pattern destructures a
+*member* of the class expression, and `(class Named {}).name` is a string. It
+is also gated on nothing rewriting the binding — `var C = class {}; C = { … }`
+holds an object, and a `function` claim there is contradicted by the probe in
+the inverse direction; a *member* write such as `C.marker = true`, which is
+what static-field and decorator lowering emits, leaves `C` a class.
+`fixtures/package-contracts/class-expression-kind` pins the entry-file, `.js`
+barrel-hop and package-boundary shapes.
+
+**When no closed type answers `kind`, the entrypoint is refused.** A bare
+`kind: "value"` summary is the *maximal certified negative*: `validate_export`
+bars a `value` summary from carrying any claim domain, known or unknown, so it
+asserts that the export reads nothing reactive, returns nothing reactive,
+invokes no caller-supplied callback and requires no owner. Publishing one
+therefore needs a proof that the export is not a function, not merely the
+absence of a proof that it is. `Callability::Unknown` (an `any`, `unknown`,
+`never` or error type — what an untyped dependency leaves behind in a published
+`.js` artifact) and `Callability::Mixed` (a union with callable *and*
+non-callable constituents) are both the absence of that proof, and treating
+either as `value` is how `@solid-devtools/locator@0.16.7` published "invokes no
+caller-supplied callback" for `addClickInterceptor(fn)` and
+`addHighlightingSource(fn)` — the remaining 8 of those 53 rows. Since `kind`
+has no sentinel, the honest outcome is the existing refusal path below: the
+entrypoint is omitted and a consumer of it gets an explicit uncertifiable
+result.
+
+**`nonCallable` is not the same claim as "not a function".** It says the type
+has no *call* signature, which is exactly what a class type says too — the
+whole reason the syntactic class search above exists. Where that search can
+run and finds nothing, `nonCallable` is a `value` proof. Where it cannot run at
+all it is not, and a **destructuring pattern** is precisely that shape:
+`identifier_binding_at` deliberately refuses to follow one, because
+`const { Inner } = Container` binds a *member* of `Container` and
+`const { name } = class Named {}` binds a string, so neither the initializer's
+symbol nor its class-ness says anything about the name. `const { Inner } =
+Container`, a static class member, and `const [Core] = pair`, a tuple element
+whose element type is a class, were both published as the maximal certified
+negative for constructors that invoke their callback. Such a binding is now
+refused (`ExportKindProof::DestructuredMember`), and
+`fixtures/package-contracts/class-expression-kind`'s `./destructured`
+entrypoint pins it. The cost is a destructured binding whose type really is a
+primitive: `(class Named {}).name` is a string and is refused with the rest,
+because separating them needs a fact this analysis does not demand at an
+export-specifier span. Recorded in
+[docs/precision-backlog.md](precision-backlog.md).
+
+**A raise to `kind: "function"` always leaves `callbacks` unknown.** Both
+raises reach `raised_function_export` with a summary that still said `value`,
+which is exactly the state in which no function body was summarized for the
+export — a class never has one, and a callable binding that had one would
+already carry its analysis's claims and never be raised. Publishing the raise
+with every domain absent therefore certified "invokes no caller-supplied
+callback, returns nothing reactive, requires no owner" for a body this run
+never read. The raise corrects a wrong `kind`; it cannot also be read as
+evidence about behavior.
+
+**Two boundaries on the refusal.** A summary **carried from a dependency
+contract** keeps its kind, but only on provenance the document cannot fake
+(`PackageContract::kind_claims_are_trusted`): either this generation run
+produced that contract itself from the dependency's own installed sources under
+this same rule — the generator passes those with `--generated-contract`, never
+`--contract` — or its `evidence.kind` records that a human or a verifier stood
+behind its claims (`reviewed`, `verified`, `trusted`, `attested`). Re-deciding
+such a kind here, with the dependency's implementation outside the project and
+its specifier consequently `any`, would refuse exactly the entrypoints that
+already have the better answer.
+
+A contract with *neither* provenance is a document of unknown origin.
+`dependencyContracts()` discovers `node_modules/<dep>/solid-reactivity.json`
+by walking upward with no flag from the user, so an `inferred` contract written
+by any earlier solid-checker — including one with the `Unknown ⇒ value` defect
+this rule closes — arrives indistinguishable from a reviewed one. Its `kind`
+goes through this decision like a local claim: corrected where the consumer's
+own facts prove it, refused where they do not. Every *other* claim in such a
+contract is used exactly as before; only `kind` is gated, because only `kind`
+has no unknown sentinel to fall back on.
+`fixtures/package-contracts/carried-value-kind` pins all three directions.
+
+And a location carrying **no callability fact at all** keeps today's `value`:
+`demand_plan` requests callability exactly where it requests a type
+descriptor, so absence there is missing evidence about the span rather than an
+answer about the type, and refusing on it would refuse for a demand-coverage
+accident. That residue is recorded in
+[docs/precision-backlog.md](precision-backlog.md).
+
+**An unmarked type-only re-export is omitted, not refused.** `export type
+{ T }` and `export interface T {}` say what they are, and generation drops them
+by that marker. `import { Options } from "./types.js"; export { Options }` is
+equally legal and says nothing at the export site — and at that span no
+producer fact separates it from a value whose type is unresolvable: callability
+is `Unknown`, `runtime_identity` is empty, `reference_space` is structurally
+`Neither`, and the declaration kind is the catch-all `"declaration"` for both.
+Left to the kind decision it refused the whole entrypoint, costing every real
+export beside it for a name with no runtime existence to describe. So
+generation follows the same relative re-export and import chain it already
+walks for dependency summaries, and omits a name whose every export along that
+chain is `type_only`. Fail-closed by construction: a chain that leaves the
+project (a bare specifier, an unresolvable relative path) or that the walk
+cannot see (`interface T {} export { T }`, where no `type_only` specifier
+covers the local declaration) proves nothing and stays with the refusal.
+
 **A summary-level marker does not outlive its claims.** `writeProbeEvidence`
 computes the export summary's own `probed` marker from the `callbacks[]` rows
 and the top-level `returns`. When those claims are converted here — or deleted

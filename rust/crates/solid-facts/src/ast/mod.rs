@@ -313,6 +313,20 @@ pub struct BindingFact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call_initializer: Option<Span>,
     pub initializer_function: bool,
+    /// Whether the initializer is a class expression — `const C = class {}`,
+    /// which is what every bundler emits for a `class C {}` declaration it
+    /// hoists into a module scope. No [`ClassFact::name`] covers the
+    /// declarator's own span, because the class expression is anonymous; see
+    /// [`ClassFact`] for why callability cannot answer this either.
+    ///
+    /// A fact about the *initializer*, and only about it. It says the
+    /// declarator was initialized with a class, not that the binding still
+    /// holds one: `var C = class {}; C = { … }` sets this and holds an object.
+    /// A consumer concluding `typeof C === "function"` therefore has to add
+    /// [`BindingFact::immutable`] or [`AstFacts::assignments`] — see
+    /// `binding_is_reassigned` in solid-reactive-ir.
+    #[serde(default)]
+    pub initializer_class: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer_identifier: Option<NamedSpan>,
 }
@@ -1047,6 +1061,7 @@ struct BindingMetadata {
     initializer: Option<OxcSpan>,
     call_initializer: Option<OxcSpan>,
     initializer_function: bool,
+    initializer_class: bool,
     initializer_identifier: Option<NamedSpan>,
     immutable: bool,
 }
@@ -1241,6 +1256,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             initializer: metadata.initializer.map(span),
             call_initializer: metadata.call_initializer.map(span),
             initializer_function: metadata.initializer_function,
+            initializer_class: metadata.initializer_class,
             initializer_identifier: metadata.initializer_identifier,
         }
     }
@@ -1715,6 +1731,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
             )
         });
+        // A class *expression* initializer, peeled of TypeScript sugar exactly
+        // as `initializer_function` is: `const C = class {}` binds a class,
+        // and `const C = class {} as Ctor` still does. A call, an object or any
+        // other expression is a different runtime value.
+        let initializer_class = declaration.init.as_ref().is_some_and(|expression| {
+            matches!(
+                expression.get_inner_expression(),
+                Expression::ClassExpression(_)
+            )
+        });
         let initializer_identifier = declaration.init.as_ref().and_then(|expression| {
             let Expression::Identifier(identifier) = expression.get_inner_expression() else {
                 return None;
@@ -1736,6 +1762,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 initializer,
                 call_initializer,
                 initializer_function,
+                initializer_class,
                 initializer_identifier,
                 immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
             },
@@ -2714,6 +2741,67 @@ class Box { helper() { return fn(); } }
         assert!(callees.contains(&Some("solid.createEffect")));
         assert!(callees.contains(&Some("factory")));
         assert!(callees.contains(&None));
+    }
+
+    /// A bundler lowers `export class C {}` to `var C = class { … }`. Nothing
+    /// else in the artifact says the binding is a class: the class expression
+    /// is anonymous, so no `ClassFact::name` covers the declarator, and a
+    /// class type is truthfully `nonCallable` to the checker. Only the
+    /// initializer shape answers it — and only for the plain identifier form,
+    /// because an object pattern binds a *member* of the class.
+    #[test]
+    fn records_class_expression_initializers_but_not_their_members() {
+        let source = r#"
+var Anonymous = class {};
+const Named = class Inner {};
+const Asserted = class {} as unknown;
+class Declared {}
+const Aliased = Declared;
+const built = makeClass();
+const { name } = class Other {};
+"#;
+        let facts = extract("classes.ts", source).unwrap();
+        let initializer_class = |name: &str| {
+            facts
+                .bindings
+                .iter()
+                .find(|binding| {
+                    binding.names.iter().any(|bound| {
+                        source.get(bound.span.start as usize..bound.span.end as usize) == Some(name)
+                    })
+                })
+                .map(|binding| binding.initializer_class)
+        };
+
+        assert_eq!(initializer_class("Anonymous"), Some(true));
+        assert_eq!(initializer_class("Named"), Some(true));
+        assert_eq!(initializer_class("Asserted"), Some(true));
+        assert_eq!(initializer_class("Aliased"), Some(false));
+        assert_eq!(initializer_class("built"), Some(false));
+        // The binding is a class expression's `name`, a string. The fact is
+        // recorded on the declarator, so consumers gate on the binding shape.
+        assert_eq!(initializer_class("name"), Some(true));
+        assert_eq!(
+            facts
+                .bindings
+                .iter()
+                .find(|binding| binding.names.iter().any(|bound| source
+                    .get(bound.span.start as usize..bound.span.end as usize)
+                    == Some("name")))
+                .map(|binding| binding.shape),
+            Some(BindingShape::Object)
+        );
+        // A class *declaration* is not a declarator at all.
+        assert_eq!(initializer_class("Declared"), None);
+        assert!(
+            facts.declares_class_at(
+                facts
+                    .classes
+                    .iter()
+                    .find_map(|class| class.name.as_ref().map(|name| name.span))
+                    .unwrap()
+            )
+        );
     }
 
     #[test]

@@ -1,0 +1,14 @@
+{
+  "name": "carried-value-kind",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "untyped-dependency": "1.0.0",
+    "laundered-dependency": "1.0.0",
+    "laundered-typed-dependency": "1.0.0"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./laundered": "./laundered.ts"
+  }
+}

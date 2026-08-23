@@ -147,8 +147,11 @@ npm test --prefix packages/cli
 # every case as well, so it takes the same fresh debug build as coverage and
 # ownership -- the packaged binary may lag rust/ source.
 step tsc-oracle-test
-node --test scripts/tsc-oracle.test.mjs scripts/tsc-oracle-case.test.mjs \
-  scripts/pool.test.mjs scripts/gate-cache.test.mjs scripts/verify-delta.test.mjs
+# The whole glob, exactly as CI's contracts job runs it: naming individual
+# files here once let a contract-generation regression reach CI that every
+# local handoff had missed, because verify gated 5 of the 17 test files.
+SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node --test scripts/*.test.mjs
 
 step tsc-oracle-gate
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
