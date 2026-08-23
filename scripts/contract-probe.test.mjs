@@ -21,12 +21,14 @@ import {
 import {
   ARGUMENT_SYNTHESIS,
   BROWSER_SHIM_GLOBALS,
+  EXECUTION_UNATTRIBUTABLE,
   PROBE_MODES,
   applyProbeEvidence,
   attemptedModes,
   buildProbePlan,
   buildProbeReport,
   classifyExecution,
+  classifyExecutionResult,
   environmentForMode,
   interpretSession,
   settleClaims,
@@ -72,6 +74,10 @@ const sha256 = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex
 /// A callback observation with every counter at rest, so each test names only
 /// the counters its case is about. `calls` is the measured invocation count the
 /// worker now reports; one call is what a site memo that did not re-run makes.
+///
+/// `runsAfterControl` defaults to `runsBeforeWrite`: the control interval is a
+/// settle in which nothing was written, and a callback that does not schedule
+/// itself runs exactly zero times in it. A case about self-scheduling states it.
 const observation = fields => ({
   ranDuringCall: false,
   runsBeforeWrite: 0,
@@ -79,7 +85,8 @@ const observation = fields => ({
   siteRunsBeforeWrite: 1,
   siteRunsAfterWrite: 1,
   calls: 1,
-  ...fields
+  ...fields,
+  runsAfterControl: fields?.runsAfterControl ?? fields?.runsBeforeWrite ?? 0
 });
 
 /// A `returns-accessor` observation of a genuine memo accessor: reactive, and
@@ -149,6 +156,269 @@ test("classification reads attribution, not timing", () => {
     "it ran only after the call returned and holds no subscription"
   );
   assert.equal(classifyExecution(observation({})), null, "a callback that never ran names nothing");
+  assert.equal(
+    classifyExecution(observation({ runsAfterWrite: 1 })),
+    null,
+    "a callback that ran for the first time after the write was not re-run by it, and names no mode"
+  );
+});
+
+test("an observation with no control interval names nothing rather than being read as one", () => {
+  // The counters are the tracked shape and the classifier would answer
+  // `tracked` for them, which is exactly why the missing field cannot be filled
+  // in: reading it as the baseline is the pre-control-interval classifier, and
+  // the observations it was wrong about are indistinguishable from this one.
+  const result = classifyExecutionResult({
+    ranDuringCall: false,
+    runsBeforeWrite: 1,
+    runsAfterWrite: 2,
+    siteRunsBeforeWrite: 1,
+    siteRunsAfterWrite: 1,
+    calls: 1
+  });
+  assert.equal(result.execution, null);
+  assert.equal(result.reason, EXECUTION_UNATTRIBUTABLE.noControlInterval);
+});
+
+/// The counters each real shape produces, measured rather than reasoned about.
+///
+/// Every row was recorded by running the worker's `callbackObservation` body --
+/// control interval included -- against the real release in a temporary
+/// directory: solid-js@1.9.14 under `--conditions browser`, cross-checked on
+/// 2.0.0-rc.1 (which produces the same counters for the six shapes it can run;
+/// it refuses `createEffect` inside a memo, so `inlineAndEffect` throws there and
+/// the probe is undriven for a different reason).
+///
+/// Two of them were recorded through the real worker against the real published
+/// package rather than a synthetic stand-in: `@corvu/utils@0.4.2 ./dom:afterPaint`
+/// produced `rb 0, rc 1, ra 1, sb 1, sa 1` and `./create/register:default`
+/// produced `rb 1, rc 1, ra 3, sb 1, sa 2` -- byte-identical to the rows below.
+///
+/// `truth` is what the callback's execution mode actually is, and `was` is what
+/// the classifier answered before the control interval, the transitive
+/// subscription guard and the first-run guard existed. Five rows had `was`
+/// wrong.
+const EXECUTION_SHAPES = [
+  {
+    name: "pure inline -- cb => cb()",
+    counters: { ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 2, siteRunsAfterWrite: 2 },
+    was: "inline",
+    is: "inline",
+    truth: "inline"
+  },
+  {
+    name: "tracked control -- cb => createMemo(cb)",
+    counters: { ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 2 },
+    was: "tracked",
+    is: "tracked",
+    truth: "tracked"
+  },
+  {
+    // @solid-primitives/rootless createSubRoot: createRoot runs its callback
+    // synchronously with the listener cleared, which is inline.
+    name: "createRoot detach -- cb => createRoot(d => cb(d))",
+    counters: { ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 1 },
+    was: "inline",
+    is: "inline",
+    truth: "inline"
+  },
+  {
+    name: "single timer -- cb => setTimeout(cb, 0)",
+    counters: { runsBeforeWrite: 1, runsAfterWrite: 1 },
+    was: "deferred",
+    is: "deferred",
+    truth: "deferred"
+  },
+  {
+    // @corvu/utils create/register: mergeProps wraps the function source in a
+    // memo, and reading the defaulted member *during the call* subscribes the
+    // call site to it. The site re-runs, which used to read as inline; the
+    // callback ran twice for that one site re-run, which is the tell.
+    name: "read-back memo -- cb => { const m = createMemo(cb); return m() }",
+    counters: { ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 3, siteRunsAfterWrite: 2 },
+    was: "inline",
+    is: null,
+    reason: "transitiveSubscription",
+    truth: "tracked"
+  },
+  {
+    // @solid-primitives/spring createDerivedSpring and @tanstack/solid-pacer
+    // createDebouncedValue: one parameter invoked at two sites with two roles.
+    // The contract carries both rows and at most one can be true of one
+    // observation, so neither is earned here.
+    name: "two roles -- cb => { cb(); createEffect(() => cb()) }",
+    counters: { ranDuringCall: true, runsBeforeWrite: 2, runsAfterWrite: 4, siteRunsAfterWrite: 2 },
+    was: "inline",
+    is: null,
+    reason: "transitiveSubscription",
+    truth: "inline and tracked"
+  },
+  {
+    // @corvu/utils dom:afterPaint. A double requestAnimationFrame, shimmed to
+    // nested timers, so the callback's *first* run lands after the baseline was
+    // taken. The write caused nothing at all, and the contract's `deferred` was
+    // right.
+    name: "late first run -- cb => raf(() => raf(cb))",
+    counters: { runsBeforeWrite: 0, runsAfterControl: 1, runsAfterWrite: 1 },
+    was: "tracked",
+    is: "deferred",
+    truth: "deferred"
+  },
+  {
+    // The row above, three milliseconds later. A deferral of roughly three
+    // macrotask hops -- `setTimeout(cb, 3)`, a triple `requestAnimationFrame`,
+    // a promise chain into a timer -- lands its first run in the *write*
+    // interval instead of the control interval, and which one it lands in is a
+    // property of the machine's load: measured on solid-js 1.9.14, `setTimeout`
+    // at 2ms produced the row above and at 3ms this row, flipping between them
+    // on 1 run in 5. The callback had not run by the time of the write, so it
+    // had not read the probe's signal and held no subscription to it: the write
+    // cannot have caused its first run, and `tracked` reported a plain timeout
+    // as a package defect.
+    //
+    // It is not `deferred` either. The row above earns that reading because the
+    // callback ran *before* the write and the write then did not re-run it,
+    // which is an observed absence of a subscription. Here there is no such
+    // test: a callback whose subscription starts late --
+    // `raf(() => raf(() => raf(() => createEffect(cb))))` -- also runs exactly
+    // once in the write interval having never run before it, and is genuinely
+    // tracked. The counters are identical, so the observation names nothing.
+    name: "first run after the write -- cb => setTimeout(cb, 3)",
+    counters: { runsBeforeWrite: 0, runsAfterControl: 0, runsAfterWrite: 1 },
+    was: "tracked",
+    is: null,
+    reason: "firstRunAfterWrite",
+    truth: "deferred, and counter-identical to a late-tracked callback"
+  },
+  {
+    // @solid-primitives/timer createTimeoutLoop, which reschedules itself, so it
+    // runs again across every interval whatever is written and no re-run can be
+    // attributed to the write. Its claim was `deferred`, which this cannot
+    // confirm -- undriven is the honest answer, not a pass. The counters do not
+    // say the callback rescheduled itself: `raf(() => raf(() => createEffect(cb)))`
+    // is genuinely tracked and produces the same three counts, which is why the
+    // reason names the observation and not a mechanism.
+    name: "re-ran with nothing written -- cb => { const t = () => { cb(); setTimeout(t, 0) }; setTimeout(t, 0) }",
+    counters: { runsBeforeWrite: 1, runsAfterControl: 2, runsAfterWrite: 3 },
+    was: "tracked",
+    is: null,
+    reason: "unwrittenRerun",
+    truth: "deferred"
+  }
+];
+
+test("the control interval and the attribution guards fix five verdicts and keep four", () => {
+  for (const shape of EXECUTION_SHAPES) {
+    const result = classifyExecutionResult(observation(shape.counters));
+    assert.equal(result.execution, shape.is, shape.name);
+    if (shape.is === null) {
+      assert.equal(result.reason, EXECUTION_UNATTRIBUTABLE[shape.reason], shape.name);
+    }
+  }
+  // The four that were already right are the four that must not move, and the
+  // five that were wrong are the point of the change.
+  assert.deepEqual(
+    EXECUTION_SHAPES.filter(shape => shape.was === shape.is).map(shape => shape.name),
+    EXECUTION_SHAPES.filter(shape => shape.was === shape.truth).map(shape => shape.name)
+  );
+  assert.equal(EXECUTION_SHAPES.filter(shape => shape.was !== shape.is).length, 5);
+});
+
+test("a false verdict is withdrawn as undriven and never turned into a failure", () => {
+  // The withdrawal has to reach the claim, not just the classifier: a `tracked`
+  // row on the read-back shape used to be reported as a package defect
+  // ("observed inline"), and the `inline` row of the two-role shape used to
+  // *pass*. Both are now unproven, which is what fails closed means here.
+  for (const [shape, claimed] of [
+    [EXECUTION_SHAPES[4], "tracked"],
+    [EXECUTION_SHAPES[5], "inline"],
+    [EXECUTION_SHAPES[8], "deferred"]
+  ]) {
+    const document = structuredClone(CONTRACT);
+    document.summaries["function-1"] = {
+      kind: "function",
+      callbacks: [{ parameter: 0, execution: claimed }]
+    };
+    const plan = buildProbePlan(expandContract(document), {
+      modes: [PROBE_MODES[0]],
+      discovery: false
+    });
+    const { claims } = drive(plan, probe =>
+      probe.type === "callback" && probe.export === "wrapMemo"
+        ? { outcome: "observed", observation: observation(shape.counters), calls: 1 }
+        : trackedAnswer(probe)
+    );
+    const record = claims.find(claim => claim.claim === `callbacks[0]=${claimed}`);
+    assert.equal(record.status, "undriven", `${shape.name} claimed ${claimed}`);
+    assert.equal(record.reason, EXECUTION_UNATTRIBUTABLE[shape.reason], shape.name);
+  }
+});
+
+test("a late first run confirms the deferred claim it used to contradict", () => {
+  // The double-rAF shape is the one false verdict that becomes a *verdict*
+  // rather than a withdrawal: the callback ran before the write, so it had read
+  // the signal, and nothing ran in the write interval, so the write caused
+  // nothing and the contract's `deferred` is confirmed. It used to be reported
+  // as a failure against a claim the package honours.
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-1"] = {
+    kind: "function",
+    callbacks: [{ parameter: 0, execution: "deferred" }]
+  };
+  const plan = buildProbePlan(expandContract(document), {
+    modes: [PROBE_MODES[0]],
+    discovery: false
+  });
+  const { claims } = drive(plan, probe =>
+    probe.type === "callback" && probe.export === "wrapMemo"
+      ? {
+          outcome: "observed",
+          observation: observation(EXECUTION_SHAPES[6].counters),
+          calls: 1
+        }
+      : trackedAnswer(probe)
+  );
+  const record = claims.find(claim => claim.claim === "callbacks[0]=deferred");
+  assert.equal(record.status, "passed");
+  assert.deepEqual(record.modesPassed, ["client"]);
+});
+
+test("a first run in the write interval names no mode in either direction", () => {
+  // The same shape one macrotask later, at the claim level rather than the
+  // classifier's. `setTimeout(cb, 3)` used to answer `tracked`, so a package
+  // stating `deferred` was reported as defective ("observed tracked") and a
+  // package stating `tracked` *passed* on the strength of a run the write
+  // cannot have caused. Neither row is earned now: the counters a
+  // late-subscribing callback produces are the same ones, so both claims are
+  // withdrawn rather than one of them being certified by the coin flip.
+  for (const claimed of ["deferred", "tracked"]) {
+    const document = structuredClone(CONTRACT);
+    document.summaries["function-1"] = {
+      kind: "function",
+      callbacks: [{ parameter: 0, execution: claimed }]
+    };
+    const plan = buildProbePlan(expandContract(document), {
+      modes: [PROBE_MODES[0]],
+      discovery: false
+    });
+    const { claims, evidence } = drive(plan, probe =>
+      probe.type === "callback" && probe.export === "wrapMemo"
+        ? {
+            outcome: "observed",
+            observation: observation(EXECUTION_SHAPES[7].counters),
+            calls: 1
+          }
+        : trackedAnswer(probe)
+    );
+    const record = claims.find(claim => claim.claim === `callbacks[0]=${claimed}`);
+    assert.equal(record.status, "undriven", claimed);
+    assert.equal(record.reason, EXECUTION_UNATTRIBUTABLE.firstRunAfterWrite, claimed);
+    assert.equal(
+      evidence.some(row => row.claim === `callbacks[0]=${claimed}`),
+      false,
+      `${claimed} contributes no evidence, passing or failing`
+    );
+  }
 });
 
 const CONTRACT = {
@@ -313,6 +583,10 @@ function drive(plan, answer) {
       // The worker starts every result at zero and only a body that invoked the
       // export raises it; each canned answer says what it measured.
       calls: 0,
+      // The runtime capability the worker stamps on every driven observation.
+      // These canned answers stand for a reactive runtime, which is what an
+      // ordinary session has; the tests about an inert one stamp it themselves.
+      runtime: { reruns: true },
       ...answer(probe, session.mode)
     }))
   }));
@@ -411,6 +685,186 @@ test("a mode mismatch the driver's own read scope could explain is undriven, not
   const record = claims.find(claim => claim.claim === "callbacks[0]=tracked");
   assert.equal(record.status, "undriven");
   assert.match(record.reason, /looked inline rather than tracked/);
+});
+
+// ---------------------------------------------------------------------------
+// The runtime capability self-check
+// ---------------------------------------------------------------------------
+
+/// Every observation of a session, stamped with one runtime capability.
+const withRuntime = (reruns, answer) => probe => {
+  const result = answer(probe);
+  return result.outcome === "observed" ? { ...result, runtime: { reruns } } : result;
+};
+
+test("a runtime that re-runs nothing observes no execution mode, in either direction", () => {
+  // The whole of RC1. Both audited releases resolve `node` to a server build
+  // where `createSignal` is a constant, `createMemo` computes once and
+  // `createEffect` is empty -- so the probe's own scaffolding is inert. A
+  // `tracked` claim cannot be observed there and used to be reported as a
+  // package defect; an `inline` or `deferred` claim cannot be observed there
+  // either and used to *pass*, which is the half that matters, because a pass
+  // becomes probed row evidence and then a verified contract.
+  for (const claimed of ["tracked", "inline", "deferred"]) {
+    const document = structuredClone(CONTRACT);
+    document.summaries["function-1"] = {
+      kind: "function",
+      callbacks: [{ parameter: 0, execution: claimed }]
+    };
+    const plan = buildProbePlan(expandContract(document), {
+      modes: [PROBE_MODES[0]],
+      discovery: false
+    });
+    const { claims, evidence } = drive(
+      plan,
+      withRuntime(false, probe =>
+        probe.type === "callback" && probe.export === "wrapMemo"
+          ? {
+              outcome: "observed",
+              // The counters an inert runtime produces for every shape: the
+              // callback ran once, during the call, and nothing ever re-ran.
+              observation: observation({ ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 1 }),
+              calls: 1
+            }
+          : trackedAnswer(probe)
+      )
+    );
+    const record = claims.find(claim => claim.claim === `callbacks[0]=${claimed}`);
+    assert.equal(record.status, "undriven", claimed);
+    assert.equal(record.reason, EXECUTION_UNATTRIBUTABLE.runtimeInert, claimed);
+    assert.equal(
+      evidence.some(row => row.claim === `callbacks[0]=${claimed}`),
+      false,
+      `${claimed} contributes no evidence, passing or failing`
+    );
+  }
+});
+
+test("an inert runtime still observes kind, which reads typeof and needs no reactivity", () => {
+  const plan = buildProbePlan(expanded(), { modes: [PROBE_MODES[0]], discovery: false });
+  const { claims } = drive(plan, withRuntime(false, trackedAnswer));
+  assert.equal(claims.find(claim => claim.claim === "kind=function").status, "passed");
+});
+
+/// What a `returns=accessor` claim can answer in an inert mode, over the two
+/// observations such a mode can actually produce.
+///
+/// A `returns` claim keeps its verdict rather than being withdrawn with the
+/// callback claims, and these are the two halves of why. `reactive: true` is not
+/// among them: it requires a re-read after the write, which is the one thing an
+/// inert runtime cannot produce, so a case that stamps `reruns: false` and feeds
+/// `reactive: true` documents the exemption with an input no inert mode can
+/// generate. `typeof` is what an inert runtime can still observe, and a returned
+/// non-function is a real contradiction of `accessor` whatever re-runs.
+const INERT_RETURNS = [
+  {
+    name: "a callable return that never re-read is undriven, not a pass",
+    observation: { typeofValue: "function", reactive: false, calls: 1 },
+    status: "undriven",
+    reason: /no re-read followed the planted write/
+  },
+  {
+    name: "a returned non-function contradicts accessor even where nothing re-runs",
+    observation: { typeofValue: "object", reactive: false, calls: 1 },
+    status: "failed",
+    reason: /which cannot be an accessor/
+  }
+];
+
+test("a returns claim in an inert mode answers from typeof, and never from reactivity", () => {
+  for (const row of INERT_RETURNS) {
+    const plan = buildProbePlan(expanded(), { modes: [PROBE_MODES[0]], discovery: false });
+    const { claims } = drive(
+      plan,
+      withRuntime(false, probe =>
+        probe.type === "returns-accessor"
+          ? { outcome: "observed", observation: row.observation, calls: 1 }
+          : trackedAnswer(probe)
+      )
+    );
+    const record = claims.find(claim => claim.claim === "returns=accessor");
+    assert.equal(record.status, row.status, row.name);
+    assert.match(record.reason, row.reason, row.name);
+  }
+});
+
+test("an unstamped observation is undriven, because an unasked runtime is not a re-running one", () => {
+  const plan = buildProbePlan(expanded(), { modes: [PROBE_MODES[0]], discovery: false });
+  const { claims } = drive(plan, probe =>
+    probe.type === "callback" && probe.export === "wrapMemo"
+      ? {
+          outcome: "observed",
+          observation: observation({ runsBeforeWrite: 1, runsAfterWrite: 2 }),
+          calls: 1,
+          runtime: undefined
+        }
+      : trackedAnswer(probe)
+  );
+  const record = claims.find(claim => claim.claim === "callbacks[0]=tracked");
+  assert.equal(record.status, "undriven");
+  assert.equal(record.reason, EXECUTION_UNATTRIBUTABLE.runtimeInert);
+});
+
+test("an inert runtime reports no incompleteness, because the mode in the finding would be invented", () => {
+  const plan = buildProbePlan(expanded(), { modes: [PROBE_MODES[0]], discovery: true });
+  const answer = probe => {
+    if (probe.type === "discovery" && probe.export === "wrapRoot" && probe.parameter === 1) {
+      return {
+        outcome: "observed",
+        observation: observation({ ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 1 })
+      };
+    }
+    if (probe.type === "discovery") return { outcome: "observed", observation: observation({}) };
+    return trackedAnswer(probe);
+  };
+  assert.equal(drive(plan, withRuntime(false, answer)).incompleteness.length, 0);
+  // The same observation in a re-running runtime is a finding, so the
+  // suppression is about attribution and not about discovery being off.
+  const reactive = buildProbePlan(expanded(), { modes: [PROBE_MODES[0]], discovery: true });
+  const found = drive(reactive, withRuntime(true, answer)).incompleteness;
+  assert.equal(found.length, 1);
+  assert.equal(found[0].claim, "callbacks[1]=inline");
+});
+
+test("the capability is per runtime, not per session: one session can hold both answers", () => {
+  // Measured, not hypothesised. Probing solid-js@1.9.14 under `--conditions
+  // node`, `import "solid-js"` resolves to `dist/server.js` and re-runs nothing,
+  // while `import "solid-js/jsx-dev-runtime"` resolves to `dist/solid.js` -- the
+  // manifest gives that subpath one unconditional target -- satisfies the
+  // worker's `drivesItself` check and re-runs normally. A per-session answer is
+  // wrong about one of the two whichever runtime it is taken from.
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-1"] = {
+    kind: "function",
+    callbacks: [{ parameter: 0, execution: "tracked" }]
+  };
+  document.summaries["function-2"] = {
+    kind: "function",
+    callbacks: [{ parameter: 0, execution: "tracked" }]
+  };
+  const plan = buildProbePlan(expandContract(document), {
+    modes: [PROBE_MODES[1]],
+    discovery: false
+  });
+  const { claims } = drive(plan, probe => {
+    if (probe.type !== "callback") return trackedAnswer(probe);
+    const tracked = {
+      outcome: "observed",
+      observation: observation({ ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 2 }),
+      calls: 1
+    };
+    // `wrapMemo` stands for the entrypoint the inert artifact resolved;
+    // `wrapRoot` for the one whose own artifact drives it.
+    return probe.export === "wrapMemo"
+      ? { ...tracked, observation: observation({ ranDuringCall: true, runsBeforeWrite: 1, runsAfterWrite: 1 }), runtime: { reruns: false } }
+      : { ...tracked, runtime: { reruns: true } };
+  });
+  const inert = claims.find(claim => claim.export === "wrapMemo" && claim.claim === "callbacks[0]=tracked");
+  const driven = claims.find(claim => claim.export === "wrapRoot" && claim.claim === "callbacks[0]=tracked");
+  assert.equal(inert.status, "undriven");
+  assert.equal(inert.reason, EXECUTION_UNATTRIBUTABLE.runtimeInert);
+  assert.equal(driven.status, "passed", "a reactive runtime in the same session is still driven");
+  assert.deepEqual(driven.modesPassed, ["server"]);
 });
 
 test("a callable value that never re-read is undriven, and a non-callable one fails the claim", () => {
@@ -695,6 +1149,10 @@ test("a worker that stopped at a throw is restarted for what is left", () => {
       const stop = probes[0].id === "p1" ? 1 : probes.length;
       return {
         completed: stop === probes.length,
+        // The worker measures the runtime it will drive probes with and reports
+        // the answer per session. Every process of a mode re-imports the same
+        // artifacts, so the first answer is the mode's answer.
+        runtime: { reruns: true },
         results: probes
           .slice(0, stop)
           .map((probe, index) => ({ id: probe.id, outcome: index === stop - 1 && stop === 1 ? "threw" : "observed" }))
@@ -715,7 +1173,8 @@ test("a worker that stopped at a throw is restarted for what is left", () => {
     started: 2,
     restarts: 1,
     failed: 0,
-    completed: true
+    completed: true,
+    runtime: { reruns: true }
   });
 });
 
@@ -738,12 +1197,15 @@ test("a crashed or timed-out mode records what is left undriven rather than retr
     results.map(result => result.outcome),
     ["session-failed", "session-failed"]
   );
+  // A mode whose only process died measured no runtime, and says so rather than
+  // reporting the inert answer it never took.
   assert.deepEqual(accounting, {
     mode: "client",
     started: 1,
     restarts: 0,
     failed: 1,
-    completed: false
+    completed: false,
+    runtime: null
   });
 });
 
@@ -796,6 +1258,10 @@ const fakeSessions = answer => ({ sessions }) =>
       // The worker starts every result at zero and only a body that invoked the
       // export raises it; each canned answer says what it measured.
       calls: 0,
+      // The runtime capability the worker stamps on every driven observation.
+      // These canned answers stand for a reactive runtime, which is what an
+      // ordinary session has; the tests about an inert one stamp it themselves.
+      runtime: { reruns: true },
       ...answer(probe, session.mode)
     }))
   }));
@@ -1089,20 +1555,29 @@ test("drives a real tracked-callback claim against an installed Solid release", 
   );
 
   // Solid 1.x resolves a genuinely different artifact under `node`: a memo
-  // computes once and never re-runs, so the callback's own subscription is not
-  // there to observe and the driver sees the call site's synchronous run
-  // instead. That is a surfaced environment mismatch, and the RFC's rule is
-  // that it fails rather than silently narrowing the modes the contract claims.
+  // computes once and never re-runs, `createEffect` is empty, and a signal is a
+  // constant. The probe's own scaffolding is inert there, so `tracked` is not
+  // merely unobserved but *unobservable* -- and so are `inline` and `deferred`,
+  // which is why this had to withdraw a pass as well as a failure.
+  //
+  // The runtime self-check is what turns that into a fact about the run rather
+  // than a fact about the package: the session's runtime is asked whether it
+  // re-runs anything, it answers no, and every callback observation of that
+  // runtime becomes undriven. Nothing here names the mode, the condition or the
+  // artifact; a `server` session that resolved a reactive artifact -- which
+  // `solid-js/jsx-dev-runtime` does, unconditionally -- is driven normally.
   const server = await probeContract([contractFile, "--modes", "server", "--no-discovery"]);
   process.exitCode = 0;
-  const divergent = server.claims.find(claim => claim.claim === "callbacks[0]=tracked");
-  const serverObservation = divergent.observations.find(entry => entry.mode === "server");
-  assert.equal(serverObservation.observed, "inline");
-  // The claim is *not* asserted as a package defect: the callback ran only
-  // because the driver read the accessor the contract states, so which
-  // computation owned its reads is partly the driver's own scaffolding.
-  assert.equal(divergent.status, "undriven");
-  assert.match(serverObservation.reason, /read scope/);
+  for (const claimed of ["callbacks[0]=tracked", "callbacks[0]=inline"]) {
+    const claim = server.claims.find(record => record.claim === claimed);
+    const seen = claim.observations.find(entry => entry.mode === "server");
+    assert.equal(claim.status, "undriven", claimed);
+    assert.equal(seen.status, "undriven", claimed);
+    assert.equal(seen.observed, undefined, `${claimed} names no mode it could not observe`);
+    assert.equal(seen.reason, EXECUTION_UNATTRIBUTABLE.runtimeInert, claimed);
+  }
+  assert.equal(server.summary.failed, 0, "an unobservable claim is never a package defect");
+  assert.equal(server.summary.passed, 2, "only the two kind claims, which read typeof");
 
   if (!existsSync(native)) {
     t.diagnostic(`skipped the evidence write: no native solid-checker at ${native}`);
@@ -1161,25 +1636,33 @@ test("every session of a plan carries the environment its mode resolves to", () 
 /// Runs the real worker in a staged directory, exactly as `defaultRunSessions`
 /// does, against a package whose module body reports what the environment
 /// looked like while it was being evaluated.
-function runWorker({ body, environment, mode = "client", probeCount = 1 }) {
+function runWorker({
+  body,
+  environment,
+  mode = "client",
+  probeCount = 1,
+  probes,
+  solid = "export const createSignal = () => [];\n",
+  packages = {}
+}) {
   const directory = workspace("solid-checker-worker-");
   const modules = join(directory, "node_modules");
+  const install = (name, source, version = "1.0.0") => {
+    mkdirSync(join(modules, name), { recursive: true });
+    writeFileSync(
+      join(modules, name, "package.json"),
+      JSON.stringify({ name, version, type: "module", main: "index.mjs" })
+    );
+    writeFileSync(join(modules, name, "index.mjs"), source);
+  };
   // The worker builds its probe runtime from `solid-js` before it touches any
   // probe, so a staging directory without one answers every probe "no probe
-  // runtime" and tests nothing about the environment. Nothing here drives a
-  // reactive claim -- these are `kind` probes -- so the stub only has to exist.
-  mkdirSync(join(modules, "solid-js"), { recursive: true });
-  writeFileSync(
-    join(modules, "solid-js", "package.json"),
-    JSON.stringify({ name: "solid-js", version: "1.9.14", type: "module", main: "index.mjs" })
-  );
-  writeFileSync(join(modules, "solid-js", "index.mjs"), "export const createSignal = () => [];\n");
-  mkdirSync(join(modules, "env-fixture"), { recursive: true });
-  writeFileSync(
-    join(modules, "env-fixture", "package.json"),
-    JSON.stringify({ name: "env-fixture", version: "1.0.0", type: "module", main: "index.mjs" })
-  );
-  writeFileSync(join(modules, "env-fixture", "index.mjs"), body);
+  // runtime" and tests nothing about the environment. The default stub only has
+  // to exist -- the environment tests drive no reactive claim -- and a test
+  // about the runtime capability supplies a runtime of its own.
+  install("solid-js", solid, "1.9.14");
+  if (body !== undefined) install("env-fixture", body);
+  for (const [name, source] of Object.entries(packages)) install(name, source);
   const worker = join(modules, "contract-probe-worker.mjs");
   writeFileSync(
     worker,
@@ -1192,12 +1675,14 @@ function runWorker({ body, environment, mode = "client", probeCount = 1 }) {
       mode,
       dialect: "solid-v1",
       environment,
-      probes: Array.from({ length: probeCount }, (_, index) => ({
-        id: `p${index + 1}`,
-        type: "kind",
-        specifier: "env-fixture",
-        export: "report"
-      }))
+      probes:
+        probes ??
+        Array.from({ length: probeCount }, (_, index) => ({
+          id: `p${index + 1}`,
+          type: "kind",
+          specifier: "env-fixture",
+          export: "report"
+        }))
     })
   );
   const child = spawnSync(process.execPath, [worker, requestFile], {
@@ -1316,7 +1801,7 @@ test("an import that still throws with the shim in place is undriven exactly as 
   assert.deepEqual(answer.environment.shimmed, ["window"]);
 });
 
-test("the probe report records the environment per mode and the session accounting", () => {
+test("the probe report records the environment, the accounting and which modes were inert", () => {
   const report = buildProbeReport({
     contract: { package: { name: "p", version: "1.0.0" } },
     contractHash: "sha256:x",
@@ -1333,7 +1818,14 @@ test("the probe report records the environment per mode and the session accounti
       server: { kind: "none", shimmed: [], present: [] }
     },
     sessions: [
-      { mode: "client", started: 3, restarts: 2, failed: 0, completed: true },
+      {
+        mode: "client",
+        started: 3,
+        restarts: 2,
+        failed: 0,
+        completed: true,
+        runtime: { reruns: true }
+      },
       { mode: "server", started: 1, restarts: 0, failed: 1, completed: false }
     ],
     claims: [],
@@ -1342,13 +1834,17 @@ test("the probe report records the environment per mode and the session accounti
   assert.equal(report.environment.shimmedAnyMode, true);
   assert.deepEqual(report.environment.modes.client.shimmed, ["document", "window"]);
   assert.deepEqual(report.environment.modes.server, { kind: "none", shimmed: [], present: [] });
+  // The runtime capability the worker measured rides along per mode, so a report
+  // can say *which* modes withdrew their callback claims because the runtime was
+  // asked and answered that it re-runs nothing. A mode whose processes never got
+  // that far records `null` rather than an inert answer nobody measured.
   assert.deepEqual(report.sessions, {
     started: 4,
     restarts: 2,
     failed: 1,
     byMode: {
-      client: { started: 3, restarts: 2, failed: 0, completed: true },
-      server: { started: 1, restarts: 0, failed: 1, completed: false }
+      client: { started: 3, restarts: 2, failed: 0, completed: true, runtime: { reruns: true } },
+      server: { started: 1, restarts: 0, failed: 1, completed: false, runtime: null }
     }
   });
 });
@@ -1455,6 +1951,139 @@ test("a session that aborted after answering something is restarted for the rest
   );
   assert.equal(accounting.restarts, 2);
   assert.equal(accounting.completed, true);
+});
+
+// ---------------------------------------------------------------------------
+// The worker's runtime capability self-check
+// ---------------------------------------------------------------------------
+
+/// A reactive runtime in about twenty lines: enough of a graph that a memo
+/// re-runs when a signal it read is written, which is the whole property the
+/// self-check measures. `wrapMemo` is a genuinely tracked callback parameter.
+const REACTIVE_RUNTIME = [
+  "let listener = null;",
+  "export function createSignal(value) {",
+  "  const subscribers = new Set();",
+  "  return [",
+  "    () => { if (listener) subscribers.add(listener); return value; },",
+  "    next => {",
+  "      value = next;",
+  "      const queued = [...subscribers];",
+  "      subscribers.clear();",
+  "      for (const run of queued) run();",
+  "      return next;",
+  "    }",
+  "  ];",
+  "}",
+  "export function createMemo(fn) {",
+  "  let value;",
+  "  const run = () => {",
+  "    const previous = listener;",
+  "    listener = run;",
+  "    try { value = fn(); } finally { listener = previous; }",
+  "  };",
+  "  run();",
+  "  return () => value;",
+  "}",
+  "export const createRoot = fn => fn(() => {});",
+  "export function untrack(fn) {",
+  "  const previous = listener;",
+  "  listener = null;",
+  "  try { return fn(); } finally { listener = previous; }",
+  "}",
+  "export const wrapMemo = compute => createMemo(compute);",
+  ""
+].join("\n");
+
+/// The shape of both audited releases' server builds: a signal is a constant, a
+/// memo computes once and caches, and a root runs its body. Nothing can re-run,
+/// so nothing about attribution is observable -- and every primitive is still
+/// present, which is why a name-based or shape-based check would not notice.
+const INERT_RUNTIME = [
+  "export const createSignal = value => [() => value, () => value];",
+  "export const createMemo = fn => { const value = fn(); return () => value; };",
+  "export const createRoot = fn => fn(() => {});",
+  "export const untrack = fn => fn();",
+  "export const wrapMemo = compute => createMemo(compute);",
+  ""
+].join("\n");
+
+const callbackProbe = (id, specifier, name) => ({
+  id,
+  type: "callback",
+  specifier,
+  export: name,
+  parameter: 0,
+  arguments: ["probe-callback"]
+});
+
+test("the worker asks its runtime whether anything re-runs, and stamps every observation", () => {
+  const probes = [callbackProbe("p1", "solid-js", "wrapMemo")];
+  const reactive = runWorker({ solid: REACTIVE_RUNTIME, probes, environment: { kind: "none", globals: [] } });
+  assert.deepEqual(reactive.runtime, { reruns: true });
+  assert.equal(reactive.results[0].outcome, "observed");
+  assert.deepEqual(reactive.results[0].runtime, { reruns: true });
+  // The control interval is reported alongside the baseline, so the driver can
+  // tell a write-caused re-run from a callback that runs on its own.
+  const seen = reactive.results[0].observation;
+  assert.equal(seen.runsBeforeWrite, 1);
+  assert.equal(seen.runsAfterControl, 1);
+  assert.equal(seen.runsAfterWrite, 2);
+  assert.equal(classifyExecution(seen), "tracked");
+
+  const inert = runWorker({ solid: INERT_RUNTIME, probes, environment: { kind: "none", globals: [] } });
+  assert.deepEqual(inert.runtime, { reruns: false });
+  assert.deepEqual(inert.results[0].runtime, { reruns: false });
+  // And this is the manufactured pass the stamp exists to withdraw: the same
+  // definitionally tracked export reads `inline` in the inert runtime, because
+  // the only thing the counters can record there is the synchronous call.
+  assert.equal(classifyExecution(inert.results[0].observation), "inline");
+});
+
+test("a runtime whose primitives throw is reported as re-running nothing, with the throw", () => {
+  // The default `solid-js` stub of these tests exports a `createSignal` that
+  // returns `[]`, so the self-check destructures undefined and throws. Failing
+  // closed there is what keeps a broken runtime from certifying anything.
+  const answer = runWorker({
+    probes: [callbackProbe("p1", "env-fixture", "wrap")],
+    body: "export const wrap = callback => callback();\n",
+    environment: { kind: "none", globals: [] }
+  });
+  assert.equal(answer.runtime.reruns, false);
+  assert.match(answer.runtime.error, /TypeError|not a function|undefined/);
+});
+
+test("the capability is measured per runtime, so one session reports both answers", () => {
+  // The concrete case: probing solid-js@1.9.14 in `server` mode, `.` resolves to
+  // the non-reactive `dist/server.js` while `./jsx-dev-runtime` resolves
+  // unconditionally to `dist/solid.js` and drives its own probes. Here
+  // `plain-fixture` stands for the entrypoint the inert project runtime drives
+  // and `self-driving` for the one that carries a reactive runtime of its own --
+  // `drivesItself` is true for it because it exports all four primitives.
+  const answer = runWorker({
+    mode: "server",
+    solid: INERT_RUNTIME,
+    packages: {
+      "plain-fixture": "export const wrap = callback => callback();\n",
+      "self-driving": REACTIVE_RUNTIME
+    },
+    probes: [
+      callbackProbe("p1", "plain-fixture", "wrap"),
+      callbackProbe("p2", "self-driving", "wrapMemo")
+    ],
+    environment: { kind: "none", globals: [] }
+  });
+  const byId = Object.fromEntries(answer.results.map(result => [result.id, result]));
+  // The session-level record is the project runtime's, and it is not the answer
+  // for every observation in the session.
+  assert.deepEqual(answer.runtime, { reruns: false });
+  assert.deepEqual(byId.p1.runtime, { reruns: false });
+  assert.deepEqual(byId.p2.runtime, { reruns: true });
+  // Which is exactly the difference that matters: the inert one's counters name
+  // `inline` for a callback whose attribution is unobservable, and the
+  // self-driven one's name `tracked` truthfully.
+  assert.equal(classifyExecution(byId.p1.observation), "inline");
+  assert.equal(classifyExecution(byId.p2.observation), "tracked");
 });
 
 test("the fake element carries the members a cleanup path reaches for", () => {

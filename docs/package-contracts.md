@@ -408,6 +408,69 @@ signal, and the signal is then written: a call site that re-ran owns the reads
 (`inline`), a callback that re-ran alone holds its own subscription (`tracked`),
 a callback that ran synchronously and neither re-ran is `inline` with the
 listener cleared, and one that ran only after the call returned is `deferred`.
+
+**Three things have to be ruled out before those readings mean anything.**
+
+*A re-run has to have been caused by the write.* Between the baseline and the
+write the body settles once more with **nothing written** — the control
+interval — and reports the count after it. A callback that ran again there ran
+again without a write, and two ordinary shapes do: `@corvu/utils`' `afterPaint`
+is a double `requestAnimationFrame`, which the worker shims to nested timers, so
+its *first* run lands after the baseline was taken;
+`@solid-primitives/timer`'s `createTimeoutLoop` reschedules itself and runs again
+across every interval whatever is written. Both used to read `tracked` — a
+callback holding no subscription at all, reported as a package defect against
+the `deferred` claim that was right. With the control interval, a callback that
+ran again there and again after the write is unattributable (`undriven`: nothing
+separates what the write did from what was going to happen anyway), and one that
+ran again there but *not* after the write proves the write caused nothing —
+`deferred`, confirmed.
+
+The reason recorded with that withdrawal says what was counted, not why it
+happened. `raf(() => raf(() => createEffect(cb)))` — start tracking after paint,
+an ordinary idiom — is a genuinely `tracked` callback and produces the same three
+counts as `createTimeoutLoop`, so the withdrawal is forced but *"it schedules
+itself"* would be a claim about the package that the counters cannot support.
+Undriven reasons are published per claim in `<contract>.probe.json` and
+aggregated across the corpus, so a reason is held to the same standard as a
+verdict.
+
+*A first run is not a re-run.* The control interval narrows that window; it does
+not close it. A callback that had not run by the time of the write — not during
+the call, and not across the control interval — held no subscription to the
+probe's signal, because the only read of that signal is in the callback body. Its
+run in the write interval is therefore a first run, and the write cannot have
+caused it. A package that defers by roughly three macrotask hops
+(`setTimeout(cb, 3)`, a triple `requestAnimationFrame`, a promise chain into a
+timer) lands exactly there, and used to be reported as defective against the
+`deferred` claim it honours — on some runs and not others, since which interval a
+first run lands in is a property of the machine's load rather than of the
+package.
+
+It is not `deferred` either, and the asymmetry is the point. The `deferred`
+reading of `rb 0, rc 1, ra 1` is earned: the callback ran, and so read the
+signal, *before* the write, and the write then did not re-run it, which is an
+observed absence of a subscription. No such test exists for a run that happens
+only after the write, and a callback whose subscription is established late —
+`raf(() => raf(() => raf(() => createEffect(cb))))` — runs exactly once, in the
+write interval, having never run before it, and is genuinely `tracked`. Measured
+on both audited releases, the two shapes produce identical counters, so the
+observation names no mode at all.
+
+*A call-site re-run is not proof of `inline`.* It is implied by `inline`, and
+the converse was assumed. The site also re-runs when the export reads its own
+tracked derivation of the callback **during the call**, which subscribes the
+caller transitively: `mergeProps({...defaults}, props)` followed by a read of a
+defaulted member is exactly this shape, and so is an export that invokes the
+parameter once directly and once inside an effect. What separates those from a
+genuine `inline` is that the callback then ran *more often than the site
+re-invoked the export*, so a subscription the call site does not own re-ran it;
+which reads belonged to the site is not something these counters can settle, and
+the observation is `undriven`. The residual conservatism is deliberate: an
+export that invokes its callback twice per call is `inline` and lands undriven
+here, because those counters are also what a transitively subscribed site
+produces, and failing closed on the ambiguity is the safe direction.
+
 Where the contract states `returns.kind: accessor`, the returned accessor is
 read to force a lazily computed export — inside a fresh memo created under
 `untrack`, so the reads get a computation to land on without the call site
@@ -435,13 +498,89 @@ rule the bundled 1.x worker records by hand is that a namespace exporting
 runtime. For an ordinary package the project's `solid-js` drives, which is the
 same instance the package itself resolved.
 
+**A runtime that re-runs nothing observes no execution mode at all.** Every
+callback observation above is a *differential* measurement — write, settle, see
+what ran again — and that presupposes a runtime in which something can run
+again. Both audited releases resolve `node` to a server build where nothing can:
+1.9.14's `dist/server.js` returns `[() => value, setter]` from `createSignal`,
+computes a memo once, and has an empty `createEffect`; 2.0.0-rc.1's makes
+`flush()` a no-op. The worker builds its scaffolding out of that same runtime, so
+in such a session the scaffolding is inert: `tracked` is not merely unobserved
+but **unobservable**, and `inline` and `deferred` are indistinguishable from it
+and from each other.
+
+So the runtime is asked rather than assumed. Before it drives a probe the worker
+runs a **capability self-check** with the same runtime the probe will use —
+create a memo over a signal, write, settle, see whether the memo ran again — and
+stamps every driven observation with the answer. The driver records **every**
+`callbacks[n]` observation of a runtime that re-runs nothing as `undriven`, and
+suppresses discovery findings from it, because the execution mode in such a
+finding's claim string would be whatever the inert scaffolding defaulted to.
+`kind` claims are unaffected: they read `typeof`. `returns` claims keep their own
+verdicts, because passing one already requires an observed re-read that an inert
+runtime cannot produce, and because *"the call returned an object"* stays a real
+observation.
+
+Four properties of that design are load-bearing.
+
+- **It withdraws passes, not only failures.** In an inert runtime an `inline` or
+  `deferred` claim *matches* — the counters can produce nothing else — and
+  recording that as a pass turns into `probed` row evidence and then into a
+  verified contract. Withdrawing the unearned passes is the half that makes this
+  a correctness fix rather than a way to raise a number.
+- **It is name-free.** Nothing tests for `server`, `node`, a version or an
+  artifact path. The property that matters is whether the artifact a mode
+  resolved is reactive, and that does not follow from the mode's name.
+- **It is per runtime, not per session**, because one session holds more than
+  one. Probing `solid-js@1.9.14` under `--conditions node`, `.` resolves to the
+  non-reactive `dist/server.js` while `./jsx-dev-runtime` resolves — through a
+  single unconditional target in the manifest — to the fully reactive
+  `dist/solid.js`, which drives its own probes. A per-session answer taken from
+  the project runtime would discard the jsx-dev-runtime observations that are
+  genuinely attributable; taken from the self-driving namespace it would certify
+  the server build's inert ones.
+- **It is recorded, not just applied.** Attribution comes from the per
+  observation stamp for the reason above, and the answer the worker measured for
+  the runtime that drove that mode's ordinary packages is written down per mode
+  as `sessions.byMode.<mode>.runtime` in `<contract>.probe.json`, from where the
+  verify sidecar carries it forward. Without it a reader of a report sees a batch
+  of `undriven` rows with a per-claim reason and has to reconstruct the mode-level
+  fact; with it the report says which modes were measured inert. `null` means no
+  process of that mode got far enough to measure a runtime, which is not the same
+  fact as *"measured, and nothing re-ran"*.
+
 Every driven claim runs in every applicable condition mode, with an initial and
 a subsequent call. The applicable modes come from the entrypoint's recorded
 conditions and each variant's conditions; `--modes` narrows them further. There
-is no per-package `probeModes` equivalent, so a claim a package states only for
-some environments must be narrowed with `--modes` — probing Solid 1.x's `node`
-build against a client-semantics contract reports the divergence as a failure,
-which is the surfaced environment mismatch that behavior is supposed to produce.
+is no per-package `probeModes` equivalent. Until the self-check existed, a claim
+a package states only for some environments had to be narrowed by hand with
+`--modes`, and probing Solid 1.x's `node` build against a client-semantics
+contract reported the divergence as a *failure* — which is why 82 of the corpus's
+218 failing claims were `server`-mode-only, and why the same modes were handing
+out unearned `inline` and `deferred` passes. A mode whose runtime cannot re-run
+contributes nothing in either direction for **callback execution claims**: it
+cannot provide callback attribution evidence or a callback-mode contradiction.
+`kind` claims still read `typeof`, and `returns` claims still keep their direct
+return-shape verdicts; those observations do not require a reactive re-run.
+
+Those two families keep their verdicts in **both** directions, which is the part
+worth stating exactly rather than rounding to "an inert mode contributes
+nothing": such a mode can still produce a **failure**. A `kind` mismatch is one,
+and so is a `returns=accessor` claim whose call returned a non-function — a value
+no amount of re-running would turn into an accessor. Both are sound from an inert
+runtime because both are `typeof` observations rather than differential ones, and
+a mode that resolves an artifact of a different shape than the one the generator
+analysed is a real environment mismatch rather than an artefact of the probe.
+Whether that is reachable at all was probed and **not** demonstrated: on both
+audited releases no export differs in `typeof` between the client and the server
+artifact — the differences are presence, which becomes `export-missing` and so
+undriven — and every `isServer` early return in the sampled corpus packages
+returns a function. So the claim is that `--modes` is unnecessary for correctness
+in practice, not that an inert mode is inert for every claim family.
+
+Thus `--modes` is a way to bound callback-probe time rather than a correctness
+requirement for those claims. A claim that passes in its remaining modes still
+passes: undriven callback modes are ignored when a claim settles.
 
 **Probes confirm; they never write behavior.** `--write` records passing modes
 as `probed` row evidence on claims that already exist, exactly as the bundled

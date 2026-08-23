@@ -508,8 +508,40 @@ function recordUndrivable(summary, push, prefix = "") {
   }
 }
 
-/// What a callback observation says the execution mode is, or `null` when the
-/// counters do not name one.
+/// Why a set of counters names no execution mode. Each reason distinguishes one
+/// unattributable observation from another, because "the callback never ran" and
+/// "the callback ran, and nothing here can say on whose behalf" are different
+/// facts about the package and about this probe.
+///
+/// Each reason states **what the counters showed**, never a mechanism inferred
+/// from them. These reasons are published per claim in `<contract>.probe.json`
+/// and aggregated by the corpus harness, so a reason is a claim about a package
+/// and is held to the same standard as a verdict: "the callback re-ran in an
+/// interval where nothing was written" is an observation, while "the callback
+/// schedules itself" is a guess that the same three counts do not license -- a
+/// genuinely tracked callback whose subscription starts late produces them too.
+export const EXECUTION_UNATTRIBUTABLE = {
+  neverRan:
+    "the synthesized call completed without invoking the callback, so the claim was not exercised",
+  unwrittenRerun:
+    "the callback re-ran across a settle interval in which nothing was written, and re-ran again " +
+    "after the write, so it re-runs without a write and no re-run can be attributed to the write",
+  firstRunAfterWrite:
+    "the callback had not run by the time of the write and ran only after it, so the write cannot " +
+    "have caused a re-run and a first run alone does not say whether it holds a subscription",
+  transitiveSubscription:
+    "the callback ran more times than the call site re-invoked the export, so a subscription other " +
+    "than the call site's re-ran it and the counters cannot say which reads were the call site's",
+  runtimeInert:
+    "the reactive runtime this observation was made in re-runs nothing, so inline, tracked and " +
+    "deferred are indistinguishable and a matching observation would not be evidence",
+  noControlInterval:
+    "the observation reports no count for the settle interval in which nothing was written, so a " +
+    "re-run the write caused cannot be separated from activity it did not cause"
+};
+
+/// What a callback observation says the execution mode is, and when it says
+/// nothing, why.
 ///
 /// The three modes classify **attribution, not timing**, which is what makes a
 /// single generic body able to tell them apart:
@@ -523,15 +555,115 @@ function recordUndrivable(summary, push, prefix = "") {
 ///   * neither, and it ran only
 ///     after the call returned       -> deferred
 ///
-/// A call-site re-run necessarily re-invokes the callback, so `inline` is
-/// checked first and the two counters are not treated as independent.
+/// Three things have to be ruled out before those readings mean anything, and
+/// none of them used to be.
+///
+/// **A re-run has to be caused by the write.** `runsAfterControl` is the count
+/// after a settle interval in which nothing was written, so a callback that ran
+/// again there ran again without a write. If it also ran again after the write,
+/// no re-run can be attributed and the observation names nothing --
+/// `createTimeoutLoop`, which reschedules itself, is one such shape, and the
+/// counters do not say that is why: `raf(() => raf(() => createEffect(cb)))` is
+/// a genuinely tracked callback whose subscription starts late and it produces
+/// the same three counts, so the withdrawal is forced and naming a mechanism in
+/// the reason would not be. If it did *not* run again after the write, the write
+/// caused nothing: `afterPaint`'s double `requestAnimationFrame` merely landed
+/// its first run late, and it is `deferred`, which is what the contract said.
+/// Both used to read `tracked`.
+///
+/// **A first run is not a re-run.** A callback that had not run by the time of
+/// the write -- not during the call, and not across the control interval -- held
+/// no subscription to the probe's signal: the only read of that signal is in the
+/// callback body, so a callback that never executed never subscribed, and the
+/// write cannot have caused the first run it is being credited with. This used
+/// to read `tracked` about a callback that had never run at all: a plain
+/// `setTimeout(cb, 3)` and a triple `requestAnimationFrame` land their first run
+/// in the write interval rather than the control interval, and a package that
+/// defers by three macrotask hops was reported as defective against the
+/// `deferred` claim it honours -- on some runs and not others, since which
+/// interval the run lands in is a property of the machine's load.
+///
+/// It is not `deferred` either, and this is the reason a first run names nothing
+/// rather than the other mode. The `deferred` reading of `rb 0, rc 1, ra 1` is
+/// earned: the callback ran, and so read the signal, *before* the write, and the
+/// write then did not re-run it -- which is a subscription's absence, observed.
+/// No such test exists for a run that happens only after the write. A callback
+/// whose subscription is established late -- `raf(() => raf(() => raf(() =>
+/// createEffect(cb))))`, "start tracking after paint", an ordinary idiom -- runs
+/// exactly once, in the write interval, having never run before it, and is
+/// genuinely `tracked`. The counters are identical, so neither mode is provable
+/// and the observation names none.
+///
+/// **A call-site re-run is not proof of `inline`.** It is implied by `inline` and
+/// the converse was assumed: the site also re-runs when the export reads its own
+/// tracked derivation of the callback *during the call*, which subscribes the
+/// caller transitively -- `mergeProps({...defaults}, props)` then reading a
+/// defaulted member is exactly this, and so is an export that invokes the
+/// parameter once inline and once inside an effect. What separates them is that
+/// the callback then ran more often than the site re-invoked the export:
+/// `runDelta > siteDelta > 0` proves a subscription the call site does not own,
+/// and which of the two the reads belonged to is not something these counters
+/// can settle. So it is unattributable rather than `inline`.
+///
+/// The residual conservatism is deliberate: an export that invokes the callback
+/// twice per call is `inline` and reads as unattributable here. Failing closed on
+/// a shape whose counters a genuinely tracked callback also produces is the safe
+/// direction; certifying one because the arithmetic happened to agree is not.
+export function classifyExecutionResult(observation) {
+  if (!(observation.runsAfterWrite > 0)) {
+    return { execution: null, reason: EXECUTION_UNATTRIBUTABLE.neverRan };
+  }
+  // The control interval is a measurement this classification requires, not one
+  // it can do without: reading a missing count as the baseline would restore the
+  // pre-control-interval classifier for that observation, which is the source of
+  // the wrong verdicts the interval exists to remove. The worker always reports
+  // it, so this is fail-closed on a malformed observation rather than a
+  // compatibility path.
+  const control = observation.runsAfterControl;
+  if (typeof control !== "number") {
+    return { execution: null, reason: EXECUTION_UNATTRIBUTABLE.noControlInterval };
+  }
+  if (control > observation.runsBeforeWrite && observation.runsAfterWrite > control) {
+    return { execution: null, reason: EXECUTION_UNATTRIBUTABLE.unwrittenRerun };
+  }
+  const siteDelta = observation.siteRunsAfterWrite - observation.siteRunsBeforeWrite;
+  const runDelta = observation.runsAfterWrite - control;
+  if (siteDelta > 0 && runDelta > siteDelta) {
+    return { execution: null, reason: EXECUTION_UNATTRIBUTABLE.transitiveSubscription };
+  }
+  if (siteDelta > 0) return { execution: "inline" };
+  // A callback that had not run by the time of the write held no subscription to
+  // the probe's signal -- subscribing to it means reading it, and only the
+  // callback body reads it -- so its run in the write interval is a first run
+  // and not a re-run the write caused. `ranDuringCall` is false by construction
+  // here: the baseline is taken after the call returned, so a run during the
+  // call would have raised `runsBeforeWrite`.
+  if (observation.runsBeforeWrite === 0 && control === 0) {
+    return { execution: null, reason: EXECUTION_UNATTRIBUTABLE.firstRunAfterWrite };
+  }
+  if (runDelta > 0) return { execution: "tracked" };
+  if (observation.ranDuringCall) return { execution: "inline" };
+  return { execution: "deferred" };
+}
+
+/// The execution mode a callback observation names, or `null` when it names
+/// none. `classifyExecutionResult` carries the reason for the `null`.
 export function classifyExecution(observation) {
-  const ranAtAll = observation.runsAfterWrite > 0;
-  if (!ranAtAll) return null;
-  if (observation.siteRunsAfterWrite > observation.siteRunsBeforeWrite) return "inline";
-  if (observation.runsAfterWrite > observation.runsBeforeWrite) return "tracked";
-  if (observation.ranDuringCall) return "inline";
-  return "deferred";
+  return classifyExecutionResult(observation).execution;
+}
+
+/// Whether the runtime an observation was made in could re-run anything.
+///
+/// Fail-closed on absence: the worker stamps every driven observation with the
+/// capability of the runtime that produced it, so a callback observation with no
+/// stamp is an observation whose runtime was never asked -- and an unasked
+/// runtime is not a re-running one. The stamp is per observation rather than per
+/// session because one session holds more than one runtime: probing
+/// solid-js@1.9.14 in `server` mode, `.` resolves to the non-reactive
+/// `dist/server.js` while `./jsx-dev-runtime` resolves unconditionally to
+/// `dist/solid.js` and is driven by its own fully reactive primitives.
+function runtimeReran(result) {
+  return result?.runtime?.reruns === true;
 }
 
 const OUTCOME_REASON = {
@@ -562,6 +694,11 @@ export function interpretSession({ claims, index, mode, results }) {
     if (!about) continue;
     if (about.discovery) {
       if (result.outcome !== "observed") continue;
+      // A discovery finding is a claim string this run would put to a reviewer,
+      // so it needs the same attribution the claim it contradicts needs. In a
+      // runtime that re-runs nothing the mode in that string would be whatever
+      // the inert scaffolding defaulted to.
+      if (!runtimeReran(result)) continue;
       const observed = classifyExecution(result.observation);
       if (!observed) continue;
       incompleteness.push({
@@ -583,6 +720,22 @@ export function interpretSession({ claims, index, mode, results }) {
     if (result.outcome !== "observed") {
       observation.status = "undriven";
       observation.reason = (OUTCOME_REASON[result.outcome] ?? (() => result.outcome))(result);
+      record.observations.push(observation);
+      continue;
+    }
+    // A callback execution claim is a claim about attribution, and attribution
+    // is not observable in a runtime where nothing re-runs. Both directions are
+    // withdrawn, not just the failures: an `inline` or `deferred` claim probed
+    // against an inert runtime *matches* -- the scaffolding can produce nothing
+    // else -- and recording that as a pass certifies a row nothing observed.
+    //
+    // `kind` claims read `typeof` and need no reactivity. A `returns` claim
+    // keeps its verdict because it already requires a re-read to pass, and
+    // because `the call returned an object` is a real observation an inert
+    // runtime can still make.
+    if (claim.startsWith("callbacks[") && !runtimeReran(result)) {
+      observation.status = "undriven";
+      observation.reason = EXECUTION_UNATTRIBUTABLE.runtimeInert;
       record.observations.push(observation);
       continue;
     }
@@ -674,14 +827,8 @@ function verdictFor(claim, observation) {
     return { status: "passed", observed: "accessor" };
   }
   const expected = claim.slice(claim.indexOf("=") + 1);
-  const observed = classifyExecution(observation);
-  if (!observed) {
-    return {
-      status: "undriven",
-      reason:
-        "the synthesized call completed without invoking the callback, so the claim was not exercised"
-    };
-  }
+  const { execution: observed, reason } = classifyExecutionResult(observation);
+  if (!observed) return { status: "undriven", reason };
   if (observed !== expected) {
     // A mismatch is a failure only when the driver did not have to supply the
     // read scope itself.
@@ -994,6 +1141,15 @@ export function buildProbeReport({
     // only way to un-halt a Solid 2.0 development runtime -- but a mode that
     // needed dozens of them is the shape behind a slow or timed-out row, and
     // nothing recorded it before.
+    //
+    // `runtime` is the capability the worker measured for the runtime that drove
+    // that mode's ordinary packages -- `{ reruns: false }` for a mode whose
+    // artifact re-runs nothing. Attribution is still decided per observation,
+    // because one session can hold two runtimes with opposite answers; this is
+    // the mode-level record that says a batch of `undriven` rows was withdrawn
+    // because the runtime was *asked and answered*, which no per-claim reason
+    // can establish. `null` on a mode whose processes all died before importing
+    // `solid-js`: "not measured" is not "measured, and nothing re-ran".
     sessions: {
       started: (sessions ?? []).reduce((total, entry) => total + (entry.started ?? 0), 0),
       restarts: (sessions ?? []).reduce((total, entry) => total + (entry.restarts ?? 0), 0),
@@ -1005,7 +1161,8 @@ export function buildProbeReport({
             started: entry.started ?? 0,
             restarts: entry.restarts ?? 0,
             failed: entry.failed ?? 0,
-            completed: Boolean(entry.completed)
+            completed: Boolean(entry.completed),
+            runtime: entry.runtime ?? null
           }
         ])
       )
