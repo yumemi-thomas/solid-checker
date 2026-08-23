@@ -1,0 +1,14 @@
+{
+  "name": "conditional-imports-side-effect",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "imports": {
+    "#platform": {
+      "browser": "./platform-browser.mjs",
+      "node": "./platform-node.mjs"
+    }
+  }
+}

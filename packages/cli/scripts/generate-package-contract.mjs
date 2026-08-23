@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -29,7 +30,7 @@ import {
   reviewStatePath,
   verifyReportPath
 } from "./contract-review-plan.mjs";
-import { createModuleResolver, runtimeModuleClosure } from "./runtime-module-closure.mjs";
+import { createModuleResolver, noteFor, runtimeModuleClosure } from "./runtime-module-closure.mjs";
 
 /// Who produced a review plan, so a transfer can refuse to carry a review
 /// across a generator whose enumeration or summarization changed underneath it.
@@ -288,14 +289,441 @@ function walkFiles(directory, root = directory, files = []) {
 
 /// The runtime modules an entry file pulls in, and why that set may be short.
 ///
-/// One seam, three consumers: the TypeScript project `analyzeTarget` seeds, the
-/// unpinned-module count on the review plan, and the per-entrypoint hash set a
-/// review transfers against. They must agree, and a hole in any of them is the
-/// same hole -- so the walk lives in one module (runtime-module-closure.mjs)
-/// and its `notes` are propagated everywhere rather than dropped at the two
-/// call sites that only wanted a file list.
+/// The walk has one remaining consumer of its *file list*: the TypeScript
+/// project `analyzeTarget` seeds. It stays the seeder because a published ESM
+/// barrel's `.js` specifiers resolve to adjacent `.d.ts` files when only the
+/// entrypoint is seeded, so letting TypeScript discover the graph from the entry
+/// alone would make the analysis read declarations where it now reads runtime
+/// bytes -- see the pinned rationale in `analyzeTarget`.
+///
+/// What the walk no longer decides is the *record*. The unpinned-module count
+/// and the per-entrypoint hash set a review transfers against now come from the
+/// analyzing program's own module inventory (`attestedClosure`), and the walk's
+/// problems are reconciled against that inventory rather than quoted blind. The
+/// walk is therefore the seed and the attestation is both the record and the
+/// seed's verifier: a module one side names and the other does not is a named,
+/// fail-closed note, never a silent reconciliation.
 function closureOf(packageRoot, resolver, entryFile, excludedFiles = new Set()) {
   return runtimeModuleClosure({ packageRoot, entryFile, excludedFiles, resolver });
+}
+
+/// The realpath of a path that exists, or the path itself.
+///
+/// Neither process's spelling of a file is predictable from the other's. This
+/// one names whatever the caller handed it; the analyzing program names the
+/// cleaned path it holds the file under, which is a realpath only where
+/// resolution walked a symlink under `node_modules`. A package generated inside
+/// a symlinked temporary directory -- `/var/folders/...` on macOS, and every
+/// directory an ecosystem probe generates in -- is reached by both spellings at
+/// once.
+///
+/// So every path is normalized through here before it is compared, and the
+/// record is written back in this process's spelling (`packageScope`). Neither
+/// side derives its answer from the other's, and a path that names no file (a
+/// `bundled:` library path) normalizes to itself and falls outside the package
+/// on its own.
+///
+/// **`realpathSync.native`, not `realpathSync`, and the difference is a
+/// verdict.** The JavaScript implementation resolves symlinks and leaves the
+/// case alone, so on a case-insensitive filesystem -- APFS, HFS+, NTFS -- two
+/// spellings of one file normalized to two different keys: the record named a
+/// path that does not exist on a case-sensitive filesystem, and the seed sweep
+/// reported the same file as seeded-but-never-opened. `realpathSync.native`
+/// goes through the platform's `realpath(3)`, which returns the name the
+/// filesystem actually holds, so one file is one key on every platform and the
+/// verdict for a package no longer depends on which machine generated it.
+const realpathCache = new Map();
+function realpathOrSelf(path) {
+  const cached = realpathCache.get(path);
+  if (cached !== undefined) return cached;
+  let resolved;
+  try {
+    resolved = realpathSync.native(path);
+  } catch {
+    try {
+      resolved = realpathSync(path);
+    } catch {
+      resolved = path;
+    }
+  }
+  realpathCache.set(path, resolved);
+  return resolved;
+}
+
+/// Where a module the analyzing program opened sits, relative to the package
+/// this contract describes. Four answers, and only one of them is a silence.
+///
+/// - **`local`** carries the path *this* process spells the file with, which is
+///   what the record names and hashes. Two spellings are accepted for the same
+///   reason the native side accepts two (`local` in `write_module_inventory`):
+///   TypeScript takes a realpath only where resolution walked a symlink under
+///   `node_modules`, so a directory symlink *inside* the package -- `src ->
+///   ../shared` -- is held under the spelled path while its realpath leaves
+///   `realRoot` entirely. Canonicalizing first and filtering second dropped
+///   that module from the record with no note at all, which is the exact defect
+///   an attested record exists to make impossible. This filter must never be
+///   narrower than the native one.
+/// - **`dependency`** is an installed package's own bytes, reached through a
+///   `node_modules` directory in either spelling. Excluded from the record
+///   deliberately: they are not this package's bytes, no republish of it
+///   changes them, and hashing them would bind the record to the *install
+///   layout* (hoisted or nested) and to a dependency's version, so two
+///   generations over byte-identical package bytes would refuse to transfer a
+///   review. What the analysis read from a dependency is described by that
+///   package's own contract and closure record (`dependencyContracts`). The
+///   residue -- a dependency with no contract of its own -- is a named
+///   approximation in docs/precision-backlog.md, not a claim this record makes.
+/// - **`library`** is the producer's own bundled lib (`bundled:/libs/...`): not
+///   an absolute path, so not a file any record could hash.
+/// - **`foreign`** is everything else: a file the analysis read that this
+///   record cannot claim. It is *noted*, not dropped -- a record that excludes
+///   bytes the summaries were derived from has to say so.
+function packageScope({ packageRoot, realRoot, spelled, real }) {
+  const throughNodeModules = path => path.split(sep).includes("node_modules");
+  if (!isAbsolute(spelled)) return { kind: "library" };
+  // The canonical form first, so the record names the file the filesystem
+  // holds: on a case-insensitive filesystem the analyzing program can hand back
+  // a spelling that exists nowhere on a case-sensitive one, and a record is
+  // transferred between machines. The spelled path is the fallback, for the file
+  // whose realpath left the package root.
+  const local = isWithinDirectory(realRoot, real)
+    ? join(packageRoot, relative(realRoot, real))
+    : isWithinDirectory(packageRoot, spelled)
+      ? spelled
+      : undefined;
+  if (local !== undefined) {
+    return throughNodeModules(relative(packageRoot, local))
+      ? { kind: "dependency" }
+      : { kind: "local", path: local };
+  }
+  return throughNodeModules(spelled) || throughNodeModules(real)
+    ? { kind: "dependency" }
+    : { kind: "foreign" };
+}
+
+function isWithinDirectory(root, candidate) {
+  return candidate === root || candidate.startsWith(`${root}${sep}`);
+}
+
+/// The analyzing program's module inventory, or why there is none.
+///
+/// Fail-closed by construction: every shape that is not a complete, current
+/// inventory answers `unavailable` with the reason, and no caller may treat an
+/// `unavailable` as licence to fall back to the walk's own record. `complete`
+/// is the producer's `ModuleGraph::is_complete` -- a scoped answer that covered
+/// less than it asked for -- and it is checked here rather than at each use so
+/// there is one place the check can be read.
+///
+/// **Two of these branches are defence against a future producer, not a tier
+/// with a population, and the distinction is worth stating where a reader will
+/// hit it.** Against the pinned producer neither can occur:
+///
+/// - `complete: false` is structurally unreachable. `unknownImportPaths` is
+///   non-empty only for a *requested* path the program does not hold, and
+///   `write_module_inventory` builds the request from the program's own
+///   inventory answer with both sides cleaned, so the request is always a
+///   subset of the holdings.
+/// - an absent or unparsable inventory is unreachable through this call, because
+///   a run that cannot write one exits non-zero and aborts the whole generation
+///   before any contract or plan is written.
+///
+/// The code stays, and stays tested (`STUB_INVENTORY_ABSENT` /
+/// `STUB_INVENTORY_INCOMPLETE` in scripts/contract-generation.test.mjs) as the
+/// pin on the *contract* those shapes must honor if a producer ever answers
+/// that way. What must not be claimed is that a user has seen the sentence
+/// below, or that "unattested" is a tier this generator currently produces.
+function readModuleInventory(path) {
+  let document;
+  try {
+    document = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    return {
+      unavailable: `the analyzing program wrote no module inventory (${String(
+        error?.message ?? error
+      )})`
+    };
+  }
+  if (document?.schemaVersion !== 1) {
+    return {
+      unavailable: `the module inventory declares schema version ${JSON.stringify(
+        document?.schemaVersion
+      )} rather than 1`
+    };
+  }
+  if (!Array.isArray(document.modules) || !Array.isArray(document.imports)) {
+    return { unavailable: "the module inventory names no module list" };
+  }
+  if (document.complete !== true) {
+    return {
+      unavailable:
+        "the analyzing program reported its resolved module graph incomplete: it holds fewer " +
+        `files than the inventory asked about (${(document.unknownImportPaths ?? []).length} unanswered)`
+    };
+  }
+  return document;
+}
+
+/// The attested inventories this generation collected, one per analyzed target.
+///
+/// Keyed by `(target, excludedTargets)` rather than by the analysis key, because
+/// that is the key the closure record is rebuilt under: `generationClosures`
+/// mirrors the analysis by excluding an entrypoint's sibling targets, while the
+/// export-map conditions that complete the analysis key select *dependency
+/// contracts* and not TypeScript's own resolution, so two condition sets over
+/// one target analyze the same file set. `record` fails closed on the day that
+/// stops being true instead of letting one condition's inventory stand in for
+/// another's.
+function moduleInventories() {
+  const byTarget = new Map();
+  const key = (target, excludedTargets) => JSON.stringify([target, [...excludedTargets].sort()]);
+  // Modules *and* import facts: the modules decide the record, the import facts
+  // decide which of the walk's problems survive reconciliation, and a check
+  // that compared only the first would let two analyses that resolved the same
+  // files differently share one attestation. Nothing in the generated tsconfig
+  // is condition-dependent today, so this is expected to hold; the point is
+  // that it is checked rather than assumed.
+  const identity = inventory =>
+    inventory?.unavailable
+      ? `unavailable:${inventory.unavailable}`
+      : JSON.stringify([
+          (inventory?.modules ?? []).map(module => module.path),
+          (inventory?.imports ?? []).map(fact => [
+            fact.path,
+            fact.startByte,
+            fact.text,
+            fact.resolution,
+            fact.resolvedPath ?? ""
+          ])
+        ]);
+  return {
+    record(target, excludedTargets, inventory) {
+      const slot = key(target, excludedTargets);
+      const existing = byTarget.get(slot);
+      if (existing === undefined) {
+        byTarget.set(slot, inventory ?? { unavailable: "the target was not analyzed" });
+        return;
+      }
+      if (identity(existing) !== identity(inventory)) {
+        byTarget.set(slot, {
+          unavailable:
+            "two analyses of this target reported different module inventories, so neither " +
+            "attests which bytes the summaries were derived from"
+        });
+      }
+    },
+    for(target, excludedTargets) {
+      return (
+        byTarget.get(key(target, excludedTargets)) ?? {
+          unavailable: "this generation recorded no module inventory for the target"
+        }
+      );
+    }
+  };
+}
+
+/// One analyzed target's closure record, attested against the program that
+/// produced its summaries.
+///
+/// Three answers, and the third is the point.
+///
+/// - **The record** is the inventory, scoped to the package by `packageScope`:
+///   the files the analyzing program opened that are this package's own bytes.
+///   Declaration files are kept. They are bytes the analysis read and the
+///   summaries depend on them exactly as much as on a runtime module -- the walk
+///   classified a `.d.ts` resolution as `external` because *it* could not read
+///   runtime behavior out of one, which is a fact about the walk and not about
+///   the analysis. Library files and dependency bytes are excluded, and
+///   `packageScope` says why each exclusion is not a silence.
+/// - **The walk's problems are reconciled, not quoted.** A specifier the walk
+///   could not resolve and the compiler resolved nothing for either is not an
+///   omission from the record -- the analysis read no file for it -- so no
+///   *record* note is kept. One the compiler *did* resolve is kept and restated
+///   with the attested path, which is strictly more than the walk could say.
+/// - **What the runtime may still load is a different claim.** The record is
+///   attested complete for what the analysis read; what stays unproven is what
+///   the runtime loads, and no module graph can prove that. It rides
+///   `runtimeNotes` so it still blocks promotion while no longer blocking a
+///   transfer between two generations whose attested records are identical. Two
+///   shapes reach it, and they make the same claim: a non-literal `import()`,
+///   and a specifier the compiler resolved nothing for that names existing
+///   runtime modules inside this package a runtime *can* select -- an
+///   unselected conditional `imports` branch. The second is why "the compiler
+///   resolved nothing" is not on its own a licence to say nothing: `#internal`
+///   with a `browser`/`node` pair resolves to no file under `bundler`
+///   resolution and to `node.mjs` under Node, and a side-effect import of it is
+///   exactly where a package patches globals or calls into `solid-js/web`.
+///   `runtimeTargets` (`createModuleResolver`) is the fact that separates it
+///   from `./styles.css` and `./gone.js`, which name no runtime module at all
+///   and which therefore no runtime loads either.
+///
+/// And the fail-closed halves: an absent or incomplete inventory leaves the
+/// record unattested and noted -- never silently replaced by the walk's own
+/// claim -- and a module either side names and the other does not is its own
+/// note, in both directions. Those two inventory shapes are **defensive**: see
+/// `readModuleInventory` for why no current producer can reach them.
+function attestedClosure({ packageRoot, realRoot, target, walked, inventory }) {
+  const notes = [];
+  const runtimeNotes = [];
+  // Two spellings, deliberately. `relativeToRoot` names a path the *producer*
+  // answered with, which is canonical, so it is relative to the canonical root
+  // -- and it is what a note about a file outside the package has to use. The
+  // `local` spelling of a module the record does carry goes through
+  // `packageRelative` instead, so a note and the record name one file one way.
+  const relativeToRoot = file => relative(realRoot, file).replaceAll(sep, "/");
+  const packageRelative = file => relative(packageRoot, file).replaceAll(sep, "/");
+  if (inventory?.unavailable) {
+    notes.push(
+      `${target}: closure not attested: ${inventory.unavailable}. The record below is this ` +
+        "generator's own syntax walk, which cannot say whether the analyzing program read the " +
+        "same files"
+    );
+    return { files: walked.files, notes, runtimeNotes };
+  }
+  // Every path from either side goes through `realpathOrSelf` before it is
+  // compared: see there for why neither process's spelling can be derived from
+  // the other's, and why the comparison is case-exact on every platform.
+  //
+  // One scoped view, computed once and used by the record and by all three
+  // sweeps below. Two views was itself a defect: the record filtered on the
+  // canonical path while the sweeps compared against the unfiltered inventory,
+  // so a module the analysis read that the record excluded was invisible to
+  // both the record and every note.
+  const attested = inventory.modules.map(module => {
+    const real = realpathOrSelf(module.path);
+    return {
+      ...module,
+      path: real,
+      scope: packageScope({ packageRoot, realRoot, spelled: module.path, real })
+    };
+  });
+  const local = attested.filter(module => module.scope.kind === "local");
+  const included = new Set(attested.map(module => module.path));
+  const seeded = new Set(walked.files.map(realpathOrSelf));
+  const importsByFile = new Map();
+  for (const fact of inventory.imports) {
+    const importer = realpathOrSelf(fact.path);
+    const facts = importsByFile.get(importer) ?? [];
+    facts.push({
+      ...fact,
+      ...(fact.resolvedPath ? { resolvedPath: realpathOrSelf(fact.resolvedPath) } : {})
+    });
+    importsByFile.set(importer, facts);
+  }
+  // A module already named by a restated specifier note is not also reported as
+  // an unseeded module: one cause, one note.
+  const restated = new Set();
+  for (const problem of walked.problems) {
+    const importer = realpathOrSelf(problem.file);
+    if (!included.has(importer)) {
+      // The program never opened the module this problem was read from, so
+      // nothing attests what it imports -- and this branch has to come first,
+      // because the sentences below all begin by claiming the record is
+      // attested. The walk's own sentence stands instead, on `notes`.
+      notes.push(noteFor(problem));
+      continue;
+    }
+    if (problem.kind === "dynamic-import") {
+      runtimeNotes.push(
+        `${problem.spelled}: the module record is attested -- it names every file the analyzing ` +
+          `program opened under this package -- and complete except for what ${problem.reason} ` +
+          "may load at runtime, which no module graph can enumerate"
+      );
+      continue;
+    }
+    if (problem.kind !== "specifier" || !problem.specifier) {
+      // A specifier this walk could not read at all -- an unterminated comment
+      // or string, a non-literal `from`, a module whose bytes it could not
+      // open. The compiler's import list for the same file settles it: a
+      // resolution the walk missed is a file in the inventory, so it is
+      // reported below as a module the walk did not seed rather than here as a
+      // sentence about what the walk could not read.
+      continue;
+    }
+    const resolved = (importsByFile.get(importer) ?? []).filter(
+      fact => fact.text === problem.specifier && fact.resolution !== "unresolved" && fact.resolvedPath
+    );
+    if (!resolved.length) {
+      // The compiler resolved nothing for the specifier either, so the analysis
+      // read no file for it and the *record* is complete. That is a claim about
+      // the record and says nothing about the runtime -- and where the walk
+      // found runtime modules inside this package that a runtime can still
+      // select for this specifier, the runtime loads package bytes neither side
+      // read. Same claim as a non-literal `import()`, same channel: it blocks
+      // promotion and not a transfer between two identical records.
+      //
+      // An empty `runtimeTargets` is the ordinary answer and is not a shortcut:
+      // it means nothing on disk answers this specifier, so no runtime resolves
+      // it to a module either -- `./styles.css`, `./gone.js`, an `imports` map
+      // entry that matches nothing, a specifier that escapes the package (whose
+      // boundary the dependency contract owns, exactly as a bare specifier's
+      // is).
+      const reachable = (problem.runtimeTargets ?? []).map(packageRelative).sort();
+      if (reachable.length) {
+        runtimeNotes.push(
+          `${problem.spelled}: the module record is attested -- it names every file the analyzing ` +
+            `program opened under this package -- and complete except for what ${problem.specifier} ` +
+            `may load at runtime: the analyzing program resolved nothing for it (${problem.reason}), ` +
+            `while ${reachable.join(", ")} exist on disk and a runtime selecting one of them reads ` +
+            "package bytes this analysis did not, which no module graph can enumerate"
+        );
+      }
+      continue;
+    }
+    for (const fact of resolved) {
+      restated.add(fact.resolvedPath);
+      notes.push(
+        `${noteFor(problem)}; the analyzing program resolved it to ` +
+          `${relativeToRoot(fact.resolvedPath)} (${fact.resolution}${
+            fact.extension ? `, ${fact.extension}` : ""
+          }), so the analysis read a module this walk did not seed`
+      );
+    }
+  }
+  for (const module of local) {
+    // A declaration file is not a seeding gap. TypeScript preferring an
+    // adjacent `.d.ts` over the `.js` beside it is why the walk seeds runtime
+    // files at all, and the identity split that creates is the analyzer's own
+    // incompleteness finding, not this record's -- see
+    // docs/precision-backlog.md. Reporting it here would double-report it.
+    if (module.declarationFile) continue;
+    if (seeded.has(module.path) || restated.has(module.path)) continue;
+    notes.push(
+      `${packageRelative(module.scope.path)}: the analyzing program opened this module and the closure ` +
+        "walk did not seed it, so the analysis read package bytes the walk did not enumerate"
+    );
+  }
+  for (const file of walked.files) {
+    const real = realpathOrSelf(file);
+    if (included.has(real)) continue;
+    // The same scoped view the record uses: a seeded path that is not this
+    // package's own bytes is not a seeding gap in this package's record. The
+    // note names it the way the record would have -- package-relative, in this
+    // process's spelling -- rather than through a realpath that a directory
+    // symlink can push outside the package.
+    const scope = packageScope({ packageRoot, realRoot, spelled: file, real });
+    if (scope.kind !== "local") continue;
+    notes.push(
+      `${packageRelative(scope.path)}: the closure walk seeded this ` +
+        "module as an analysis root and the analyzing program did not open it, so the " +
+        "record cannot say the summaries were derived from it"
+    );
+  }
+  // The third direction, and the one that had no note at all: a module the
+  // analysis read that the record's own scope excludes. A dependency's bytes
+  // and the producer's bundled libs are named elsewhere (`packageScope`), and a
+  // declaration file outside this package is a dependency's typing whose
+  // identity the analyzer's own declaration-sibling finding owns. Everything
+  // else is a file the summaries were derived from that no hash here pins --
+  // which is precisely what a record may not leave unsaid.
+  for (const module of attested) {
+    if (module.scope.kind !== "foreign" || module.declarationFile) continue;
+    if (restated.has(module.path)) continue;
+    notes.push(
+      `${relativeToRoot(module.path)}: the analyzing program opened this module and it is not ` +
+        "inside this package, so the record excludes bytes the summaries were derived from"
+    );
+  }
+  return { files: local.map(module => module.scope.path), notes, runtimeNotes };
 }
 
 function patternCapture(pattern, candidate) {
@@ -546,15 +974,23 @@ function sha256Artifact(path) {
 ///
 /// One more thing the pair cannot say, and the review plan therefore must. The
 /// bound hash covers the *entry* artifact only, while the analysis behind the
-/// summaries consumes that entry's whole relative runtime-module closure
-/// (`runtimeModuleClosure`, seeded as the analysis roots in `analyzeTarget`).
-/// A barrel entry -- `export { x } from "./internal.mjs"` -- therefore gets a
-/// contract whose semantics come from files no hash pins: replace
+/// summaries consumes every module the analyzing program opened under this
+/// package. A barrel entry -- `export { x } from "./internal.mjs"` -- therefore
+/// gets a contract whose semantics come from files no hash pins: replace
 /// `internal.mjs` and the entry bytes, and the hash with them, are unchanged.
 /// The hash is still real evidence about the entry file, so it keeps being
 /// emitted; the unpinned remainder is counted on the review plan instead of
 /// being left to look like full byte binding.
-function contractArtifacts(output, packageRoot, resolver, targetsByEntrypoint, entrypoints) {
+///
+/// That count is read off the closure record rather than re-walked, which is why
+/// this runs after `generationClosures`. The two used to be independent walks of
+/// the same entrypoint, so a hole in one was a hole in the other with nothing
+/// forcing them to agree; now there is one attested answer and this reads it.
+/// With exactly one target the record is the same for every entrypoint -- one
+/// target means no sibling to exclude -- so any entrypoint's record answers it,
+/// and the body checks that rather than trusting it: a disagreement is a bug in
+/// this generation and a bug may not surface as a smaller unpinned remainder.
+export function contractArtifacts(output, packageRoot, targetsByEntrypoint, entrypoints, closures) {
   const targets = [
     ...new Set(
       [...targetsByEntrypoint]
@@ -588,13 +1024,38 @@ function contractArtifacts(output, packageRoot, resolver, targetsByEntrypoint, e
       ]
     };
   }
-  const closure = closureOf(packageRoot, resolver, file);
+  // Every record here describes this one target, so any of them answers the
+  // count -- and that is checked rather than assumed. A record with no module at
+  // all is the `closure not recorded` catch path: it counts nothing, and reading
+  // it as "one module, nothing pulled in" would suppress this note over a
+  // generation that failed to derive a closure. A generation with no record at
+  // all (every entrypoint refused before a closure was derived) likewise says
+  // nothing extra here -- the per-entrypoint notes already carry why.
+  const records = Object.values(closures.entrypoints ?? {}).filter(
+    entry => Array.isArray(entry?.modules) && entry.modules.length > 0
+  );
+  const counts = [...new Set(records.map(entry => entry.modules.length))].sort(
+    (left, right) => left - right
+  );
+  const artifacts = { implementation: { path: relativePath, hash: sha256Artifact(file) } };
+  if (counts.length > 1) {
+    // One target means no sibling to exclude, so two records over it cannot
+    // legitimately differ. If they do, the generation contradicted itself and
+    // the smaller count must not be the one a reviewer is handed.
+    return {
+      artifacts,
+      notes: [
+        `contract is byte-bound to its entry artifact only: the closure records for ${target} name different module counts (${counts.join(", ")}) although one target has no sibling to exclude, so the unpinned remainder is not established; check every module the analysis read against the exact package release by hand`
+      ]
+    };
+  }
+  const pulled = (counts[0] ?? 1) - 1;
   return {
-    artifacts: { implementation: { path: relativePath, hash: sha256Artifact(file) } },
+    artifacts,
     notes:
-      closure.files.length > 1
+      pulled > 0
         ? [
-            `contract is byte-bound to its entry artifact only: ${target} pulls in ${closure.files.length - 1} further runtime module(s) whose bytes the summaries depend on and schema v1 cannot pin; check those against the exact package release by hand`
+            `contract is byte-bound to its entry artifact only: ${target} pulls in ${pulled} further module(s) the analysis read, whose bytes the summaries depend on and schema v1 cannot pin; check those against the exact package release by hand`
           ]
         : []
   };
@@ -604,19 +1065,27 @@ function contractArtifacts(output, packageRoot, resolver, targetsByEntrypoint, e
 ///
 /// A `notes` entry inside `generation.entrypoints` already blocks a transfer,
 /// but a reviewer reading the checklist would never see it. A specifier the
-/// walker could not resolve means the contract is bound to *less* than the
-/// entry artifact -- the hash covers bytes whose dependencies nobody
-/// enumerated -- which is exactly what this section is for.
+/// walk could not resolve and the analyzing program did resolve means the
+/// contract is bound to *less* than the entry artifact -- the hash covers bytes
+/// whose dependencies nobody enumerated -- which is exactly what this section is
+/// for.
+///
+/// `runtimeNotes` ride the same section for the same reason, and are the same
+/// checklist item to a reviewer: the difference between the two kinds is which
+/// gate they block (see `closureDifference` and `collectBlockers`), not whether
+/// a human has to look.
 function closureEnumerationNotes(closures) {
   return Object.entries(closures.entrypoints ?? {})
     .flatMap(([entrypoint, record]) =>
-      (record.notes ?? []).map(note => `${entrypoint} ${note}`)
+      [...(record.notes ?? []), ...(record.runtimeNotes ?? [])].map(
+        note => `${entrypoint} ${note}`
+      )
     )
     .sort();
 }
 
-/// What the emitted summaries were derived from, per entrypoint: the exact
-/// runtime modules seeded as analysis roots in `analyzeTarget`, hashed.
+/// What the emitted summaries were derived from, per entrypoint: every module
+/// the analyzing program opened under this package, hashed.
 ///
 /// This is the review plan's record, not the contract's: `artifacts` can carry
 /// one implementation pair inside the contract's own directory, while an
@@ -624,15 +1093,28 @@ function closureEnumerationNotes(closures) {
 /// outside the package entirely, so these paths may be spelled with `..`. It
 /// answers the question the checklist cannot -- *which bytes was this reviewed
 /// against* -- and nothing loads it as evidence.
+///
+/// The record is an **attestation**, not a reconstruction: the module list is the
+/// analyzing program's own (`--emit-module-inventory`), and this generator's
+/// syntax walk is reconciled against it rather than quoted. See
+/// `attestedClosure` for the three answers that produces and the two fail-closed
+/// halves. One consequence worth stating where a reader will hit it: the record
+/// names realpaths, resolved back into this process's spelling, and it names the
+/// declaration files the analysis read -- so a record written before attestation
+/// landed does not compare equal to one written after, and a review recorded
+/// against the older record does not transfer. That break is one-time and
+/// documented in docs/package-contracts.md.
 function generationClosures(
   output,
   packageRoot,
   resolver,
   targetsByEntrypoint,
   entrypoints,
-  legacyRoot
+  legacyRoot,
+  inventories
 ) {
   const directory = dirname(output);
+  const realRoot = realpathOrSelf(packageRoot);
   const closures = {};
   for (const [entrypoint, targets] of [...targetsByEntrypoint].sort(([left], [right]) =>
     left.localeCompare(right)
@@ -641,22 +1123,33 @@ function generationClosures(
     const sorted = [...targets].sort();
     const modules = [];
     const notes = [];
+    const runtimeNotes = [];
     for (const target of sorted) {
       // Mirrors the analysis exactly: a sibling conditional target of the same
       // entrypoint is excluded there, so it is not part of what this target's
-      // summaries were derived from.
+      // summaries were derived from -- and it is the other half of the key the
+      // attested inventory for this target was recorded under.
       const excluded = new Set();
+      const excludedTargets = sorted.filter(sibling => sibling !== target);
       let files;
       try {
-        for (const sibling of sorted) {
-          if (sibling !== target) excluded.add(packageLocalTarget(packageRoot, sibling));
+        for (const sibling of excludedTargets) {
+          excluded.add(packageLocalTarget(packageRoot, sibling));
         }
         const entryFile = packageLocalTarget(packageRoot, target);
-        const closure = closureOf(packageRoot, resolver, entryFile, excluded);
-        files = closure.files;
-        // The walker's note already names the exact module the specifier was
-        // read from, which is more precise than the target that reached it.
-        for (const note of closure.notes) notes.push(note);
+        const walked = closureOf(packageRoot, resolver, entryFile, excluded);
+        const reconciled = attestedClosure({
+          packageRoot,
+          realRoot,
+          target,
+          walked,
+          inventory: inventories.for(target, excludedTargets)
+        });
+        files = reconciled.files;
+        // Each note already names the exact module the specifier was read from,
+        // which is more precise than the target that reached it.
+        for (const note of reconciled.notes) notes.push(note);
+        for (const note of reconciled.runtimeNotes) runtimeNotes.push(note);
       } catch (error) {
         notes.push(`${target}: closure not recorded (${String(error?.message ?? error)})`);
         continue;
@@ -676,7 +1169,15 @@ function generationClosures(
     closures[entrypoint] = {
       targets: sorted,
       modules: modules.sort((left, right) => left.path.localeCompare(right.path)),
-      ...(notes.length ? { notes: [...new Set(notes)].sort() } : {})
+      ...(notes.length ? { notes: [...new Set(notes)].sort() } : {}),
+      // A separate field, not a second class of `notes`, because the two answer
+      // different questions. A `notes` entry says the record does not establish
+      // which bytes the summaries came from, so nothing transfers against it. A
+      // `runtimeNotes` entry says the record *is* established and something
+      // outside any module graph may still load a module the analysis never
+      // read -- so two generations with identical records may transfer, and
+      // promotion is still refused.
+      ...(runtimeNotes.length ? { runtimeNotes: [...new Set(runtimeNotes)].sort() } : {})
     };
   }
   return {
@@ -1307,6 +1808,7 @@ async function analyzeTarget({
   const implementationFiles = closureOf(packageRoot, resolver, entryFile, excludedFiles).files;
   const project = join(temporaryDirectory, `${identifier}-tsconfig.json`);
   const output = join(temporaryDirectory, `${identifier}.json`);
+  const inventoryPath = join(temporaryDirectory, `${identifier}-inventory.json`);
   writeFileSync(
     project,
     `${JSON.stringify(
@@ -1337,6 +1839,22 @@ async function analyzeTarget({
       project,
       "--emit-contract",
       output,
+      // The same run's own answer to "which files did you open". The walk above
+      // seeded `files`; this is what the program did with that seed, and it is
+      // what the closure record is built from. Asked for only here, on a
+      // generation run: it is a read of an already-built program, but it is
+      // still two round trips and an ordinary analysis has no consumer for it.
+      //
+      // Passed unconditionally, and an engine that does not know the flag exits
+      // non-zero on an unknown argument -- so a CLI newer than its native engine
+      // fails the whole generation loudly instead of writing a contract whose
+      // record is this process's own walk. That is the intended direction: the
+      // record is fail-closed on a missing attestation, and a version skew is a
+      // missing attestation it would be worse to paper over than to report. The
+      // sentence does not match `nativeRefusalPattern`, so it is an error rather
+      // than a per-entrypoint refusal, which would exit 0.
+      "--emit-module-inventory",
+      inventoryPath,
       "--package-name",
       packageName,
       "--package-version",
@@ -1422,6 +1940,10 @@ async function analyzeTarget({
     }
     return {
       exports: expandContract(JSON.parse(readFileSync(output, "utf8"))).entrypoints["."].exports,
+      // Read from the run that just succeeded, and read here rather than left to
+      // the caller: the file lives in this generation's temporary directory and
+      // is removed with the project below.
+      inventory: readModuleInventory(inventoryPath),
       // Relative to the package root so the plan describes the published
       // package rather than the temporary directory this run analyzed it in.
       attributions: attributions.map(note => ({
@@ -1431,6 +1953,7 @@ async function analyzeTarget({
     };
   } finally {
     rmSync(project, { force: true });
+    rmSync(inventoryPath, { force: true });
   }
 }
 
@@ -1703,6 +2226,9 @@ async function generatePackageContractInternal(arguments_, context) {
   // instead of rebuilding TypeScript, Reactive IR, and dependency contracts
   // once per public alias.
   const targetAnalyses = new Map();
+  // What each analyzed target's own program reported it opened. The closure
+  // record is built from this, not from the walk that seeded the program.
+  const inventories = moduleInventories();
   try {
     let ordinal = 0;
     for (const [entrypoint, variants] of [...selected].sort(([left], [right]) =>
@@ -1775,6 +2301,10 @@ async function generatePackageContractInternal(arguments_, context) {
             });
             targetAnalyses.set(analysisKey, observed);
           }
+          // Recorded on every variant, not only on a fresh analysis, so a target
+          // reached under two condition sets is checked for inventory agreement
+          // rather than silently taking the first one's answer.
+          inventories.record(target, excludedTargets, observed.inventory);
           for (const note of observed.attributions) {
             attributionNotes.push({ ...note, entrypoint });
           }
@@ -1967,23 +2497,27 @@ async function generatePackageContractInternal(arguments_, context) {
       }
     }
 
-    const binding = contractArtifacts(
-      output,
-      packageRoot,
-      moduleResolver,
-      targetsByEntrypoint,
-      entrypoints
-    );
-    // Computed before the review items, not after the plan: a specifier the
-    // walker could not resolve is a hole in the artifact binding, and the
-    // checklist section that names binding holes has to carry it.
+    // Computed before the review items, not after the plan: a specifier the walk
+    // could not resolve and the program did is a hole in the artifact binding,
+    // and the checklist section that names binding holes has to carry it. And
+    // before the binding, because the binding's unpinned-module count is read
+    // off this record rather than re-walked -- one attested answer, not two
+    // independent walks that nothing forced to agree.
     closures = generationClosures(
       output,
       packageRoot,
       moduleResolver,
       targetsByEntrypoint,
       entrypoints,
-      legacyProvenance
+      legacyProvenance,
+      inventories
+    );
+    const binding = contractArtifacts(
+      output,
+      packageRoot,
+      targetsByEntrypoint,
+      entrypoints,
+      closures
     );
     artifactNotes = [
       ...binding.notes,

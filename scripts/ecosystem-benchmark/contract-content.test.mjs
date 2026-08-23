@@ -328,6 +328,59 @@ test("a plan with no notes anywhere reports zero closure notes", () => {
   });
   assert.equal(plan.closureNotes, 0);
   assert.deepEqual(plan.closureNoteSamples, []);
+  assert.equal(plan.attestedRuntimeNotes, 0);
+  assert.deepEqual(plan.attestedRuntimeNoteSamples, []);
+});
+
+test("an attested runtime note is counted apart from a closure note, and still blocks", () => {
+  // The two say different things. A closure note means the record could not be
+  // established; a `runtimeNotes` entry means it was -- the analyzing program's
+  // own file list -- and that a non-literal dynamic `import()` leaves the
+  // *runtime* unbounded. Merging the counts would make attestation's effect on
+  // the corpus unmeasurable, which is the one thing this measurement exists for.
+  const plan = summarizeReviewPlan({
+    schemaVersion: 1,
+    items: [],
+    generation: {
+      entrypoints: {
+        ".": {
+          targets: ["./index.js"],
+          modules: [{ path: "index.js", hash: "abc" }],
+          runtimeNotes: ["index.js: attested, runtime unbounded"]
+        }
+      }
+    }
+  });
+  assert.equal(plan.closureNotes, 0);
+  assert.equal(plan.attestedRuntimeNotes, 1);
+  assert.deepEqual(plan.attestedRuntimeNoteSamples, [". index.js: attested, runtime unbounded"]);
+
+  // And it is not "fully proven": promotion is refused either way.
+  const content = summarizeContract({
+    contract: {
+      schemaVersion: 1,
+      package: { name: "p", version: "1.0.0" },
+      compilerFactsProtocol: 1,
+      entrypoints: { ".": { exports: { thing: { kind: "value" } } } },
+      evidence: { kind: "inferred" }
+    },
+    reviewPlan: {
+      schemaVersion: 1,
+      items: [],
+      generation: {
+        entrypoints: {
+          ".": {
+            targets: ["./index.js"],
+            modules: [{ path: "index.js", hash: "abc" }],
+            runtimeNotes: ["index.js: attested, runtime unbounded"]
+          }
+        }
+      }
+    }
+  });
+  assert.equal(content.closureNotes, 0);
+  assert.equal(content.attestedRuntimeNotes, 1);
+  assert.equal(content.fullyProven, false);
 });
 
 // ---------------------------------------------------------------------------

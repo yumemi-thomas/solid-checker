@@ -111,3 +111,15 @@ missing evidence about the span rather than an answer about the type, and
 refusing on it would refuse for a demand-coverage accident. See
 docs/precision-backlog.md.
 
+
+## What the closure record pins here
+
+`expected-generation.json` names `index.ts` and `sibling.js` — and nothing under
+`node_modules/`, although the analysis reads the installed dependency's own
+artifact to decide the two kinds it carries across. That exclusion is the record's
+scope rule (`packageScope` in packages/cli/scripts/generate-package-contract.mjs):
+a dependency's bytes are not this package's bytes, no republish of this package
+changes them, and hashing them would make the record depend on the install layout
+and on the dependency's version — so two generations over byte-identical package
+bytes would refuse to transfer a review. The dependency's own generated contract
+and closure record are what describe those bytes.

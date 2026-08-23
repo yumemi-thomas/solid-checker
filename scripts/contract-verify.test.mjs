@@ -815,6 +815,69 @@ test("a closure note on an emitted entrypoint blocks outright", () => {
   assert.match(blockers[0], /declines to claim it enumerated/);
 });
 
+test("a runtimeNotes-only record blocks too, under its own named class", () => {
+  // The half attestation separates out, and the ratified decision about it: the
+  // record *is* established -- it is the analyzing program's own file list -- and
+  // what nothing bounds is the runtime. RFC 0002 §2 condition 4 is unchanged in
+  // effect, so this still refuses the document; what changes is that a transfer
+  // between two identical records no longer refuses (`closureDifference`).
+  //
+  // And it must refuse under a *name*. The sentence is one word away from the
+  // closure-note one, the corpus classifier matches on the leading phrase, and a
+  // blocker it cannot name is counted as an unclassified refusal -- the number
+  // amendment A9's stage 2 gate reads.
+  const fixture = draft({
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: {
+        ".": {
+          modules: [{ path: "index.js", hash: "sha256:00" }],
+          runtimeNotes: [
+            "index.js: the module record is attested -- it names every file the analyzing program " +
+              "opened under this package -- and complete except for what a dynamic import() whose " +
+              "specifier is not a string literal may load at runtime, which no module graph can " +
+              "enumerate"
+          ]
+        }
+      }
+    }
+  });
+  const blockers = blockersFor(fixture);
+  assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /^\. carries an attested closure note: index\.js: the module record/);
+  assert.match(blockers[0], /nothing establishes that the runtime loads no other one/);
+  assert.equal(blockerClass(blockers[0]), "attested-closure-note");
+  assert.equal(BLOCKERS.includes("attested-closure-note"), true);
+});
+
+test("an unattested record blocks as a closure note, not as a runtime claim", () => {
+  // The other ratified decision: when the analyzing program's file list is
+  // absent or short, the record is the generator's own walk and says so. That is
+  // the *record* being unestablished -- the stronger of the two refusals -- so it
+  // rides `notes`, blocks the transfer as well as the promotion, and classifies
+  // as `closure-note`. Nothing may route it to the runtime field, where a
+  // transfer would carry a review across bytes nobody attested.
+  const fixture = draft({
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: {
+        ".": {
+          modules: [{ path: "index.js", hash: "sha256:00" }],
+          notes: [
+            "./index.js: closure not attested: the analyzing program wrote no module inventory " +
+              "(ENOENT). The record below is this generator's own syntax walk, which cannot say " +
+              "whether the analyzing program read the same files"
+          ]
+        }
+      }
+    }
+  });
+  const blockers = blockersFor(fixture);
+  assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /^\. carries a closure note: \.\/index\.js: closure not attested/);
+  assert.equal(blockerClass(blockers[0]), "closure-note");
+});
+
 test("a closure note on an entrypoint the contract does not emit does not block", () => {
   // A refused entrypoint is absent from the contract, so a consumer importing
   // it already gets an explicit uncertifiable result rather than a wrong claim.

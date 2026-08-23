@@ -7,6 +7,10 @@ import {
   PROBE_MODES,
   UNDRIVABLE
 } from "../../packages/cli/scripts/contract-probe-driver.mjs";
+// The verifier's own blocker taxonomy, imported rather than restated: a kind it
+// can raise and this classifier cannot name lands in `unclassified-refusal`,
+// which is the one number amendment A9's stage 2 gate reads.
+import { BLOCKERS } from "../../packages/cli/scripts/contract-verification.mjs";
 import {
   ROOT_CAUSE_ORDER,
   blockerClass,
@@ -59,6 +63,17 @@ const CLOSURE_NOTE =
 const STALE_BYTES =
   `the probe report at ${PROBE_REPORT} was written for contract bytes abc123 and ${CONTRACT} ` +
   "hashes to def456; re-probe these exact bytes before verifying them";
+// One word apart from `CLOSURE_NOTE` and a different claim: there the file set
+// is not established, here it is and the runtime is what nothing bounds. Kept
+// verbatim as `collectBlockers` writes it -- the first version of this rule
+// classified every row whose only blocker was this one as an unclassified
+// refusal, because "carries an attested closure note" does not contain "carries
+// a closure note".
+const ATTESTED_CLOSURE_NOTE =
+  ". carries an attested closure note: index.js: the module record is attested -- it names every " +
+  "file the analyzing program opened under this package -- and complete except for what a dynamic " +
+  "import() whose specifier is not a string literal may load at runtime, which no module graph can " +
+  "enumerate. The record names every module the analysis read";
 
 test("blockerClass names every RFC 0002 blocker the corpus actually raised", () => {
   assert.equal(blockerClass(NO_EVIDENCE_WRITE), "probe-report-includes-evidence-write");
@@ -66,6 +81,10 @@ test("blockerClass names every RFC 0002 blocker the corpus actually raised", () 
   assert.equal(blockerClass(INCOMPLETENESS), "incompleteness");
   assert.equal(blockerClass(KIND_UNOBSERVED), "kind-observed");
   assert.equal(blockerClass(CLOSURE_NOTE), "closure-note");
+  // Its own class, not the closure-note bucket: merging them would make the
+  // effect of attestation on this corpus unmeasurable, which is the whole reason
+  // the generator emits the two on separate fields.
+  assert.equal(blockerClass(ATTESTED_CLOSURE_NOTE), "attested-closure-note");
   assert.equal(blockerClass(STALE_BYTES), "probe-report-binds-contract");
   assert.equal(blockerClass(`no probe report at ${PROBE_REPORT}: mechanical verification`), "probe-report-present");
   // Amendment A9's floor: a document that would certify nothing with no `kind`
@@ -99,6 +118,33 @@ test("blockerClass classifies an evidence-write refusal truncated mid-marker", (
 
 test("blockerClass falls back rather than guessing", () => {
   assert.equal(blockerClass("something nobody has seen before"), "unclassified-refusal");
+});
+
+// The hazard `collectBlockers` documents ten lines above the code that raises
+// them, and which nothing asserted until a new blocker kind slipped through: a
+// refusal the verifier can raise whose class this harness cannot name is not a
+// measurement, it is an unclassified row -- and `unclassified-refusal` is the
+// number amendment A9's stage 2 gate reads. Two halves, because either alone
+// passes while the pair is broken: every kind the verifier declares must be
+// orderable as a root cause, and the classifier must actually produce it from
+// the sentence.
+test("every blocker kind the verifier declares is one this harness can name", () => {
+  for (const kind of BLOCKERS) {
+    assert.equal(
+      ROOT_CAUSE_ORDER.includes(kind),
+      true,
+      `${kind} is raised by contract verify and has no place in ROOT_CAUSE_ORDER`
+    );
+    assert.equal(rootCause(new Set([kind])), kind);
+  }
+});
+
+test("the closure blockers classify apart, in both directions", () => {
+  const classes = new Set([blockerClass(CLOSURE_NOTE), blockerClass(ATTESTED_CLOSURE_NOTE)]);
+  assert.deepEqual([...classes].sort(), ["attested-closure-note", "closure-note"]);
+  // A row carrying both is a row whose record is not established at all, and
+  // that is the cause a reader has to resolve first.
+  assert.equal(rootCause(classes), "closure-note");
 });
 
 test("rootCause prefers a real cause over the evidence-write consequence", () => {

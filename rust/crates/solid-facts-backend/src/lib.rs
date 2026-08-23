@@ -222,6 +222,29 @@ impl TypeFactsSession {
             .collect())
     }
 
+    /// The resolved module graph of the open generation: every file the
+    /// analyzing program included, and — where the demand asks — where each
+    /// specifier of a named file resolved.
+    ///
+    /// A read of the retained program, exactly like
+    /// [`Self::configured_sources`]: it carries no state token, edits no
+    /// retained demand set, and leaves a materialized analysis untouched. It is
+    /// what turns a closure record from a reconstruction into an attestation,
+    /// and it is issued only where a caller asks for one — never on an ordinary
+    /// analysis run, which has no consumer for it.
+    ///
+    /// The producer fails the request rather than answering a partial
+    /// inventory, and
+    /// [`ModuleGraph::is_complete`](typefacts::ModuleGraph::is_complete) is the
+    /// caller's signal that a scoped answer covered less than it asked for.
+    /// Neither may be reconciled against a weaker local reconstruction.
+    pub fn module_graph(
+        &mut self,
+        demand: &typefacts::ModuleGraphDemand,
+    ) -> Result<typefacts::ModuleGraph, BackendError> {
+        Ok(self.session.module_graph(demand)?)
+    }
+
     /// Applies an overlay and advances the generation.
     pub fn update(&mut self, changes: Vec<typefacts::v3::FileChange>) -> Result<(), BackendError> {
         self.session.update(changes)?;

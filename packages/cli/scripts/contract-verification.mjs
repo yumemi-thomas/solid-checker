@@ -52,6 +52,14 @@ export const BLOCKERS = [
   // finer refusal can produce that the coarse one could not.
   "certifies-nothing",
   "closure-note",
+  // The other half of RFC 0002 §2 condition 4, separated by attestation: the
+  // record is established and what the runtime loads is not. Its own kind
+  // rather than a second spelling of `closure-note`, because merging the two
+  // would make attestation's effect on the corpus unmeasurable -- and its own
+  // rule in `blockerClass` (scripts/ecosystem-benchmark/verify-corpus.mjs), or
+  // every row whose only blocker is this one lands in `unclassified-refusal`,
+  // which is the one number amendment A9's stage 2 gate reads.
+  "attested-closure-note",
   "review-under-way",
   "document-validates"
 ];
@@ -808,6 +816,29 @@ export function collectBlockers({
           `${name} carries a closure note: ${note}. The summaries were derived from a file set ` +
             "the generator itself declines to claim it enumerated, and no probe covers the " +
             "negative claims that file set determines"
+        );
+      }
+      // The other half of RFC 0002 §2 condition 4, separated by attestation.
+      // Here the file set *is* claimed -- it is the analyzing program's own --
+      // and what is unclaimed is that the runtime loads nothing else. That is a
+      // different sentence and it blocks for a different reason: the negative
+      // claims still rest on a file set no probe can be shown to be complete,
+      // and no module graph can close it. It stays document-wide for the same
+      // reason a closure note does.
+      //
+      // The sentence is one word from the one above ("an *attested* closure
+      // note"), which is exactly why it needs its own classifier rule and its
+      // own `BLOCKERS` kind: the corpus harness matches on the leading phrase,
+      // and a blocker it cannot name is counted as an unclassified refusal --
+      // the one number amendment A9's stage 2 gate reads. See the hazard note
+      // on `noCertifyingEntrypointBlockers`, `attested-closure-note` in
+      // scripts/ecosystem-benchmark/verify-corpus.mjs, and the test in
+      // verify-corpus.test.mjs that holds every kind here to being nameable.
+      for (const note of plan.generation?.entrypoints?.[name]?.runtimeNotes ?? []) {
+        blockers.push(
+          `${name} carries an attested closure note: ${note}. The record names every module the ` +
+            "analysis read, and nothing establishes that the runtime loads no other one, so no " +
+            "probe covers the negative claims that file set determines"
         );
       }
     }

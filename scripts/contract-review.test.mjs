@@ -22,6 +22,7 @@ import {
   collectReviewItems,
   renderReviewPlanDocument
 } from "../packages/cli/scripts/contract-review-plan.mjs";
+import { closureDifference } from "../packages/cli/scripts/review-contract.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");
@@ -237,6 +238,51 @@ test(
     }
   }
 );
+
+// Which of the two closure fields a transfer reads, pinned directly on the
+// comparison the transfer runs. The end-to-end tests below drive real
+// generations, and no real generation can produce the pair of records that makes
+// this decision visible: two byte-identical records where one carries a runtime
+// claim and the other does not is not a shape a package has.
+test("a transfer reads notes and deliberately ignores runtimeNotes", () => {
+  const record = () => ({
+    targets: ["./index.js"],
+    modules: [{ path: "index.js", hash: "sha256:aa" }]
+  });
+
+  // The baseline: same targets, same modules, same hashes.
+  assert.equal(closureDifference(record(), record()), "");
+
+  // A `runtimeNotes` entry says the record is the analyzing program's own file
+  // list and complete for what the analysis read, and that nothing bounds what
+  // the runtime loads. The bytes on both sides are the same bytes and the
+  // runtime is exactly as unbounded in both, so refusing the transfer would
+  // refuse it for a reason that did not change. Promotion still refuses -- see
+  // the attested-closure blocker in scripts/contract-verify.test.mjs, which is
+  // the gate that question is about.
+  const unbounded = { ...record(), runtimeNotes: ["index.js: the module record is attested --"] };
+  assert.equal(closureDifference(unbounded, unbounded), "");
+  assert.equal(closureDifference(record(), unbounded), "");
+  assert.equal(closureDifference(unbounded, record()), "");
+
+  // A `notes` entry is the other claim: the record does not establish which
+  // bytes the summaries came from, so it cannot establish that two generations
+  // came from the same ones. Either side carrying one refuses.
+  const unattested = { ...record(), notes: ["./index.js: closure not attested: ..."] };
+  assert.match(closureDifference(unattested, record()), /^its closure record is incomplete/);
+  assert.match(closureDifference(record(), unattested), /^its closure record is incomplete/);
+
+  // And the record still has to be a record: an empty module list transfers
+  // nothing, note or no note.
+  assert.match(
+    closureDifference({ targets: ["./index.js"], modules: [] }, record()),
+    /^its closure record names no module/
+  );
+  assert.match(
+    closureDifference(record(), { ...record(), modules: [{ path: "index.js", hash: "sha256:bb" }] }),
+    /^its runtime module closure changed/
+  );
+});
 
 test("listing an unresolved plan is a gate", () => {
   const { directory, contract, identify } = sentinelWorkspace();

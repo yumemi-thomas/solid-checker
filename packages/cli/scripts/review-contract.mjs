@@ -299,12 +299,25 @@ function parseResolution(argument) {
 
 /// Why two closure records do not describe the same bytes, or "" when they do.
 ///
-/// A note is an omission -- a target whose closure could not be walked, a
-/// module whose bytes were unreadable -- so a record carrying one does not
-/// establish what the summaries were derived from, and cannot establish that
-/// two generations were derived from the same thing. Both sides are emitted
-/// sorted, so equal content compares position by position.
-function closureDifference(left, right) {
+/// A note is an omission -- a record that is not attested, a module the
+/// analyzing program opened that the generator's seed never named, a module
+/// whose bytes were unreadable -- so a record carrying one does not establish
+/// what the summaries were derived from, and cannot establish that two
+/// generations were derived from the same thing. Both sides are emitted sorted,
+/// so equal content compares position by position.
+///
+/// `runtimeNotes` is deliberately *not* read here, and the omission is the
+/// point. It says the record is the analyzing program's own file list and
+/// complete for what the analysis read, and that something outside every module
+/// graph -- a non-literal dynamic `import()`, or an unselected conditional
+/// `imports` branch whose targets are real modules on disk -- leaves the runtime
+/// unbounded. The record it sits beside does
+/// establish which bytes the summaries came from, and the runtime is exactly as
+/// unbounded in both generations, so refusing the transfer would refuse it for a
+/// reason that did not change. It still refuses *promotion* --
+/// `collectBlockers` raises its own sentence for it -- which is the gate that
+/// question is actually about.
+export function closureDifference(left, right) {
   if (left.notes?.length || right.notes?.length) {
     return "its closure record is incomplete: a module's bytes were not recorded at generation";
   }

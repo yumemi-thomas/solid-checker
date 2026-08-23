@@ -10,7 +10,7 @@ import {
   rmSync
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -151,7 +151,29 @@ const fixtures = [
   // destructures a member of another value so nothing ruled out a class --
   // against publishing a `value` summary, which is the maximal certified
   // negative.
-  "class-expression-kind"
+  "class-expression-kind",
+  // The closure-record fixtures. Each carries an `expected-generation.json`
+  // as well as an `expected.json`, because what they pin is the *review plan's*
+  // record -- which modules the analyzing program attested it opened, and which
+  // of the generator's own walk problems survived reconciliation against that
+  // attestation. Their contracts are deliberately trivial: a closure-record
+  // regression is invisible in the contract document, which is why nothing
+  // caught this class before.
+  //
+  // They are registered here and not left to scripts/contract-generation.test.mjs
+  // because that suite runs against a stub native checker, and a stub cannot
+  // resolve a module. Only a real producer can answer "did the compiler resolve
+  // this specifier", and every one of these turns on that answer.
+  "attested-record-matches-walk",
+  "asset-import",
+  "attested-specifier-restated",
+  "seed-attestation-discrepancy",
+  "non-literal-dynamic-import",
+  // The one case where "the compiler resolved nothing" and "no runtime loads
+  // anything" come apart: an unselected conditional `imports` branch whose
+  // targets exist on disk. It is the reason the record's completeness and the
+  // runtime's boundedness are two claims and not one.
+  "conditional-imports-side-effect"
 ];
 
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? defaultNative;
@@ -240,17 +262,81 @@ async function generate(name) {
   }
   return {
     contract: JSON.parse(readFileSync(output, "utf8")),
+    // The closure record, normalized into the fixture's own namespace. It is
+    // written beside the contract, so in this gate it lives in the temporary
+    // directory and its module paths are relative to that -- which is
+    // machine-specific and unpinnable. Re-relativizing against the package root
+    // is what makes it a fixture-owned fact. Hashes are dropped for the same
+    // reason `expected.json` does not carry file bytes: the *set* of modules and
+    // the notes are the semantic claim, and pinning a hash would make every
+    // source edit a two-file edit while proving nothing extra. That each module
+    // carries a hash at all is asserted below.
+    closures: normalizeClosures(packageRoot, output),
     coverage: collectFixtureCoverage(name)
   };
 }
 
-/** Compares one fixture's generated contract against its checked-in pin. */
-function compare(name, contract) {
-  const expectedPath = join(root, "fixtures/package-contracts", name, "expected.json");
+/**
+ * One fixture's per-entrypoint closure record, in package-relative terms.
+ *
+ * `null` when the generation wrote no review plan, which is itself pinnable: a
+ * fixture whose plan disappeared has lost the only record of which bytes its
+ * summaries were derived from.
+ */
+function normalizeClosures(packageRoot, output) {
+  const planPath = `${output.slice(0, -".json".length)}.review.json`;
+  if (!existsSync(planPath)) return null;
+  const plan = JSON.parse(readFileSync(planPath, "utf8"));
+  const directory = dirname(output);
+  const normalized = {};
+  for (const [entrypoint, record] of Object.entries(plan.generation?.entrypoints ?? {})) {
+    normalized[entrypoint] = {
+      targets: record.targets ?? [],
+      modules: (record.modules ?? [])
+        .map(module => {
+          if (!/^sha256:[0-9a-f]{64}$/.test(module.hash ?? "")) {
+            throw new Error(
+              `${entrypoint} records module ${module.path} with no sha256 hash; the closure record's ` +
+                "whole purpose is naming which bytes the summaries came from"
+            );
+          }
+          return relative(packageRoot, resolve(directory, module.path)).split(sep).join("/");
+        })
+        .sort(),
+      ...(record.notes ? { notes: record.notes } : {}),
+      ...(record.runtimeNotes ? { runtimeNotes: record.runtimeNotes } : {})
+    };
+  }
+  return normalized;
+}
+
+/**
+ * Compares one fixture's generated contract against its checked-in pin, and its
+ * closure record against `expected-generation.json` where the fixture pins one.
+ *
+ * The closure pin is opt-in because it is a *review-plan* fact and most fixtures
+ * are about the contract document. A fixture that carries the file is asserting
+ * something about attestation -- which modules the analyzing program opened,
+ * and which of the walk's own problems survived reconciliation against that --
+ * and that is exactly what nothing else in this repository can pin against the
+ * real producer.
+ */
+function compare(name, contract, closures) {
+  const fixture = join(root, "fixtures/package-contracts", name);
+  const expectedPath = join(fixture, "expected.json");
   const expected = JSON.parse(readFileSync(expectedPath, "utf8"));
   if (JSON.stringify(contract) !== JSON.stringify(expected)) {
     throw new Error(
       `${name} drifted from ${expectedPath}; review the generated contract before updating the pin`
+    );
+  }
+  const closurePath = join(fixture, "expected-generation.json");
+  if (!existsSync(closurePath)) return;
+  const expectedClosures = JSON.parse(readFileSync(closurePath, "utf8"));
+  if (JSON.stringify(closures) !== JSON.stringify(expectedClosures)) {
+    throw new Error(
+      `${name} closure record drifted from ${closurePath}; review it before updating the pin.\n` +
+        `generated: ${JSON.stringify(closures, null, 2)}`
     );
   }
 }
@@ -354,7 +440,7 @@ try {
   const generated = [];
   const contributions = [];
   for (const [index, fixture] of fixtures.entries()) {
-    compare(fixture, computed[index].value.contract);
+    compare(fixture, computed[index].value.contract, computed[index].value.closures);
     contributions.push(...computed[index].value.coverage);
     generated.push(fixture);
   }

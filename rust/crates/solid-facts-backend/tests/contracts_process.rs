@@ -959,6 +959,158 @@ fn cli_emits_and_revalidates_package_contracts() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+/// `--emit-module-inventory` attests the program this run analyzed.
+///
+/// The point of the flag is that the answer comes from the process that resolved
+/// the modules, so the assertions below are the three things only that process
+/// can say: which files it opened, which specifier resolved to what, and which
+/// specifier resolved to nothing at all. A generator-side walk can produce a
+/// plausible version of the first and neither of the other two.
+#[test]
+fn cli_emits_the_analyzing_program_s_own_module_inventory() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("module-inventory");
+    let package = directory.join("package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        "{\"name\":\"inventory-package\",\"version\":\"1.0.0\",\"type\":\"module\"}\n",
+    )
+    .unwrap();
+    // Three shapes in one entry: a specifier the resolver substitutes an
+    // extension for, one it resolves to nothing, and a file the program reaches
+    // only through the first.
+    fs::write(
+        package.join("index.js"),
+        "import \"./styles.css\";\nexport { thing } from \"./impl.js\";\n",
+    )
+    .unwrap();
+    fs::write(package.join("impl.ts"), "export const thing = 1;\n").unwrap();
+    fs::write(package.join("styles.css"), ".thing { color: red; }\n").unwrap();
+    let project = directory.join("tsconfig.json");
+    fs::write(
+        &project,
+        format!(
+            "{{\"compilerOptions\":{{\"allowJs\":true,\"checkJs\":true,\"module\":\"ESNext\",\
+             \"moduleResolution\":\"Bundler\",\"skipLibCheck\":true,\"target\":\"ES2022\"}},\
+             \"files\":[{:?}]}}\n",
+            package.join("index.js").to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let contract = directory.join("solid-reactivity.json");
+    let inventory_path = directory.join("inventory.json");
+    let result = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--project"])
+        .arg(&project)
+        .args(["--emit-contract"])
+        .arg(&contract)
+        .args(["--emit-module-inventory"])
+        .arg(&inventory_path)
+        .args(["--contract-entry-file"])
+        .arg(package.join("index.js"))
+        .args(["--contract-package-root"])
+        .arg(&package)
+        .args([
+            "--package-name",
+            "inventory-package",
+            "--package-version",
+            "1.0.0",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let inventory: serde_json::Value =
+        serde_json::from_slice(&fs::read(&inventory_path).unwrap()).unwrap();
+    assert_eq!(inventory["schemaVersion"], 1);
+    assert_eq!(inventory["complete"], true);
+    assert_eq!(inventory["unknownImportPaths"].as_array().unwrap().len(), 0);
+
+    // The spelling the caller passed, not the canonical one. Both name the same
+    // directory and the consumer normalizes each side itself, so the assertions
+    // below canonicalize rather than assuming which spelling the program used --
+    // a `/var/folders` temporary directory is reachable by both.
+    assert_eq!(
+        inventory["packageRoot"].as_str().unwrap(),
+        package.to_string_lossy()
+    );
+    let real_package = package.canonicalize().unwrap();
+    let modules = inventory["modules"].as_array().unwrap();
+    let local = modules
+        .iter()
+        .filter_map(|module| module["path"].as_str())
+        .filter_map(|path| fs::canonicalize(path).ok())
+        .filter(|path| path.starts_with(&real_package))
+        .collect::<Vec<_>>();
+    // `impl.ts` is there because the program opened it, not because the entry
+    // named it: the entry names `./impl.js`, which does not exist.
+    assert_eq!(
+        local,
+        vec![real_package.join("impl.ts"), real_package.join("index.js")]
+    );
+    // The inventory is not filtered to the package on the wire. It is a record
+    // of what the analysis read, and the generator scopes it where the record is
+    // built -- see `attestedClosure`.
+    assert!(
+        modules.len() > local.len(),
+        "the inventory should name the library files the analysis opened too: {modules:?}"
+    );
+
+    let imports = inventory["imports"].as_array().unwrap();
+    let of = |text: &str| {
+        imports
+            .iter()
+            .find(|fact| fact["text"] == text)
+            .unwrap_or_else(|| panic!("no import fact for {text}: {imports:?}"))
+            .clone()
+    };
+    let asset = of("./styles.css");
+    assert_eq!(asset["resolution"], "unresolved");
+    assert_eq!(asset["resolvedPath"], serde_json::Value::Null);
+    let implementation = of("./impl.js");
+    assert_eq!(implementation["resolution"], "relative");
+    assert_eq!(
+        fs::canonicalize(implementation["resolvedPath"].as_str().unwrap()).unwrap(),
+        real_package.join("impl.ts")
+    );
+    assert_eq!(implementation["extension"], ".ts");
+    // Every fact joins to a consumer's own syntax facts by exact span, never by
+    // matching specifier text.
+    assert_eq!(
+        fs::canonicalize(implementation["path"].as_str().unwrap()).unwrap(),
+        real_package.join("index.js")
+    );
+    assert!(
+        implementation["endByte"].as_u64().unwrap() > implementation["startByte"].as_u64().unwrap()
+    );
+
+    // An attestation of a run that emits no contract would attest nothing.
+    let orphan = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--project"])
+        .arg(&project)
+        .args(["--emit-module-inventory"])
+        .arg(directory.join("orphan.json"))
+        .output()
+        .unwrap();
+    assert!(!orphan.status.success());
+    assert!(
+        String::from_utf8_lossy(&orphan.stderr).contains("requires --emit-contract"),
+        "{}",
+        String::from_utf8_lossy(&orphan.stderr)
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
 #[test]
 fn cli_emits_unknown_callback_claim_without_discarding_known_siblings() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {

@@ -1,0 +1,11 @@
+{
+  ".": {
+    "targets": [
+      "./index.js"
+    ],
+    "modules": [
+      "impl.ts",
+      "index.js"
+    ]
+  }
+}

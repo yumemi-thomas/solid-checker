@@ -87,4 +87,20 @@ per fixture project, holding rule, code, kind, severity, path, and span
 
 Package-contract fixtures (`fixtures/package-contracts/`) additionally pin the
 exact package artifact; keep unknown external behavior fail-closed rather than
-adding blanket trust to make a case green.
+adding blanket trust to make a case green. They are registered by name in
+`scripts/contract-corpus.mjs`, which compares `expected.json` (the contract) and,
+where the fixture carries one, `expected-generation.json` (the review plan's
+attested closure record — per entrypoint: `targets`, package-relative module
+paths, `notes`, `runtimeNotes`; hashes deliberately unpinned). Add the second
+file only for a claim about which modules the *analyzing program* reported it
+opened: that is invisible in the contract document and cannot be tested from
+`scripts/contract-generation.test.mjs`, whose stub native checker resolves
+nothing. See `fixtures/package-contracts/torture-corpus.md`.
+
+Two closure shapes cannot be a committed fixture at all: a symlink escaping the
+package root (it would be this repository's first committed symlink, and arrives
+as a plain file on a Windows checkout) and one file reached by two case
+spellings. Those are generated into a temporary directory against the real
+producer in `scripts/contract-closure-record.test.mjs` — the right home for any
+closure property that depends on the filesystem underneath the package rather
+than on its contents.

@@ -1,0 +1,12 @@
+{
+  ".": {
+    "targets": [
+      "./index.js"
+    ],
+    "modules": [
+      "barrel-one.js",
+      "barrel-two.js",
+      "index.js"
+    ]
+  }
+}
