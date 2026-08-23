@@ -2738,9 +2738,9 @@ same 305-row / 416-probe manifest; before = the 2026-08-22 run recorded above).
 > unknown-claim counts and *raised* the "exports proven" figure by certifying
 > something that was not proven. The improvement recorded here is real in
 > direction; part of its magnitude was that inflation. The `corrected` column
-> was the current state when this entry was written and is now three measurement
+> was the current state when this entry was written and is now four measurement
 > states old — see
-> [ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-sixth-measurement-state-release-binary-416-probes)
+> [ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-seventh-measurement-state-release-binary-416-probes)
 > for the current figures, including the outcome classes, which have moved since
 > ("moved once and have not moved since" below was true until 2026-08-24).
 
@@ -4143,9 +4143,22 @@ checked-in reports under `benchmarks/ecosystem/` are that state (the account is 
   state, in both probes, traces to a render site the graph resolved; no probe in
   the corpus lost proven surface, and no unknown became proven anywhere else.
 
+**Re-measured 2026-08-24 beside the export-kind proof, and it survives.** On the
+merged engine (`ddb0ecd860d4c77f50d1d6c7a0af003bc3adb34ff46a0fcee81715c84ac574b1`)
+the render edges are worth **exports proven +6, exports carrying an unknown −6,
+unknown claims −14** (`reactiveReads` −7, `returns` −7) and reactive-read rows
++4 — the same two probes, the same mechanisms, and one proven export fewer than
+above. The missing export is the two change sets' only overlap: of the seven
+`@tanstack/ai-solid-ui@0.7.18` exports the render edge frees, one carries a
+`callbacks` unknown the `kind` proof opens, so it is not fully proven either way.
+Verification moves the same four undriven `reactiveReads` claims and nothing else,
+against the `kind` proof measured alone
+(`34e97be60c60291debbae66239082cd1e252ff53831f7f1eb977647207f31aec`).
+
 Two probes is a small result and it is not evidence that the shape is rare in
 real projects: the rendered-only private helper is a component-library idiom, and
-this corpus is dominated by Solid Primitives, whose 288 contracts are hooks and
+this corpus is dominated by Solid Primitives, whose 288 contracts (281 after the
+2026-08-24 refusals) are hooks and
 primitives rather than components. The corpus measures published packages'
 *contract generation*, which is the one place this shape is least represented.
 The reports carry no attribution-mechanism field, so the `fallback-all` →
@@ -4421,18 +4434,30 @@ refused for an unrelated pre-existing reason (its dependency contract has no
 entrypoint matching `@tanstack/pacer/types`), not by any `kind` decision.
 
 **The corpus-level cost and gain, measured 2026-08-24.** The full ecosystem
-benchmark was re-run against a release build of this change set
-(`34e97be60c60291debbae66239082cd1e252ff53831f7f1eb977647207f31aec`), both
-harnesses, all 416 probe rows. Machine verification: **261 → 267 verified**
-(+13 rows gained, −7 lost, none moved `verified → refused`), **146 → 129
-refused**, failing claims **63 → 24**, and generation failures **4 → 15**.
-Contract content: exports proven **5,410/8,358 → 4,444/8,082**, exports carrying
-an unknown **2,948 → 3,638**, probes fully proven **205/409 → 125/398**. The
-arithmetic closes exactly — proven −966 = 276 exports that stopped existing plus
-690 that moved to unknown, and exports-with-unknown +690 — so nothing in the
-movement is unattributed. Both numbers are stated once, with the family
-breakdowns, in
-[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-sixth-measurement-state-release-binary-416-probes).
+benchmark was re-run against a release build of this change set as it sits beside
+the render-edge change it merged with
+(`ddb0ecd860d4c77f50d1d6c7a0af003bc3adb34ff46a0fcee81715c84ac574b1`), both
+harnesses, all 416 probe rows, and the checked-in reports under
+`benchmarks/ecosystem/` are that state. Machine verification: **261 → 267
+verified** (+13 rows gained, −7 lost, none moved `verified → refused`), **146 →
+129 refused**, failing claims **63 → 24**, and generation failures **4 → 15**.
+Contract content: exports proven **5,417/8,358 → 4,450/8,082**, exports carrying
+an unknown **2,941 → 3,632**, probes fully proven **205/409 → 125/398**. The
+arithmetic closes exactly — proven −967 = 276 exports that stopped existing (the
+export total falls 8,358 → 8,082) plus the 691 by which exports-carrying-an-unknown
+rose, an identity because no export in either state lacks a summary — so nothing
+in the movement is unattributed.
+
+**Measured alone, this change set produces the same verdict on every row.** A
+release build of it without the render edges
+(`34e97be60c60291debbae66239082cd1e252ff53831f7f1eb977647207f31aec`) verifies the
+same 267 rows and refuses the same 129 — *the same rows* — with the same 24
+failing claims, root causes, conversions and session counts; the two change sets
+differ only by 4 undriven `reactiveReads` claims and by 6 proven exports of
+`@tanstack/ai-solid-ui@0.7.18`, where they overlap on one export. So none of the
+movement above is an interaction between them. Both numbers are stated once, with
+the family breakdowns, in
+[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-24-seventh-measurement-state-release-binary-416-probes).
 
 ## The refusal path costs enums and untyped values (2026-08-24)
 
