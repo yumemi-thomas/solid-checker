@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { EXECUTION_UNATTRIBUTABLE } from "../../packages/cli/scripts/contract-probe-driver.mjs";
+import {
+  EXECUTION_UNATTRIBUTABLE,
+  OUTCOME_REASON,
+  PROBE_MODES,
+  UNDRIVABLE
+} from "../../packages/cli/scripts/contract-probe-driver.mjs";
 import {
   ROOT_CAUSE_ORDER,
   blockerClass,
   buildVerificationReport,
   classifyExports,
+  kindGapsFor,
   notVerifiedLines,
   peerSpecsFor,
   percentile,
@@ -20,6 +26,8 @@ import {
   stats,
   undrivenBucket
 } from "./verify-corpus.mjs";
+
+const ALL_MODE_NAMES = PROBE_MODES.map(mode => mode.name);
 
 // Real captured refusal lines from `contract verify` against the pinned
 // corpus. They matter verbatim: they are what the refusal sidecar's
@@ -60,6 +68,25 @@ test("blockerClass names every RFC 0002 blocker the corpus actually raised", () 
   assert.equal(blockerClass(CLOSURE_NOTE), "closure-note");
   assert.equal(blockerClass(STALE_BYTES), "probe-report-binds-contract");
   assert.equal(blockerClass(`no probe report at ${PROBE_REPORT}: mechanical verification`), "probe-report-present");
+  // Amendment A9's floor: a document that would certify nothing with no `kind`
+  // refusal behind it. Named rather than left to the catch-all, so that if the
+  // shape ever appears the measurement says what it is.
+  assert.equal(
+    blockerClass(
+      "no entrypoint certifies anything: the contract emits no entrypoint at all, so the promoted " +
+        "document would certify nothing and the loader would reject it."
+    ),
+    "certifies-nothing"
+  );
+  // And the document-level kind line keeps its class with the phrase leading, so
+  // the 260-character head cannot lose it behind a long entrypoint name.
+  assert.equal(
+    blockerClass(
+      "no passing kind observation for any entrypoint that certifies anything: of 2 emitted " +
+        "entrypoint(s), 2 are refused for an unobserved `kind` claim"
+    ),
+    "kind-observed"
+  );
 });
 
 // The head length the harness stores has to be long enough to classify a line
@@ -130,6 +157,277 @@ test("every reason the probe driver can give for an unattributable observation h
   for (const [name, reason] of Object.entries(EXECUTION_UNATTRIBUTABLE)) {
     assert.notEqual(undrivenBucket(reason), "other", name);
   }
+});
+
+// The reasons a probe *result* carries, evaluated with a synthetic result so the
+// package-specific detail each one interpolates is present exactly as a real one
+// would be. `session-failed` forwards the session layer's own text rather than a
+// string the driver owns, so it is asserted against those shapes below instead.
+const RESULT = {
+  export: "createStore",
+  specifier: "@solid-primitives/storage",
+  error: "TypeError: fn is not a function",
+  outcome: "export-missing"
+};
+
+// Verbatim from packages/cli/scripts/probe-contract.mjs: `spawnSession` builds
+// the first four (a spawn error's own message, a signal, a non-zero exit, an
+// unparseable report) and `runSessionWithRestarts` the last two. They matter
+// verbatim because they are the strings the driver forwards for
+// `session-failed`, and the harness has no other handle on them.
+const SESSION_FAILURES = [
+  "spawnSync /opt/homebrew/bin/node ETIMEDOUT",
+  "the probe process was killed by SIGTERM (timeout 20000ms)",
+  "the probe process exited 1: TypeError: callback is not a function",
+  "the probe process wrote no readable report: Unexpected end of JSON input",
+  "the probe process stopped before reaching this claim",
+  "the probe process was aborted by package code running outside a probe: Error: boom"
+];
+
+test("every reason the probe pipeline can emit has a bucket, not just the ones seen so far", () => {
+  // Totality over the three tables the driver owns plus the session layer's
+  // shapes and the two fallbacks `settleClaims` uses. `other` is the harness's
+  // catch-all, and an unclassified bucket of 834 claims is exactly what left
+  // RFC 0002 amendment A9's stage 2 undecidable: the split between "the probe
+  // observed the export is absent" and "the session died" was inside it.
+  for (const [name, reason] of Object.entries(UNDRIVABLE)) {
+    assert.notEqual(undrivenBucket(reason), "other", `UNDRIVABLE.${name}`);
+  }
+  for (const [name, reason] of Object.entries(OUTCOME_REASON)) {
+    if (name === "session-failed") continue;
+    assert.notEqual(undrivenBucket(reason(RESULT)), "other", `OUTCOME_REASON.${name}`);
+  }
+  for (const reason of SESSION_FAILURES) {
+    assert.notEqual(undrivenBucket(reason), "other", reason);
+  }
+  for (const reason of ["no probe form", "no mode was attempted", "(no reason recorded)"]) {
+    assert.notEqual(undrivenBucket(reason), "other", reason);
+  }
+});
+
+test("a session death that quotes a bundler export error is still a session death", () => {
+  // The laundering this ordering exists to prevent. `probe-contract.mjs` builds
+  // a session-failure reason as `${detail}: ${child.stderr}`, and
+  // `'x' is not exported by y` is the canonical bundler message a dying package
+  // prints -- so a substring rule above the session rules read a crash as the one
+  // outcome amendment A9 stage 2 may narrow away. The driver's own
+  // `export-missing` reason always ends `" in this mode"`, so the anchored rule
+  // is exact and the ordering is the second guard.
+  assert.equal(
+    undrivenBucket(
+      "the probe process exited 1: SyntaxError: 'createSignal' is not exported by " +
+        "node_modules/solid-js/dist/server.js, imported by dist/index.js"
+    ),
+    "probe session failed (process died)"
+  );
+  assert.equal(
+    undrivenBucket(
+      "the probe process was killed by SIGTERM (timeout 20000ms): 'x' is not exported by y"
+    ),
+    "probe session failed (process died)"
+  );
+  assert.equal(
+    undrivenBucket("spawnSync node ENOMEM: 'x' is not exported by y"),
+    "probe session could not be spawned"
+  );
+  assert.equal(
+    undrivenBucket("the probe process wrote no readable report: 'x' is not exported by y"),
+    "probe session wrote no report"
+  );
+  // The control: an import throw quoting the same text keeps its own name.
+  assert.equal(
+    undrivenBucket("import of pkg threw: Error: 'x' is not exported by y"),
+    "entrypoint import threw"
+  );
+  // And the real thing still buckets as itself.
+  assert.equal(
+    undrivenBucket("createStore is not exported by @solid-primitives/storage in this mode"),
+    "export-missing in this mode"
+  );
+});
+
+test("an observation of absence is bucketed apart from every gap", () => {
+  // The distinction the next revision of the `kind` rule turns on, so it is
+  // pinned rather than left to the reader of a distribution: `export-missing`
+  // means the namespace loaded and the binding was not in it, which is an
+  // observation that the export does not exist in that artifact. Everything
+  // else here is a gap.
+  assert.equal(
+    undrivenBucket(OUTCOME_REASON["export-missing"](RESULT)),
+    "export-missing in this mode"
+  );
+  assert.equal(
+    undrivenBucket(OUTCOME_REASON["import-failed"](RESULT)),
+    "entrypoint import threw"
+  );
+  assert.equal(
+    undrivenBucket("the probe process was aborted by package code running outside a probe: Error: x"),
+    "probe session aborted by package code"
+  );
+  assert.equal(undrivenBucket("no mode was attempted"), "no mode was attempted");
+  // A reworded session failure still lands in a name rather than in `other`.
+  assert.equal(
+    undrivenBucket("the probe process gave up in some way nobody has written yet"),
+    "probe session failed (other)"
+  );
+  assert.equal(undrivenBucket("spawnSync /usr/bin/node ENOENT"), "probe session could not be spawned");
+});
+
+// ---------------------------------------------------------------------------
+// Why a `kind` observation is missing
+// ---------------------------------------------------------------------------
+
+test("kindGapsFor splits an observation of absence from a gap and from a contradiction", () => {
+  const gaps = kindGapsFor([
+    // Observed everywhere: not a gap at all.
+    {
+      export: "createSignal",
+      claim: "kind=function",
+      status: "passed",
+      modes: { attempted: ["client", "server"], passed: ["client", "server"] }
+    },
+    // The shape amendment A9 stage 2 is about: passing in the browser modes,
+    // and the export simply does not exist in the server artifact.
+    {
+      export: "useLocation",
+      claim: "kind=function",
+      status: "undriven",
+      modes: { attempted: ["client", "server"], passed: ["client"] },
+      observations: [
+        { mode: "client", status: "passed" },
+        {
+          mode: "server",
+          status: "undriven",
+          reason: "useLocation is not exported by @solidjs/router in this mode"
+        }
+      ]
+    },
+    // A gap: nothing was observed, so nothing may be narrowed away.
+    {
+      export: "Router",
+      claim: "kind=function",
+      status: "undriven",
+      modes: { attempted: ["client", "server"], passed: [] },
+      observations: [
+        {
+          mode: "client",
+          status: "undriven",
+          reason: "import of @solidjs/router threw: ReferenceError: window is not defined"
+        },
+        { mode: "server", status: "undriven", reason: "the probe process exited 1" }
+      ]
+    },
+    // A contradiction, which must never be counted as a gap: the package
+    // answered the claim differently, and that is a failure to fix rather than
+    // a mode to exclude.
+    {
+      export: "ReactiveMap",
+      claim: "kind=value",
+      status: "failed",
+      modes: { attempted: ["client"], passed: [] },
+      observations: [{ mode: "client", status: "failed", reason: "runtime kind is function" }]
+    },
+    // Not a `kind` claim, so it is none of this function's business.
+    {
+      export: "createSignal",
+      claim: "callbacks[0]=tracked",
+      status: "undriven",
+      modes: { attempted: ["client"], passed: [] },
+      observations: [{ mode: "client", status: "undriven", reason: "anything at all" }]
+    }
+  ]);
+  // A contradiction is in neither `claims` nor `modes`: amendment A9 says the
+  // two must never share a number, and the markdown headings above these
+  // figures say "unobserved". Sharing them and separating only `reasons` was
+  // that failure with a label on it -- the corpus carries 53 contradicted `kind`
+  // claims across 20 rows, every one of which would have been counted as a gap.
+  assert.equal(gaps.claims, 2);
+  assert.deepEqual(gaps.modes, { client: 1, server: 2 });
+  assert.deepEqual(gaps.reasons, {
+    "export-missing in this mode": 1,
+    "entrypoint import threw": 1,
+    "probe session failed (process died)": 1
+  });
+  assert.equal(gaps.contradictions.claims, 1);
+  assert.deepEqual(gaps.contradictions.modes, { client: 1 });
+  assert.deepEqual(gaps.contradictions.reasons, { "observed and did not pass (failed)": 1 });
+});
+
+test("a claim gapped in one mode and contradicted in another is counted in both, once each", () => {
+  const gaps = kindGapsFor([
+    {
+      export: "ReactiveMap",
+      claim: "kind=value",
+      status: "failed",
+      modes: { attempted: ["client", "server"], passed: [] },
+      observations: [
+        { mode: "client", status: "failed", reason: "runtime kind is function" },
+        { mode: "server", status: "undriven", reason: "the probe process exited 1" }
+      ]
+    }
+  ]);
+  assert.equal(gaps.claims, 1);
+  assert.deepEqual(gaps.modes, { server: 1 });
+  assert.equal(gaps.contradictions.claims, 1);
+  assert.deepEqual(gaps.contradictions.modes, { client: 1 });
+});
+
+test("an attempted mode with no observation at all is its own gap", () => {
+  const gaps = kindGapsFor([
+    {
+      export: "createSignal",
+      claim: "kind=function",
+      status: "undriven",
+      modes: { attempted: ["client"], passed: [] }
+    }
+  ]);
+  assert.deepEqual(gaps.reasons, { "no observation recorded for the mode": 1 });
+});
+
+test("a mode the run never attempted is a labelled gap, not an absence from the table", () => {
+  // Two of the four non-observing outcomes A9's stage-0 table enumerates are not
+  // per-mode observations at all, so iterating `modes.attempted` could not see
+  // them. A `--modes client` run attempts one mode and the verifier still
+  // refuses the entrypoint for the other three; the run's own mode list is what
+  // makes that visible.
+  const claim = {
+    export: "createSignal",
+    claim: "kind=function",
+    status: "passed",
+    modes: { attempted: ["client"], passed: ["client"] }
+  };
+  assert.deepEqual(kindGapsFor([claim], { modes: ["client"] }), {
+    claims: 1,
+    modes: { server: 1, development: 1, production: 1 },
+    reasons: { "the run never attempted this mode": 3 },
+    contradictions: { claims: 0, modes: {}, reasons: {} }
+  });
+  // A run that drove every mode has none of them, which is why the corpus's
+  // own figure should be zero and a non-zero one means the run was narrowed.
+  assert.equal(kindGapsFor([claim], { modes: ALL_MODE_NAMES }).claims, 0);
+});
+
+test("a mode where no unambiguous summary resolves is a gap the plan records elsewhere", () => {
+  // `buildProbePlan` creates no `kind=` claim for such a mode at all -- it
+  // records a family-(C) `summary` claim naming the mode -- so a rule that read
+  // only `kind=` claims left the verifier's "(no unambiguous summary resolves
+  // there)" refusal invisible to the measurement that gates it.
+  const gaps = kindGapsFor([
+    {
+      entrypoint: ".",
+      export: "createAsync",
+      claim: "summary",
+      family: "C",
+      status: "undriven",
+      reason: "no unambiguous summary in server",
+      modes: { attempted: [], passed: [] }
+    }
+  ]);
+  assert.equal(gaps.claims, 1);
+  assert.deepEqual(gaps.modes, { server: 1 });
+  assert.deepEqual(gaps.reasons, {
+    "no unambiguous summary resolves in the mode (no kind claim exists)": 1
+  });
 });
 
 test("probeErrorBucket names the missing runtime rather than calling it unknown", () => {
@@ -284,6 +582,134 @@ test("buildVerificationReport attributes a refusal to one root cause and keeps e
   assert.equal(report.refusals[0].rootCause, "incompleteness");
   assert.equal(report.overall.exports.inUnverifiedContract, 5);
   assert.equal(report.overall.claims.driven, 4);
+});
+
+test("the report carries the kind-gap breakdown and the entrypoints verification refused", () => {
+  const report = buildVerificationReport({
+    records: [
+      record({
+        probeId: "v",
+        outcome: "verified",
+        generated: { exports: 2, unknownBearing: 0 },
+        final: { exports: 1, unknownBearing: 0 },
+        verify: {
+          summary: { conversions: 0, probedRows: 1, refusedEntrypoints: 1 },
+          conversions: [],
+          refusedEntrypoints: [
+            { entrypoint: "./server", blocker: "./server: ... no passing kind observation", exports: 1 }
+          ]
+        },
+        probe: {
+          summary: { claims: 4, driven: 2, passed: 2, failed: 0, undriven: 2, incompleteness: 0 },
+          kindGaps: {
+            claims: 1,
+            modes: { server: 1 },
+            reasons: { "export-missing in this mode": 1 }
+          }
+        }
+      }),
+      record({
+        probeId: "r",
+        outcome: "refused",
+        generated: { exports: 3, unknownBearing: 0 },
+        final: { exports: 3, unknownBearing: 0 },
+        blockerCount: 1,
+        blockerHeads: [KIND_UNOBSERVED],
+        probe: {
+          summary: { claims: 3, driven: 0, passed: 0, failed: 0, undriven: 3, incompleteness: 0 },
+          kindGaps: {
+            claims: 3,
+            modes: { client: 3, server: 3 },
+            reasons: { "entrypoint import threw": 6 },
+            // The same row also carries a contradicted claim. It must land in
+            // the contradiction totals and in none of the gap ones.
+            contradictions: {
+              claims: 1,
+              modes: { client: 1 },
+              reasons: { "observed and did not pass (failed)": 1 }
+            }
+          }
+        }
+      })
+    ],
+    manifest: MANIFEST,
+    budgets: BUDGETS,
+    checker: CHECKER
+  });
+  assert.equal(report.overall.kindGaps.rows, 2);
+  assert.equal(report.overall.kindGaps.claims, 4);
+  assert.deepEqual(report.overall.kindGaps.reasons, {
+    "export-missing in this mode": 1,
+    "entrypoint import threw": 6
+  });
+  assert.equal(report.overall.kindGaps.contradictions.rows, 1);
+  assert.equal(report.overall.kindGaps.contradictions.claims, 1);
+  assert.deepEqual(report.overall.kindGaps.contradictions.modes, { client: 1 });
+  assert.equal(report.overall.verificationRefusedEntrypoints, 1);
+  assert.equal(report.overall.rowsWithAVerificationRefusedEntrypoint, 1);
+  // A refused row's gaps are carried too: a row root-caused elsewhere can still
+  // have one, and those are the rows that must stay refused.
+  assert.equal(report.refusals[0].kindGaps.claims, 3);
+  assert.deepEqual(report.verified[0].refusedEntrypoints, ["./server"]);
+  const markdown = renderVerificationMarkdown(report);
+  assert.match(markdown, /### Why a `kind` observation is missing/);
+  assert.match(markdown, /\| export-missing in this mode \| 1 \|/);
+  assert.match(markdown, /Entrypoints verification refused inside a promoted document \| 1 \|/);
+  assert.match(markdown, /cost made visible, not a regression/);
+  // The contradictions render as their own section, and no gap heading counts
+  // them: the two numbers can never be read as one.
+  assert.match(markdown, /### `kind` claims the probe contradicted/);
+  assert.match(markdown, /- `kind` claims contradicted in at least one mode: 1/);
+  assert.match(markdown, /- `kind` obligations with at least one gapped stated mode: 4/);
+  assert.equal(/observed and did not pass[\s\S]*?Why the mode produced no passing/.test(markdown), false);
+  // The per-row half: which refusals are absences, which are gaps, and which
+  // carry a contradiction.
+  assert.match(markdown, /\| `r` \| .* \| entrypoint import threw x6, \*\*contradicted\*\* x1 \|/);
+  // And the named survivor, so "verified" is never read without "minus this".
+  assert.match(markdown, /\| `v` \| 1 \| 0 \| 0 \| 1 \| `\.\/server` \|/);
+});
+
+test("the composite keeps a verification-refused export in its denominator", () => {
+  // The flattering direction the re-measurement plan forbids. Both verified
+  // states are counted off `record.final` -- the *promoted* document -- so the
+  // exports that left with a refused entrypoint were in none of the composite's
+  // states, and stage 1 raised the certified share for a reason with no
+  // certification behind it. Here: a 21-export draft, 2 of 3 entrypoints
+  // refused, 7 exports promoted of which 5 certify.
+  const report = buildVerificationReport({
+    records: [
+      record({
+        probeId: "v",
+        outcome: "verified",
+        generated: { exports: 21, unknownBearing: 0 },
+        final: { exports: 7, unknownBearing: 2 },
+        verify: {
+          summary: { conversions: 2, probedRows: 0, refusedEntrypoints: 2 },
+          conversions: [],
+          refusedEntrypoints: [
+            { entrypoint: "./server", blocker: "./server: ...", exports: 8 },
+            { entrypoint: "./web", blocker: "./web: ...", exports: 6 }
+          ]
+        },
+        probe: { summary: { claims: 21, driven: 7, passed: 5, failed: 0, undriven: 14, incompleteness: 0 } }
+      })
+    ],
+    manifest: MANIFEST,
+    budgets: BUDGETS,
+    checker: CHECKER
+  });
+  assert.equal(report.overall.exports.certifiedInVerified, 5);
+  assert.equal(report.overall.exports.unknownInVerified, 2);
+  assert.equal(report.overall.exports.refusedInVerified, 14);
+  assert.equal(report.overall.exports.inUnverifiedContract, 0);
+  const markdown = renderVerificationMarkdown(report);
+  // 5 of 21, not 5 of 7.
+  assert.match(markdown, /\| \(a\) certified by a verified contract \| 5\/21 \(23\.81%\) \|/);
+  assert.match(markdown, /\| \(b\) honest unknown inside a verified contract \| 2\/21/);
+  assert.match(
+    markdown,
+    /\| \(c\) dropped from a verified contract with its refused entrypoint \| 14\/21/
+  );
 });
 
 // ---------------------------------------------------------------------------

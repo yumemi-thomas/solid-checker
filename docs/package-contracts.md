@@ -739,7 +739,7 @@ Everything else converts, per **domain**:
 | --- | --- |
 | an omitted effect field (the negative claim) | kept — the generator proved it, and no probe can ever verify a negative |
 | `reactiveReads[]`, `ownerRequirements[]`, `variants[]` | kept |
-| `kind: function` / `value` | kept **only when probed in every stated mode**; otherwise it *blocks* (see below) |
+| `kind: function` / `value` | kept **only when probed in every stated mode**; otherwise its entrypoint is refused and omitted (see below) |
 | `callbacks[].execution` | kept when probed and witnessed in every stated mode |
 | `returns` (top-level `accessor`) | kept when probed and witnessed in every stated mode |
 | `callbacks[].owner` | converts the whole `callbacks` domain — permanently out of a machine's reach |
@@ -755,10 +755,47 @@ exempt from the conversion rule and therefore from every check, and the
 protection the code claimed — "a runtime kind that disagrees is a failed probe"
 — is vacuous when the probe observed *nothing*. A contract none of whose claims
 were driven verified anyway. A `kind` claim not probed-passed in every mode its
-export is stated for is now a blocker. The consequence is deliberate: **a
-package this checker cannot import cannot be machine-verified at all.** It can
-still be reviewed, and a human's reading of an unimportable package is exactly
-what the reviewed tier is for.
+export is stated for is therefore not certifiable. The consequence is
+deliberate: **a package this checker cannot import cannot be machine-verified at
+all.** It can still be reviewed, and a human's reading of an unimportable
+package is exactly what the reviewed tier is for.
+
+**The unit of that refusal is the entrypoint.** An entrypoint whose `kind`
+claims this run did not observe is refused and omitted from the promoted
+document — exactly what [`contract generate`](#refused-entrypoints-versus-failed-generation)
+does with an entrypoint it cannot certify — and the other entrypoints are still
+promoted, so one unimportable subpath no longer costs a package its other
+twenty. A refused entrypoint is absent from the contract, so a consumer
+importing it gets an explicit uncertifiable result rather than a claim nothing
+observed.
+
+Three artifacts say so, and between them is what keeps "it can still be
+reviewed" true of a *partial* promotion:
+
+- `<contract>.verify.json` names each refusal under `refusedEntrypoints` with
+  the exports whose `kind` was unobserved, and counts them in
+  `summary.refusedEntrypoints`, whose sibling `summary.exports` counts the
+  promoted document — so the two figures together say the document is smaller
+  than the draft it came from.
+- **the rewritten review plan carries a `refused-entrypoint` item** for each
+  one, naming the exports the promotion dropped. The plan is re-derived from the
+  promoted bytes, so without that item the subpath would leave the document
+  *and* the plan — and `contract review` never reads the verify sidecar. It is
+  the same item kind, in the same section, that generation raises for an
+  entrypoint it refused, for the same reason: a partial contract must never be
+  silent about what it omits.
+- stdout prints one line each.
+
+**A document where no entrypoint would certify anything is still refused
+whole.** That is the actual test rather than "every entrypoint was refused": an
+entrypoint with an empty export map certifies nothing either, and raises no
+refusal to be counted. The blocker leads with the same phrase the per-entrypoint
+lines carry and enumerates the refusals after it, and each refused entrypoint
+still gets a line of its own naming its unobserved exports and modes — a refusal
+sidecar's `blockers.raised` is the only durable record of a refusal, and one
+line naming five of ninety-one is not one. See
+[RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) for the
+measurement behind the rule and the three relaxations it rejects.
 
 **An exported class is `kind: "function"`.** Constructability is not
 callability: Type Facts derives `Callability` from `GetSignaturesOfType(…,
@@ -945,8 +982,15 @@ no check made.
   from a file set the generator itself declines to claim it enumerated, and no
   probe covers the negative claims that file set determines;
 - a `kind` claim the report does not record as passing in every mode its export
-  is stated for — there is no sentinel to convert it to, so an unobserved one
-  would be certified from nothing;
+  is stated for, **when that leaves no entrypoint carrying a certifiable
+  export** — there is no sentinel to convert it to, so an unobserved one would
+  be certified from nothing, and such a document certifies nothing at all. Where
+  an entrypoint with a non-empty export map survives, the unobserved ones are
+  refused and omitted instead of blocking;
+- a document that would certify nothing for any other reason: no entrypoint at
+  all, or nothing but entrypoints with empty export maps. The loader rejects both
+  shapes, and the blocker exists so the refusal says what happened instead of
+  complaining about document shape;
 - a probe report that is missing, describes another package, was written for
   other contract bytes, or predates the `--write` it should have included (its
   passing claims never reached the contract, so all of them would silently
@@ -962,8 +1006,11 @@ no check made.
   because verification moves the bytes those decisions were recorded against;
 - a promoted document that does not pass `--validate-contract`.
 
-**What does not block:** a refused entrypoint (absent from the contract, hence
-already an explicit uncertifiable result at consumers), an unbindable artifact
+**What does not block:** a refused entrypoint — one the generator refused, or
+one verification refuses for an unobserved `kind` claim while another certifying
+entrypoint survives (absent from the contract either way, hence already an
+explicit uncertifiable result at consumers, and named on the review plan either
+way) — an unbindable artifact
 (recorded on the review plan; see [Trust boundary](#trust-boundary)), an
 undrivable claim (converted, hence demand-sensitively uncertifiable), and a
 missing callback `owner` row (fail-closed `SC9012` at the consumer, never
@@ -1000,7 +1047,8 @@ dialect, Solid release, installed version and integrity), the consumed report's
 discovery state and its `environment` and `sessions` blocks — so a contract
 verified from observations made against a faked `window` is legible as one —
 the probed rows that survived, the `staleProbedMarkers` the document carried
-that the report did not witness, and — the part that matters — every conversion,
+that the report did not witness, the `refusedEntrypoints` the promotion left out
+with the blocker that refused each one, and — the part that matters — every conversion,
 with the claim identity, the value the machine held, the modes it was stated
 for, and the reason the probe could not reach it:
 

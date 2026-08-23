@@ -41,6 +41,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { PROBE_MODES } from "../../packages/cli/scripts/contract-probe-driver.mjs";
 import { classifyResult } from "./lib/classify.mjs";
 import { FAMILIES } from "./lib/families.mjs";
 import {
@@ -227,6 +228,12 @@ export function blockerClass(line) {
   if (line.startsWith("an incompleteness finding")) return "incompleteness";
   if (line.includes("carries a closure note")) return "closure-note";
   if (line.includes("no passing kind observation")) return "kind-observed";
+  // The floor under amendment A9's per-entrypoint refusal: a document that would
+  // certify nothing, with no `kind` refusal behind it (zero entrypoints, or every
+  // entrypoint carrying an empty export map). Unreachable from a generated draft
+  // today, and named rather than left to `unclassified-refusal` so that if it
+  // ever does appear the measurement says what it is.
+  if (line.startsWith("no entrypoint certifies anything")) return "certifies-nothing";
   if (line.includes("review decision") || line.includes("a promotion to")) return "review-under-way";
   if (line.includes("does not validate")) return "document-validates";
   return "unclassified-refusal";
@@ -244,6 +251,7 @@ export const ROOT_CAUSE_ORDER = [
   "probe-failed",
   "incompleteness",
   "kind-observed",
+  "certifies-nothing",
   "closure-note",
   "probe-report-binds-contract",
   "probe-report-includes-discovery",
@@ -263,13 +271,33 @@ export function rootCause(classes) {
 /// package-specific detail -- a thrown message, an absolute path -- so grouping
 /// strips the detail to make a distribution readable. The raw reason survives
 /// per row in the journal and in the JSON report.
+///
+/// **Every reason the pipeline can emit has to land in a named bucket.** The
+/// rules below are total over three tables -- `UNDRIVABLE` and `OUTCOME_REASON`
+/// and `EXECUTION_UNATTRIBUTABLE` in
+/// packages/cli/scripts/contract-probe-driver.mjs -- plus the session-death
+/// shapes packages/cli/scripts/probe-contract.mjs writes and the two fallbacks
+/// `settleClaims` uses, and verify-corpus.test.mjs asserts that totality
+/// against the driver's own tables rather than a copied list. `other` is a
+/// catch-all, and a catch-all that grows is a measurement that stops saying
+/// anything: an unclassified bucket of 834 claims is exactly what made RFC 0002
+/// amendment A9's stage 2 undecidable, because the split between "the probe
+/// observed the export is absent" and "the session died" was inside it.
+///
+/// Two rules are deliberately shaped as families rather than exact strings --
+/// `the probe process …` and `spawnSync …` -- so that a reworded session
+/// failure lands in a *named* bucket instead of `other`. Failing into a name is
+/// the safe direction here; the exact rules above them keep the distinctions
+/// the design actually reads.
 export function undrivenBucket(reason) {
   const text = String(reason);
+  if (text === "(no reason recorded)") return "no reason recorded";
   if (text.startsWith("reactive reads are proven from compiler facts")) return "no probe form: reactiveReads";
   if (text.startsWith("owner requirements are proven")) return "no probe form: ownerRequirements";
   if (text.startsWith("an identity claim about a parameter")) return "no probe form: parameter identity";
   if (text.startsWith("callback argument descriptors have no probe form"))
     return "no probe form: callback arguments";
+  if (text.startsWith("callback owner rows have no probe form")) return "no probe form: callback owner";
   if (text.startsWith("writeProbeEvidence does not descend into return leaves"))
     return "no probe form: nested return leaf";
   if (text.startsWith("asyncBehavior has no")) return "no probe form: asyncBehavior";
@@ -297,13 +325,150 @@ export function undrivenBucket(reason) {
     return "probe session failed (process died)";
   if (/^spawnSync .*ETIMEDOUT/.test(text)) return "probe session hit the per-mode timeout";
   if (text.includes("no re-read followed the planted write")) return "planted write was never re-read";
+  if (text.startsWith("the probe runtime reported no caching measurement"))
+    return "no caching measurement for the returned value";
+  if (text.startsWith("reading the returned value "))
+    return "returned value indistinguishable from a forwarding closure";
   if (text.startsWith("the callback ran only once the returned accessor was read"))
     return "callback ownership ambiguous in the driver's read scope";
   if (text.startsWith("the probe process stopped before reaching this claim"))
     return "probe session stopped before this claim";
   if (text.startsWith("the probe process wrote no readable report")) return "probe session wrote no report";
+  if (text.startsWith("the probe process was aborted by package code"))
+    return "probe session aborted by package code";
   if (text.startsWith("no unambiguous summary")) return "no unambiguous summary for the mode";
+  if (text === "no probe form") return "no probe form (unnamed)";
+  if (text === "no mode was attempted") return "no mode was attempted";
+  // The two family rules, last so every exact shape above keeps its own name.
+  if (text.startsWith("the probe process")) return "probe session failed (other)";
+  if (text.startsWith("spawnSync ")) return "probe session could not be spawned";
+  // The one non-observation that is an *observation*: the namespace loaded and
+  // the binding was not in it, so the export does not exist in the artifact that
+  // mode resolves. RFC 0002 amendment A9 stage 2 turns on how large this bucket
+  // is, which is why it gets a name of its own rather than sharing one with the
+  // session failures.
+  //
+  // **Placed below every session rule, and anchored to the end of the string,
+  // for one reason.** A session death forwards the child's stderr verbatim
+  // (`${detail}: ${child.stderr}` in packages/cli/scripts/probe-contract.mjs),
+  // and `'x' is not exported by y` is the canonical Rollup/bundler message a
+  // dying package prints. A substring test above the session rules read that as
+  // an observation of absence -- laundering the one class that must keep
+  // blocking into the one class stage 2 may narrow away. The driver's own reason
+  // always *ends* `" in this mode"`
+  // (`OUTCOME_REASON["export-missing"]`), so the anchored form is exact and the
+  // ordering is the belt to its braces.
+  if (/ is not exported by .+ in this mode$/.test(text)) return "export-missing in this mode";
+  if (/ is not callable, so no call could be synthesized$/.test(text))
+    return "export is not callable";
   return "other";
+}
+
+export function emptyKindGaps() {
+  return {
+    claims: 0,
+    modes: {},
+    reasons: {},
+    // Structurally separate, not merely separately *labelled*. See below.
+    contradictions: { claims: 0, modes: {}, reasons: {} }
+  };
+}
+
+/// Where a `kind` claim's missing observations went, per mode.
+///
+/// The undriven distribution above is over *every* claim, so it cannot answer
+/// the one question RFC 0002 amendment A9 stage 2 is gated on: for the modes a
+/// `kind` claim was not observed in, how many were observations of *absence*
+/// (`export-missing`, sound to exclude from the stated modes) and how many were
+/// gaps (an import that threw, a session that died, a mode never attempted,
+/// which must keep blocking).
+///
+/// **A contradiction is counted in its own object, never in `claims`/`modes`.**
+/// A9: *"a mode whose observation exists and disagreed is counted as a
+/// contradiction, never as a gap: the two must never share a number."* Sharing
+/// `claims` and `modes` and separating only `reasons` was that failure with a
+/// label on it -- the markdown headings say "unobserved", and 53 contradicted
+/// `kind` claims across 20 corpus rows would have been counted under them. So
+/// `contradictions` is a sibling object and renders as its own section: one
+/// claim can contribute a gap in one mode and a contradiction in another, and
+/// both numbers stay true.
+///
+/// It reads the probe report's own per-mode observations, so a mode counted in
+/// `claims`/`modes` is a mode the plan attempted and the report answered for.
+/// Two non-observations A9's stage-0 table enumerates are *not* per-mode
+/// observations at all, and each gets a labelled category rather than being
+/// silently absent:
+///
+/// - **a mode this run never attempted.** `runModes` is the probe report's own
+///   `modes` list, so the un-attempted set is `PROBE_MODES - runModes`: for a
+///   corpus run that drives all four this is empty, and a `--modes` narrowing
+///   makes it exactly the modes no claim in the row could have been observed
+///   in. It cannot distinguish "not stated" from "not attempted" for a claim
+///   whose entrypoint states fewer modes than the run drove, which is why it is
+///   derived from the *run's* set and not from each claim's `attempted`; on a
+///   narrowed run it therefore over-counts a browser-only entrypoint's `server`
+///   mode, in the conservative direction.
+/// - **a mode where no unambiguous summary resolves.** `buildProbePlan` creates
+///   no `kind=` claim there at all -- it records a family-(C) `summary` claim
+///   whose reason names the mode -- so those are read from that claim rather
+///   than from a `kind` one, and counted as gaps, because the verifier refuses
+///   the entrypoint for exactly those modes.
+export function kindGapsFor(claims, { modes: runModes } = {}) {
+  const gaps = emptyKindGaps();
+  const attemptedByRun = new Set(runModes ?? PROBE_MODES.map(mode => mode.name));
+  const neverAttempted = PROBE_MODES.map(mode => mode.name).filter(
+    name => !attemptedByRun.has(name)
+  );
+  const count = (into, mode, key) => {
+    into.modes[mode] = (into.modes[mode] ?? 0) + 1;
+    into.reasons[key] = (into.reasons[key] ?? 0) + 1;
+  };
+  for (const claim of claims ?? []) {
+    const text = String(claim.claim ?? "");
+    // A mode in which no unambiguous summary resolves states no `kind` claim to
+    // observe, and the plan records it against this synthetic claim instead.
+    if (text === "summary") {
+      const mode = /^no unambiguous summary in (\S+)/.exec(String(claim.reason ?? ""))?.[1];
+      if (!mode) continue;
+      gaps.claims += 1;
+      count(gaps, mode, "no unambiguous summary resolves in the mode (no kind claim exists)");
+      continue;
+    }
+    if (!text.startsWith("kind=")) continue;
+    const passed = new Set(claim.modes?.passed ?? []);
+    const unobserved = (claim.modes?.attempted ?? []).filter(mode => !passed.has(mode));
+    if (!unobserved.length && !neverAttempted.length) continue;
+    const byMode = new Map((claim.observations ?? []).map(entry => [entry.mode, entry]));
+    let gapped = false;
+    let contradicted = false;
+    for (const mode of unobserved) {
+      const observation = byMode.get(mode);
+      if (observation && observation.status !== "undriven") {
+        contradicted = true;
+        count(
+          gaps.contradictions,
+          mode,
+          `observed and did not pass (${observation.status ?? "no status"})`
+        );
+        continue;
+      }
+      gapped = true;
+      count(
+        gaps,
+        mode,
+        observation
+          ? undrivenBucket(observation.reason ?? "(no reason recorded)")
+          : "no observation recorded for the mode"
+      );
+    }
+    for (const mode of neverAttempted) {
+      gapped = true;
+      count(gaps, mode, "the run never attempted this mode");
+    }
+    if (gapped) gaps.claims += 1;
+    if (contradicted) gaps.contradictions.claims += 1;
+  }
+  return gaps;
 }
 
 export function probeErrorBucket(detail) {
@@ -710,6 +875,16 @@ async function runRow({ row, probe }, context) {
     }
     record.probe.undrivenReasons = undrivenReasons;
     record.probe.claimFamilies = claimFamilies;
+    // Why each unobserved `kind` mode was unobserved. Recorded per row because
+    // the decision RFC 0002 amendment A9 defers to stage 2 -- exclude a mode the
+    // probe observed the export absent in, keep blocking on every gap -- is a
+    // per-(entrypoint, export, mode) decision, and the corpus-wide undriven
+    // distribution cannot answer it.
+    record.probe.kindGaps = kindGapsFor(probeReport.claims ?? [], {
+      // The modes this run actually drove, so a narrowed run's never-attempted
+      // modes are counted rather than invisible.
+      modes: probeReport.modes
+    });
     record.probe.failedClaims = failedClaims.slice(0, 10);
     // Every failure is kept: the whole point of the section it feeds is that
     // this class is about to be the dominant visible defect, and a capped list
@@ -736,6 +911,16 @@ async function runRow({ row, probe }, context) {
       record.outcome = "verified";
       record.verify = {
         summary: verifyReport.summary,
+        // The entrypoints verification refused inside a document it still
+        // promoted (RFC 0002 amendment A9 stage 1). A rising number here is the
+        // *cost* of the promotion being made visible: those entrypoints are
+        // absent from the contract, so a consumer importing one gets an explicit
+        // uncertifiable result instead of a claim nothing observed.
+        refusedEntrypoints: (verifyReport.refusedEntrypoints ?? []).map(refusal => ({
+          entrypoint: refusal.entrypoint,
+          blocker: refusal.blocker ?? null,
+          exports: (refusal.exports ?? []).length
+        })),
         conversions: (verifyReport.conversions ?? []).map(conversion => ({
           entrypoint: conversion.entrypoint,
           export: conversion.export,
@@ -794,6 +979,7 @@ function emptyAggregate() {
     refused: 0,
     claims: { total: 0, driven: 0, passed: 0, failed: 0, undriven: 0, incompleteness: 0 },
     undriven: {},
+    kindGaps: { rows: 0, ...emptyKindGaps(), contradictions: { rows: 0, ...emptyKindGaps().contradictions } },
     failureShapes: {},
     install: { runtimeCompleted: 0, peerComplete: 0, peerFailed: 0, peersInstalled: 0 },
     environment: { rowsShimmed: 0, shimmedGlobals: {}, modesShimmed: {} },
@@ -803,6 +989,11 @@ function emptyAggregate() {
     rootCauses: {},
     conversions: 0,
     conversionFields: {},
+    // Stage 1 of amendment A9: entrypoints refused by *verification* inside a
+    // document that was still promoted. Separate from `record.refusedEntrypoints`,
+    // which counts what `contract generate` refused.
+    verificationRefusedEntrypoints: 0,
+    rowsWithAVerificationRefusedEntrypoint: 0,
     probedRowsKept: 0,
     rowsWithProbedEvidence: 0,
     droppedInferredMarkers: 0,
@@ -810,6 +1001,7 @@ function emptyAggregate() {
     exports: {
       certifiedInVerified: 0,
       unknownInVerified: 0,
+      refusedInVerified: 0,
       inUnverifiedContract: 0,
       draftUnknownInVerified: 0,
       draftExportsInVerified: 0
@@ -871,6 +1063,23 @@ function accumulate(bucket, record) {
       bucket.undriven[key] = (bucket.undriven[key] ?? 0) + count;
     }
   }
+  const kindGaps = record.probe?.kindGaps;
+  // Gaps and contradictions are accumulated into separate objects, and a row can
+  // land in both. Never into one number: see `kindGapsFor`.
+  const fold = (into, from) => {
+    into.rows += 1;
+    into.claims += from.claims ?? 0;
+    for (const [mode, count] of Object.entries(from.modes ?? {})) {
+      into.modes[mode] = (into.modes[mode] ?? 0) + count;
+    }
+    for (const [reason, count] of Object.entries(from.reasons ?? {})) {
+      into.reasons[reason] = (into.reasons[reason] ?? 0) + count;
+    }
+  };
+  if (kindGaps?.claims) fold(bucket.kindGaps, kindGaps);
+  if (kindGaps?.contradictions?.claims) {
+    fold(bucket.kindGaps.contradictions, kindGaps.contradictions);
+  }
   if (record.outcome === "verified") {
     bucket.verified += 1;
     bucket.conversions += record.verify?.summary?.conversions ?? 0;
@@ -878,6 +1087,9 @@ function accumulate(bucket, record) {
     if ((record.verify?.summary?.probedRows ?? 0) > 0) bucket.rowsWithProbedEvidence += 1;
     bucket.droppedInferredMarkers += record.verify?.summary?.droppedInferredMarkers ?? 0;
     bucket.staleProbedMarkers += record.verify?.summary?.staleProbedMarkers ?? 0;
+    const refusedHere = (record.verify?.refusedEntrypoints ?? []).length;
+    bucket.verificationRefusedEntrypoints += refusedHere;
+    if (refusedHere) bucket.rowsWithAVerificationRefusedEntrypoint += 1;
     for (const conversion of record.verify?.conversions ?? []) {
       const field = conversion.field.split(".").pop();
       bucket.conversionFields[field] = (bucket.conversionFields[field] ?? 0) + 1;
@@ -886,6 +1098,17 @@ function accumulate(bucket, record) {
     bucket.exports.unknownInVerified += record.final?.unknownBearing ?? 0;
     bucket.exports.draftUnknownInVerified += record.generated?.unknownBearing ?? 0;
     bucket.exports.draftExportsInVerified += record.generated?.exports ?? 0;
+    // The exports a *verified* row's promotion left behind, because their
+    // entrypoint was refused (RFC 0002 amendment A9 stage 1). Derived from the
+    // two documents rather than from the refusal list, so it is exactly the
+    // difference between the draft and the promoted bytes: `certifiedInVerified`
+    // and `unknownInVerified` both count `record.final`, so without this state
+    // these exports would be in none of the composite's states and stage 1 would
+    // raise the certified *share* by removing exports from its denominator.
+    bucket.exports.refusedInVerified += Math.max(
+      0,
+      (record.generated?.exports ?? 0) - (record.final?.exports ?? 0)
+    );
   } else if (record.generated) {
     bucket.exports.inUnverifiedContract += record.final?.exports ?? record.generated?.exports ?? 0;
   }
@@ -1024,7 +1247,11 @@ export function buildVerificationReport({ records, manifest, budgets, checker })
         rootCause: rootCause(classes),
         firstBlocker: record.blockers?.[0] ?? record.detail ?? null,
         claims: record.probe?.summary ?? null,
-        exports: record.final?.exports ?? null
+        exports: record.final?.exports ?? null,
+        // Present on every refusal, not only the `kind-observed` ones: a row
+        // root-caused elsewhere can still carry a kind gap, and amendment A9's
+        // 29 co-blocked rows are exactly the ones that must stay refused.
+        kindGaps: record.probe?.kindGaps ?? null
       };
     })
     .sort((left, right) => left.probeId.localeCompare(right.probeId));
@@ -1042,6 +1269,12 @@ export function buildVerificationReport({ records, manifest, budgets, checker })
       exportsUnknownAtGeneration: record.generated?.unknownBearing ?? 0,
       conversions: record.verify?.summary?.conversions ?? 0,
       probedRowsKept: record.verify?.summary?.probedRows ?? 0,
+      // Named individually rather than counted: "this package verified, minus
+      // ./server" is the finding, and a bare count would hide which subpath a
+      // consumer now gets an uncertifiable result for.
+      refusedEntrypoints: (record.verify?.refusedEntrypoints ?? []).map(
+        refusal => refusal.entrypoint
+      ),
       claims: record.probe?.summary ?? null,
       totalMs: record.totalMs
     }))
@@ -1252,6 +1485,64 @@ export function renderVerificationMarkdown(report) {
   for (const [name, count] of sortedEntries(overall.undriven)) lines.push(`| ${name} | ${count} |`);
   lines.push("");
 
+  const kindGaps = { rows: 0, ...emptyKindGaps(), ...(overall.kindGaps ?? {}) };
+  const kindContradictions = {
+    rows: 0,
+    ...emptyKindGaps().contradictions,
+    ...(kindGaps.contradictions ?? {})
+  };
+  lines.push("### Why a `kind` observation is missing");
+  lines.push("");
+  lines.push(
+    "`kind` is the one claim schema v1 has no unknown sentinel for, so an unobserved one blocks " +
+      "rather than converting — which makes *why* it was unobserved the number the rule's next " +
+      "revision turns on. An **observation of absence** (`export-missing`: the namespace loaded and " +
+      "the binding was not in it) says the export does not exist in that artifact, so there is no " +
+      "consumer claim about that mode to certify. Every other non-observation is a **gap** — an " +
+      "import that threw, a session that died, a mode never attempted, a mode where no unambiguous " +
+      "summary resolves — and a gap must keep blocking. Every number in this section counts gaps " +
+      "only: a mode that was observed and *disagreed* is a failing claim, and it has its own " +
+      "section below rather than a row here, because amendment A9 forbids the two sharing a number."
+  );
+  lines.push("");
+  lines.push(`- Rows with at least one gap in a stated \`kind\` mode: ${kindGaps.rows}`);
+  lines.push(`- \`kind\` obligations with at least one gapped stated mode: ${kindGaps.claims}`);
+  lines.push("");
+  if (Object.keys(kindGaps.reasons).length) {
+    lines.push("| Why the mode produced no passing `kind` observation | (claim, mode) pairs |");
+    lines.push("| --- | --- |");
+    for (const [name, count] of sortedEntries(kindGaps.reasons)) lines.push(`| ${name} | ${count} |`);
+    lines.push("");
+  }
+  if (Object.keys(kindGaps.modes).length) {
+    lines.push("| Mode | Gapped `kind` obligations |");
+    lines.push("| --- | --- |");
+    for (const [name, count] of sortedEntries(kindGaps.modes)) lines.push(`| \`${name}\` | ${count} |`);
+    lines.push("");
+  }
+
+  lines.push("### `kind` claims the probe contradicted");
+  lines.push("");
+  lines.push(
+    "A mode whose observation **exists and disagreed** with the contract. Nothing above counts " +
+      "these, and nothing in any relaxation of the `kind` rule may absorb them: the package answered " +
+      "the claim differently, which is a generator bug or a package change, and neither is fixed by " +
+      "narrowing a mode away or converting a claim to unknown. They refuse the whole document today " +
+      "and must keep doing so."
+  );
+  lines.push("");
+  lines.push(`- Rows with at least one contradicted \`kind\` claim: ${kindContradictions.rows}`);
+  lines.push(`- \`kind\` claims contradicted in at least one mode: ${kindContradictions.claims}`);
+  lines.push("");
+  if (Object.keys(kindContradictions.modes).length) {
+    lines.push("| Mode | Contradicted `kind` claims |");
+    lines.push("| --- | --- |");
+    for (const [name, count] of sortedEntries(kindContradictions.modes)) {
+      lines.push(`| \`${name}\` | ${count} |`);
+    }
+    lines.push("");
+  }
+
   lines.push("## The probe environment");
   lines.push("");
   lines.push(
@@ -1416,6 +1707,23 @@ export function renderVerificationMarkdown(report) {
   lines.push(
     `| Probed markers discarded as unwitnessed by this run's report | ${overall.staleProbedMarkers} |`
   );
+  lines.push(
+    `| Entrypoints verification refused inside a promoted document | ${overall.verificationRefusedEntrypoints} |`
+  );
+  lines.push(
+    `| Verified rows carrying at least one such refusal | ${overall.rowsWithAVerificationRefusedEntrypoint} |`
+  );
+  lines.push("");
+  lines.push(
+    "The last two rows are a **cost made visible, not a regression**. An entrypoint whose `kind` " +
+      "claims this run did not observe is refused and omitted, exactly as `contract generate` already " +
+      "refuses an entrypoint it cannot certify, so the package's other entrypoints are not sunk by one " +
+      "unimportable subpath. A refused entrypoint is absent from the contract, which is an explicit " +
+      "uncertifiable result at the consumer rather than a wrong claim; a document where *no* " +
+      "entrypoint would certify anything is still refused whole. The exports it dropped are their " +
+      "own state in the composite below, still inside its denominator: a certified *share* that rose " +
+      "because unobservable exports left the population would be measuring nothing."
+  );
   lines.push("");
   lines.push("Converted domains by field:");
   lines.push("");
@@ -1426,9 +1734,20 @@ export function renderVerificationMarkdown(report) {
   }
   lines.push("");
 
+  // The denominator is the *draft* export count of every verified row plus every
+  // export of the rows that never verified -- not the promoted documents' own
+  // counts. A verification-refused entrypoint's exports are still exports the
+  // corpus's generated contracts describe, so dropping them out of the
+  // denominator would raise the certified share for a reason with no
+  // certification behind it (RFC 0002 amendment A9's re-measurement forbids
+  // exactly that movement). They are their own state instead.
+  // `?? 0` on the new state alone, so a report written before it existed still
+  // renders its other three rather than a table of `n/a`.
+  const refusedInVerified = overall.exports.refusedInVerified ?? 0;
   const totalExports =
     overall.exports.certifiedInVerified +
     overall.exports.unknownInVerified +
+    refusedInVerified +
     overall.exports.inUnverifiedContract;
   lines.push("## The composite a consumer feels");
   lines.push("");
@@ -1443,13 +1762,20 @@ export function renderVerificationMarkdown(report) {
     `| (b) honest unknown inside a verified contract | ${rate(overall.exports.unknownInVerified, totalExports)} |`
   );
   lines.push(
-    `| (c) inside a contract that never reached \`verified\` | ${rate(overall.exports.inUnverifiedContract, totalExports)} |`
+    `| (c) dropped from a verified contract with its refused entrypoint | ${rate(refusedInVerified, totalExports)} |`
+  );
+  lines.push(
+    `| (d) inside a contract that never reached \`verified\` | ${rate(overall.exports.inUnverifiedContract, totalExports)} |`
   );
   lines.push("");
   lines.push(
-    "(c) is every export of a contract that was generated and then refused, timed out, or errored " +
-      "before a probe report existed. Rows whose `npm install` or `contract generate` failed describe " +
-      "no exports at all and are in none of the three states."
+    "(c) is the cost of amendment A9 stage 1 stated as a consumer-facing number: the row verified, " +
+      "and these exports are absent from the document it promoted, so importing one is an explicit " +
+      "uncertifiable result. They stay in the denominator — a certified *share* that rose because " +
+      "unobservable exports left the population would be measuring nothing. (d) is every export of a " +
+      "contract that was generated and then refused, timed out, or errored before a probe report " +
+      "existed. Rows whose `npm install` or `contract generate` failed describe no exports at all " +
+      "and are in none of the four states."
   );
   lines.push("");
 
@@ -1566,22 +1892,35 @@ export function renderVerificationMarkdown(report) {
 
   lines.push("## Every refusal");
   lines.push("");
-  lines.push("| Probe | Family | Root cause | Blocker lines | Classes |");
-  lines.push("| --- | --- | --- | --- | --- |");
+  lines.push("| Probe | Family | Root cause | Blocker lines | Classes | Kind gaps |");
+  lines.push("| --- | --- | --- | --- | --- | --- |");
   for (const refusal of report.refusals) {
+    // The kind-gap column is the per-row half of "Why a `kind` observation is
+    // missing": which rows are absences the rule could stop requiring, and which
+    // are gaps that must keep blocking.
+    const contradicted = refusal.kindGaps?.contradictions?.claims ?? 0;
+    const gaps = [
+      ...sortedEntries(refusal.kindGaps?.reasons ?? {}).map(([name, count]) => `${name} x${count}`),
+      // Named apart from the gaps in the same cell, never folded into one of
+      // them: this row's `kind` was contradicted, which no relaxation may absorb.
+      ...(contradicted ? [`**contradicted** x${contradicted}`] : [])
+    ].join(", ");
     lines.push(
-      `| \`${refusal.probeId}\` | ${refusal.family} | \`${refusal.rootCause}\` | ${refusal.blockerCount} | ${refusal.blockerClasses.join(", ")} |`
+      `| \`${refusal.probeId}\` | ${refusal.family} | \`${refusal.rootCause}\` | ${refusal.blockerCount} | ${refusal.blockerClasses.join(", ")} | ${gaps || "—"} |`
     );
   }
   lines.push("");
 
   lines.push("## Every verified contract");
   lines.push("");
-  lines.push("| Probe | Exports | Exports unknown | Conversions | Probed rows kept |");
-  lines.push("| --- | --- | --- | --- | --- |");
+  lines.push(
+    "| Probe | Exports | Exports unknown | Conversions | Probed rows kept | Entrypoints refused |"
+  );
+  lines.push("| --- | --- | --- | --- | --- | --- |");
   for (const row of report.verified) {
     lines.push(
-      `| \`${row.probeId}\` | ${row.exports} | ${row.exportsUnknown} | ${row.conversions} | ${row.probedRowsKept} |`
+      `| \`${row.probeId}\` | ${row.exports} | ${row.exportsUnknown} | ${row.conversions} | ` +
+        `${row.probedRowsKept} | ${(row.refusedEntrypoints ?? []).map(name => `\`${name}\``).join(", ") || "—"} |`
     );
   }
   lines.push("");

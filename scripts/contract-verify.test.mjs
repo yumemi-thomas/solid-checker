@@ -27,14 +27,22 @@ import {
 import {
   BLOCKERS,
   buildVerifyReport,
+  certifyingEntrypoints,
   collectBlockers,
   convertUnconfirmedClaims,
   dropInferredRowEvidence,
   pruneSummaryProbedMarkers,
-  statedModes
+  statedModes,
+  unobservedKindRefusals,
+  withoutRefusedEntrypoints
 } from "../packages/cli/scripts/contract-verification.mjs";
 import { probeContract } from "../packages/cli/scripts/probe-contract.mjs";
-import { verifyContract } from "../packages/cli/scripts/verify-contract.mjs";
+import { rewriteReviewPlan, verifyContract } from "../packages/cli/scripts/verify-contract.mjs";
+// The corpus harness's own classifier, imported rather than restated: the head
+// truncation it applies before classifying is what makes the shape of a blocker
+// line load-bearing, and a test that copied the rule could not catch a line that
+// moved past it.
+import { blockerClass } from "./ecosystem-benchmark/verify-corpus.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");
@@ -313,20 +321,34 @@ test("an incompleteness finding blocks: a negative a probe falsified is wrong, n
   assert.match(blockers[0], /an incompleteness finding contradicts a negative claim/);
 });
 
-test("a kind claim nothing observed blocks, because there is no sentinel to convert it to", () => {
+// The three cases below use the single-entrypoint fixture, so since amendment
+// A9 they all reach the *no-entrypoint-certifies-anything* branch: the kind gap
+// refuses `.`, that leaves nothing, and the document is refused whole. Their
+// titles say so, because a test that silently changed which branch it covers is
+// a test nobody re-read. Each asserts the two lines that branch raises -- the
+// document-level summary and the per-entrypoint attribution -- and the
+// mode/export detail inside them, which is the part that has to survive
+// verbatim: the corpus parses it.
+
+test("a kind claim nothing observed refuses the only entrypoint, so the document goes", () => {
   const fixture = draft();
   const withoutKinds = {
     ...fixture.report,
     claims: fixture.report.claims.filter(claim => !claim.claim.startsWith("kind="))
   };
   const blockers = blockersFor(fixture, { report: withoutKinds });
-  assert.equal(blockers.length, 1);
+  assert.equal(blockers.length, 2);
+  assert.match(blockers[0], /^no passing kind observation for any entrypoint that certifies/);
+  assert.match(blockers[0], /of 1 emitted entrypoint\(s\), 1 refused/);
   assert.match(blockers[0], /no passing kind observation for 4 export\(s\)/);
   assert.match(blockers[0], /wrapMemo \(client, server, development, production\)/);
   assert.match(blockers[0], /no unknown sentinel for/);
+  // And the attribution line HEAD wrote, kept: the refusal sidecar's
+  // `blockers.raised` is the only durable record of which entrypoint it was.
+  assert.match(blockers[1], /^\.: the probe report records no passing kind observation for 4 export/);
 });
 
-test("a kind claim observed in fewer modes than the export is stated for blocks", () => {
+test("a kind claim observed in fewer modes than the export is stated for refuses the same way", () => {
   const fixture = draft();
   const narrowed = {
     ...fixture.report,
@@ -338,13 +360,16 @@ test("a kind claim observed in fewer modes than the export is stated for blocks"
     )
   };
   const blockers = blockersFor(fixture, { report: narrowed });
-  assert.equal(blockers.length, 1);
+  assert.equal(blockers.length, 2);
   assert.match(blockers[0], /server, development, production/);
+  assert.match(blockers[1], /server, development, production/);
 });
 
 test("a package the probe could not import cannot be machine-verified at all", () => {
   // The consequence of the kind rule, stated as its own case because it is the
   // one that used to certify a contract none of whose claims were observed.
+  // Every entrypoint it has is unobservable, so per-entrypoint granularity
+  // changes nothing here: 67 of the corpus's 77 kind refusals are this shape.
   const fixture = draft();
   const importFailed = {
     ...fixture.report,
@@ -357,8 +382,402 @@ test("a package the probe could not import cannot be machine-verified at all", (
     }))
   };
   const blockers = blockersFor(fixture, { report: importFailed });
+  assert.equal(blockers.length, 2);
+  for (const line of blockers) {
+    assert.match(line, /no passing kind observation for 4 export\(s\)/);
+  }
+});
+
+// ------------------------------------- the kind refusal is per entrypoint (A9)
+//
+// One entrypoint the probe could not observe used to refuse the whole document,
+// so a package whose `./server` subpath would not load lost the entrypoints the
+// probe *did* observe. Generation has never worked that way. These four cases
+// pin the boundary: refuse the entrypoint, refuse the document only when that
+// leaves nothing, and never keep a refused entrypoint as a present-but-empty
+// shell.
+
+/// Two entrypoints, one export each, sharing the fully probed summary.
+const PAIR = {
+  schemaVersion: 1,
+  package: { name: "verify-fixture", version: "1.0.0" },
+  compilerFactsProtocol: 1,
+  summaries: {
+    "function-1": {
+      kind: "function",
+      callbacks: [{ parameter: 0, execution: "tracked", evidence: probedIn() }],
+      evidence: probedIn()
+    }
+  },
+  entrypoints: {
+    ".": { exports: { "function-1": ["wrapMemo"] } },
+    "./server": { exports: { "function-1": ["mountServer"] } }
+  },
+  evidence: { kind: "inferred", generator: "solid-checker package generator" }
+};
+
+/// The claims a probe would record for `PAIR`: `.` fully observed, and
+/// `./server` observed not at all because its module threw on import.
+function pairClaims({ serverObserved = false, rootObserved = true } = {}) {
+  const observed = (entrypoint, exportName) => [
+    {
+      entrypoint,
+      export: exportName,
+      claim: "kind=function",
+      family: "B",
+      status: "passed",
+      modes: { attempted: ALL_MODES, passed: ALL_MODES }
+    },
+    {
+      entrypoint,
+      export: exportName,
+      claim: "callbacks[0]=tracked",
+      family: "B",
+      status: "passed",
+      modes: { attempted: ALL_MODES, passed: ALL_MODES }
+    }
+  ];
+  const unobserved = (entrypoint, exportName) =>
+    ["kind=function", "callbacks[0]=tracked"].map(claim => ({
+      entrypoint,
+      export: exportName,
+      claim,
+      family: "B",
+      status: "undriven",
+      reason: `import of verify-fixture${entrypoint.slice(1)} threw: ReferenceError: window is not defined`,
+      modes: { attempted: ALL_MODES, passed: [] },
+      observations: ALL_MODES.map(mode => ({
+        mode,
+        status: "undriven",
+        reason: `import of verify-fixture${entrypoint.slice(1)} threw: ReferenceError: window is not defined`
+      }))
+    }));
+  return [
+    ...(rootObserved ? observed(".", "wrapMemo") : unobserved(".", "wrapMemo")),
+    ...(serverObserved
+      ? observed("./server", "mountServer")
+      : unobserved("./server", "mountServer"))
+  ];
+}
+
+test("an entrypoint whose kind nothing observed is refused without sinking the others", () => {
+  const fixture = draft({
+    document: PAIR,
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: { ".": { modules: [] }, "./server": { modules: [] } }
+    },
+    report: { claims: pairClaims() }
+  });
+  const contract = expanded(PAIR);
+
+  // No document-level blocker: one entrypoint survives, so the promotion runs.
+  assert.deepEqual(blockersFor(fixture), []);
+
+  const refusals = unobservedKindRefusals(contract, fixture.report);
+  assert.equal(refusals.length, 1);
+  assert.equal(refusals[0].entrypoint, "./server");
+  // In `PROBE_MODES` order, not sorted: the modes are named in the order the
+  // probe would have attempted them, which is the order the blocker reads in.
+  assert.deepEqual(refusals[0].exports, [
+    { export: "mountServer", modes: PROBE_MODES.map(mode => mode.name) }
+  ]);
+  assert.match(refusals[0].blocker, /^\.\/server: the probe report records no passing kind/);
+
+  // The surviving entrypoint's observed rows are still observed rows: the point
+  // of the change is that they are no longer collateral.
+  const surviving = withoutRefusedEntrypoints(contract, ["./server"]);
+  const { contract: promoted, conversions, probed } = convertUnconfirmedClaims(
+    surviving,
+    fixture.report
+  );
+  assert.deepEqual(conversions, []);
+  assert.equal(probed.length, 1);
+  assert.equal(probed[0].entrypoint, ".");
+  assert.equal(promoted.entrypoints["."].exports.wrapMemo.callbacks[0].evidence.kind, "probed");
+});
+
+test("a refused entrypoint is absent from the promoted document, not present and empty", () => {
+  // The distinction a consumer feels: `exports_for_module` finds no summary for
+  // a name the document does not carry, so the symbol stays an uncontracted
+  // external -- the fail-closed pre-contract state. A present entrypoint with an
+  // empty export map would instead be a document asserting it has nothing to
+  // say about exports that exist.
+  const surviving = withoutRefusedEntrypoints(expanded(PAIR), ["./server"]);
+  assert.deepEqual(Object.keys(surviving.entrypoints), ["."]);
+  assert.equal(Object.hasOwn(surviving.entrypoints, "./server"), false);
+});
+
+test("the verify sidecar names every entrypoint the promotion left out", () => {
+  const fixture = draft({
+    document: PAIR,
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: { ".": { modules: [] }, "./server": { modules: [] } }
+    },
+    report: { claims: pairClaims() }
+  });
+  const contract = expanded(PAIR);
+  const refusedEntrypoints = unobservedKindRefusals(contract, fixture.report);
+  const surviving = withoutRefusedEntrypoints(
+    contract,
+    refusedEntrypoints.map(refusal => refusal.entrypoint)
+  );
+  const converted = convertUnconfirmedClaims(surviving, fixture.report);
+  const report = buildVerifyReport({
+    contract: surviving,
+    contractPath: fixture.contractFile,
+    before: fixture.hash,
+    after: "sha256:ff",
+    report: fixture.report,
+    reportPath: fixture.reportFile,
+    identities: {},
+    conversions: converted.conversions,
+    probed: converted.probed,
+    staleMarkers: converted.staleMarkers,
+    droppedMarkers: 0,
+    refusedEntrypoints
+  });
+  assert.equal(report.summary.refusedEntrypoints, 1);
+  // The promoted document's own export count, so the sidecar's two numbers
+  // together say the document is smaller than the draft it came from.
+  assert.equal(report.summary.exports, 1);
+  assert.equal(report.refusedEntrypoints.length, 1);
+  assert.equal(report.refusedEntrypoints[0].entrypoint, "./server");
+  assert.match(report.refusedEntrypoints[0].blocker, /no passing kind observation for 1 export/);
+});
+
+test("a document where no entrypoint survives is refused whole, naming the empty set", () => {
+  const fixture = draft({
+    document: PAIR,
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: { ".": { modules: [] }, "./server": { modules: [] } }
+    },
+    report: { claims: pairClaims({ rootObserved: false }) }
+  });
+  const blockers = blockersFor(fixture);
+  // One document-level line plus one per refused entrypoint.
+  assert.equal(blockers.length, 3);
+  assert.match(
+    blockers[0],
+    /^no passing kind observation for any entrypoint that certifies anything: of 2 emitted entrypoint\(s\), 2 refused/
+  );
+  // Both refusals stay enumerated inside it: the reader still needs to know
+  // which entrypoints were unobservable and in which modes.
+  assert.match(blockers[0], /\.: the probe report records no passing kind observation for 1 export/);
+  assert.match(blockers[0], /\.\/server: the probe report records no passing kind observation/);
+  assert.match(blockers[0], /no unknown sentinel for/);
+  assert.deepEqual(
+    blockers.slice(1).map(line => line.slice(0, line.indexOf(":"))),
+    [".", "./server"]
+  );
+});
+
+test("a refusal keeps one named line per refused entrypoint, however many there are", () => {
+  // The corpus has a kind-rooted refusal spanning 91 entrypoints and five rows
+  // above five. A single line naming five and counting the rest lost up to 86
+  // entrypoint identities from `blockers.raised`, which is the only durable
+  // record a refusal leaves. Scaled down to eight here; the property is that the
+  // line count tracks the refusals rather than a cap.
+  const names = [".", ...Array.from({ length: 7 }, (_, index) => `./e${index}`)];
+  const document = {
+    ...PAIR,
+    entrypoints: Object.fromEntries(
+      names.map((name, index) => [name, { exports: { "function-1": [`x${index}`] } }])
+    )
+  };
+  const claims = names.flatMap((name, index) =>
+    ["kind=function", "callbacks[0]=tracked"].map(claim => ({
+      entrypoint: name,
+      export: `x${index}`,
+      claim,
+      family: "B",
+      status: "undriven",
+      reason: "import of verify-fixture threw: Error: nope",
+      modes: { attempted: ALL_MODES, passed: [] },
+      observations: ALL_MODES.map(mode => ({
+        mode,
+        status: "undriven",
+        reason: "import of verify-fixture threw: Error: nope"
+      }))
+    }))
+  );
+  const fixture = draft({
+    document,
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: Object.fromEntries(names.map(name => [name, { modules: [] }]))
+    },
+    report: { claims }
+  });
+  const blockers = blockersFor(fixture);
+  assert.equal(blockers.length, names.length + 1);
+  for (const name of names) {
+    assert.equal(
+      blockers.some(line => line.startsWith(`${name}: the probe report records no passing kind`)),
+      true,
+      `${name} is named by a line of its own`
+    );
+  }
+  // Every line still classifies as the same blocker class the corpus counts.
+  for (const line of blockers) {
+    assert.equal(blockerClass(line.slice(0, 260)), "kind-observed");
+  }
+});
+
+test("the document-level line stays classifiable behind a long entrypoint name", () => {
+  // `verify-corpus.mjs` truncates every blocker to a 260-character head *before*
+  // classifying it, so a classifying phrase pushed past that by an entrypoint
+  // name reclassifies the row as an unclassified refusal -- silently corrupting
+  // the one count amendment A9's stage 2 gate reads. 46 characters here; the
+  // longest name in the corpus today is 22, and the margin used to be 36.
+  const name = "./primitives/create-async-memo-with-a-name-abc";
+  assert.equal(name.length, 46);
+  const document = {
+    ...PAIR,
+    entrypoints: { [name]: { exports: { "function-1": ["mountServer"] } } }
+  };
+  const fixture = draft({
+    document,
+    generation: { generator: "solid-checker@test", entrypoints: { [name]: { modules: [] } } },
+    report: {
+      claims: ["kind=function", "callbacks[0]=tracked"].map(claim => ({
+        entrypoint: name,
+        export: "mountServer",
+        claim,
+        family: "B",
+        status: "undriven",
+        reason: "import of verify-fixture threw: Error: nope",
+        modes: { attempted: ALL_MODES, passed: [] },
+        observations: ALL_MODES.map(mode => ({
+          mode,
+          status: "undriven",
+          reason: "import of verify-fixture threw: Error: nope"
+        }))
+      }))
+    }
+  });
+  const blockers = blockersFor(fixture);
+  assert.equal(blockers.length, 2);
+  for (const line of blockers) {
+    assert.equal(blockerClass(line.slice(0, 260)), "kind-observed");
+    assert.equal(blockerClass(line), "kind-observed");
+  }
+});
+
+test("an entrypoint with an empty export map is not a survivor", () => {
+  // Verify-by-saying-nothing: `unobservedKindRefusals` has nothing to refuse in
+  // an entrypoint with no exports, so counting it as a survivor promoted a
+  // document that certified literally nothing -- caught only downstream, by
+  // `--validate-contract` complaining about document shape.
+  const document = {
+    ...PAIR,
+    entrypoints: {
+      ".": { exports: { "function-1": ["wrapMemo"] } },
+      "./types": { exports: {} }
+    }
+  };
+  const fixture = draft({
+    document,
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: { ".": { modules: [] }, "./types": { modules: [] } }
+    },
+    report: {
+      claims: ["kind=function", "callbacks[0]=tracked"].map(claim => ({
+        entrypoint: ".",
+        export: "wrapMemo",
+        claim,
+        family: "B",
+        status: "undriven",
+        reason: "import of verify-fixture threw: Error: nope",
+        modes: { attempted: ALL_MODES, passed: [] },
+        observations: ALL_MODES.map(mode => ({
+          mode,
+          status: "undriven",
+          reason: "import of verify-fixture threw: Error: nope"
+        }))
+      }))
+    }
+  });
+  const contract = expanded(document);
+  assert.deepEqual(certifyingEntrypoints(contract, ["."]), []);
+  const blockers = blockersFor(fixture);
+  assert.equal(blockers.length, 2);
+  assert.match(blockers[0], /1 refused for an unobserved `kind` claim and 1 carrying no export/);
+});
+
+test("a contract with no entrypoint at all is refused here, not by the loader", () => {
+  const document = { ...PAIR, entrypoints: {} };
+  const fixture = draft({
+    document,
+    generation: { generator: "solid-checker@test", entrypoints: {} },
+    report: { claims: [] }
+  });
+  const blockers = blockersFor(fixture);
   assert.equal(blockers.length, 1);
+  assert.match(blockers[0], /^no entrypoint certifies anything: the contract emits no entrypoint/);
+  assert.equal(blockerClass(blockers[0]), "certifies-nothing");
+  assert.equal(BLOCKERS.includes("certifies-nothing"), true);
+});
+
+test("a single-entrypoint contract with the same gap still refuses whole", () => {
+  // The control for the case above. 67 of the corpus's 77 kind refusals are
+  // single-entrypoint packages, so this is the *common* shape and per-entrypoint
+  // granularity must not turn it into a document that verifies because it says
+  // nothing.
+  const fixture = draft();
+  const blockers = blockersFor(fixture, {
+    report: {
+      ...fixture.report,
+      claims: fixture.report.claims.filter(claim => !claim.claim.startsWith("kind="))
+    }
+  });
+  assert.equal(blockers.length, 2);
+  assert.match(
+    blockers[0],
+    /^no passing kind observation for any entrypoint that certifies anything: of 1 emitted entrypoint\(s\), 1 refused/
+  );
   assert.match(blockers[0], /no passing kind observation for 4 export\(s\)/);
+});
+
+test("a verification refusal leaves a review item naming the entrypoint and what it dropped", () => {
+  // "A partial contract must never be silent about what it omits"
+  // (`collectReviewItems`) is generation's rule for a refused entrypoint, and
+  // the rewritten plan is the only artifact a reviewer reads -- `contract
+  // review` never opens `<contract>.verify.json`. Without this the subpath left
+  // the document *and* the plan, so nothing said it had ever been claimed.
+  const contract = expanded(PAIR);
+  const report = { claims: pairClaims(), discovery: { enabled: true } };
+  const refusedEntrypoints = unobservedKindRefusals(contract, report);
+  const surviving = withoutRefusedEntrypoints(contract, ["./server"]);
+  const prior = renderReviewPlanDocument(
+    "verify-fixture",
+    "1.0.0",
+    collectReviewItems(contract.entrypoints),
+    { generator: "solid-checker@test", entrypoints: { ".": {}, "./server": {} } },
+    "sha256:aa"
+  );
+  const rewritten = rewriteReviewPlan({
+    plan: prior,
+    contract: surviving,
+    contractHash: "sha256:bb",
+    conversions: [],
+    refusedEntrypoints
+  });
+  const item = rewritten.items.find(candidate => candidate.kind === "refused-entrypoint");
+  assert.equal(item?.target.entrypoint, "./server");
+  assert.match(item.text, /^\.\/server: verification observed no passing `kind` claim for 1 export/);
+  // The exports are named, not counted: the reviewed tier is the only remaining
+  // route to a claim about them.
+  assert.match(item.text, /mountServer/);
+  // And the plan is not otherwise re-shaped: the surviving entrypoint's items
+  // keep the ids they had, so a recorded `because` still lands.
+  assert.deepEqual(
+    rewritten.items.filter(candidate => candidate.target.entrypoint === ".").map(candidate => candidate.id),
+    prior.items.filter(candidate => candidate.target.entrypoint === ".").map(candidate => candidate.id)
+  );
 });
 
 test("a probe report produced with discovery disabled is refused", () => {
@@ -1004,6 +1423,63 @@ test("a refusal's sidecar does not block the verification that follows it", { sk
   assert.deepEqual(sidecar.blockers.raised, []);
   process.exitCode = 0;
 });
+
+test(
+  "verify promotes a document minus its refused entrypoint, end to end",
+  { skip: !canWrite },
+  async () => {
+    // The whole stage-1 wiring in one run: the refusal list, the shrunken
+    // document, the sidecar on disk, the stdout line, and the plan rewritten
+    // over bytes one of the drafted entrypoints is no longer in. Everything
+    // above this point tests those pieces separately.
+    const fixture = draft({
+      document: PAIR,
+      generation: {
+        generator: "solid-checker@test",
+        entrypoints: { ".": { modules: [] }, "./server": { modules: [] } }
+      },
+      report: { claims: pairClaims() }
+    });
+    const report = await verifyContract([fixture.contractFile]);
+    assert.equal(process.exitCode ?? 0, 0);
+
+    const written = JSON.parse(readFileSync(fixture.contractFile, "utf8"));
+    assert.deepEqual(written.evidence, { kind: "verified" });
+    assert.deepEqual(Object.keys(expandContract(written).entrypoints), ["."]);
+    // The survivor kept its probed row: the point of the change is that an
+    // observed entrypoint is no longer collateral.
+    assert.equal(
+      expandContract(written).entrypoints["."].exports.wrapMemo.callbacks[0].evidence.kind,
+      "probed"
+    );
+
+    assert.equal(report.summary.refusedEntrypoints, 1);
+    assert.equal(report.summary.exports, 1);
+    assert.deepEqual(
+      report.refusedEntrypoints.map(refusal => refusal.entrypoint),
+      ["./server"]
+    );
+    const sidecar = JSON.parse(readFileSync(verifyReportPath(fixture.contractFile), "utf8"));
+    assert.deepEqual(sidecar, report);
+    assert.deepEqual(sidecar.blockers.raised, []);
+
+    // And the plan says what the document no longer does.
+    const plan = JSON.parse(readFileSync(fixture.planFile, "utf8"));
+    assert.equal(plan.contract, sidecar.contract.after);
+    const refusalItem = plan.items.find(item => item.kind === "refused-entrypoint");
+    assert.equal(refusalItem?.target.entrypoint, "./server");
+    assert.match(refusalItem.text, /verification observed no passing `kind` claim/);
+    assert.equal(
+      plan.items.some(item => item.target.entrypoint === "./server" && item.kind !== "refused-entrypoint"),
+      false,
+      "no question about the refused entrypoint's claims survives, because the claims did not"
+    );
+    const checklist = readFileSync(join(fixture.directory, "solid-reactivity.review.md"), "utf8");
+    assert.match(checklist, /## entrypoints refused as uncertifiable/);
+    assert.match(checklist, /- \[ \] \.\/server: verification observed no passing/);
+    process.exitCode = 0;
+  }
+);
 
 test("verify refuses a contract that already carries a stronger claim", { skip: !canWrite }, async () => {
   const document = structuredClone(CONTRACT);

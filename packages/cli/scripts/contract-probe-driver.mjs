@@ -217,7 +217,12 @@ export function synthesizeArguments(summary, probedParameter) {
 /// Where an undriven claim's reason comes from. Each string names the missing
 /// mechanism, not the claim, so a report reader can tell a permanent gap
 /// (owner rows) from one Stage 2+ could close (a store-path probe form).
-const UNDRIVABLE = {
+///
+/// Exported only so the corpus harness's reason-bucket test can be total over
+/// this table rather than over a copied list of it: a reason nobody classified
+/// lands in the harness's `other` bucket, which is worst exactly when a new
+/// withdrawal class is the largest one in a run.
+export const UNDRIVABLE = {
   owner: "callback owner rows have no probe form: no observation distinguishes inherited from created ownership",
   callbackArguments:
     "callback argument descriptors have no probe form: the claim is about the shape passed to the callback, and no claim string names one",
@@ -666,7 +671,14 @@ function runtimeReran(result) {
   return result?.runtime?.reruns === true;
 }
 
-const OUTCOME_REASON = {
+/// The reason a non-observing probe outcome carries.
+///
+/// Exported for the same reason `UNDRIVABLE` is: the corpus harness buckets
+/// these strings, and the test that keeps its buckets total reads this table
+/// instead of restating it. `session-failed` forwards the session layer's own
+/// text (packages/cli/scripts/probe-contract.mjs), so that one entry is not a
+/// string this file owns.
+export const OUTCOME_REASON = {
   // The worker never ran, or never answered: a mode-wide fact, not a fact about
   // this claim, so it is still only ever `undriven`.
   "session-failed": result => result.error,
