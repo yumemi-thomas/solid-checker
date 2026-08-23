@@ -27,7 +27,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 34;
+pub const AST_FACTS_SCHEMA: u32 = 35;
 
 mod span_index;
 
@@ -41,9 +41,35 @@ pub struct AstFacts {
     pub calls: Vec<CallFact>,
     pub bindings: Vec<BindingFact>,
     pub functions: Vec<FunctionFact>,
+    /// Class declarations and expressions. See [`ClassFact`]: a class is
+    /// `typeof === "function"` at runtime but carries no call signature, so
+    /// this is the only fact domain that can tell a contract generator the
+    /// runtime kind of an exported class.
+    #[serde(default)]
+    pub classes: Vec<ClassFact>,
     pub imports: Vec<ImportFact>,
     pub exports: Vec<ExportFact>,
     pub identifiers: Vec<IdentifierFact>,
+    /// The binder's own resolution for each identifier *reference* that names a
+    /// declaration in this file: `(reference span, declaration name span)`,
+    /// sorted by reference span.
+    ///
+    /// This is the scope-exact answer, and it is deliberately not the
+    /// compiler's. TypeScript answers a symbol query at a shorthand property
+    /// span (`{ fn }`) with the *property's* symbol, never the value binding's,
+    /// and a compiler entity exists only at a span some demand asked for.
+    /// Neither limitation applies to Oxc's scope tree, and a reference to a
+    /// parameter is always resolvable inside the function that declares it —
+    /// which is what a contract generator proving "what does this export do
+    /// with the value its caller passed" has to be able to ask.
+    ///
+    /// A reference that is absent resolves to no declaration in this file — a
+    /// global, or an unresolved name. That is the absence of a fact, never
+    /// proof that no declaration exists. It is a side table rather than a field
+    /// on [`IdentifierFact`] because identifiers are the highest-cardinality
+    /// fact in the file and that struct is kept to two words.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_declarations: Vec<(Span, Span)>,
     pub awaits: Vec<Span>,
     /// The subset of [`AstFacts::awaits`] proven to execute on every run of
     /// their innermost enclosing function (or of module evaluation): awaits
@@ -306,6 +332,26 @@ pub enum FunctionKind {
     Arrow,
 }
 
+/// A class declaration or class expression, and the span of the name it binds.
+///
+/// This exists because *constructability is not callability*. The compiler's
+/// `Callability` is derived from `GetSignaturesOfType(…, SignatureKindCall)`
+/// alone, so `typeof C` for a class answers `nonCallable` — it has construct
+/// signatures and no call signature. At runtime `typeof C === "function"` for
+/// every class, which is exactly what a package contract's `kind` describes
+/// and exactly what a runtime probe measures. Nothing in the type facts can
+/// close that gap, so the syntactic fact is the one that has to.
+///
+/// `name` is `None` for an anonymous class expression (`export default class
+/// {}`), whose binding is the export itself.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassFact {
+    pub span: Span,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<NamedSpan>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FunctionFact {
@@ -328,6 +374,14 @@ pub struct FunctionFact {
     /// must treat that tail as observable rather than as unnamed.
     #[serde(default)]
     pub rest_parameter: bool,
+    /// The binding identifiers a rest parameter declares.
+    ///
+    /// Kept out of `parameters` for the reason above — the tail fills no single
+    /// argument slot — but a consumer proving what an exported function does
+    /// with the values its caller supplied still has to resolve references to
+    /// it. Empty when there is no rest parameter.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rest_parameter_names: Vec<NamedSpan>,
     pub r#async: bool,
     pub generator: bool,
     pub expression_body: bool,
@@ -715,6 +769,32 @@ pub enum ReturnValueKind {
 }
 
 impl AstFacts {
+    /// The declaration the binder resolved the reference at `span` to.
+    ///
+    /// `None` when `span` is not an identifier reference, or when the binder
+    /// resolved it to no declaration in this file. See
+    /// [`AstFacts::reference_declarations`].
+    #[must_use]
+    pub fn reference_declaration(&self, span: Span) -> Option<Span> {
+        self.reference_declarations
+            .binary_search_by_key(&span, |(reference, _)| *reference)
+            .ok()
+            .map(|index| self.reference_declarations[index].1)
+    }
+
+    /// Whether `span` is *exactly* the name a class binds in this file.
+    ///
+    /// Span identity, not containment: the name of a class declaration, or of
+    /// a named class expression. A span inside the class *body* is not the
+    /// class. Callers use this to answer "is this exported binding a class",
+    /// which no type fact can answer — see [`ClassFact`].
+    #[must_use]
+    pub fn declares_class_at(&self, span: Span) -> bool {
+        self.classes
+            .iter()
+            .any(|class| class.name.as_ref().is_some_and(|name| name.span == span))
+    }
+
     /// Whether `span` is *exactly* the target an assignment overwrites without
     /// reading the previous value — plain `=` and nothing else.
     ///
@@ -793,9 +873,11 @@ impl AstFacts {
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
+            classes: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
             identifiers: Vec::new(),
+            reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             returns: Vec::new(),
@@ -914,9 +996,11 @@ struct Collector<'s, 'semantic> {
     calls: Vec<CallFact>,
     bindings: Vec<BindingFact>,
     functions: Vec<FunctionFact>,
+    classes: Vec<ClassFact>,
     imports: Vec<ImportFact>,
     exports: Vec<ExportFact>,
     identifiers: Vec<IdentifierFact>,
+    reference_declarations: Vec<(Span, Span)>,
     awaits: Vec<Span>,
     unconditional_awaits: Vec<Span>,
     returns: Vec<ReturnFact>,
@@ -967,9 +1051,11 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
+            classes: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
             identifiers: Vec::new(),
+            reference_declarations: Vec::new(),
             awaits: Vec::new(),
             unconditional_awaits: Vec::new(),
             returns: Vec::new(),
@@ -1000,9 +1086,11 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.calls.sort_by_key(|fact| fact.span);
         self.bindings.sort_by_key(|fact| fact.declaration);
         self.functions.sort_by_key(|fact| fact.span);
+        self.classes.sort_by_key(|fact| fact.span);
         self.imports.sort_by_key(|fact| fact.span);
         self.exports.sort_by_key(|fact| fact.span);
         self.identifiers.sort_by_key(|identifier| identifier.span);
+        self.reference_declarations.sort_unstable();
         self.awaits.sort_unstable();
         self.unconditional_awaits.sort_unstable();
         self.returns.sort_by_key(|fact| fact.span);
@@ -1029,9 +1117,11 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             calls: self.calls,
             bindings: self.bindings,
             functions: self.functions,
+            classes: self.classes,
             imports: self.imports,
             exports: self.exports,
             identifiers: self.identifiers,
+            reference_declarations: self.reference_declarations,
             awaits: self.awaits,
             unconditional_awaits: self.unconditional_awaits,
             returns: self.returns,
@@ -1052,6 +1142,21 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             if_regions: self.if_regions,
             module_directives: self.module_directives,
         }
+    }
+
+    fn rest_parameter_names(
+        &self,
+        rest: Option<&oxc_ast::ast::FormalParameterRest<'_>>,
+    ) -> Vec<NamedSpan> {
+        rest.map(|rest| {
+            self.binding_fact(
+                rest.rest.span,
+                &rest.rest.argument,
+                BindingMetadata::default(),
+            )
+            .names
+        })
+        .unwrap_or_default()
     }
 
     fn binding_fact(
@@ -1658,6 +1763,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     })
                     .collect(),
                 rest_parameter: function.params.rest.is_some(),
+                rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
                 r#async: function.r#async,
                 generator: function.generator,
                 expression_body: false,
@@ -1678,6 +1784,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.method_names.push(static_property_name(&method.key));
         walk::walk_method_definition(self, method);
         self.method_names.pop();
+    }
+
+    fn visit_class(&mut self, class: &oxc_ast::ast::Class<'a>) {
+        self.classes.push(ClassFact {
+            span: span(class.span),
+            name: class.id.as_ref().map(|id| NamedSpan {
+                span: span(id.span),
+            }),
+        });
+        walk::walk_class(self, class);
     }
 
     fn visit_arrow_function_expression(&mut self, function: &ArrowFunctionExpression<'a>) {
@@ -1703,6 +1819,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 })
                 .collect(),
             rest_parameter: function.params.rest.is_some(),
+            rest_parameter_names: self.rest_parameter_names(function.params.rest.as_deref()),
             r#async: function.r#async,
             generator: false,
             expression_body: function.expression,
@@ -1862,6 +1979,15 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             span: span(identifier.span),
             role: IdentifierRole::Reference,
         });
+        if let Some(declaration) = identifier
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+            .map(|symbol| span(self.scoping.symbol_span(symbol)))
+        {
+            self.reference_declarations
+                .push((span(identifier.span), declaration));
+        }
         walk::walk_identifier_reference(self, identifier);
     }
 

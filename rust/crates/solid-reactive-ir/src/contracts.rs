@@ -16,9 +16,10 @@ use solid_facts::ProjectFacts;
 use typefacts::{Callability, Location, ReferenceSpace};
 
 use super::{
-    ContractCallback, ContractExport, ContractExportVariant, ContractReactiveRead, ContractReturn,
-    EntitySymbols, PackageContract, ReactiveSourceKind, RuntimeEnvironment, StaticDefect,
-    StaticDefectKind, SummaryNode, SummaryRead, SummaryReads, SymbolId, location, location_order,
+    ContractCallback, ContractClaim, ContractExport, ContractExportVariant, ContractReactiveRead,
+    ContractReturn, ContractUnknownClaim, EntitySymbols, PackageContract, ReactiveSourceKind,
+    RuntimeEnvironment, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead, SummaryReads,
+    SymbolId, location, location_order,
 };
 use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
 use crate::pipeline::parallel_slice_results;
@@ -661,19 +662,54 @@ pub(super) struct ContractAnalysis<'a> {
     pub(super) returned: &'a [SummaryReads],
     pub(super) structured_returns: &'a [Option<ContractReturn>],
     pub(super) callbacks: &'a [Vec<ContractCallback>],
+    /// Per node, the parameters whose caller-supplied value the analysis never
+    /// accounted for. Any one of them makes this export's `callbacks` domain
+    /// the unknown sentinel — see
+    /// `interproc::push_unaccounted_parameter_escapes`.
+    pub(super) escaped_parameters: &'a [Vec<usize>],
     pub(super) invoked_parameter_members: &'a [Vec<(usize, String)>],
     pub(super) semantics: ContractSemantics<'a>,
 }
 
+/// One node's inputs to [`contract_export_function`], indexed out of a
+/// [`ContractAnalysis`].
+struct ContractExportNode<'a> {
+    node: &'a SummaryNode,
+    summary: &'a SummaryReads,
+    returned_summary: &'a SummaryReads,
+    structured_return: Option<&'a ContractReturn>,
+    callbacks: &'a [ContractCallback],
+    escaped_parameters: &'a [usize],
+    invoked_parameter_members: &'a [(usize, String)],
+}
+
+impl<'a> ContractExportNode<'a> {
+    fn at(analysis: &ContractAnalysis<'a>, node: &'a SummaryNode, index: usize) -> Self {
+        Self {
+            node,
+            summary: &analysis.summaries[index],
+            returned_summary: &analysis.returned[index],
+            structured_return: analysis.structured_returns[index].as_ref(),
+            callbacks: &analysis.callbacks[index],
+            escaped_parameters: &analysis.escaped_parameters[index],
+            invoked_parameter_members: &analysis.invoked_parameter_members[index],
+        }
+    }
+}
+
 fn contract_export_function(
-    node: &SummaryNode,
-    summary: &SummaryReads,
-    returned_summary: &SummaryReads,
-    structured_return: Option<&ContractReturn>,
-    callbacks: &[ContractCallback],
-    invoked_parameter_members: &[(usize, String)],
+    inputs: ContractExportNode<'_>,
     semantics: &ContractSemantics<'_>,
 ) -> ContractExport {
+    let ContractExportNode {
+        node,
+        summary,
+        returned_summary,
+        structured_return,
+        callbacks,
+        escaped_parameters,
+        invoked_parameter_members,
+    } = inputs;
     let mut seen_reactive_reads = HashSet::new();
     let mut reactive_reads = summary
         .iter()
@@ -739,12 +775,20 @@ fn contract_export_function(
     });
     let mut callback_summary = callbacks.to_vec();
     callback_summary.sort_by_key(|callback| callback.parameter);
+    // An omitted `callbacks` list is a negative claim. Where a caller-supplied
+    // parameter escaped without being accounted for, the honest list is not the
+    // rows that were proven -- it is "unknown".
+    let callbacks = if escaped_parameters.is_empty() {
+        callback_summary.into()
+    } else {
+        ContractClaim::Unknown(ContractUnknownClaim::new())
+    };
     ContractExport {
         kind: "function".into(),
         evidence: None,
         variants: Vec::new(),
         reactive_reads: reactive_reads.into(),
-        callbacks: callback_summary.into(),
+        callbacks,
         owner_requirements: Vec::new().into(),
         returns: returns.into(),
         async_behavior: if node.r#async {
@@ -1132,12 +1176,7 @@ pub(super) fn contract_export_summaries_incremental(
     dirty_indices.sort_unstable();
     let rebuilt_nodes = parallel_slice_results(&dirty_indices, |index| {
         contract_export_function(
-            &graph.nodes[*index],
-            &analysis.summaries[*index],
-            &analysis.returned[*index],
-            analysis.structured_returns[*index].as_ref(),
-            &analysis.callbacks[*index],
-            &analysis.invoked_parameter_members[*index],
+            ContractExportNode::at(analysis, &graph.nodes[*index], *index),
             &analysis.semantics,
         )
     });
@@ -1248,12 +1287,7 @@ pub(super) fn contract_export_summaries(
             (
                 node_keys[index].clone(),
                 contract_export_function(
-                    node,
-                    &analysis.summaries[index],
-                    &analysis.returned[index],
-                    analysis.structured_returns[index].as_ref(),
-                    &analysis.callbacks[index],
-                    &analysis.invoked_parameter_members[index],
+                    ContractExportNode::at(analysis, node, index),
                     &analysis.semantics,
                 ),
             )
@@ -1336,24 +1370,145 @@ fn value_contract_export() -> ContractExport {
     }
 }
 
+/// Whether the binding at `target` is a class.
+///
+/// Constructability is not callability. [`Callability`] is derived from
+/// `GetSignaturesOfType(…, SignatureKindCall)` over the actual union
+/// constituents, and a class type carries construct signatures and no call
+/// signature, so every exported class answers `nonCallable` there. At runtime
+/// `typeof C === "function"` for every class — which is exactly what a
+/// contract's `kind` describes and exactly what `contract probe` measures — so
+/// the callability answer alone makes the generator publish `kind: "value"`
+/// for a class and the probe contradict it.
+///
+/// Two exact facts answer the real question, and neither is name-, text- or
+/// type-text-based: the compiler's own declaration kind for the resolved
+/// symbol (`ast.IsClassDeclaration`), and this project's class-name spans from
+/// the syntax facts. The syntax fact is consulted first because it needs no
+/// symbol demand; the symbol declarations reach a class declared in another
+/// analyzed file.
+pub fn binding_declares_class(facts: &ProjectFacts, target: &Location) -> bool {
+    if location_is_class_name(facts, target) {
+        return true;
+    }
+    let Some(entity) = entity_at(facts, target) else {
+        return false;
+    };
+    if entity.symbol.is_empty() {
+        return false;
+    }
+    // A barrel's `export { ChildError }` binds an *alias* symbol whose own
+    // declaration is the import specifier, and a bundler's `const Query =
+    // BaseQueryBuilder` binds a variable whose initializer is the class. Both
+    // hops are followed by exact symbol identity — an alias target the
+    // compiler recorded, and the binder's own initializer reference — never by
+    // a name. The walk is bounded by the symbols it has already visited.
+    let mut pending = vec![entity.symbol.to_string()];
+    let mut visited = HashSet::new();
+    while let Some(symbol) = pending.pop() {
+        if !visited.insert(symbol.clone()) {
+            continue;
+        }
+        let Some(fact) = facts.typescript.symbol(&symbol) else {
+            continue;
+        };
+        for declaration in fact.declarations() {
+            if declaration.kind.as_ref() == "class"
+                || location_is_class_name(facts, &declaration.location)
+            {
+                return true;
+            }
+            if let Some(next) = binding_initializer_symbol(facts, &declaration.location) {
+                pending.push(next);
+            }
+        }
+        let alias = fact.alias_target();
+        if !alias.is_empty() {
+            pending.push(alias.to_owned());
+        }
+    }
+    false
+}
+
+/// The symbol a `const Alias = Original` declaration copies its value from.
+///
+/// Only the identifier form: an initializer that is a call, an object, or any
+/// other expression is a different runtime value, not this declaration under
+/// another name.
+fn binding_initializer_symbol(facts: &ProjectFacts, target: &Location) -> Option<String> {
+    let span = span_of(target);
+    let file = facts
+        .files
+        .iter()
+        .find(|file| file.path.as_str() == target.path.as_ref())?;
+    let initializer = file
+        .ast
+        .bindings
+        .iter()
+        .find(|binding| binding.names.iter().any(|name| name.span == span))?
+        .initializer_identifier
+        .as_ref()?;
+    let entity = entity_at(facts, &location(file.path.shared(), initializer.span))?;
+    (!entity.symbol.is_empty()).then(|| entity.symbol.to_string())
+}
+
+fn span_of(target: &Location) -> solid_facts::core::Span {
+    solid_facts::core::Span::new(
+        u32::try_from(target.start_byte).unwrap_or(u32::MAX),
+        u32::try_from(target.end_byte).unwrap_or(u32::MAX),
+    )
+}
+
+fn location_is_class_name(facts: &ProjectFacts, target: &Location) -> bool {
+    let span = span_of(target);
+    facts
+        .files
+        .iter()
+        .any(|file| file.path.as_str() == target.path.as_ref() && file.ast.declares_class_at(span))
+}
+
+fn entity_at<'a>(facts: &'a ProjectFacts, target: &Location) -> Option<&'a typefacts::EntityFact> {
+    facts.typescript.entities().find(|entity| {
+        entity.location.path == target.path
+            && entity.location.start_byte == target.start_byte
+            && entity.location.end_byte == target.end_byte
+    })
+}
+
+/// A class export's honest summary: `kind: "function"`, callbacks fail closed.
+///
+/// The generator summarizes function declarations, not construct signatures.
+/// Nothing here carries what a constructor — the class's own, or the one it
+/// inherits through `extends` — does with the arguments a caller passes, and
+/// an omitted `callbacks` list is a *negative* claim ("invokes no
+/// caller-supplied function"). A consumer reads `new Store(onChange)` through
+/// exactly the same contract path as `store(onChange)`, so publishing that
+/// silence would certify inertness the class can contradict. The sentinel is
+/// demand-sensitive at the consumer: constructing with no callable argument
+/// stays clean.
+pub fn class_contract_export(mut summary: ContractExport) -> ContractExport {
+    summary.kind = "function".into();
+    summary.callbacks = ContractClaim::Unknown(ContractUnknownClaim::new());
+    summary
+}
+
 fn promote_callable_export(
     facts: &ProjectFacts,
     file: &solid_facts::FileFacts,
     span: solid_facts::core::Span,
-    mut summary: ContractExport,
+    summary: ContractExport,
 ) -> ContractExport {
     if summary.kind != "value" {
         return summary;
     }
     let target = location(file.path.shared(), span);
-    let entity = facts.typescript.entities().find(|entity| {
-        entity.location.path == target.path
-            && entity.location.start_byte == target.start_byte
-            && entity.location.end_byte == target.end_byte
-    });
-    let Some(entity) = entity else {
+    if binding_declares_class(facts, &target) {
+        return class_contract_export(summary);
+    }
+    let Some(entity) = entity_at(facts, &target) else {
         return summary;
     };
+    let mut summary = summary;
     if entity.callability == Some(Callability::Callable) {
         summary.kind = "function".into();
     }
