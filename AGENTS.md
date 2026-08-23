@@ -245,6 +245,14 @@ proportionality rules and the report format.
   fixtures/reactive-ir/dialect-solid-1x and dialect-solid-2 pair pins where
   1.x and 2.0 deliberately differ; read fixture comments before mirroring
   behavior across dialects.
+- **Bundled contracts are compiled into the binary.** pkg/contracts/bundled/**
+  reaches the analyzer through `include_bytes!` in
+  rust/crates/solid-facts-backend/src/diagnostics.rs, so editing one changes
+  nothing until the binary is rebuilt. The stale-binary trap above applies to
+  a contract-only change exactly as it does to a Rust one: build
+  rust/target/debug first, then run coverage/ownership with
+  `SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust"`. “No finding
+  moved” from a run that used the previous binary is meaningless there too.
 
 ## Fixtures, diagnostics, and snapshots
 

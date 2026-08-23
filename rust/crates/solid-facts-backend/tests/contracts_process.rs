@@ -1049,6 +1049,126 @@ fn package_generator_reviews_unknown_callback_claim_as_one_grouped_item() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+/// A local callee's summary is inherited by everything that forwards a
+/// callback into it, so an empty summary is a *negative* claim about the
+/// caller too. Where the callee retains the value instead of calling it,
+/// the domain has to be the sentinel — and where the references only observe
+/// the value, it must stay the honest omission.
+/// See fixtures/package-contracts/retained-callback-parameter/README.md.
+#[test]
+fn package_generator_fails_closed_on_a_retained_callback_parameter() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/retained-callback-parameter");
+    let directory = temporary_directory("retained-callback-parameter-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    let exports = &contract["entrypoints"]["."]["exports"];
+    for name in [
+        "forwardsIntoRetainingHelper",
+        "retainsInModuleBinding",
+        "absorbsRest",
+    ] {
+        assert_eq!(
+            exports[name]["callbacks"],
+            serde_json::json!({ "status": "unknown" }),
+            "{name}: {contract}"
+        );
+    }
+    assert_eq!(
+        without_claim_evidence(&exports["invokesCallback"]["callbacks"]),
+        serde_json::json!([{ "parameter": 0, "execution": "inline" }]),
+        "{contract}"
+    );
+    for name in ["observesCallback", "storesIntoCallerContainer"] {
+        assert!(
+            exports[name].get("callbacks").is_none(),
+            "{name}: {contract}"
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// `typeof C === "function"` for every class, but a class type has construct
+/// signatures and no *call* signature, so Type Facts answers `nonCallable`
+/// and the generator used to publish `kind: "value"` — a claim the runtime
+/// kind probe contradicts. See fixtures/package-contracts/exported-class.
+#[test]
+fn package_generator_states_an_exported_class_as_a_function_kind() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/exported-class");
+    let directory = temporary_directory("exported-class-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    let exports = &contract["entrypoints"]["."]["exports"];
+    // Declared here, reached through a barrel's `export { … }` of an imported
+    // binding, and reached through `const Alias = SomeClass`.
+    for name in [
+        "DirectError",
+        "BaseError",
+        "ChildError",
+        "Watcher",
+        "AliasedWatcher",
+    ] {
+        assert_eq!(exports[name]["kind"], "function", "{name}: {contract}");
+        assert_eq!(
+            exports[name]["callbacks"],
+            serde_json::json!({ "status": "unknown" }),
+            "{name}: {contract}"
+        );
+    }
+    assert_eq!(exports["plainFunction"]["kind"], "function", "{contract}");
+    assert!(
+        exports["plainFunction"].get("callbacks").is_none(),
+        "{contract}"
+    );
+    assert_eq!(exports["settings"]["kind"], "value", "{contract}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
 #[test]
 fn package_generator_describes_reactive_callback_arguments() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {

@@ -290,6 +290,71 @@ it portably can: one child process per condition mode, a per-mode timeout
 staging directory under the project's `node_modules` that is removed afterwards.
 None of that is a sandbox, and the command does not pretend to be one.
 
+**The client modes import against a faked browser, and the report says so.**
+A module that dereferences `window` while it is being *evaluated* throws
+`ReferenceError` in a bare Node process, the worker stops, and every claim of
+that entrypoint is undriven — so nothing at all is observed about the package,
+including the `kind` claim verification cannot convert. The worker therefore
+defines a minimal inert browser surface before it imports anything, in the
+`client`, `development` and `production` sessions.
+
+The premise, stated plainly because it is a real weakening: **a claim observed
+under the shim is not a claim observed in a browser.** The fake `document`
+renders nothing, the fake `matchMedia` never matches, the fake `navigator`
+reports `solid-checker-contract-probe` rather than impersonating one. A package
+that branches on any of that was observed on the branch the fake sent it down,
+and where that distinction could matter the honest state is what the record
+says — not what the number implies. So the shim is recorded rather than
+assumed harmless: `<contract>.probe.json` gains an `environment` block naming,
+per mode, the globals that process invented (`shimmed`) and the ones Node
+already provided and it therefore left alone (`present`), and
+`<contract>.verify.json` carries the same block forward under `probeReport`.
+A promotion built on faked-DOM observations is legible as one.
+
+Four rules keep it bounded.
+
+- **Mode-scoped.** Only modes whose conditions include `browser` are shimmed.
+  A `server` import that throws on `window` under `--conditions node` is a
+  *truthful* observation of that entrypoint in that mode; faking a DOM there
+  would manufacture a pass the package never earns. `server` sessions shim
+  nothing, always.
+- **Never at generation.** `contract generate` imports nothing at all, so no
+  shim exists on the static path. This lives in the probe worker only.
+- **Inert-observable.** Every faked value carries a non-enumerable
+  `__solidCheckerProbeShim` accessor and the process carries
+  `globalThis.__solidCheckerProbeEnvironment`, so a probe body — or a future
+  classification that needs to know the DOM was fake — can ask. Both are
+  non-enumerable, so a package's own feature detection sees exactly what it
+  would see in a browser and nothing extra.
+- **Empirical, not speculative.** The list is
+  `window document navigator self location screen history localStorage
+  sessionStorage matchMedia requestAnimationFrame cancelAnimationFrame
+  getComputedStyle MutationObserver ResizeObserver IntersectionObserver`,
+  derived from what the corpus's failing packages actually reach for rather
+  than from what a browser happens to have. The same rule governs each fake
+  object's members: `document.readyState`, `navigator.userAgent`,
+  `node.ownerDocument`, `document.defaultView`, `style.getPropertyPriority`
+  and the rest are there because packages in the corpus reached them, plus
+  each one's immediate structural neighbour — a node carrying `firstChild` and
+  no `childNodes` is a node that throws one line later.
+  `--no-environment-shim` reproduces the bare-Node environment, which is what
+  makes the shim's effect on a measurement separable from the engine's.
+
+  The back-references matter more than they look. A package that reaches
+  `node.ownerDocument.addEventListener` from a *deferred* callback throws
+  inside a timer, and an uncaught exception in a timer kills the whole worker
+  process rather than one probe — taking every remaining claim of that mode,
+  `kind` observations included, with it. So `node.ownerDocument === document`
+  and `document.defaultView === window` hold in the fake as they do in a real
+  DOM.
+
+An import that still throws with the shim in place is unchanged: undriven,
+`import-failed`, with the throw as its reason. And the shim buys nothing at all
+for a `typeof window === "undefined"` guard — `typeof` on an undeclared
+identifier never threw. For those modules the shim *redirects* rather than
+rescues: a package that took its server path in every earlier run now takes its
+browser path. That is the sharpest reason the shimmed list is data.
+
 **A worker stops at its first throw and the mode is restarted for what is
 left.** That is a correctness requirement, not a performance one: Solid 2.0's
 development build halts the reactive system permanently on an uncaught error —
@@ -300,6 +365,17 @@ restart answers at least the probe that stopped the previous one, so the loop is
 bounded. A whole-process failure — a crash, a timeout, unreadable output — names
 no particular probe, so the rest of that mode is recorded undriven rather than
 retried.
+
+**An asynchronous throw stops the process, not the mode.** Package code the
+probe set running — a deferred callback, a promise left rejected — throws
+outside every `try` the worker has. The process used to die with status 1 and
+an empty stdout, so the parent had *no* results for that mode: every probe
+already answered was discarded, and because a whole-process failure names no
+probe to retry past, the mode ended there. The worker now answers with what it
+observed, `completed: false`, and the abort reason, so the parent restarts for
+the remainder exactly as it does after a synchronous throw. The reason is
+reported and never attributed to a claim — nothing says which probe scheduled
+the work that threw. Two corpus rows lost a verification to the old behavior.
 
 Probing changes **no** evidence kind. A probed contract is still `inferred` and
 still certifies nothing. What the probed rows it writes are *for* is
@@ -419,7 +495,12 @@ call counts, the synthesized argument vocabulary, and every undriven claim's
 reason — plus the discovery state, the markers a write superseded, and the
 identities the result is a function of: the installed version and npm
 integrity, the generator identity the review plan carries, the probe driver
-identity, and the resolved dialect and Solid release. Nothing loads it and
+identity, and the resolved dialect and Solid release. It also records the
+`environment` block described above and a `sessions` block — how many worker
+processes each mode cost and how many of those were restarts after a throw.
+Restarts are not failures, but a mode that needed hundreds of them is the shape
+behind a slow or timed-out probe, and until this the count was visible only as
+an unexplained duration. Nothing loads it and
 nothing certifies from it. It is the audit trail for what the machine believed
 and could not confirm, and it is the measurement of how much of a real
 package's contract a machine can reach.
@@ -540,6 +621,26 @@ package this checker cannot import cannot be machine-verified at all.** It can
 still be reviewed, and a human's reading of an unimportable package is exactly
 what the reviewed tier is for.
 
+**An exported class is `kind: "function"`.** Constructability is not
+callability: Type Facts derives `Callability` from `GetSignaturesOfType(…,
+SignatureKindCall)`, a class type carries construct signatures and no call
+signature, and so every exported class answers `nonCallable` there. At runtime
+`typeof C === "function"`, which is exactly what `kind` describes and exactly
+what the kind probe measures, so generation reads class-ness off the compiler's
+own declaration kind and the syntax facts' class-name spans, following alias
+and `const Alias = SomeClass` hops by exact symbol identity. `@tanstack/solid-db@0.2.37`
+alone failed 102 `kind=value` claims, every one of them an error class.
+
+Its `callbacks` domain then fails closed. The generator summarizes function
+declarations, not construct signatures, so nothing carries what a constructor —
+the class's own or the one it inherits through `extends` — does with the
+arguments a caller passes; a consumer reads `new Store(onChange)` through the
+same contract path as `store(onChange)`, so the omitted (negative) claim would
+certify inertness the class can contradict. The sentinel stays
+demand-sensitive: constructing with no callable argument is still clean.
+`fixtures/package-contracts/exported-class` pins the three resolution shapes
+and the `kind: "value"` negative.
+
 **A summary-level marker does not outlive its claims.** `writeProbeEvidence`
 computes the export summary's own `probed` marker from the `callbacks[]` rows
 and the top-level `returns`. When those claims are converted here — or deleted
@@ -624,12 +725,31 @@ renamed over the contract, after which the sidecars are written. Verifying a
 contract this sidecar already verified — the bytes on disk are still the ones
 the promotion produced — prints `already verified`, writes nothing, and exits 0.
 
-**The report.** `<contract>.verify.json` records the blockers checked, the
-probe report consumed and its contract hash, the identities the result is a
-function of (generator, probe driver, verifier, dialect, Solid release,
-installed version and integrity), the consumed report's discovery state, the
-probed rows that survived, the `staleProbedMarkers` the document carried that
-the report did not witness, and — the part that matters — every conversion,
+**The report, on both paths.** `<contract>.verify.json` is written whether the
+promotion happened or not, and the two shapes are told apart by `outcome`
+rather than by which counts are zero.
+
+A **refusal** writes `outcome: "refused"` with `blockers.raised` carrying every
+line the command printed, `blockers.checked` carrying the same taxonomy the
+success path lists, the probe report's own figures, and `contract.before` with
+no `after` because nothing was written. Every field that would imply a
+promotion is *absent* rather than zeroed: no `evidence`, no `conversions`, no
+`probed`, no `summary`. The refusal path used to write nothing at all, which
+made the most common outcome the least legible one — stderr was the only record
+of why a contract was not promoted, so CI kept a log or kept nothing, and the
+ecosystem measurement had to recover the blocker taxonomy by pattern-matching
+English sentences. A refusal sidecar is overwritten by the verification that
+succeeds later; it is never mistaken for one, because the idempotence check
+tests `contract.after`, which a refusal has not got.
+
+A **promotion** writes the blockers checked (with `raised` empty, because this
+document was promoted), the probe report consumed and its contract hash, the
+identities the result is a function of (generator, probe driver, verifier,
+dialect, Solid release, installed version and integrity), the consumed report's
+discovery state and its `environment` and `sessions` blocks — so a contract
+verified from observations made against a faked `window` is legible as one —
+the probed rows that survived, the `staleProbedMarkers` the document carried
+that the report did not witness, and — the part that matters — every conversion,
 with the claim identity, the value the machine held, the modes it was stated
 for, and the reason the probe could not reach it:
 
@@ -1486,6 +1606,37 @@ inside a callback whose timing is unknown stays uncertifiable rather than
 becoming a proven untracked read. Local calls are
 summarized transitively, and forwarding into known Solid callback slots records
 the corresponding tracked, deferred, or inline execution.
+
+**A local callee's summary is only inheritable where it accounts for the
+parameter.** Summarizing a local call transitively lets the caller inherit the
+callee's callback answer, and an *empty* answer is the negative claim "never
+invoked". That inheritance breaks the moment the callee merely retains the
+value: `createComputation(fn, init) { const c = { fn, value: init, … }; return
+c; }` — solid-js 1.9.14's — calls nothing, so its summary is empty, so
+`createMemo`, `createEffect`, `children`, `createSelector`, `createDeferred`,
+`createRenderEffect` and `createComputed` each published no callbacks row at
+all, and `contract probe`'s discovery pass contradicted every one of them.
+Generation therefore tracks *retention* per parameter and emits the unknown
+sentinel for the declaring export, propagating it along the same forwarding
+edges the callback rows travel.
+
+Retention is a closed list of positions, never "every reference the analysis
+did not recognize". The difference is the whole precision budget: a published
+runtime artifact is dense with references that only *observe* a parameter —
+`typeof value === "string"`, `prev && …`, `for (const key in props)`,
+`value[HREF]`, `node[name] = value`, a reassignment of the parameter itself —
+and treating those as escapes converts a third of a DOM package's exports to
+sentinels while proving nothing. The retaining positions are an object-literal
+property value (`{ fn }`), an assignment value (`source = pSource`) whose
+target is not a member chain rooted at one of the caller's own parameters, and
+a computed read of a rest parameter (`sources[index]`, whose slot no
+`callbacks` row can name). `fixtures/package-contracts/retained-callback-parameter`
+pins both halves.
+
+References are resolved through the *binder's* own answer for that exact
+reference, not through a compiler entity: TypeScript answers a symbol query at
+a shorthand property span (`{ fn }`) with the property's symbol rather than the
+value binding's, and an entity exists only where some demand asked for one.
 
 Consumers keep an unknown callback demand-sensitive. Passing a potentially
 callable value produces an SC9005 uncertifiable finding through the existing

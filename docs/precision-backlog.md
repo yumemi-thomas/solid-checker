@@ -3315,3 +3315,265 @@ by unit cases in `scripts/contract-probe.test.mjs`,
   does not — but it is the same one-sided shape and has not been argued
   through. Left open deliberately; fixing it without measuring the ecosystem
   cost would be the same guess in the other direction.
+
+## Generated contracts contradicted by the runtime probe (2026-08-23)
+
+The corpus-wide machine-verification measurement
+(`benchmarks/ecosystem/verification-report.md`) attributed a root cause to each
+of its 210 refusals. Two of them were defects in `contract generate` itself
+rather than in what a probe could reach, and both are fixed here.
+
+**1. An exported class was `kind: "value"`.** `Callability` is derived from
+`GetSignaturesOfType(…, SignatureKindCall)`, and a class type has construct
+signatures and *no* call signature, so every exported class answered
+`nonCallable` and `promote_callable_export` /`promote_entry_callable` left it a
+value. At runtime `typeof C === "function"`, which is what the probe's kind
+probe measures, so each such export was a failed claim — 102 of them in
+`@tanstack/solid-db@0.2.37` alone, all error classes, and `kind` is the one
+claim schema v1 has no sentinel for, so one wrong answer blocks its whole
+entrypoint. Class-ness now comes from the compiler's own declaration kind plus
+the syntax facts' class-name spans, walked through alias and
+`const Alias = SomeClass` hops by exact symbol identity.
+
+**2. A retained callback parameter published the negative claim.** Local calls
+are summarized transitively and the caller inherits the callee's callback
+answer, but an *empty* answer is the claim "invokes no caller-supplied
+function". `createComputation(fn, init) { const c = { fn, value: init, … }; }`
+retains rather than calls, so solid-js 1.9.14's `createMemo`, `createEffect`,
+`children`, `createSelector`, `createDeferred`, `createRenderEffect` and
+`createComputed` each certified inertness the package contradicts on every use.
+Retention is now tracked per parameter and opens
+`callbacks: {"status":"unknown"}` on the declaring export, propagating along the
+forwarding edges the callback rows already travel.
+
+Measured against a `HEAD` baseline binary, per package, exports whose
+`callbacks` domain moved to the sentinel: `@solidjs/web@2.0.0-rc.1` 38/388
+(9.8%; 9 of its 48 exports with proven rows folded into the sentinel because a
+sibling parameter of the same export escaped), and **zero** in
+`@solid-primitives/analytics@2.0.0-next.2`,
+`@solid-primitives/context@2.0.0-next.2`,
+`@solid-primitives/connectivity@1.0.0-next.2` and `@corvu-next/dialog@0.1.5` —
+the four corpus rows that reached `verified` before. On solid-js 1.9.14 the
+probe's incompleteness findings fell 35 → 23 rows and 10 → 6 distinct exports.
+
+**Still fail-closed or unresolved after this.**
+
+- **A class's behavioral domains other than `callbacks` are still omitted.**
+  The generator summarizes function declarations, not construct signatures, so
+  a constructor that reads a signal or calls `onCleanup` publishes no
+  `reactiveReads` or `ownerRequirements` row, and an omitted row is a certified
+  negative. Only `callbacks` fails closed today, because only that domain has a
+  demand-sensitive consumer and therefore a bounded cost. Resolving it properly
+  means resolving a class export to its constructor's summary node — including
+  the inherited constructor when the class declares none — which is a separate
+  slice.
+- **Retention is a closed list of positions**: an object-literal property
+  value, an assignment value whose target is not rooted at a caller-supplied
+  parameter, and a computed read of a rest parameter. A parameter that leaves
+  through a conditional branch into a local binding does not open the sentinel,
+  which is why solid-js 1.9.14 `createRoot` (`updateFn = unowned ? fn : () =>
+  fn(…)`, then `runUpdates(updateFn, true)`) still publishes an empty callbacks
+  claim in the client build and is still contradicted by the probe. Widening the
+  list to conditional branches was measured and rejected: it converts a third of
+  `@solidjs/web`'s exports while proving nothing.
+- **Sub-entrypoint variants lag the root.** `./web:createComponent`,
+  `./web:mergeProps` and `./jsx-dev-runtime:createEffect`/`createDeferred`
+  remain contradicted for solid-js 1.9.14 where their root-entrypoint
+  counterparts no longer are; those summaries are inherited through a
+  dependency contract rather than analyzed in the sub-entrypoint's own runtime
+  target.
+- **Eight `callbacks[].execution` claims are simply wrong** and are now
+  reachable because the probe no longer dies early: `.:onMount` states
+  `tracked` where the runtime is `deferred`, `./jsx-dev-runtime`'s
+  `createComputed`/`createMemo`/`createRenderEffect` state `inline` where the
+  resolved artifact is `tracked`, `./jsx-dev-runtime:createSelector` states
+  `deferred` where it is `tracked`, and `./web:use` states `deferred` where it
+  is `inline`. These are a *different* generator defect — the wrong execution
+  kind, not a missing row — and were present before this change; they were
+  invisible only because the earlier contract crashed the probe worker first.
+
+## Closed 2026-08-23: the probe environment was measuring itself
+
+The corpus-wide machine-verification measurement attributed a root cause to each
+of its 210 refusals, and the largest single one — `kind-observed`, 82 rows — was
+not a claim anybody disagreed with. It was the absence of any observation at
+all: roughly fifty of those rows had an entrypoint whose module **throws on
+import** in at least one mode, so no `kind` reading existed, and `kind` is the
+one claim schema v1 has no unknown sentinel for. A further 2,248 claims went
+undriven because the throwaway install did not contain packages the probed code
+imports, and three wide-surface rows exceeded a flat wall budget and produced no
+result at all.
+
+None of that is a fact about a package's reactivity. It is the probe's own
+environment being reported as the package's behavior, and four things are fixed
+here.
+
+**1. A minimal, mode-scoped, recorded import environment.** The probe worker now
+defines fifteen browser globals — `window`, `document`, `self`, `location`,
+`screen`, `history`, `localStorage`, `sessionStorage`, `matchMedia`,
+`requestAnimationFrame`, `cancelAnimationFrame`, `getComputedStyle`,
+`MutationObserver`, `ResizeObserver`, `IntersectionObserver` — before it imports
+anything, in the `client`, `development` and `production` sessions only. The
+list, and the members of each fake object, are derived from what the corpus's
+failing packages actually reach for, not from what a browser happens to have.
+
+The premise is stated rather than assumed: **a claim observed under the shim is
+a weaker observation than one observed in a browser.** So `<contract>.probe.json`
+gains an `environment` block naming, per mode, the globals the process invented
+and the ones Node already provided, and `<contract>.verify.json` carries it
+forward. Four rules bound it: server modes are never shimmed (an import that
+throws on `window` under `--conditions node` is a *truthful* observation);
+generation is untouched, since `contract generate` imports nothing; every faked
+value is stamped with a non-enumerable `__solidCheckerProbeShim` accessor and
+the process carries `__solidCheckerProbeEnvironment`, so a probe body can ask;
+and an import that still throws is unchanged — undriven, `import-failed`, with
+the throw as its reason.
+
+The sharpest reason the record exists: a `typeof window === "undefined"` guard
+never threw, so for those modules the shim *redirects* rather than rescues. A
+package that took its server path in every earlier measurement now takes its
+browser path.
+
+**2. Peer-complete installs.** The manifest's install environment was built for
+static generation and installs what a row *pins*. For Solid 2 that runtime is
+two packages, and rows whose package declares only `solid-js` as a peer got only
+`solid-js` — 248 claims of the previous measurement were an
+`ERR_MODULE_NOT_FOUND` for `@solidjs/web` attributed to the package. The harness
+now completes the pinned runtime with the parallel `@solidjs/web` version, and
+separately installs the non-optional peers the *installed artifact's own*
+`package.json` declares, in a second npm invocation so no peer range can take
+part in resolving a pinned version. If a peer install moves a pin anyway, the
+pinned-only tree is restored and the row records that.
+
+The line held: **a missing peer is the harness's gap; a missing undeclared
+import is the package's.** `@solid-primitives/utils` (94 claims), `server-only`
+(60) and the `react`/`vue`/`svelte`/`vite`/`@angular` group are imported by
+packages that declare them nowhere, and completing those would mean the harness
+choosing a version the package never named. They remain import throws.
+
+**3. A probe budget that scales with the claim count.** 90 s + 500 ms per
+planned claim, capped at 900 s, computed from the exact plan `contract probe` is
+about to run rather than from an export count. A flat 120 s was a budget for the
+median package and a guaranteed timeout for the wide-surface ones. All four rows
+that previously timed out now complete in 83–208 s. A timeout remains its own
+outcome class; this changes how many rows hit one, never what hitting one means.
+
+**4. An asynchronous package throw no longer costs a whole mode.** Package code
+the probe set running — a deferred callback, a promise left rejected — throws
+outside every `try` the worker has. The process died with status 1 and an empty
+stdout, so the parent had *no* results for that mode: every probe already
+answered was discarded, and because a whole-process failure names no probe to
+retry past, the mode ended there. The worker now answers with what it observed,
+`completed: false`, and the abort reason, so the parent restarts for the
+remainder exactly as it does after a synchronous throw. The reason is reported
+and never attributed to a claim.
+
+**Measured, by running the corpus four times against the same two snapshotted
+binaries with one group of changes enabled at a time.** Each step is a full
+416-row run and each attribution is a per-row set difference, not a
+classification of deltas:
+
+| State | Verified | Δ |
+| --- | --- | --- |
+| 2026-08-22 baseline | 194/416 (46.63%) | — |
+| + engine fixes (class kind, retained-callback sentinels) | 214 | +20 / −0 |
+| + the abort guard (4 above) | 217 | +3 / −0 |
+| + shim, peer-complete install, scaled budget (1–3 above) | **222/416 (53.37%)** | +12 / −7 |
+
+The environment half is a net **+1** on the headline, and that is the honest
+result. What it bought is *observation*: claims driven 6,257 → 7,809, rows with
+an entrypoint import throw 55 → 34, exports certified by a verified contract
+672 → 752, probe timeouts 3 → 0. More observation surfaces more contradictions
+as well as more confirmations, and one contradiction refuses a whole contract —
+so `probe-failed` rises 65 → 75 as a root cause while `kind-observed` falls
+82 → 71.
+
+**Still fail-closed or unresolved after this.**
+
+- **An inert fake can change an answer, and one row shows it.**
+  `@solid-primitives/pagination@0.5.2` now fails `createInfiniteScroll
+  callbacks[0]=deferred` with `observed inline`, because the fake
+  `IntersectionObserver` never fires and a callback a browser would run on
+  intersection ran only at setup. The driver already has the right precedent —
+  a mismatch its own read scope could explain is recorded `undriven`, not
+  `failed` — and the same reasoning applies to a mismatch a faked DOM API could
+  explain. It is not implemented, because "which claims depend on which faked
+  API" is not knowable from the contract, and the blunt version ("any failure in
+  a shimmed mode is undriven") would discard the 99 genuine `tracked → inline`
+  findings. The two `@solid-primitives/resize-observer` rows sit on the same
+  line, one step less clearly.
+- **The synthesized-argument boundary is now the binding limit for DOM
+  primitives.** `@solid-primitives/interaction` reads `el.ownerDocument` on the
+  element the *caller* passes, and the driver synthesizes `{}` there; the shim
+  only let execution get far enough to reach the limit. RFC 0002 refuses a
+  ladder of retries deliberately, so this stays undriven rather than being
+  guessed at with a fake node.
+- **Four globals were reached and deliberately not added.** `EventSource` (12
+  claims), `Element` (4), `HTMLAudioElement` (2), `HTMLVideoElement` (2). Each
+  needs constructor or `instanceof` identity rather than a value, and faking
+  that invents behavior rather than removing an obstacle. 20 claims across the
+  corpus.
+- **93% of verified contracts still certify no observed behavior.** Verified
+  rows carrying a probed behavioral row went 6 → 15 of 222, and the markers kept
+  12 → 25. The rate roughly doubled on a base that is still almost nothing; the
+  binding constraint is drivability, not the environment.
+- **2,745 claims have no probe form at all** and never will —
+  `reactiveReads` 1,354, `ownerRequirements` 565, parameter identity 421, nested
+  return leaves 257, `asyncBehavior` 100, callback arguments 25, store paths 23.
+  They are static claims, or claims schema v1 has no evidence slot for.
+- **Wrong execution kind is now the dominant visible defect class**: 155 of the
+  218 failing claims, once the 53 `kind: value → function` failures the class
+  fix removes are gone. `callbacks[n]: claimed tracked, observed inline` alone is
+  99. That is a generator defect and is tracked in "[Generated contracts
+  contradicted by the runtime probe](#generated-contracts-contradicted-by-the-runtime-probe-2026-08-23)"
+  above, not here.
+
+## Closed 2026-08-23: `contract verify` refused without writing anything down
+
+The refusal path built no sidecar at all — `buildVerifyReport` was reachable
+only after the promotion succeeded, and its `blockers.raised` was always `[]` —
+so the most common outcome of the command was the least legible one. The only
+record of *why* a contract was not promoted was stderr: a CI run kept a log or
+kept nothing, and the corpus measurement had to recover the RFC 0002 blocker
+taxonomy by pattern-matching English sentences against lines carrying absolute
+paths.
+
+A refusal now writes `<contract>.verify.json` with `outcome: "refused"`,
+`blockers.raised` carrying every line the command printed, `blockers.checked`
+carrying the same taxonomy the success path lists, and the consumed probe
+report's own figures. Every refusal path goes through it — the blocker list, the
+stronger-existing-evidence refusal, and the document-does-not-validate refusal —
+so the sidecar exists for the same set of outcomes the stderr lines describe.
+
+The two shapes are told apart by `outcome`, never by which counts are zero:
+every field that would imply a promotion is **absent** rather than zeroed — no
+`evidence`, no `conversions`, no `probed`, no `summary`, and a `contract` block
+with `before` and no `after`, because nothing was written. Success behavior is
+unchanged, and the docs sentence that promised "the blockers checked" without
+saying the file only existed on one path is corrected.
+
+Two consequences had to be handled rather than discovered later:
+
+- **A refusal never overwrites a record of a promotion.** A sidecar carrying
+  `evidence` is the audit trail of a verification that actually happened — of
+  some other bytes, if it survived a regeneration, and self-invalidating either
+  way — and replacing history with the record of a failed attempt is a strictly
+  worse artifact. A refusal record replaces a refusal record; that is the only
+  overwrite.
+- **`contract generate` read the file's *existence* as proof of a verification.**
+  `snapshotPreviousReview` moved a contract to `.previous` and printed "the
+  previous machine-verified contract … were kept" whenever the sidecar was on
+  disk. With a refusal sidecar that message was false and the snapshot was
+  pointless, so the check is now on the record's content: `outcome !== "refused"`
+  and an `evidence` block present.
+
+The corpus harness reads `blockers.raised` in preference to stderr, and keeps
+the text classifier for journals written before this change.
+
+**Still unresolved after this.** The refusal sidecar is not schema-validated —
+nothing loads it, exactly as with the promotion sidecar — and `blockers.raised`
+is free text rather than a taxonomy field, so a consumer still classifies by
+matching the line. Emitting the blocker *class* alongside each line would remove
+the last reason the corpus harness owns a text classifier at all; it is not done
+here because the classes live in `contract-verification.mjs` as a flat list and
+`collectBlockers` builds sentences rather than tagged records.

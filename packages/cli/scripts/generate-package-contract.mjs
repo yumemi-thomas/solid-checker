@@ -726,10 +726,27 @@ function generationClosures(
 /// they describe. Both are self-invalidating anyway -- each records the contract
 /// hash it was written for -- but a sidecar that is merely stale beside the
 /// wrong file is a worse artifact than one filed with its own contract.
+/// Whether the `.verify.json` beside a contract records a *promotion*.
+///
+/// `contract verify` writes the sidecar on its refusal path too, with
+/// `outcome: "refused"` and no `evidence` block. That record is not a
+/// verification and must not be read as one: a refused draft has no conclusion
+/// to preserve, so it neither triggers a snapshot nor makes the message below
+/// say a machine-verified contract was kept.
+function recordsVerification(path) {
+  if (!existsSync(path)) return false;
+  try {
+    const report = JSON.parse(readFileSync(path, "utf8"));
+    return report.outcome !== "refused" && Boolean(report.evidence);
+  } catch {
+    return false;
+  }
+}
+
 function snapshotPreviousReview(output) {
   const state = reviewStatePath(output);
   const verified = verifyReportPath(output);
-  if (!existsSync(output) || !(existsSync(state) || existsSync(verified))) return undefined;
+  if (!existsSync(output) || !(existsSync(state) || recordsVerification(verified))) return undefined;
   const previous = previousContractPath(output);
   const moves = [
     [output, previous],
@@ -743,7 +760,7 @@ function snapshotPreviousReview(output) {
     rmSync(to, { force: true });
     if (existsSync(from)) renameSync(from, to);
   }
-  return { contract: previous, verified: existsSync(verifyReportPath(previous)) };
+  return { contract: previous, verified: recordsVerification(verifyReportPath(previous)) };
 }
 
 function dependencyContracts(packageRoot, manifest) {

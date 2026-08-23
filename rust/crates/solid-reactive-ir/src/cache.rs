@@ -213,6 +213,11 @@ pub(crate) struct InterproceduralGraphContribution {
     /// behavior and make an ambiguous call look certified.
     pub(crate) dispatches: Vec<(Span, Vec<SymbolId>)>,
     pub(crate) invoked_parameters: Vec<(Span, usize)>,
+    /// `(owner, parameter index)` for a parameter whose caller-supplied value
+    /// this function neither invokes nor observes inertly — it stores it, hands
+    /// it on, or returns it. See
+    /// `interproc::push_unaccounted_parameter_escapes`.
+    pub(crate) escaped_parameters: Vec<(Span, usize)>,
     /// A member invoked on a parameter: `(owner, parameter index, property)`
     /// for `function invoke(reader) { reader.read() }`. The implementation is
     /// not a property of the owner -- each call site supplies it -- so this

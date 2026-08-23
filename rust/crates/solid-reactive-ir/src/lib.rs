@@ -54,6 +54,7 @@ use contracts::{
     ContractAnalysis, ContractGraph, ContractSemantics, contract_export_summaries,
     contract_export_summaries_incremental,
 };
+pub use contracts::{binding_declares_class, class_contract_export};
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
     named_callback_roles, semantic_execution_role,

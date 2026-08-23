@@ -95,7 +95,16 @@ const fixtures = [
   "unreached-private-obligation",
   // Pins the ReactiveSourceUncaptured arm's domains, and that they are today
   // masked by the missing-contract-export obligation on the same call.
-  "uncaptured-source-return"
+  "uncaptured-source-return",
+  // Pins that a local callee's summary is only inheritable where it accounts
+  // for the parameter -- a callee that *retains* the value opens the sentinel
+  // for everything forwarding into it -- and the precision half: an observed
+  // value and a caller-owned container stay the honest omission.
+  "retained-callback-parameter",
+  // Pins that an exported class is `kind: "function"` through all three
+  // resolution shapes, with its callbacks domain fail-closed, while a real
+  // non-callable value stays `kind: "value"`.
+  "exported-class"
 ];
 
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? defaultNative;

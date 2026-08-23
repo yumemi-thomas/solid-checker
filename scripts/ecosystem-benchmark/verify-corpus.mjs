@@ -59,15 +59,33 @@ const REPORT_DIR = join(ROOT, "benchmarks/ecosystem");
 
 const DEFAULTS = {
   installTimeoutMs: 240_000,
+  peerInstallTimeoutMs: 240_000,
   generateTimeoutMs: 120_000,
   // Per condition-mode child process. The driver restarts a worker after every
   // probe that threw, so this bounds one attempt, not the mode.
   probeModeTimeoutMs: 20_000,
-  // The whole `contract probe` invocation, restarts included.
-  probeWallBudgetMs: 120_000,
+  // The whole `contract probe` invocation, restarts included -- scaled per row
+  // by `probeBudgetFor`, because a fixed budget is a budget for the median
+  // package and a guaranteed timeout for the wide-surface ones.
+  // Calibrated against the corpus rather than guessed. The cost of a row is
+  // dominated by *worker restarts*, not by claim count alone -- a mode restarts
+  // after every probe that throws, and a wide-surface package can spend
+  // hundreds of processes -- so the per-claim increment has to cover a fresh
+  // node process and its imports, not just one call. A first pass at
+  // 60s + 150ms/claim still timed out four rows, one of which had not timed out
+  // under the old flat budget at all.
+  probeBudgetBaseMs: 90_000,
+  probeBudgetPerClaimMs: 500,
+  probeBudgetCapMs: 900_000,
   verifyTimeoutMs: 90_000,
   concurrency: 6
 };
+
+/// The packages that *are* the Solid runtime, and are therefore pinned by the
+/// manifest rather than resolved from a peer range. A peer declaration naming
+/// one of these is never installed from its range: the range would be free to
+/// move the runtime the row is a measurement of.
+const RUNTIME_PACKAGES = new Set(["solid-js", "@solidjs/web", "@solidjs/signals"]);
 
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for direct unit testing).
@@ -79,15 +97,122 @@ export function siblingPath(output, suffix) {
   return output.toLowerCase().endsWith(".json") ? `${output.slice(0, -5)}${suffix}` : `${output}${suffix}`;
 }
 
-/// The blocker taxonomy of RFC 0002 §3 (`BLOCKERS` in
-/// packages/cli/scripts/contract-verification.mjs), recovered from the refusal
-/// text.
+/// The Solid runtime a row is a measurement of, completed.
 ///
-/// `contract verify` writes no sidecar when it refuses -- the report it builds
-/// exists only on the success path, and its `blockers.raised` is always `[]` --
-/// so the stderr line is the only record of what was raised. The refusal text
-/// embeds an absolute contract path, so a distinguishing clause can sit far
-/// into the line; each rule below matches on the earliest marker that is
+/// The manifest pins the runtime versions each probe row is meant to run
+/// against, and for Solid 2 that runtime is *two* packages: `solid-js` and
+/// `@solidjs/web`. Some rows pin both because the package declares both as
+/// peers; a row whose package declares only `solid-js` got only `solid-js`,
+/// and then every entrypoint reaching the DOM half of the runtime failed to
+/// import -- 248 claims of the previous measurement, attributed to the
+/// package.
+///
+/// Completion is deliberately narrow. The companion version is the *same*
+/// version string as the pinned `solid-js`, and only when the manifest's own
+/// release list for `@solidjs/web` contains it: a version this corpus never
+/// audited is not substituted in to make a row work, and a 1.x row is never
+/// given a 2.x companion. What was added is recorded per row.
+export function runtimeSpecsFor({ probe, manifest }) {
+  const pinned = { ...(probe.solid ?? {}) };
+  const added = [];
+  const solid = pinned["solid-js"];
+  const major = solid ? Number(String(solid).split(".")[0]) : null;
+  if (solid && major === 2 && !pinned["@solidjs/web"]) {
+    const audited = manifest?.solidReleases?.["@solidjs/web"]?.v2 ?? [];
+    if (audited.includes(solid)) {
+      pinned["@solidjs/web"] = solid;
+      added.push("@solidjs/web");
+    }
+  }
+  return { pinned, added };
+}
+
+/// The peers the installed artifact itself declares, minus the ones the row
+/// already pins.
+///
+/// Read from the *installed* `package.json` rather than the manifest row:
+/// that file is the artifact under measurement, and a peer set derived from
+/// anywhere else could describe a different release. Optional peers are left
+/// out -- `peerDependenciesMeta.optional` is the package saying the peer is
+/// not required to function, and installing it would change what the probe
+/// observes on the strength of nothing.
+///
+/// A peer naming a runtime package is skipped with a reason rather than
+/// silently: those are pinned, and letting a range like `>=1.9.7` resolve
+/// would swap the runtime the row is about.
+export function peerSpecsFor({ installedManifest, pinned }) {
+  const specs = [];
+  const skipped = [];
+  const meta = installedManifest?.peerDependenciesMeta ?? {};
+  for (const [name, range] of Object.entries(installedManifest?.peerDependencies ?? {})) {
+    if (meta[name]?.optional) {
+      skipped.push({ package: name, reason: "declared optional by the package" });
+      continue;
+    }
+    if (Object.hasOwn(pinned ?? {}, name)) {
+      skipped.push({ package: name, reason: "already pinned by the manifest row" });
+      continue;
+    }
+    if (RUNTIME_PACKAGES.has(name)) {
+      skipped.push({ package: name, reason: "a Solid runtime package the row does not pin" });
+      continue;
+    }
+    if (typeof range !== "string" || !range.trim()) {
+      skipped.push({ package: name, reason: "no usable version range" });
+      continue;
+    }
+    specs.push({ package: name, range: range.trim() });
+  }
+  specs.sort((left, right) => left.package.localeCompare(right.package));
+  skipped.sort((left, right) => left.package.localeCompare(right.package));
+  return { specs, skipped };
+}
+
+/// The wall budget one row's `contract probe` gets.
+///
+/// A single fixed budget is a budget for the median package. `@kobalte/core`
+/// plans two orders of magnitude more claims than a one-export primitive, and
+/// under a flat 120s it timed out -- which is its own outcome class and
+/// therefore a row the measurement can say nothing about at all. Scaling with
+/// the planned claim count buys those rows proportional time without giving
+/// every row the maximum, and the cap keeps one pathological package from
+/// holding a worker for the length of the run.
+///
+/// A timeout is still a timeout. This changes how many rows hit one, never
+/// what hitting one means.
+export function probeBudgetFor({ claims, base, perClaim, cap }) {
+  if (!Number.isFinite(claims) || claims <= 0) return base;
+  return Math.min(cap, base + Math.round(claims * perClaim));
+}
+
+/// A probe failure, reduced to the shape a maintainer acts on.
+///
+/// A failure is the strongest thing this measurement produces: the package
+/// answered a claim the contract makes differently, which is a generator bug or
+/// a package change and never an environment gap. Grouping by
+/// `claim -> observed` is what turns 353 individual lines into "the generator
+/// says `tracked` and the package does `deferred`, 41 times".
+export function probeFailureShape({ claim, observed, reason }) {
+  const claimText = String(claim ?? "");
+  const field = claimText.replace(/\[\d+\]/, "[n]").split("=")[0] || "claim";
+  const claimed = claimText.includes("=") ? claimText.slice(claimText.indexOf("=") + 1) : "?";
+  const saw =
+    observed ??
+    /runtime kind is (\S+)/.exec(String(reason ?? ""))?.[1] ??
+    /^the call returned a (\S+)/.exec(String(reason ?? ""))?.[1] ??
+    "not observed";
+  return `${field}: claimed ${claimed}, observed ${saw}`;
+}
+
+/// The blocker taxonomy of RFC 0002 §3 (`BLOCKERS` in
+/// packages/cli/scripts/contract-verification.mjs).
+///
+/// `contract verify` now writes a refusal sidecar carrying `blockers.raised`
+/// verbatim, and the harness reads that in preference to stderr. This
+/// classifier still exists because the lines are the same either way, and
+/// because a journal from an older run has only the stderr heads. The refusal
+/// text embeds an absolute contract path, so a distinguishing clause can sit
+/// far into the line; each rule below matches on the earliest marker that is
 /// unambiguous.
 export function blockerClass(line) {
   if (line.startsWith("no probe report at")) return "probe-report-present";
@@ -289,7 +414,16 @@ function readJson(path) {
 }
 
 async function runRow({ row, probe }, context) {
-  const { workDir, budgets, cliEnv, expandContract } = context;
+  const {
+    workDir,
+    budgets,
+    cliEnv,
+    expandContract,
+    buildProbePlan,
+    manifest,
+    environmentShim,
+    peerInstall = true
+  } = context;
   const started = Date.now();
   const record = {
     probeId: probe.id,
@@ -306,14 +440,17 @@ async function runRow({ row, probe }, context) {
   const projectDir = await mkdtemp(join(workDir, "proj-"));
   const outputDir = await mkdtemp(join(workDir, "out-"));
   try {
+    const runtime = peerInstall
+      ? runtimeSpecsFor({ probe, manifest })
+      : { pinned: { ...(probe.solid ?? {}) }, added: [] };
     const specs = [
       `${row.package}@${row.version}`,
-      ...Object.entries(probe.solid ?? {}).map(([name, version]) => `${name}@${version}`)
+      ...Object.entries(runtime.pinned).map(([name, version]) => `${name}@${version}`)
     ];
     const expected = {
       [row.package]: { version: row.version, integrity: row.integrity ?? null },
       ...Object.fromEntries(
-        Object.entries(probe.solid ?? {}).map(([name, version]) => [name, { version, integrity: null }])
+        Object.entries(runtime.pinned).map(([name, version]) => [name, { version, integrity: null }])
       )
     };
 
@@ -327,6 +464,13 @@ async function runRow({ row, probe }, context) {
     const installedVersions = readInstalledVersions(projectDir, Object.keys(expected));
     const integrity = readLockIntegrity(projectDir, Object.keys(expected));
     record.installMs = Date.now() - installStart;
+    record.install = {
+      pinned: [...specs].sort(),
+      runtimeCompleted: runtime.added,
+      peers: [],
+      peersSkipped: [],
+      peerInstall: "none"
+    };
 
     const installClass = classifyResult({
       status: installResult.status,
@@ -351,6 +495,54 @@ async function runRow({ row, probe }, context) {
     }
 
     const packageRoot = join(projectDir, "node_modules", ...row.package.split("/"));
+
+    // Phase two of the install: the peers the artifact on disk declares.
+    //
+    // Separate from the pinned install rather than folded into it, so a peer
+    // range can never take part in resolving the versions the row is pinned to.
+    // If the peer install moves a pin anyway, the row keeps the pinned-only
+    // tree: the measurement is about those exact bytes.
+    const peers = peerInstall
+      ? peerSpecsFor({
+          installedManifest: readJson(join(packageRoot, "package.json")),
+          pinned: runtime.pinned
+        })
+      : { specs: [], skipped: [] };
+    record.install.peersSkipped = peers.skipped;
+    if (peers.specs.length) {
+      const peerSpecs = peers.specs.map(peer => `${peer.package}@${peer.range}`);
+      const peerResult = await installPackages({
+        projectDir,
+        specs: peerSpecs,
+        timeoutMs: budgets.peerInstallTimeoutMs
+      });
+      const afterPeers = verifyInstall({
+        expected,
+        versions: readInstalledVersions(projectDir, Object.keys(expected)),
+        integrity: readLockIntegrity(projectDir, Object.keys(expected))
+      });
+      if (peerResult.status !== 0 || peerResult.timedOut || !afterPeers.ok) {
+        record.install.peerInstall = afterPeers.ok ? "failed" : "reverted-pin-moved";
+        record.install.peerDetail = (peerResult.stderr || peerResult.stdout || "")
+          .slice(0, 300)
+          .trim();
+        // Reinstalling the pinned specs restores the tree the pins describe.
+        // A failure here is recorded and the row continues: what it then
+        // probes is the same tree every previous measurement probed.
+        await installPackages({ projectDir, specs, timeoutMs: budgets.installTimeoutMs });
+      } else {
+        record.install.peerInstall = "complete";
+        record.install.peers = peerSpecs;
+      }
+    }
+
+    // No Solid runtime anywhere above the package is its own outcome, not an
+    // error and not a refusal. The manifest pins what each row runs against,
+    // and for a handful of rows -- `@solidjs/signals`, which is the reactive
+    // core itself -- it pins no `solid-js`. Choosing one would be this
+    // harness inventing a runtime pairing the corpus deliberately did not
+    // audit, so the row is recorded as unprobeable and counted separately.
+    const runtimePresent = existsSync(join(projectDir, "node_modules", "solid-js", "package.json"));
     // The contract is written OUTSIDE the install tree, for the same reason
     // run.mjs does it: a report artifact living inside node_modules could be
     // mistaken for package content by the package's own tooling.
@@ -379,7 +571,38 @@ async function runRow({ row, probe }, context) {
       record.totalMs = Date.now() - started;
       return record;
     }
-    record.generated = classifyExports(readJson(contractFile), expandContract);
+    const contractDocument = readJson(contractFile);
+    record.generated = classifyExports(contractDocument, expandContract);
+
+    if (!runtimePresent && row.package !== "solid-js") {
+      record.stage = "probe";
+      record.outcome = "no-runtime";
+      record.detail =
+        `the manifest pins ${JSON.stringify(probe.solid ?? {})} for this row and the package ` +
+        "declares no peer that installs a solid-js, so no Solid release sits above it to settle a probe";
+      record.totalMs = Date.now() - started;
+      return record;
+    }
+
+    // The claim count the plan will produce, computed here rather than guessed
+    // from the export count: it is the exact number the probe is about to
+    // drive, and it is what the wall budget scales with.
+    let plannedClaims = null;
+    try {
+      plannedClaims = buildProbePlan(expandContract(contractDocument)).claims.length;
+    } catch {
+      plannedClaims = null;
+    }
+    const probeWallBudgetMs =
+      budgets.probeWallBudgetMs ??
+      probeBudgetFor({
+        claims: plannedClaims,
+        base: budgets.probeBudgetBaseMs,
+        perClaim: budgets.probeBudgetPerClaimMs,
+        cap: budgets.probeBudgetCapMs
+      });
+    record.plannedClaims = plannedClaims;
+    record.probeWallBudgetMs = probeWallBudgetMs;
 
     const probeStart = Date.now();
     const probeResult = await run(
@@ -396,10 +619,11 @@ async function runRow({ row, probe }, context) {
         // negative claim, and `contract verify` refuses a report produced
         // without it outright.
         "--write",
+        ...(environmentShim ? [] : ["--no-environment-shim"]),
         "--timeout",
         String(budgets.probeModeTimeoutMs)
       ],
-      { timeoutMs: budgets.probeWallBudgetMs, env: cliEnv }
+      { timeoutMs: probeWallBudgetMs, env: cliEnv }
     );
     record.probeMs = Date.now() - probeStart;
     record.probeExit = probeResult.status;
@@ -407,7 +631,7 @@ async function runRow({ row, probe }, context) {
     if (probeResult.timedOut) {
       record.stage = "probe";
       record.outcome = "probe-timeout";
-      record.detail = `probe exceeded the ${budgets.probeWallBudgetMs}ms wall budget`;
+      record.detail = `probe exceeded the ${probeWallBudgetMs}ms wall budget`;
       record.totalMs = Date.now() - started;
       return record;
     }
@@ -429,6 +653,11 @@ async function runRow({ row, probe }, context) {
       },
       dialect: probeReport.identities?.dialect ?? null,
       runtime: probeReport.identities?.runtime ?? null,
+      // What the worker faked before it imported anything, and how many
+      // processes each mode cost. Both are new in the probe report and both
+      // are things a reader of these numbers has to be able to see.
+      environment: probeReport.environment ?? null,
+      sessions: probeReport.sessions ?? null,
       markersWritten: probeReport.contract?.markersWritten ?? 0,
       markersSuperseded: probeReport.contract?.markersSuperseded ?? 0,
       wrote: probeReport.contract?.afterWrite !== undefined,
@@ -437,6 +666,7 @@ async function runRow({ row, probe }, context) {
     };
     const undrivenReasons = {};
     const failedClaims = [];
+    const failures = [];
     const claimFamilies = {};
     for (const claim of probeReport.claims ?? []) {
       const key = `${claim.family}:${claim.status}`;
@@ -446,11 +676,31 @@ async function runRow({ row, probe }, context) {
         undrivenReasons[reason] = (undrivenReasons[reason] ?? 0) + 1;
       } else if (claim.status === "failed") {
         failedClaims.push(`${claim.entrypoint}:${claim.export} ${claim.claim}: ${claim.reason}`);
+        // Structured, not just a rendered sentence. A failure is a claim the
+        // package answered differently, and the report has to be able to say
+        // which claim, what was observed instead, and in which modes -- that
+        // is the row a maintainer opens the package to.
+        const observed = (claim.observations ?? []).find(entry => entry.status === "failed");
+        failures.push({
+          entrypoint: claim.entrypoint,
+          export: claim.export,
+          claim: claim.claim,
+          observed: observed?.observed ?? null,
+          modes: (claim.observations ?? [])
+            .filter(entry => entry.status === "failed")
+            .map(entry => entry.mode)
+            .sort(),
+          reason: claim.reason ?? null
+        });
       }
     }
     record.probe.undrivenReasons = undrivenReasons;
     record.probe.claimFamilies = claimFamilies;
     record.probe.failedClaims = failedClaims.slice(0, 10);
+    // Every failure is kept: the whole point of the section it feeds is that
+    // this class is about to be the dominant visible defect, and a capped list
+    // could hide a shape entirely.
+    record.probe.failures = failures;
 
     const verifyStart = Date.now();
     const verifyResult = await run(process.execPath, [CLI, "contract", "verify", contractFile], {
@@ -482,7 +732,17 @@ async function runRow({ row, probe }, context) {
     } else {
       record.stage = "verify";
       record.outcome = "refused";
-      const lines = notVerifiedLines(verifyResult.stderr);
+      // The sidecar first: `contract verify` now records its refusal as data,
+      // so the blockers arrive verbatim instead of being recovered from
+      // sentences on stderr. The stderr path stays as the fallback for a
+      // refusal that never reached the write -- and it is what every journal
+      // from before this change contains.
+      const sidecarBlockers =
+        verifyReport?.outcome === "refused" ? verifyReport.blockers?.raised ?? [] : null;
+      record.refusalSource = sidecarBlockers ? "sidecar" : "stderr";
+      const lines = sidecarBlockers?.length
+        ? sidecarBlockers
+        : notVerifiedLines(verifyResult.stderr);
       // Every refusal line is kept -- truncated to a head long enough to
       // classify -- because a capped list could hide a blocker class entirely.
       record.blockerCount = lines.length;
@@ -520,6 +780,10 @@ function emptyAggregate() {
     refused: 0,
     claims: { total: 0, driven: 0, passed: 0, failed: 0, undriven: 0, incompleteness: 0 },
     undriven: {},
+    failureShapes: {},
+    install: { runtimeCompleted: 0, peerComplete: 0, peerFailed: 0, peersInstalled: 0 },
+    environment: { rowsShimmed: 0, shimmedGlobals: {}, modesShimmed: {} },
+    sessions: { started: 0, restarts: 0, failed: 0 },
     blockerRows: {},
     blockerLines: {},
     rootCauses: {},
@@ -546,6 +810,40 @@ function accumulate(bucket, record) {
   bucket.outcomes[record.outcome] = (bucket.outcomes[record.outcome] ?? 0) + 1;
   bucket.totals.push(record.totalMs);
   if (record.generated) bucket.contractsGenerated += 1;
+  if ((record.install?.runtimeCompleted ?? []).length) bucket.install.runtimeCompleted += 1;
+  if (record.install?.peerInstall === "complete") {
+    bucket.install.peerComplete += 1;
+    bucket.install.peersInstalled += (record.install.peers ?? []).length;
+  }
+  if (record.install?.peerInstall === "failed" || record.install?.peerInstall === "reverted-pin-moved") {
+    bucket.install.peerFailed += 1;
+  }
+  const environment = record.probe?.environment;
+  if (environment) {
+    // Counted once per row, not once per mode session: a row that shimmed
+    // `window` in three of its four modes faked one `window`, and reporting
+    // three under a column headed "Rows" would be a wrong number.
+    const namesOnThisRow = new Set();
+    for (const [mode, entry] of Object.entries(environment.modes ?? {})) {
+      const names = entry?.shimmed ?? [];
+      if (!names.length) continue;
+      bucket.environment.modesShimmed[mode] = (bucket.environment.modesShimmed[mode] ?? 0) + 1;
+      for (const name of names) namesOnThisRow.add(name);
+    }
+    for (const name of namesOnThisRow) {
+      bucket.environment.shimmedGlobals[name] = (bucket.environment.shimmedGlobals[name] ?? 0) + 1;
+    }
+    if (namesOnThisRow.size) bucket.environment.rowsShimmed += 1;
+  }
+  if (record.probe?.sessions) {
+    bucket.sessions.started += record.probe.sessions.started ?? 0;
+    bucket.sessions.restarts += record.probe.sessions.restarts ?? 0;
+    bucket.sessions.failed += record.probe.sessions.failed ?? 0;
+  }
+  for (const failure of record.probe?.failures ?? []) {
+    const shape = probeFailureShape(failure);
+    bucket.failureShapes[shape] = (bucket.failureShapes[shape] ?? 0) + 1;
+  }
   if (record.probe?.summary) {
     const summary = record.probe.summary;
     bucket.claims.total += summary.claims ?? 0;
@@ -606,6 +904,7 @@ export function buildVerificationReport({ records, manifest, budgets, checker })
   const installFailures = [];
   const generateFailures = [];
   const timeouts = [];
+  const noRuntime = [];
 
   for (const record of records) {
     accumulate(overall, record);
@@ -619,8 +918,44 @@ export function buildVerificationReport({ records, manifest, budgets, checker })
     if (record.outcome === "generate-failure")
       generateFailures.push({ probeId: record.probeId, class: record.generateClass });
     if (record.outcome === "probe-timeout" || record.outcome === "verify-timeout")
-      timeouts.push({ probeId: record.probeId, outcome: record.outcome, totalMs: record.totalMs });
+      timeouts.push({
+        probeId: record.probeId,
+        outcome: record.outcome,
+        totalMs: record.totalMs,
+        plannedClaims: record.plannedClaims ?? null,
+        budgetMs: record.probeWallBudgetMs ?? null
+      });
+    if (record.outcome === "no-runtime")
+      noRuntime.push({ probeId: record.probeId, detail: record.detail ?? null });
   }
+
+  // The failures a maintainer acts on, grouped by shape and then named
+  // individually. This is deliberately the most legible section of the report:
+  // a probe failure is the only outcome here that asserts something is wrong
+  // with a package or with the generator, as opposed to something the machine
+  // could not reach.
+  const failureShapes = {};
+  const failureRows = [];
+  for (const record of records) {
+    for (const failure of record.probe?.failures ?? []) {
+      const shape = probeFailureShape(failure);
+      failureShapes[shape] = (failureShapes[shape] ?? 0) + 1;
+      failureRows.push({
+        probeId: record.probeId,
+        family: record.family,
+        entrypoint: failure.entrypoint,
+        export: failure.export,
+        claim: failure.claim,
+        observed: failure.observed ?? null,
+        modes: failure.modes ?? [],
+        shape,
+        reason: failure.reason ?? null
+      });
+    }
+  }
+  failureRows.sort(
+    (left, right) => left.shape.localeCompare(right.shape) || left.probeId.localeCompare(right.probeId)
+  );
 
   // Why an entrypoint could not be imported at all -- the single largest
   // undriven cause, and a fact about the environment the probe worker runs in
@@ -736,9 +1071,33 @@ export function buildVerificationReport({ records, manifest, budgets, checker })
     phaseWallMs,
     probeEnvironment: {
       rowsWithAnEntrypointImportThrow: importThrowRows.size,
-      importThrows
+      importThrows,
+      // What the probe worker faked, and where. Reported next to the import
+      // throws because the two are the same subject: the throws are what the
+      // environment could not supply, and the shim is what it did.
+      shim: {
+        rowsShimmed: overall.environment.rowsShimmed,
+        shimmedGlobals: overall.environment.shimmedGlobals,
+        modesShimmed: overall.environment.modesShimmed,
+        note:
+          "A claim observed in a mode whose worker faked these globals is an observation against a " +
+          "fake DOM, which is a weaker fact than an observation in a browser. Every probe report and " +
+          "every verify sidecar records the per-mode list; server-mode sessions are never shimmed."
+      },
+      // Session accounting: how many worker processes the corpus cost and how
+      // many of those were restarts after a probe threw.
+      sessions: overall.sessions
     },
-    preContractFailures: { installFailures, generateFailures, probeErrors, timeouts },
+    installEnvironment: {
+      ...overall.install,
+      note:
+        "Rows install the pinned package, the Solid runtime the manifest row pins (completed with " +
+        "@solidjs/web where a Solid 2 row pinned only solid-js), and the non-optional peers the " +
+        "installed artifact itself declares. A package that imports something it declares nowhere is " +
+        "not covered by that and is reported as an import throw."
+    },
+    probeFailures: { shapes: failureShapes, rows: failureRows },
+    preContractFailures: { installFailures, generateFailures, probeErrors, timeouts, noRuntime },
     refusals,
     verified
   };
@@ -779,8 +1138,16 @@ export function renderVerificationMarkdown(report) {
   );
   lines.push(
     `- Budgets: install ${report.budgets.installTimeoutMs} ms, generate ${report.budgets.generateTimeoutMs} ms, ` +
-      `probe ${report.budgets.probeModeTimeoutMs} ms per condition mode / ${report.budgets.probeWallBudgetMs} ms whole phase, ` +
-      `verify ${report.budgets.verifyTimeoutMs} ms; concurrency ${report.budgets.concurrency}`
+      `probe ${report.budgets.probeModeTimeoutMs} ms per condition mode / ` +
+      (report.budgets.probeWallBudgetMs
+        ? `${report.budgets.probeWallBudgetMs} ms whole phase (fixed)`
+        : `${report.budgets.probeBudgetBaseMs} ms + ${report.budgets.probeBudgetPerClaimMs} ms per planned claim, ` +
+          `capped at ${report.budgets.probeBudgetCapMs} ms, whole phase`) +
+      `, verify ${report.budgets.verifyTimeoutMs} ms; concurrency ${report.budgets.concurrency}`
+  );
+  lines.push(
+    `- Import-environment shim: ${report.budgets.environmentShim === false ? "**disabled**" : "enabled"} ` +
+      "(client, development and production sessions only; server sessions never)"
   );
   lines.push("");
 
@@ -889,6 +1256,123 @@ export function renderVerificationMarkdown(report) {
   }
   lines.push("");
 
+  const shim = report.probeEnvironment.shim ?? { rowsShimmed: 0, shimmedGlobals: {}, modesShimmed: {} };
+  lines.push("### The globals the probe worker faked");
+  lines.push("");
+  lines.push(
+    "A module that reads `window` while it is being evaluated throws in a bare Node process, the " +
+      "worker stops, and every claim of that entrypoint goes undriven — so nothing at all is observed " +
+      "about the package. The worker therefore defines a small inert browser surface before it " +
+      "imports anything, in the `client`, `development` and `production` sessions only."
+  );
+  lines.push("");
+  lines.push(
+    "**A claim observed under the shim is a weaker observation than one made in a browser.** The " +
+      "fake `document` renders nothing, the fake `matchMedia` never matches, the fake `navigator` " +
+      "says it is this checker. A package that branches on any of that was observed on the branch " +
+      "the fake sent it down. Every `<contract>.probe.json` and `<contract>.verify.json` records the " +
+      "per-mode list of faked names, so where the distinction matters the record says so rather than " +
+      "the number implying a browser."
+  );
+  lines.push("");
+  lines.push(
+    "`server` sessions are never shimmed: an import that throws on `window` under `--conditions node` " +
+      "is a truthful observation of that entrypoint in that mode, and faking it there would " +
+      "manufacture a pass the package never earned."
+  );
+  lines.push("");
+  lines.push(`- Rows where at least one session faked at least one global: ${shim.rowsShimmed}`);
+  lines.push("");
+  if (Object.keys(shim.shimmedGlobals).length) {
+    lines.push("| Faked global | Rows |");
+    lines.push("| --- | --- |");
+    for (const [name, count] of sortedEntries(shim.shimmedGlobals)) {
+      lines.push(`| \`${name}\` | ${count} |`);
+    }
+    lines.push("");
+  }
+  const sessions = report.probeEnvironment.sessions ?? { started: 0, restarts: 0, failed: 0 };
+  lines.push("### Worker processes");
+  lines.push("");
+  lines.push(
+    "A worker stops at its first throw and the mode is restarted for what is left — the only way to " +
+      "un-halt a Solid 2.0 development runtime. A restart is not a failure; a row that needed many is " +
+      "the shape behind a slow or timed-out probe."
+  );
+  lines.push("");
+  lines.push("| Figure | Count |");
+  lines.push("| --- | --- |");
+  lines.push(`| Worker processes started | ${sessions.started} |`);
+  lines.push(`| Of those, restarts after a throw | ${sessions.restarts} |`);
+  lines.push(`| Sessions that died (crash, timeout, unreadable output) | ${sessions.failed} |`);
+  lines.push("");
+
+  const installEnvironment = report.installEnvironment ?? {};
+  lines.push("## The install environment");
+  lines.push("");
+  lines.push(
+    "Each row installs the pinned package, the Solid runtime the manifest row pins, and the " +
+      "non-optional peers the installed artifact's own `package.json` declares. Peers are installed " +
+      "in a second npm invocation so that no peer range can take part in resolving the pinned " +
+      "versions; if it moves a pin anyway, the pinned-only tree is restored and the row is recorded " +
+      "as such."
+  );
+  lines.push("");
+  lines.push("| Figure | Rows |");
+  lines.push("| --- | --- |");
+  lines.push(
+    `| Solid 2 rows given the \`@solidjs/web\` half of the runtime the row pinned only half of | ${installEnvironment.runtimeCompleted ?? 0} |`
+  );
+  lines.push(`| Rows with a completed peer install | ${installEnvironment.peerComplete ?? 0} |`);
+  lines.push(`| Peer packages installed | ${installEnvironment.peersInstalled ?? 0} |`);
+  lines.push(`| Rows whose peer install failed or moved a pin | ${installEnvironment.peerFailed ?? 0} |`);
+  lines.push("");
+  lines.push(
+    "A package that **imports something it declares nowhere** — not a dependency, not a peer — is " +
+      "outside what any install policy can supply, and is reported above as an import throw rather " +
+      "than fixed here. Completing an undeclared import would mean this harness choosing a version " +
+      "the package never named."
+  );
+  lines.push("");
+
+  const probeFailures = report.probeFailures ?? { shapes: {}, rows: [] };
+  lines.push("## Probe failures: claims the package answered differently");
+  lines.push("");
+  lines.push(
+    "A **failure** is the strongest thing this measurement produces. The contract states a claim, the " +
+      "probe drove it, and the package did something else — a generator bug or a package change, never " +
+      "an environment gap and never an unreachable claim. Verification refuses the whole contract on " +
+      "one of these, deliberately: converting a contradicted claim to the unknown sentinel would hide " +
+      "it."
+  );
+  lines.push("");
+  lines.push(`${probeFailures.rows.length} failing claim(s) across the corpus, by shape:`);
+  lines.push("");
+  lines.push("| Claim, claimed, observed | Claims |");
+  lines.push("| --- | --- |");
+  for (const [shape, count] of sortedEntries(probeFailures.shapes)) {
+    lines.push(`| ${shape.replace(/\|/g, "\\|")} | ${count} |`);
+  }
+  lines.push("");
+  if (probeFailures.rows.length) {
+    const shown = probeFailures.rows.slice(0, 60);
+    lines.push(
+      shown.length < probeFailures.rows.length
+        ? `The first ${shown.length}, in full (the JSON report carries all ${probeFailures.rows.length}):`
+        : "Each one, in full:"
+    );
+    lines.push("");
+    lines.push("| Probe | Export | Claim | Observed | Modes |");
+    lines.push("| --- | --- | --- | --- | --- |");
+    for (const failure of shown) {
+      lines.push(
+        `| \`${failure.probeId}\` | \`${failure.entrypoint}:${failure.export}\` | \`${failure.claim}\` | ` +
+          `${failure.observed ?? "—"} | ${failure.modes.join(", ") || "—"} |`
+      );
+    }
+    lines.push("");
+  }
+
   lines.push("## Conversion volume");
   lines.push("");
   lines.push(
@@ -972,6 +1456,7 @@ export function renderVerificationMarkdown(report) {
   lines.push("");
 
   const { installFailures, generateFailures, probeErrors, timeouts } = report.preContractFailures;
+  const noRuntime = report.preContractFailures.noRuntime ?? [];
   lines.push("## Rows that never reached verification");
   lines.push("");
   lines.push("| Stage | Rows |");
@@ -981,8 +1466,20 @@ export function renderVerificationMarkdown(report) {
   lines.push(
     `| \`contract probe\` errored before writing a report | ${Object.values(probeErrors).reduce((sum, value) => sum + value, 0)} |`
   );
+  lines.push(`| no Solid runtime the row could honestly be probed against | ${noRuntime.length} |`);
   lines.push(`| timed out under the harness budget | ${timeouts.length} |`);
   lines.push("");
+  if (noRuntime.length) {
+    lines.push(
+      "The manifest pins the runtime each row runs against, and for these it pins no `solid-js` — " +
+        "`@solidjs/signals` *is* the reactive core, so there is no second package to settle a probe " +
+        "with. Pairing one in would be this harness auditing a combination the corpus deliberately " +
+        "did not. They are their own class rather than an error:"
+    );
+    lines.push("");
+    for (const row of noRuntime) lines.push(`- \`${row.probeId}\``);
+    lines.push("");
+  }
   if (Object.keys(probeErrors).length) {
     lines.push("Probe errors by cause:");
     lines.push("");
@@ -1005,7 +1502,12 @@ export function renderVerificationMarkdown(report) {
     lines.push("Timeouts, named individually because a timeout is never a verification result:");
     lines.push("");
     for (const timeout of timeouts) {
-      lines.push(`- \`${timeout.probeId}\` — ${timeout.outcome} after ${timeout.totalMs} ms`);
+      lines.push(
+        `- \`${timeout.probeId}\` — ${timeout.outcome} after ${timeout.totalMs} ms` +
+          (timeout.budgetMs
+            ? ` (budget ${timeout.budgetMs} ms for ${timeout.plannedClaims ?? "?"} planned claims)`
+            : "")
+      );
     }
     lines.push("");
   }
@@ -1019,14 +1521,23 @@ export function renderVerificationMarkdown(report) {
       "benchmark measures."
   );
   lines.push(
-    "- **The install environment is the corpus manifest's, and it was built for static generation.** " +
-      "It installs the probed package and the Solid runtime versions the manifest selected — not the " +
-      "package's full peer set. Several `ERR_MODULE_NOT_FOUND` import failures above are that gap, " +
-      "not the package's."
+    "- **Some observations were made against a fake DOM.** The probe worker defines a minimal inert " +
+      "browser surface in the client, development and production sessions so that an import-time " +
+      "`window` read does not cost the whole entrypoint. What is then observed is the package's " +
+      "behavior *given that fake*, which is not the same fact as its behavior in a browser. Every " +
+      "probe report and verify sidecar names the globals it faked; server sessions fake nothing."
+  );
+  lines.push(
+    "- **The install is peer-complete, not project-complete.** It installs the probed package, the " +
+      "Solid runtime the manifest row pins, and the peers the artifact declares. A package that " +
+      "imports something it declares nowhere still fails to import, and that is a fact about the " +
+      "package rather than about this harness."
   );
   lines.push(
     "- **A timeout is never a verification result.** Rows that exceeded the probe wall budget are " +
-      "their own outcome class and are counted as neither verified nor refused."
+      "their own outcome class and are counted as neither verified nor refused. The budget now scales " +
+      "with each row's planned claim count, so fewer rows hit one — which changes how many rows the " +
+      "measurement can speak about, never what a timeout means."
   );
   lines.push(
     "- **Per probe row, not per package.** A package with a Solid 1.x row and two Solid 2.x rows " +
@@ -1084,7 +1595,17 @@ function usage() {
   --ids <A,B>            run only these probe ids
   --limit <N>            stop after N selected rows
   --probe-timeout <MS>   per condition-mode child timeout (default ${DEFAULTS.probeModeTimeoutMs})
-  --probe-budget <MS>    whole contract probe wall budget (default ${DEFAULTS.probeWallBudgetMs})
+  --probe-budget <MS>    fixed whole-phase wall budget for every row. Default is
+                         scaled instead: ${DEFAULTS.probeBudgetBaseMs} ms + ${DEFAULTS.probeBudgetPerClaimMs} ms per planned claim,
+                         capped at ${DEFAULTS.probeBudgetCapMs} ms
+  --no-environment-shim  do not let the probe worker define the minimal browser
+                         globals in client/development/production sessions.
+                         The state every measurement before this one ran in,
+                         and the way to separate the shim's effect from the
+                         engine's
+  --no-peer-install      install only what the manifest row pins: no declared
+                         peers, no completion of the Solid 2 runtime's
+                         @solidjs/web half. Same purpose as the flag above
   --json <FILE>          default benchmarks/ecosystem/verification-report.json
   --markdown <FILE>      default benchmarks/ecosystem/verification-report.md
   --aggregate-only       rebuild the reports from the state dir's journal
@@ -1109,7 +1630,10 @@ function parseArgs(argv) {
     ids: null,
     limit: null,
     probeModeTimeoutMs: DEFAULTS.probeModeTimeoutMs,
-    probeWallBudgetMs: DEFAULTS.probeWallBudgetMs,
+    // `null` means "scale it per row"; `--probe-budget` pins it flat.
+    probeWallBudgetMs: null,
+    environmentShim: true,
+    peerInstall: true,
     json: join(REPORT_DIR, "verification-report.json"),
     markdown: join(REPORT_DIR, "verification-report.md"),
     aggregateOnly: false,
@@ -1126,6 +1650,8 @@ function parseArgs(argv) {
     else if (argument === "--limit") options.limit = Number(argv[++index]);
     else if (argument === "--probe-timeout") options.probeModeTimeoutMs = Number(argv[++index]);
     else if (argument === "--probe-budget") options.probeWallBudgetMs = Number(argv[++index]);
+    else if (argument === "--no-environment-shim") options.environmentShim = false;
+    else if (argument === "--no-peer-install") options.peerInstall = false;
     else if (argument === "--json") options.json = argv[++index];
     else if (argument === "--markdown") options.markdown = argv[++index];
     else if (argument === "--aggregate-only") options.aggregateOnly = true;
@@ -1200,11 +1726,19 @@ async function main(argv = process.argv.slice(2)) {
   // it would be noise a reader has to discount.
   const budgets = {
     installTimeoutMs: DEFAULTS.installTimeoutMs,
+    peerInstallTimeoutMs: DEFAULTS.peerInstallTimeoutMs,
     generateTimeoutMs: DEFAULTS.generateTimeoutMs,
     probeModeTimeoutMs: options.probeModeTimeoutMs,
     probeWallBudgetMs: options.probeWallBudgetMs,
+    probeBudgetBaseMs: DEFAULTS.probeBudgetBaseMs,
+    probeBudgetPerClaimMs: DEFAULTS.probeBudgetPerClaimMs,
+    probeBudgetCapMs: DEFAULTS.probeBudgetCapMs,
     verifyTimeoutMs: DEFAULTS.verifyTimeoutMs,
     concurrency: options.concurrency,
+    // Recorded in the report because they change what the numbers are a
+    // measurement of: a run with these off measures the engine alone.
+    environmentShim: options.environmentShim,
+    peerInstall: options.peerInstall,
     ...(options.every ? { selection: `every ${options.every}th manifest probe row, offset ${options.offset}` } : {})
   };
   const checker = {
@@ -1218,6 +1752,11 @@ async function main(argv = process.argv.slice(2)) {
   if (!options.aggregateOnly) {
     const { expandContract } = await import(
       pathToFileURL(join(ROOT, "packages/cli/scripts/contract-document.mjs")).href
+    );
+    // The same planner `contract probe` runs, so the wall budget a row gets is
+    // scaled by the exact claim count that row is about to drive.
+    const { buildProbePlan } = await import(
+      pathToFileURL(join(ROOT, "packages/cli/scripts/contract-probe-driver.mjs")).href
     );
     let tasks = [];
     for (const row of sortRows([...manifest.rows])) {
@@ -1238,7 +1777,11 @@ async function main(argv = process.argv.slice(2)) {
       workDir,
       budgets,
       cliEnv: { SOLID_CHECKER_NATIVE_BIN: nativeBin, SOLID_TYPEFACTS_BIN: typeFactsBin },
-      expandContract
+      expandContract,
+      buildProbePlan,
+      manifest,
+      environmentShim: options.environmentShim,
+      peerInstall: options.peerInstall
     };
     let cursor = 0;
     let completed = 0;

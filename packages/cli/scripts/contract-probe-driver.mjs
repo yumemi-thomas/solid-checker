@@ -44,6 +44,64 @@ export const PROBE_MODES = [
 /// happened to elicit".
 export const DISCOVERY_PARAMETERS = [0, 1];
 
+/// The import-time browser surface a client-mode probe session provides.
+///
+/// **This is a weakening of the observation, and it is recorded as one.** A
+/// module that reads `window` at import time in a bare Node process throws
+/// `ReferenceError`, the worker stops, and every probe of that entrypoint is
+/// undriven -- so nothing about the package is observed at all. Defining a
+/// small inert surface lets the module load, and what is then observed is the
+/// package's behavior *given a fake DOM*, which is not the same fact as its
+/// behavior in a browser. `environment` in `<contract>.probe.json` and in
+/// `<contract>.verify.json` says which names were faked, per mode, so the
+/// difference stays legible instead of being absorbed into the numbers.
+///
+/// Three rules keep the weakening bounded:
+///
+///   * **Mode-scoped.** Only modes whose conditions include `browser` get it.
+///     A `server`/`node` mode import that throws on `window` is a *truthful*
+///     observation of that entrypoint in that mode, and faking it there would
+///     manufacture a pass the package never earns.
+///   * **Never at generation.** `contract generate` imports nothing at all, so
+///     no shim exists on the static path. This lives in the worker only.
+///   * **Empirical, not speculative.** The list is derived from what the
+///     corpus's failing packages actually touch at import time -- see
+///     docs/package-contracts.md's probe section for the derivation -- and a
+///     name nothing reached is not added on the theory that a browser has it.
+///     A module that still throws with the shim in place is left exactly as it
+///     was: undriven, `import-failed`, with the throw as its reason.
+export const BROWSER_SHIM_GLOBALS = [
+  "window",
+  "document",
+  "navigator",
+  "self",
+  "location",
+  "screen",
+  "history",
+  "localStorage",
+  "sessionStorage",
+  "matchMedia",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "getComputedStyle",
+  "MutationObserver",
+  "ResizeObserver",
+  "IntersectionObserver"
+];
+
+/// The environment a session runs under: which globals, if any, the worker
+/// fakes before it imports anything.
+///
+/// `shim: false` reproduces the bare-Node environment every measurement before
+/// this one ran in, which is what makes the shim's effect separable rather
+/// than baked into a single number.
+export function environmentForMode(mode, { shim = true } = {}) {
+  const browserish = (mode?.conditions ?? []).includes("browser");
+  return shim && browserish
+    ? { kind: "browser-globals", globals: [...BROWSER_SHIM_GLOBALS] }
+    : { kind: "none", globals: [] };
+}
+
 export function sha256Bytes(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
@@ -229,7 +287,10 @@ export function measuredCalls(result) {
 /// `modes` restricts which of `PROBE_MODES` are attempted at all; an
 /// entrypoint's own conditions restrict it further through `modeApplies`, and a
 /// variant's conditions through `summaryForMode`.
-export function buildProbePlan(contract, { modes = PROBE_MODES, discovery = true } = {}) {
+export function buildProbePlan(
+  contract,
+  { modes = PROBE_MODES, discovery = true, environmentShim = true } = {}
+) {
   const claims = new Map();
   const requests = new Map();
   // Probe ids are opaque counters and the parent keeps the map back to what
@@ -405,11 +466,20 @@ export function buildProbePlan(contract, { modes = PROBE_MODES, discovery = true
     // because it is a sampling bound and not a proof: discovery that ran only
     // over parameters 0 and 1 says nothing about parameter 2.
     discovery: { enabled: Boolean(discovery), parameters: discovery ? [...DISCOVERY_PARAMETERS] : [] },
-    sessions: [...requests.entries()].map(([mode, probes]) => ({
-      mode,
-      conditions: PROBE_MODES.find(candidate => candidate.name === mode).conditions,
-      probes
-    }))
+    sessions: [...requests.entries()].map(([mode, probes]) => {
+      const definition = PROBE_MODES.find(candidate => candidate.name === mode);
+      return {
+        mode,
+        conditions: definition.conditions,
+        // Carried on the session rather than resolved in the worker so that the
+        // decision "this mode gets a fake DOM" is made once, in the parent that
+        // also writes the record of it, and the worker only applies what it was
+        // told. A worker that chose for itself could observe under a shim the
+        // report does not mention.
+        environment: environmentForMode(definition, { shim: environmentShim }),
+        probes
+      };
+    })
   };
 }
 
@@ -868,10 +938,13 @@ export function buildProbeReport({
   runtime,
   modes,
   discovery,
+  environment,
+  sessions,
   claims,
   incompleteness
 }) {
   const counted = kind => claims.filter(claim => claim.status === kind).length;
+  const perMode = environment ?? {};
   return {
     schemaVersion: PROBE_REPORT_SCHEMA_VERSION,
     package: {
@@ -894,6 +967,49 @@ export function buildProbeReport({
     // condition at all -- and `contract verify` refuses such a report rather
     // than listing a blocker it could not evaluate.
     discovery: discovery ?? { enabled: false, parameters: [] },
+    // Which globals each mode's worker faked before it imported anything.
+    //
+    // Recorded for the same reason `discovery` is: a claim observed against a
+    // fake DOM is a weaker observation than one observed against a browser,
+    // and the difference is invisible in the claim record itself. `shimmed`
+    // names what this process invented; `present` names what Node already had
+    // and the worker therefore left alone. A mode with an empty `shimmed` list
+    // observed in a bare Node process, which is what every `server` session
+    // does by construction.
+    environment: {
+      shimmedAnyMode: Object.values(perMode).some(entry => (entry?.shimmed ?? []).length > 0),
+      modes: Object.fromEntries(
+        Object.entries(perMode).map(([mode, entry]) => [
+          mode,
+          {
+            kind: entry?.kind ?? "none",
+            shimmed: [...(entry?.shimmed ?? [])].sort(),
+            present: [...(entry?.present ?? [])].sort()
+          }
+        ])
+      )
+    },
+    // How many worker processes each mode cost, and how many of those were
+    // restarts after a probe threw. A restart is not a failure -- it is the
+    // only way to un-halt a Solid 2.0 development runtime -- but a mode that
+    // needed dozens of them is the shape behind a slow or timed-out row, and
+    // nothing recorded it before.
+    sessions: {
+      started: (sessions ?? []).reduce((total, entry) => total + (entry.started ?? 0), 0),
+      restarts: (sessions ?? []).reduce((total, entry) => total + (entry.restarts ?? 0), 0),
+      failed: (sessions ?? []).reduce((total, entry) => total + (entry.failed ?? 0), 0),
+      byMode: Object.fromEntries(
+        (sessions ?? []).map(entry => [
+          entry.mode,
+          {
+            started: entry.started ?? 0,
+            restarts: entry.restarts ?? 0,
+            failed: entry.failed ?? 0,
+            completed: Boolean(entry.completed)
+          }
+        ])
+      )
+    },
     summary: {
       claims: claims.length,
       driven: claims.filter(claim => claim.status !== "undriven").length,

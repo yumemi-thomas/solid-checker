@@ -746,8 +746,10 @@ trust root for the claims, which question 7 owns.
 
 ## Amendments
 
-The RFC above is the design as proposed. Implementation found four places where
-it was wrong or underspecified, and each was resolved *against* the text rather
+The RFC above is the design as proposed. Implementation and one corpus-scale
+measurement found eight places where it was wrong or underspecified — A1–A6
+from building the pipeline, A7 and A8 from running it across 416 real probe
+rows — and each was resolved *against* the text rather
 than by bending the implementation to it. They are recorded here rather than
 edited into the sections above, so that a reader can still see what was
 proposed and what the proposal turned out to miss.
@@ -875,3 +877,72 @@ The worker stamped a per-probe-type constant, so a `deferred` claim recorded
 `calls: 2` for a single invocation. It counts now. This is a correction, not a
 design change, and is recorded here only because the number reaches the
 contract.
+
+### A7. A probe's import environment is part of what it observed
+
+**§ "What counts as observing the claim" says** the probe imports the package
+and drives its exports, and treats the process the import happens in as
+neutral scaffolding.
+
+**What was missing** is that the process is not neutral. A module that
+dereferences `window` while it is being *evaluated* throws `ReferenceError` in a
+bare Node process, the worker stops, and every claim of that entrypoint — the
+`kind` claim included, which A1 makes unconvertible — is undriven. The corpus
+measurement lost 432 claims to exactly that, which is not an observation of the
+package but of the environment it was denied.
+
+**The amendment:** the probe worker defines a minimal inert browser surface
+before it imports anything, in modes whose conditions include `browser` only,
+and the surface is recorded rather than assumed harmless.
+
+- A `server`/`node` session shims nothing. An import that throws on `window`
+  under `--conditions node` is a truthful observation of that entrypoint in
+  that mode, and faking a DOM there would manufacture a pass.
+- `<contract>.probe.json` gains an `environment` block naming, per mode, the
+  globals the process invented and the ones Node already provided;
+  `<contract>.verify.json` carries it forward. **A claim observed under the
+  shim is a weaker observation than one observed in a browser**, and the record
+  is what says so — a fake `document` renders nothing, a fake `matchMedia`
+  never matches, and a package that branches on either was observed on the
+  branch the fake sent it down.
+- Every faked value is stamped with a non-enumerable `__solidCheckerProbeShim`
+  accessor and the process carries `__solidCheckerProbeEnvironment`, so a probe
+  body — or a future classification that needs to know the DOM was fake — can
+  ask. Non-enumerable, so a package's own feature detection sees a browser's
+  surface and nothing extra.
+- An import that still throws with the shim in place is unchanged: undriven,
+  `import-failed`, with the throw as its reason. And a `typeof window ===
+  "undefined"` guard never threw in the first place, so for those modules the
+  shim *redirects* rather than rescues. That is the sharpest reason the shimmed
+  list is data and not a footnote.
+
+Generation is untouched: `contract generate` imports nothing, so no shim exists
+on the static path. `--no-environment-shim` reproduces the bare-Node
+environment, which is what makes the shim's effect on a measurement separable
+from the engine's.
+
+### A8. A refusal is a result, and results are written down
+
+**§3 says** verification refuses when any blocker is raised, and §"The report"
+describes `<contract>.verify.json` as the record of what the promotion did.
+
+**What was missing** is that the sidecar existed only on the success path. A
+refusal wrote nothing at all, so the most common outcome was the least legible
+one: stderr was the only record of why a contract was not promoted. CI kept a
+log or kept nothing, and the corpus measurement had to recover the blocker
+taxonomy by pattern-matching English sentences against lines carrying absolute
+paths.
+
+**The amendment:** a refusal writes `<contract>.verify.json` too, with
+`outcome: "refused"`, `blockers.raised` carrying every line the command
+printed, `blockers.checked` carrying the same taxonomy the success path lists,
+and the consumed probe report's own figures.
+
+The two shapes are told apart by `outcome`, never by which counts are zero.
+Every field that would imply a promotion is **absent** rather than zeroed: no
+`evidence`, no `conversions`, no `probed`, no `summary`, and a `contract` block
+with `before` and no `after`, because nothing was written. The idempotence
+check tests `contract.after`, which a refusal has not got, so a refusal sidecar
+is overwritten by a later successful verification rather than read as one.
+Success behavior is unchanged in every other respect, and `blockers.raised`
+stays `[]` there for the reason it always did: that document was promoted.

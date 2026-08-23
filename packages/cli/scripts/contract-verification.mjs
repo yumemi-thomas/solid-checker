@@ -704,9 +704,24 @@ export function buildVerifyReport({
       // Recorded because the promotion depends on it: a report with discovery
       // disabled is refused, so a sidecar that says `enabled: true` is the
       // evidence that the negative-claim falsifier ran for these bytes.
-      discovery: report.discovery ?? null
+      discovery: report.discovery ?? null,
+      // Carried forward, not summarized away. A verified contract whose
+      // observations were made against a faked `window` certifies something
+      // weaker than one observed in a bare process, and this sidecar is the
+      // only artifact that can say so -- schema v1 has no place on the
+      // contract for it. `null` on a report that predates the field, because
+      // "it probably ran without a shim" is not a record.
+      environment: report.environment ?? null,
+      // Session accounting rides along for the same reason the probe report
+      // keeps it: a promotion built on a mode that needed forty restarts is
+      // reproducible only if the cost is written down.
+      sessions: report.sessions ?? null
     },
     identities,
+    // `checked` is the taxonomy this promotion evaluated; `raised` is empty
+    // *because this document was promoted*. A run that refused writes a
+    // different sidecar -- see `buildRefusalReport` -- where `raised` carries
+    // the lines and there is no evidence block at all.
     blockers: { checked: [...BLOCKERS], raised: [] },
     summary: {
       exports: Object.values(contract.entrypoints ?? {}).reduce(
@@ -740,5 +755,62 @@ export function buildVerifyReport({
         left.export.localeCompare(right.export) ||
         left.field.localeCompare(right.field)
     )
+  };
+}
+
+/// The `<contract>.verify.json` a *refusal* writes.
+///
+/// Before this, a refusal wrote nothing at all: the sidecar was built on the
+/// success path only, so the sole record of why a contract was not promoted
+/// was the stderr of the process that refused it. That made the most common
+/// outcome the least legible one -- a corpus measurement had to recover the
+/// blocker taxonomy by pattern-matching English sentences, and anyone running
+/// the command in CI kept a log or kept nothing.
+///
+/// It is deliberately **not** `buildVerifyReport` with a populated `raised`
+/// list. Every field that would imply a promotion is absent rather than zeroed:
+/// no `evidence`, no `conversions`, no `probed`, no `staleProbedMarkers`, and a
+/// `contract` block with `before` but no `after`, because nothing was written.
+/// A reader -- or a tool -- that finds `outcome: "refused"` and looks for a
+/// promotion finds nothing to misread. `outcome` is the discriminator; the two
+/// shapes are never confused by the presence or absence of a count.
+export function buildRefusalReport({
+  contract,
+  contractPath,
+  before,
+  report,
+  reportPath,
+  identities,
+  blockers
+}) {
+  return {
+    schemaVersion: VERIFY_REPORT_SCHEMA_VERSION,
+    kind: "contract-verify-refusal",
+    outcome: "refused",
+    refusedAt: new Date().toISOString(),
+    package: { name: contract?.package?.name ?? null, version: contract?.package?.version ?? null },
+    // `after` is absent, not null: the contract was not written, so there is no
+    // second hash and no field that could be read as one.
+    contract: { path: contractPath, before },
+    probeReport: report
+      ? {
+          path: reportPath,
+          present: true,
+          contract: report.contract?.afterWrite ?? report.contract?.hash ?? null,
+          driven: report.summary?.driven ?? 0,
+          passed: report.summary?.passed ?? 0,
+          failed: report.summary?.failed ?? 0,
+          undriven: report.summary?.undriven ?? 0,
+          incompleteness: report.summary?.incompleteness ?? 0,
+          discovery: report.discovery ?? null,
+          environment: report.environment ?? null,
+          sessions: report.sessions ?? null
+        }
+      : { path: reportPath, present: false },
+    identities,
+    // The whole point of the file. `checked` is the same taxonomy the success
+    // path lists so the two are comparable; `raised` is every line the refusal
+    // printed, in the order it printed them.
+    blockers: { checked: [...BLOCKERS], raised: [...blockers] }
   };
 }

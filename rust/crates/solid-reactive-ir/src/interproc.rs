@@ -634,6 +634,212 @@ fn contract_callback_arguments_unbound(
         })
 }
 
+/// Parameters whose caller-supplied value this function *retains*.
+///
+/// The call loop below classifies every *argument* position, and a call into a
+/// local function is summarized transitively — on the assumption that the
+/// callee's own summary accounts for what it does with that parameter. That
+/// assumption fails the moment the callee merely **stores** the value:
+///
+/// ```js
+/// function createComputation(fn, init) {          // solid-js 1.9.14
+///   const c = { fn, value: init, /* … */ };       // fn is retained, never called
+///   return c;
+/// }
+/// ```
+///
+/// `createComputation` invokes nothing, so its callback summary is empty, so
+/// every export that forwards a callback into it — `createMemo`,
+/// `createEffect`, `children`, `createSelector`, `createDeferred`,
+/// `createRenderEffect`, `createComputed` — published *no* callbacks row. An
+/// omitted `callbacks` list is a **negative** claim, so those contracts
+/// certified "invokes no caller-supplied function" for the seven primitives
+/// whose whole purpose is to invoke one, and `contract probe`'s discovery pass
+/// contradicted every one of them.
+///
+/// Retention is stated as a closed list of positions, never as "everything the
+/// analysis did not recognize". The difference is the whole precision budget:
+/// a published runtime artifact is dense with references that *observe* a
+/// parameter — `typeof value === "string"`, `prev && …`, `for (const key in
+/// props)`, `value[HREF]`, `node[name] = value`, a reassignment of the
+/// parameter itself — and treating those as escapes turns a third of a DOM
+/// package's exports into sentinels while proving nothing. The positions that
+/// do put the value somewhere this analysis stops following are:
+///
+/// - an **object-literal property value** (`{ fn }`, `{ fn: p }`) — the
+///   literal outlives the call, and whoever receives it may invoke the
+///   property. This is exactly `createComputation`;
+/// - an **assignment value** (`source = pSource`) — stored into a binding or a
+///   container whose later use this summary does not track. Storing into a
+///   member chain rooted at one of the *caller's own* parameters is excluded:
+///   `node.className = value` writes into a container the caller supplied and
+///   the caller's code is analyzed too;
+/// - a **computed read of a rest parameter** (`sources[index]`) — a rest
+///   parameter absorbs an unbounded argument tail that no `callbacks` row can
+///   name, so anything at all happening to one of its elements is unstatable
+///   in schema v1 as anything but the sentinel.
+///
+/// Only *potentially callable* parameters can escape into a callback claim, so
+/// a parameter the type facts prove non-callable never opens the sentinel.
+fn push_unaccounted_parameter_escapes(
+    contribution: &mut InterproceduralGraphContribution,
+    file: &solid_facts::FileFacts,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+) {
+    let owners = parameter_declaration_owners(file, nodes, nodes_by_path, entities);
+    if owners.is_empty() {
+        return;
+    }
+    let mut retained = HashSet::new();
+    for property in file
+        .ast
+        .object_properties
+        .iter()
+        .filter(|property| property.data && !property.computed)
+    {
+        retained.insert(file.ast.peel_ts_sugar_span(property.value));
+        retained.insert(property.value);
+    }
+    for assignment in &file.ast.assignments {
+        if member_root_is_parameter(file, assignment.target, &owners) {
+            continue;
+        }
+        retained.insert(file.ast.peel_ts_sugar_span(assignment.value_span));
+        retained.insert(assignment.value_span);
+    }
+    for member in file.ast.members.iter().filter(|member| {
+        file.ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+    }) {
+        if owners_rest_parameter(file, member.object, &owners) {
+            retained.insert(member.object);
+        }
+    }
+    let mut seen = HashSet::new();
+    for identifier in &file.ast.identifiers {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+            || !retained.contains(&identifier.span)
+        {
+            continue;
+        }
+        let Some(declaration) = file.ast.reference_declaration(identifier.span) else {
+            continue;
+        };
+        let Some(&(owner, parameter)) = owners.get(&declaration) else {
+            continue;
+        };
+        if !seen.insert((owner, parameter)) {
+            continue;
+        }
+        if !potentially_callable(
+            lookup.smallest_contained_callability(file.path.as_str(), identifier.span),
+        ) {
+            continue;
+        }
+        contribution
+            .escaped_parameters
+            .push((nodes[owner].span, parameter));
+    }
+}
+
+/// Whether `object` is a reference to a rest parameter of a summarized
+/// function.
+fn owners_rest_parameter(
+    file: &solid_facts::FileFacts,
+    object: Span,
+    owners: &HashMap<Span, (usize, usize)>,
+) -> bool {
+    file.ast
+        .reference_declaration(object)
+        .and_then(|declaration| owners.get(&declaration))
+        .is_some_and(|(_, parameter)| *parameter == REST_PARAMETER)
+}
+
+/// Whether `target` is a member chain rooted at one of this file's summarized
+/// parameters — a container the caller handed in.
+fn member_root_is_parameter(
+    file: &solid_facts::FileFacts,
+    target: Span,
+    owners: &HashMap<Span, (usize, usize)>,
+) -> bool {
+    let mut current = target;
+    for _ in 0..32 {
+        let Some(member) = file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == current)
+        else {
+            break;
+        };
+        current = member.object;
+    }
+    if current == target {
+        return false;
+    }
+    file.ast
+        .reference_declaration(current)
+        .is_some_and(|declaration| owners.contains_key(&declaration))
+}
+
+/// The slot a rest parameter's escape is recorded under.
+///
+/// A rest parameter absorbs an unbounded tail of argument positions and has no
+/// single index, so it is deliberately absent from
+/// [`SummaryNode::parameters`]. An escape through it still has to reach the
+/// callbacks domain, and this index — which no real slot can take — is how it
+/// travels without ever being mistaken for a stated parameter.
+const REST_PARAMETER: usize = usize::MAX;
+
+/// Every summarized parameter's declaration span, and the slot it fills.
+///
+/// The slot indices have to be the ones the rest of the pipeline uses, so the
+/// filter chain here is exactly [`function_nodes`]': identifier-shaped
+/// parameters whose binding name carries a compiler entity, in declaration
+/// order. A rest parameter fills no single slot and is recorded under
+/// [`REST_PARAMETER`].
+fn parameter_declaration_owners(
+    file: &solid_facts::FileFacts,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    entities: &EntitySymbols,
+) -> HashMap<Span, (usize, usize)> {
+    let mut owners = HashMap::new();
+    for (index, node) in functions_for_path(nodes, nodes_by_path, file.path.as_str()) {
+        let Some(function) = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == node.span)
+        else {
+            continue;
+        };
+        let spans = function
+            .parameters
+            .iter()
+            .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Identifier)
+            .filter_map(|parameter| parameter.names.first())
+            .filter(|name| {
+                entities
+                    .get(&location(file.path.shared(), name.span))
+                    .is_some()
+            })
+            .map(|name| name.span);
+        for (parameter, span) in spans.enumerate() {
+            owners.entry(span).or_insert((index, parameter));
+        }
+        for name in &function.rest_parameter_names {
+            owners.entry(name.span).or_insert((index, REST_PARAMETER));
+        }
+    }
+    owners
+}
+
 /// Record an unknown-callback obligation for every caller-supplied callable
 /// forwarded into a call whose callee has no resolvable identity at all.
 ///
@@ -1266,6 +1472,14 @@ fn discover_interprocedural_graph(
             ));
         }
     }
+    push_unaccounted_parameter_escapes(
+        &mut contribution,
+        file,
+        nodes,
+        nodes_by_path,
+        lookup,
+        symbols.entities,
+    );
     for binding in &file.ast.bindings {
         let Some(initializer) = binding.call_initializer else {
             continue;
@@ -3126,6 +3340,7 @@ struct InterproceduralGraphAssembly<'a> {
     contract_consumer_obligations: &'a mut Vec<StaticDefect>,
     edges: &'a mut [Vec<usize>],
     invoked_parameters: &'a mut [Vec<usize>],
+    escaped_parameters: &'a mut [Vec<usize>],
     invoked_parameter_members: &'a mut [Vec<(usize, String)>],
     returned_bindings: &'a mut Vec<(SymbolId, SymbolId)>,
     factory_calls: &'a mut Vec<(usize, SymbolId)>,
@@ -3162,6 +3377,13 @@ impl InterproceduralGraphAssembly<'_> {
         for (owner, parameter) in &contribution.invoked_parameters {
             if let Some(owner) = node_index(*owner) {
                 self.invoked_parameters[owner].push(*parameter);
+            }
+        }
+        for (owner, parameter) in &contribution.escaped_parameters {
+            if let Some(owner) = node_index(*owner)
+                && !self.escaped_parameters[owner].contains(parameter)
+            {
+                self.escaped_parameters[owner].push(*parameter);
             }
         }
         for (owner, parameter, property) in &contribution.invoked_parameter_members {
@@ -4113,6 +4335,7 @@ fn interprocedural_reads(
     let mut dispatch_obligations = Vec::new();
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameter_members = vec![Vec::<(usize, String)>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
     let mut factory_call_candidates = Vec::new();
@@ -4131,6 +4354,7 @@ fn interprocedural_reads(
             contract_consumer_obligations: &mut dispatch_obligations,
             edges: &mut edges,
             invoked_parameters: &mut invoked_parameters,
+            escaped_parameters: &mut escaped_parameters,
             invoked_parameter_members: &mut invoked_parameter_members,
             returned_bindings: &mut returned_binding_candidates,
             factory_calls: &mut factory_call_candidates,
@@ -4224,6 +4448,17 @@ fn interprocedural_reads(
         for (owner, target, target_parameter, owner_parameter, ambient_execution) in
             &callback_forwardings
         {
+            // Forwarding a callback into a local callee inherits that callee's
+            // *whole* answer for the slot, and "the callee never accounted for
+            // this parameter" is part of it. Without this hop the forwarding
+            // silently upgrades an unknown into the empty (negative) claim.
+            let target_escaped = escaped_parameters[*target].contains(target_parameter)
+                || (escaped_parameters[*target].contains(&REST_PARAMETER)
+                    && *target_parameter >= nodes[*target].parameters.len());
+            if target_escaped && !escaped_parameters[*owner].contains(owner_parameter) {
+                escaped_parameters[*owner].push(*owner_parameter);
+                changed = true;
+            }
             for callback in callback_summaries[*target]
                 .iter()
                 .filter(|callback| callback.parameter == *target_parameter)
@@ -5008,6 +5243,7 @@ fn interprocedural_reads(
         returned: &returned,
         structured_returns: &structured_returns,
         callbacks: &callback_summaries,
+        escaped_parameters: &escaped_parameters,
         invoked_parameter_members: &invoked_parameter_members,
         semantics: ContractSemantics {
             bundled_returns,

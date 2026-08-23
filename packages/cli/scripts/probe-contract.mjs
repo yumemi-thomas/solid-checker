@@ -90,6 +90,13 @@ Options:
                          only: contract verify refuses it outright, and the
                          probe report records the refusal reason under
                          "discovery".
+  --no-environment-shim  Do not define the minimal browser globals in the
+                         client, development and production sessions. Without
+                         the shim an entrypoint that reads window at import
+                         time throws and every one of its claims is undriven;
+                         with it, the claims that are then observed are
+                         observed against a fake DOM. Either way the report's
+                         "environment" block says which names were faked.
   --report <FILE>        Report output path (default: <contract>.probe.json)
   --write                Record passing modes as probed row evidence on claims
                          that already exist. Refused when any probe failed or
@@ -109,6 +116,7 @@ export function parseProbeArguments(arguments_) {
     modes: undefined,
     timeout: DEFAULT_TIMEOUT_MS,
     discovery: true,
+    environmentShim: true,
     report: undefined,
     write: false
   };
@@ -122,6 +130,7 @@ export function parseProbeArguments(arguments_) {
     else if (argument === "--report") options.report = value(argument, arguments_[++index]);
     else if (argument === "--write") options.write = true;
     else if (argument === "--no-discovery") options.discovery = false;
+    else if (argument === "--no-environment-shim") options.environmentShim = false;
     else if (argument === "--modes") {
       const list = value(argument, arguments_[++index])
         .split(",")
@@ -251,7 +260,10 @@ function installedIntegrity(packageRoot, packageName) {
 /// scratch temporary directory so a package that writes on import writes there.
 function spawnSession({ probes, session, worker, stagingDirectory, dialect, timeout }) {
   const requestFile = join(stagingDirectory, `request-${session.mode}-${probes[0].id}.json`);
-  writeFileSync(requestFile, JSON.stringify({ mode: session.mode, dialect, probes }));
+  writeFileSync(
+    requestFile,
+    JSON.stringify({ mode: session.mode, dialect, environment: session.environment, probes })
+  );
   const scratch = mkdtempSync(join(tmpdir(), "solid-checker-probe-cwd-"));
   try {
     const child = spawnSync(
@@ -273,7 +285,14 @@ function spawnSession({ probes, session, worker, stagingDirectory, dialect, time
     }
     try {
       const answer = JSON.parse(child.stdout);
-      return { completed: answer.completed !== false, results: answer.results ?? [] };
+      return {
+        completed: answer.completed !== false,
+        environment: answer.environment,
+        // Set when package code threw asynchronously -- a deferred callback, a
+        // rejected promise -- somewhere outside every `try` the worker has.
+        aborted: answer.aborted,
+        results: answer.results ?? []
+      };
     } catch (error) {
       return {
         failed: `the probe process wrote no readable report: ${error.message}`,
@@ -298,28 +317,56 @@ function spawnSession({ probes, session, worker, stagingDirectory, dialect, time
 /// A session-level failure -- a crash, a timeout, unreadable output -- is
 /// different: nothing says which probe caused it, so the remaining probes are
 /// recorded undriven rather than retried into a loop of timeouts.
+/// The accounting is returned rather than logged. A mode that answered its
+/// probes in one process and a mode that needed forty restarts cost wildly
+/// different wall time and mean different things about the package, and until
+/// this the report recorded neither -- the restart count was visible only as
+/// an unexplained probe duration.
 export function runSessionWithRestarts({ session, spawn }) {
   const results = [];
+  const accounting = { mode: session.mode, started: 0, restarts: 0, failed: 0, completed: false };
+  let environment;
+  let aborted;
   let pending = session.probes;
+  const finish = () => ({ results, accounting, environment });
   for (let attempt = 0; pending.length && attempt <= session.probes.length; attempt += 1) {
     const answer = spawn(pending);
+    accounting.started += 1;
+    if (attempt > 0) accounting.restarts += 1;
+    // The first session that answers at all settles the environment record: a
+    // restart runs with the same request-level environment, and a session that
+    // never produced readable output has none to report.
+    environment ??= answer.environment;
+    if (answer.aborted) aborted = answer.aborted;
     results.push(...answer.results);
     const answered = new Set(answer.results.map(result => result.id));
     const remaining = pending.filter(probe => !answered.has(probe.id));
     if (answer.failed) {
+      accounting.failed += 1;
       results.push(...sessionFailure(remaining, answer.failed));
-      return results;
+      return finish();
     }
     if (answer.completed || remaining.length === pending.length) {
+      // A process that answered nothing made no progress, so the loop stops
+      // here rather than restarting into the same abort. When an asynchronous
+      // throw is why, that reason travels to the probes it could not reach --
+      // which is more than "stopped before reaching this claim" could say.
+      if (remaining.length === pending.length && answer.aborted) accounting.failed += 1;
       pending = remaining;
+      accounting.completed = remaining.length === 0;
       break;
     }
     pending = remaining;
   }
   results.push(
-    ...sessionFailure(pending, "the probe process stopped before reaching this claim")
+    ...sessionFailure(
+      pending,
+      aborted
+        ? `the probe process was aborted by package code running outside a probe: ${aborted}`
+        : "the probe process stopped before reaching this claim"
+    )
   );
-  return results;
+  return finish();
 }
 
 function sessionFailure(probes, error) {
@@ -424,14 +471,22 @@ function defaultRunSessions({ sessions, dialect, projectRoot, timeout }) {
   try {
     const worker = join(stagingDirectory, "contract-probe-worker.mjs");
     copyFileSync(fileURLToPath(new URL("./contract-probe-worker.mjs", import.meta.url)), worker);
-    return sessions.map(session => ({
-      mode: session.mode,
-      results: runSessionWithRestarts({
+    return sessions.map(session => {
+      const run = runSessionWithRestarts({
         session,
         spawn: probes =>
           spawnSession({ probes, session, worker, stagingDirectory, dialect, timeout })
-      })
-    }));
+      });
+      return {
+        mode: session.mode,
+        results: run.results,
+        accounting: run.accounting,
+        // What the session *asked for* is the fallback: a mode whose every
+        // process died reports no environment of its own, and saying "no shim"
+        // there would be a claim about a process that never answered.
+        environment: run.environment ?? session.environment
+      };
+    });
   } finally {
     rmSync(stagingDirectory, { recursive: true, force: true });
   }
@@ -468,7 +523,11 @@ export async function probeContract(arguments_, { runSessions = defaultRunSessio
   }
   const runtime = resolveProbeRuntime(packageRoot);
 
-  const plan = buildProbePlan(contract, { modes: options.modes, discovery: options.discovery });
+  const plan = buildProbePlan(contract, {
+    modes: options.modes,
+    discovery: options.discovery,
+    environmentShim: options.environmentShim
+  });
   const sessions = await runSessions({
     sessions: plan.sessions,
     dialect: runtime.dialect,
@@ -479,6 +538,8 @@ export async function probeContract(arguments_, { runSessions = defaultRunSessio
 
   const incompleteness = [];
   const evidence = [];
+  const environment = {};
+  const accounting = [];
   for (const session of sessions) {
     const interpreted = interpretSession({
       claims: plan.claims,
@@ -488,6 +549,10 @@ export async function probeContract(arguments_, { runSessions = defaultRunSessio
     });
     incompleteness.push(...interpreted.incompleteness);
     evidence.push(...interpreted.evidence);
+    const planned = plan.sessions.find(candidate => candidate.mode === session.mode);
+    environment[session.mode] = session.environment ??
+      planned?.environment ?? { kind: "none", shimmed: [], present: [] };
+    if (session.accounting) accounting.push(session.accounting);
   }
   const claims = settleClaims(plan.claims);
 
@@ -505,6 +570,8 @@ export async function probeContract(arguments_, { runSessions = defaultRunSessio
     runtime: { package: "solid-js", version: runtime.version },
     modes: options.modes ?? PROBE_MODES,
     discovery: plan.discovery,
+    environment,
+    sessions: accounting,
     claims,
     incompleteness
   });

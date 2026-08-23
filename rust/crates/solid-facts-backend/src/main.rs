@@ -1770,6 +1770,12 @@ fn promote_entry_callable(
     let Some(entity) = entry_export_entity(facts, entry_file, name) else {
         return summary;
     };
+    // A class is `typeof === "function"` at runtime and `nonCallable` to the
+    // type system, which reads construct signatures as *not* call signatures.
+    // See `solid_reactive_ir::binding_declares_class`.
+    if solid_reactive_ir::binding_declares_class(facts, &entity.location) {
+        return solid_reactive_ir::class_contract_export(summary);
+    }
     if entity.callability == Some(typefacts::Callability::Callable) {
         summary.kind = "function".into();
     }
