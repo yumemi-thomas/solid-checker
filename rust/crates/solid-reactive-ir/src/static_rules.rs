@@ -49,6 +49,14 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     .parameters
                     .first()
                     .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
+                // The compiler deleted this function. A component declared
+                // inside a value the emitter removed cannot be rendered from
+                // anywhere -- the declaration went with the value, and nothing
+                // outside the deleted expression can name it -- so "this
+                // component never updates" is a claim about code that does not
+                // run. See the body-binding loop below for the same gate and
+                // the reason it is a positive lookup rather than a role.
+                && !crate::execution_role::discarded_region_contains(file, parameter.pattern)
                 && ctx
                     .semantic_lookup
                     .function_may_be_component(file, function)
@@ -113,6 +121,22 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             let props = prop_declaration.is_some();
             let reactive_object = props || binding_initializes_reactive_store(ctx, file, binding);
             if !reactive_object {
+                continue;
+            }
+            // The compiler deleted this destructure, so there is no
+            // snapshot to be stale: SC1003's claim is that the bindings are
+            // read once and then never update, and code the emitter removed is
+            // read zero times in either compiler's output.
+            //
+            // A positive lookup and an early return, the shape
+            // `push_owner_requirement` uses, rather than a
+            // `ExecutionRole::DiscardedRendering` arm in the allowlist below.
+            // That list means something else -- "this context is fresh at call
+            // time, so the destructure is legal" -- and a deleted destructure
+            // is not legal-because-fresh, it is absent. Adding the role there
+            // would make the two claims indistinguishable to the next reader,
+            // and would silently answer for any future role added to the list.
+            if crate::execution_role::discarded_region_contains(file, binding.pattern) {
                 continue;
             }
             let role = semantic_execution_role(

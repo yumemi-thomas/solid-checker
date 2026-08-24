@@ -69,6 +69,28 @@ pub(super) fn leaf_owner_operations_for_file(
     };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
+        // The compiler deleted this call. Gated at the owner call, which is
+        // this pass's single entry: every operation below -- a forbidden
+        // primitive, an unresolved callback, a cross-file helper's operations
+        // -- exists only because a leaf scope opens here, and a call the
+        // emitter removed opens none. "These nested primitives are never
+        // disposed" describes a disposal that never comes due.
+        //
+        // A positive lookup and an early return, the shape
+        // `push_owner_requirement` uses, because this pass consults no
+        // execution facts at all and so has no role to give a
+        // `DiscardedRendering` arm to. `uncertain` would be wrong for the same
+        // reason it is wrong there: nothing here is unproven, the two
+        // compilers agree the code is gone.
+        //
+        // The gate is on the owner call rather than on each push site because
+        // deletion travels down, not up: a producer `Elided` span is a single
+        // attribute or child value expression, so any nested call it contains
+        // is contained with it, while a leaf callback resolved in *another*
+        // file is only reachable from this deleted call site.
+        if crate::execution_role::discarded_region_contains(file, owner_call.span) {
+            continue;
+        }
         let owner = primitive_name(
             file.path.as_str(),
             owner_call.callee,

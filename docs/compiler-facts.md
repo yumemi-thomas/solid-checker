@@ -63,7 +63,8 @@ Each dialect compiler adapter projects the trace onto the checker's
 | Site decision | Execution map |
 | --- | --- |
 | `Value(ReactiveRerun)` | tracked region |
-| `Value(EagerOnce)`, `Value(Elided)` | untracked region |
+| `Value(EagerOnce)` | untracked region |
+| `Value(Elided)` | discarded region |
 | `Value(EagerOnce)` on a component child | deferred callback |
 | `Value(CallerContext)` | deferred callback |
 | `Callback(LaterEvent)` | `event-handler` callback |
@@ -118,11 +119,14 @@ chain.
 
 Two things it deliberately does not do. It does not certify the read safe — "the
 compiler deleted this expression" is a second claim with no more evidence behind
-it than the first. And it does not fire for a role any *fact* established: the
-escalation is gated on `UntrackedRendering`, so a read the dialect proved runs
-in an untracked callback keeps its proven violation even inside an uncensused
-region, because that proof never came from the census. Verified live at the
-current pins: `<br>{runWithOwner(owner, () => a())}</br>` — the 2.0 census gap
+it than the first. (When the compiler *does* say it deleted the expression, that
+is a discarded region, below, and it is a fact rather than a hole: silence
+follows from the fact, never from the silence.) And it does not fire for a role
+any *fact* established: the escalation is gated on `UntrackedRendering`, so a
+read the dialect proved runs in an untracked callback keeps its proven violation
+even inside an uncensused region, because that proof never came from the census.
+Verified live at the current pins:
+`<br>{runWithOwner(owner, () => a())}</br>` — the 2.0 census gap
 of the fixture below, wrapped around a callback `Solid2` reports untracked reads
 in (`reports_untracked_reads_at`, `RunWithOwner` argument 1, giving
 `UntrackedCallback`) — stays an SC1001 **violation**, matching its censused
@@ -143,6 +147,60 @@ non-hydratable `<head>`, child and attribute arms) and
 child, never censused; and a `textContent`-shadowed child, censused then
 retracted). Each also pins the two negatives — a censused tracked read stays
 silent, and an untracked read outside all JSX stays a proven violation.
+
+## Discarded regions
+
+`Value(Elided)` is the compiler reporting a deletion: the site was censused, a
+decision was reached, and nothing was emitted for it. Both adapters project it
+to `ExecutionMap::discarded_regions`, and the IR classifies a span inside one as
+`ExecutionRole::DiscardedRendering`.
+
+It is deliberately a category of its own, and it took a defect to establish
+that. Until 2026-08-24 both adapters projected `Elided` and `EagerOnce` to the
+same untracked region, so a reactive read inside a deleted value was a **proven
+SC1001 violation** — "the read sees the current value once and never updates" —
+about code no compiler emits. Every clause is false when the read does not
+happen. `EagerOnce` keeps the untracked projection, because it evaluates exactly
+once and that sentence is true of it.
+
+Three properties define the class, and the third is what keeps it from becoming
+a certification channel:
+
+- **It is not a hole.** `census_touches` counts a discarded region, so
+  `missing_jsx_census` does not escalate a deletion into an uncertifiable
+  obligation. Nothing is missing: the compiler reported on this JSX and said the
+  code is gone.
+- **It is not an execution claim.** `reports_untracked_read` and
+  `reports_disallowed_write` both exclude it, so no read, write or action
+  finding is projected from it, and `contract_callback_execution` publishes no
+  timing for a callback inside one — "inline" would license a consumer to run
+  it eagerly, which is a positive claim dead code cannot support.
+- **It proves nothing positive either.** Silence over a discarded region means
+  "both compilers deleted this", never "this was proven safe". Deletion
+  dominates: `execution_role` and `semantic_execution_role` both answer
+  `DiscardedRendering` for a span inside a discarded region *before* consulting
+  any narrower region or any semantic role, so a deleted value cannot certify a
+  read through a deferred position, or convict one through an `untrack()`
+  position, on the strength of syntax whose code was removed. Dominance is safe
+  because every one of both producers' `Elided` spans is a single attribute or
+  child *value* expression, never a wider enclosing construct — checked at both
+  pins, and pinned by the adapters' own unit tests.
+
+The one thing that outranks it is a **named divergence** (below). Where the two
+candidate compilers disagree about whether the span is deleted, its deletion is
+not a shared fact and silence would certify one compiler's output. That is why
+`divergent_lowered_child` covers the promoted-`children`-attribute span as well
+as source child regions: `children={…}` *is* the child list, since Babel
+promotes it to a real child before `transformElement` runs. A template-root
+`<noscript children={c()}/>` is promoted **and lowered** by the fork
+(`_$insert(_el$, c)`) while Babel emits nothing — uncertifiable — whereas the
+*nested* spelling discards the capture and both compilers agree, which is why
+the divergence predicate requires a censused site the producer did not discard.
+It also requires the attribute to have been **promoted at all**: with a spread
+on the element neither compiler promotes it, both keep it in the merged props,
+and the predicate's spread gate is what says so — see "Divergent lowering"
+below, where the condition and the reason the census cannot express it are set
+out.
 
 ## Divergent lowering
 
@@ -175,6 +233,39 @@ is two lists" below. Concretely:
   template root and wherever attributes force the element off the
   static-template fast path; Babel never lowers `<noscript>` children in any
   position (divergence 3).
+- `<noscript children={count()}/>` at template root — the same divergence
+  reached through the `children`-attribute promotion, and named as such in the
+  fork's divergence 3 (*"Still divergent"*). The attribute **is** the child
+  list: Babel promotes it to a real child before `transformElement` runs and
+  then never visits it, while `lower_dom_element` promotes and lowers it. So
+  the predicate's region set is an element's source children *plus* its
+  **promoted** `children` attribute value — expression containers only, and
+  `children` only, because every other attribute, event handler and `ref` on
+  these elements lowers in both compilers and in every position.
+
+  "Promoted" is a condition, not a spelling. Both compilers gate the capture
+  the same way — the fork on
+  `!is_void_element && !has_spread && element.children.is_empty()` plus a
+  non-literal, non-confidently-foldable value; Babel through the matching
+  preprocessing — and where promotion does not happen the value is an ordinary
+  `children` prop or a deleted value in *both*, so nothing diverges.
+  `promoted_children_attribute_value` writes exactly one of those conditions
+  down, **no spread**, because it is the only one the census cannot express:
+  the producer censuses a spread's `children` member as a *child* claiming
+  `ReactiveRerun` (`semantic_trace.rs` gates the child kind on
+  `has_spread || element.children.is_empty()`) since `spread()` really does
+  assign it through a `mergeProps` getter, so it is indistinguishable from a
+  promotion to the positive-lowering test below — while Babel's
+  `processSpreads` consumes it into the merged props before its capture runs,
+  and the fork lists "a spread keeps `children` in the merged props" among the
+  shapes the two already agree on. Every other condition makes the producer
+  census or resolve the value as something other than a lowered child (a void
+  element's or a shadowed `children` attribute is `native-attribute`/`elided`,
+  a foldable one is resolved `elided`, a dedup loser is an elided value span),
+  which the positive-lowering test already refuses. The *parity-target-only*
+  void tags stay divergent here and correctly so: the 1.x fork does not treat
+  `<keygen>`/`<menuitem>` as void, so it promotes and lowers where 1.x's Babel
+  skips `transformChildren` entirely.
 
 `divergent_lowered_child` in
 `rust/crates/solid-reactive-ir/src/execution_role.rs` implements both, beside
@@ -233,10 +324,22 @@ Two properties are load-bearing:
   a wider censused region can shadow a narrower hole; and after this pin the
   divergent child is not a hole at all, but an entry claiming `ReactiveRerun`.
 - **The one compiler fact consulted is also positive**: a `jsx-expression`
-  operation inside the void element's child region. That is what separates the
-  divergence (the producer lowered the child) from an ordinary census gap (it
-  discarded it, agreeing with Babel), and the two must not borrow each other's
-  wording — one says a fact is missing, the other says two facts conflict.
+  operation inside the region, *not* inside a discarded region. That is what
+  separates the divergence (the producer lowered the child) from an ordinary
+  census gap (it never censused or retracted the site, agreeing with Babel) and
+  from a discarded region (it censused the site and deleted it, also agreeing
+  with Babel); the three must not borrow each other's wording — one says a fact
+  is missing, one says the code is gone, the third says two facts conflict. The
+  discarded exclusion is what makes the `children`-attribute arm position-aware
+  without naming positions: the nested `<noscript children={c()}/>` capture is
+  discarded rather than promoted, so it is not divergent, while the
+  template-root one is lowered and is.
+
+  It cannot carry the whole `children`-attribute question, though, and that is
+  why the spread gate is in the predicate: a spread's `children` member is
+  censused as a lowered child *and* decided `ReactiveRerun`, so the positive
+  test passes and the discarded exclusion does not apply. Position-awareness
+  comes from the census; promotion-awareness has to be asked of the AST.
 
 ### The void tag set is two lists, and one of them is dialect vocabulary
 
@@ -316,11 +419,38 @@ and `RetractedInertNoscriptChild` in
 `fixtures/reactive-ir/jsx-census-gap-solid-2` is the mechanical guard: keyed on
 the tag, that arm would take the divergence wording and fail the gate.
 
-The remaining divergence the fork declares — the nested `children` attribute on a
-void element with no source children — is a deliberate hard reconciliation
-failure in the producer, so the file is rejected rather than analyzed. It and the
-1.x producer's missing retractions are recorded in `docs/precision-backlog.md`
-(2026-08-24) with their status.
+**Divergence 4 (nested `children` attribute promotion) is resolved as of the
+`fea62adb5d0332a4a3cb5088e97283673c40b540` pin** (upstream PR #3, "nested
+children attribute promotion"). At the prior pin (`c6008f01…`), a `children`
+attribute on a nested native element with no source children —
+`<div><span children={x()}/></div>` — was a deliberate hard reconciliation
+failure in the producer: the census named a `jsx-child` site nested lowering
+never resolved, so the file was rejected outright rather than analyzed, and
+there was no fact for a checker-side mitigation to distrust. At the new pin
+`lower_dynamic_native_child` performs the same promotion `lower_dom_element`
+already performed at a template root, so the shape now lowers to an ordinary
+`jsx-child` / `reactive-rerun` site and this checker's existing tracked-JSX
+and ownership machinery certifies it exactly as it would any other nested
+child — no new rule, no new mitigation, because the divergence this checker
+had nothing to say about no longer exists. Pinned in
+`fixtures/reactive-ir/jsx-nested-children-attribute-solid-2`, which also pins
+that a confidently-foldable `children` value is still never promoted and that
+the with-source-children shape (the attribute is captured-then-discarded,
+reported `native-attribute`/`elided`) is unaffected by the move.
+
+The fix also corrects a latent dedup bug in `children_attribute_container`
+present in the template-root path too, not only the newly-lowered nested one:
+Babel's own attribute dedup selects the last attribute *named* `children`
+before judging whether its value is literal, so a trailing literal duplicate
+(`<span children={x()} children={"s"}/>`) blocks promotion outright instead of
+falling through to an earlier non-literal `children` attribute the dedup
+already discarded.
+
+Divergences 5-9 — all pre-existing, none of them nesting-specific, surfaced
+only while resolving divergence 4 — remain open and reach no rule in this
+checker today. The 1.x producer's missing retractions on divergence 2 and 3's
+fast-path shapes are a separate, still-open gap. Both are recorded in
+`docs/precision-backlog.md` with their status.
 
 `Value(CallerContext)` is the dynamic component property: the expression is
 handed to the child as a getter and re-evaluated in the child's tracking
@@ -331,10 +461,19 @@ itself is built once.
 The hardened DOM contract covers these compiler decisions:
 
 - Dynamic native JSX children and attributes are tracked regions.
-- Expressions the compiler renders exactly once are explicit untracked
+- Expressions the compiler evaluates exactly once are explicit untracked
   regions: template-inlined and unwrapped-insert children (including
   `staticMarker` holes), one-shot `setAttr` attribute values, and by-value
-  component properties.
+  component properties. "Once" is the claim — the code runs, at render, outside
+  any tracking scope — so a reactive read there is a proven stale read.
+- Expressions the compiler **deletes** are discarded regions, and they are the
+  opposite claim, not a weaker one: a `Value(Elided)` value evaluates *zero*
+  times. Every one of both producers' `Elided` sites is either a confidently
+  foldable constant baked into the template or a value discarded unlowered (a
+  `children` attribute shadowed by real children, a promoted capture the slot's
+  winner drops, a spread's skipped `$key`/`children`, 1.x's shadowed component
+  `children` prop) — none of them evaluates at runtime, in this producer or in
+  the compiler Solid ships. See "Discarded regions" below.
 - `on*` JSX values are deferred `event-handler` callbacks rather than tracked
   reads at element creation.
 - Dynamic component properties and component children are deferred callbacks;
@@ -345,7 +484,7 @@ The hardened DOM contract covers these compiler decisions:
 - Fact arrays are sorted deterministically by original UTF-8 byte spans.
 
 Completeness invariant: every `jsx-expression` operation must be covered by a
-tracked region, an untracked region, a callback role, or a
+tracked region, an untracked region, a discarded region, a callback role, or a
 `component-property`, `component-spread`, or `component-child` operation.
 Because the trace is total, every site lands in
 exactly one category and the invariant holds by construction. Completeness is

@@ -103,6 +103,7 @@ fn inert_execution_map(source_hash: SourceHash) -> ExecutionMap {
         source_hash,
         tracked_regions: Vec::new(),
         untracked_regions: Vec::new(),
+        discarded_regions: Vec::new(),
         ownership_regions: Vec::new(),
         callback_roles: Vec::new(),
         jsx_operations: Vec::new(),
@@ -1766,6 +1767,7 @@ mod tests {
                 source_hash: request.source_hash.clone(),
                 tracked_regions: vec![],
                 untracked_regions: vec![],
+                discarded_regions: vec![],
                 ownership_regions: vec![],
                 callback_roles: vec![],
                 jsx_operations: vec![],
@@ -1822,6 +1824,7 @@ mod tests {
                 source_hash: SourceHash::of(source),
                 tracked_regions: vec![],
                 untracked_regions: vec![],
+                discarded_regions: vec![],
                 ownership_regions: vec![],
                 callback_roles: vec![],
                 jsx_operations: vec![],
@@ -2434,8 +2437,13 @@ mod tests {
         assert!(json_file.ast.members.is_empty());
         assert!(json_file.compiler.tracked_regions.is_empty());
         assert!(json_file.compiler.untracked_regions.is_empty());
+        // Every execution-fact array, enumerated: the claim is that a JSON
+        // module has *no* execution facts, so a new array left out of this list
+        // would let the next one arrive populated with this test still green.
+        assert!(json_file.compiler.discarded_regions.is_empty());
         assert!(json_file.compiler.ownership_regions.is_empty());
         assert!(json_file.compiler.callback_roles.is_empty());
+        assert!(json_file.compiler.jsx_operations.is_empty());
 
         // Only `index.mjs` needed the dialect's compiler; the JSON module's
         // inertness is a proof from its module kind, not a question the JS/JSX

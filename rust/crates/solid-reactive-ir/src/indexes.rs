@@ -2271,6 +2271,7 @@ mod tests {
                     source_hash: SourceHash::of(source),
                     tracked_regions: Vec::new(),
                     untracked_regions: Vec::new(),
+                    discarded_regions: Vec::new(),
                     ownership_regions: Vec::new(),
                     callback_roles: Vec::new(),
                     jsx_operations: Vec::new(),

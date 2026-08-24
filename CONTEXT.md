@@ -41,6 +41,10 @@ _Avoid_: Rule config, checker settings, options file
 Whether a finding is a **violation** (the analyzer proved the code misbehaves at runtime) or **uncertifiable** (a proof obligation the analyzer could not resolve). Distinct from severity (error/warning).
 _Avoid_: Finding status, finding type
 
+**Discarded region**:
+A source region the Solid compiler censused and then **deleted** — the `Value(Elided)` decision, projected as `ExecutionMap::discarded_regions` and classified `ExecutionRole::DiscardedRendering`. Distinct from an *untracked region*, which is code that executes once at render: a discarded region executes zero times, so it supports no finding and no certification. Silence over one means "both compilers deleted this", never "this was proven safe".
+_Avoid_: Elided region, dead region, untracked region (that is the once-executing one), unreachable code
+
 **Failure class**:
 A user-facing grouping of the runtime misbehavior that findings prevent: silent staleness (reads that register no dependency), feedback loops (writes and actions in owned scopes), escaped async (pending reads outside tracked or Loading-bounded regions), and lifecycle leaks (effects, cleanups, and boundaries without a live owner).
 _Avoid_: Bug category, rule group (that is the SCxxxx numbering)

@@ -790,12 +790,15 @@ impl Dialect for Solid2 {
     /// Empty, and that is a checked claim rather than an absence.
     ///
     /// 2.0's parity target is `packages/babel-plugin-jsx` in the pinned
-    /// `dom-expressions` fork (rev `c6008f01`), whose `src/dom/element.ts` and
+    /// `dom-expressions` fork (rev `fea62adb`), whose `src/dom/element.ts` and
     /// `src/ssr/element.ts` import `VoidElements` from
     /// `packages/runtime/src/constants.js`. That set is exactly the 14 tags the
     /// Rust producer's `void_elements`
     /// (`packages/compiler/src/shared/constants.rs`, same rev) carries, so the
-    /// two agree tag for tag and no tag is void in only one of them.
+    /// two agree tag for tag and no tag is void in only one of them. All three
+    /// files are byte-identical at `c6008f01`, the rev this claim was first
+    /// audited against — checked with `shasum`, not assumed — so the pin move
+    /// re-points the citation without re-opening the question.
     ///
     /// `keygen` and `menuitem` are the tags this could plausibly have held, and
     /// their absence is deliberate upstream: the fork's

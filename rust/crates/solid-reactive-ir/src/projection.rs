@@ -568,6 +568,25 @@ pub fn project_findings(
                 .async_reads
                 .iter()
                 .filter(|read| {
+                    // Deletion first, ahead of the leaf-owner short-circuit
+                    // below. Every clause after this one is a claim about a
+                    // read that happens -- "a pending read here throws at
+                    // runtime", "this read needs a Loading boundary" -- and a
+                    // read the compiler deleted happens in neither compiler's
+                    // output. Ordered rather than merged into the clauses
+                    // because `read.leaf_owner.is_some()` short-circuits ahead
+                    // of every role test: a leaf-owned async read inside a
+                    // deleted value would have been reported on the strength of
+                    // the leaf owner alone, with reachability unproven.
+                    //
+                    // Defensive as much as reachable: with the leaf-owner pass
+                    // itself now gated on discarded regions (`cleanup.rs`), the
+                    // `leaf_owner.is_some()` route into this is not known to be
+                    // constructible from a fixture. The gate stays because the
+                    // ordering, not the reachability, is what was wrong.
+                    if read.execution == crate::ExecutionRole::DiscardedRendering {
+                        return false;
+                    }
                     // Pending-read rules (SC5001/SC5002) need proven async
                     // provenance; they stay reported for loadingValue-declared
                     // sources because the declared window ends at the first
@@ -929,6 +948,53 @@ mod tests {
                 .map(|finding| finding.message.as_str())
                 .collect::<Vec<_>>(),
             ["action", "async"]
+        );
+    }
+
+    /// A deleted async read is not an async read. The leaf-owner clause
+    /// short-circuits ahead of every role test, so before the discarded-role
+    /// exclusion was ordered in front of it a leaf-owned read inside a value
+    /// the compiler removed would have been reported as a pending read that
+    /// throws at runtime -- about code neither compiler emits.
+    #[test]
+    fn a_discarded_async_read_is_excluded_ahead_of_the_leaf_owner_short_circuit() {
+        let program = Program {
+            async_reads: vec![AsyncRead {
+                accessor: Arc::from("user()"),
+                location: location(3),
+                declaration: location(4),
+                execution: ExecutionRole::DiscardedRendering,
+                leaf_owner: Some(Arc::from("onSettled")),
+                under_loading: false,
+                async_provenance: true,
+                declared_loading: false,
+                options_opaque: false,
+                ssr_client_hole: false,
+                server_rendering_unresolved: false,
+            }],
+            ..Program::default()
+        };
+        let (findings, _) =
+            project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_2));
+        assert!(findings.is_empty());
+
+        // The control: the same row with a live role is still reported, so the
+        // exclusion cannot pass by disabling the clause.
+        let program = Program {
+            async_reads: vec![AsyncRead {
+                execution: ExecutionRole::UntrackedRendering,
+                ..program.async_reads.into_iter().next().unwrap()
+            }],
+            ..Program::default()
+        };
+        let (findings, _) =
+            project_findings(&program, &RecordingCatalog(CatalogCapabilities::SOLID_2));
+        assert_eq!(
+            findings
+                .iter()
+                .map(|finding| finding.message.as_str())
+                .collect::<Vec<_>>(),
+            ["async"]
         );
     }
 

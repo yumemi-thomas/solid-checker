@@ -89,6 +89,23 @@ pub enum ExecutionRole {
     EventCallback,
     DirectiveApply,
     UntrackedRendering,
+    /// The compiler deleted this code: a `Value(Elided)` site, projected as a
+    /// [`solid_facts::compiler::ExecutionMap::discarded_regions`] entry.
+    ///
+    /// Not a weaker [`Self::UntrackedRendering`] — the opposite of it. An
+    /// untracked-rendering read executes once and then goes stale; a discarded
+    /// read does not execute, so "sees the current value once and never
+    /// updates" is false in all three clauses, and so is every claim built on
+    /// it (a write that never runs is not a render-phase write, an action that
+    /// never runs is not invoked in the wrong phase).
+    ///
+    /// It certifies nothing either. Silence here means "both compilers deleted
+    /// this", never "this was proven safe": a discarded region satisfies no
+    /// reactive reader, establishes no owner, and settles no value. Where the
+    /// same span is *also* touched by a named producer/parity-target divergence,
+    /// the divergence wins — that span's deletion is exactly what the two
+    /// compilers disagree about (see `divergent_lowered_child`).
+    DiscardedRendering,
 }
 
 /// Explicit runtime evidence supplied by the host integration. An empty
@@ -337,6 +354,13 @@ impl RuntimeEnvironment {
 impl ExecutionRole {
     /// Whether a reactive read in this role subscribes to nothing — the roles
     /// the strict-read rule reports in every dialect.
+    ///
+    /// [`Self::DiscardedRendering`] is deliberately absent. The rule's claim is
+    /// that the read *happens* and then never updates; in a discarded region it
+    /// does not happen, in either compiler's output, so the honest answer is
+    /// silence rather than a violation or an uncertifiable obligation. Nothing
+    /// is missing here — the compiler reported on the region and said the code
+    /// is gone.
     #[must_use]
     pub const fn reports_untracked_read(self) -> bool {
         matches!(
@@ -350,6 +374,10 @@ impl ExecutionRole {
 
     /// Whether a reactive write (or an action invocation) is allowed in this
     /// role: the imperative scopes that run outside the tracking phase.
+    ///
+    /// [`Self::DiscardedRendering`] is absent for the same reason as above: a
+    /// write the compiler deleted runs in no phase at all, so it is neither a
+    /// tracked-phase write nor a render-phase one.
     #[must_use]
     pub const fn reports_disallowed_write(self) -> bool {
         matches!(self, Self::TrackedJsx | Self::UntrackedRendering)
@@ -2356,6 +2384,12 @@ fn contract_callback_execution(execution: ExecutionRole) -> Option<&'static str>
         // promise. A consumer must not execute user code eagerly because the
         // producer lacked an execution proof.
         ExecutionRole::Unknown => None,
+        // A callback the compiler deleted has no execution timing to publish.
+        // "inline" would be a promise that a consumer may run the callback
+        // eagerly, and this role is evidence that nothing runs it at all — a
+        // positive claim dead code cannot support. The contract carries no
+        // execution for it, exactly as for unproven timing.
+        ExecutionRole::DiscardedRendering => None,
         ExecutionRole::ModuleInitialization => Some("inline"),
         ExecutionRole::TrackedJsx => Some("tracked"),
         ExecutionRole::DeferredCallback | ExecutionRole::UntrackedCallback => Some("deferred"),
