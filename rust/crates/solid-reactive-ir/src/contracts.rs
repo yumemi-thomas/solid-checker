@@ -1847,6 +1847,7 @@ mod export_kind_proof_tests {
             source_hash: ast.source.hash.clone(),
             tracked_regions: Vec::new(),
             untracked_regions: Vec::new(),
+            discarded_regions: Vec::new(),
             ownership_regions: Vec::new(),
             callback_roles: Vec::new(),
             jsx_operations: Vec::new(),

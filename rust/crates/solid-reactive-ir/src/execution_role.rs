@@ -56,8 +56,9 @@ pub(crate) fn missing_jsx_census(
 ) -> bool {
     // Any other role was decided by a fact — a dialect-proven primitive
     // callback, an event or ref census entry, module initialization (an
-    // AST-proven one-shot context that needs no census at all) — so a census
-    // hole cannot be what put the read there.
+    // AST-proven one-shot context that needs no census at all), a discarded
+    // region (the compiler reported on the JSX and said the code is deleted) —
+    // so a census hole cannot be what put the read there.
     if execution != ExecutionRole::UntrackedRendering {
         return false;
     }
@@ -102,6 +103,18 @@ fn narrowest_jsx_region_containing(file: &solid_facts::FileFacts, span: Span) ->
         .min_by_key(|region| region.end - region.start)
 }
 
+/// Whether the compiler deleted the code at `span`.
+///
+/// The one execution fact that is not a claim about *how* code runs but about
+/// whether it is emitted at all, which is why its consumers consult it before
+/// every other classification rather than alongside them.
+pub(crate) fn discarded_region_contains(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.compiler
+        .discarded_regions
+        .iter()
+        .any(|region| region.span.contains(span))
+}
+
 /// Whether the compiler's census says anything at all about `region`.
 ///
 /// Overlap, not containment in either direction: a census entry inside the
@@ -122,6 +135,13 @@ fn census_touches(file: &solid_facts::FileFacts, region: Span) -> bool {
             .untracked_regions
             .iter()
             .any(|untracked| overlaps(untracked.span))
+        // A discarded region is the compiler having reported on this JSX — it
+        // said the code is deleted. That is a fact, so the region is not a
+        // hole, and `missing_jsx_census` must not turn it into an obligation.
+        || facts
+            .discarded_regions
+            .iter()
+            .any(|discarded| overlaps(discarded.span))
         || facts.callback_roles.iter().any(|role| overlaps(role.span))
 }
 
@@ -217,7 +237,23 @@ pub(crate) fn divergent_lowered_child(
         .jsx_operations
         .iter()
         .any(|operation| {
-            operation.kind.as_str() == "jsx-expression" && child.contains(operation.span)
+            operation.kind.as_str() == "jsx-expression"
+                && child.contains(operation.span)
+                // …and the producer kept it. A site inside a discarded region
+                // was censused and then deleted, which is the producer agreeing
+                // with Babel rather than diverging from it: the nested
+                // `<noscript children={c()}/>` capture is dropped exactly
+                // because promoting it would emit an insert Babel does not
+                // (the fork's `children.rs`, "the capture is discarded
+                // instead"). Before discarded regions existed as a category
+                // this was implicit — a discarded child list was *retracted*,
+                // leaving no site at all — and it stops being implicit as soon
+                // as deletion is expressed as a decision instead.
+                && !file
+                    .compiler
+                    .discarded_regions
+                    .iter()
+                    .any(|discarded| discarded.span.contains(operation.span))
         })
         .then_some(divergence)
 }
@@ -231,10 +267,29 @@ pub(crate) fn divergent_lowered_child(
 /// reader can act on. Either answer would be uncertifiable, but only one of
 /// them is the accurate reason.
 ///
-/// An element's *attributes* are not its children: both compilers lower an
-/// attribute, an event handler and a `ref` on a void element and on a
-/// `<noscript>` in every position and keep their sites, so only the child list
-/// diverges.
+/// An element's *attributes* are not its children — with exactly one
+/// exception, and it is not an exception to the rule so much as the rule
+/// applied to a different spelling. `children={…}` **is** the child list:
+/// Babel's preprocessing promotes the attribute to a real child before
+/// `transformElement` ever sees the element, and this fork's `captured_child`
+/// mirrors that. So a read written there is a read in the child position, and
+/// it diverges on the same elements for the same reason — the fork's
+/// `lower_dom_element` emits `_$insert(_el$, c)` for a template-root
+/// `<noscript children={c()}/>` while Babel, having promoted the value into a
+/// child list it then never visits, emits nothing (the fork's
+/// docs/execution-contract.md, divergence 3: *"The root-level
+/// `children`-attribute-promoted variant is the same divergence by another
+/// route"*). Every *other* attribute, event handler and `ref` on a void element
+/// and on a `<noscript>` lowers in both compilers and in every position, and
+/// stays outside this predicate.
+///
+/// The attribute only counts where it is actually *promoted*, which is what
+/// [`promoted_children_attribute_value`] decides — the same conditions the
+/// fork's own capture is gated on. The positive-lowering test in
+/// [`divergent_lowered_child`] then keeps the arm honest across positions: the
+/// *nested* `<noscript children={c()}/>` discards the capture instead of
+/// promoting it, both compilers emit nothing, and the discarded region there
+/// withholds the divergence claim.
 ///
 /// Void membership is the shared [`VOID_ELEMENTS`] *or* this dialect's
 /// parity-target-only extras. The two are separate constants and joined only
@@ -263,10 +318,77 @@ fn divergent_candidate_child(
                 .children
                 .iter()
                 .copied()
+                .chain(promoted_children_attribute_value(file, element))
                 .find(|child| child.contains(span))
                 .map(|child| (divergence, child))
         })
         .min_by_key(|(_, child)| child.end - child.start)
+}
+
+/// The value span of a `children={…}` attribute *the compilers promote to a
+/// real child* — the child list written as an attribute.
+///
+/// Promotion is a decision with conditions, and only a promoted value is in
+/// the child position at all. The fork gates its capture on
+/// `!is_void_element && !has_spread && children.is_empty()`, then filters to a
+/// non-literal, non-confidently-foldable expression container
+/// (`children_attribute_container` plus `evaluate_confident`), and Babel's
+/// `transformAttributes` reaches its `key === "children"` capture under the
+/// matching conditions. Where promotion does not happen the value is an
+/// ordinary `children` property write or a deleted value, and *both* compilers
+/// treat it the same way, so there is nothing for a divergence to be about.
+///
+/// **The spread gate is the one that has to be written here**, because it is
+/// the one the census cannot express. With a spread, Babel's `processSpreads`
+/// consumes the attribute into the merged props before the promotion capture
+/// runs — the fork's contract lists "a spread keeps `children` in the merged
+/// props" among the shapes the two compilers already agree on — yet the
+/// producer still censuses the member as `ExecutionSiteKind::JsxChild`
+/// (`semantic_trace.rs`: `name == "children" && … && (has_spread || …)`) and
+/// decides it `ReactiveRerun`, because at runtime `spread()` really does
+/// assign it as the element's children through a `mergeProps` getter. So the
+/// census entry is a *child* entry claiming a rerun, which is exactly what the
+/// positive-lowering test in [`divergent_lowered_child`] looks for, and that
+/// test cannot tell a promotion from a spread member. Without this gate
+/// `<noscript {...p} children={c()}/>` and its nested spelling both claimed
+/// divergence over a value that executes deferred in both compilers.
+///
+/// The fork's other promotion conditions need no gate here, and that is a
+/// property of the census rather than an oversight: each of them makes the
+/// producer census or resolve the value as something *other* than a lowered
+/// child, so the positive-lowering test already refuses it. A void element's
+/// `children` attribute is censused `NativeAttribute` and resolved `Elided`
+/// (`semantic_trace.rs` gates the child kind on `!is_void_element` for the
+/// same reason lowering does); a shadowed one — real children present — is
+/// `NativeAttribute`/`Elided` too; a confidently foldable one is resolved
+/// `Elided` by the attribute planner; and a duplicate the name-first dedup
+/// discards is an elided value span. Only the *parity-target-only* void tags
+/// stay divergent through this arm, and correctly so: the fork does not treat
+/// `<keygen>`/`<menuitem>` as void, so it promotes and lowers, while 1.x's
+/// Babel skips `transformChildren` for a void tag entirely.
+///
+/// Expression containers only. A string, boolean or element/fragment spelling
+/// holds no call and no accessor read, so no rule asks about it, and the
+/// producers' constant fold keeps them out of the reactive census anyway.
+/// Resolved by exact local name against this file's own AST: `children:foo` is
+/// a namespaced attribute and not this one, which is why `local_name` is
+/// compared rather than the whole name span.
+fn promoted_children_attribute_value(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+) -> Option<Span> {
+    if !element.spreads.is_empty() {
+        return None;
+    }
+    element
+        .attributes
+        .iter()
+        .filter(|attribute| {
+            attribute.namespace.is_none()
+                && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+        })
+        .filter(|attribute| file.source_text(attribute.local_name) == Some("children"))
+        .find_map(|attribute| attribute.value)
 }
 
 /// The effect primitives: the ones 2.0 spells `(compute, apply)`.
@@ -354,6 +476,24 @@ fn execution_role_where(
     allowed: &[Span],
     callback_applies: impl Fn(&solid_facts::compiler::CallbackRole) -> bool,
 ) -> ExecutionRole {
+    // Deletion dominates, rather than competing on region width like the rest.
+    // A discarded region is code the emitter removed, and removed code cannot
+    // contain code that runs: any narrower region inside it would describe
+    // lowering that the deletion took with it. Every one of the producers'
+    // `Elided` spans is a single attribute or child *value* expression, never a
+    // wider enclosing construct, so a discarded region cannot swallow a live
+    // sibling — checked against both pins' emission sites, not assumed.
+    //
+    // Ahead of `allowed` too: a deferred-callback span inside a deleted value
+    // would otherwise publish a `deferred` timing for a callback nothing ever
+    // invokes, which is a positive claim rather than the absence of one.
+    if facts
+        .discarded_regions
+        .iter()
+        .any(|region| region.span.contains(span))
+    {
+        return ExecutionRole::DiscardedRendering;
+    }
     if allowed.iter().any(|region| region.contains(span)) {
         return ExecutionRole::DeferredCallback;
     }
@@ -588,6 +728,18 @@ fn semantic_execution_role_within(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // Before every semantic path, because the semantic paths answer a question
+    // that no longer applies. They classify *how* code executes — the callback
+    // that will invoke it, the primitive whose argument it is, the owner it
+    // answers to — and a discarded region is the compiler saying the code is
+    // not there to execute. Left below them, a read inside a deleted value
+    // would take its role from a dialect-proven `untrack()` or effect-apply
+    // position and be reported as a proven untracked read, or from a deferred
+    // position and be silently *certified*: a positive claim about dead code
+    // either way.
+    if discarded_region_contains(file, span) {
+        return ExecutionRole::DiscardedRendering;
+    }
     if let Some(role) = context_provider_value_role(file, span, lookup) {
         return role;
     }
@@ -1472,6 +1624,7 @@ mod tests {
             source_hash: SourceHash::of("value"),
             tracked_regions: vec![],
             untracked_regions: vec![],
+            discarded_regions: vec![],
             ownership_regions: vec![],
             callback_roles: vec![],
             jsx_operations: vec![],
@@ -1640,6 +1793,227 @@ mod tests {
             read,
             ExecutionRole::UntrackedRendering
         ));
+    }
+
+    /// Deletion dominates. A discarded region is not a narrower or weaker
+    /// untracked region: it says the code is gone, so a narrower live region
+    /// inside it describes lowering the deletion took with it, and no
+    /// width-based competition can be allowed to resurrect it.
+    #[test]
+    fn a_discarded_region_dominates_every_live_region_inside_it() {
+        let mut facts = execution_map();
+        facts.discarded_regions.push(ExecutionRegion {
+            span: Span::new(0, 100),
+            reason: RegionReason::JsxAttribute,
+        });
+        facts.tracked_regions.push(ExecutionRegion {
+            span: Span::new(40, 60),
+            reason: RegionReason::JsxChild,
+        });
+        facts.callback_roles.push(CallbackRole {
+            span: Span::new(45, 55),
+            role: CallbackRoleKind::EventHandler,
+        });
+
+        assert_eq!(
+            execution_role(&facts, Span::new(50, 51), &[]),
+            ExecutionRole::DiscardedRendering
+        );
+        // Outside it, nothing changed.
+        assert_eq!(
+            execution_role(&facts, Span::new(200, 201), &[]),
+            ExecutionRole::Unknown
+        );
+    }
+
+    /// A discarded region is a *fact*, so it is not a census hole. The compiler
+    /// reported on this JSX and said the value is deleted; turning that into an
+    /// uncertifiable obligation would claim something is missing when nothing
+    /// is.
+    #[test]
+    fn a_discarded_region_closes_the_census_gap_rather_than_being_one() {
+        let source = "const view = <span children={ignored()}>{visible()}</span>;\n";
+        let read = span_of(source, "ignored()");
+        let mut census = execution_map();
+        census.source_hash = SourceHash::of(source);
+        census
+            .jsx_operations
+            .push(solid_facts::compiler::JsxOperation {
+                span: span_of(source, "ignored()"),
+                kind: "dynamic-attribute".into(),
+            });
+        census.discarded_regions.push(ExecutionRegion {
+            span: span_of(source, "ignored()"),
+            reason: RegionReason::JsxAttribute,
+        });
+
+        assert!(!missing_jsx_census(
+            &file(source, census),
+            read,
+            ExecutionRole::UntrackedRendering
+        ));
+    }
+
+    /// `children={…}` is the child list written as an attribute, and on the two
+    /// divergent elements it diverges for the same reason their children do:
+    /// the fork promotes it to a real child and lowers it, while Babel promotes
+    /// it into a child list it then never visits.
+    ///
+    /// Position decides, and the positive-lowering test is what reads the
+    /// position: the template-root shape emits `_$insert(_el$, c)` (a lowered
+    /// site) and diverges, while the nested shape discards the capture — both
+    /// compilers emit nothing there — and must not.
+    #[test]
+    fn a_promoted_children_attribute_diverges_only_where_the_producer_lowered_it() {
+        let source = "const view = <noscript children={c()} />;\n";
+        let read = span_of(source, "c()");
+        let mut census = execution_map();
+        census.source_hash = SourceHash::of(source);
+        census
+            .jsx_operations
+            .push(solid_facts::compiler::JsxOperation {
+                span: span_of(source, "c()"),
+                // Promoted: the producer censuses it as a child, not as an
+                // attribute.
+                kind: "jsx-expression".into(),
+            });
+
+        let mut lowered = census.clone();
+        lowered.tracked_regions.push(ExecutionRegion {
+            span: span_of(source, "c()"),
+            reason: RegionReason::JsxChild,
+        });
+        assert_eq!(
+            divergent_lowered_child(v2(), &file(source, lowered), read),
+            Some(DivergentLowering::NoscriptChild)
+        );
+
+        let mut discarded = census;
+        discarded.discarded_regions.push(ExecutionRegion {
+            span: span_of(source, "c()"),
+            reason: RegionReason::JsxChild,
+        });
+        let discarded = file(source, discarded);
+        assert!(divergent_lowered_child(v2(), &discarded, read).is_none());
+        assert!(!missing_jsx_census(
+            &discarded,
+            read,
+            ExecutionRole::UntrackedRendering
+        ));
+    }
+
+    /// A spread means the attribute was never promoted, so nothing about it
+    /// diverges — in either position.
+    ///
+    /// This is the one promotion condition the census cannot express, and the
+    /// reason the gate is written in the predicate rather than left to the
+    /// positive-lowering test. With a spread the producer censuses the
+    /// `children` member as a `jsx-expression` child claiming `ReactiveRerun`,
+    /// because `spread()` really does assign it as the element's children
+    /// through a `mergeProps` getter — a lowered child site by every signal the
+    /// test can read. But Babel's `processSpreads` consumes the attribute into
+    /// the merged props before its promotion capture runs, so both compilers
+    /// keep it as a prop and the two *agree*: the value executes, deferred, in
+    /// either output. The census is truthful, and the divergence claim over it
+    /// was not.
+    #[test]
+    fn a_spread_carrying_element_promotes_no_children_attribute_in_either_position() {
+        for source in [
+            "const view = <noscript {...p} children={c()} />;\n",
+            "const view = <div><noscript {...p} children={c()} /></div>;\n",
+        ] {
+            let read = span_of(source, "c()");
+            let mut census = execution_map();
+            census.source_hash = SourceHash::of(source);
+            census
+                .jsx_operations
+                .push(solid_facts::compiler::JsxOperation {
+                    span: span_of(source, "c()"),
+                    // The producer's own census kind for a spread's `children`
+                    // member: a child, not an attribute.
+                    kind: "jsx-expression".into(),
+                });
+            census.tracked_regions.push(ExecutionRegion {
+                span: span_of(source, "c()"),
+                reason: RegionReason::JsxChild,
+            });
+            let file = file(source, census);
+            assert!(
+                divergent_lowered_child(v2(), &file, read).is_none(),
+                "{source}"
+            );
+            // And it stays certified rather than becoming a census hole: the
+            // census said `ReactiveRerun`, which is a fact about a shape both
+            // compilers agree on.
+            assert!(
+                !missing_jsx_census(&file, read, ExecutionRole::UntrackedRendering),
+                "{source}"
+            );
+        }
+    }
+
+    /// The no-spread control for the pair above, so the test that proves the
+    /// gate cannot pass by disabling the arm: the same tag, the same census, no
+    /// spread — still divergent at the template root, still silent nested.
+    #[test]
+    fn without_a_spread_the_same_two_positions_keep_their_verdicts() {
+        let root = "const view = <noscript children={c()} />;\n";
+        let mut census = execution_map();
+        census.source_hash = SourceHash::of(root);
+        census
+            .jsx_operations
+            .push(solid_facts::compiler::JsxOperation {
+                span: span_of(root, "c()"),
+                kind: "jsx-expression".into(),
+            });
+        census.tracked_regions.push(ExecutionRegion {
+            span: span_of(root, "c()"),
+            reason: RegionReason::JsxChild,
+        });
+        assert_eq!(
+            divergent_lowered_child(v2(), &file(root, census), span_of(root, "c()")),
+            Some(DivergentLowering::NoscriptChild)
+        );
+
+        let nested = "const view = <div><noscript children={c()} /></div>;\n";
+        let mut census = execution_map();
+        census.source_hash = SourceHash::of(nested);
+        census
+            .jsx_operations
+            .push(solid_facts::compiler::JsxOperation {
+                span: span_of(nested, "c()"),
+                kind: "jsx-expression".into(),
+            });
+        census.discarded_regions.push(ExecutionRegion {
+            span: span_of(nested, "c()"),
+            reason: RegionReason::JsxChild,
+        });
+        assert!(
+            divergent_lowered_child(v2(), &file(nested, census), span_of(nested, "c()")).is_none()
+        );
+    }
+
+    /// Only `children`. Every other attribute on a `<noscript>` or a void
+    /// element lowers in both compilers and in every position, so widening the
+    /// arm to attributes in general would withhold certification from shapes
+    /// the two compilers agree about.
+    #[test]
+    fn only_the_children_attribute_reaches_the_divergent_attribute_arm() {
+        let source = "const view = <noscript title={label()} />;\n";
+        let read = span_of(source, "label()");
+        let mut census = execution_map();
+        census.source_hash = SourceHash::of(source);
+        census
+            .jsx_operations
+            .push(solid_facts::compiler::JsxOperation {
+                span: span_of(source, "label()"),
+                kind: "dynamic-attribute".into(),
+            });
+        census.tracked_regions.push(ExecutionRegion {
+            span: span_of(source, "label()"),
+            reason: RegionReason::JsxAttribute,
+        });
+        assert!(divergent_lowered_child(v2(), &file(source, census), read).is_none());
     }
 
     /// A void element's attribute is not its child. Both compilers lower an

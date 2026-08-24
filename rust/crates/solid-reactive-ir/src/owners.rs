@@ -1611,6 +1611,15 @@ pub(crate) fn push_owner_requirement(
     span: Span,
     status: OwnerRequirementStatus,
 ) {
+    // The compiler deleted this operation. There is no owner question to
+    // answer and no obligation to record: "this cleanup will never run" is a
+    // claim about a call that never happens, and `uncertain` would be wrong too
+    // — nothing is unproven here, the two compilers agree the code is gone.
+    // Applied at the funnel for the same reason the divergence escalation below
+    // is: a new candidate kind cannot forget it.
+    if crate::execution_role::discarded_region_contains(file, span) {
+        return;
+    }
     let location = location(file.path.as_str(), span);
     if seen.insert((
         location.path.to_string(),
@@ -2903,6 +2912,7 @@ mod tests {
             source_hash: SourceHash::of(source),
             tracked_regions: vec![],
             untracked_regions: vec![],
+            discarded_regions: vec![],
             ownership_regions: vec![OwnershipRegion {
                 span: Span::new(0, 17),
                 kind: OwnershipRegionKind::Leaf,
@@ -2944,6 +2954,7 @@ mod tests {
             source_hash: SourceHash::of(source),
             tracked_regions: vec![],
             untracked_regions: vec![],
+            discarded_regions: vec![],
             ownership_regions: vec![OwnershipRegion {
                 span: inner,
                 kind: OwnershipRegionKind::Owned,

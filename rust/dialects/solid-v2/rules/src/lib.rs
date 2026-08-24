@@ -447,13 +447,17 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                 ),
                 "This is safe but shows nothing while loading. Wrap the reading subtree in <Loading fallback={...}> for visible fallback UI, or leave it as is if an empty container during load is intended. For a revalidation indicator, use isPending(() => ...) under the same boundary.".to_owned(),
             ),
+            // `DiscardedRendering` is here and not above: a pending read the
+            // compiler deleted cannot throw, so selection excludes it exactly
+            // as it excludes an unclassified span.
             ExecutionRole::Unknown
             | ExecutionRole::TrackedJsx
             | ExecutionRole::DeferredCallback
             | ExecutionRole::UntrackedCallback
             | ExecutionRole::EffectApply
             | ExecutionRole::EventCallback
-            | ExecutionRole::DirectiveApply => {
+            | ExecutionRole::DirectiveApply
+            | ExecutionRole::DiscardedRendering => {
                 panic!("async projector received a seed that selection should have excluded")
             }
         }

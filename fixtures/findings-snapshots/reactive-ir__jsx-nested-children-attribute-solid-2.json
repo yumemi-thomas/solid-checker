@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 6986,
+      "end": 6992,
+      "fixes": 0
+    },
+    {
+      "rule": "no-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 11948,
+      "end": 11957,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 13167,
+      "end": 13176,
+      "fixes": 1
+    }
+  ]
+}

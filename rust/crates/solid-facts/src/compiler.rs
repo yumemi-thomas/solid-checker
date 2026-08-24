@@ -9,6 +9,23 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 
+/// The compiler-facts wire version. [`ExecutionMap::validate`] refuses a map
+/// that does not carry exactly this value.
+///
+/// It stayed at 1 when [`ExecutionMap::discarded_regions`] was added, and that
+/// is safe only because of who fills the map in: every
+/// [`CompilerFactsProvider`] is in-process and compiled from this same
+/// workspace, so a map is never deserialized from a producer built against an
+/// older definition. The field's `#[serde(default)]` is therefore only ever
+/// exercised by this repository's own fixtures and caches, where an absent
+/// array and an empty one mean the same thing. What would make it unsafe is a
+/// provider on the other side of a process or package boundary: an older
+/// producer would omit `discardedRegions` and its deletions would silently
+/// arrive as *nothing at all*, which reads as "no code was deleted" rather
+/// than as "this producer cannot say" — and a missing deletion fact turns a
+/// deleted value back into an ordinary uncensused hole or, worse, an untracked
+/// region. Adding such a boundary means bumping this constant, not adding
+/// another defaulted field.
 pub const COMPILER_FACTS_PROTOCOL: u32 = 1;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -132,6 +149,23 @@ pub struct ExecutionMap {
     pub tracked_regions: Vec<ExecutionRegion>,
     #[serde(default)]
     pub untracked_regions: Vec<ExecutionRegion>,
+    /// Regions the compiler **deleted**: the value is censused, decided, and
+    /// then emitted nowhere.
+    ///
+    /// Deliberately not part of [`Self::untracked_regions`], which is a claim
+    /// about code that *executes* — once, at render, outside any tracking
+    /// scope. A discarded region executes zero times, so every claim an
+    /// untracked region licenses is false of it: the read does not see a stale
+    /// value, the write does not run in the render phase, the callback is never
+    /// attached. It is equally not a hole (see `missing_jsx_census` in
+    /// solid-reactive-ir): the compiler reported on this JSX and said the code
+    /// is gone.
+    ///
+    /// A discarded region proves no *positive* claim either. Nothing here is
+    /// evidence that a reader is satisfied, that an owner was established, or
+    /// that a value settles — dead code establishes nothing.
+    #[serde(default)]
+    pub discarded_regions: Vec<ExecutionRegion>,
     #[serde(default)]
     pub ownership_regions: Vec<OwnershipRegion>,
     #[serde(default)]
@@ -258,6 +292,12 @@ impl ExecutionMap {
             |value| value.span,
         )?;
         validate_spanned(
+            "discarded regions",
+            &self.discarded_regions,
+            source.len(),
+            |value| value.span,
+        )?;
+        validate_spanned(
             "ownership regions",
             &self.ownership_regions,
             source.len(),
@@ -285,6 +325,13 @@ impl ExecutionMap {
         Ok(())
     }
 
+    /// Whether some region or role fact decides `candidate`.
+    ///
+    /// A discarded region counts: "the compiler deleted this" is a decision
+    /// about the site, not an absence of one. Leaving it out would make
+    /// [`Self::uncovered_jsx_expressions`] report every deleted value as an
+    /// unclassified JSX expression, which the dialect adapters turn into a hard
+    /// refusal of the whole file.
     #[must_use]
     pub fn classifies(&self, candidate: Span) -> bool {
         self.tracked_regions
@@ -292,6 +339,10 @@ impl ExecutionMap {
             .any(|fact| fact.span.contains(candidate))
             || self
                 .untracked_regions
+                .iter()
+                .any(|fact| fact.span.contains(candidate))
+            || self
+                .discarded_regions
                 .iter()
                 .any(|fact| fact.span.contains(candidate))
             || self

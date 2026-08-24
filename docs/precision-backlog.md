@@ -5554,13 +5554,15 @@ that retiring one leaves the other intact.
   retracts, so the pre-existing `missing_jsx_census` path already answers
   uncertifiable; see section 2 above. No divergence-specific mechanism was
   needed, and none was added.
-- **Divergence 4 stays a hard reconciliation failure by design.** A `children`
-  attribute on a nested void element with no source children
+- ~~**Divergence 4 stays a hard reconciliation failure by design.** A `children`
+  attribute on a nested native element with no source children
   (`<div><span children={x()}/></div>`) makes the census name a `jsx-child` site
   lowering never resolves, so the file is rejected and `solid-checker-rust`
   exits 2. The fork keeps that deliberately: the failure is the divergence's only
   detection signal. There is no fixture, for the same reason as before — a
-  fixture would pin an exit code rather than a semantic claim.
+  fixture would pin an exit code rather than a semantic claim.~~ **Resolved
+  (2026-08-24)** by moving the pin to `fea62adb5d0332a4a3cb5088e97283673c40b540`
+  — see "Divergence 4 is resolved, and it surfaced five more" below.
 - **The 1.x producer fails the file on *both* retraction shapes.** Probed under
   `solid1-dom-expressions-compiler` at
   `b66c3e34ba2a0b74238726eb2b83f767eacf94f2`: both
@@ -5720,6 +5722,482 @@ accept and which keeps the call inside the divergent child region. The whole
   assertion, and the new extras are the same: a comment naming a file and a
   revision. Nothing fails if a pin moves and the parity target's list changes
   underneath it — the same known weakness, now in two places instead of one.
+
+## Divergence 4 is resolved, and it surfaced five more (2026-08-24)
+
+`dom-expressions-compiler` moved from `c6008f01df199ff0f0d072093e2393ed3d67f0c4`
+to `fea62adb5d0332a4a3cb5088e97283673c40b540` (upstream PR #3, "nested children
+attribute promotion"), the fork's first deliberate transform change since the
+census/lowering reconciliation work above. It resolves divergence 4 — the one
+named "stays a hard reconciliation failure by design" two sections up — and its
+own `docs/execution-contract.md` at the new revision documents five further
+divergences (5-9), all pre-existing, found while fixing it.
+
+### What changed in the producer
+
+Before this pin, `<div><span children={x()}/></div>` — a `children` attribute
+on a nested native element with no source children — made the producer's own
+census name a `jsx-child` site that `lower_dynamic_native_child` never resolved:
+`lower_dom_element` already promoted a template-root `children` attribute to a
+child insert, but the nested path had no equivalent capture. The fork treated
+that unresolved site as the divergence's only detection signal and kept it
+deliberately: the file failed reconciliation and `solid-checker-rust` exited 2
+before this checker's project analysis ever ran.
+
+`lower_dynamic_native_child` now performs the same promotion, gated exactly as
+the template-root path is (`!is_void_element`, `!has_spread`, an empty source
+child list, and the value not resolving under `evaluate_confident`), so the
+value joins the (empty) child list as an ordinary expression container and
+lowers like any other nested child. The fix also corrects a latent dedup bug in
+`children_attribute_container`, present in the template-root path too: Babel's
+own attribute dedup selects the last attribute *named* `children` before
+judging whether its value is literal, so a trailing literal duplicate
+(`<span children={x()} children={"s"}/>`) must block promotion outright rather
+than falling through to an earlier non-literal `children` attribute the dedup
+already discarded — the old `rev().find_map(...)` selected by value shape
+first and got this wrong.
+
+### Why this checker needed no new mitigation
+
+Divergences 1 and 3 needed `divergent_lowered_child` because the producer's
+census carried a *present, positive* fact — `jsx-child` / `reactive-rerun` —
+that was true about the fork and false about the compiler Solid ships, and this
+checker had to actively distrust it. Divergence 4 never reached that point:
+before this pin, a project containing the shape never got past the producer at
+all, so there was no census entry to distrust and nothing for a mitigation to
+intercept. After this pin the file compiles and the shape is an ordinary
+`jsx-child` / `reactive-rerun` site indistinguishable from any other nested
+child, so this checker's existing tracked-JSX and ownership machinery handles
+it with no Rust change. Pinned in the new fixture
+`fixtures/reactive-ir/jsx-nested-children-attribute-solid-2` (2.0-only — the
+pin that moved is 2.0-only; Solid 1.x is built by its own fork,
+`solid1-dom-expressions-compiler`, untouched by this move):
+
+- the promoted value is read exactly like an ordinary tracked JSX child
+  (silent — certified);
+- a confidently-foldable `children` value is still never promoted (silent — no
+  reactive site at all);
+- the with-source-children shape is unaffected: `captured_child` is gated on
+  `child.children.is_empty()`, a condition that shape never satisfies either
+  side of this pin, so it falls through to the ordinary attribute-lowering path
+  exactly as before, and ~~its `children`-attribute read is a genuine SC1001
+  **proven violation** (an elided value read outside any tracked or deferred
+  context, unchanged by the pin)~~ **that claim was wrong and is corrected
+  below** ("`Value(Elided)` was projected as code that runs", 2026-08-24): the
+  attribute is *deleted*, not evaluated once, so the read is silent. Its real
+  JSX child stays certified either way;
+- an ownership arm shows the promoted value's insert is owned by the fork's
+  default effect wrapper exactly as any other nested child's is.
+
+`<span children={ignored()}>{visible()}</span>` also draws a real TS2710 —
+checked against the real `@solidjs/web@2.0.0-rc.0` / `solid-js@2.0.0-rc.0`
+typings with `scripts/tsc-oracle.mjs`, not assumed — but that pair is already
+narrowed out of `jsx-no-duplicate-props` (`only_the_children_pair` in
+`upstream_compat/solid1x_syntax.rs`; see "Landed 2026-08-17" above), so this
+checker's SC8003 stays silent there for an unrelated, already-audited reason.
+
+### What did not move
+
+The checked-in `fixtures/findings-snapshots/*.json` were last written under
+the old pin. With the pin moved and a fresh debug binary built
+(`SOLID_CHECKER_BIN` pointed at `rust/target/debug/solid-checker-rust`),
+`node scripts/coverage.mjs` (no `--update`) recomputed all 91 fixture projects
+against those snapshots and reported exactly **one** project differing: the new
+fixture, which had no snapshot yet. No existing fixture contains the
+divergence-4 shape — it could not have, since a project containing it never
+reached this checker's analysis at all under the old pin — so nothing else
+could move, and nothing did. `--update` then recorded only that one project
+(565 findings total, cache: 90 hits / 1 miss on the immediately following run,
+confirming the other 90 were untouched). Ownership gate: 289 cases passed,
+ledger 465 rows, 0 pending, unaffected.
+
+Divergences 1-3's mitigations and the census-gap path are unchanged by this
+move: `divergent_lowered_child` and `missing_jsx_census` in
+`rust/crates/solid-reactive-ir/src/execution_role.rs` still hold, and none of
+divergence 1 (void-element children), 2 (nested dynamic `textContent`), or 3
+(`<noscript>` children) is touched by PR #3's diff. `docs/compiler-facts.md`
+records divergence 4 as resolved and divergences 5-9 as open in one place;
+this entry is the detailed record.
+
+### Divergences 5-9 remain open, and reach no rule here
+
+None of the five newly-documented divergences reaches a rule in this checker
+today, and none was introduced by this pin — the fork's contract states all
+five as pre-existing, surfaced only because resolving divergence 4 required
+auditing the nested and template-root `children`-attribute paths against each
+other:
+
+5. **Template-root slot order** — a `children` attribute before a dynamic
+   `textContent` loses the slot to Babel's captured-value overwrite, but this
+   fork's template-root capture ignores attribute order and inserts the
+   `children` value anyway. Nested lowering (this pin) follows Babel's order;
+   the template root does not.
+6. **JSX-valued holes** — `() => (() => {…})()` vs. `() => {…}` for a JSX
+   element inside a hole, unrelated to `children`.
+7. **`undefined`/`null` `children`** — Babel's literalness test accepts a
+   string or number only, so it promotes `undefined`/`null` too; this fork's
+   `evaluate_confident` filter is broader and keeps them as attributes.
+8. **Nested custom-element owner context** — a template-root custom element
+   gets the `contextToCustomElements` owner assignment; a nested one does not.
+9. **Textarea `value` fold on a constant-but-non-literal-spelled expression**
+   (`value={"a" + "b"}`) — Babel's literalness test is by AST node type before
+   its own constant fold runs, so it stays a stateful property write; this
+   fork's attribute planner folds first, so it collapses into the template
+   exactly as a real literal would, and — the case that matters for
+   `children` — a real `children` attribute alongside such a `value` is
+   promoted by Babel but not by this fork.
+
+Each would need its own probe against the real fork output before a checker
+rule could rest on it, the same discipline that produced divergences 1-4's
+mitigations; none is scheduled.
+
+## `Value(Elided)` was projected as code that runs (2026-08-24)
+
+**Closed for the projection, for the divergence route it exposed and that
+route's boundary, and for the two rule funnels that read no execution facts;
+four residues recorded open below** — divergence 5's certification residue, the
+rules that never ask for an execution role (with one member measured), and the
+producer's fail-closed refusal of a shadowed JSX-valued `children` attribute.
+
+Both dialect adapters mapped the compiler's `Value(Elided)` decision onto an
+**untracked region**, sharing the arm with `Value(EagerOnce)` under one comment:
+*"`EagerOnce` and `Elided` settle at render and never re-run."* That sentence is
+true of `EagerOnce` and false of `Elided`. An untracked region is a claim that
+the code **executes** — once, at render, outside any tracking scope — so a
+reactive read inside a deleted value became a **proven SC1001 violation**: *"the
+read sees the current value once and never updates."* Every clause is false when
+the read does not happen at all. The adversarial review that found this reported
+five distinct shapes firing that false proven violation, with both compilers'
+emitted code as evidence; one of them — the fixture arm re-pinned below — is
+reproduced and pinned here, and the ownership variant further down was probed
+directly.
+
+The mapping predates the census-gap and divergence honesty work (commits
+`1ddbac26` / `5fc3c60e` versus `85808728` / `24e7f86f`), which is why it
+survived them: those slices asked what the *absence* of a fact licenses, and
+this was a present fact whose meaning was misread.
+
+### Nothing the producers mark `Elided` evaluates at runtime
+
+Audited at both pinned revisions by reading the emitting path, not inferred
+from the name. The 2.0 fork at `fea62adb` has nine emission sites and the 1.x
+fork at `b66c3e34` has eight; every 2.0 site was read, and the 1.x sites were
+matched to their 2.0 twin by emitting path, with 1.x's one site that has no 2.0
+twin (`shared/component.rs`) read directly. Every one falls in one of two
+classes:
+
+- **A constant folded into the template.** `children.rs`, `static_template.rs`,
+  and the `PlanDisposition::Skip`/`Inline` arms in `attrs.rs`. These reach
+  `Elided` only for a value `evaluate_confident`/`static_jsx_expression_value`
+  resolves, so they cannot contain an accessor call in the first place.
+- **A value discarded unlowered.** A `children` attribute shadowed by real
+  source children (`attrs.rs`), a promoted capture the slot's winner drops
+  (`children.rs`, the nested `<noscript>` and dynamic-`textContent` cases), a
+  spread's `$key` and its skipped `children` (`spread.rs`), and — 1.x only — a
+  component's `children` prop shadowed by real children
+  (`shared/component.rs`). Nothing is emitted, and the fork's own comments state
+  Babel emits nothing either.
+
+`resolve_lowered_attribute` never turns a callback site into an `Elided` value —
+it *retracts* `on*` and `ref` sites — so `Elided` only ever arrives on a native
+attribute, a spread member, a JSX child, or a component property.
+
+### The projection: a discarded region, distinct from an untracked one
+
+`ExecutionMap` gained `discarded_regions` (`rust/crates/solid-facts/src/compiler.rs`)
+and the IR gained `ExecutionRole::DiscardedRendering`. `Value(EagerOnce)` is
+untouched: it evaluates once, which is exactly what an untracked region says.
+
+Every consumer was decided rather than defaulted:
+
+| consumer | decision |
+| --- | --- |
+| `ExecutionMap::classifies` / `uncovered_jsx_expressions` | **counts it.** Leaving it out would make every deleted value an unclassified `jsx-expression` and the adapters refuse the whole file. |
+| `census_touches` → `missing_jsx_census` | **counts it, so it is not a hole.** The compiler reported on the JSX and said the code is gone; escalating that to an uncertifiable obligation would claim something is missing when nothing is. |
+| `execution_role` (compiler facts) | **dominates**, ahead of the narrowest-region competition. |
+| `semantic_execution_role` | **dominates**, ahead of every semantic path. Left below them, a read in a deleted value would take a proven-untracked role from an `untrack()` position, or be silently *certified* by a deferred one. |
+| `ExecutionRole::reports_untracked_read` | **false.** No SC1001, proven or uncertifiable. |
+| `ExecutionRole::reports_disallowed_write` | **false.** A write the compiler deleted runs in no phase, so it is neither a tracked-phase nor a render-phase write. Covers SC1002 and action invocations. |
+| async-read selection (`projection.rs`) | **excluded**, so SC5001/SC5003/SC5005 stay silent: a pending read that never happens cannot throw. The exclusion is ordered *first*, ahead of the `read.leaf_owner.is_some()` short-circuit — that clause returns true before any role is tested, so a leaf-owned async read inside a deleted value would have been reported on the leaf owner alone, with reachability unproven. With the leaf-owner pass itself now gated (`cleanup.rs`), that route is not known to be constructible from a fixture; the ordering, not the reachability, is what was wrong, and it is pinned by `a_discarded_async_read_is_excluded_ahead_of_the_leaf_owner_short_circuit`. |
+| `server_rules.rs` post-flush writes | **excluded** by the same gate (it names `UntrackedRendering`/`TrackedJsx` explicitly). |
+| `contract_callback_execution` | **`None`.** `"inline"` would license a consumer to run the callback eagerly — a positive claim dead code cannot support. |
+| `push_owner_requirement` (`owners.rs`) | **no requirement at all**, not an uncertain one. See below. |
+| `cache.rs::same_compiler_semantics` | **compared**, so a changed discarded set invalidates a reused generation. |
+
+Dominance is what keeps the class from becoming a certification channel, and it
+is sound because of a producer property that was checked rather than assumed:
+every `Elided` span is a single attribute or child *value* expression, never a
+wider enclosing construct, so a discarded region cannot swallow a live sibling.
+Both adapters carry a unit test for the projection
+(`deleted_values_are_discarded_regions_rather_than_untracked_ones`,
+`one_shot_values_stay_untracked_regions`).
+
+**Silence over a discarded region is not a certification.** It means "both
+compilers deleted this", never "this was proven safe" — no rerun, no owner, no
+satisfied reactive reader, no settled value.
+
+### The ownership half was the same false claim in another rule
+
+Probed rather than assumed, with a scratch project outside `fixtures/`: an
+`onCleanup` written inside a deleted `children` attribute at module scope
+reported SC4001 as a **proven violation** — *"this cleanup function will never
+run"* — about a call that never runs, because the surrounding context is proven
+unowned and no `ownership_regions` entry exists inside deleted code to say
+otherwise. `push_owner_requirement`, the single funnel both owner passes use,
+now returns without recording a requirement when the span sits in a discarded
+region. `uncertain` would have been wrong too: nothing is unproven there, the
+two compilers agree the code is gone. The same scratch project is silent after
+the change, and the ownership gate is unmoved (289 cases, ledger 465 rows, 0
+pending).
+
+### The exception: a divergence outranks the deletion
+
+Where a deletion decision and a named producer/parity-target divergence touch
+the same span, the divergence must win — the compilers *disagree* about whether
+the code is deleted, so silence would certify one of them. For source child
+regions this already held: `projection.rs` reports a read carrying
+`divergent_lowering` whatever role the census gave it, so the mitigation is
+role-independent by construction.
+
+One route was open, and it is the review finding that made this section bigger
+than a projection fix. `divergent_lowered_child`'s region set was an element's
+source children only, deliberately excluding attribute spans ("attributes are
+not children"). But `children={…}` **is** the child list — Babel promotes it to
+a real child before `transformElement` runs — so a template-root
+`<noscript children={c()}/>` was **silently certified**: the fork's
+`lower_dom_element` promotes and lowers it (`_$insert(_el$, c)`), the census
+reports an ordinary tracked child, and Babel's `transformElement` never visits a
+`<noscript>`'s children and emits nothing. The identical divergence written
+`<noscript>{c()}</noscript>` was correctly uncertifiable. The fork names this
+route itself, in divergence 3 at `fea62adb`: *"The root-level
+`children`-attribute-promoted variant is the same divergence by another route …
+Still divergent."*
+
+The predicate now also considers the `children` attribute's expression value on
+the same elements — `children` only, expression containers only, resolved by
+exact `local_name` against this checker's own AST — and its positive-lowering
+test gained the discarded exclusion that keeps the arm position-aware without
+naming positions: the **nested** `<noscript children={c()}/>` discards the
+capture rather than promoting it (promoting would emit an insert Babel does
+not), both compilers agree, and no divergence may be claimed there. Before
+discarded regions existed as a category this exclusion was implicit — a
+discarded child list was *retracted*, leaving no site at all — and it stops
+being implicit as soon as deletion is expressed as a decision.
+
+Both producer facts the arm rests on are pinned in the 2.0 adapter rather than
+reasoned about: `a_template_root_noscript_children_attribute_is_lowered_not_deleted`
+and `a_nested_noscript_children_attribute_is_deleted_not_lowered`.
+
+#### The arm needed a boundary, and the census could not draw it
+
+The first cut of the arm chained the `children` attribute's value onto the
+candidate child regions unconditionally, and that over-claimed:
+`<noscript {...props} children={c()}/>` and its nested spelling both reported
+SC1001 **uncertifiable** with divergence-3 wording over a value both compilers
+keep. Promotion has conditions — the fork gates its capture on
+`!is_void_element && !has_spread && element.children.is_empty()` plus a
+non-literal, non-confidently-foldable value, and Babel reaches its
+`key === "children"` capture under the matching preprocessing — and only a
+promoted value is in the child position at all.
+
+`promoted_children_attribute_value` writes down exactly one of those
+conditions, **no spread**, because it is the only one the census cannot express:
+
+- With a spread the producer *still* censuses the `children` member as
+  `ExecutionSiteKind::JsxChild` and decides it `ReactiveRerun`
+  (`semantic_trace.rs` gates the child kind on
+  `has_spread || element.children.is_empty()`; `spread.rs` records the
+  decision), because at runtime `spread()` really does assign it as the
+  element's children through a `mergeProps` getter. That is a truthful census
+  entry, and it is indistinguishable from a promotion to the positive-lowering
+  test. Babel's `processSpreads` consumes the attribute into the merged props
+  before its capture runs, and the fork lists *"a spread keeps `children` in the
+  merged props"* among the shapes the two compilers already agree on (divergence
+  4, "the shapes that already agreed still do"). Both keep it, both execute it
+  deferred: nothing to be uncertain about.
+- Every other condition makes the producer census or resolve the value as
+  something other than a lowered child, so the positive-lowering test already
+  refuses it: a void element's `children` attribute is
+  `native-attribute`/`elided` (the census gates the child kind on
+  `!is_void_element` for the same reason lowering does), a shadowed one is too,
+  a confidently foldable one is resolved `elided` by the attribute planner, and
+  a name-first dedup loser is an elided value span.
+- The **parity-target-only** void tags stay divergent through this arm, and
+  correctly: the 1.x fork does not treat `<keygen>`/`<menuitem>` as void, so it
+  promotes and lowers, while 1.x's Babel skips `transformChildren` for a void
+  tag entirely (`if (!voidTag) { … transformChildren … }`). Gating on the shared
+  `VOID_ELEMENTS` set instead would have withheld a real divergence.
+
+Probed end-to-end with the debug binary over all four spellings, before and
+after. Before: `<noscript children={c()}/>` uncertifiable (correct),
+`<div><noscript children={c()}/></div>` silent (correct),
+`<noscript {...p} children={c()}/>` uncertifiable (**wrong**),
+`<div><noscript {...p} children={c()}/></div>` uncertifiable (**wrong**). After:
+the first two unchanged, the two spread spellings silent. Pinned as fixture arms
+(`SpreadKeepsChildrenInMergedProps`,
+`NestedSpreadKeepsChildrenInMergedProps`) and as unit tests
+(`a_spread_carrying_element_promotes_no_children_attribute_in_either_position`,
+with `without_a_spread_the_same_two_positions_keep_their_verdicts` as the
+control that the gate did not simply disable the arm).
+
+### What moved
+
+`fixtures/reactive-ir/jsx-nested-children-attribute-solid-2` is re-pinned:
+
+| arm | before | after |
+| --- | --- | --- |
+| `SourceChildrenShadowChildrenAttribute`, `ignored()` | SC1001 **proven violation** | **silent** — a discarded region |
+| `NoscriptPromotedChildrenAttribute`, `note()` (new arm) | — (was silently certified) | SC1001 **uncertifiable**, divergence 3 wording |
+| `LiteralChildrenAttributeStaysSilent` | silent | silent (spelling changed, see below) |
+| `SpreadKeepsChildrenInMergedProps`, `NestedSpreadKeepsChildrenInMergedProps` (new arms) | — (uncertifiable in the arm's first cut) | **silent** — a spread promotes nothing |
+| `DestructureInsideADeletedChildrenValue` (new arm) | — (SC1003 proven violation, ungated) | **silent** |
+| `DestructureAtComponentBodyScope` (new arm, control) | — | SC1003 **violation** |
+| `LeafOwnerInsideADeletedChildrenValue` (new arm) | — (SC3001 proven violation, ungated) | **silent** |
+| `LeafOwnerInsideAPromotedChildrenValue` (new arm, control) | — | SC3001 **violation** |
+| every other arm | silent | silent |
+
+The two new controls are why that fixture's status is now `violation` rather
+than `uncertifiable`, and they are there so no silent arm can pass by its rule
+being off: each deleted-value arm sits beside the same call in a live value.
+
+The remaining SC1001 in that fixture is the real defect at the shadowed span's
+`tsc` level being left where it belongs: `<span children={ignored()}>{visible()}</span>`
+is **TS2710** against the real published typings (re-checked with
+`scripts/tsc-oracle.mjs` after the edit — exactly one diagnostic, identical in
+`strict` and `loose`), and the absolute rule makes the checker's silence there
+mandatory rather than merely acceptable.
+
+`node scripts/coverage.mjs` with a fresh debug binary and no `--update`
+recomputed all 91 fixture projects and reported **exactly one** project
+differing — that fixture — at every step: after the projection change, after the
+fixture edit, and after the ownership funnel change (which moved nothing at all,
+0 of 91). No other fixture pins a read inside an `Elided` region; the two that
+looked like candidates (`dialect-solid-2` and `eslint-compat`) hold constant or
+literal values, silent either way.
+
+The literal arm's spelling moved from `children={"a literal string"}` to
+`children={"a" + "b"}`. A *literal-spelled* nested `children` attribute is
+reported to crash the parity-target Babel plugin outright in the fork's own
+parity harness, so there is no parity-verified verdict to pin for that spelling.
+**Provenance:** that observation comes from the adversarial review of this
+change, working in the fork repository; it was **not** re-run here, because this
+repository has no Babel harness. Recorded as a pre-existing fork-repo divergence
+note, not as a claim about this checker. `"a" + "b"` is non-literal in spelling
+and confidently foldable in value, which both compilers agree on.
+
+### Open: divergence 5's certification residue
+
+`<span children={c()} textContent={t()}/>` at a **template root**: the fork's
+template-root capture ignores attribute order and inserts the `children` value
+anyway, while Babel's captured-value overwrite gives the slot to the later
+dynamic `textContent` and drops the `children` value (the fork's divergence 5;
+its nested path follows Babel's order, which is why only the root shape is
+affected). The census therefore reports a lowered, tracked child and this
+checker **certifies** the read — a certification resting on a fact a named
+divergence touches, which is precisely what the consumer rule forbids.
+
+Not fixed here, deliberately: the mitigation is not the `children`-attribute arm
+above but an attribute-*order* predicate (does a dynamic `textContent` follow a
+`children` attribute on this element, at a template root only), which needs its
+own probe of both compilers' emitted output for the ordering cases before a rule
+rests on it. Divergences 6-9 reach no rule here at all and remain as recorded in
+the previous section.
+
+### Two more funnels were fixed, and the rest of the sweep is named
+
+The table above covers the channels a read, write, action, async read, contract
+callback or owner requirement flows through — every consumer that *asks* for an
+execution role. Two rule funnels reached a verdict without asking, and both
+reported **proven violations about deleted code**. Both are now fixed, gated the
+same way `push_owner_requirement` is: a positive `discarded_region_contains`
+lookup and an early return.
+
+| rule | funnel | what it claimed about deleted code |
+| --- | --- | --- |
+| SC1003 `component-props-destructure` | `static_rules.rs`, both destructure loops | The freshness test is an allowlist of *fresh-at-call-time* roles, and `DiscardedRendering` is not one, so a destructure inside a deleted value fell through to a proven "the bindings are frozen, this component never updates". |
+| SC3001 `leaf-owner-forbidden-call` | `cleanup.rs`, `leaf_owner_operations_for_file` | The pass is entirely lexical and reads no execution facts, so `onCleanup` inside an `onSettled` inside a deleted value was a proven "these nested primitives are never disposed". |
+
+Neither gate adds `DiscardedRendering` to the SC1003 allowlist, deliberately:
+that list means "legal because the context is fresh at call time", and a
+deleted destructure is not legal-because-fresh, it is absent. Merging the two
+would make the claims indistinguishable to the next reader and would silently
+answer for any role added to the list later. SC3001's gate sits on the **owner
+call**, this pass's single entry, because deletion travels down from there — a
+producer `Elided` span is one attribute or child value expression, so every
+nested call is contained with it, while a leaf callback resolved in another file
+is reachable only through this call site.
+
+Both are pinned end-to-end, with their live controls in the same file, by
+`fixtures/reactive-ir/jsx-nested-children-attribute-solid-2`
+(`DestructureInsideADeletedChildrenValue` / `DestructureAtComponentBodyScope`,
+`LeafOwnerInsideADeletedChildrenValue` / `LeafOwnerInsideAPromotedChildrenValue`).
+Each arm was verified load-bearing by disabling its gate and confirming the
+finding returns: gates off, that fixture reports seven findings; gates on,
+three. The destructure arms are passed a reactive prop rather than a literal
+because SC1003's caller-proven gate answers `PropUse::Static` first and would
+otherwise silence both arms for an unrelated reason.
+
+### Open: the rules that never ask for an execution role
+
+Rules that reason purely from syntax still report inside a deleted value,
+because they consult no execution facts at all. This is **not** audited shape by
+shape, and one member of the set is measured rather than hypothetical:
+
+- **Observed.** SC7001 `missing-effect-function` fires as a **proven
+  violation** on `<div><noscript children={(createEffect(() => {}), null)}/></div>`
+  — a one-argument `createEffect` inside a discarded region (probed with a
+  scratch project against a stub carrying both real overloads; the deprecated
+  one-argument overload returns `never` in `@solidjs/signals@2.0.0-rc.0`, so
+  this is the checker's own claim and not a `tsc` duplicate). Whether that is
+  wrong is a real question rather than an obvious yes: the defect is in the
+  call's *shape*, which is wrong in the source whether or not the emitter keeps
+  it. It is recorded here as undecided, not as licensed.
+- **Not audited.** The other `StaticDefect` kinds that can appear inside a JSX
+  value expression — `ReactiveReadAfterAwait`, `ComponentReturnsConditionally`,
+  `ReactiveHandlerRead`, `HandlerValueUnresolved`, `UncalledAccessor`,
+  `DirectMutation`, `ReactiveCallbackUnresolved`, `ReactiveSourceUncaptured` —
+  plus every `upstream_compat` static violation (the SC8xxx families) and
+  `directive_creations`. None was probed inside a discarded region.
+
+What the sweep does establish is the boundary: every consumer that reads an
+execution role was decided, and the two funnels that reached a *reactive*
+verdict without reading one are fixed. A rule that reports a syntactic defect
+in deleted code is a separate decision, and this note exists so the next reader
+does not mistake the first for the second.
+
+### Open: a shadowed `children` attribute holding reactive JSX still fails the producer closed
+
+Probed at `fea62adb` with a scratch project and the debug binary:
+
+```tsx
+export function Shadowed() {
+  const [x] = createSignal(0);
+  const [y] = createSignal(0);
+  return <span children={<b>{x()}</b>}>{y()}</span>;
+}
+```
+
+`solid-checker-rust` exits **2** with
+`semantic trace has unresolved execution sites: JsxChild@162..165` — the span of
+`x()`, inside the JSX-valued attribute. The census walks source, so it names the
+`<b>`'s child as a `jsx-child` site; lowering drops the shadowed `children`
+attribute *without visiting its value*, so that inner site is neither resolved
+nor retracted, the completeness invariant fails, and the whole project is never
+analyzed.
+
+This is **producer-side and fail-closed** — the same failure class divergence 4
+had before PR #3 resolved it, and the reason that divergence had no checker-side
+mitigation to test. Nothing here is a wrong claim; the file is refused rather
+than misjudged. The *promoted* variant of the same shape,
+`<span children={<b>{x()}</b>}/>` (no source children), certifies cleanly with
+zero findings, which locates the gap precisely: it is the shadowed path's
+unvisited value, not JSX-valued `children` attributes in general. Related to the
+fork's divergence 6 ("JSX-valued holes"), which is about the *emitted shape* of
+a JSX-valued hole rather than about this reconciliation failure, and to
+divergence 5's residue above; recorded as a residue of this entry because the
+discarded-region work is what made the shadowed path interesting enough to
+probe. No fixture pins it — a fixture containing it would make its whole project
+exit 2 and pin nothing.
 
 ## Closed 2026-08-24: the constructability fact decides `kind`, and the spans it must not be asked at
 

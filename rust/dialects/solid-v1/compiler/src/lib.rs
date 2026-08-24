@@ -91,7 +91,7 @@ impl CompilerFactsProvider for NativeCompilerFacts {
 ///
 /// The trace is total *over the census*: every censused JSX site carries a
 /// terminal decision, so each one lands in exactly one of the tracked,
-/// untracked, or callback categories, and
+/// untracked, discarded, or callback categories, and
 /// `ExecutionMap::uncovered_jsx_expressions` is empty by construction rather
 /// than by luck. That is not the same as total over the JSX the source
 /// contains — this compiler censuses what it lowers, and a nested
@@ -143,6 +143,7 @@ fn execution_map_from_trace(
         source_hash: SourceHash::of(source),
         tracked_regions: Vec::new(),
         untracked_regions: Vec::new(),
+        discarded_regions: Vec::new(),
         ownership_regions: Vec::new(),
         callback_roles: Vec::new(),
         jsx_operations: Vec::new(),
@@ -226,18 +227,30 @@ fn execution_map_from_trace(
                     role: CallbackRoleKind::Deferred,
                 });
             }
-            // `EagerOnce` and `Elided` settle at render and never re-run.
-            TerminalDecision::Value(ValueDecision::EagerOnce | ValueDecision::Elided) => {
-                let reason = match site.kind {
-                    ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
-                        RegionReason::JsxAttribute
-                    }
-                    ExecutionSiteKind::ComponentProperty
-                    | ExecutionSiteKind::ComponentSpread
-                    | ExecutionSiteKind::ComponentChild => RegionReason::ComponentGetter,
-                    _ => RegionReason::JsxChild,
-                };
-                map.untracked_regions.push(ExecutionRegion { span, reason });
+            // `EagerOnce` settles at render and never re-runs. It does execute:
+            // exactly once, outside any tracking scope, which is what an
+            // untracked region claims.
+            TerminalDecision::Value(ValueDecision::EagerOnce) => {
+                map.untracked_regions.push(ExecutionRegion {
+                    span,
+                    reason: region_reason(site.kind),
+                });
+            }
+            // `Elided` is the opposite: the value is decided and then emitted
+            // nowhere. Every one of this producer's `Elided` sites is a value
+            // the emitter deletes — a confidently-foldable constant baked into
+            // the template (`children.rs`, `static_template.rs`, the folded
+            // attribute plans in `attrs.rs`), or a value discarded unlowered (a
+            // `children` attribute or component `children` prop shadowed by
+            // real children, a spread's skipped `children`). Projecting it as
+            // an untracked region reported the read inside it as a proven stale
+            // read, a claim whose every clause is false of code neither
+            // compiler emits.
+            TerminalDecision::Value(ValueDecision::Elided) => {
+                map.discarded_regions.push(ExecutionRegion {
+                    span,
+                    reason: region_reason(site.kind),
+                });
             }
             TerminalDecision::Callback(decision) => {
                 let role = match decision {
@@ -262,6 +275,25 @@ fn execution_map_from_trace(
     Ok(map)
 }
 
+/// Which JSX position a one-shot or deleted value sat in.
+///
+/// Shared by the untracked (`EagerOnce`) and discarded (`Elided`) arms: the
+/// reason describes where the value was written, which does not depend on
+/// whether the emitter kept it.
+fn region_reason(kind: dom_expressions_compiler::ExecutionSiteKind) -> RegionReason {
+    use dom_expressions_compiler::ExecutionSiteKind;
+
+    match kind {
+        ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
+            RegionReason::JsxAttribute
+        }
+        ExecutionSiteKind::ComponentProperty
+        | ExecutionSiteKind::ComponentSpread
+        | ExecutionSiteKind::ComponentChild => RegionReason::ComponentGetter,
+        _ => RegionReason::JsxChild,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +311,41 @@ mod tests {
         NativeCompilerFacts
             .analyze(&request)
             .expect("compiler facts")
+    }
+
+    fn compile_source(source: &str) -> ExecutionMap {
+        let request = AnalysisRequest::new("App.tsx", source, CompilerOptions::default());
+        NativeCompilerFacts
+            .analyze(&request)
+            .expect("compiler facts")
+    }
+
+    // The 1.x twin of the 2.0 adapter's projection test: a value the emitter
+    // deletes is a *discarded* region, not an untracked one. An untracked region
+    // says the code runs once at render, which would make a reactive read inside
+    // a deleted value a proven stale read.
+    #[test]
+    fn deleted_values_are_discarded_regions_rather_than_untracked_ones() {
+        // A `children` attribute shadowed by real source children: dropped
+        // during attribute planning, never lowered, and emitted by neither this
+        // compiler nor Babel.
+        let facts = compile_source("const view = <span children={ignored()}>{visible()}</span>;");
+        assert_eq!(facts.discarded_regions.len(), 1, "{facts:#?}");
+        assert!(facts.untracked_regions.is_empty(), "{facts:#?}");
+        // The live sibling is untouched: deletion is per value, not per element.
+        assert_eq!(facts.tracked_regions.len(), 1, "{facts:#?}");
+        // Still classified, so the completeness invariant holds and the file is
+        // not refused.
+        assert!(facts.uncovered_jsx_expressions().is_empty(), "{facts:#?}");
+    }
+
+    // The other half of the split: `EagerOnce` really does execute, once, so it
+    // stays an untracked region.
+    #[test]
+    fn one_shot_values_stay_untracked_regions() {
+        let facts = compile_source("const view = <Widget value={CONSTANT} />;");
+        assert!(facts.discarded_regions.is_empty(), "{facts:#?}");
+        assert_eq!(facts.untracked_regions.len(), 1, "{facts:#?}");
     }
 
     #[test]

@@ -617,6 +617,7 @@ pub(crate) fn same_compiler_semantics(
     previous.compiler_facts_protocol == current.compiler_facts_protocol
         && previous.tracked_regions == current.tracked_regions
         && previous.untracked_regions == current.untracked_regions
+        && previous.discarded_regions == current.discarded_regions
         && previous.ownership_regions == current.ownership_regions
         && previous.callback_roles == current.callback_roles
         && previous.jsx_operations == current.jsx_operations

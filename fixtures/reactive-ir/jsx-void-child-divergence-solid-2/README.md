@@ -27,11 +27,17 @@ the fixture names below.
 ## The divergences
 
 The pinned fork's own `docs/execution-contract.md` (revision
-`c6008f01df199ff0f0d072093e2393ed3d67f0c4`, "The trace describes this compiler,
+`fea62adb5d0332a4a3cb5088e97283673c40b540`, "The trace describes this compiler,
 not the parity target") names both and states each as a **binding consumer
 rule**: *"A consumer must treat a `jsx-child` site inside a void native element
 as uncertifiable"* and *"a consumer must treat a `jsx-child` site inside a
-`<noscript>` as uncertifiable."*
+`<noscript>` as uncertifiable."* Both sentences are present verbatim at this
+revision; the citation moved with the `c6008f01` → `fea62adb` pin (upstream PR
+#3), which left divergences 1 and 3 untouched while adding divergences 5-9 to
+the same document — and added, under divergence 3, the `<noscript>` route this
+checker now mitigates through the promoted-`children`-attribute span (see
+`fixtures/reactive-ir/jsx-nested-children-attribute-solid-2`). The void tag
+lists it cites are byte-identical at both revs (checked with `shasum`).
 
 **Divergence 1 — void element children.** `<div><br>{count()}</br></div>`:
 
@@ -160,7 +166,7 @@ their source is byte-shared.
 | | Rust producer | parity target |
 | --- | --- | --- |
 | 1.x | 14 tags — `void_elements`, `packages/compiler/src/shared/constants.rs` @ `b66c3e34` | **16** — `packages/babel-plugin-jsx-dom-expressions/src/VoidElements.ts` @ `b66c3e34`, adding `keygen` and `menuitem` |
-| 2.0 | 14 tags — same file @ `c6008f01` | 14 — `VoidElements` in `packages/runtime/src/constants.js` @ `c6008f01`, imported by `babel-plugin-jsx` |
+| 2.0 | 14 tags — same file @ `fea62adb` | 14 — `VoidElements` in `packages/runtime/src/constants.js` @ `fea62adb`, imported by `babel-plugin-jsx` |
 
 A divergence is a producer disagreeing with **its own** parity target, so under
 1.x these two tags diverge exactly as `<br>` does — the plugin computes
