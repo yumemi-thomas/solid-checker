@@ -2,5 +2,11 @@
   "name": "exported-class",
   "version": "1.0.0",
   "type": "module",
-  "exports": "./index.ts"
+  "exports": {
+    ".": "./index.ts",
+    "./anonymous-default": "./anonymous-default.ts",
+    "./anonymous-extends": "./anonymous-extends.ts",
+    "./named-default": "./named-default.ts",
+    "./class-expression-default": "./class-expression-default.ts"
+  }
 }

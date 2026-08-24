@@ -7,5 +7,13 @@
       "index.ts",
       "sibling.js"
     ]
+  },
+  "./destructured": {
+    "targets": [
+      "./destructured.ts"
+    ],
+    "modules": [
+      "destructured.ts"
+    ]
   }
 }

@@ -39,7 +39,7 @@ repository.
 ## TypeFacts
 
 - Consumed repository: https://github.com/yumemi-thomas/solid-ts-facts
-- Pinned revision: `e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4`
+- Pinned revision: `3296ec8ccd8a563cbc9037d1297ed2a88054c1a9`
 - License: MIT
 
 The Rust client and Go producer move together at this revision. The producer

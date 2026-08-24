@@ -546,6 +546,14 @@ fn plan_file(
         planned.r#async = async_symbol_spans.contains(&span);
         planned.type_descriptor = type_descriptor_spans.contains(&span);
         planned.callability = type_descriptor_spans.contains(&span);
+        // Constructability travels with callability, never alone: neither fact
+        // answers "is this a runtime function" by itself. A class type carries
+        // construct signatures and no call signature, so `callability` reports
+        // every class `nonCallable`, and only the two closed negatives together
+        // prove a value. See `solid_reactive_ir::export_kind_proof`. Demanding
+        // it costs one extra `GetSignaturesOfType` walk over a type the
+        // callability demand already resolved.
+        planned.constructability = planned.callability;
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
         planned.primitive_value_domain = primitive_value_domain_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
@@ -619,6 +627,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         r#async: false,
         structural_accessor: false,
         callability: false,
+        constructability: false,
         runtime_value_domain: false,
         primitive_value_domain: false,
         call_result_domain: false,
@@ -682,6 +691,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.r#async |= demand.r#async;
             current.structural_accessor |= demand.structural_accessor;
             current.callability |= demand.callability;
+            current.constructability |= demand.constructability;
             current.runtime_value_domain |= demand.runtime_value_domain;
             current.primitive_value_domain |= demand.primitive_value_domain;
             current.call_result_domain |= demand.call_result_domain;

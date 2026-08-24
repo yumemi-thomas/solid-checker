@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": {
-    "name": "exported-class",
+    "name": "namespace-export-surface",
     "version": "1.0.0"
   },
   "compilerFactsProtocol": 1,
@@ -39,35 +39,19 @@
     ".": {
       "exports": {
         "function-1": [
-          "AliasedWatcher",
-          "BaseError",
-          "ChildError",
-          "DirectError",
-          "Watcher"
+          "boxed",
+          "Holder",
+          "Merged"
+        ],
+        "value-1": [
+          "Config",
+          "helper",
+          "settings"
         ],
         "function-2": [
           "plainFunction"
-        ],
-        "value-1": [
-          "settings"
         ]
       }
-    },
-    "./anonymous-default": {
-      "exports": {
-        "function-1": [
-          "default"
-        ]
-      }
-    },
-    "./anonymous-extends": {
-      "sameAs": "./anonymous-default"
-    },
-    "./class-expression-default": {
-      "sameAs": "./anonymous-default"
-    },
-    "./named-default": {
-      "sameAs": "./anonymous-default"
     }
   },
   "evidence": {

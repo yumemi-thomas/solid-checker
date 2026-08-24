@@ -1325,10 +1325,11 @@ fn package_generator_states_an_exported_class_as_a_function_kind() {
 /// `export class C {}` to `var C = class { … }`, so no class-name span covers
 /// the exported binding and `nonCallable` is the truthful callability of a
 /// class type — which made the generator publish `kind: "value"` for 45 of the
-/// 53 failing kind claims in the corpus measurement. Also pins the honest
-/// outcome when no closed type answers `kind` at all: the entrypoint is
-/// refused, not published as the maximal certified negative that a bare
-/// `value` summary is.
+/// 53 failing kind claims in the corpus measurement. The construct signature is
+/// what answers it now: `Constructability::Constructable` at the declarator's
+/// name, no syntax involved. Also pins the honest outcome when *neither*
+/// signature fact closes: the entrypoint is refused, not published as the
+/// maximal certified negative that a bare `value` summary is.
 ///
 /// See fixtures/package-contracts/class-expression-kind/README.md.
 #[test]
@@ -1362,28 +1363,29 @@ fn package_generator_states_a_class_expression_export_as_a_function_kind() {
     );
     let stdout = String::from_utf8_lossy(&result.stdout).to_string();
     assert!(
-        stdout.contains("2 entrypoint(s) refused and omitted"),
+        stdout.contains("1 entrypoint(s) refused and omitted"),
         "{stdout}"
     );
     let contract = expanded_contract(&output);
-    for refused in ["./unresolvable", "./destructured"] {
-        assert!(contract["entrypoints"].get(refused).is_none(), "{contract}");
-    }
+    assert!(
+        contract["entrypoints"].get("./unresolvable").is_none(),
+        "{contract}"
+    );
     let plan = fs::read_to_string(directory.join("solid-reactivity.review.md")).unwrap();
     assert!(
         plan.contains("./unresolvable: solid-checker-rust: emit package contract:")
-            && plan.contains("whose runtime kind no closed type answers (Unknown)"),
+            && plan.contains("whose runtime kind no closed type answers (Unknown, Unknown)"),
         "{plan}"
     );
-    // The other refusal: `nonCallable` is a class type's answer too, and for a
-    // destructuring pattern the class search never ran, so it proves nothing.
-    assert!(
-        plan.contains("./destructured: solid-checker-rust: emit package contract:")
-            && plan.contains(
-                "which destructures a member of another value, so no fact here rules out a class"
-            ),
-        "{plan}"
-    );
+    // `./destructured` is the refusal the constructability fact discharged.
+    // `nonCallable` alone proved nothing about a binding pattern, because the
+    // syntactic class search could not run on one at all; the type answers the
+    // pattern directly, and `(class Named {}).name` is a string — provably not
+    // a function, so the entrypoint publishes instead of being refused.
+    let destructured = &contract["entrypoints"]["./destructured"]["exports"];
+    for name in ["inlineCacheName", "dependencyCacheName"] {
+        assert_eq!(destructured[name]["kind"], "value", "{name}: {contract}");
+    }
     let exports = &contract["entrypoints"]["."]["exports"];
     // Bound in the entry file, reached through a `.js` barrel hop with no
     // `.d.ts` to answer for it, and reached through a bare-specifier
@@ -1408,8 +1410,8 @@ fn package_generator_states_a_class_expression_export_as_a_function_kind() {
             "{name}: {contract}"
         );
     }
-    // The false-positive direction: real non-callable values whose binding is a
-    // plain identifier, so the syntactic class search did run and did answer.
+    // The false-positive direction: real non-callable values, both closed
+    // negatives, so `value` is a proof rather than a default.
     for name in ["settings", "siblingTable"] {
         assert_eq!(exports[name]["kind"], "value", "{name}: {contract}");
     }
@@ -2634,7 +2636,7 @@ fn package_generator_keeps_a_dependency_contracts_value_kind_and_refuses_without
     assert!(
         plan.contains("./laundered: solid-checker-rust: emit package contract:")
             && plan.contains(
-                "exports \"addClickInterceptor\", whose runtime kind no closed type answers (Unknown)"
+                "exports \"addClickInterceptor\", whose runtime kind no closed type answers (Unknown, Unknown)"
             ),
         "{plan}"
     );
@@ -2661,8 +2663,9 @@ fn package_generator_keeps_a_dependency_contracts_value_kind_and_refuses_without
         String::from_utf8_lossy(&result.stderr)
     );
     assert!(
-        message
-            .contains("exports \"hostValue\", whose runtime kind no closed type answers (Unknown)"),
+        message.contains(
+            "exports \"hostValue\", whose runtime kind no closed type answers (Unknown, Unknown)"
+        ),
         "{message}"
     );
     assert!(!refused.exists(), "{message}");

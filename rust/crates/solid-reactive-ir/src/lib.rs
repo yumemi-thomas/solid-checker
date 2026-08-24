@@ -54,9 +54,7 @@ use contracts::{
     ContractAnalysis, ContractGraph, ContractSemantics, contract_export_summaries,
     contract_export_summaries_incremental,
 };
-pub use contracts::{
-    ExportKindProof, binding_declares_class, export_kind_proof, raised_function_export,
-};
+pub use contracts::{ExportKindProof, export_kind_proof, raised_function_export};
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
     named_callback_roles, semantic_execution_role,
@@ -396,6 +394,28 @@ pub struct ReactiveRead {
     /// wording, because the two divergences are true for different reasons.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub divergent_lowering: Option<DivergentLowering>,
+}
+
+impl ReactiveRead {
+    /// Whether a finding about this read is **uncertifiable** rather than a
+    /// proven violation.
+    ///
+    /// Three independent holes, any one of which is enough: the reactive
+    /// backing cannot be established because the component's callers cannot be
+    /// enumerated ([`Self::uncertain`]), the execution context cannot be
+    /// established because the compiler reported no census for the JSX region
+    /// ([`Self::missing_jsx_census`]), or the region's lowering differs between
+    /// the pinned fork and the compiler Solid ships
+    /// ([`Self::divergent_lowering`]).
+    ///
+    /// This is one predicate on purpose. The projection sets a finding's `kind`
+    /// from it and each dialect's wording selects its hint from it; when the two
+    /// disagreed, a finding could be published as a proven violation while
+    /// carrying a proof-obligation hint, or the reverse.
+    #[must_use]
+    pub fn is_uncertifiable(&self) -> bool {
+        self.uncertain || self.missing_jsx_census || self.divergent_lowering.is_some()
+    }
 }
 
 /// Which of the pinned compiler fork's lowering divergences a fact about a
@@ -3827,6 +3847,7 @@ mod tests {
             type_descriptor: None,
             resolved_call: None,
             callability: None,
+            constructability: None,
             runtime_value_domain: None,
             primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
             call_result_domain: None,

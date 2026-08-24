@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "function-supertype-kind",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "value-1": {
+      "kind": "value",
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "value-1": [
+          "bag",
+          "empty",
+          "raw",
+          "retries",
+          "table"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

@@ -72,6 +72,14 @@
           "siblingFunction"
         ]
       }
+    },
+    "./destructured": {
+      "exports": {
+        "value-1": [
+          "dependencyCacheName",
+          "inlineCacheName"
+        ]
+      }
     }
   },
   "evidence": {

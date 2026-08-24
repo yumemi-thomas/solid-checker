@@ -87,7 +87,13 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # its own `READS_TRACE_VERSION` literal equal to the producer's constant, so a
 # schema bump fails the build rather than being read as if nothing changed.
 solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "b66c3e34ba2a0b74238726eb2b83f767eacf94f2", default-features = false }
-typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4" }
+# Moved from `e2f7ac5` for the span-exact `constructability` fact (producer ADR
+# 0020): wire table schema 14, handshake protocol still 2, compact demand bit
+# 16. `export_kind_proof` consumes it beside `callability` — callable or
+# constructable proves a runtime function, and only the two closed negatives
+# together prove a value — which is what retired the syntactic class search
+# this consumer used to run instead.
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "3296ec8ccd8a563cbc9037d1297ed2a88054c1a9" }
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"
 oxc_ast = "0.118"

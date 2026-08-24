@@ -1883,7 +1883,14 @@ mod tests {
     fn semantic_demand_plan_is_complete_for_downstream_consumers() {
         let file = test_file_facts(
             "src/component.tsx",
-            "const value = createMemo(async () => 1); const effectArgs: [() => number] = [() => 1]; createEffect(...effectArgs); export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
+            // Every export shape the `kind` decision can be asked about, not
+            // just the declaration form: a specifier list, a class
+            // declaration, an anonymous default class (whose recorded span is
+            // the class node, there being no name), and a destructuring
+            // declarator. Each must carry both signature facts, because
+            // `export_kind_proof` reads absence at one of these spans as a
+            // refusal.
+            "const value = createMemo(async () => 1); const effectArgs: [() => number] = [() => 1]; createEffect(...effectArgs); const local = 1; const o: { a: number } = { a: 1 }; export { local }; export class K {} export const { a } = o; export default class {} export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
         );
         let demands = semantic_demands(
             dialect::default_dialect(),
@@ -1972,8 +1979,17 @@ mod tests {
         for export in &file.ast.exports {
             for item in export.specifiers.iter().chain(&export.declarations) {
                 let location = typefacts_location(file.path.as_str(), item.local.span);
+                // Both signature facts, at every export specifier and every
+                // exported declaration name. `export_kind_proof` treats an
+                // absent fact at one of these spans as a *refusal* rather than
+                // as a keep-the-summary no-op, which is only honest because
+                // this invariant holds: absence there is the producer finding
+                // no node to classify, never the plan declining to ask.
                 assert!(demands.iter().any(|demand| {
-                    demand.location == location && demand.callability && demand.runtime_identity
+                    demand.location == location
+                        && demand.callability
+                        && demand.constructability
+                        && demand.runtime_identity
                 }));
             }
         }
