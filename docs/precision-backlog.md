@@ -5100,7 +5100,7 @@ Both compiler pins moved to the merged semantic-trace producer work:
 | pin | from | to |
 | --- | --- | --- |
 | `dom-expressions-compiler` (2.0) | `e6ab3469a94addd6f72c7e8347e871a1a0c7edf5` | `66004ab78fa10412208d1bc8cb301bfc028ea826` — **superseded later the same day** by `c6008f01df199ff0f0d072093e2393ed3d67f0c4`; see "Two lowering divergences the fork's own contract declares binding" below, and `rust/Cargo.toml` for the pin actually in force |
-| `solid1-dom-expressions-compiler` (1.x) | `ad2c9452041c757138bb972416d8abc4798ea6b9` | `b66c3e34ba2a0b74238726eb2b83f767eacf94f2` (still in force) |
+| `solid1-dom-expressions-compiler` (1.x) | `ad2c9452041c757138bb972416d8abc4798ea6b9` | `b66c3e34ba2a0b74238726eb2b83f767eacf94f2` — **superseded later the same day** by `d1e089581231b3028b7e8ce838ceed0f3c83e154`, which adds all-position `children` promotion and discarded-subtree retractions |
 
 What the two forks ratified, from their own `docs/execution-contract.md`:
 
@@ -5563,18 +5563,19 @@ that retiring one leaves the other intact.
   fixture would pin an exit code rather than a semantic claim.~~ **Resolved
   (2026-08-24)** by moving the pin to `fea62adb5d0332a4a3cb5088e97283673c40b540`
   — see "Divergence 4 is resolved, and it surfaced five more" below.
-- **The 1.x producer fails the file on *both* retraction shapes.** Probed under
+- **The 1.x producer used to fail the file on *both* retraction shapes.** Probed under
   `solid1-dom-expressions-compiler` at
   `b66c3e34ba2a0b74238726eb2b83f767eacf94f2`: both
   `<div><span textContent={x()}>{y()}</span></div>` and
   `<div><noscript>{b()}</noscript></div>` report `semantic trace has unresolved
-  execution sites: JsxChild@<span>` and exit 2. PR #2's retractions are 2.0-only;
-  the 1.x fork has received neither. So both retraction arms are pinned in the
-  2.0 census-gap fixture with no 1.x sibling — a fixture there would pin an exit
-  code. They arrive with the 1.x pin that carries the same retractions. Note the
-  asymmetry this creates and that the fixtures state: 1.x *emits* in every
-  position these shapes appear in, so it has no retraction to get wrong, and its
-  divergence coverage is complete while its census-gap coverage is not.
+  execution sites: JsxChild@<span>` and exit 2. The `d1e08958` pin closes the
+  static-`<noscript>` half: `TraceRecorder::retract_within` now withdraws the
+  sites under that fast path, plus both hydratable-`<head>` replacement paths,
+  without changing emitted JavaScript or trace schema. The 1.x census-gap
+  fixture now pins the `<noscript>` arm. The dynamic-`textContent` shadowed-child
+  path is still not among the producer's three discarded-subtree retractions,
+  so that half remains a file-level reconciliation failure and stays unpinned
+  here rather than normalizing an exit code into a semantic expectation.
 - ~~**The `uncertifiable` hint still says "Solid warns STRICT_READ_UNTRACKED here
   in dev"** under 2.0, on the divergence finding exactly as on the census-gap and
   `uncertain` ones.~~ **Fixed (2026-08-24)** by the same v2 wording slice as the
@@ -5879,9 +5880,9 @@ this was a present fact whose meaning was misread.
 
 ### Nothing the producers mark `Elided` evaluates at runtime
 
-Audited at both pinned revisions by reading the emitting path, not inferred
-from the name. The 2.0 fork at `fea62adb` has nine emission sites and the 1.x
-fork at `b66c3e34` has eight; every 2.0 site was read, and the 1.x sites were
+Audited at the then-pinned revisions by reading the emitting path, not inferred
+from the name. The 2.0 fork at `fea62adb` had nine emission sites and the 1.x
+fork at `b66c3e34` had eight; every 2.0 site was read, and the 1.x sites were
 matched to their 2.0 twin by emitting path, with 1.x's one site that has no 2.0
 twin (`shared/component.rs`) read directly. Every one falls in one of two
 classes:
@@ -5901,6 +5902,16 @@ classes:
 `resolve_lowered_attribute` never turns a callback site into an `Elided` value —
 it *retracts* `on*` and `ref` sites — so `Elided` only ever arrives on a native
 attribute, a spread member, a JSX child, or a component property.
+
+The `eabc563d` port to `next` adds one more 2.0 emission route, reviewed with
+the port rather than silently inherited from that count: a dynamic intrinsic
+`$key={key()}` in DOM mode. `$key` is server-component markup identity; the DOM
+lowering strips it completely, so the value is resolved as
+`native-attribute` / `Elided`. SSR retains the expression under the emitted
+`_key` attribute and resolves it through its live lowering instead. This is the
+only `next`-specific semantic-trace adaptation in the port; the full upstream
+census, regression, interface, and transform-baseline suites pass with trace
+version 2 unchanged.
 
 ### The projection: a discarded region, distinct from an untracked one
 
@@ -6167,7 +6178,8 @@ does not mistake the first for the second.
 
 ### Open: a shadowed `children` attribute holding reactive JSX still fails the producer closed
 
-Probed at `fea62adb` with a scratch project and the debug binary:
+Probed at `fea62adb` and re-probed after the `eabc563d` port to `next` with a
+scratch project and the fresh debug binary:
 
 ```tsx
 export function Shadowed() {
@@ -6177,8 +6189,8 @@ export function Shadowed() {
 }
 ```
 
-`solid-checker-rust` exits **2** with
-`semantic trace has unresolved execution sites: JsxChild@162..165` — the span of
+`solid-checker-rust` still exits **2** with
+`semantic trace has unresolved execution sites: JsxChild@<x-span>` — the span of
 `x()`, inside the JSX-valued attribute. The census walks source, so it names the
 `<b>`'s child as a `jsx-child` site; lowering drops the shadowed `children`
 attribute *without visiting its value*, so that inner site is neither resolved
@@ -6197,12 +6209,13 @@ a JSX-valued hole rather than about this reconciliation failure, and to
 divergence 5's residue above; recorded as a residue of this entry because the
 discarded-region work is what made the shadowed path interesting enough to
 probe. No fixture pins it — a fixture containing it would make its whole project
-exit 2 and pin nothing.
+exit 2 and pin nothing. The port therefore does **not** close this case; it
+preserves the producer's fail-closed behavior.
 
 ## Closed 2026-08-24: the constructability fact decides `kind`, and the spans it must not be asked at
 
-**Closed for the class residue and the destructuring refusal; one named
-residue stays open.** The producer's span-exact `constructability` fact landed
+**Closed for the class residue and the destructuring refusal; the remaining
+`Function` residue was closed by the schema-15 follow-up below.** The producer's span-exact `constructability` fact landed
 (solid-ts-facts merge `3296ec8c`, wire table schema 14, handshake protocol
 still 2, compact demand bit 16, producer ADR 0020). `rust/Cargo.toml`'s
 `typefacts` pin moved `e2f7ac5` → `3296ec8c` and `bin/solid-typefacts` was
@@ -6212,20 +6225,20 @@ rebuilt from it.
 the three-way rule the two entries above
 ([the `kind` claim a bundled artifact contradicts](#the-kind-claim-a-bundled-artifact-contradicts-2026-08-23),
 [the refusal path costs enums and untyped values](#the-refusal-path-costs-enums-and-untyped-values-2026-08-24))
-named as the fix. The complete decision, over the 5×5 product of what the two
-facts can say — each of `Callable`/`NonCallable`/`Mixed`/`Unknown` plus
-absence, on each side:
+named as the fix. The current decision is the 6×5 product of callability's five
+answers plus absence and constructability's four answers plus absence:
 
 | | `Constructable` | `NonConstructable` | `Mixed` | `Unknown` | absent |
 | --- | --- | --- | --- | --- | --- |
 | **`Callable`** | function | function | function | function | function |
+| **`UntypedCallable`** | function | function | function | function | function |
 | **`NonCallable`** | function | **value** | unresolvable | unresolvable | unanswered |
 | **`Mixed`** | function | unresolvable | unresolvable | unresolvable | unanswered |
 | **`Unknown`** | function | unresolvable | unresolvable | unresolvable | unanswered |
 | **absent** | function | unanswered | unanswered | unanswered | unanswered |
 
-Nine cells prove a function, exactly one proves a value, and the other fifteen
-refuse. `unresolvable` and `unanswered` both refuse at
+Fourteen cells prove a function, exactly one proves a value, and the other
+fifteen refuse. `unresolvable` and `unanswered` both refuse at
 `promote_entry_callable`; they are separate variants only so the refusal
 message distinguishes "the facts closed nothing" from "a fact is missing". The
 table is pinned cell by cell, against an independently restated rule and with
@@ -6346,7 +6359,7 @@ constructor by language definition, and it cannot be defeated the way the
 retired search was — a bundler that lowers the declaration away leaves a
 *declarator* name, which types as the constructor and is decided by the facts.
 `export_kind_proof_tests::a_class_declaration_is_decided_before_the_facts_are_read`
-pins that this gate fires for all 25 fact combinations at a class declaration
+pins that this gate fires for all 30 fact combinations at a class declaration
 and for none of the lowered shapes.
 
 This subsection said "one span" when it landed, and that was wrong by one
@@ -6355,46 +6368,36 @@ class *node's* span and the same instance-type problem applies there. It
 published `kind: "value"` for a constructor until 2026-08-24 — see the
 namespace-surface entry at the end of this file.
 
-### Open residue: the signature-less `Function`-supertype family
+### Closed 2026-08-24: signature-less `Function` values have a positive kind answer
 
-**Open. Pre-existing, neither widened nor closed by this change.**
-lib.es5.d.ts's `Function` interface — and `CallableFunction`,
-`NewableFunction`, and any type a function value is assignable to that declares
-no signature of its own, such as `object`, `{}` and
-`Record<string, unknown>` — declares `apply`/`call`/`bind` and no call or
-construct signature. So `export declare const x: Function` answers
-`nonCallable` **and** `nonConstructable`, the cell this rule reads as its one
-`value` proof, while `typeof x === "function"` holds at runtime for every value
-that type admits. TypeScript-Go's own `typeof` narrowing
-(`checker.isFunctionObjectType`) gets it right through a `bind`-member
-subtype-of-`Function` fallback, so the compiler's own "is this a function"
-answer and the fact pair's answer diverge **by design** for this family.
+The Type Facts pin moved `3296ec8c` → `19671a88` (producer ADR 0021, wire table
+schema 15, handshake protocol still 2). It adds
+`Callability::UntypedCallable` for the signature-less `Function` family:
+`Function`, `CallableFunction`, `NewableFunction`, aliases and interfaces based
+on `Function`, and intersections containing it. The answer is deliberately
+narrow: it proves the runtime value is a function while proving no readable
+signature, parameters, arity, or callback behavior.
 
-Nothing on the consumer side can detect it. Assignability to `Function` is not
-one of these facts, and there is no honest local substitute: matching the
-rendered type text is exactly the `typeDescriptor.text` interpretation the
-producer's migration notes forbid, and a `type Handler = Function` alias
-renders as its own name and defeats it anyway. Through `callability` alone this
-answered `nonCallable`, no class syntax contradicted it, and `value` was
-published for the same reason — so this is not a hole the second fact opened.
+Both consumers moved with the pin. `export_kind_proof` treats
+`UntypedCallable` as the same positive runtime-kind evidence as `Callable`, so
+the generated contract raises to `kind: "function"` and keeps `callbacks`
+unknown. `dynamic_key_form` accepts it for an identifier-valued custom key,
+where runtime callability — not signature introspection — is the required
+fact. No other signature-dependent inference was widened.
 
-Pinned wrong on purpose by
-`fixtures/package-contracts/function-supertype-kind`: `Function`, `object`,
-`{}` and `Record<string, unknown>` all publish `kind: "value"`, beside a
-`number` control that answers the identical pair and for which `value` is
-correct. That control is why the pair cannot simply be distrusted wholesale.
+The previous entry overstated the family. `object`, `{}`, and
+`Record<string, unknown>` are not `UntypedCallable`: those declared types admit
+non-function values, so `NonCallable` + `NonConstructable` remains the honest
+answer and `kind: "value"` remains correct. The updated
+`fixtures/package-contracts/function-supertype-kind` pins six positive family
+shapes and those three broad negative controls beside a `number`.
 
-**Named producer follow-up (ADR 0020, "What it does not answer"): give
-`constructabilityOfType` and `callabilityOfType` the same `bind`-member
-subtype-of-`Function` fallback `isFunctionObjectType` already has**, so the
-fact vocabulary closes the gap instead of pushing it onto every consumer. When
-it lands, all four of that fixture's family rows answer `Unknown` on both
-facts, `export_kind_proof` returns `unresolvable`, and the entrypoint is
-*refused* rather than published — which for that fixture (a single `.`
-entrypoint) is a generation failure, so `retries` should be split onto its own
-entrypoint at that point. No corpus measurement of the family's size exists
-yet; a search for exports typed against it is the measurable before/after
-target.
+**Remaining producer limits:** `UntypedCallable` does not imply a readable
+signature; constructability remains `NonConstructable` for this family;
+runtime-value-domain does not add a second positive; union constituent
+aggregation remains coarser than a per-constituent proof; declaration lies are
+still possible; and the ecosystem corpus has not been remeasured for how often
+this answer changes a real export.
 
 ### Gates
 
@@ -6695,11 +6698,10 @@ which changed behavior:
   `fixtures/package-contracts/exported-class/README.md` and
   `class-expression-default.ts`.
 - `scripts/contract-corpus.mjs`'s summary line read `contract corpus: N
-  packages`, which reads as "N correct contracts". A passing count is "N
-  pins matched their checked-in expectation" — `function-supertype-kind` pins
-  a `kind` claim that is wrong on purpose (see its row comment), so the count
-  is not itself a correctness claim about every package it includes. The line
-  now reads `contract corpus: N pins, …`.
+  packages`, which reads as "N correct contracts". A passing count is only "N
+  pins matched their checked-in expectation"; at the time,
+  `function-supertype-kind` deliberately pinned a known-wrong claim (since
+  closed by schema 15). The line now reads `contract corpus: N pins, …`.
 - The two shape changes to `AstFacts` in the fix above — the `module_blocks`
   addition and the unrelated `initializer_class` deletion recorded under "Dead
   field removed" below — shared a single `AST_FACTS_SCHEMA` bump (35 → 36).

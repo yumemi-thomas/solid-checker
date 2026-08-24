@@ -12,6 +12,7 @@ declare namespace JSX {
   interface IntrinsicElements {
     div: { children?: unknown };
     head: { children?: unknown };
+    noscript: { children?: unknown };
     title: { children?: unknown; id?: string };
     span: { children?: unknown };
   }

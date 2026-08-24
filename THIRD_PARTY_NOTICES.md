@@ -7,7 +7,7 @@ whose original notices remain applicable.
 
 - Upstream: https://github.com/ryansolid/dom-expressions
 - Consumed fork: https://github.com/yumemi-thomas/dom-expressions
-- Pinned revision: `fea62adb5d0332a4a3cb5088e97283673c40b540`
+- Pinned revision: `eabc563d812e9854d67cee63777483df150538cc`
 - License: MIT
 
 The `dom-expressions-compiler` crate is consumed as a pinned Cargo git
@@ -19,7 +19,7 @@ upstream in that fork.
 
 - Upstream: https://github.com/ryansolid/dom-expressions
 - Consumed fork: https://github.com/yumemi-thomas/solid-1x-compiler
-- Pinned revision: `b66c3e34ba2a0b74238726eb2b83f767eacf94f2`
+- Pinned revision: `d1e089581231b3028b7e8ce838ceed0f3c83e154`
 - License: MIT
 
 The Solid 1.x dialect consumes the same `dom-expressions-compiler` crate name
@@ -39,7 +39,7 @@ repository.
 ## TypeFacts
 
 - Consumed repository: https://github.com/yumemi-thomas/solid-ts-facts
-- Pinned revision: `3296ec8ccd8a563cbc9037d1297ed2a88054c1a9`
+- Pinned revision: `19671a889b273da135024722c5957b8979e43fbb`
 - License: MIT
 
 The Rust client and Go producer move together at this revision. The producer

@@ -1016,23 +1016,16 @@ element whose type is a class are `Constructable` — so
 `fixtures/package-contracts/class-expression-kind`'s `./destructured`
 entrypoint now *publishes* two `value` claims where it used to be refused.
 
-The residue is one family, and it is not detectable here. lib.es5.d.ts's
-signature-less `Function`-supertype family (`Function`, `CallableFunction`,
-`NewableFunction`, and any type a function value is assignable to that declares
-no signature of its own — `object`, `{}`, `Record<string, unknown>`) declares
-`apply`/`call`/`bind` and no signature, so `export declare const x: Function`
-answers both closed negatives while `typeof x === "function"` holds at runtime
-for every value the type admits. TypeScript-Go's own `typeof` narrowing gets
-these right through a `bind`-member subtype-of-`Function` fallback that the
-producer's signature walks do not carry, so the compiler's answer and the fact
-pair's answer diverge by design there. Assignability to `Function` is not one of
-these facts and there is no honest local substitute, so such an export publishes
-`kind: "value"` — a pre-existing hole through `callability` alone, neither
-widened nor closed by the constructability fact.
-`fixtures/package-contracts/function-supertype-kind` pins that wrong answer on
-purpose, with a `number` control that answers the identical pair and for which
-`value` is correct. The producer follow-up named in ADR 0020 is what closes it.
-Recorded in [docs/precision-backlog.md](precision-backlog.md).
+Schema 15 closes the signature-less `Function` residue with
+`Callability::UntypedCallable`. `Function`, `CallableFunction`,
+`NewableFunction`, aliases/interfaces based on `Function`, and intersections
+containing it now prove runtime `kind: "function"` without claiming a readable
+signature. Broad types such as `object`, `{}`, and `Record<string, unknown>` are
+not members of that family: they admit non-function values and correctly keep
+the closed negative pair. `fixtures/package-contracts/function-supertype-kind`
+pins both sides of that boundary. The producer and consumer migration, plus the
+remaining signature and union limits, are recorded in
+[docs/precision-backlog.md](precision-backlog.md).
 
 **A raise to `kind: "function"` always leaves `callbacks` unknown.** Every
 raise reaches `raised_function_export` with a summary that still said `value`,

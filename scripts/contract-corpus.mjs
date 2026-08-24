@@ -162,14 +162,10 @@ const fixtures = [
   // declarator-inside-the-export-span selection. A merged class+namespace rides
   // along, because the merge must not cost the class its `kind: "function"`.
   "namespace-export-surface",
-  // Pins a `kind` claim that is *wrong*, deliberately. lib.es5.d.ts's
-  // signature-less `Function`-supertype family (`Function`, `object`, `{}`,
-  // `Record<…>`) answers `nonCallable` + `nonConstructable` truthfully about
-  // the declared type while `typeof x === "function"` can hold at runtime, and
-  // no fact on this side can detect the family. The row is here so the
-  // producer follow-up that closes it (ADR 0020's `bind`-member fallback)
-  // shows up as a gate flip rather than as prose. A `number` control rides
-  // along, because it answers the identical pair and `value` is right for it.
+  // Pins Type Facts schema 15's `UntypedCallable` boundary: `Function`, its
+  // aliases/interfaces, and intersections containing it prove runtime
+  // `kind: "function"` without claiming a readable signature; broad supertypes
+  // (`object`, `{}`, `Record<…>`) and a number control remain values.
   "function-supertype-kind",
   // The closure-record fixtures. Each carries an `expected-generation.json`
   // as well as an `expected.json`, because what they pin is the *review plan's*
@@ -466,9 +462,8 @@ try {
   const coverageResult = generatorCoverage(contributions);
   const uncovered = coverageResult.uncoveredRanges.length;
   // "pins", not "packages": a passing count is "matches its checked-in
-  // expectation", not "is correct" -- `function-supertype-kind` pins a `kind`
-  // claim that is wrong on purpose, so this line staying green after a change
-  // is not itself a correctness claim about every entry it counts.
+  // expectation"; it does not by itself certify the review state of every
+  // external artifact represented by the corpus.
   console.log(
     `contract corpus: ${generated.length} pins, ${uncovered} uncovered generator ranges`
   );

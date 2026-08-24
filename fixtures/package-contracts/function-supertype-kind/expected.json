@@ -6,6 +6,15 @@
   },
   "compilerFactsProtocol": 1,
   "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
     "value-1": {
       "kind": "value",
       "evidence": {
@@ -16,10 +25,17 @@
   "entrypoints": {
     ".": {
       "exports": {
+        "function-1": [
+          "alias",
+          "branded",
+          "callable",
+          "extended",
+          "newable",
+          "raw"
+        ],
         "value-1": [
           "bag",
           "empty",
-          "raw",
           "retries",
           "table"
         ]

@@ -30,12 +30,12 @@ rust-version = "1.97"
 # The JSX compiler lives in its own repository now and is pinned by revision:
 # reproducible builds matter more here than picking up upstream
 # automatically.
-# Pinned to `main` (the semantic-trace and census branches are merged into
-# it), which stops a constant-folded `on*`/`ref`/`children` attribute
-# leaving a mismatched census site and failing the whole file, and carries
-# upstream `next` at 0.50.0-next.43 for Solid 2.0 RC.0, merged through
-# `8069eb66821c7d36f327cd3a0790b3d47ae4d276` while retaining the semantic
-# ownership trace required by this checker.
+# Pinned to the tested head of fork PR #4, based on upstream `next` at
+# `e109692b9b50e20511091d9ce324ebc660b4ca32` (0.50.0-next.44). The PR ports
+# the reactive-ownership prerequisite and the three compiler-contract fixes
+# that had landed on `main`, preserving `next`'s newer Oxc and server-component
+# work. It stops constant-folded `on*`/`ref`/`children` attributes from leaving
+# mismatched census sites and failing the whole file.
 # This rev carries `SEMANTIC_TRACE_VERSION = 2`: the trace gained the additive
 # wrapper vocabulary (`owner_establishments`, `component_render_sites`,
 # `deferred_callback_sites`) and a `version` field the consumer must check.
@@ -46,7 +46,7 @@ rust-version = "1.97"
 # producer's constant — equal to `SEMANTIC_TRACE_VERSION` in a const assert.
 # That is deliberate. Fix the projection for the new schema, then move both the
 # rev and the literal.
-# This rev was the merge of fork PR #2 (`fix/void-child-census`) into `main`:
+# The port includes fork PR #2 (`fix/void-child-census`):
 # the semantic-trace census now includes a *nested* void element's children,
 # which the fork's transform really does lower -- a deliberate parity
 # divergence from Babel, which deletes them -- and the textarea `value` fold
@@ -55,8 +55,8 @@ rust-version = "1.97"
 # consumer rule; the two this checker mitigates are in docs/compiler-facts.md,
 # "Divergent lowering", implemented by `divergent_lowered_child` in
 # rust/crates/solid-reactive-ir/src/execution_role.rs.
-# Moved to the merge of fork PR #3 (`fix/nested-children-attribute-promotion`)
-# into `main`, resolving divergence 4: a `children` attribute on a nested
+# It also includes fork PR #3 (`fix/nested-children-attribute-promotion`),
+# resolving divergence 4: a `children` attribute on a nested
 # native element with no source children now promotes to a real child insert,
 # the way a template-root `children` attribute always has, instead of naming a
 # `jsx-child` census site nested lowering never resolved (a hard
@@ -70,8 +70,11 @@ rust-version = "1.97"
 # evidence in docs/precision-backlog.md ("Divergence 4 is resolved, and it
 # surfaced five more"), with divergence 5's certification residue tracked there
 # as open. See docs/compiler-facts.md for the divergences this checker does
-# mitigate.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "fea62adb5d0332a4a3cb5088e97283673c40b540", default-features = false }
+# mitigate. The only `next`-specific trace adaptation is a DOM-mode dynamic
+# intrinsic `$key`: lowering strips the server-component identity attribute,
+# so the trace now resolves its value as `Elided` instead of leaving the census
+# open. `SEMANTIC_TRACE_VERSION` remains 2.
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "eabc563d812e9854d67cee63777483df150538cc", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on
@@ -102,14 +105,18 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # The same const assert guards this side: rust/dialects/solid-v1/compiler holds
 # its own `READS_TRACE_VERSION` literal equal to the producer's constant, so a
 # schema bump fails the build rather than being read as if nothing changed.
-solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "b66c3e34ba2a0b74238726eb2b83f767eacf94f2", default-features = false }
-# Moved from `e2f7ac5` for the span-exact `constructability` fact (producer ADR
-# 0020): wire table schema 14, handshake protocol still 2, compact demand bit
-# 16. `export_kind_proof` consumes it beside `callability` — callable or
-# constructable proves a runtime function, and only the two closed negatives
-# together prove a value — which is what retired the syntactic class search
-# this consumer used to run instead.
-typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "3296ec8ccd8a563cbc9037d1297ed2a88054c1a9" }
+# The current rev additionally carries the nested `children`-attribute
+# promotion fixes and retracts trace rows inside every subtree lowering later
+# discards (including static `<noscript>` and hydratable `<head>` paths). The
+# latter is trace-only: emitted JavaScript and `SEMANTIC_TRACE_VERSION = 2`
+# remain unchanged, while file-level exit-2 census gaps are closed.
+solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "d1e089581231b3028b7e8ce838ceed0f3c83e154", default-features = false }
+# Moved from `3296ec8` for the signature-less `Function`-supertype answer
+# (producer ADR 0021): wire table schema 15, handshake protocol still 2.
+# `Callability::UntypedCallable` is positive runtime-function evidence without
+# claiming a readable signature; the kind proof and keyed-control discovery
+# consume it beside `Callable`. `Constructability` remains unchanged.
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "19671a889b273da135024722c5957b8979e43fbb" }
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"
 oxc_ast = "0.118"

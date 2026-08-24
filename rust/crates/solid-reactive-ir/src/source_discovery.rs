@@ -1251,10 +1251,12 @@ fn dynamic_key_form(
             && identifier.role == solid_facts::ast::IdentifierRole::Reference
     });
     if identifier
-        && semantic_lookup
-            .entity_at(file.path.as_str(), expression)
-            .and_then(|entity| entity.callability)
-            == Some(typefacts::Callability::Callable)
+        && matches!(
+            semantic_lookup
+                .entity_at(file.path.as_str(), expression)
+                .and_then(|entity| entity.callability),
+            Some(typefacts::Callability::Callable | typefacts::Callability::UntypedCallable)
+        )
     {
         return solid_dialect::KeyForm::CustomKey;
     }

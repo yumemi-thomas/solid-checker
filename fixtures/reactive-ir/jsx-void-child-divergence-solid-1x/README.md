@@ -16,7 +16,7 @@ the snapshot diff between the two meaning "the *producer* changed the answer"
 rather than "someone edited one file".
 
 **The 1.x half of the differential.** Probed against the pinned
-`solid1-dom-expressions-compiler` (`b66c3e34ba2a0b74238726eb2b83f767eacf94f2`)
+`solid1-dom-expressions-compiler` (`d1e089581231b3028b7e8ce838ceed0f3c83e154`)
 with the fresh debug binary, not assumed:
 
 | function | 1.x verdict |

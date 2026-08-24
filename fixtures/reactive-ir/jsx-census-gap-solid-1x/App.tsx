@@ -34,6 +34,16 @@ function AttributeReadInsideDroppedHead() {
   );
 }
 
+// Censused, then retracted. The static-template `<noscript>` fast path emits
+// the inert tag and skips its children wholesale. At `d1e08958` the producer
+// began withdrawing every site in that discarded range instead of rejecting
+// the whole file during trace reconciliation. The resulting source/census hole
+// is an uncertifiable proof obligation, exactly like the dropped-head paths.
+function ReadInsideDiscardedNoscript() {
+  const [note] = createSignal("n");
+  return <div><noscript>{note()}</noscript></div>;
+}
+
 // Negative: an ordinary tracked child. The census records it, the compiler
 // proves it re-runs, and the checker stays silent. This is what the census-gap
 // escalation must not start reporting.
@@ -69,6 +79,7 @@ export function Root() {
     <div>
       <ReadInsideDroppedHead />
       <AttributeReadInsideDroppedHead />
+      <ReadInsideDiscardedNoscript />
       <TrackedChildStaysCertified />
       <ReadOutsideJsxStaysAViolation />
     </div>

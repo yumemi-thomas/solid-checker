@@ -419,9 +419,11 @@ and `RetractedInertNoscriptChild` in
 `fixtures/reactive-ir/jsx-census-gap-solid-2` is the mechanical guard: keyed on
 the tag, that arm would take the divergence wording and fail the gate.
 
-**Divergence 4 (nested `children` attribute promotion) is resolved as of the
-`fea62adb5d0332a4a3cb5088e97283673c40b540` pin** (upstream PR #3, "nested
-children attribute promotion"). At the prior pin (`c6008f01…`), a `children`
+**Divergence 4 (nested `children` attribute promotion) was resolved by
+`fea62adb5d0332a4a3cb5088e97283673c40b540`** (upstream PR #3, "nested
+children attribute promotion") and is retained by the current
+`eabc563d812e9854d67cee63777483df150538cc` port to `next`. At the prior pin
+(`c6008f01…`), a `children`
 attribute on a nested native element with no source children —
 `<div><span children={x()}/></div>` — was a deliberate hard reconciliation
 failure in the producer: the census named a `jsx-child` site nested lowering
@@ -448,9 +450,9 @@ already discarded.
 
 Divergences 5-9 — all pre-existing, none of them nesting-specific, surfaced
 only while resolving divergence 4 — remain open and reach no rule in this
-checker today. The 1.x producer's missing retractions on divergence 2 and 3's
-fast-path shapes are a separate, still-open gap. Both are recorded in
-`docs/precision-backlog.md` with their status.
+checker today. The 1.x producer now retracts the static `<noscript>` fast path;
+its dynamic-`textContent` shadowed-child path remains a file-level gap. Both
+states are recorded in `docs/precision-backlog.md`.
 
 `Value(CallerContext)` is the dynamic component property: the expression is
 handed to the child as a getter and re-evaluated in the child's tracking

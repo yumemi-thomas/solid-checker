@@ -790,7 +790,7 @@ impl Dialect for Solid2 {
     /// Empty, and that is a checked claim rather than an absence.
     ///
     /// 2.0's parity target is `packages/babel-plugin-jsx` in the pinned
-    /// `dom-expressions` fork (rev `fea62adb`), whose `src/dom/element.ts` and
+    /// `dom-expressions` fork (rev `eabc563d`), whose `src/dom/element.ts` and
     /// `src/ssr/element.ts` import `VoidElements` from
     /// `packages/runtime/src/constants.js`. That set is exactly the 14 tags the
     /// Rust producer's `void_elements`

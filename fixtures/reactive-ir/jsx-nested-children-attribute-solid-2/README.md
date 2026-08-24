@@ -21,6 +21,10 @@ At the new pin, `lower_dynamic_native_child` performs the same promotion
 onto the (empty) child list as an ordinary expression container, so it lowers
 and censuses exactly like any other nested child.
 
+The current `eabc563d812e9854d67cee63777483df150538cc` pin ports this work from
+`main` onto `next`; the historical `c6008f01` → `fea62adb` transition above is
+the semantic change this fixture exists to pin.
+
 Promotion is also what makes this fixture the natural home for the second
 claim it pins: **what the promoted-or-dropped attribute means when the
 compiler deletes it**, and where deletion stops being the whole story because

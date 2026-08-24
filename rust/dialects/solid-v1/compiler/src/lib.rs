@@ -109,9 +109,10 @@ impl CompilerFactsProvider for NativeCompilerFacts {
 /// both; see docs/compiler-facts.md, "Divergent lowering". (The 2.0 fork gates
 /// the *void* template-root path on `!is_void_element`, so only its nested
 /// position diverges — probed, and pinned by the fixture pair named there.
-/// This producer does **not** retract the `<noscript>` fast path at all: that
-/// shape fails reconciliation and the file is rejected, recorded in
-/// docs/precision-backlog.md.)
+/// The static-template `<noscript>` fast path now retracts the sites in the
+/// subtree it discards, so it agrees with Babel and projects a discarded
+/// region. The template-root and dynamic-attribute positions still lower the
+/// children and remain divergences.)
 ///
 /// `default_effect_wrapper` reports whether the compile ran under the
 /// compiler's own effect wrapper. It is not derivable from the trace, and it
