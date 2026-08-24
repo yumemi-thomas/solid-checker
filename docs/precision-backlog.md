@@ -5092,3 +5092,603 @@ same five shapes**.
   probed behavioral row, and **0 of the 8** stage 1 added. Machine verification is
   certifying negatives and `typeof`; the human tier is still the useful one for
   positives, exactly as RFC 0002 unresolved question 1 warned.
+
+## Compiler trace version 2: the producers converged, the 1.x consumer took the derivation (2026-08-24)
+
+Both compiler pins moved to the merged semantic-trace producer work:
+
+| pin | from | to |
+| --- | --- | --- |
+| `dom-expressions-compiler` (2.0) | `e6ab3469a94addd6f72c7e8347e871a1a0c7edf5` | `66004ab78fa10412208d1bc8cb301bfc028ea826` — **superseded later the same day** by `c6008f01df199ff0f0d072093e2393ed3d67f0c4`; see "Two lowering divergences the fork's own contract declares binding" below, and `rust/Cargo.toml` for the pin actually in force |
+| `solid1-dom-expressions-compiler` (1.x) | `ad2c9452041c757138bb972416d8abc4798ea6b9` | `b66c3e34ba2a0b74238726eb2b83f767eacf94f2` (still in force) |
+
+What the two forks ratified, from their own `docs/execution-contract.md`:
+
+- `SemanticTrace` now carries `version: u32` (`SEMANTIC_TRACE_VERSION = 2`) and
+  still refuses unknown fields, so a consumer must check the version before
+  reading a single field.
+- Three additive facts: `owner_establishments` (`{ span, wrapper, group_id? }`,
+  one per wrapper call lowering emits), `component_render_sites` (`{ span }`),
+  and `deferred_callback_sites` (`{ span, receiver_span }`).
+- **The 1.x fork removed `ownership_sites` and `OwnershipDecision` entirely**;
+  the 2.0 fork deliberately kept emitting them "for the currently pinned
+  consumer". So the two producers now disagree about who owns the ownership
+  rule, and this is the version where the consumer side had to answer.
+
+What the consumer does about it:
+
+- **Both adapters refuse a trace whose `version` is not the one they were
+  written against**, rather than reading the fields they recognize and assuming
+  the rest still mean what they used to. The refusal is unreachable through
+  `analyze` — the pinned producer only ever emits 2 — so each dialect compiler
+  crate pins it with a unit test instead
+  (`an_unreadable_trace_version_is_refused_rather_than_projected`).
+
+  **Corrected the same day, by review**: as first written the gate could not
+  fire *at all*. It compared `trace.version` against `SEMANTIC_TRACE_VERSION`
+  imported from the very producer that fills the field from that constant, so
+  the two were equal by construction for every producer, a future version-3
+  one included. The unit tests passed because they built their "wrong" version
+  as `SEMANTIC_TRACE_VERSION + 1`, deriving the falsifier from the thing under
+  test. Each adapter now owns a literal `READS_TRACE_VERSION = 2` used in the
+  runtime check, plus a `const _: () = assert!(…)` holding the producer's
+  constant equal to it so a schema bump fails the build; the tests build
+  version `3` literally and name every `SemanticTrace` field rather than
+  filling the rest from `..default()`. The producer's
+  `#[serde(deny_unknown_fields)]` was never protection here either — nothing in
+  this repository deserializes a `SemanticTrace`; `compile()` hands the struct
+  over in-process. `docs/compiler-facts.md` carries the corrected story.
+- **`rust/dialects/solid-v1/compiler` derives the owned ownership regions
+  itself**: every `Value(ReactiveRerun)` site, and only when the compile ran
+  under `Wrapper::Default`. That is the rule the 1.x producer applied at rev
+  `ad2c9452` (`TraceRecorder::finish`) reproduced exactly, over the same
+  `trace.sites` it used, including the "a configured effect wrapper is an
+  unaudited runtime, so claim nothing" arm. Both existing unit tests still pin
+  both arms.
+- **`rust/dialects/solid-v2/compiler` still reads `ownership_sites`**, which the
+  2.0 producer derives from the same rule at decision time. The projected
+  `ExecutionMap` is identical either way; nothing downstream of the two adapters
+  can tell which side derived it. Coverage confirms it: 86 fixture projects, 542
+  findings, no finding moved.
+
+Open, and deliberately not taken here — this slice was wiring, not new rules:
+
+- **The three additive facts are produced and consumed by nothing.** They are
+  the first compiler evidence about *where the wrappers went* rather than what
+  each site decided: a memo boundary, a `createComponent` render site, and the
+  component span that receives a deferred callback. Anything built on them needs
+  its own fixtures and its own slice.
+- **The join rules they require are not obvious, and getting one wrong is a
+  false claim, so they are written down here before anyone consumes them.**
+  A memo fact is spanned at the *booleanized test* it memoizes (`cond()` in
+  `{cond() ? left() : right()}`), which is a strict sub-span of the consuming
+  site: **join owner facts to sites by containment, not by equality.** A span is
+  **not a unique key** — a `createComponent` and its child's `insert` can share
+  one — so key on `(span, identity)`. A fact **need not join anything**: a
+  literal-only hole emits a real `insert`, and literal-only leaves are
+  deliberately not execution sites, so that fact joins to nothing and that is
+  correct rather than a gap. `wrapper` is a string on purpose: an unaudited or
+  custom identity must map to unknown, never be read as its name. The identity
+  sets are also not identical across the forks — `scope` is 2.0-only, and 1.x
+  emits `capture` for a captured listener where 2.0 reports only `direct` and
+  `delegated` — so the mapping belongs to each dialect, not to shared code.
+- **Whether the 2.0 adapter should migrate off `ownership_sites` too**, so the
+  fork can delete the field it is keeping only for this consumer. The rule is
+  the same, but the bytes are not guaranteed to be: the producer sorts and
+  dedups its ownership sites, while a consumer-side pass over `trace.sites`
+  emits one region per `(span, kind)`, so two same-span sites that are both
+  `ReactiveRerun` would produce a duplicate region. `ExecutionMap::validate`
+  permits that (it requires non-decreasing spans, not uniqueness), so the
+  migration is safe — but it can change the map's bytes and therefore needs its
+  own coverage run rather than riding along on a pin move.
+
+One bookkeeping defect found while moving the pins: `THIRD_PARTY_NOTICES.md`
+recorded the 1.x compiler at `79b9b63721c59b0acfd72348438bbb6e090ec81c`, two
+pin moves behind `rust/Cargo.toml`. `docs/monorepo.md` requires the two to move
+together; they now do.
+
+## Census absence was read as proof of non-tracking; it is now uncertifiable (2026-08-24)
+
+Found by adversarial review of the pin move above, and a precision-contract
+violation rather than an imprecision: the checker was reporting a **proven**
+SC1001 about code the compiler had declined to report on.
+
+`ExecutionMap::uncovered_jsx_expressions` holds the census against itself — a
+site the producer censused but left unclassified. It cannot see a source-level
+JSX expression the census never listed, and the "the trace is total" comment in
+both adapters is true only *within* the census. Each producer censuses the JSX
+it lowers, and neither lowers everything. A reactive read inside an unlisted
+expression matched no tracked region, no untracked region, no callback role and
+no JSX operation, fell through `semantic_execution_role_within`'s
+`inside_component` arm to `UntrackedRendering`, and SC1001 fired as a violation
+whose evidence read "the read is outside every compiler-tracked JSX region and
+deferred callback" — a completed search of facts that were never collected.
+
+Two live shapes at the current pins, both verified against the fresh debug
+binary:
+
+| dialect | shape | before | after |
+| --- | --- | --- | --- |
+| 1.x | `{title()}` inside a nested non-hydratable `<head>` (census drops the whole head range) | SC1001 `v1/strict-read-untracked` **violation** | **uncertifiable** |
+| 2.0 | `{count()}` as a root-level `<br>`'s child (no site emitted; generated code never reads `count`) | SC1001 `strict-read-untracked` **violation** | **uncertifiable** |
+
+The fix is `missing_jsx_census` in
+`rust/crates/solid-reactive-ir/src/execution_role.rs`, carried on
+`ReactiveRead::missing_jsx_census` and flipped to `uncertifiable` in
+`projection.rs`. It is dialect-free on purpose: the *rule* is identical in both
+dialects and only the JSX each producer declines to census differs, which is
+already a per-producer fact inside the producers. The JSX regions it consults —
+attribute expression containers, spread containers, children — are read from
+solid-facts' syntax, never from the census, because the question is exactly what
+the source has that the census does not.
+
+What it deliberately does not claim:
+
+- **It does not certify the read safe.** "The compiler deleted this expression,
+  so the stale read cannot happen" is a *second* claim, with no more evidence
+  behind it than the first. Proving it needs the additive `owner_establishments`
+  / lowering facts joined to source spans, i.e. its own slice.
+- **It does not fire where a fact established the role.** The escalation is
+  gated on `execution == UntrackedRendering`; a read the dialect proved runs in
+  an untracked callback, or an event-handler census entry, inside an uncensused
+  region keeps its proven violation, because its proof never came from the
+  census. Verified at the current pins rather than reasoned about:
+  `<br>{runWithOwner(owner, () => a())}</br>` — the 2.0 gap shape wrapping a
+  callback `Solid2::reports_untracked_reads_at` claims (`RunWithOwner`
+  argument 1), which `semantic_execution_role_within` turns into
+  `UntrackedCallback` — reports an SC1001 **violation**, identical to the
+  censused control. `untrack` is *not* such a callback in either dialect:
+  neither catalog lists it in `reports_untracked_reads_at`, so a read inside an
+  `untrack` callback produces no SC1001 at all and cannot demonstrate this gate
+  either way.
+
+Fixtures: `fixtures/reactive-ir/jsx-census-gap-solid-1x` (child and attribute
+arms of the head gap) and `fixtures/reactive-ir/jsx-census-gap-solid-2` (the
+void-element child). Each carries both negatives — a censused tracked read stays
+silent, an untracked read outside all JSX stays a proven violation. Coverage: 88
+projects, 547 findings; the 86 pre-existing projects and their 542 findings did
+not move.
+
+The wording is the claim here, so it is pinned rather than left to review. Both
+projects are in coverage's `KEEPS_WORDING` set, so their snapshots carry the
+message and hint: deleting `strict_read_message`'s census branch fails both,
+which is how the pin was checked. The evidence chain appears in no snapshot, so
+`untracked_evidence_sentence` — both its subjects, the direct read and the
+propagated one — is pinned by unit tests in `findings.rs`. The spread arm of
+`narrowest_jsx_region_containing` has no fixture (neither producer declines to
+census a spread today) and is pinned by a unit test in `execution_role.rs`,
+which places a census entry over the sibling child so it fails for the spread
+specifically rather than for "nothing was censused".
+
+Remaining, and known:
+
+- ~~**Nested `<div><br>{count()}</br></div>` under the pinned 2.0 producer never
+  reaches the checker at all.**~~ **Resolved** by the `c6008f01` pin move, but
+  not into silence: see "Two lowering divergences the fork's own contract
+  declares binding" below. The producer no longer errors — its census now
+  includes the nested void child, because the transform really does lower it —
+  and the shape is analyzable. It is *not* a census gap, though: the entry is
+  present and claims `reactive-rerun`, which the compiler Solid ships would
+  never emit. It gets its own mitigation and its own wording, and
+  `fixtures/reactive-ir/jsx-void-child-divergence-solid-2` (with its 1.x
+  sibling) pins it.
+- **A census gap at module scope is not escalated, and under 2.0 it emits
+  nothing at all.** `semantic_execution_role_within` classifies a read with no
+  enclosing function body as `ModuleInitialization`, and `missing_jsx_census`
+  returns `false` for every role but `UntrackedRendering`, so the escalation
+  never considers it. What that leaves is dialect-dependent, and the earlier
+  wording here ("still classified `ModuleInitialization`") implied a violation
+  that the 2.0 catalog does not in fact emit: `CatalogCapabilities::SOLID_2` sets
+  `module_scope_strict_reads: false` (the rc.0 runtime installs strict-read
+  contexts only inside component and effect bodies), so `project_findings` drops
+  the read and a module-scope census gap produces no finding under 2.0. Only the
+  1.x catalog, which sets the flag `true` to keep upstream `reactivity`
+  semantics, reports one — as an ordinary proven untracked read, with the
+  pre-escalation message. The rationale for not escalating is unchanged: module
+  initialization is an AST-proven one-shot context needing no census, since no
+  owner or subscriber can be active before a containing function runs. If a
+  producer is ever found to wrap module-scope JSX in a reactive effect, that
+  rationale — and the 1.x finding resting on it — is where it would be wrong.
+- **The hint still says "Solid warns STRICT_READ_UNTRACKED here in dev"** on an
+  uncertifiable finding, in the **2.0** catalog. The message and the evidence
+  chain are corrected to state the missing fact; the hint is not, and it asserts
+  a runtime behavior the census gap leaves unproven. Scope checked rather than
+  assumed: `rg "in dev" rust/dialects/solid-v2/rules` matches 12 times and
+  `rust/dialects/solid-v1/rules` zero, so the 1.x catalog has no such hint to
+  correct. It is the same overstatement on the pre-existing `uncertain`
+  (unenumerable-callers) path, so it stays one v2 wording slice rather than part
+  of this fix. It rides on the **divergence** findings as well, added later the
+  same day — same hint, same rule, and there the overstatement is sharper still,
+  because the hint asserts a dev-mode warning for a read that may not exist at
+  runtime at all. One slice, three carriers.
+
+## Two lowering divergences the fork's own contract declares binding (2026-08-24)
+
+The `dom-expressions-compiler` pin moved
+`66004ab78fa10412208d1bc8cb301bfc028ea826` →
+`c6008f01df199ff0f0d072093e2393ed3d67f0c4` (fork PR #2 merged). The census now
+covers a nested void element's children, the textarea `value` fold and the
+inert `<noscript>` fast path retract the children they discard, and the fork's
+`docs/execution-contract.md` gained a section — "The trace describes this
+compiler, not the parity target" — that names every known divergence from the
+Babel plugin Solid actually ships, with the emitted code of both compilers as
+evidence, and states the rule as **binding on the consumer**:
+
+> A consumer must not certify from facts an affected divergence touches; there
+> the trace is accurate about this compiler's output and inaccurate about the
+> parity target, and only the consumer knows which it is reasoning about.
+
+That is a real hazard, not a formality. The trace is truthful, the facts are
+present, and believing them anyway certifies behavior for a compiler that may
+not build the user's project. Three of the four named divergences reach this
+checker's rules; all three are now answered — two by a new mitigation
+(divergences 1 and 3, which emit) and one by the pre-existing census-gap path
+(divergence 2, which retracts). The fourth is a deliberate hard failure in the
+producer.
+
+### 1. Void-element children — the fork emits, Babel deletes
+
+`<div><br>{count()}</br></div>`:
+
+| compiler | emitted code |
+| --- | --- |
+| the fork (`lower_dynamic_native_child` walks into `lower_dom_children` unconditionally) | `_$insert(_el$2, count)` |
+| Babel `babel-plugin-jsx-dom-expressions` (shipped) | nothing — the child list is discarded in every position |
+
+The census follows the emission, so the site arrives as
+`jsx-child` / `reactive-rerun` → `RegionReason::JsxChild` → `TrackedJsx`. Before
+this slice that role made the read **silent**: a certification-by-silence built
+on a fact about the wrong compiler.
+
+The mitigation is `divergent_lowered_child` in
+`rust/crates/solid-reactive-ir/src/execution_role.rs`, beside `missing_jsx_census`
+because it is the same kind of thing — consumer policy over producer facts, with
+one dialect-owned input (the parity-target-only tags; see the correction below).
+It carries `ReactiveRead::divergent_lowering`, which `projection.rs` reports
+(whatever the role) and marks `uncertifiable`, with its own message and evidence
+sentence in `findings.rs`. Neither reading is
+certifiable: *tracked* believes only the fork, *stale untracked read* believes
+only Babel.
+
+Detection is **positive, from solid-facts' own AST**, and that is load-bearing
+in two ways. Detecting by census absence would be wrong because `census_touches`
+overlap lets a wider censused region shadow a narrower hole — and, decisively,
+because after this pin the divergent child *has* an entry claiming
+`ReactiveRerun`. The one compiler fact consulted is also positive: a
+`jsx-expression` operation inside the void element's child region. That is what
+separates the divergence from an ordinary census gap, and it is what makes the
+per-producer answer below come out right.
+
+The void-element tag list lives in exactly one place, `VOID_ELEMENTS` in
+`execution_role.rs`, byte-checked against `void_elements` in
+`packages/compiler/src/shared/constants.rs` at **both** pinned producer
+revisions (identical at each: `area base br col embed hr img input link meta
+param source track wbr`). A tag this list missed would be a divergent child the
+checker certified.
+
+Three consumption points, all closed:
+
+- **Rerun certification** — the read is reported `uncertifiable` instead of
+  being silently certified tracked.
+- **Ownership attribution** — `owners.rs` skips an `ownership_regions` entry
+  inside a divergent void child, in `providing_regions` (so a leaf primitive
+  there is not certified owned) and in `compiler_owner_context` (so a function
+  body there is seeded neither owned nor proven-unowned). The fork wraps the
+  insert it emits; Babel emits neither insert nor wrapper.
+- **Reactive-reader satisfaction** — the props-destructure autofix in
+  `owners.rs` requires every reference to sit in a tracked JSX position. A
+  reference inside a divergent void child satisfied that only through the fork's
+  own lowering, so it now refuses the fix. No fix beats a fix whose soundness
+  rests on which compiler runs.
+
+**Per-producer, probed with the fresh debug binary, not assumed:** 1.x lowers a
+void element's children in the *template-root* position too, so
+`<br>{total()}</br>` at a component root is the divergence under 1.x and an
+ordinary census gap under 2.0 (whose `lower_dom_element` gates on
+`!is_void_element` there, agreeing with Babel). Same source, same
+`uncertifiable` verdict, different mechanism, different message. The pair
+`fixtures/reactive-ir/jsx-void-child-divergence-solid-{2,1x}` holds
+byte-identical sources (enforced through coverage's `IDENTICAL_SOURCES`) so that
+this one-message snapshot difference *is* the claim.
+
+### 1b. `<noscript>` children — the fork emits, Babel never lowers
+
+Divergence 3, and the same hazard by a different route. `<noscript>` markup is
+inert, so Babel drops its children in every position; this fork drops them only
+on the static-template fast path. `<noscript>{a()}</noscript>`:
+
+| compiler | emitted code |
+| --- | --- |
+| the fork, at template root or off the fast path | `_$insert(_el$, a)` |
+| Babel (shipped) | nothing — `<noscript>` children are dropped in every position |
+
+The contract states it as binding in the same words as divergence 1: *"a
+consumer must treat a `jsx-child` site inside a `<noscript>` as
+uncertifiable."* **Probed before implementing**, and the measurement is the
+reason this arm exists: `<noscript>{a()}</noscript>` and
+`<div><noscript id={tag()}>{c()}</noscript></div>` were **silently certified** in
+*both* dialects — no finding at all — which is precisely the wrong-certification
+class this slice removes.
+
+It is the **same predicate, a second named condition** —
+`INERT_MARKUP_ELEMENT` in `execution_role.rs`, not a fifteenth entry in
+`VOID_ELEMENTS`. That list's entire value is that it matches the compiler's
+`void_elements` byte for byte, and `<noscript>` is not in it: it has an ordinary
+content model and diverges because its markup is inert, not because it is
+childless. Merging them would destroy the one property that makes the void arm
+auditable. `ReactiveRead` therefore carries `Option<DivergentLowering>` rather
+than a bool, because the two conditions need **different sentences**: Babel
+*deletes* a void element's child list, while it never *lowers* a `<noscript>`
+subtree at all, and "deletes it" would name a compiler step that does not
+happen. Where the two nest, the narrowest enclosing divergent element decides
+the wording — both answers are uncertifiable, only the nearer is the reason.
+
+Positions, probed at both pins:
+
+| shape | 2.0 | 1.x |
+| --- | --- | --- |
+| `<noscript>{a()}</noscript>` (template root) | divergence | **identical** |
+| `<div><noscript id={tag()}>{c()}</noscript></div>` (dynamic attribute forces it off the fast path) | divergence | **identical** |
+| `<div><noscript>{b()}</noscript></div>` (static fast path) | retracted → census gap | **exit 2** (`unresolved execution sites`) |
+| `<div><noscript id="d">{d()}</noscript></div>` (a *static* attribute does **not** force it off the fast path) | retracted → census gap | **exit 2** |
+
+The first two are pinned in the divergence pair, which stays byte-identical
+because both producers agree there. The retracting position is pinned 2.0-only,
+as `RetractedInertNoscriptChild` in
+`fixtures/reactive-ir/jsx-census-gap-solid-2` — where it doubles as the
+mechanical guard that the mitigation keys on a *lowered site* and not on the tag:
+key it on the tag and that arm flips to the divergence wording, and the fixture
+is in `KEEPS_WORDING`, so it fails the gate. The 1.x rejection is recorded below
+rather than pinned, for the same reason as the `textContent` arm.
+
+### 2. Nested dynamic-`textContent` children — the fork retracts, Babel inserts
+
+`<div><span textContent={x()}>{y()}</span></div>`:
+
+| compiler | emitted code |
+| --- | --- |
+| the fork (missing Babel's `!hasChildren` gate on the nested placeholder branch) | template `` `<div><span> ` ``, no insert; the children's censused sites are **retracted** |
+| Babel (shipped) | template `` `<div><span>` ``, `_$insert(_el$2, y)`, and an effect writing `_el$3.data` where `_el$3 = _el$2.firstChild` |
+
+Here the fork's absence must not be read as no-execution — the fork's contract
+says so explicitly. **No new mechanism was needed**: the retraction lands as a
+hole in the narrowest JSX region, so the pre-existing `missing_jsx_census` path
+already reports it `uncertifiable`, which is the honest answer for the same
+reason. Verified with the fresh debug binary and pinned as the retraction arm of
+`fixtures/reactive-ir/jsx-census-gap-solid-2`, whose README now states both ways
+a hole arrives (never censused, and censused-then-retracted) and why the
+mitigation cannot key on which.
+
+SC8003 fires on the same element for an unrelated and legitimate reason (JSX
+children and `textContent` at once). Two claims about one element, neither
+duplicating the other, and neither duplicating `tsc`: the oracle reports **zero
+diagnostics** for this source against the real `@solidjs/web@2.0.0-rc.0` and
+`solid-js@2.0.0-rc.0` typings, under both `strict` and `loose`.
+
+### Measurement
+
+Coverage moved 88 projects / 547 findings → **90 projects / 558 findings**,
+confirmed with the cache disabled (`SOLID_CHECKER_GATE_CACHE=0`) against the
+fresh debug binary. Every one of the eleven new findings is in a fixture this
+slice added or extended, and **nothing else moved**:
+
+- +8 from the new pair (four `uncertifiable` SC1001s each: nested void,
+  template-root void, `<noscript>` root, `<noscript>` off the fast path);
+- +3 in `jsx-census-gap-solid-2`'s two retraction arms (two `uncertifiable`
+  SC1001s and the SC8003 on the `textContent` element).
+
+Two kinds of pre-existing snapshot line changed, both bookkeeping: byte offsets
+in `jsx-census-gap-solid-2`, shifted by the components added above them, and one
+apparent `violation` → `uncertifiable` at a fixed array index there, which is the
+positional shift from inserting a finding ahead of it. Checked by enumerating the
+fixture rather than trusting the diff: `ReadOutsideJsxStaysAViolation` is still an
+SC1001 **violation** and `TrackedChildStaysCertified` is still silent, so both
+negative controls hold. Ownership gate: 289 cases passed, ledger 465 rows,
+0 pending.
+`make verify` green end to end.
+
+### Droppable when upstream fixes the transform
+
+Every mitigation here is pinned to a producer defect, not to Solid semantics.
+Each is a straight deletion once the fork's `transform()` output stops diverging
+— divergence 1 by gating nested void-child lowering on `!is_void_element`,
+divergence 3 by dropping `<noscript>` children off the fast path too, divergence
+2 by restoring Babel's `!hasChildren` gate — and the census follows the emission
+automatically. Until then removing any of them silently restores a certification
+the facts do not support, so each carries that reasoning in its doc comment as
+well as here. The two conditions are independent: divergence 1 and divergence 3
+can be fixed upstream separately, and `divergent_lowered_child` is written so
+that retiring one leaves the other intact.
+
+### Remaining, and known
+
+- **Other consumers of the same divergent `TrackedJsx` role still read it**: the
+  destructure-freshness discharge in `static_rules.rs` (a tracked role means
+  "fresh at call time", so it `continue`s), `resolve_tracked_scope` in
+  `static_api.rs` (a `resolve()` inside a tracked JSX region reports), and the
+  post-flush server rules in `server_rules.rs` (which match `TrackedJsx` and
+  `UntrackedRendering` alike). Each needs its own uncertifiable path, one rule at
+  a time.
+
+  **SC1003 no-destructure belongs on this list too**, and its state is partial
+  rather than untouched: on a divergent case it stays a **violation** while its
+  autofix is refused (the props-destructure fix in `owners.rs` returns `None`
+  whenever a reference sits in a divergently lowered child, since the tracked
+  position that would make the rewrite sound exists only under the fork). That is
+  deliberate for now — the destructure itself is a defect under either compiler,
+  so the violation is not a divergence artifact — but the finding's *kind* has
+  never been re-examined against the case where the whole subtree may not exist,
+  and the fix refusal is silent, so a user sees a rule with no autofix and no
+  reason given. Recorded here so the half that is done does not read as the whole. Forcing the *role* away from `TrackedJsx` would reach all three at once
+  and is deliberately **not** done: `UntrackedRendering` is in
+  `reports_disallowed_write`, so the role flip would manufacture proven
+  disallowed-write findings inside a subtree that may not exist — a worse claim
+  than the certification it removes. Today's behavior at all three is silence or
+  a pre-existing report, never a new false positive.
+- **Divergence 2's shape is fine here for a different reason.** The fork
+  retracts, so the pre-existing `missing_jsx_census` path already answers
+  uncertifiable; see section 2 above. No divergence-specific mechanism was
+  needed, and none was added.
+- **Divergence 4 stays a hard reconciliation failure by design.** A `children`
+  attribute on a nested void element with no source children
+  (`<div><span children={x()}/></div>`) makes the census name a `jsx-child` site
+  lowering never resolves, so the file is rejected and `solid-checker-rust`
+  exits 2. The fork keeps that deliberately: the failure is the divergence's only
+  detection signal. There is no fixture, for the same reason as before — a
+  fixture would pin an exit code rather than a semantic claim.
+- **The 1.x producer fails the file on *both* retraction shapes.** Probed under
+  `solid1-dom-expressions-compiler` at
+  `b66c3e34ba2a0b74238726eb2b83f767eacf94f2`: both
+  `<div><span textContent={x()}>{y()}</span></div>` and
+  `<div><noscript>{b()}</noscript></div>` report `semantic trace has unresolved
+  execution sites: JsxChild@<span>` and exit 2. PR #2's retractions are 2.0-only;
+  the 1.x fork has received neither. So both retraction arms are pinned in the
+  2.0 census-gap fixture with no 1.x sibling — a fixture there would pin an exit
+  code. They arrive with the 1.x pin that carries the same retractions. Note the
+  asymmetry this creates and that the fixtures state: 1.x *emits* in every
+  position these shapes appear in, so it has no retraction to get wrong, and its
+  divergence coverage is complete while its census-gap coverage is not.
+- **The `uncertifiable` hint still says "Solid warns STRICT_READ_UNTRACKED here
+  in dev"** under 2.0, on the divergence finding exactly as on the census-gap and
+  `uncertain` ones. Same v2 wording slice, unchanged by this work.
+
+## The divergence mitigation manufactured one violation and missed one dialect (2026-08-24)
+
+Two defects in the mitigation above, found in its own final review. Both are
+fixed; both were the mitigation getting *more* wrong than the behavior it
+replaced, in opposite directions.
+
+### The ownership skip manufactured a proven SC4001
+
+`providing_regions` (`owners.rs`) drops a divergent child's `Owned` ownership
+region, correctly: the parity target emits neither the insert nor the wrapper
+that region describes, so it is not evidence of an owner. But dropping it is only
+half an answer. Where the ambient context is *proven unowned* — module scope —
+the requirement then stands with nothing to satisfy it, and SC4001 reported a
+**proven violation**. Reproduced with the fresh debug binary in both dialects:
+
+~~~tsx
+export const Divergent = <div><br>{(onCleanup(() => {}), null)}</br></div>;  // SC4001 violation — WRONG
+export const Control   = <div><span>{(onCleanup(() => {}), null)}</span></div>;  // silent
+~~~
+
+`createEffect` reached it identically under 1.x (v1/missing-owner; under 2.0 the
+one-argument call is an unrelated SC7001).
+
+No fact supports that violation. Under the pinned fork the child *is* lowered and
+the insert's wrapper owns the call; under the parity target the child is deleted
+and the call never runs. Neither compiler produces the unowned live operation the
+finding asserted — the finding existed only because the ownership evidence was
+removed from one side of the proof while the other side kept asserting absence.
+
+**Fix.** `OwnerRequirement` now carries `divergent_lowering:
+Option<DivergentLowering>`, the same carrier `ReactiveRead` has, and the
+requirement is marked uncertain when it is `Some`. `findings.rs` gives it its own
+message and evidence — naming the disagreement, and *replacing* rather than
+appending to the "no containing owner dominates this operation" sentence, which
+would otherwise still assert a completed search for an owner.
+
+The seam is `push_owner_requirement`: the one funnel both owner passes
+(`find_missing_owners` in batch, `discover_owner_file` plus the incremental
+emission) and all four operations go through. It takes `file` and the dialect and
+derives the divergence itself, so the two passes cannot drift and a new candidate
+kind cannot forget the escalation. Four call sites lost their `path` argument in
+exchange.
+
+This is the one consumption point of the divergence that *reports* where nothing
+was reported before the mitigation existed. It reports a proof obligation, never
+a defect; `docs/compiler-facts.md` said "all of them fail-closed rather than
+newly-reporting" and now states this exactly.
+
+Pinned by `CleanupInsideADivergentChild` (uncertifiable), its `<span>` twin
+(silent — the escalation is positional and narrow), and a bare module-scope
+`onCleanup` that stays a proven **violation**, all in the divergence pair; plus
+`findings.rs`'s
+`a_divergent_child_makes_an_owner_requirement_uncertifiable_not_a_violation`,
+which pins the wording and the absence of the no-owner sentence, neither of which
+a snapshot carries.
+
+### The void tag set is dialect-dependent; 1.x silently certified `<keygen>`
+
+`VOID_ELEMENTS` was byte-checked against the producers' `void_elements` and
+described as "the only copy of the tag list". It is the only copy of the
+*producers'* list, and a divergence is a producer disagreeing with **its own
+parity target** — which is not the same list on both sides:
+
+| | Rust producer | parity target |
+| --- | --- | --- |
+| 1.x | 14 — `void_elements`, `packages/compiler/src/shared/constants.rs` @ `b66c3e34` | **16** — `packages/babel-plugin-jsx-dom-expressions/src/VoidElements.ts` @ `b66c3e34`, adding `keygen` and `menuitem` |
+| 2.0 | 14 — same file @ `c6008f01` | 14 — `VoidElements`, `packages/runtime/src/constants.js` @ `c6008f01`, imported by `babel-plugin-jsx` |
+
+The 1.x plugin computes `voidTag = VoidElements.indexOf(tagName) > -1` and gates
+its whole child pass on `if (!voidTag)`, so it deletes a `<keygen>`'s and a
+`<menuitem>`'s children in every position. The 1.x producer lowers them, censuses
+`ReactiveRerun`, and the checker **certified the read by silence** — the exact
+failure class this mitigation exists to remove, surviving inside it. Probed
+before and after with the fresh debug binary: five void-child arms, only the
+`<br>` control reported before; all five report under 1.x now.
+
+A union list was the wrong fix. 2.0's parity target dropped both tags
+deliberately (`packages/babel-plugin-jsx/CHANGELOG.md`, `1cc342c`), so under 2.0
+both compilers lower those children and the read is genuinely certifiable;
+reporting it would withhold a certification the facts support.
+
+**Fix.** The extras are dialect vocabulary and travel the dialect seam:
+`Dialect::parity_target_only_void_elements` in `solid-dialect`, answered
+`["keygen", "menuitem"]` by `Solid1x` and `[]` by `Solid2`, each naming its
+parity target's file and revision at the implementation. It is **required**, not
+defaulted: an empty answer is a claim about a specific parity target's list and a
+new dialect must make it deliberately. `divergent_candidate_child` joins the two
+lists at the one question that needs the union — "does the compiler this project
+builds with drop this element's children?" — so neither list absorbs the other's
+provenance, and `divergent_lowered_child` now takes the dialect (which is
+available at every call site through `SemanticLookup::dialect`; the
+props-destructure fix took a new parameter for it).
+
+The extras take the shared `VoidElementChild` wording, since the reason is the
+same, and the positive lowered-site fact still gates them.
+
+Pinned by `NestedKeygenChild` and `RootMenuitemChild` in the divergence pair —
+uncertifiable under 1.x, **silent under 2.0** — which is the first place that pair
+has arms whose *verdict* differs rather than only their wording. The sources
+stayed byte-identical, so `IDENTICAL_SOURCES` is unchanged. Unit coverage:
+`a_parity_target_only_void_tag_diverges_under_that_dialect_alone` (both tags, both
+positions, and the shared `<br>` still diverging under both dialects) and
+`a_parity_target_only_void_tag_still_needs_a_lowered_site`.
+
+### tsc oracle, checked rather than assumed
+
+`<keygen>`/`<menuitem>` with children: **zero diagnostics** against both real
+audited typings, `strict` and `loose`. Both published typings still declare them
+as ordinary intrinsic elements, so the checker is not duplicating a type error
+there and the fixture arms are legal shapes.
+
+The ownership arm was *not* legal as first written. `{onCleanup(() => {})}` as a
+JSX child is TS2322 against both packages — `Type '() => void' is not assignable
+to type 'Element'` under `solid-js@1.9.14`, `Type 'Disposable' is not assignable
+to type 'Element'` under `2.0.0-rc.0` — because neither return type is a
+`JSX.Element`. Accepting it would have required a stub looser than the real
+package, so the arm is `{(onCleanup(() => {}), null)}`, which both real typings
+accept and which keeps the call inside the divergent child region. The whole
+`App.tsx` compiles with zero diagnostics in both dialects, both modes.
+
+### Remaining, and known
+
+- **`<keygen>` makes both producers print to stderr.** `The HTML provided is
+  malformed … Browser HTML: <keygen>` — their template round-trip validator
+  follows the HTML standard's legacy void list while their lowering does not,
+  which is arguably a fifth divergence, in the producers' *output* rather than
+  their census. No gate reads stderr and no finding depends on it, so it is
+  recorded rather than acted on. It is also mild evidence against 2.0's
+  CHANGELOG rationale ("no longer parsed as void by modern browsers"): the
+  producer's own HTML parser disagrees.
+- **No oracle-ledger case was added.** `fixtures/tsc-oracle/rule-cases.json` has
+  no void-element case at all, and neither fix adds or narrows a rule, so the
+  gate's invariants are untouched. A `<keygen>` case under v1 would be a
+  textbook keystone row (TypeScript silent, checker reports) and is the obvious
+  next addition.
+- **The parity-target lists are hand-transcribed, like the producers' list.**
+  `VOID_ELEMENTS` has always been byte-checked by reading, not by a build-time
+  assertion, and the new extras are the same: a comment naming a file and a
+  revision. Nothing fails if a pin moves and the parity target's list changes
+  underneath it — the same known weakness, now in two places instead of one.

@@ -142,11 +142,27 @@ checkDialectStubs();
  * to catch, and excluding the text would leave them unable to fail for the
  * reason they exist. Everywhere else the text stays out, so rewording a hint
  * still does not churn 30 files.
+ *
+ * The two `jsx-census-gap` projects are here for the same reason in a different
+ * shape. Their claim is not "a finding appears at this span with this `kind`":
+ * an uncertifiable SC1001 whose message still reads "which does not track; the
+ * read sees the current value once and never updates" asserts exactly the thing
+ * the census hole leaves unproven, and no other field in the snapshot can tell
+ * that apart from one that names the missing compiler fact. Without the text,
+ * `strict_read_message`'s census branch could revert and every gate would stay
+ * green — verified by deleting the branch, which now fails both projects here.
+ * The evidence chain is in no snapshot at all, so the matching evidence
+ * sentence (`untracked_evidence_sentence`) is pinned by unit tests in
+ * `rust/crates/solid-reactive-ir/src/findings.rs` instead.
  */
 const KEEPS_WORDING = new Set([
   "reactive-ir/dialect-solid-1x",
   "reactive-ir/dialect-solid-2",
   "reactive-ir/import-location",
+  "reactive-ir/jsx-census-gap-solid-1x",
+  "reactive-ir/jsx-census-gap-solid-2",
+  "reactive-ir/jsx-void-child-divergence-solid-1x",
+  "reactive-ir/jsx-void-child-divergence-solid-2",
   "reactive-ir/no-owner-v1",
   "reactive-ir/solid-1x-leftovers"
 ]);
@@ -163,6 +179,22 @@ const IDENTICAL_SOURCES = [
   {
     projects: ["reactive-ir/dialect-solid-1x", "reactive-ir/dialect-solid-2"],
     files: ["App.tsx", "tsconfig.json"]
+  },
+  // The void-child divergence pair duplicates its source for the opposite
+  // reason: the mitigation policy is shared while its tag set is
+  // dialect-supplied, so the *same* source must pin each producer's answer.
+  // Their snapshots differ in exactly three rows — one reworded message (the
+  // template-root void child, which 1.x lowers and 2.0 does not) and two
+  // findings absent under 2.0 (keygen/menuitem, void only in 1.x's parity
+  // target) — and those differences are the pair's whole claim. Let the
+  // sources drift and the diff stops meaning "the producer changed the
+  // answer".
+  {
+    projects: [
+      "reactive-ir/jsx-void-child-divergence-solid-1x",
+      "reactive-ir/jsx-void-child-divergence-solid-2"
+    ],
+    files: ["App.tsx", "solid-js.d.ts", "tsconfig.json"]
   }
 ];
 

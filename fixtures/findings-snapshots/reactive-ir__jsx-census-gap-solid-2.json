@@ -1,0 +1,65 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-census-gap-solid-2/App.tsx",
+      "start": 1390,
+      "end": 1397,
+      "fixes": 0,
+      "message": "reactive accessor \"count\" is read in ReadInsideVoidElementChild, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-census-gap-solid-2/App.tsx",
+      "start": 2576,
+      "end": 2604,
+      "fixes": 0,
+      "message": "Using JSX children, `props.textContent` at the same time is not allowed.",
+      "hint": "Pick exactly one source of content for this element. When more than one of children, innerHTML, and textContent is set, they overwrite each other and the result depends on write order."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-census-gap-solid-2/App.tsx",
+      "start": 2605,
+      "end": 2611,
+      "fixes": 0,
+      "message": "reactive accessor \"body\" is read in RetractedTextContentShadowedChild, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-census-gap-solid-2/App.tsx",
+      "start": 4038,
+      "end": 4044,
+      "fixes": 0,
+      "message": "reactive accessor \"note\" is read in RetractedInertNoscriptChild, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/jsx-census-gap-solid-2/App.tsx",
+      "start": 4749,
+      "end": 4756,
+      "fixes": 0,
+      "message": "reactive accessor \"total\" is read directly in ReadOutsideJsxStaysAViolation, which does not track; the read sees the current value once and never updates when \"total\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    }
+  ]
+}
