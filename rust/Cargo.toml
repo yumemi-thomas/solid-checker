@@ -36,7 +36,26 @@ rust-version = "1.97"
 # upstream `next` at 0.50.0-next.43 for Solid 2.0 RC.0, merged through
 # `8069eb66821c7d36f327cd3a0790b3d47ae4d276` while retaining the semantic
 # ownership trace required by this checker.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "e6ab3469a94addd6f72c7e8347e871a1a0c7edf5", default-features = false }
+# This rev carries `SEMANTIC_TRACE_VERSION = 2`: the trace gained the additive
+# wrapper vocabulary (`owner_establishments`, `component_render_sites`,
+# `deferred_callback_sites`) and a `version` field the consumer must check.
+# 2.0 deliberately keeps emitting the legacy `ownership_sites` field, so
+# rust/dialects/solid-v2/compiler still reads it; the 1.x fork dropped it.
+# Bumping this rev to a producer with a different schema version fails the
+# build: each adapter holds `READS_TRACE_VERSION` — its own literal, never the
+# producer's constant — equal to `SEMANTIC_TRACE_VERSION` in a const assert.
+# That is deliberate. Fix the projection for the new schema, then move both the
+# rev and the literal.
+# This rev is the merge of fork PR #2 (`fix/void-child-census`) into `main`:
+# the semantic-trace census now includes a *nested* void element's children,
+# which the fork's transform really does lower -- a deliberate parity
+# divergence from Babel, which deletes them -- and the textarea `value` fold
+# and the inert `<noscript>` fast path retract the children they discard. The
+# fork's docs/execution-contract.md names every divergence with a binding
+# consumer rule; the two this checker mitigates are in docs/compiler-facts.md,
+# "Divergent lowering", implemented by `divergent_lowered_child` in
+# rust/crates/solid-reactive-ir/src/execution_role.rs.
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "c6008f01df199ff0f0d072093e2393ed3d67f0c4", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on
@@ -57,11 +76,17 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # lowering uses, and fragment children are classified from a span set instead of
 # a flag that leaked through attribute values. Both are census-only, so emitted
 # output is byte-identical across them.
-# The reactive-ownership trace this checker requires
-# (`SemanticTrace::ownership_sites`, consumed by
-# rust/dialects/solid-v1/compiler) sits on top of all of the above; an earlier
-# main briefly lacked it, so verify it is present before moving this rev again.
-solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "ad2c9452041c757138bb972416d8abc4798ea6b9", default-features = false }
+# This rev carries `SEMANTIC_TRACE_VERSION = 2` and *removes* the
+# `ownership_sites` / `OwnershipDecision` vocabulary in favor of the additive
+# wrapper facts (`owner_establishments`, `component_render_sites`,
+# `deferred_callback_sites`). The reactive-ownership regions this checker
+# requires are therefore derived in rust/dialects/solid-v1/compiler now — the
+# same rule the producer used to apply, reactive-rerun sites under the default
+# effect wrapper — so that derivation must move with this rev, not after it.
+# The same const assert guards this side: rust/dialects/solid-v1/compiler holds
+# its own `READS_TRACE_VERSION` literal equal to the producer's constant, so a
+# schema bump fails the build rather than being read as if nothing changed.
+solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "b66c3e34ba2a0b74238726eb2b83f767eacf94f2", default-features = false }
 typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4" }
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"

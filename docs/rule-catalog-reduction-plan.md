@@ -95,11 +95,12 @@ populates `rust/target/tsc-oracle/v1/node_modules` (`solid-js@1.9.14`) and
 exist only after provisioning. All probes are read-only and were run from a
 scratch directory.
 
-Compiler claims cite the revisions pinned in `rust/Cargo.toml`:
-`dom-expressions-compiler` rev `e6ab3469a94addd6f72c7e8347e871a1a0c7edf5` (2.0)
-and `solid1-dom-expressions-compiler` rev
-`79b9b63721c59b0acfd72348438bbb6e090ec81c` (1.x), under
-`~/.cargo/git/checkouts/`.
+Compiler claims cite the revisions pinned in `rust/Cargo.toml` —
+`dom-expressions-compiler` (2.0) and `solid1-dom-expressions-compiler` (1.x) —
+whose checkouts sit under `~/.cargo/git/checkouts/`. `rust/Cargo.toml` is the
+single source of truth for both; this page deliberately no longer repeats the
+revisions, because the copies here went two pin moves stale without anything
+noticing.
 
 ---
 
