@@ -4,6 +4,7 @@
 use crate::ast::AstFacts;
 use crate::compiler::ExecutionMap;
 use crate::core::{Generation, SourceHash, SourcePath, Span};
+use crate::resolution::AttestedImportIndex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -29,6 +30,17 @@ pub struct ProjectFacts {
     pub typescript: TypeScriptTable,
     #[serde(skip)]
     pub typescript_changes: Option<TypeScriptChanges>,
+    /// Where each import specifier actually resolves, when the analysis asked
+    /// the compiler.
+    ///
+    /// `None` is not "nothing resolved": it says this analysis carries no
+    /// resolution facts at all, so a package contract can only be matched by
+    /// specifier name — the pre-attestation behavior, kept for an adapter with
+    /// no Type Facts session of its own. `Some` binds contracts by installed
+    /// package identity and fails closed per specifier. See
+    /// [`crate::resolution`].
+    #[serde(skip)]
+    pub resolved_imports: Option<AttestedImportIndex>,
 }
 
 #[derive(Clone)]
@@ -465,6 +477,7 @@ impl ProjectFacts {
             files,
             typescript,
             typescript_changes: None,
+            resolved_imports: None,
         })
     }
 }

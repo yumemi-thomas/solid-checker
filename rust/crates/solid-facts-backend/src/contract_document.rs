@@ -197,6 +197,7 @@ fn expand(document: ContractDocument) -> Result<PackageContract, BackendError> {
         contract_hash: String::new(),
         source_path: String::new(),
         run_generated: false,
+        installed_root: None,
     };
     contract
         .validate()
@@ -319,6 +320,7 @@ mod tests {
             contract_hash: String::new(),
             source_path: String::new(),
             run_generated: false,
+            installed_root: None,
         }
     }
 

@@ -14,8 +14,9 @@ use std::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
-    BackendError, RequestedRuleEnablement, SemanticDemandOptions, SourceFile, TypeFactsSession,
-    analyze_project_measured_with_enablement, build_project_native_measured_with_demands,
+    BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
+    SourceFile, TypeFactsSession, analyze_project_measured_with_enablement,
+    attest_import_identities, build_project_native_measured_with_demands, contract_identity_scope,
     default_typefacts_executable, dialect, encode_package_contract, package_contract_statuses,
     read_package_contract, semantic_demand_options_for_enablement,
 };
@@ -244,6 +245,31 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             .into_owned();
     }
     let facts_complete_ns = started.elapsed().as_nanos();
+    // Contracts are bound to the installed package an import resolves to, not
+    // to the specifier's name, so the analysis needs the compiler's own
+    // resolution for every specifier a contract could describe. This is the
+    // one-shot path's equivalent of what `NativeIncrementalSession::attested`
+    // does for a retained session: the same scope rule, issued at the one point
+    // where the session is live and the whole file set is known.
+    //
+    // `--check-contracts` needs it for the same reason and not merely for
+    // symmetry: that report answers "is my contract coverage complete?", and a
+    // contract every import refuses covers nothing. Skipping the attestation
+    // there let the report call such a contract `published` while the analysis
+    // refused it everywhere.
+    let mut import_identity = ImportIdentityMeasurement::default();
+    if diagnostics {
+        let scope = contract_identity_scope(&facts);
+        if !scope.is_empty() {
+            let (index, measurement) = attest_import_identities(&mut typescript, &scope)?;
+            facts.resolved_imports = Some(index);
+            import_identity = measurement;
+        }
+    }
+    let import_identity_ns = started
+        .elapsed()
+        .as_nanos()
+        .saturating_sub(facts_complete_ns);
     if diagnostics && request.check_contracts {
         let statuses = package_contract_statuses(
             dialect,
@@ -370,6 +396,19 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     "sourceAnalysisNs": source_analysis_ns,
                     "typeFactsNs": type_facts_ns,
                     "factsTotalNs": facts_complete_ns.saturating_sub(source_setup_ns),
+                    "importIdentityNs": import_identity_ns,
+                    "importIdentityFilesRequested": import_identity.requested,
+                    "importIdentityFilesAttested": import_identity.attested,
+                    "importIdentityFilesUnknown": import_identity.unknown,
+                    "importIdentitySpecifiers": import_identity.specifiers,
+                    "importIdentityModules": import_identity.modules,
+                    // How binding actually answered. A refusal is silent in the
+                    // findings by design, but a defect in the span join, the
+                    // scope, or a host's offsets degrades contract coverage
+                    // toward nothing, and these two counts are what make that
+                    // visible rather than merely quiet.
+                    "contractBindingsBound": analysis.program.contract_binding.bound,
+                    "contractBindingsRefused": analysis.program.contract_binding.refused,
                     "irNs": diagnostic_timings.reactive_ir.as_nanos(),
                     "solveAndSnapshotNs": diagnostic_timings.solve_and_snapshot.as_nanos(),
                     "totalNs": started.elapsed().as_nanos(),
@@ -1711,6 +1750,7 @@ fn emit_package_contract(
         contract_hash: String::new(),
         source_path: String::new(),
         run_generated: false,
+        installed_root: None,
     };
     contract.validate().map_err(|error| error.to_string())?;
     let mut encoded = encode_package_contract(&contract, true)?;
@@ -2240,6 +2280,21 @@ fn unify_runtime_alias_summaries(
 /// see [`solid_reactive_ir::PackageContract::kind_claims_are_trusted`]. Every
 /// other claim in the summary is used regardless — a contract is the only
 /// evidence there is about a package this project cannot see into.
+///
+/// **This lookup binds by module *name*, not by attested identity, and that is
+/// deliberate — but it is a weaker rule than the one analysis uses.** The
+/// obligations of the package under generation are computed through
+/// `resolve_contract_imports`, which binds by identity; these emitted
+/// *dependency* claims are computed here, by name. The two can only disagree
+/// for a package whose own tsconfig shadows one of its declared dependencies
+/// with a `paths` entry, which is a shape no corpus package has and which no
+/// generator flow produces: `ensureGeneratedDependencyContract`
+/// (packages/cli/scripts/generate-package-contract.mjs) generates these
+/// contracts from the dependency's *installed* sources in this same run, and
+/// the specifiers consulted here are the package's own imports of those
+/// declared dependencies. Threading the declaration span through both call
+/// sites would move generation-side answers, so the divergence is recorded in
+/// docs/precision-backlog.md instead of narrowed here.
 fn dependency_export_summary(
     dependency_contracts: &[solid_reactive_ir::PackageContract],
     module: &str,
@@ -2425,6 +2480,14 @@ fn exported_names_for_file(
                 .as_deref()
                 .ok_or("export-all declaration has no module")?;
             if !module.starts_with('.') {
+                // Name binding, for the same reason as
+                // `dependency_export_summary`: a generated dependency contract
+                // describes the dependency's installed sources as this run
+                // generated them, and the specifier is the package's own
+                // re-export of a dependency it declares. A `paths`-shadowed
+                // dependency inside a package under generation would diverge
+                // from the identity-bound answer analysis uses, which is the
+                // residue recorded in docs/precision-backlog.md.
                 let Some(contract) =
                     solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)
                 else {

@@ -173,7 +173,7 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
 | `--preset <NAME>` | Enable a catalog preset (repeatable; the compatibility `preferences` preset is currently available). |
 | `--enable-rule <NAME>` | Explicitly enable one rule (repeatable). |
-| `--check-contracts` | Report imported Solid packages whose reactivity contract is missing, unverified, or stale, with the command that fixes each. Also spelled `solid-checker contract check`. |
+| `--check-contracts` | Report imported Solid packages whose reactivity contract is missing, unverified, stale, or bound to no import, with the command that fixes each. Also spelled `solid-checker contract check`. |
 | `-h`, `--help` | Print help. |
 
 Authoring a package contract (see [Publishing a Solid library?](#publishing-a-solid-library)):
@@ -204,8 +204,11 @@ solid-checker contract check
 ```
 
 Each package is reported as `bundled`, `published`, `local`, `explicit`,
-`unverified`, `stale`, or `missing`, and every status that cannot certify
-prints the command that resolves it. The command exits non-zero when any
+`unverified`, `stale`, `unbound`, or `missing`, and every status that cannot
+certify prints the command that resolves it. `unbound` means the contract is
+fine and describes no import you actually have: every specifier carrying its
+name resolves somewhere else -- usually a tsconfig `paths` mapping, sometimes a
+typings entry pointing outside the package. The command exits non-zero when any
 package needs action, so it also works as a CI gate. A `stale` contract is one
 generated against a different version of the package than the one installed —
 after an upgrade, regenerate and re-review it. See

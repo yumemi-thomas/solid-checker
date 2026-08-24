@@ -81,6 +81,7 @@ use solid_facts::compiler::{
 use solid_facts::core::{Generation, SourceHash, Span};
 
 use crate::dialect::Dialect;
+use solid_facts::resolution::{AttestedImport, AttestedImportIndex, ImportResolution};
 use solid_facts::{FileFacts, ProjectFacts, TypeScriptChanges, TypeScriptTable};
 use thiserror::Error;
 
@@ -335,7 +336,167 @@ pub struct NativeIncrementalSession {
     typescript: TypeFactsSession,
     known_paths: HashSet<String>,
     last_build_timings: NativeBuildTimings,
+    last_import_identity: ImportIdentityMeasurement,
     semantic_demand_options: SemanticDemandOptions,
+}
+
+/// The importing files whose module specifiers must be attested before a
+/// package contract may be bound to any of them.
+///
+/// A contract is applied by installed identity, which needs the compiler's own
+/// resolution for the specifier
+/// ([`solid_reactive_ir::PackageContract::for_import`]). Asking for that
+/// resolution is an explicit operation on the Type Facts session, and its
+/// import half is proportional to the files asked about — so it is asked only
+/// of the files that could carry a contract-bound specifier at all: the ones
+/// with at least one bare specifier. A relative or `node:` specifier can never
+/// name a package.
+///
+/// The scope deliberately does **not** consult contract discovery, though that
+/// would narrow it further. The attestation is computed once per program
+/// generation and a retained session reuses it across checks, while contracts
+/// are re-discovered on every check; a scope keyed on today's contracts would
+/// answer for a contract that appeared afterwards by *silently omitting* its
+/// files, which is name-only binding restored by accident. `export … from`
+/// specifiers count for the same reason contract resolution binds them.
+///
+/// An empty answer means no specifier in this program could name a package, and
+/// the caller then asks for nothing.
+#[must_use]
+pub fn contract_identity_scope(facts: &ProjectFacts) -> Vec<String> {
+    facts
+        .files
+        .iter()
+        .filter(|file| {
+            file.ast
+                .imports
+                .iter()
+                .map(|import| import.module.as_str())
+                .chain(
+                    file.ast
+                        .exports
+                        .iter()
+                        .filter_map(|export| export.module.as_deref()),
+                )
+                .any(|specifier| {
+                    !specifier.starts_with('.')
+                        && !specifier.starts_with('/')
+                        && !specifier.starts_with("node:")
+                })
+        })
+        .map(|file| file.path.as_str().to_owned())
+        .collect()
+}
+
+/// What one import-identity attestation cost and covered.
+///
+/// Reported under `SOLID_CHECKER_TIMINGS` so the operation's cost is
+/// attributable rather than guessed at, and so a scope the program could not
+/// answer for is countable instead of silently failing closed.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ImportIdentityMeasurement {
+    /// Importing files asked about.
+    pub requested: usize,
+    /// Importing files the answer covered.
+    pub attested: usize,
+    /// Requested files the program does not hold under that path. Every
+    /// specifier in one of these is refused, so a non-zero count is a plumbing
+    /// defect and not a project property.
+    pub unknown: usize,
+    /// Specifiers attested.
+    pub specifiers: usize,
+    /// Files the program included, which the operation always answers for.
+    pub modules: usize,
+}
+
+/// Asks the compiler where each specifier in `scope` resolves, and to which
+/// installed package.
+///
+/// One round trip, both halves read off the already-built program: the module
+/// inventory (unconditional — it is the operation's reason to exist) and the
+/// import provenance of the requested files only. `packages: true` adds the
+/// owning manifest and the resolver's own recorded identity to each row, which
+/// is the fact a contract is bound by.
+///
+/// A requested file the program does not hold is reported by the producer
+/// rather than dropped, and it is recorded here as *not covered*: a contract
+/// then refuses every specifier in it. Presenting an unanswered file as "this
+/// file imports nothing" would silently restore name-only binding for it.
+pub fn attest_import_identities(
+    typescript: &mut TypeFactsSession,
+    scope: &[String],
+) -> Result<(AttestedImportIndex, ImportIdentityMeasurement), BackendError> {
+    let graph = typescript.module_graph(
+        &typefacts::ModuleGraphDemand::default()
+            .import_paths(scope.iter().cloned())
+            .with_packages(),
+    )?;
+    let unknown = graph
+        .unknown_import_paths
+        .iter()
+        .map(|path| path.to_string())
+        .collect::<HashSet<_>>();
+    let mut rows = HashMap::<&str, Vec<AttestedImport>>::new();
+    for import in &graph.imports {
+        rows.entry(&import.specifier.path)
+            .or_default()
+            .push(AttestedImport {
+                span: solid_facts::core::Span::new(
+                    u32::try_from(import.specifier.start_byte).unwrap_or(u32::MAX),
+                    u32::try_from(import.specifier.end_byte).unwrap_or(u32::MAX),
+                ),
+                text: import.text.as_ref().into(),
+                resolution: match import.resolution {
+                    typefacts::ModuleResolution::Unresolved => ImportResolution::Unresolved,
+                    typefacts::ModuleResolution::Relative => ImportResolution::Relative,
+                    typefacts::ModuleResolution::NodeModules => ImportResolution::NodeModules,
+                    typefacts::ModuleResolution::NonRelative => ImportResolution::NonRelative,
+                },
+                resolved_path: Arc::clone(&import.resolved_path),
+                // An empty name is a manifest that declares none — the
+                // `{"type":"module"}` file a published package ships beside its
+                // output — and is carried as absent rather than as the empty
+                // string, so no comparison can read it as a disagreement.
+                package_name: import
+                    .package
+                    .as_ref()
+                    .map(|package| package.name.as_ref())
+                    .filter(|name| !name.is_empty())
+                    .map(Into::into),
+                package_manifest: import
+                    .package
+                    .as_ref()
+                    .map(|package| Arc::clone(&package.manifest_path)),
+                resolver_package_name: import
+                    .resolver_package
+                    .as_ref()
+                    .map(|package| package.name.as_ref())
+                    .filter(|name| !name.is_empty())
+                    .map(Into::into),
+            });
+    }
+    let mut index = AttestedImportIndex::default();
+    let mut specifiers = 0;
+    let mut attested = 0;
+    for path in scope {
+        if unknown.contains(path) {
+            continue;
+        }
+        let file = rows.remove(path.as_str()).unwrap_or_default();
+        specifiers += file.len();
+        attested += 1;
+        index.insert_file(path.as_str(), file);
+    }
+    Ok((
+        index,
+        ImportIdentityMeasurement {
+            requested: scope.len(),
+            attested,
+            unknown: unknown.len(),
+            specifiers,
+            modules: graph.modules.len(),
+        },
+    ))
 }
 
 impl NativeIncrementalSession {
@@ -380,6 +541,7 @@ impl NativeIncrementalSession {
             last_facts: None,
             typescript,
             last_build_timings: NativeBuildTimings::default(),
+            last_import_identity: ImportIdentityMeasurement::default(),
             semantic_demand_options: SemanticDemandOptions::NONE,
         }
     }
@@ -486,7 +648,7 @@ impl NativeIncrementalSession {
                     return Err(error);
                 }
                 Ok(facts) => {
-                    let facts = Arc::new(facts);
+                    let facts = Arc::new(self.attested(facts)?);
                     self.last_facts = Some(Arc::clone(&facts));
                     return Ok(facts);
                 }
@@ -609,7 +771,7 @@ impl NativeIncrementalSession {
             self.semantic_demand_options,
         )?;
         self.last_build_timings = timings;
-        let facts = Arc::new(facts);
+        let facts = Arc::new(self.attested(facts)?);
         self.last_facts = Some(Arc::clone(&facts));
         Ok(facts)
     }
@@ -641,9 +803,38 @@ impl NativeIncrementalSession {
             self.semantic_demand_options,
         )?;
         self.last_build_timings = timings;
-        let facts = Arc::new(facts);
+        let facts = Arc::new(self.attested(facts)?);
         self.last_facts = Some(Arc::clone(&facts));
         Ok(facts)
+    }
+
+    /// Attaches this program's attested import identities to the facts it
+    /// produced, so a package contract reaching them is bound to the install
+    /// each specifier resolves to rather than to its name.
+    ///
+    /// Every path that produces `ProjectFacts` from this session passes through
+    /// here. A retained session reuses one generation's facts across many
+    /// checks, so the attestation is computed once per generation with it — and
+    /// it must not be conditional on anything that can change between checks
+    /// (see [`contract_identity_scope`]).
+    fn attested(&mut self, mut facts: ProjectFacts) -> Result<ProjectFacts, BackendError> {
+        let scope = contract_identity_scope(&facts);
+        if scope.is_empty() {
+            // This generation asked for nothing, and the measurement must say
+            // so rather than leave the previous generation's counts standing.
+            self.last_import_identity = ImportIdentityMeasurement::default();
+            return Ok(facts);
+        }
+        let (index, measurement) = attest_import_identities(&mut self.typescript, &scope)?;
+        self.last_import_identity = measurement;
+        facts.resolved_imports = Some(index);
+        Ok(facts)
+    }
+
+    /// What the last attestation on this session cost and covered.
+    #[must_use]
+    pub const fn last_import_identity(&self) -> ImportIdentityMeasurement {
+        self.last_import_identity
     }
 
     #[must_use]

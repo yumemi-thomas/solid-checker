@@ -2286,6 +2286,7 @@ mod tests {
                 Vec::new(),
             ),
             typescript_changes: None,
+            resolved_imports: None,
         }
     }
 
@@ -2321,6 +2322,7 @@ mod tests {
             bindings: Vec::new(),
             by_symbol: HashMap::new(),
             missing_exports: Vec::new(),
+            counts: crate::ContractBindingCounts::default(),
         };
         let lookup = SemanticLookup::new(
             &facts,

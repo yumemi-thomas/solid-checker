@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
-    CacheRetention, Finding, IncrementalBuilder, PackageContract, PackageContractIssue,
-    PackageContractIssueKind, Program, RuleOptions, RuntimeEnvironment,
+    CacheRetention, ContractInstallRoot, Finding, IncrementalBuilder, PackageContract,
+    PackageContractIssue, PackageContractIssueKind, Program, RuleOptions, RuntimeEnvironment,
     suppress_findings_owned_by_enabled_rules,
 };
 
@@ -646,7 +646,16 @@ pub fn analysis_metrics(
     let mut contracted_functions = HashMap::<String, Option<String>>::new();
     for file in &facts.files {
         for import in &file.ast.imports {
-            let Some(contract) = PackageContract::for_module(contracts, &import.module) else {
+            // The same identity gate contract resolution applies: a metric that
+            // counted a contract this analysis refused to bind would report
+            // certified summaries the analysis never used.
+            let Some(contract) = PackageContract::for_import(
+                contracts,
+                facts,
+                file.path.as_str(),
+                import.span,
+                &import.module,
+            ) else {
                 continue;
             };
             for binding in &import.bindings {
@@ -958,6 +967,9 @@ pub fn load_package_contracts_reporting(
                 None
             };
             if contract_matches_manifest(manifest, &bundled) && disagreement.is_none() {
+                let mut bundled = bundled;
+                bundled.installed_root =
+                    install_root(installed.as_ref().map(|(directory, _)| directory.as_path()));
                 contracts.insert(bundled.package.name.clone(), bundled);
             } else {
                 refuse(
@@ -976,10 +988,13 @@ pub fn load_package_contracts_reporting(
     }
     for module in &modules {
         if let Some(path) = discover_contract(project_directory, module)? {
-            let contract = read_package_contract(&path)?;
+            let mut contract = read_package_contract(&path)?;
             match classify_identity(project_directory, module, &contract)? {
                 Some(entry) => refuse(&mut stale, entry),
                 None => {
+                    contract.installed_root = install_root(
+                        discover_package_directory(project_directory, module)?.as_deref(),
+                    );
                     contracts.insert(contract.package.name.clone(), contract);
                 }
             }
@@ -987,10 +1002,13 @@ pub fn load_package_contracts_reporting(
     }
     for module in &modules {
         if let Some(path) = discover_local_contract(project_directory, module)? {
-            let contract = read_package_contract(&path)?;
+            let mut contract = read_package_contract(&path)?;
             match classify_identity(project_directory, module, &contract)? {
                 Some(entry) => refuse(&mut stale, entry),
                 None => {
+                    contract.installed_root = install_root(
+                        discover_package_directory(project_directory, module)?.as_deref(),
+                    );
                     contracts.insert(contract.package.name.clone(), contract);
                 }
             }
@@ -1012,6 +1030,9 @@ pub fn load_package_contracts_reporting(
             refuse(&mut stale, entry);
             continue;
         }
+        let mut contract = contract;
+        contract.installed_root =
+            install_root(discover_package_directory(project_directory, &module)?.as_deref());
         contracts.insert(contract.package.name.clone(), contract);
     }
     // A tier that supplied a usable contract wins over any earlier refusal for
@@ -1027,6 +1048,27 @@ pub fn load_package_contracts_reporting(
 pub struct LoadedContracts {
     pub contracts: Vec<PackageContract>,
     pub stale: Vec<StaleContract>,
+}
+
+/// The installed package directory a loaded contract was classified against,
+/// in both spellings the analyzed program may hold it under.
+///
+/// `None` when the ancestor walk found no installed directory: an explicit
+/// `--contract` for a package that is not installed, or a bundled contract for
+/// a package whose manifest the project does not carry. Identity binding then
+/// requires the resolution to have landed in a `node_modules` tree *and* to
+/// have recorded the contract's package name — see
+/// [`PackageContract::for_import`], whose clause 5 says why the name alone is
+/// not enough.
+fn install_root(directory: Option<&Path>) -> Option<ContractInstallRoot> {
+    let directory = directory?;
+    let path = directory.to_string_lossy().into_owned();
+    let canonical = directory
+        .canonicalize()
+        .ok()
+        .map(|canonical| canonical.to_string_lossy().into_owned())
+        .filter(|canonical| *canonical != path);
+    Some(ContractInstallRoot { path, canonical })
 }
 
 fn installed_version(manifest: Option<&PackageManifest>) -> String {
@@ -1061,6 +1103,60 @@ pub fn imported_package_roots(facts: &ProjectFacts) -> Vec<String> {
     modules.sort();
     modules.dedup();
     modules
+}
+
+/// How many of the project's import and `export … from` declarations `contract`
+/// would actually describe, and how many named it and were refused.
+///
+/// Loading a contract and applying it are two different questions: a contract
+/// can name the installed version exactly and still describe *no* import in
+/// this project, because a `paths` entry, a `baseUrl` mapping, or a project
+/// reimplementation owns every specifier that carries its name
+/// ([`PackageContract::bind_import`]). The completeness report has to ask the
+/// second question too — reporting the first alone is how it came to say
+/// `missing: 0` about a contract the analysis refused everywhere.
+///
+/// Both halves are needed to say anything: zero bindings alone is not a
+/// complaint, because a project whose only mention of the package is a
+/// `import type` carries no bindable specifier at all and its contract is not
+/// at fault. A refusal with no binding anywhere is the report-worthy state.
+///
+/// The caller must have set `installed_root` the way analysis does, because
+/// that is what the answer turns on. With no resolution facts in `facts`
+/// nothing is ever refused, which is the correct answer there: without them a
+/// contract *is* bound by name.
+fn contract_binding_counts(
+    facts: &ProjectFacts,
+    contract: &PackageContract,
+) -> solid_reactive_ir::ContractBindingCounts {
+    let candidates = std::slice::from_ref(contract);
+    let mut counts = solid_reactive_ir::ContractBindingCounts::default();
+    for file in &facts.files {
+        let path = file.path.as_str();
+        let declarations = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| (import.span, import.module.as_str()))
+            .chain(
+                file.ast
+                    .exports
+                    .iter()
+                    .filter(|export| !export.type_only)
+                    .filter_map(|export| {
+                        export.module.as_deref().map(|module| (export.span, module))
+                    }),
+            );
+        for (span, module) in declarations {
+            match PackageContract::bind_import(candidates, facts, path, span, module) {
+                solid_reactive_ir::ImportBinding::Bound(_) => counts.bound += 1,
+                solid_reactive_ir::ImportBinding::Refused => counts.refused += 1,
+                solid_reactive_ir::ImportBinding::NoCandidate => {}
+            }
+        }
+    }
+    counts
 }
 
 /// The package manifests and contract files that influence contract discovery
@@ -1108,8 +1204,18 @@ pub struct PackageContractStatus {
 impl PackageContractStatus {
     /// Whether this status blocks contract-backed certification. These are the
     /// statuses `--check-contracts` counts and exits non-zero on.
+    ///
+    /// `unbound` is one of them and is produced only by
+    /// [`package_contract_statuses`], the `--check-contracts` path: a contract
+    /// no import binds certifies nothing, so the report must not count it as
+    /// coverage. The analysis path
+    /// ([`package_contract_statuses_with`]) never produces it, because a
+    /// refusal is deliberately silent in the findings.
     pub fn needs_action(&self) -> bool {
-        matches!(self.status.as_str(), "missing" | "unverified" | "stale")
+        matches!(
+            self.status.as_str(),
+            "missing" | "unverified" | "stale" | "unbound"
+        )
     }
 }
 
@@ -1464,10 +1570,16 @@ pub fn package_contract_statuses(
         // `audited` is set only when the winning tier is the checker's own
         // bundled artifact, which the consumer cannot regenerate. Every other
         // tier is a file the project owns.
+        // The winning tier's contract, kept so the report can also ask which
+        // imports it describes. `None` for a tier that already needs action:
+        // binding reality adds nothing to a contract the user must regenerate
+        // first.
+        let mut winner: Option<PackageContract> = None;
         let (status, detail, contract_path, audited, integrity_mismatch) =
             if let Some(contract) = explicit.get(&module) {
                 validate_discovered_contract_name(&module, contract)?;
                 let (status, detail, integrity) = classify(contract, "explicit")?;
+                winner = Some(contract.clone());
                 (
                     status,
                     detail,
@@ -1479,14 +1591,20 @@ pub fn package_contract_statuses(
                 let contract = read_package_contract(&path)?;
                 validate_discovered_contract_name(&module, &contract)?;
                 let (status, detail, integrity) = classify(&contract, "local")?;
-                (status, detail, contract.source_path, None, integrity)
+                let source_path = contract.source_path.clone();
+                winner = Some(contract);
+                (status, detail, source_path, None, integrity)
             } else if let Some(path) = published {
                 let contract = read_package_contract(&path)?;
                 validate_discovered_contract_name(&module, &contract)?;
                 let (status, detail, integrity) = classify(&contract, "published")?;
-                (status, detail, contract.source_path, None, integrity)
+                let source_path = contract.source_path.clone();
+                winner = Some(contract);
+                (status, detail, source_path, None, integrity)
             } else if let Some(path) = bundled_path {
-                ("bundled", None, path.into(), None, false)
+                let path = path.to_owned();
+                winner = bundled.clone();
+                ("bundled", None, path, None, false)
             } else if let (Some(contract), Some(disagreement)) =
                 (bundled.as_ref(), bundled_integrity.as_ref())
             {
@@ -1529,6 +1647,31 @@ pub fn package_contract_statuses(
                     false,
                 )
             };
+        // A usable contract that describes no import in this project is
+        // reported as `unbound` rather than as the tier that supplied it. The
+        // analysis stays silent about the refusal on purpose -- the imports go
+        // uncertifiable on the rules' own terms -- but this report exists to
+        // answer whether contract coverage is complete, and a contract nothing
+        // binds is not coverage.
+        let (status, detail) = match winner {
+            Some(mut contract) if !matches!(status, "missing" | "stale" | "unverified") => {
+                contract.installed_root = install_root(package_directory.as_deref());
+                let counts = contract_binding_counts(facts, &contract);
+                if counts.bound > 0 || counts.refused == 0 {
+                    (status, detail)
+                } else {
+                    (
+                        "unbound",
+                        Some(format!(
+                            "the contract describes {module} {}, and none of the {} import(s) of \
+                             {module} in this project resolves into that installed package",
+                            contract.package.version, counts.refused
+                        )),
+                    )
+                }
+            }
+            _ => (status, detail),
+        };
         let remedy = contract_remedy(
             project_directory,
             status,
@@ -1585,6 +1728,21 @@ fn contract_remedy(
         "unverified" => Some(format!(
             "review the generated checklist beside the contract and record reviewed evidence; \
              regenerating {module:?} will not promote its inferred claims"
+        )),
+        // Regenerating is the wrong instruction, and so is anything about the
+        // contract file: the contract is fine, and something other than the
+        // installed package owns the specifier. Finding that owner is the whole
+        // remedy -- if the redirection is intended, what it lands on needs its
+        // own contract or none, and if it is not, the mapping is the bug. The
+        // cause is offered rather than asserted, because a tsconfig path
+        // mapping is the common one but not the only one: a `types` or
+        // `exports` entry pointing outside the package does it too. It also
+        // stays true for a bundled contract, which the consumer cannot drop.
+        "unbound" => Some(format!(
+            "find what owns the {module:?} specifier instead -- a tsconfig path mapping, a \
+             baseUrl mapping, or a typings entry pointing outside the package. Until then this \
+             contract describes nothing here: its summaries are about the installed package and \
+             cannot describe whatever owns that specifier"
         )),
         _ => None,
     }
@@ -2136,6 +2294,7 @@ mod tests {
                 Vec::new(),
             ),
             typescript_changes: None,
+            resolved_imports: None,
         };
         let mut session = DiagnosticSession::default();
 
@@ -2167,6 +2326,7 @@ mod tests {
                 Vec::new(),
             ),
             typescript_changes: None,
+            resolved_imports: None,
         };
         let mut session = DiagnosticSession::default();
 
@@ -2363,6 +2523,7 @@ mod tests {
                 Vec::new(),
             ),
             typescript_changes: None,
+            resolved_imports: None,
         };
 
         let stale_path = contract("1.0.0");
