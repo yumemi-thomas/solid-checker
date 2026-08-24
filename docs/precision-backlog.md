@@ -5289,18 +5289,43 @@ Remaining, and known:
   owner or subscriber can be active before a containing function runs. If a
   producer is ever found to wrap module-scope JSX in a reactive effect, that
   rationale — and the 1.x finding resting on it — is where it would be wrong.
-- **The hint still says "Solid warns STRICT_READ_UNTRACKED here in dev"** on an
-  uncertifiable finding, in the **2.0** catalog. The message and the evidence
-  chain are corrected to state the missing fact; the hint is not, and it asserts
-  a runtime behavior the census gap leaves unproven. Scope checked rather than
-  assumed: `rg "in dev" rust/dialects/solid-v2/rules` matches 12 times and
-  `rust/dialects/solid-v1/rules` zero, so the 1.x catalog has no such hint to
-  correct. It is the same overstatement on the pre-existing `uncertain`
-  (unenumerable-callers) path, so it stays one v2 wording slice rather than part
-  of this fix. It rides on the **divergence** findings as well, added later the
-  same day — same hint, same rule, and there the overstatement is sharper still,
-  because the hint asserts a dev-mode warning for a read that may not exist at
-  runtime at all. One slice, three carriers.
+- ~~**The hint still says "Solid warns STRICT_READ_UNTRACKED here in dev"** on an
+  uncertifiable finding, in the **2.0** catalog.~~ **Fixed (2026-08-24).** The
+  hint asserted a runtime behavior none of its three uncertifiable carriers can
+  prove: unenumerable callers (`ReactiveRead::uncertain`), a census hole
+  (`ReactiveRead::missing_jsx_census`), and divergent lowering
+  (`ReactiveRead::divergent_lowering`, where the read may not even execute).
+  `strict_read_hint` in `rust/dialects/solid-v2/rules/src/lib.rs` now takes an
+  `uncertifiable` flag — `ReactiveRead::is_uncertifiable`, the same predicate
+  `projection.rs` uses to set `finding.kind = "uncertifiable"`, so the hint and
+  the kind can never disagree — and picks between two trailing sentences. (The
+  predicate was duplicated verbatim in both places when this landed and was
+  hoisted to that one method on 2026-08-24; see the namespace-surface entry at
+  the end of this file.) A proven violation keeps the original, unconditional
+  sentence:
+
+  > Solid warns STRICT_READ_UNTRACKED here in dev.
+
+  An uncertifiable finding now gets a conditional one that stays true
+  regardless of which of the three carriers applies — including divergence,
+  where the antecedent may simply never fire:
+
+  > If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED
+  > for it; this finding does not establish that it does, so confirm the read's
+  > actual execution and tracking status before relying on that warning.
+
+  Everything before that sentence (the actionable "move the read into a
+  tracking scope" advice) is unchanged in both branches — it stays correct
+  advice independent of whether the finding is proven. 1.x is untouched:
+  `rust/dialects/solid-v1/rules` has no such hint to correct, confirmed by
+  `rg "in dev"` still matching zero there.
+
+  **Gates for this slice** (it recorded none when it landed): the v2 rules
+  library (`cargo test -p solid-v2-rules --lib`), `ir-lib`, and coverage against
+  a fresh debug binary — the hint text is snapshotted for the wording-under-test
+  projects listed in `scripts/coverage.mjs`, so a hint change cannot move
+  silently. All three were re-run on 2026-08-24 with the predicate hoist, with
+  no finding moved.
 
 ## Two lowering divergences the fork's own contract declares binding (2026-08-24)
 
@@ -5548,9 +5573,12 @@ that retiring one leaves the other intact.
   asymmetry this creates and that the fixtures state: 1.x *emits* in every
   position these shapes appear in, so it has no retraction to get wrong, and its
   divergence coverage is complete while its census-gap coverage is not.
-- **The `uncertifiable` hint still says "Solid warns STRICT_READ_UNTRACKED here
+- ~~**The `uncertifiable` hint still says "Solid warns STRICT_READ_UNTRACKED here
   in dev"** under 2.0, on the divergence finding exactly as on the census-gap and
-  `uncertain` ones. Same v2 wording slice, unchanged by this work.
+  `uncertain` ones.~~ **Fixed (2026-08-24)** by the same v2 wording slice as the
+  census-gap entry above — see "The hint still says..." earlier in this
+  document for the new conditional wording and why it holds for a divergence
+  read that may not execute at all.
 
 ## The divergence mitigation manufactured one violation and missed one dialect (2026-08-24)
 
@@ -5692,3 +5720,610 @@ accept and which keeps the call inside the divergent child region. The whole
   assertion, and the new extras are the same: a comment naming a file and a
   revision. Nothing fails if a pin moves and the parity target's list changes
   underneath it — the same known weakness, now in two places instead of one.
+
+## Closed 2026-08-24: the constructability fact decides `kind`, and the spans it must not be asked at
+
+**Closed for the class residue and the destructuring refusal; one named
+residue stays open.** The producer's span-exact `constructability` fact landed
+(solid-ts-facts merge `3296ec8c`, wire table schema 14, handshake protocol
+still 2, compact demand bit 16, producer ADR 0020). `rust/Cargo.toml`'s
+`typefacts` pin moved `e2f7ac5` → `3296ec8c` and `bin/solid-typefacts` was
+rebuilt from it.
+
+`export_kind_proof` (`rust/crates/solid-reactive-ir/src/contracts.rs`) is now
+the three-way rule the two entries above
+([the `kind` claim a bundled artifact contradicts](#the-kind-claim-a-bundled-artifact-contradicts-2026-08-23),
+[the refusal path costs enums and untyped values](#the-refusal-path-costs-enums-and-untyped-values-2026-08-24))
+named as the fix. The complete decision, over the 5×5 product of what the two
+facts can say — each of `Callable`/`NonCallable`/`Mixed`/`Unknown` plus
+absence, on each side:
+
+| | `Constructable` | `NonConstructable` | `Mixed` | `Unknown` | absent |
+| --- | --- | --- | --- | --- | --- |
+| **`Callable`** | function | function | function | function | function |
+| **`NonCallable`** | function | **value** | unresolvable | unresolvable | unanswered |
+| **`Mixed`** | function | unresolvable | unresolvable | unresolvable | unanswered |
+| **`Unknown`** | function | unresolvable | unresolvable | unresolvable | unanswered |
+| **absent** | function | unanswered | unanswered | unanswered | unanswered |
+
+Nine cells prove a function, exactly one proves a value, and the other fifteen
+refuse. `unresolvable` and `unanswered` both refuse at
+`promote_entry_callable`; they are separate variants only so the refusal
+message distinguishes "the facts closed nothing" from "a fact is missing". The
+table is pinned cell by cell, against an independently restated rule and with
+the four bucket counts asserted, by
+`contracts::export_kind_proof_tests::every_fact_combination_decides_the_documented_way`.
+
+Deleted with it: `ExportKindProof::DestructuredMember`,
+`ExportKindProof::Class`, `ExportKindProof::Undemanded`, the public
+`binding_declares_class` and its whole walk (`location_declares_class`,
+`identifier_binding_at`, `binding_initializer_symbol`, `binding_is_reassigned`,
+`destructured_binding_at`, `location_destructures`). `Callability::Mixed` is no
+longer read on its own anywhere in the `kind` decision.
+
+**What is expected to move. The ecosystem benchmark was NOT re-run**, so the
+three bullets below are the discharge map this change was written against, not
+a measurement. The only corpus-level numbers here are the ones the previous two
+entries measured; re-measuring is the next pass's work and is the honest
+before/after target.
+
+- The **13 wrong-kind claims** those entries left publishing `value` —
+  `@solidjs/web@2.0.0-rc.1`'s `ResponseEnvelope` (6 rows, an IIFE-wrapped class
+  whose initializer is a *call*) and `@tanstack/*-devtools`' `*DevtoolsCore`
+  (7 rows, a class reached only as a tuple element type declared in another
+  package) — should be `Constructable` and raise to `function`. Neither shape
+  has a class expression in the analyzed artifact, which is why no amount of
+  further syntax chasing could have closed them, and both shapes are reproduced
+  as fixture rows here
+  (`export_kind_proof_tests::a_class_is_proven_by_constructability_alone`).
+- The **4 destructured-member refusals** should become decisions. The type
+  answers a binding pattern directly: `(class Named {}).name` is a `string` and
+  carries both closed negatives, so `@solid-devtools/ui@0.10.3`'s `./theme`
+  `color` and its kin should publish `value` and their entrypoints emit; a
+  static class member (`const { Inner } = Container`) and a tuple element whose
+  type is a class (`const [Core] = pair`) are `Constructable` and raise. The
+  cost that entry recorded — a destructured primitive refused with the
+  class-shaped ones — is discharged, and this one *is* measured locally:
+  `fixtures/package-contracts/class-expression-kind`'s `./destructured`
+  entrypoint flipped from **refused** to **two published `value` claims**,
+  pinned in its `expected.json` and its closure record.
+- The **17 `Callability::Unknown` refusals** are unchanged, as
+  [that entry predicted explicitly](#the-refusal-path-costs-enums-and-untyped-values-2026-08-24):
+  a downleveled enum, a value computed from an untyped global, and
+  `Object.assign(Object.create(null), …)` are `any`, and constructability reads
+  the same type and fails closed on the same flags. That one is measured
+  locally too, by `class-expression-kind`'s `./unresolvable` entrypoint, which
+  still refuses with both facts `Unknown`. `solid-js@1.9.14`'s `./web` is still
+  the most consequential single refusal in the corpus. The candidate that
+  closes it is still `primitive_value_domain` or an object-literal domain
+  demanded at export-specifier spans, unchanged and still open.
+
+### The refusal message changed shape
+
+`whose runtime kind no closed type answers (Unknown)` became
+`… (Unknown, Unknown)` — both facts, in that order. The
+`(Unknown)` spelling in
+[ecosystem-benchmark.md](ecosystem-benchmark.md) and in
+[RFC 0002 amendment A9](rfcs/0002-a9-kind-has-no-unknown-form.md) is a record
+of a past measurement and is deliberately not rewritten. A second phrase,
+`whose runtime kind no fact covers at all`, is new (see below). Anything keying
+on these texts — `scripts/ecosystem-benchmark/lib/classify.mjs` does not today,
+though [the entry above](#the-refusal-path-costs-enums-and-untyped-values-2026-08-24)
+proposed it — must key on all three.
+
+### A demanded span that came back empty now refuses
+
+`ExportKindProof::Undemanded` mapped an absent fact to "keep the summary", and
+`promote_entry_callable` published `kind: "value"` on it — the maximal
+certified negative, for a span whose facts simply did not arrive. An
+adversarial review proved it reachable: the producer leaves both signature
+facts absent when the demanded location has **no covering query node**
+(`internal/typefacts/tsgo/semantic_runs.go`, the `queryNode != nil` guard), and
+it emits the entity row regardless, so the consumer saw a present row with an
+absent fact and read it as an answer.
+
+**The two cases are not distinguishable from the fact table, so both fail
+closed.** `ProjectFacts` carries no record of what was demanded, and
+`export_kind_proof` is a fact-table function. What makes failing closed on both
+honest rather than merely conservative is that at every call site the span *was*
+demanded: `demand_plan` sets `callability` — and now `constructability` beside
+it, unconditionally, the two never travel apart — at every export specifier and
+every exported declaration name (`export_declaration_names` covers destructured
+declarator names too), and both `export_kind_proof` call sites pass exactly one
+of those spans. An assertion in `solid_facts_backend::semantic_demands`' own
+tests pins that invariant, so a demand-plan narrowing that reintroduced a
+genuinely undemanded span would fail there rather than silently publish a
+`value`.
+
+**The cost, stated plainly.** A future caller of `export_kind_proof` at a span
+the demand plan does not cover gets a refusal, not a kept summary. There is no
+such caller today, and no corpus row moved: the arm is unreached by any fixture
+and is pinned by unit test
+(`export_kind_proof_tests::absence_on_either_fact_is_unanswered_not_a_negative`)
+instead. Half an answer refuses too — a present `NonCallable` beside an absent
+constructability is `unanswered`, not `value`.
+
+### A class declaration's span is not the export's value, and the review brief did not predict it
+
+Wiring the two facts and deleting the syntactic search made
+`fixtures/package-contracts/exported-class`'s `DirectError` publish
+`kind: "value"`. **This was a real regression, found by the process gate, and
+it is not in either entry's discharge map.**
+
+`export class DirectError extends Error {}` has no export specifier — the
+exported name *is* the class declaration's name — and the compiler's type at a
+class declaration name is the class's **instance** type, which honestly answers
+`nonCallable` *and* `nonConstructable`, because an instance is neither. ADR
+0020 documents this under "What it does not answer" and the migration notes say
+it outright ("Demand at the export-specifier span, never at a declaration
+name"); what neither says is what a consumer should do about `export class C {}`,
+which has no other span to ask at. The old code got this row right by accident,
+through the class-name-span half of the search that was being deleted.
+
+The fix is `class_declaration_name`, and it is deliberately *not* the search
+that was retired. It is span identity against this file's own class spans and
+nothing else: no symbol walk, no alias hop, no initializer-identifier hop, no
+class-expression initializer fact, no assignment scan. `class C {}` binds the
+constructor by language definition, and it cannot be defeated the way the
+retired search was — a bundler that lowers the declaration away leaves a
+*declarator* name, which types as the constructor and is decided by the facts.
+`export_kind_proof_tests::a_class_declaration_is_decided_before_the_facts_are_read`
+pins that this gate fires for all 25 fact combinations at a class declaration
+and for none of the lowered shapes.
+
+This subsection said "one span" when it landed, and that was wrong by one
+spelling: `export default class {}` is anonymous, so the export records the
+class *node's* span and the same instance-type problem applies there. It
+published `kind: "value"` for a constructor until 2026-08-24 — see the
+namespace-surface entry at the end of this file.
+
+### Open residue: the signature-less `Function`-supertype family
+
+**Open. Pre-existing, neither widened nor closed by this change.**
+lib.es5.d.ts's `Function` interface — and `CallableFunction`,
+`NewableFunction`, and any type a function value is assignable to that declares
+no signature of its own, such as `object`, `{}` and
+`Record<string, unknown>` — declares `apply`/`call`/`bind` and no call or
+construct signature. So `export declare const x: Function` answers
+`nonCallable` **and** `nonConstructable`, the cell this rule reads as its one
+`value` proof, while `typeof x === "function"` holds at runtime for every value
+that type admits. TypeScript-Go's own `typeof` narrowing
+(`checker.isFunctionObjectType`) gets it right through a `bind`-member
+subtype-of-`Function` fallback, so the compiler's own "is this a function"
+answer and the fact pair's answer diverge **by design** for this family.
+
+Nothing on the consumer side can detect it. Assignability to `Function` is not
+one of these facts, and there is no honest local substitute: matching the
+rendered type text is exactly the `typeDescriptor.text` interpretation the
+producer's migration notes forbid, and a `type Handler = Function` alias
+renders as its own name and defeats it anyway. Through `callability` alone this
+answered `nonCallable`, no class syntax contradicted it, and `value` was
+published for the same reason — so this is not a hole the second fact opened.
+
+Pinned wrong on purpose by
+`fixtures/package-contracts/function-supertype-kind`: `Function`, `object`,
+`{}` and `Record<string, unknown>` all publish `kind: "value"`, beside a
+`number` control that answers the identical pair and for which `value` is
+correct. That control is why the pair cannot simply be distrusted wholesale.
+
+**Named producer follow-up (ADR 0020, "What it does not answer"): give
+`constructabilityOfType` and `callabilityOfType` the same `bind`-member
+subtype-of-`Function` fallback `isFunctionObjectType` already has**, so the
+fact vocabulary closes the gap instead of pushing it onto every consumer. When
+it lands, all four of that fixture's family rows answer `Unknown` on both
+facts, `export_kind_proof` returns `unresolvable`, and the entrypoint is
+*refused* rather than published — which for that fixture (a single `.`
+entrypoint) is a generation failure, so `retries` should be split onto its own
+entrypoint at that point. No corpus measurement of the family's size exists
+yet; a search for exports typed against it is the measurable before/after
+target.
+
+### Gates
+
+Producer rebuilt from the new pin (`scripts/build-typefacts.sh`, which reads the
+rev out of `rust/Cargo.toml`), then: `facts-lib` (53), `ir-lib` (152, including
+the eight `export_kind_proof` tests), backend lib (29), every armed
+`solid-facts-backend` process suite including `contracts_process` (53) and
+`diagnostics_process` (15), coverage against a fresh debug binary (90 fixture
+projects, 564 findings, **no finding moved**), the contract corpus (38
+packages, one added), `node --test scripts/*.test.mjs` (281, which `make verify`
+does not run and CI does), and `make verify`. `git diff --check`,
+workspace-wide `cargo clippy -D warnings`, and `cargo fmt --check` all clean.
+
+**Not run: the ecosystem benchmark.** It installs real packages from the
+registry, and the three corpus-level bullets above are therefore predictions
+from the discharge map rather than measurements. `benchmarks/ecosystem/` is
+untouched.
+
+## Investigated: `./web`, `onSettled`, and undeclared-dependency corpus failures — all honest (2026-08-24)
+
+A re-diagnosis of `benchmarks/ecosystem/verification-report.json` flagged five
+rows failing with `Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath
+'./web' is not defined`, two with `SyntaxError: ... does not provide an export
+named 'onSettled'`, and a cluster of `ERR_MODULE_NOT_FOUND` rows, on the
+hypothesis that the corpus manifest's floor selection (`scripts/ecosystem-
+benchmark/lib/select.mjs`) might be pinning a Solid runtime version older than
+a package actually needs. The verification-report aggregate only carries
+message-frequency counts (`probeEnvironment.importThrows`), not row
+attribution, so the actual failing probe IDs were recovered from the run's
+surviving journal
+(`.../scratchpad/state-d1/journal.jsonl`, the resumable per-row record
+`verify-corpus.mjs` appends before aggregating) and independently confirmed by
+real `npm install` of each package in an isolated temp directory. Verdict for
+every row checked: **honest**. No manifest pin, floor computation, or install
+policy changed.
+
+**The five `./web` rows are not a floor problem, and the opening hypothesis was
+wrong about the mechanism.** `solid-js`'s Solid-2 line never ships a `./web`
+export subpath at *any* published version — checked directly against the
+registry's `exports` map for `2.0.0-beta.0`, `2.0.0-beta.19`, `2.0.0-rc.0`, and
+`2.0.0-rc.1`, all four `['.','./types/*','./package.json']` only. DOM rendering
+moved to the separate `@solidjs/web` package for the entire 2.0 line, so there
+is no "old floor" that would have had `./web` and a "new floor" that lost it.
+The five packages —
+`@solid-primitives/controlled-props@1.0.0-next.3`,
+`@solid-primitives/drag-drop@0.1.0-next.0`,
+`@solid-primitives/favicon@1.0.0-next.1`,
+`@solid-primitives/upload@1.0.0-next.4` (via its `@solid-primitives/drag-drop`
+dependency), and
+`@solid-primitives/virtual@1.0.0-next.4` — each ship a compiled bundle whose
+JSX output still does `import { ... } from "solid-js/web"` (confirmed by
+grepping the installed `dist/*.js`), the Solid-1.x import path that was
+retired in the 2.0 split. Reproduced with a bare `npm install
+<package>@<version> solid-js@<pinned> @solidjs/web@<pinned>` in a fresh temp
+project against **both** the floor (`2.0.0-rc.0`) and head (`2.0.0-rc.1`)
+pins for `drag-drop` and `controlled-props`: identical failure at both ends,
+which is itself the proof this is not floor-specific — the package's own
+compiler output never targets the runtime split its `peerDependencies` claims
+to support. Honest failure; the manifest's floor selection followed each
+package's own declared `solid-js`/`@solidjs/web` range faithfully
+(`^2.0.0-rc.0` for four of the five, an exact `2.0.0-beta.19` pin is unrelated
+— that pin belongs to the separate `@corvu-next/*` family, which fails for a
+different, unrelated runtime reason and was not one of these five rows).
+
+**The two `onSettled` rows are a package-side dependency-graph/peer-range
+inconsistency, not a corpus bug.**
+`@solid-primitives/graphql@3.0.0-next.0` and
+`@solid-primitives/immutable@2.0.0-next.0` both declare `peerDependencies:
+{"solid-js": "^1.6.12"}` — correctly satisfied by the corpus's audited
+`solid-js@1.9.14`, so `solid1` selection is faithful to the package's own
+claim. But each also has a regular `dependencies` entry on a solid-primitives
+package still in active "next" development — `@solid-primitives/keyed:
+"^3.0.0-next.0"` for `immutable`, `@solid-primitives/utils: "^7.0.0-next.0"`
+for `graphql` — and real npm semver resolves each of those ranges to the
+newest matching prerelease under the *same* `major.minor.patch` prefix
+(`keyed@3.0.0-next.2`, `utils@7.0.0-next.4`), which are Solid-2.0-only
+releases peering `solid-js@^2.0.0-rc.0`. `onSettled` has existed on every
+2.0.x prerelease checked (`beta.0` through `rc.1`) and is simply absent from
+`1.9.14` — a 2.0-only API. Reproduced with a bare `npm install
+@solid-primitives/immutable@2.0.0-next.0 solid-js@1.9.14`: npm resolves the
+nested `keyed@3.0.0-next.2` with an `ERESOLVE overriding peer dependency`
+warning (not a hard failure — the same npm behavior a real end user hits with
+the identical command) and the runtime crashes on the exact reported
+`SyntaxError`. The package's own declared floor for `solid-js` is honest by
+itself; the package's *own* dependency tree contradicts it. Not a manifest or
+selection defect.
+
+**The `@solid-primitives/utils` / `server-only` `ERR_MODULE_NOT_FOUND` rows are
+undeclared dependencies in the published artifact, not a peer-completeness
+gap.** The "peer-complete installs" policy from
+`Give probes an honest browser shim, peer-complete installs, and scaled
+budgets` (d8d240a4) only completes peers the *tested* package itself declares
+in `peerDependencies` (`peerSpecsFor` in
+`scripts/ecosystem-benchmark/verify-corpus.mjs`), and deliberately skips peers
+marked optional — matching real `npm install` behavior, which does not
+auto-install optional peers either. Checked against the actual npm registry
+per package:
+  - `@solid-primitives/keyed@3.0.0-next.2` and
+    `@solid-primitives/share@4.0.0-next.4` declare **no dependency of any
+    kind** — not `dependencies`, not `peerDependencies`, not optional — on
+    `@solid-primitives/utils`, yet their compiled `dist/index.js` /
+    `dist/social-share.js` unconditionally `import` it. Reproduced with a
+    bare, isolated `npm install @solid-primitives/keyed@3.0.0-next.2
+    solid-js@2.0.0-rc.0 @solidjs/web@2.0.0-rc.0`: `@solid-primitives/utils` is
+    never installed and the import throws exactly the reported
+    `ERR_MODULE_NOT_FOUND`. (An earlier combined install of several
+    `@solid-primitives/*` packages together made `keyed`/`favicon`/etc. import
+    successfully by accident, because a *sibling* package's own declared
+    dependency on `@solid-primitives/utils` hoisted it into the shared
+    `node_modules` root — which is exactly why the isolated, single-package
+    reproduction the corpus itself performs is the correct measurement, and a
+    combined test is not.) This is a missing entry in the published
+    `package.json`, indistinguishable from what any real consumer's
+    `npm install @solid-primitives/keyed` alone would hit.
+  - `@solidjs/start@2.0.3`'s `dist/http/index.js` and
+    `dist/middleware/index.js` unconditionally `import "server-only"`, but
+    `server-only` appears in none of `dependencies`, `peerDependencies`, or
+    `optionalDependencies`. Same undeclared-dependency shape, confirmed the
+    same way.
+  - The `react`/`preact`/`svelte`/`vue`/`@angular/core` throws all trace to
+    `@tanstack/devtools-a11y@0.2.2` and `@tanstack/devtools-utils@0.7.0`,
+    which declare all five as `peerDependenciesMeta`-`optional` — a real `npm
+    install` would not auto-install them either, so a Solid-only probe
+    environment correctly lacks them.
+  - The `vite` / `@rsbuild/core` throws on `@tanstack/solid-start@2.0.0-rc.1`
+    trace to the same pattern: both are declared `peerDependenciesMeta`-
+    `optional` on that package.
+  - `@solid-primitives/start@0.0.4`'s `Cannot find module
+    '.../solid-start/server/ServerContext.jsx'` is the deprecated legacy
+    `solid-start` package (the registry itself reports `@solid-primitives/
+    start@0.0.4: Package renamed to @solid-primitives/cookies`) reaching into
+    a path that package no longer ships; a stale, deprecated release, not a
+    corpus install gap.
+
+**No code changed.** `scripts/ecosystem-benchmark/lib/select.mjs`,
+`scripts/ecosystem-benchmark/verify-corpus.mjs`, and the manifest
+(`scripts/ecosystem-benchmark/manifest.json`) are untouched — every row's
+floor/head selection and every peer-completion decision already matches what
+a real `npm install` of that exact package would produce. `benchmarks/
+ecosystem/verification-report.json` and `report.json` were read but not
+regenerated.
+
+## Closed 2026-08-24: a `namespace` member is not a module export, and an anonymous class was published as a value
+
+Two false claims in the same seam — what a module's **export surface** is, and
+what the `kind` decision may read at a class declaration. Both were published
+by the contract generator, so both reached consumers as certified statements
+about a package.
+
+### Phantom namespace-member exports
+
+**Closed.** `export namespace Config { export const inner = 1 } export const
+real = 2` generated an entrypoint whose exports were
+`["Config", "inner", "real"]`. `inner` is a property of the `Config` namespace
+object; `import { inner } from "pkg"` does not resolve, and no build of that
+package ever exported it. A merged `class C {} namespace C { export const marker
+= 1 }` leaked `marker` the same way, and so did a namespace that was not
+exported at all — its own `export const` is one level further from the surface
+and was picked up regardless.
+
+Root cause, verified in the code and then against the reproduction
+(`contract generate` over a two-line package):
+
+- `AstFacts::exported_bindings` (`rust/crates/solid-facts/src/ast/mod.rs`)
+  selected every non-array `BindingFact` whose declaration span is *contained*
+  in the export statement's span, excluding only declarators inside a
+  **function body**. A `TSModuleBlock` is not a function body, so a namespace's
+  declarators passed. `export_declaration_names`, three hundred lines away, had
+  it right the whole time: a `TSModuleDeclaration` yields the namespace's own
+  name and nothing else.
+- The nested `export` statement is an `ExportFact` like any other, and both
+  surface enumerations walked every one of them. This is the path that fires
+  even when the namespace itself is not exported, and it is the one the
+  reproduction was actually hitting first.
+
+The fix adds one fact and one filter. `AstFacts::module_blocks` records the body
+of every `namespace`, `module`, and `declare global` declaration (one
+`visit_ts_module_block` hook covers all three: `namespace A.B {}` nests
+declarations and only the innermost carries a block). `exported_bindings` now
+excludes declarators inside such a block, and `AstFacts::module_level_exports`
+is the iterator the surface enumerations use. At the time of this fix that was
+two call sites — `contract_export_fragment`
+(`rust/crates/solid-reactive-ir/src/contracts.rs`) and `exported_names_for_file`
+(`rust/crates/solid-facts-backend/src/main.rs`) — and a review pass afterward
+found four more name-keyed enumerations still reading the unfiltered
+`AstFacts::exports` table; see "Review follow-up" below for why those needed
+the same filter and were not caught here. `AstFacts::exports` remains the
+complete syntactic table; it is the *surface* that filters. `AST_FACTS_SCHEMA`
+moved 36 → 37 for this addition — its own bump, distinct from the 35 → 36 bump
+the `initializer_class` deletion below carries (the fact table changed; the
+constant is compared only for incremental cache reuse,
+`same_reachability_ast` in solid-reactive-ir's `cache.rs`, and is not a
+published artifact).
+
+`exported_bindings` had exactly two consumers, both of them export-surface
+enumerations, so both wanted the fix; there is no consumer that wanted namespace
+members.
+
+**Deliberately left conservative.** The demand plan
+(`rust/crates/solid-facts-backend/src/demand_plan.rs`) still demands both
+signature facts at *every* export specifier and exported declaration name,
+nested ones included. Nothing depended on the phantom rows — the surface no
+longer asks about them — and demanding a fact that goes unread costs a walk,
+while shrinking the plan would move an invariant `export_kind_proof`'s refusal
+honesty rests on and is pinned by
+`semantic_demand_plan_is_complete_for_downstream_consumers`. Two other sites
+that iterate `ast.exports` (`module_surface_is_unaccounted` in the backend's
+`main.rs`, the exported-function scan in its `lib.rs`) also still see nested
+exports; both err toward "this is exported", which widens uncertainty rather
+than certifying anything, so they were left alone.
+
+**Audit of every checked-in contract: clean.** A throwaway script cross-checked
+each `fixtures/package-contracts/*/expected.json` and each
+`pkg/contracts/bundled/**` contract's export names against the namespace bodies
+declared anywhere in that fixture's tree. **No phantom in any of them**, so no
+`expected.json` needed correcting. The one namespace body in a package-contracts
+fixture is the JSX namespace in `escaping-private-helper`'s `solid-js` stub, and
+none of `Element`, `ArrayElement`, `ElementChildrenAttribute`, `HTMLAttributes`
+or `IntrinsicElements` appears in that fixture's contract. The bundled contracts
+are not exposed to this bug class at all: they describe compiled `dist`
+artifacts (TypeScript namespaces do not survive to JS), their surfaces are
+independently generated from and checked against the installed releases
+(`scripts/generate-solid1-runtime-surface.mjs`,
+`scripts/check-bundled-contracts.mjs`), and none of them lists a JSX-namespace
+member. Nothing under `pkg/contracts/bundled/` was regenerated.
+
+`fixtures/package-contracts/namespace-export-surface` is the pin: an exported
+namespace whose three members and one nested namespace must not appear, a merged
+class+namespace that must publish `Merged` alone and keep it `kind: "function"`,
+an unexported namespace, and two ordinary exports as controls. `tsc --noEmit
+--strict` is clean on its source, as it must be: this is a claim about a runtime
+export surface, and no type error covers it.
+
+### Review follow-up: four more enumeration sites, and a class static block
+
+A review pass over this fix found the two closed defects above were not the
+whole bug class, in the same seam.
+
+**Four more name-keyed enumerations still matched a nested specifier.**
+`contract_export_fragment` and `exported_names_for_file` were not the only
+consumers that need to bind a name to *this module's* export, not to any
+`ExportFact` reachable from the file regardless of nesting. Four more read
+`file.ast.exports` (or `&file.ast.exports`) directly, unfiltered:
+`entry_export_entity` and `external_export_summary_for_file`
+(`rust/crates/solid-facts-backend/src/main.rs`), `export_is_type_only` (same
+file), and `resolve_named_export`
+(`rust/crates/solid-reactive-ir/src/contracts.rs`). `file.ast.exports` is
+sorted by *span*, not by nesting depth, so a nested specifier can sort before
+the module-level one it shares a name with — `entry_export_entity` is the one
+proven wrong: `namespace internal { export function helper(v: number) { return
+v } } export const helper = internal.helper(41)` bound the module-level
+`helper` (a `number`) to `internal.helper`'s type facts and published `kind:
+"function"`, a `tsc`-clean false claim. All four now iterate
+`AstFacts::module_level_exports` instead, the same fix already applied to the
+other two — there is no sixth call site of this shape left in either crate.
+
+**A class static block is not a function body either.** `exported_bindings`'s
+function-body exclusion covers a function's parameters and locals, but `static
+{ const inside = 1 }` inside an exported class is neither a function body nor
+a module block, so its declarator passed the same way a namespace member's
+used to. `export class Holder { static { const insideStaticBlock = 1 } }`
+published `insideStaticBlock` as a module export with zero facts behind it —
+whatever type it turned out to have was whatever the demand plan happened to
+find at that span, not a claim this analysis proved. `exported_bindings` now
+also excludes a declarator whose span is *strictly inside* a `ClassFact::span`
+that is itself inside the export span. Strictly inside, not merely contained,
+is the exact boundary: a class **expression** initializer —
+`export const boxed = class { static { const hiddenB = 2 } }` — gives
+`boxed`'s own declarator span (identifier through initializer) a span that
+*contains* the class expression, the reverse relationship from `hiddenB`'s,
+so `boxed` must survive the same exclusion that removes `hiddenB`. A
+module-level declarator can never itself sit inside a class body, so the
+containment test cannot misfire on one; both directions are pinned in the
+fixture below.
+
+`fixtures/package-contracts/namespace-export-surface` grew three rows for
+this: `helper` (a module-level `number` whose name collides with
+`internal`'s nested `helper` function — the name-collision shape), `Holder`
+(an ordinary exported class whose static block must not cost it its surface),
+and `boxed` (the class-expression-initializer control for the strict-containment
+direction). `tsc --noEmit --strict` stays clean — class static blocks are
+ordinary ES2022 syntax, and this fixture needed no `tsconfig.json` change to
+type-check them, since nothing here depends on downlevel emission.
+
+Three unrelated documentation corrections rode along with this pass, none of
+which changed behavior:
+
+- `AstFacts::declares_class_at`'s doc undercounted its own domain.
+  `export default (class {})` is not a case the function stays out of: the
+  parser does not preserve the parentheses, so the export records the class
+  expression's own span, which is exactly the span `visit_class` recorded for
+  it, and `declares_class_at` matches it the same way it matches an anonymous
+  class *declaration*'s span. The match is redundant there — ordinary
+  `Constructability` already answers a class expression correctly on its own —
+  but the fixture and package-contracts docs that described this control as
+  decided "by the same [language] definition" alone, as if the span-addressing
+  rule played no part, are corrected in
+  `fixtures/package-contracts/exported-class/README.md` and
+  `class-expression-default.ts`.
+- `scripts/contract-corpus.mjs`'s summary line read `contract corpus: N
+  packages`, which reads as "N correct contracts". A passing count is "N
+  pins matched their checked-in expectation" — `function-supertype-kind` pins
+  a `kind` claim that is wrong on purpose (see its row comment), so the count
+  is not itself a correctness claim about every package it includes. The line
+  now reads `contract corpus: N pins, …`.
+- The two shape changes to `AstFacts` in the fix above — the `module_blocks`
+  addition and the unrelated `initializer_class` deletion recorded under "Dead
+  field removed" below — shared a single `AST_FACTS_SCHEMA` bump (35 → 36).
+  They are now two honest bumps: the deletion keeps 35 → 36, and
+  `module_blocks` moves 36 → 37.
+
+A direct re-probe of both repro shapes against a fresh debug binary and
+`bin/solid-typefacts` (`solid-checker contract generate` over two throwaway
+one-file packages in `/tmp`, outside this repository) confirms the fix:
+`namespace internal { export function helper(v: number) { return v } } export
+const helper = internal.helper(41)` now publishes `helper` as `kind: "value"`,
+and `export class Holder { static { const insideStaticBlock = 1 } }` beside
+`export const boxed = class { static { const hiddenB = 2 } }` publishes
+`Holder` and `boxed` both as `kind: "function"` with neither
+`insideStaticBlock` nor `hiddenB` anywhere in the surface. See "Gates" below
+for the full suite this pass ran.
+
+### `export default class {}` published `kind: "value"`
+
+**Closed.** The `kind` decision reads `class_declaration_name` before any type
+fact, because at a class declaration's name the compiler answers with the
+*instance* type. That guard matched class **name** spans only. An anonymous
+default-exported class has no name, so `visit_export_default_declaration`
+records the `class …` node's own span, the guard missed, and the facts answered
+about the instance — `NonCallable` + `NonConstructable`, the one cell that
+publishes `value`. That is a **false maximal certified negative for a
+constructor**: `value` asserts the export reads nothing reactive, returns
+nothing, invokes no caller-supplied callback and requires no owner, about
+something a consumer will call with `new`.
+
+Measured before the fix: `export default class {}` and `export default class
+extends Base {}` published `value`; `export default class Named {}`,
+`export default (class {})` and every `export { C }` form were already correct.
+
+`AstFacts::declares_class_at` now answers for a class's binding name **or** the
+class node itself, which keeps it a span-addressing rule rather than a class-ness
+proof: a class declaration *is* the constructor by language definition, named or
+not, exactly as for the named case. `fixtures/package-contracts/exported-class`
+grew four entrypoints — `./anonymous-default`, `./anonymous-extends` (the shape
+a published package actually contains), and `./named-default` and
+`./class-expression-default` as controls — each publishing `default` as
+`kind: "function"`. The "one span" wording that this bug hid behind is corrected
+in `contracts.rs`, `docs/package-contracts.md`, that fixture's README, and the
+constructability entry above; there are two such spans, not one.
+
+### Dead field removed, one predicate hoisted
+
+- `BindingFact::initializer_class` had no reader left: its consumers
+  (`location_declares_class`, `binding_is_reassigned`) were deleted when
+  `export_kind_proof` moved to the constructability fact. The field, its
+  extraction, and its `BindingMetadata` slot are gone, and its unit test is
+  replaced by one that pins what remains true — the span-addressing rule, for a
+  declaration name, a named class expression's name, and an anonymous class
+  node. Nothing outside the crate serialized it (no snapshot, golden, or process
+  fixture carries `initializerClass`), but the field's removal is still a shape
+  change to a versioned fact table, and it does not share a bump with the
+  unrelated `module_blocks` addition above: it carries its own `AST_FACTS_SCHEMA`
+  move, 35 → 36, ahead of that addition's 36 → 37. The doc comment's dangling
+  reference to `binding_is_reassigned` went with it.
+- The uncertifiable predicate `read.uncertain || read.missing_jsx_census ||
+  read.divergent_lowering.is_some()` was duplicated verbatim in
+  `solid-v2/rules/src/lib.rs` (hint selection) and `projection.rs`
+  (`finding.kind`). It is now `ReactiveRead::is_uncertifiable`, called from
+  both: the two could not disagree by construction, which is the property the
+  hint fix relied on and stated in prose.
+
+### Gates
+
+`facts-lib` (54), `ir-lib` (152), backend lib (29, with the demand-plan
+completeness assertion widened to `export { local }`, `export class K {}`,
+`export default class {}` and `export const { a } = o`), `solid-v2-rules --lib`
+(10), the armed `contracts_process` (53) and `dialects_process` (37) suites,
+coverage against a fresh debug binary (**90 fixture projects, 564 findings, no
+finding moved**), the contract corpus (39 packages, one added), and
+`node --test scripts/*.test.mjs` (281). `cargo fmt --check`, workspace-wide
+`cargo clippy -D warnings`, `git diff --check`, `jq empty` on the findings
+schema and `dialect-manifests.mjs validate` all clean. The reproduction now
+generates `["Config", "real"]`.
+
+**Re-run for the review follow-up above**, against the same fresh debug binary
+and `bin/solid-typefacts` (`facts-lib` 54, `ir-lib` 152, backend lib 29, the
+armed `contracts_process` 53 and `dialects_process` 37 suites, coverage 90
+fixture projects / 564 findings / no finding moved, the contract corpus 39
+pins (its 33 uncovered generator ranges are pre-existing `generatorCoverage`
+bookkeeping over `packages/cli`'s generator, untouched by this pass and not a
+gate failure — `generatorCoverage` only throws on a claim emitter with *zero*
+coverage, which did not happen), `cargo fmt --check`, `git diff --check`,
+`jq empty`, `dialect-manifests.mjs validate`, and
+workspace-wide `cargo clippy -D warnings` — all identical or clean). Not
+re-run: `node --test scripts/*.test.mjs`, `make verify`, and the ecosystem
+benchmark, for the same unmapped-path and registry-install reasons as the
+first pass.
+
+**Not run: `make verify`.** `verify-delta` escalates to it because this tree
+carries unmapped paths from the constructability work it sits on top of
+(`rust/Cargo.toml`, `THIRD_PARTY_NOTICES.md`, `scripts/`), not because a check
+above was skipped. The ecosystem benchmark and contract conformance (which
+install from the registry) were not run either.
+
+**Remaining approximation.** The analysis-side surface
+(`contract_export_fragment`, the project-wide export map) takes the same
+`module_level_exports` filter as the generator, but no fixture exercises a
+*namespace* export through it — the pin is the generator's corpus row. A
+reactive-ir fixture with a local package that exports a namespace would close
+that.

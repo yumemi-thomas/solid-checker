@@ -40,11 +40,36 @@ pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
     project_finding(FindingSeed::PackageContractIssue(issue), &Catalog)
 }
 
-fn strict_read_hint(kind: &str) -> &'static str {
-    if kind == "component-props" {
-        "Move the prop read into a tracking scope: read props.<name> directly in JSX, derive it with createMemo(() => props.<name>), or read it in the compute function of createEffect(compute, apply). Do not use untrack() to make a prop reactive; untrack() only documents an intentional one-time snapshot. Solid warns STRICT_READ_UNTRACKED here in dev."
+// The trailing sentence is the only clause that differs between a proven
+// violation and an uncertifiable finding, so it is split out here rather than
+// duplicating the whole hint body per kind. A violation's read is proven
+// untracked in a proven tracking context, so Solid provably warns there — the
+// flat "Solid warns ... here in dev" claim is earned. An uncertifiable read is
+// not: it rests on unenumerable callers (`ReactiveRead::uncertain`), a census
+// hole (`ReactiveRead::missing_jsx_census`), or a divergent-lowering read that
+// may not exist at runtime at all (`ReactiveRead::divergent_lowering`), and in
+// every one of those the flat claim asserts a runtime behavior the finding's
+// own message says cannot be proven. The conditional phrasing stays true
+// regardless of which is the case — including divergence, where the read
+// might not execute at all: an unmet antecedent never falsifies the
+// conditional.
+const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
+const STRICT_READ_UNTRACKED_MAY_WARN: &str = "If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning.";
+
+fn strict_read_hint(kind: &str, uncertifiable: bool) -> String {
+    let warning = if uncertifiable {
+        STRICT_READ_UNTRACKED_MAY_WARN
     } else {
-        "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+        STRICT_READ_UNTRACKED_WARNS
+    };
+    if kind == "component-props" {
+        format!(
+            "Move the prop read into a tracking scope: read props.<name> directly in JSX, derive it with createMemo(() => props.<name>), or read it in the compute function of createEffect(compute, apply). Do not use untrack() to make a prop reactive; untrack() only documents an intentional one-time snapshot. {warning}"
+        )
+    } else {
+        format!(
+            "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. {warning}"
+        )
     }
 }
 
@@ -66,10 +91,14 @@ impl CatalogWording for Catalog {
                         "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime warning",
                     );
                 }
+                // The same predicate projection.rs sets `finding.kind =
+                // "uncertifiable"` from — one owner, so the hint and the kind
+                // cannot disagree on which findings are proven.
+                let uncertifiable = read.is_uncertifiable();
                 FindingWording::new(
                     Rule::StrictReadUntracked.metadata(),
                     message,
-                    strict_read_hint(&read.kind),
+                    strict_read_hint(&read.kind, uncertifiable),
                 )
                 .with_evidence(strict_read_evidence(read))
             }
@@ -750,8 +779,27 @@ mod strict_read_hint_tests {
 
     #[test]
     fn component_props_hint_does_not_present_untrack_as_a_reactivity_fix() {
-        let hint = strict_read_hint("component-props");
+        let hint = strict_read_hint("component-props", false);
         assert!(hint.contains("read props.<name> directly in JSX"));
         assert!(hint.contains("Do not use untrack() to make a prop reactive"));
+    }
+
+    #[test]
+    fn violation_hint_asserts_solid_warns_unconditionally() {
+        for kind in ["component-props", "signal"] {
+            let hint = strict_read_hint(kind, false);
+            assert!(hint.contains("Solid warns STRICT_READ_UNTRACKED here in dev"));
+            assert!(!hint.contains("If this read executes untracked"));
+        }
+    }
+
+    #[test]
+    fn uncertifiable_hint_never_asserts_that_solid_will_warn() {
+        for kind in ["component-props", "signal"] {
+            let hint = strict_read_hint(kind, true);
+            assert!(!hint.contains("Solid warns STRICT_READ_UNTRACKED here in dev"));
+            assert!(hint.contains("If this read executes untracked in dev, Solid warns"));
+            assert!(hint.contains("this finding does not establish that it does"));
+        }
     }
 }

@@ -14,9 +14,17 @@ contradicted it. That was 45 of the 53 failing `kind` claims in the corpus
 measurement: `ReactiveMap`/`ReactiveSet`/`TriggerCache` (Solid Primitives),
 `ResponseEnvelope` (`@solidjs/web`), `SelectionManager` (`@kobalte/core`), and
 `AsyncBatcher`/`Debouncer`/`Queuer`/`Throttler` plus the `*DevtoolsCore` family
-(`@tanstack/*`). The exact fact that answers it is the declarator's
-class-expression initializer (`BindingFact::initializer_class`), never a name
-or a type text.
+(`@tanstack/*`).
+
+The exact fact that answers it is `Constructability` —
+`GetSignaturesOfType(…, SignatureKindConstruct)` at the same span the callability
+demand already resolves — never a name, a type text, or a syntactic search for a
+`class` keyword. This fixture used to pin that search (a
+class-expression-initializer fact on `BindingFact`, since deleted, plus a symbol
+walk); it now pins that the
+search is not needed, because the type answers every shape it recognized *and*
+the two it could not: an IIFE-wrapped class whose initializer is a call, and a
+class reached only as a tuple element type declared in another package.
 
 Expected generation:
 
@@ -29,7 +37,7 @@ Expected generation:
 | `siblingFunction` | plain function through the same barrel | `function` | *absent* |
 | `dependencyFunction` | plain function through the same `export *` | `function` | *absent* |
 | `settings`, `siblingTable` | real non-callable values, local and through the barrel | `value` | *absent* |
-| `./destructured`'s `inlineCacheName`, `dependencyCacheName` | object pattern over a class expression / a class identifier | **entrypoint refused** | — |
+| `./destructured`'s `inlineCacheName`, `dependencyCacheName` | object pattern over a class expression / a class identifier, both binding a `string` | `value` | *absent* |
 | `./unresolvable`'s `fromHost` | re-export of an `any` | **entrypoint refused** | — |
 
 The four positive rows reach the decision by three different routes, and the
@@ -52,9 +60,9 @@ attribution is worth stating exactly because it is easy to get wrong:
   found in `node_modules`).
 - `promote_entry_callable`, the emission site, is reached for the summaries
   that are still `value` when the entry file's exports are assembled: the two
-  real values here, and the refusals on `./destructured` and
+  real values here, `./destructured`'s two strings, and the refusal on
   `./unresolvable`. It is the only site that can refuse, which is why the
-  refusals are what this fixture pins there.
+  refusal is what this fixture pins there.
 
 `function-2`'s and `function-3`'s summaries differ from `function-1`'s only in
 key order because a carried summary arrives already serialized from another
@@ -68,31 +76,31 @@ why `@tanstack/pacer`'s `.` entrypoint (whose barrel imports resolve to
 `batcher.d.ts`) was *already* correct while its `./batcher` entrypoint — the
 same class, entered through the `.js` artifact — was not.
 
-**Why `./destructured` is its own refused entrypoint.** An object pattern
-destructures a *member* of its initializer, so neither the class expression
-(`const { name } = class Named {}`) nor the class identifier
-(`const { name } = DependencyCache`) says anything about what the binding
-holds; both hold a string. This pins both directions of that:
+**Why `./destructured` is its own entrypoint, and what it pins now.** An object
+pattern destructures a *member* of its initializer, so neither the class
+expression (`const { name } = class Named {}`) nor the class identifier
+(`const { name } = DependencyCache`) says anything about what the binding holds;
+both hold a `string`. Under the retired syntactic class search that was
+undecidable in both directions — following the initializer's symbol made each of
+them a `function` claim about a value that cannot be called, and gating the
+search off left `nonCallable` proving nothing, because `nonCallable` is what a
+class type answers too. The entrypoint was therefore *refused*, and its two
+correct `value` claims were the measured cost.
 
-- dropping the binding-shape gate in `identifier_binding_at` turns each of them
-  into a `function` claim about a value that cannot be called;
-- keeping the gate and then publishing the type's `nonCallable` answer as
-  `kind: "value"` is the *other* wrong claim, because `nonCallable` is what a
-  class type answers too — that is the whole reason `binding_declares_class`
-  exists — and for a pattern the class search never ran. `const { Inner } =
-  Container`, a static class member, is a constructor that invokes its callback
-  and was published as the maximal certified negative. So a destructured
-  binding whose kind is not otherwise provable refuses
-  (`ExportKindProof::DestructuredMember`).
-
-The cost is visible right here: these two really are strings, and refusing them
-loses two correct `value` claims to avoid one wrong one. Separating them needs
-a fact this analysis does not demand at an export-specifier span — the
-constructability fact below, or `primitive_value_domain`. Recorded in
-docs/precision-backlog.md.
+The constructability fact discharges it: the type answers the pattern directly.
+`(class Named {}).name` is `nonCallable` **and** `nonConstructable`, which is the
+full negative, so both exports publish `kind: "value"` and the entrypoint emits.
+The same fact decides the shapes the refusal existed to protect — a static class
+member (`const { Inner } = Container`) and a tuple element whose type is a class
+(`const [Core] = pair`) are `Constructable` and raise to `function`. No syntax
+participates in either direction any more, so this entrypoint is now the
+*positive* pin on a destructured binding: it must publish two values, and a
+regression that reinstated a shape gate would refuse them again.
 
 **Why `./unresolvable` is refused rather than published.** `fromHost` is
-`any`, so Type Facts answers `Callability::Unknown`: no closed domain, hence no
+`any`, so Type Facts answers `Callability::Unknown` *and*
+`Constructability::Unknown` — the second fact reads the same type and fails
+closed on the same flags, so it rescues nothing here: no closed domain, hence no
 proof either way. A bare `kind: "value"` summary is the *maximal certified
 negative* — `validate_export` bars a `value` summary from carrying even an
 unknown claim domain, so it asserts "reads nothing reactive, returns nothing
@@ -104,12 +112,21 @@ refuse the entrypoint, keep the rest of the package, and let a consumer of
 `./unresolvable` get an explicit uncertifiable result. The refusal is recorded
 in the review plan; `expected.json` pins it by the entrypoint's absence.
 
-One remaining hole, deliberately: an export whose location carries *no*
-callability fact at all keeps today's `value`. `demand_plan` requests
-callability exactly where it requests a type descriptor, so absence there is
-missing evidence about the span rather than an answer about the type, and
-refusing on it would refuse for a demand-coverage accident. See
-docs/precision-backlog.md.
+An export whose location carries *no* signature fact at all is refused too, on
+the same reasoning. `demand_plan` requests both facts at every export specifier
+and every exported declaration name, and an assertion in
+`solid_facts_backend::semantic_demands`' tests pins that, so absence at one of
+those spans is the producer finding no node to classify rather than the plan
+declining to ask — missing evidence about this export, and `kind: "value"` is a
+claim rather than a default. That arm is unreached by any fixture here and
+pinned by unit test instead
+(`export_kind_proof_tests::absence_on_either_fact_is_unanswered_not_a_negative`).
+
+The residual hole is a different one: lib.es5.d.ts's signature-less
+`Function`-supertype family answers both closed negatives while
+`typeof x === "function"` can still hold at runtime, and nothing on this side
+can detect it. `fixtures/package-contracts/function-supertype-kind` pins that
+wrong answer deliberately. See docs/precision-backlog.md.
 
 
 ## What the closure record pins here

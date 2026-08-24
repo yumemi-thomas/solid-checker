@@ -916,10 +916,12 @@ callability: Type Facts derives `Callability` from `GetSignaturesOfType(…,
 SignatureKindCall)`, a class type carries construct signatures and no call
 signature, and so every exported class answers `nonCallable` there. At runtime
 `typeof C === "function"`, which is exactly what `kind` describes and exactly
-what the kind probe measures, so generation reads class-ness off the compiler's
-own declaration kind and the syntax facts' class-name spans, following alias
-and `const Alias = SomeClass` hops by exact symbol identity. `@tanstack/solid-db@0.2.37`
-alone failed 102 `kind=value` claims, every one of them an error class.
+what the kind probe measures. `Constructability` — the same walk asked of
+`SignatureKindConstruct`, demanded at the same span — is the fact that answers
+it, and it is transparent through an alias, an import and a re-export because
+the type is, so `export { Watcher }` and `const Alias = SomeClass` need no
+symbol hops of their own. `@tanstack/solid-db@0.2.37` alone failed 102
+`kind=value` claims, every one of them an error class.
 
 Its `callbacks` domain then fails closed. The generator summarizes function
 declarations, not construct signatures, so nothing carries what a constructor —
@@ -940,16 +942,43 @@ bundled class `kind: "value"` — 45 of the 53 failing `kind` claims in the
 corpus measurement, across Solid Primitives (`ReactiveMap`, `ReactiveSet`,
 `TriggerCache`), `@solidjs/web` (`ResponseEnvelope`), `@kobalte/core`
 (`SelectionManager`) and `@tanstack/*` (`AsyncBatcher`, `Debouncer`, `Queuer`,
-`Throttler`, the `*DevtoolsCore` family). The fact that answers it is the
-declarator's own initializer shape (`BindingFact::initializer_class`), gated on
-the binding being a plain identifier: an object pattern destructures a
-*member* of the class expression, and `(class Named {}).name` is a string. It
-is also gated on nothing rewriting the binding — `var C = class {}; C = { … }`
-holds an object, and a `function` claim there is contradicted by the probe in
-the inverse direction; a *member* write such as `C.marker = true`, which is
-what static-field and decorator lowering emits, leaves `C` a class.
+`Throttler`, the `*DevtoolsCore` family). The declarator's name types as the
+constructor, so `Constructability` answers all of them — including the two no
+syntactic search could reach: an IIFE-wrapped class whose initializer is a
+*call* (`@solidjs/web`'s `ResponseEnvelope`) and a class reached only as a tuple
+element type declared in another package (`@tanstack/*`'s `*DevtoolsCore`).
 `fixtures/package-contracts/class-expression-kind` pins the entry-file, `.js`
 barrel-hop and package-boundary shapes.
+
+**Some spans are not the export's value: a class declaration's.**
+`export class C {}` has no export specifier — the exported name *is* the
+declaration's name — and the compiler's type there is the class's *instance*
+type, which honestly answers `nonCallable` and `nonConstructable` because an
+instance is neither. `export default class {}` is the same problem in the
+spelling that has no name at all: the export records the `class …` node's own
+span, and the facts there describe the instance type too. The producer's ADR
+0020 pins that by test and says outright: demand at the export-specifier span,
+never at a declaration name. Both shapes are therefore decided by the
+declaration they are (`AstFacts::declares_class_at`, which answers for a class's
+binding name and for an anonymous class node), which is a span-addressing rule
+rather than a class-ness heuristic: `class C {}` binds the constructor by
+language definition — named or not — and a bundler that lowers the declaration
+away leaves a *declarator* name, which types as the constructor and is decided
+by the facts. `fixtures/package-contracts/exported-class` is the regression pin
+for all of them: `DirectError` for the named declaration, and the
+`./anonymous-default` and `./anonymous-extends` entrypoints for the anonymous
+one. Each published `kind: "value"` — a false certified negative for a
+constructor — while every other export in that fixture stayed correct.
+
+**A `namespace` member is not an export.** A declaration inside a `namespace`,
+`declare module` or `declare global` body binds a member of that namespace
+object, not a name in the enclosing module: `export namespace Config { export
+const inner = 1 }` publishes `Config` alone, and `import { inner }` does not
+resolve. Both surface enumerations — the entrypoint's export names and the
+project-wide export map — iterate `AstFacts::module_level_exports` and skip
+bindings inside a module block for that reason;
+`fixtures/package-contracts/namespace-export-surface` is the pin, including the
+merged class+namespace shape, whose class keeps `kind: "function"`.
 
 **When no closed type answers `kind`, the entrypoint is refused.** A bare
 `kind: "value"` summary is the *maximal certified negative*: `validate_export`
@@ -957,39 +986,56 @@ bars a `value` summary from carrying any claim domain, known or unknown, so it
 asserts that the export reads nothing reactive, returns nothing reactive,
 invokes no caller-supplied callback and requires no owner. Publishing one
 therefore needs a proof that the export is not a function, not merely the
-absence of a proof that it is. `Callability::Unknown` (an `any`, `unknown`,
-`never` or error type — what an untyped dependency leaves behind in a published
-`.js` artifact) and `Callability::Mixed` (a union with callable *and*
-non-callable constituents) are both the absence of that proof, and treating
-either as `value` is how `@solid-devtools/locator@0.16.7` published "invokes no
-caller-supplied callback" for `addClickInterceptor(fn)` and
-`addHighlightingSource(fn)` — the remaining 8 of those 53 rows. Since `kind`
-has no sentinel, the honest outcome is the existing refusal path below: the
-entrypoint is omitted and a consumer of it gets an explicit uncertifiable
-result.
+absence of a proof that it is. `Unknown` (an `any`, `unknown`, `never` or
+error type — what an untyped dependency leaves behind in a published `.js`
+artifact) and `Mixed` (a union holding both a signature-carrying and a
+signature-less constituent) are both the absence of that proof on *either*
+fact, and treating either as `value` is how `@solid-devtools/locator@0.16.7`
+published "invokes no caller-supplied callback" for `addClickInterceptor(fn)`
+and `addHighlightingSource(fn)` — the remaining 8 of those 53 rows. Nor does
+`Mixed` on both compose into a per-constituent proof: the producer aggregates
+the two independently, and `(() => void) | number | (new () => X)` answers
+`Mixed` twice while still holding a constituent that is neither. An **absent**
+fact refuses on the same reasoning: both are demanded at every export specifier
+and every exported declaration name, so absence at one of those spans is the
+producer finding no node to classify — missing evidence about the export, not an
+answer about its type. Since `kind` has no sentinel, the honest outcome is the
+existing refusal path below: the entrypoint is omitted and a consumer of it gets
+an explicit uncertifiable result.
 
-**`nonCallable` is not the same claim as "not a function".** It says the type
-has no *call* signature, which is exactly what a class type says too — the
-whole reason the syntactic class search above exists. Where that search can
-run and finds nothing, `nonCallable` is a `value` proof. Where it cannot run at
-all it is not, and a **destructuring pattern** is precisely that shape:
-`identifier_binding_at` deliberately refuses to follow one, because
-`const { Inner } = Container` binds a *member* of `Container` and
-`const { name } = class Named {}` binds a string, so neither the initializer's
-symbol nor its class-ness says anything about the name. `const { Inner } =
-Container`, a static class member, and `const [Core] = pair`, a tuple element
-whose element type is a class, were both published as the maximal certified
-negative for constructors that invoke their callback. Such a binding is now
-refused (`ExportKindProof::DestructuredMember`), and
+**`nonCallable` alone is not the same claim as "not a function", and neither is
+`nonConstructable`.** Each says the type lacks one signature kind, and a class
+lacks the call one. Only the two closed negatives *together* are a `value`
+proof. That is what discharged the destructuring-pattern refusal this rule used
+to carry: `const { Inner } = Container` binds a *member* and `const [Core] =
+pair` an *element*, so no syntactic search could reason about either, and
+`nonCallable` proved nothing about a binding whose class-ness question was never
+asked. The type answers the pattern directly — `(class Named {}).name` is a
+string and both closed negatives hold, while a static class member and a tuple
+element whose type is a class are `Constructable` — so
 `fixtures/package-contracts/class-expression-kind`'s `./destructured`
-entrypoint pins it. The cost is a destructured binding whose type really is a
-primitive: `(class Named {}).name` is a string and is refused with the rest,
-because separating them needs a fact this analysis does not demand at an
-export-specifier span. Recorded in
-[docs/precision-backlog.md](precision-backlog.md).
+entrypoint now *publishes* two `value` claims where it used to be refused.
 
-**A raise to `kind: "function"` always leaves `callbacks` unknown.** Both
-raises reach `raised_function_export` with a summary that still said `value`,
+The residue is one family, and it is not detectable here. lib.es5.d.ts's
+signature-less `Function`-supertype family (`Function`, `CallableFunction`,
+`NewableFunction`, and any type a function value is assignable to that declares
+no signature of its own — `object`, `{}`, `Record<string, unknown>`) declares
+`apply`/`call`/`bind` and no signature, so `export declare const x: Function`
+answers both closed negatives while `typeof x === "function"` holds at runtime
+for every value the type admits. TypeScript-Go's own `typeof` narrowing gets
+these right through a `bind`-member subtype-of-`Function` fallback that the
+producer's signature walks do not carry, so the compiler's answer and the fact
+pair's answer diverge by design there. Assignability to `Function` is not one of
+these facts and there is no honest local substitute, so such an export publishes
+`kind: "value"` — a pre-existing hole through `callability` alone, neither
+widened nor closed by the constructability fact.
+`fixtures/package-contracts/function-supertype-kind` pins that wrong answer on
+purpose, with a `number` control that answers the identical pair and for which
+`value` is correct. The producer follow-up named in ADR 0020 is what closes it.
+Recorded in [docs/precision-backlog.md](precision-backlog.md).
+
+**A raise to `kind: "function"` always leaves `callbacks` unknown.** Every
+raise reaches `raised_function_export` with a summary that still said `value`,
 which is exactly the state in which no function body was summarized for the
 export — a class never has one, and a callable binding that had one would
 already carry its analysis's claims and never be raised. Publishing the raise

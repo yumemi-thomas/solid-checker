@@ -11,7 +11,7 @@
       "end": 1442,
       "fixes": 0,
       "message": "reactive accessor \"count\" is read in NestedVoidChild, inside the children of an HTML void element; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships deletes a void element's child list in every position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
-      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning."
     },
     {
       "rule": "strict-read-untracked",
@@ -23,7 +23,7 @@
       "end": 2569,
       "fixes": 0,
       "message": "reactive accessor \"total\" is read in RootVoidChildDependsOnTheProducer, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
-      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning."
     },
     {
       "rule": "strict-read-untracked",
@@ -35,7 +35,7 @@
       "end": 4535,
       "fixes": 0,
       "message": "reactive accessor \"a\" is read in RootNoscriptChild, inside the children of a `<noscript>`; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships never lowers `<noscript>` children in any position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
-      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning."
     },
     {
       "rule": "strict-read-untracked",
@@ -47,7 +47,7 @@
       "end": 5472,
       "fixes": 0,
       "message": "reactive accessor \"body\" is read in NestedNoscriptOffTheFastPath, inside the children of a `<noscript>`; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships never lowers `<noscript>` children in any position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
-      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning."
     },
     {
       "rule": "missing-owner",

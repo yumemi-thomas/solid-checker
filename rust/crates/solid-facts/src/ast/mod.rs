@@ -16,7 +16,7 @@ use oxc_ast::ast::{
     ImportDeclarationSpecifier, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement,
     JSXElementName, JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName,
     NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, ReturnStatement,
-    SpreadElement, StaticMemberExpression, TSModuleDeclarationName, UnaryExpression,
+    SpreadElement, StaticMemberExpression, TSModuleBlock, TSModuleDeclarationName, UnaryExpression,
     UpdateExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
@@ -27,7 +27,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 35;
+pub const AST_FACTS_SCHEMA: u32 = 37;
 
 mod span_index;
 
@@ -49,6 +49,19 @@ pub struct AstFacts {
     pub classes: Vec<ClassFact>,
     pub imports: Vec<ImportFact>,
     pub exports: Vec<ExportFact>,
+    /// The body block of every `namespace`, `module`, or `declare global`
+    /// declaration in this file, sorted by span.
+    ///
+    /// A declaration inside one of these blocks binds a *member of the
+    /// namespace object*, never a name in the enclosing module's scope. So an
+    /// `export` inside such a block is not an export of this module, and a
+    /// declarator inside one is not part of this module's export surface:
+    /// `export namespace Config { export const inner = 1 }` publishes `Config`
+    /// alone, and `import { inner } from "…"` does not resolve. Consumers that
+    /// enumerate the module's exports must filter with
+    /// [`AstFacts::module_level_exports`]; see [`AstFacts::exported_bindings`].
+    #[serde(default)]
+    pub module_blocks: Vec<Span>,
     pub identifiers: Vec<IdentifierFact>,
     /// The binder's own resolution for each identifier *reference* that names a
     /// declaration in this file: `(reference span, declaration name span)`,
@@ -313,20 +326,6 @@ pub struct BindingFact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call_initializer: Option<Span>,
     pub initializer_function: bool,
-    /// Whether the initializer is a class expression — `const C = class {}`,
-    /// which is what every bundler emits for a `class C {}` declaration it
-    /// hoists into a module scope. No [`ClassFact::name`] covers the
-    /// declarator's own span, because the class expression is anonymous; see
-    /// [`ClassFact`] for why callability cannot answer this either.
-    ///
-    /// A fact about the *initializer*, and only about it. It says the
-    /// declarator was initialized with a class, not that the binding still
-    /// holds one: `var C = class {}; C = { … }` sets this and holds an object.
-    /// A consumer concluding `typeof C === "function"` therefore has to add
-    /// [`BindingFact::immutable`] or [`AstFacts::assignments`] — see
-    /// `binding_is_reassigned` in solid-reactive-ir.
-    #[serde(default)]
-    pub initializer_class: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer_identifier: Option<NamedSpan>,
 }
@@ -805,17 +804,28 @@ impl AstFacts {
             .map(|index| self.reference_declarations[index].1)
     }
 
-    /// Whether `span` is *exactly* the name a class binds in this file.
+    /// Whether `span` is *exactly* a class's binding name, or exactly the class
+    /// node itself.
     ///
-    /// Span identity, not containment: the name of a class declaration, or of
-    /// a named class expression. A span inside the class *body* is not the
-    /// class. Callers use this to answer "is this exported binding a class",
-    /// which no type fact can answer — see [`ClassFact`].
+    /// Span identity, not containment: the name of a class declaration or of a
+    /// named class expression, and — for an anonymous class, which has no name
+    /// span — the `class …` node's own span. A span inside the class *body* is
+    /// neither.
+    ///
+    /// This is a **span-addressing rule**, not a proof that some value is a
+    /// class: it tells a caller that the span it is about to ask Type Facts
+    /// about denotes the *constructor* rather than an instance, which is the
+    /// one place the compiler's answer is about a different value than the
+    /// export's. `export default class {}` is why the anonymous form is here:
+    /// the export records the class node's span because there is no name to
+    /// record, and the facts at that span describe the instance type. See
+    /// [`ClassFact`], and `class_declaration_name` in solid-reactive-ir for the
+    /// consumer.
     #[must_use]
     pub fn declares_class_at(&self, span: Span) -> bool {
-        self.classes
-            .iter()
-            .any(|class| class.name.as_ref().is_some_and(|name| name.span == span))
+        self.classes.iter().any(|class| {
+            class.span == span || class.name.as_ref().is_some_and(|name| name.span == span)
+        })
     }
 
     /// Whether `span` is *exactly* the target an assignment overwrites without
@@ -860,9 +870,54 @@ impl AstFacts {
         span
     }
 
+    /// Whether `span` lies inside a `namespace`, `module`, or `declare global`
+    /// body — see [`AstFacts::module_blocks`].
+    #[must_use]
+    pub fn is_inside_module_block(&self, span: Span) -> bool {
+        self.module_blocks.iter().any(|block| block.contains(span))
+    }
+
+    /// The exports that publish a name from *this module*.
+    ///
+    /// An `export` statement inside a `namespace` body is a member of the
+    /// namespace object, not of the module: `export namespace Config { export
+    /// const inner = 1 }` publishes `Config` and nothing else, and the same
+    /// holds for an `export` inside `declare module "…" {}` (whose exports
+    /// belong to the declared module) or inside `declare global {}`. Any
+    /// consumer enumerating the module's export surface must iterate this
+    /// rather than [`AstFacts::exports`], which is the complete syntactic table
+    /// including the nested statements.
+    pub fn module_level_exports(&self) -> impl Iterator<Item = &ExportFact> {
+        self.exports
+            .iter()
+            .filter(|export| !self.is_inside_module_block(export.span))
+    }
+
     /// The non-array bindings an export statement itself declares: inside the
-    /// export's span, but not inside the body of any function the same export
-    /// contains (those belong to the function, not the export surface).
+    /// export's span, but not inside the body of any function or namespace the
+    /// same export contains, and not inside the body of any class the same
+    /// export contains (those belong to the function, the namespace object, or
+    /// the class, not to the export surface).
+    ///
+    /// The namespace exclusion is what makes this agree with
+    /// [`ExportFact::declarations`], which answers a `TSModuleDeclaration` with
+    /// the namespace's own name alone. Without it `export namespace Config {
+    /// export const inner = 1 }` contributes `inner` — a name no importer of
+    /// this module can resolve, because it is a member of the `Config` object.
+    ///
+    /// The class exclusion is the same shape, for a **static block**: `export
+    /// class Holder { static { const inside = 1 } }` binds `inside` inside
+    /// `Holder`'s class body — neither a function body nor a module block, so
+    /// neither of the other two exclusions catches it, and no importer of this
+    /// module can resolve `inside`. The test is containment in a
+    /// [`ClassFact::span`] that is *strictly smaller* than the declarator's own
+    /// span, not mere containment: a class **expression** initializer —
+    /// `export const boxed = class { static { const inside = 1 } }` — gives
+    /// `boxed`'s own declarator span (identifier through initializer) a span
+    /// that *contains* the class expression, the reverse relationship, so it
+    /// must survive while `inside` is excluded. A module-level declarator can
+    /// never itself sit inside a class body, so this containment check cannot
+    /// misfire on one.
     pub fn exported_bindings<'a>(
         &'a self,
         export: &'a ExportFact,
@@ -870,6 +925,10 @@ impl AstFacts {
         self.bindings.iter().filter(move |binding| {
             binding.shape != BindingShape::Array
                 && export.span.contains(binding.declaration)
+                && !self.is_inside_module_block(binding.declaration)
+                && !self.classes.iter().any(|class| {
+                    class.span.contains(binding.declaration) && class.span != binding.declaration
+                })
                 && !self.functions.iter().any(|function| {
                     export.span.contains(function.span)
                         && function.body.contains(binding.declaration)
@@ -899,6 +958,7 @@ impl AstFacts {
             classes: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
+            module_blocks: Vec::new(),
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
@@ -1022,6 +1082,7 @@ struct Collector<'s, 'semantic> {
     classes: Vec<ClassFact>,
     imports: Vec<ImportFact>,
     exports: Vec<ExportFact>,
+    module_blocks: Vec<Span>,
     identifiers: Vec<IdentifierFact>,
     reference_declarations: Vec<(Span, Span)>,
     awaits: Vec<Span>,
@@ -1061,7 +1122,6 @@ struct BindingMetadata {
     initializer: Option<OxcSpan>,
     call_initializer: Option<OxcSpan>,
     initializer_function: bool,
-    initializer_class: bool,
     initializer_identifier: Option<NamedSpan>,
     immutable: bool,
 }
@@ -1078,6 +1138,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             classes: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
+            module_blocks: Vec::new(),
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
@@ -1113,6 +1174,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.classes.sort_by_key(|fact| fact.span);
         self.imports.sort_by_key(|fact| fact.span);
         self.exports.sort_by_key(|fact| fact.span);
+        self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
         self.reference_declarations.sort_unstable();
         self.awaits.sort_unstable();
@@ -1144,6 +1206,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             classes: self.classes,
             imports: self.imports,
             exports: self.exports,
+            module_blocks: self.module_blocks,
             identifiers: self.identifiers,
             reference_declarations: self.reference_declarations,
             awaits: self.awaits,
@@ -1256,7 +1319,6 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             initializer: metadata.initializer.map(span),
             call_initializer: metadata.call_initializer.map(span),
             initializer_function: metadata.initializer_function,
-            initializer_class: metadata.initializer_class,
             initializer_identifier: metadata.initializer_identifier,
         }
     }
@@ -1731,16 +1793,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
             )
         });
-        // A class *expression* initializer, peeled of TypeScript sugar exactly
-        // as `initializer_function` is: `const C = class {}` binds a class,
-        // and `const C = class {} as Ctor` still does. A call, an object or any
-        // other expression is a different runtime value.
-        let initializer_class = declaration.init.as_ref().is_some_and(|expression| {
-            matches!(
-                expression.get_inner_expression(),
-                Expression::ClassExpression(_)
-            )
-        });
         let initializer_identifier = declaration.init.as_ref().and_then(|expression| {
             let Expression::Identifier(identifier) = expression.get_inner_expression() else {
                 return None;
@@ -1762,7 +1814,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 initializer,
                 call_initializer,
                 initializer_function,
-                initializer_class,
                 initializer_identifier,
                 immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
             },
@@ -1971,6 +2022,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map_or_else(Vec::new, export_declaration_names),
         });
         walk::walk_export_named_declaration(self, declaration);
+    }
+
+    /// Record the body of every `namespace`, `module`, and `declare global`
+    /// declaration. One hook covers all three shapes: `namespace A.B {}` nests
+    /// module declarations and only the innermost carries a block, and
+    /// `declare global {}` is a distinct node whose body is the same block
+    /// type. See [`AstFacts::module_blocks`] for what consumers owe it.
+    fn visit_ts_module_block(&mut self, block: &TSModuleBlock<'a>) {
+        self.module_blocks.push(span(block.span));
+        walk::walk_ts_module_block(self, block);
     }
 
     fn visit_export_default_declaration(&mut self, declaration: &ExportDefaultDeclaration<'a>) {
@@ -2743,65 +2804,142 @@ class Box { helper() { return fn(); } }
         assert!(callees.contains(&None));
     }
 
-    /// A bundler lowers `export class C {}` to `var C = class { … }`. Nothing
-    /// else in the artifact says the binding is a class: the class expression
-    /// is anonymous, so no `ClassFact::name` covers the declarator, and a
-    /// class type is truthfully `nonCallable` to the checker. Only the
-    /// initializer shape answers it — and only for the plain identifier form,
-    /// because an object pattern binds a *member* of the class.
+    /// `declares_class_at` is the span-addressing rule a contract's `kind`
+    /// decision consults before it reads any type fact: at these spans the
+    /// compiler answers about the class's *instance*, not about the constructor
+    /// the export publishes. Every span that must answer, and the spans that
+    /// must not.
     #[test]
-    fn records_class_expression_initializers_but_not_their_members() {
+    fn addresses_class_declaration_names_and_anonymous_class_nodes() {
         let source = r#"
-var Anonymous = class {};
-const Named = class Inner {};
-const Asserted = class {} as unknown;
 class Declared {}
-const Aliased = Declared;
-const built = makeClass();
-const { name } = class Other {};
+const Named = class Inner {};
+export default class {}
 "#;
         let facts = extract("classes.ts", source).unwrap();
-        let initializer_class = |name: &str| {
-            facts
-                .bindings
-                .iter()
-                .find(|binding| {
-                    binding.names.iter().any(|bound| {
-                        source.get(bound.span.start as usize..bound.span.end as usize) == Some(name)
-                    })
-                })
-                .map(|binding| binding.initializer_class)
+        let span_of = |text: &str| {
+            let start = u32::try_from(source.find(text).expect("text occurs in source")).unwrap();
+            Span::new(start, start + u32::try_from(text.len()).unwrap())
         };
 
-        assert_eq!(initializer_class("Anonymous"), Some(true));
-        assert_eq!(initializer_class("Named"), Some(true));
-        assert_eq!(initializer_class("Asserted"), Some(true));
-        assert_eq!(initializer_class("Aliased"), Some(false));
-        assert_eq!(initializer_class("built"), Some(false));
-        // The binding is a class expression's `name`, a string. The fact is
-        // recorded on the declarator, so consumers gate on the binding shape.
-        assert_eq!(initializer_class("name"), Some(true));
-        assert_eq!(
-            facts
-                .bindings
-                .iter()
-                .find(|binding| binding.names.iter().any(|bound| source
-                    .get(bound.span.start as usize..bound.span.end as usize)
-                    == Some("name")))
-                .map(|binding| binding.shape),
-            Some(BindingShape::Object)
-        );
-        // A class *declaration* is not a declarator at all.
-        assert_eq!(initializer_class("Declared"), None);
-        assert!(
-            facts.declares_class_at(
-                facts
-                    .classes
+        // A class declaration's name, and a named class expression's name.
+        assert!(facts.declares_class_at(span_of("Declared")));
+        assert!(facts.declares_class_at(span_of("Inner")));
+        // An anonymous class has no name span, so an `export default class {}`
+        // records the class node itself — the span the decision is asked at.
+        assert!(facts.declares_class_at(span_of("class {}")));
+        // The declarator name is the binding, not the class: its type there is
+        // the constructor, so the facts answer that span correctly and this
+        // rule must not claim it.
+        assert!(!facts.declares_class_at(span_of("Named")));
+        // Nor does anything merely contained in a class.
+        assert!(!facts.declares_class_at(span_of("{}")));
+    }
+
+    /// A `namespace` body binds members of the namespace object, so nothing
+    /// inside one is part of this module's export surface — neither the nested
+    /// `export` statements nor their declarators.
+    #[test]
+    fn namespace_members_are_not_module_level_exports() {
+        let source = r#"
+export namespace Config { export const inner = 1; }
+namespace Unexported { export const hidden = 2; }
+declare global { const ambient: number; }
+export const real = 3;
+"#;
+        let facts = extract("namespaces.ts", source).unwrap();
+        let text = |span: Span| &source[span.start as usize..span.end as usize];
+
+        // Three blocks: the two namespaces and `declare global`.
+        assert_eq!(facts.module_blocks.len(), 3);
+        let module_level = facts
+            .module_level_exports()
+            .flat_map(|export| {
+                export
+                    .declarations
                     .iter()
-                    .find_map(|class| class.name.as_ref().map(|name| name.span))
-                    .unwrap()
-            )
+                    .chain(&export.specifiers)
+                    .map(|specifier| specifier.exported.to_string())
+                    .chain(
+                        facts
+                            .exported_bindings(export)
+                            .flat_map(|binding| &binding.names)
+                            .map(|name| text(name.span).to_owned()),
+                    )
+            })
+            .collect::<Vec<_>>();
+
+        assert!(module_level.contains(&"Config".to_owned()));
+        assert!(module_level.contains(&"real".to_owned()));
+        for member in ["inner", "hidden", "ambient"] {
+            assert!(
+                !module_level.contains(&member.to_owned()),
+                "{member} is a namespace member, not a module export: {module_level:?}"
+            );
+        }
+        // The complete syntactic table still carries the nested statements; it
+        // is the enumeration of the module's surface that filters them.
+        assert!(
+            facts.exports.len() > facts.module_level_exports().count(),
+            "nested exports must remain in the syntactic table"
         );
+    }
+
+    /// A class **static block** is neither a function body nor a module
+    /// block, so `exported_bindings` used to admit a declarator inside one
+    /// onto the export surface the same way a namespace member's used to. The
+    /// exclusion tests strict containment in a `ClassFact::span`, and the two
+    /// shapes here sit on opposite sides of that containment: `hiddenInside`'s
+    /// declarator is inside the class body, so the class span contains it, but
+    /// `boxed`'s own declarator span is the whole `boxed = class { … }`
+    /// initializer, which *contains* the class expression instead — the
+    /// reverse relationship — so `boxed` must survive the same exclusion that
+    /// removes `hiddenInside`.
+    #[test]
+    fn class_static_blocks_are_not_module_level_bindings_either() {
+        let source = r#"
+export class Holder {
+  static {
+    const insideStaticBlock = 1;
+  }
+}
+export const boxed = class {
+  static {
+    const hiddenInside = 2;
+  }
+};
+"#;
+        let facts = extract("static-blocks.ts", source).unwrap();
+        let text = |span: Span| &source[span.start as usize..span.end as usize];
+        let module_level = facts
+            .module_level_exports()
+            .flat_map(|export| {
+                export
+                    .declarations
+                    .iter()
+                    .chain(&export.specifiers)
+                    .map(|specifier| specifier.exported.to_string())
+                    .chain(
+                        facts
+                            .exported_bindings(export)
+                            .flat_map(|binding| &binding.names)
+                            .map(|name| text(name.span).to_owned()),
+                    )
+            })
+            .collect::<Vec<_>>();
+
+        // `Holder` is a class declaration, not a `BindingFact`, so it reaches
+        // the surface through `export.declarations`, not `exported_bindings`.
+        assert!(module_level.contains(&"Holder".to_owned()));
+        // `boxed`'s own declarator survives: its span *contains* the class
+        // expression it initializes, the reverse of strict containment.
+        assert!(module_level.contains(&"boxed".to_owned()));
+        for member in ["insideStaticBlock", "hiddenInside"] {
+            assert!(
+                !module_level.contains(&member.to_owned()),
+                "{member} is declared inside a class body, not the module: {module_level:?}"
+            );
+        }
     }
 
     #[test]

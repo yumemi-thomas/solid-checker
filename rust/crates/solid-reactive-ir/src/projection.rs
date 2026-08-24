@@ -704,7 +704,7 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // A child the pinned fork lowers and the shipped compiler deletes
             // is the third: the fact is present and truthful about its producer,
             // and still proves nothing about the build the user will run.
-            if read.uncertain || read.missing_jsx_census || read.divergent_lowering.is_some() {
+            if read.is_uncertifiable() {
                 finding.kind = "uncertifiable".into();
             }
         }

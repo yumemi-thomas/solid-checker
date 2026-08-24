@@ -164,7 +164,10 @@ test("re-exporting through an unselected branch refuses the entrypoint", { skip:
     );
     assert.notEqual(result.status, 0, result.stdout);
     assert.match(result.stderr, /has no certifiable runtime entrypoint/);
-    assert.match(result.stderr, /"branch", whose runtime kind no closed type answers \(Unknown\)/);
+    assert.match(
+      result.stderr,
+      /"branch", whose runtime kind no closed type answers \(Unknown, Unknown\)/
+    );
     assert.equal(existsSync(join(packageRoot, "solid-reactivity.json")), false);
   } finally {
     rmSync(directory, { recursive: true, force: true });

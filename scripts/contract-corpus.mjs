@@ -141,17 +141,36 @@ const fixtures = [
   "conditional-callback-conflict",
   // Pins the class shape a *published* package contains -- a bundler's `var C
   // = class {}`, which carries no class-name span and truthfully answers
-  // `nonCallable` -- through the entry file, a `.js` barrel hop with no
-  // `.d.ts`, and an installed dependency's own artifact. Both kind sites are
-  // reached: `promote_callable_export` over the project export map decides the
-  // three local classes and, in the recursively generated dependency's own
-  // run, the two the parent then carries; `promote_entry_callable` decides the
-  // values and owns the refusals. And it pins both honest refusals -- an
-  // export whose kind no closed type answers, and one whose binding
-  // destructures a member of another value so nothing ruled out a class --
-  // against publishing a `value` summary, which is the maximal certified
-  // negative.
+  // `nonCallable`, so the construct signature is the whole proof -- through the
+  // entry file, a `.js` barrel hop with no `.d.ts`, and an installed
+  // dependency's own artifact. Both kind sites are reached:
+  // `promote_callable_export` over the project export map decides the three
+  // local classes and, in the recursively generated dependency's own run, the
+  // two the parent then carries; `promote_entry_callable` decides the values
+  // and owns the refusal. It pins the one honest refusal -- an export whose
+  // kind *neither* signature fact closes -- against publishing a `value`
+  // summary, which is the maximal certified negative. And its `./destructured`
+  // entrypoint is the positive pin the constructability fact made possible:
+  // two strings behind a binding pattern, which no syntactic class search
+  // could reason about and which were refused with the class-shaped ones,
+  // publish `value` now.
   "class-expression-kind",
+  // Pins the export *surface* a `namespace` contributes: the namespace object
+  // and none of its members. The generator published `export namespace Config
+  // { export const inner = 1 }` as exporting `inner`, a name no importer can
+  // resolve, through two paths -- the nested `export` statement and the
+  // declarator-inside-the-export-span selection. A merged class+namespace rides
+  // along, because the merge must not cost the class its `kind: "function"`.
+  "namespace-export-surface",
+  // Pins a `kind` claim that is *wrong*, deliberately. lib.es5.d.ts's
+  // signature-less `Function`-supertype family (`Function`, `object`, `{}`,
+  // `Record<…>`) answers `nonCallable` + `nonConstructable` truthfully about
+  // the declared type while `typeof x === "function"` can hold at runtime, and
+  // no fact on this side can detect the family. The row is here so the
+  // producer follow-up that closes it (ADR 0020's `bind`-member fallback)
+  // shows up as a gate flip rather than as prose. A `number` control rides
+  // along, because it answers the identical pair and `value` is right for it.
+  "function-supertype-kind",
   // The closure-record fixtures. Each carries an `expected-generation.json`
   // as well as an `expected.json`, because what they pin is the *review plan's*
   // record -- which modules the analyzing program attested it opened, and which
@@ -446,8 +465,12 @@ try {
   }
   const coverageResult = generatorCoverage(contributions);
   const uncovered = coverageResult.uncoveredRanges.length;
+  // "pins", not "packages": a passing count is "matches its checked-in
+  // expectation", not "is correct" -- `function-supertype-kind` pins a `kind`
+  // claim that is wrong on purpose, so this line staying green after a change
+  // is not itself a correctness claim about every entry it counts.
   console.log(
-    `contract corpus: ${generated.length} packages, ${uncovered} uncovered generator ranges`
+    `contract corpus: ${generated.length} pins, ${uncovered} uncovered generator ranges`
   );
   if (uncovered) console.log(`uncovered ranges: ${coverageResult.uncoveredRanges.join(", ")}`);
   console.log(`${cache.summary()}; concurrency ${concurrency}`);
