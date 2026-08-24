@@ -5935,6 +5935,130 @@ registry, and the three corpus-level bullets above are therefore predictions
 from the discharge map rather than measurements. `benchmarks/ecosystem/` is
 untouched.
 
+## Investigated: `./web`, `onSettled`, and undeclared-dependency corpus failures — all honest (2026-08-24)
+
+A re-diagnosis of `benchmarks/ecosystem/verification-report.json` flagged five
+rows failing with `Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath
+'./web' is not defined`, two with `SyntaxError: ... does not provide an export
+named 'onSettled'`, and a cluster of `ERR_MODULE_NOT_FOUND` rows, on the
+hypothesis that the corpus manifest's floor selection (`scripts/ecosystem-
+benchmark/lib/select.mjs`) might be pinning a Solid runtime version older than
+a package actually needs. The verification-report aggregate only carries
+message-frequency counts (`probeEnvironment.importThrows`), not row
+attribution, so the actual failing probe IDs were recovered from the run's
+surviving journal
+(`.../scratchpad/state-d1/journal.jsonl`, the resumable per-row record
+`verify-corpus.mjs` appends before aggregating) and independently confirmed by
+real `npm install` of each package in an isolated temp directory. Verdict for
+every row checked: **honest**. No manifest pin, floor computation, or install
+policy changed.
+
+**The five `./web` rows are not a floor problem, and the opening hypothesis was
+wrong about the mechanism.** `solid-js`'s Solid-2 line never ships a `./web`
+export subpath at *any* published version — checked directly against the
+registry's `exports` map for `2.0.0-beta.0`, `2.0.0-beta.19`, `2.0.0-rc.0`, and
+`2.0.0-rc.1`, all four `['.','./types/*','./package.json']` only. DOM rendering
+moved to the separate `@solidjs/web` package for the entire 2.0 line, so there
+is no "old floor" that would have had `./web` and a "new floor" that lost it.
+The five packages —
+`@solid-primitives/controlled-props@1.0.0-next.3`,
+`@solid-primitives/drag-drop@0.1.0-next.0`,
+`@solid-primitives/favicon@1.0.0-next.1`,
+`@solid-primitives/upload@1.0.0-next.4` (via its `@solid-primitives/drag-drop`
+dependency), and
+`@solid-primitives/virtual@1.0.0-next.4` — each ship a compiled bundle whose
+JSX output still does `import { ... } from "solid-js/web"` (confirmed by
+grepping the installed `dist/*.js`), the Solid-1.x import path that was
+retired in the 2.0 split. Reproduced with a bare `npm install
+<package>@<version> solid-js@<pinned> @solidjs/web@<pinned>` in a fresh temp
+project against **both** the floor (`2.0.0-rc.0`) and head (`2.0.0-rc.1`)
+pins for `drag-drop` and `controlled-props`: identical failure at both ends,
+which is itself the proof this is not floor-specific — the package's own
+compiler output never targets the runtime split its `peerDependencies` claims
+to support. Honest failure; the manifest's floor selection followed each
+package's own declared `solid-js`/`@solidjs/web` range faithfully
+(`^2.0.0-rc.0` for four of the five, an exact `2.0.0-beta.19` pin is unrelated
+— that pin belongs to the separate `@corvu-next/*` family, which fails for a
+different, unrelated runtime reason and was not one of these five rows).
+
+**The two `onSettled` rows are a package-side dependency-graph/peer-range
+inconsistency, not a corpus bug.**
+`@solid-primitives/graphql@3.0.0-next.0` and
+`@solid-primitives/immutable@2.0.0-next.0` both declare `peerDependencies:
+{"solid-js": "^1.6.12"}` — correctly satisfied by the corpus's audited
+`solid-js@1.9.14`, so `solid1` selection is faithful to the package's own
+claim. But each also has a regular `dependencies` entry on a solid-primitives
+package still in active "next" development — `@solid-primitives/keyed:
+"^3.0.0-next.0"` for `immutable`, `@solid-primitives/utils: "^7.0.0-next.0"`
+for `graphql` — and real npm semver resolves each of those ranges to the
+newest matching prerelease under the *same* `major.minor.patch` prefix
+(`keyed@3.0.0-next.2`, `utils@7.0.0-next.4`), which are Solid-2.0-only
+releases peering `solid-js@^2.0.0-rc.0`. `onSettled` has existed on every
+2.0.x prerelease checked (`beta.0` through `rc.1`) and is simply absent from
+`1.9.14` — a 2.0-only API. Reproduced with a bare `npm install
+@solid-primitives/immutable@2.0.0-next.0 solid-js@1.9.14`: npm resolves the
+nested `keyed@3.0.0-next.2` with an `ERESOLVE overriding peer dependency`
+warning (not a hard failure — the same npm behavior a real end user hits with
+the identical command) and the runtime crashes on the exact reported
+`SyntaxError`. The package's own declared floor for `solid-js` is honest by
+itself; the package's *own* dependency tree contradicts it. Not a manifest or
+selection defect.
+
+**The `@solid-primitives/utils` / `server-only` `ERR_MODULE_NOT_FOUND` rows are
+undeclared dependencies in the published artifact, not a peer-completeness
+gap.** The "peer-complete installs" policy from
+`Give probes an honest browser shim, peer-complete installs, and scaled
+budgets` (d8d240a4) only completes peers the *tested* package itself declares
+in `peerDependencies` (`peerSpecsFor` in
+`scripts/ecosystem-benchmark/verify-corpus.mjs`), and deliberately skips peers
+marked optional — matching real `npm install` behavior, which does not
+auto-install optional peers either. Checked against the actual npm registry
+per package:
+  - `@solid-primitives/keyed@3.0.0-next.2` and
+    `@solid-primitives/share@4.0.0-next.4` declare **no dependency of any
+    kind** — not `dependencies`, not `peerDependencies`, not optional — on
+    `@solid-primitives/utils`, yet their compiled `dist/index.js` /
+    `dist/social-share.js` unconditionally `import` it. Reproduced with a
+    bare, isolated `npm install @solid-primitives/keyed@3.0.0-next.2
+    solid-js@2.0.0-rc.0 @solidjs/web@2.0.0-rc.0`: `@solid-primitives/utils` is
+    never installed and the import throws exactly the reported
+    `ERR_MODULE_NOT_FOUND`. (An earlier combined install of several
+    `@solid-primitives/*` packages together made `keyed`/`favicon`/etc. import
+    successfully by accident, because a *sibling* package's own declared
+    dependency on `@solid-primitives/utils` hoisted it into the shared
+    `node_modules` root — which is exactly why the isolated, single-package
+    reproduction the corpus itself performs is the correct measurement, and a
+    combined test is not.) This is a missing entry in the published
+    `package.json`, indistinguishable from what any real consumer's
+    `npm install @solid-primitives/keyed` alone would hit.
+  - `@solidjs/start@2.0.3`'s `dist/http/index.js` and
+    `dist/middleware/index.js` unconditionally `import "server-only"`, but
+    `server-only` appears in none of `dependencies`, `peerDependencies`, or
+    `optionalDependencies`. Same undeclared-dependency shape, confirmed the
+    same way.
+  - The `react`/`preact`/`svelte`/`vue`/`@angular/core` throws all trace to
+    `@tanstack/devtools-a11y@0.2.2` and `@tanstack/devtools-utils@0.7.0`,
+    which declare all five as `peerDependenciesMeta`-`optional` — a real `npm
+    install` would not auto-install them either, so a Solid-only probe
+    environment correctly lacks them.
+  - The `vite` / `@rsbuild/core` throws on `@tanstack/solid-start@2.0.0-rc.1`
+    trace to the same pattern: both are declared `peerDependenciesMeta`-
+    `optional` on that package.
+  - `@solid-primitives/start@0.0.4`'s `Cannot find module
+    '.../solid-start/server/ServerContext.jsx'` is the deprecated legacy
+    `solid-start` package (the registry itself reports `@solid-primitives/
+    start@0.0.4: Package renamed to @solid-primitives/cookies`) reaching into
+    a path that package no longer ships; a stale, deprecated release, not a
+    corpus install gap.
+
+**No code changed.** `scripts/ecosystem-benchmark/lib/select.mjs`,
+`scripts/ecosystem-benchmark/verify-corpus.mjs`, and the manifest
+(`scripts/ecosystem-benchmark/manifest.json`) are untouched — every row's
+floor/head selection and every peer-completion decision already matches what
+a real `npm install` of that exact package would produce. `benchmarks/
+ecosystem/verification-report.json` and `report.json` were read but not
+regenerated.
+
 ## Closed 2026-08-24: a `namespace` member is not a module export, and an anonymous class was published as a value
 
 Two false claims in the same seam — what a module's **export surface** is, and
