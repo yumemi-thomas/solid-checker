@@ -440,6 +440,28 @@ Four rules keep it bounded.
   and `document.defaultView === window` hold in the fake as they do in a real
   DOM.
 
+  A mutator that quietly drops what it was given is the sharpest way this rule
+  gets broken, and it did: `history.pushState`/`replaceState` were no-ops, so
+  `history.state` stayed `null` forever. `@solidjs/router`'s `saveCurrentDepth`
+  calls `replaceState({ ..., _depth }, "")` and reads `history.state._depth` on
+  the very next line, unconditionally, at import time in every
+  browser-conditioned mode — so the old no-op manufactured a crash
+  (`Cannot read properties of null`) no browser would ever produce. (The
+  checked-in ecosystem report still records that `_depth` crash; it predates
+  this shim change.) Both mutators now really set `history.state` — cloned
+  the way the spec's shared push/replace steps require, so a package can
+  never observe aliasing or throw-free acceptance of an uncloneable state —
+  and `length` follows the same spec where implemented: it starts at 1 (it
+  was 0, a value no browser reports), `pushState` adds an entry,
+  `replaceState` does not. `go`/`back`/`forward` stay inert, so after such a
+  traversal `length` can exceed what a settled browser would report — a
+  documented approximation, not a claim. `document.head.append`/`prepend`
+  were simply missing — real, variadic `Element` methods a `document.head`
+  never had in this shim. `@solidjs/start-devtools`'s development build,
+  which mounts its own style tag that way at import time, was the case that
+  surfaced the gap in this session's probe runs (the checked-in report
+  records only that its entrypoint import threw).
+
 An import that still throws with the shim in place is unchanged: undriven,
 `import-failed`, with the throw as its reason. And the shim buys nothing at all
 for a `typeof window === "undefined"` guard — `typeof` on an undeclared

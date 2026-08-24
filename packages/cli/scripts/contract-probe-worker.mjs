@@ -39,16 +39,25 @@ const request = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const SHIM_MARKER = "__solidCheckerProbeShim";
 const SHIM_RECORD = "__solidCheckerProbeEnvironment";
 
-/// A value that answers like the browser object it stands for, and admits what
-/// it is when asked.
-function shimValue(members) {
-  const value = { ...members };
+/// Stamps the shim marker onto an object built some other way, for the rare
+/// value that needs a live getter or private state `shimValue`'s `{ ...members
+/// }` copy would freeze into a snapshot. Spreading an object with a `get`
+/// accessor reads it once and installs the result as a plain data property on
+/// the copy -- exactly wrong for `history.state`, which has to keep answering
+/// whatever the last `pushState`/`replaceState` call set it to.
+function markShim(value) {
   Object.defineProperty(value, SHIM_MARKER, {
     get: () => true,
     enumerable: false,
     configurable: true
   });
   return value;
+}
+
+/// A value that answers like the browser object it stands for, and admits what
+/// it is when asked.
+function shimValue(members) {
+  return markShim({ ...members });
 }
 
 const noop = () => undefined;
@@ -106,6 +115,19 @@ function shimFactories() {
       classList: { add: noop, remove: noop, toggle: () => false, contains: () => false },
       contains: () => false,
       appendChild: value => value,
+      // `append`/`prepend` are the modern, variadic form of `appendChild` --
+      // real ones accept any mix of nodes and strings and return `undefined`,
+      // never the argument. A package that reaches for `document.head.append`
+      // at import time (`@solidjs/start-devtools`'s dev build mounts its own
+      // style tag this way) got `TypeError: ... .append is not a function`
+      // before this, which is a shim gap rather than an honest observation --
+      // the method exists on every real `Element`. Neither one grows
+      // `childNodes`, for the same reason `appendChild` above never did: this
+      // shim does not track structure, so pretending one call site's append
+      // updated it while every other one stayed silent would be a new
+      // inconsistency, not a fix.
+      append: noop,
+      prepend: noop,
       removeChild: value => value,
       insertBefore: value => value,
       setAttribute: noop,
@@ -211,8 +233,43 @@ function shimFactories() {
       }),
     location: () => locationValue,
     screen: () => shimValue({ width: 0, height: 0, availWidth: 0, availHeight: 0 }),
-    history: () =>
-      shimValue({ length: 0, state: null, pushState: noop, replaceState: noop, back: noop, forward: noop, go: noop }),
+    // `pushState`/`replaceState` mutate `history.state` synchronously in a
+    // real browser, and `@solidjs/router`'s `saveCurrentDepth` depends on
+    // exactly that: it calls `replaceState({ ..., _depth }, "")` and reads
+    // `history.state._depth` on the very next line, unconditionally, at
+    // import time in every browser-conditioned mode. The no-op this used to be
+    // is the one shape of lie this file exists to rule out -- a mutator that
+    // silently drops what it was given -- and it manufactured a crash no real
+    // browser would ever produce (`state` staying `null` forever), not a
+    // faithful "unsupported" refusal. `length` follows the same spec:
+    // `pushState` adds an entry and `replaceState` does not; `go`/`back`/
+    // `forward` stay inert because firing a matching `popstate` would mean
+    // modeling the whole session-history stack, which nothing in the corpus
+    // has yet needed (so after an inert traversal, `length` can exceed what a
+    // real browser would report). The stored state is structured-cloned, as
+    // the spec's shared push/replace steps require: a package must never
+    // observe `history.state === whatItPassed`, or see its own later
+    // mutations through the shim -- and an uncloneable state throws the same
+    // `DataCloneError` a browser raises.
+    history: () => {
+      let historyState = null;
+      let historyLength = 1;
+      const value = {
+        pushState: (state, _title, _url) => {
+          historyState = structuredClone(state);
+          historyLength += 1;
+        },
+        replaceState: (state, _title, _url) => {
+          historyState = structuredClone(state);
+        },
+        back: noop,
+        forward: noop,
+        go: noop
+      };
+      Object.defineProperty(value, "state", { get: () => historyState, enumerable: true, configurable: true });
+      Object.defineProperty(value, "length", { get: () => historyLength, enumerable: true, configurable: true });
+      return markShim(value);
+    },
     localStorage: () =>
       shimValue({ length: 0, getItem: () => null, setItem: noop, removeItem: noop, clear: noop, key: () => null }),
     sessionStorage: () =>

@@ -1778,6 +1778,76 @@ test("the fake DOM closes the back-references a real one has", () => {
   assert.equal(answer.results[0].outcome, "observed");
 });
 
+test("history.pushState and replaceState really set history.state, and length follows the spec", () => {
+  // The shape of the bug this rules out: `replaceState` used to be a no-op, so
+  // a module that called it and then read `history.state` on the very next
+  // line saw the *old* state forever -- `null` if nothing had set it yet.
+  // `@solidjs/router`'s `saveCurrentDepth` does exactly that at import time,
+  // unconditionally, in every browser-conditioned mode: it replaces state with
+  // `{ ..., _depth }` and immediately reads `history.state._depth`, so the old
+  // no-op crashed every import with `Cannot read properties of null` -- a
+  // defect the shim manufactured, not a fact about the package. The shim is
+  // still an approximation (`go`/`back`/`forward` stay inert), so the claim
+  // pinned here is narrower than full browser fidelity: state really lands,
+  // it is structured-cloned rather than aliased, and `length` moves the way
+  // the spec says for the two mutators that are implemented.
+  // A "kind" probe only ever reports `typeof` the export, so the fixture
+  // asserts each fact itself and throws (making the import fail) if the shim
+  // regresses -- the same style `saveCurrentDepth` itself relies on, since it
+  // reads `history.state._depth` unchecked on the line right after the call.
+  const body = [
+    "function assertEqual(actual, expected, label) {",
+    "  if (JSON.stringify(actual) !== JSON.stringify(expected)) {",
+    "    throw new Error(`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);",
+    "  }",
+    "}",
+    "assertEqual(history.state, null, 'initial state');",
+    "history.replaceState({ marker: 'replaced' }, '');",
+    "assertEqual(history.state, { marker: 'replaced' }, 'state after replaceState');",
+    "assertEqual(history.length, 1, 'length after replaceState');",
+    "history.pushState({ marker: 'pushed' }, '');",
+    "assertEqual(history.state, { marker: 'pushed' }, 'state after pushState');",
+    "assertEqual(history.length, 2, 'length after pushState');",
+    "const handed = { marker: 'cloned' };",
+    "history.replaceState(handed, '');",
+    "if (history.state === handed) throw new Error('state aliases the caller object; a browser structured-clones it');",
+    "handed.marker = 'mutated-after-the-fact';",
+    "assertEqual(history.state, { marker: 'cloned' }, 'state after caller mutation');",
+    "let cloneError = null;",
+    "try { history.pushState({ f: () => {} }, ''); } catch (error) { cloneError = error.name; }",
+    "assertEqual(cloneError, 'DataCloneError', 'uncloneable state');",
+    "export const report = true;"
+  ].join("\n");
+  const answer = runWorker({
+    body,
+    environment: { kind: "browser-globals", globals: ["window", "history"] }
+  });
+  assert.equal(answer.results[0].outcome, "observed", answer.results[0].error);
+  assert.equal(answer.results[0].observation.typeofValue, "boolean");
+});
+
+test("document.head.append and prepend exist, exactly like a real Element", () => {
+  // `append`/`prepend` are the modern, variadic form of `appendChild` and are
+  // real methods on every `Element`. `@solidjs/start-devtools`'s development
+  // build calls `document.head.append(...)` at import time to mount its own
+  // style tag; without this the shim's `document.head` had no such method at
+  // all, so the import threw `TypeError: ... .append is not a function` --
+  // a shim gap, not an honest fact about the package.
+  const body = [
+    "if (typeof document.head.append !== 'function') throw new Error('document.head.append is not a function');",
+    "if (typeof document.head.prepend !== 'function') throw new Error('document.head.prepend is not a function');",
+    "document.head.append(document.createElement('style'), 'text');",
+    "document.head.prepend(document.createElement('style'));",
+    "export const report = true;"
+  ].join("\n");
+  const answer = runWorker({
+    body,
+    environment: { kind: "browser-globals", globals: ["window", "document"] }
+  });
+  assert.equal(answer.results[0].outcome, "observed", answer.results[0].error);
+  assert.equal(answer.results[0].observation.typeofValue, "boolean");
+});
+
 test("a global Node already provides is left alone rather than replaced by a fake", () => {
   // `navigator` is real in modern Node. Overwriting it would make the
   // observation weaker than it has to be, so it is reported as present.
