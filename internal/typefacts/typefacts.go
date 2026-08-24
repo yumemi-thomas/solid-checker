@@ -47,8 +47,10 @@ type TypeDescriber interface {
 // of either kind, not a union, and assignable to the global Function type) and
 // gives it anySignature, so `nonCallable` there would claim the call is illegal
 // when the compiler allows it, and `unknown` would claim no domain was closed
-// when one was. The value proves the constituent *is* callable and that no
-// signature, arity, or parameter type can be read from it.
+// when one was. For a single, non-union constituent the value is exact: it
+// proves that constituent *is* callable and that no signature, arity, or
+// parameter type can be read from it. At a union the promise is weaker — see
+// the Aggregation paragraph below.
 //
 // It never reaches `object`, `{}`, `Record<string, unknown>`, or an interface
 // that merely declares a `bind` method: none of those is assignable to
@@ -56,7 +58,16 @@ type TypeDescriber interface {
 // CallabilityNonCallable. Aggregation places it below CallabilityCallable and
 // above CallabilityMixed: constituents that are all callable in either sense
 // answer the weaker of the two, and any non-callable constituent beside a
-// callable one still answers CallabilityMixed.
+// callable one still answers CallabilityMixed. That promise is per
+// constituent, not a claim about the union's own call: Function | (() => void)
+// still carries one readable, arity-enforced call signature that tsc itself
+// enforces (a wrong argument count is TS2554), while Function | Merged (two
+// constituents each individually in this family, such as a merged
+// `declare class C {}` and `interface C extends Function {}`) has tsc refuse
+// the call outright (TS2349), because the untyped-call rule's fallback
+// explicitly excludes unions. Either way a consumer reading
+// CallabilityUntypedCallable as "callable, signature unread" only under-checks
+// what it could have proven; it never claims the union's call type-checks.
 type Callability string
 
 const (

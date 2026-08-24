@@ -120,9 +120,21 @@ func callabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefa
 	case nonCallable && (callable || untypedCallable):
 		return typefacts.CallabilityMixed
 	case untypedCallable:
-		// The weaker of the two callable answers wins: a constituent whose
-		// signatures cannot be read makes the union's signatures unreadable
-		// too, while every constituent is still callable.
+		// At a union this rung promises only that every constituent answered
+		// callable in some sense, per constituent -- not that the union's
+		// call as written compiles, and not that no constituent's signature
+		// is readable. Both directions occur: Function | (() => void) still
+		// carries one readable, arity-enforced call signature (tsc flags a
+		// wrong argument count with TS2554), while Function | Merged -- two
+		// constituents each individually untyped-callable, such as a
+		// `declare class C {}` merged with `interface C extends Function`
+		// -- has tsc refuse the call outright (TS2349), because the
+		// untyped-call rule that grants each constituent its own fallback
+		// signature explicitly excludes unions. Either way the answer stays
+		// conservative: a consumer reading it as "callable, signature
+		// unread" only under-checks what it could have proven and does not
+		// itself claim the call as written type-checks. Before this rung
+		// existed both shapes answered nonCallable or mixed.
 		return typefacts.CallabilityUntypedCallable
 	case callable:
 		return typefacts.CallabilityCallable
@@ -152,10 +164,15 @@ func callabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefa
 //
 // The caller must already have excluded any/unknown/never/error constituents;
 // this only adds the signature-less case to what GetSignaturesOfType saw. The
-// same exclusion is repeated against the *apparent* type, because the rule has
-// a disjunct that admits any type parameter whose constraint is `any`, and an
-// `any`-derived positive is not something this fact may produce: such a
-// constituent keeps whatever answer it had before this rule existed.
+// same exclusion is repeated against the *apparent* type as a defensive guard
+// against the rule's own text, which has a disjunct admitting any type
+// parameter whose constraint is `any`. Measured, that disjunct never actually
+// fires here: `function f<T extends any>(x: T) { x(); }` reduces T's apparent
+// type to `unknown`, not `any`, and the compiler itself refuses the call
+// (TS2349, "Type 'unknown' has no call signatures"). So the constituent falls
+// through to `nonCallable` regardless, which agrees with tsc -- there is no
+// false negative here to close. The guard stays in for the disjunct as
+// written, not for an observed gap.
 func callableWithoutSignatures(typeChecker *checker.Checker, value *checker.Type) bool {
 	if len(typeChecker.GetSignaturesOfType(value, checker.SignatureKindConstruct)) != 0 {
 		return false

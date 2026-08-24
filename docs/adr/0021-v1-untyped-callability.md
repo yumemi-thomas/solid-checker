@@ -94,6 +94,40 @@ the two, so `Function | (() => void)` is `untypedCallable`; a non-callable
 constituent beside a callable one is still `mixed`, so `Function | number` and
 `Function | undefined` are `mixed` where both were `nonCallable` before.
 
+At a union this promise is per constituent — "every constituent is callable in
+some sense" — and it is deliberately weaker than either "the call as written
+compiles" or "no constituent's signature is readable". Both directions are
+measured, not asserted:
+
+- `Function | (() => void)` still carries one readable, arity-enforced call
+  signature: `declare const a: Function | (() => void); a(1);` is TS2554
+  ("Expected 0 arguments, but got 1"), so a signature *is* readable here even
+  though the fact reports `untypedCallable`.
+- `Function | Merged`, where `Merged` is itself in the untyped-call family
+  (for example a `declare class C {}` merged with `interface C extends
+  Function {}`), has tsc refuse the call outright: `declare const b: Function
+  | Merged; b();` is TS2349 ("This expression is not callable"), because the
+  untyped-call rule that grants each constituent its own fallback signature
+  explicitly excludes unions — so the whole union never gets that fallback,
+  even though every constituent individually qualifies for it.
+
+Either way the answer stays conservative: a consumer that reads
+`untypedCallable` as "callable, signature unread" only under-checks what it
+could have proven in the first case, and does not itself assert that the call
+as written type-checks in the second. Both shapes answered `nonCallable` or
+`mixed` before this rung existed, which was a worse answer in the opposite
+direction — a real false negative on a callable value, not an imprecise
+positive on an uncallable union.
+
+A design that closed this gap would ask the union type itself, rather than
+its constituents, whether it exposes call signatures, and answer `callable`
+there when it does (matching `Function | (() => void)`'s real signature) and
+`nonCallable`/some new value when the untyped-call rule's union exclusion
+leaves it with none (matching `Function | Merged`). That is a real precision
+gain and a deliberate scope cut this ADR does not take: it would change what
+"union of untyped-callable constituents" means rather than just documenting
+it, and the corpus impact of the two shapes above is unmeasured.
+
 ## Wire and representation
 
 No row layout changed and nothing grew: the Go `Callability` is already a string
@@ -140,11 +174,31 @@ fail-closed on `unknown`, on `mixed`, and on absence.
   fallback would fit it, and it is deliberately outside this change. A consumer
   needing "is this a function" should ask `callability`.
 - **A type parameter whose constraint is `any`.** The compiler's untyped-call
-  rule has a disjunct that admits it, and the derivation refuses to follow it
-  there: an `any`-derived positive is not an answer this fact may produce, so such
-  a constituent keeps what it answered before — `nonCallable`. That is the same
-  class of false negative the family had, and closing it belongs with the `any`
-  residue ADR 0020 already names rather than here.
+  rule has a disjunct that admits it, and the derivation refuses to follow it as
+  a defensive guard rather than a closed gap: measured, `function f<T extends
+  any>(x: T) { x(); }` reduces `T`'s apparent type to `unknown`, not `any` — the
+  disjunct never actually fires — and the compiler itself refuses the call
+  (TS2349, "Type 'unknown' has no call signatures"). So the constituent falls
+  through to `nonCallable` regardless, which *agrees* with tsc: there is no false
+  negative here, unlike the family this ADR does close.
 - **No corpus measurement of the family's size.** The before/after target named
   in the consumer's precision backlog — a search for exports typed against the
   family — is still unmeasured; `benchmarks/ecosystem/` was not run.
+- **A union that asks its constituents rather than itself.** Answering
+  `untypedCallable` per constituent is deliberately weaker than asking whether
+  the union type has its own readable call signature; that stronger design —
+  described under Aggregation above — is a real precision gain not taken here.
+- **The frozen-schema degradation path exists for goldens and replay, not for a
+  live mismatched peer**: the session handshake already refuses any producer
+  whose protocol, schema hash, or build ID does not match exactly, so a v15
+  payload never actually reaches a v14 client in practice — the v14 decode path
+  this ADR keeps decodable is for byte-frozen fixtures such as the phase1 CBOR
+  golden, not for cross-version interoperability.
+- **The phase1 CBOR golden (`benchmarks/phase1/typefacts-v3-response-golden.cbor`)
+  is a Wire table v14 freeze**; there is no equivalent cross-language golden for
+  v15 or `untypedCallable` yet.
+- **The interface-merging positive is faithful to tsc but not to the runtime**:
+  a `declare class C {}` merged with `interface C extends Function {}` answers
+  `untypedCallable` because tsc permits calling it, but the merge only asserts
+  the shape at the type level — the fact inherits whatever lie the author's
+  declaration tells about `C`'s actual runtime behavior.

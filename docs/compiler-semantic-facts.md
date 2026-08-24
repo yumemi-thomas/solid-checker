@@ -102,10 +102,13 @@ a call through its TS 1.0 §4.12 rule — `checker.isUntypedFunctionCall`: no
 signatures of *either* kind, not a union, and assignable to the global
 `Function` type — and gives it `anySignature`. So `nonCallable` would have
 claimed the call is illegal where the compiler allows it, and `unknown` would
-have claimed no domain was closed where one was. The value proves the
-constituent *is* callable and that no signature, arity, or parameter type can be
-read from it. It is a positive answer and a consumer may treat it as proof of a
-runtime function; what it may not do is check any call against it.
+have claimed no domain was closed where one was. For a single, non-union
+constituent the value is exact: it proves that constituent *is* callable and
+that no signature, arity, or parameter type can be read from it. It is a
+positive answer and a consumer may treat it as proof of a runtime function for
+that constituent; what it may not do is check any call against it. At a union
+the promise is weaker — see Aggregation below for what does and does not carry
+over once constituents are combined.
 
 The boundary is the compiler's assignability relation and not a list of type
 names. `object`, `{}`, `Record<string, unknown>`, and an interface that merely
@@ -116,10 +119,28 @@ pre-filter, never the rule.
 
 Aggregation places `untypedCallable` below `callable` and above `mixed`. A union
 whose constituents are all callable, at least one of them unreadably, answers
-`untypedCallable`, because the union's signatures cannot be read either; a
-non-callable constituent beside a callable one is still `mixed`. So
-`Function | number` and `Function | undefined` answer `mixed`, and
+`untypedCallable`; a non-callable constituent beside a callable one is still
+`mixed`. So `Function | number` and `Function | undefined` answer `mixed`, and
 `Function | (() => void)` answers `untypedCallable`.
+
+At a union, `untypedCallable` promises only that every constituent is callable
+in some sense — per constituent, not that the union's call as written compiles,
+and not that no constituent's signature is readable. Both directions are
+measured: `Function | (() => void)` still carries one readable,
+arity-enforced call signature (`a(1)` for `declare const a: Function |
+(() => void)` is TS2554, "Expected 0 arguments, but got 1"), while
+`Function | Merged` — where `Merged` is itself in the untyped-call family, for
+example a `declare class C {}` merged with `interface C extends Function {}`
+— has tsc refuse the call outright (`b()` is TS2349, "This expression is not
+callable"), because the untyped-call rule's fallback explicitly excludes
+unions. Either way the answer stays conservative: a consumer reading
+`untypedCallable` as "callable, signature unread" only under-checks what it
+could have proven, and does not itself claim the union's call type-checks.
+Both shapes answered `nonCallable` or `mixed` before this rung existed. A
+design that asked the union type itself for its own call signatures, rather
+than meeting its constituents' individual answers, could recover the readable
+signature in the first case; that is a real precision gain this fact does not
+take.
 
 Constructability deliberately has no counterpart value. `new` on this family is
 a compile error — `resolveNewExpression` carries no untyped fallback, unlike

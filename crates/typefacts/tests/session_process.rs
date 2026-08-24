@@ -751,7 +751,8 @@ fn untyped_callability_crosses_the_wire_for_a_function_typed_export() {
         "import { middleware } from \"./origin\";\n",
         "declare const plain: object;\n",
         "declare const typed: () => void;\n",
-        "export { middleware, plain, typed };\n",
+        "declare const tuple: [Function];\n",
+        "export { middleware, plain, typed, tuple };\n",
     );
     fs::write(&path, source).unwrap();
     let span = |needle: &str, name: &str| {
@@ -776,9 +777,14 @@ fn untyped_callability_crosses_the_wire_for_a_function_typed_export() {
             ..EntityDemand::default()
         },
         EntityDemand {
-            location: span("typed };", "typed"),
+            location: span("typed, tuple", "typed"),
             callability: true,
             constructability: true,
+            ..EntityDemand::default()
+        },
+        EntityDemand {
+            location: span("tuple };", "tuple"),
+            tuple_shape: true,
             ..EntityDemand::default()
         },
     ];
@@ -794,7 +800,7 @@ fn untyped_callability_crosses_the_wire_for_a_function_typed_export() {
 
     let full = session.analyze(&analysis()).unwrap();
     let rows: Vec<_> = full.entities().collect();
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 4);
     // Callable with nothing to read, and still not constructable: `new` on a
     // Function-typed value is a compile error, so the two facts disagree about
     // this one type on purpose.
@@ -814,6 +820,14 @@ fn untyped_callability_crosses_the_wire_for_a_function_typed_export() {
     // A readable signature still answers `callable`; the frozen value's meaning
     // did not move.
     assert_eq!(rows[2].callability, Some(Callability::Callable));
+    // This is the tuple-specific tag-4 path end to end: the Go producer derives
+    // and encodes elementZero as untypedCallable, then the Rust client decodes
+    // it into TupleShape's packed arm and reads it back out.
+    let tuple = rows[3].tuple_shape.expect("tuple shape");
+    assert_eq!(tuple.fixed_length(), 1);
+    assert_eq!(tuple.exact_length(), Some(1));
+    assert_eq!(tuple.element_zero(), Some(Callability::UntypedCallable));
+    assert!(!tuple.element_zero_accepts(0));
 
     let reused = session.analyze(&analysis()).unwrap();
     assert_eq!(reused.entities().collect::<Vec<_>>(), rows);

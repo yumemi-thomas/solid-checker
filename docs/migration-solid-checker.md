@@ -96,6 +96,27 @@ new facts:
   either. A consumer that must be right about the runtime value regardless of
   what the author declared cannot use these facts for it; nothing in this
   vocabulary answers "what did the author actually assign".
+  **Audit every existing `Callability` comparison before adopting this pin,
+  because adding `untypedCallable` is source-compatible and every stale
+  comparison below keeps compiling silently instead of failing to build.** A
+  positive match on the exact variant misses it and must be widened: in
+  solid-checker, `source_discovery.rs:1257`'s
+  `== Some(typefacts::Callability::Callable)` and `contracts.rs`'s
+  `export_kind_proof` positive arm,
+  `(Some(Callability::Callable), _) | (_, Some(Constructability::Constructable))`,
+  both need `Callability::UntypedCallable` added alongside `Callability::Callable`,
+  and the `const CALLABILITIES: [Option<Callability>; 5]` test sweep in
+  `contracts.rs` needs a sixth entry, `Some(Callability::UntypedCallable)`, or it
+  silently stops covering the full enum the moment this value exists. A negative
+  match on `NonCallable` needs no change: `runtime_semantics.rs`'s
+  `!matches!(parameter.callability, Callability::NonCallable)` and
+  `!matches!(callability, Some(Callability::NonCallable))` already read
+  `untypedCallable` as "may be callable", which is the correct answer, without
+  a single line moving. Do not paper over this by marking `Callability`
+  `#[non_exhaustive]` in the producer — that would only turn a silent
+  under-match into a silent `_` arm at the same call sites; the fix is to read
+  every existing comparison at the consumer, not to make the compiler refuse to
+  compile them.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

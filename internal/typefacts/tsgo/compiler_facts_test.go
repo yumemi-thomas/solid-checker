@@ -2049,6 +2049,8 @@ declare const unionArray: Handlers | number[];
 declare const notArray: (event: MouseEvent) => void;
 declare const anyValue: any;
 declare const empty: [];
+declare const untypedSlot: [Function];
+declare const untypedUnion: [Function] | [() => void];
 
 pair;
 overArity;
@@ -2073,6 +2075,8 @@ unionArray;
 notArray;
 anyValue;
 empty;
+untypedSlot;
+untypedUnion;
 `
 	sourcePath := filepath.Join(dir, "tuples.ts")
 	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext","lib":["esnext","dom"]},"include":["*.ts"]}`), 0o644); err != nil {
@@ -2139,6 +2143,14 @@ empty;
 		{`unionArray`, nil},
 		{`notArray`, nil},
 		{`anyValue`, nil},
+		// The signature-less Function-supertype family reaches elementZero
+		// exactly as it reaches callability: the slot is callable, but no
+		// signature can be read from it.
+		{`untypedSlot`, &typefacts.TupleShape{FixedLength: 1, ExactLength: 1, ExactLengthKnown: true, ElementZero: typefacts.CallabilityUntypedCallable}},
+		// meetTupleShapes mirrors callabilityOfType's own union rung here: a
+		// slot that is callable in one constituent and untypedCallable in the
+		// other meets to the weaker of the two rather than falling to mixed.
+		{`untypedUnion`, &typefacts.TupleShape{FixedLength: 1, ExactLength: 1, ExactLengthKnown: true, ElementZero: typefacts.CallabilityUntypedCallable}},
 	}
 	demands := make([]typefacts.EntityDemand, len(tests))
 	for index, testCase := range tests {
@@ -2521,8 +2533,10 @@ export { bare, callableFunction, newableFunction, aliased, extended, branded, as
 		{"withNumber", false, typefacts.CallabilityMixed, typefacts.ConstructabilityNonConstructable},
 		{"optional", false, typefacts.CallabilityMixed, typefacts.ConstructabilityNonConstructable},
 		// Every constituent callable, one of them unreadably: the weaker of the
-		// two callable answers wins, because the union's signatures cannot be
-		// read either.
+		// two callable answers wins. That promise is per constituent, not a
+		// claim about the union's own call: tsc still finds one readable,
+		// arity-enforced signature here (a wrong argument count is TS2554),
+		// which this fact under-checks rather than misreports.
 		// Subtype-of-Function is true for the union as a whole here, because it
 		// is true of every constituent — the relation is not a proxy for "is a
 		// single Function-family type".
@@ -2678,5 +2692,55 @@ export const constructed = new handler();
 	}
 	if len(onConstruct) == 0 {
 		t.Error("new on a Function-typed value reported no diagnostic, want one")
+	}
+}
+
+// ParameterFact.Callability shares callabilityOfType with EntityFact.callability
+// (both resolvedCall's argument-mapping path and this one call
+// callabilityOfType directly on the formal parameter's type), and only the
+// entity-level path had a regression test for the signature-less
+// Function-supertype family. A parameter typed exactly `Function` must answer
+// the same way an expression typed `Function` does.
+func TestResolvedCallParameterAnswersUntypedCallableForFunctionTypedParameter(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare function register(handler: Function): void;
+declare const fn: () => void;
+register(fn);
+`
+	sourcePath := filepath.Join(dir, "parameter.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	callStart := strings.LastIndex(source, "register(fn)")
+	entities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location: typefacts.Location{
+			Path:      sourcePath,
+			StartByte: callStart,
+			EndByte:   callStart + len("register(fn)"),
+		},
+		ResolvedCall: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := entities[0].ResolvedCall
+	if call == nil {
+		t.Fatal("resolved call fact is missing")
+	}
+	if len(call.Arguments) != 1 || call.Arguments[0].Parameter == nil {
+		t.Fatalf("argument mapping = %+v, want one resolved parameter", call.Arguments)
+	}
+	if got := call.Arguments[0].Parameter.Callability; got != typefacts.CallabilityUntypedCallable {
+		t.Errorf("Function-typed parameter callability = %q, want untypedCallable", got)
 	}
 }

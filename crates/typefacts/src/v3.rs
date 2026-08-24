@@ -1937,6 +1937,39 @@ mod tests {
         );
     }
 
+    // Tuple shape's elementZero shares parse_callability (and so tag 4) with
+    // the top-level Callability field, and TupleShape's own packed
+    // representation carries UntypedCallable as arm 5 (see element_zero's
+    // match in lib.rs). Neither side had a regression test for the two
+    // meeting at the wire boundary until now.
+    #[test]
+    fn wire_table_v15_decodes_untyped_callable_tuple_element_zero() {
+        // packed = 2 -> fixed_length 1, has_rest false.
+        let transition = decode_table_transition(&tuple_shape_transition(15, 2, 4, 0, 0)).unwrap();
+        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            entities[0].tuple_shape,
+            Some(
+                crate::TupleShape::try_new(1, false, Some(Callability::UntypedCallable), 0, None)
+                    .unwrap()
+            )
+        );
+        assert_eq!(
+            entities[0].tuple_shape.unwrap().element_zero(),
+            Some(Callability::UntypedCallable)
+        );
+        // element_zero_accepts is deliberately false for this rung: it is
+        // callable, but no argument count can be checked against it.
+        assert!(!entities[0].tuple_shape.unwrap().element_zero_accepts(0));
+
+        // The field's tag space is frozen exactly like the top-level one: a
+        // v14 row never expressed tag 4 and refuses it rather than reading it
+        // forward.
+        assert!(decode_table_transition(&tuple_shape_transition(14, 2, 4, 0, 0)).is_err());
+    }
+
     #[test]
     fn wire_table_v12_decodes_library_type_sets_and_v11_stays_frozen() {
         let transition = decode_table_transition(&library_types_transition(12, 2)).unwrap();

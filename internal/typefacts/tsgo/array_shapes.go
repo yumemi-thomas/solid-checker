@@ -169,10 +169,24 @@ func meetTupleShapes(left, right typefacts.TupleShape) typefacts.TupleShape {
 	case left.ElementZero == right.ElementZero:
 	case left.ElementZero == typefacts.CallabilityUnknown || right.ElementZero == typefacts.CallabilityUnknown:
 		met.ElementZero = typefacts.CallabilityUnknown
+	case isCallableInEitherSense(left.ElementZero) && isCallableInEitherSense(right.ElementZero):
+		// Mirrors callabilityOfType's own union rung: when both slots are
+		// callable in either sense, the meet can promise only the weaker of
+		// the two, untypedCallable, since one side does not admit a readable
+		// signature. [Function] meets [() => void] this way instead of
+		// falling to mixed.
+		met.ElementZero = typefacts.CallabilityUntypedCallable
 	default:
 		met.ElementZero = typefacts.CallabilityMixed
 	}
 	return met
+}
+
+// isCallableInEitherSense reports whether a slot's callability is callable or
+// untypedCallable -- the two rungs meetTupleShapes must not collapse to mixed
+// against each other.
+func isCallableInEitherSense(value typefacts.Callability) bool {
+	return value == typefacts.CallabilityCallable || value == typefacts.CallabilityUntypedCallable
 }
 
 // minimumParameterCount is the fewest arguments any call signature of value

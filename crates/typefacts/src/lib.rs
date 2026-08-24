@@ -99,11 +99,13 @@ pub struct Declaration {
 /// `apply`/`call`/`bind` and no signature of its own, and `CallableFunction`,
 /// `NewableFunction`, an alias or interface reaching them, and an intersection
 /// containing one all inherit that shape; the compiler resolves such a call
-/// through its TS 1.0 §4.12 untyped-call rule and gives it `anySignature`. So
-/// this value is a *positive* proof that the value is callable, paired with the
-/// absence of any signature, arity, or parameter type to read from it. It is
-/// not [`Callability::Unknown`]: a domain was closed. It is not
-/// [`Callability::Callable`]: nothing about the call can be checked.
+/// through its TS 1.0 §4.12 untyped-call rule and gives it `anySignature`. For
+/// a single, non-union type the value is exact: it is a *positive* proof that
+/// the type is callable, paired with the absence of any signature, arity, or
+/// parameter type to read from it. It is not [`Callability::Unknown`]: a
+/// domain was closed. It is not [`Callability::Callable`]: nothing about the
+/// call can be checked. At a union the promise is weaker — see Aggregation
+/// below.
 ///
 /// It never reaches `object`, `{}`, `Record<string, unknown>`, or an interface
 /// that merely declares a `bind` method — none is assignable to `Function` and
@@ -115,7 +117,16 @@ pub struct Declaration {
 ///
 /// Aggregation places it below `Callable` and above `Mixed`: constituents that
 /// are all callable in either sense answer the weaker of the two, and any
-/// non-callable constituent beside a callable one still answers `Mixed`.
+/// non-callable constituent beside a callable one still answers `Mixed`. That
+/// promise is per constituent, not a claim about the union's own call:
+/// `Function | (() => void)` still carries one readable, arity-enforced call
+/// signature tsc itself enforces (a wrong argument count is TS2554), while
+/// `Function | Merged` (two constituents each individually in this family,
+/// such as a merged `declare class C {}` and `interface C extends Function
+/// {}`) has tsc refuse the call outright (TS2349), because the untyped-call
+/// rule's fallback explicitly excludes unions. Either way a consumer reading
+/// `UntypedCallable` as "callable, signature unread" only under-checks what it
+/// could have proven; it never claims the union's call type-checks.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Callability {
