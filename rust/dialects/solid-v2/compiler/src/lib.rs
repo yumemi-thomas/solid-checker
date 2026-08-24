@@ -12,6 +12,21 @@ use solid_facts::compiler::{
 };
 use solid_facts::core::{SourceHash, Span};
 
+/// The trace schema version *this projection was written against*.
+///
+/// It is a consumer-owned literal on purpose. Comparing the trace's `version`
+/// against the producer's own `SEMANTIC_TRACE_VERSION` would be tautological —
+/// the producer fills the field from that same constant, so the runtime check
+/// could never fire, for any producer, including a version-3 one arriving
+/// through a pin move.
+const READS_TRACE_VERSION: u32 = 2;
+
+/// A pin move that changes the producer's schema version fails the build here
+/// instead of silently making the runtime refusal below unreachable again. The
+/// runtime check catches a trace that disagrees with its own producer; this
+/// catches a producer that disagrees with this projection.
+const _: () = assert!(dom_expressions_compiler::SEMANTIC_TRACE_VERSION == READS_TRACE_VERSION);
+
 /// The in-process Solid 2.0 compiler-facts provider.
 #[derive(Default)]
 pub struct NativeCompilerFacts;
@@ -66,10 +81,26 @@ impl CompilerFactsProvider for NativeCompilerFacts {
 
 /// Projects the compiler's semantic trace onto the checker's execution map.
 ///
-/// The trace is total: every censused JSX site carries a terminal decision, so
-/// each one lands in exactly one of the tracked, untracked, or callback
-/// categories, and `ExecutionMap::uncovered_jsx_expressions` is empty by
-/// construction rather than by luck.
+/// The trace is total *over the census*: every censused JSX site carries a
+/// terminal decision, so each one lands in exactly one of the tracked,
+/// untracked, or callback categories, and
+/// `ExecutionMap::uncovered_jsx_expressions` is empty by construction rather
+/// than by luck. That is not the same as total over the JSX the source
+/// contains — this compiler censuses what it lowers — and it is not the same as
+/// truthful about the compiler Solid *ships*. Two consequences, both handled
+/// downstream and both documented in docs/compiler-facts.md:
+///
+/// - A source expression this compiler does not lower (a template-root void
+///   element's children) or lowers and then retracts (a nested dynamic
+///   `textContent`, the textarea `value` fold, the inert `<noscript>` fast
+///   path) leaves a hole — `solid-reactive-ir`'s `missing_jsx_census`, under
+///   "Census gaps".
+/// - A site this compiler lowers that Babel emits nothing for (a *nested* void
+///   element's children; a `<noscript>`'s children where it is its own template
+///   root or its attributes force it off the fast path) is a present, truthful
+///   fact that is still not evidence about the user's build —
+///   `divergent_lowered_child`, under "Divergent lowering". The fork's own
+///   docs/execution-contract.md declares that consumer rule binding.
 fn execution_map_from_trace(
     trace: &dom_expressions_compiler::SemanticTrace,
     source: &str,
@@ -77,6 +108,19 @@ fn execution_map_from_trace(
     use dom_expressions_compiler::{
         CallbackDecision, ExecutionSiteKind, TerminalDecision, ValueDecision,
     };
+
+    // The trace schema is versioned and its meaning is not forward-compatible:
+    // `ownership_sites` is emitted by version 2 but is the producer's legacy
+    // vocabulary, so a trace of any other version must be refused rather than
+    // read as if the fields it does carry mean what this projection assumes.
+    // The comparison is against this crate's own `READS_TRACE_VERSION`, never
+    // the producer's constant.
+    if trace.version != READS_TRACE_VERSION {
+        return Err(CompilerProviderError::Native(format!(
+            "Solid 2.0 compiler produced semantic trace version {}, but this checker reads version {READS_TRACE_VERSION}",
+            trace.version
+        )));
+    }
 
     let mut map = ExecutionMap {
         compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
@@ -219,6 +263,40 @@ mod tests {
     #[test]
     fn custom_effect_wrappers_make_no_owner_claim() {
         assert!(facts(Some("customEffect")).ownership_regions.is_empty());
+    }
+
+    // The pinned producer only ever emits the version this adapter reads, so
+    // the refusal is unreachable through `analyze` and is pinned here instead.
+    // It is what keeps a future pin move from reinterpreting a field whose
+    // meaning changed.
+    #[test]
+    fn an_unreadable_trace_version_is_refused_rather_than_projected() {
+        use dom_expressions_compiler::SemanticTrace;
+
+        let source = "const view = <div>{count()}</div>;";
+        // A literal version, not `READS_TRACE_VERSION + 1`: the point is that
+        // some *specific* other schema is refused, and a version derived from
+        // the constant under test would move with it.
+        //
+        // Every field is named rather than filled from `..default()`, so a
+        // producer that adds one fails this build instead of quietly widening
+        // the schema this projection claims to read.
+        let trace = SemanticTrace {
+            version: 3,
+            sites: Vec::new(),
+            ownership_sites: Vec::new(),
+            owner_establishments: Vec::new(),
+            component_render_sites: Vec::new(),
+            deferred_callback_sites: Vec::new(),
+        };
+        let error = execution_map_from_trace(&trace, source)
+            .expect_err("an unknown trace version must fail closed");
+        assert!(
+            matches!(&error, CompilerProviderError::Native(message)
+                if message.contains("semantic trace version 3")
+                    && message.contains("reads version 2")),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]

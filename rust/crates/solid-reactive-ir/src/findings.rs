@@ -154,12 +154,62 @@ impl Finding {
         let conditional_owner = requirement.conditional_owner;
         let runtime_uncertain = requirement.runtime_uncertain;
         let component_uncertain = requirement.component_uncertain;
+        let divergent_lowering = requirement.divergent_lowering;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
-        // row with no explicit reason as caller uncertainty.
+        // row with no explicit reason as caller uncertainty. A divergence is an
+        // explicit reason and must not be re-read as that legacy default, or the
+        // message would also blame callers it has no complaint about.
         let caller_uncertain = requirement.caller_uncertain
-            || (uncertain && !runtime_uncertain && !conditional_owner && !component_uncertain);
+            || (uncertain
+                && !runtime_uncertain
+                && !conditional_owner
+                && !component_uncertain
+                && divergent_lowering.is_none());
         let mut message = message.to_string();
         let mut hint = hint.to_string();
+        // The divergence returns early instead of appending a clause like the
+        // other reasons, because it disagrees with the sentence they decorate.
+        // "No containing owner dominates this operation" is a completed search of
+        // the compiler's facts; here the facts are not incomplete but
+        // contradictory, and that sentence would assert the half of them that
+        // happens to be this producer's. Appending would leave the evidence chain
+        // still claiming the search finished.
+        //
+        // It also subsumes the other reasons when they coincide: if the call
+        // cannot be shown to run at all, whether its unenumerable callers would
+        // have supplied an owner is not the reader's next question. The fields
+        // stay on the requirement, so the serialized row still records them; only
+        // the prose leads with the reason that dominates.
+        if let Some(divergence) = divergent_lowering {
+            let (position, shipped) = match divergence {
+                crate::DivergentLowering::VoidElementChild => (
+                    "inside the children of an HTML void element",
+                    "the compiler Solid ships deletes a void element's child list in every position",
+                ),
+                crate::DivergentLowering::NoscriptChild => (
+                    "inside the children of a `<noscript>`",
+                    "the compiler Solid ships never lowers `<noscript>` children in any position",
+                ),
+            };
+            message.push_str(&format!(
+                "; but this call is written {position}, and {shipped} while the pinned Solid compiler lowers that child into a reactive insert that owns it — so whether this call runs at all, and under which owner, depends on which compiler builds this project"
+            ));
+            hint.push_str(
+                " Move the call out of that element's children: while it sits there, no compiler fact decides its owner, and the two candidate compilers disagree about whether it executes.",
+            );
+            return Self {
+                kind: "uncertifiable".into(),
+                severity: "error".into(),
+                evidence: vec![EvidenceStep {
+                    message: format!(
+                        "the operation sits {position}: the pinned compiler reports that child as a reactive JSX site and owns it, the compiler Solid ships emits nothing there, and no fact available here decides which one builds this project"
+                    ),
+                    location: Some(requirement.location.clone()),
+                }],
+                hint,
+                ..Self::new(metadata, message, requirement.location.clone())
+            };
+        }
         let mut evidence = vec![EvidenceStep {
             message: if component_uncertain {
                 "component identity is unresolved, so this operation may execute with or without a reactive owner"
@@ -286,6 +336,57 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
     } else {
         "rendering function"
     };
+    // A census gap unmakes the second half of the ordinary sentence. "Which
+    // does not track" and "never updates" are claims about the execution
+    // context, and the only evidence for them here would be the compiler's
+    // silence about this JSX region — which is equally consistent with the
+    // expression having been dropped, or lowered into something tracked that
+    // the producer did not census. So the message says what is actually known.
+    // Checked before the census gap, and they are mutually exclusive by
+    // construction: the divergence requires a census entry the producer really
+    // emitted, and the gap requires there to be none. The order is fixed
+    // anyway, because this is the more specific claim — the census here is not
+    // silent, it speaks for a compiler that may not be the one building this
+    // project.
+    //
+    // The two divergences share a shape and differ in why they are true, so the
+    // sentence differs in exactly that clause. Saying "deletes it" of
+    // `<noscript>` would be wrong: the shipped compiler does not delete a
+    // `<noscript>` child it decided to keep, it never lowers the subtree at all.
+    if let Some(divergence) = read.divergent_lowering {
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        let (position, shipped) = match divergence {
+            crate::DivergentLowering::VoidElementChild => (
+                "inside the children of an HTML void element",
+                "the compiler Solid ships deletes a void element's child list in every position",
+            ),
+            crate::DivergentLowering::NoscriptChild => (
+                "inside the children of a `<noscript>`",
+                "the compiler Solid ships never lowers `<noscript>` children in any position",
+            ),
+        };
+        return format!(
+            "{} {:?} is read{through} in {context}, {position}; the pinned Solid compiler lowers that child into a reactive insert while {shipped}, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
+    if read.missing_jsx_census {
+        let through = if read.via.is_empty() {
+            String::new()
+        } else {
+            format!(" through {}", read.via)
+        };
+        return format!(
+            "{} {:?} is read{through} in {context}, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
+            reactive_value_label(&read.kind),
+            read.accessor,
+        );
+    }
     if read.via.is_empty() {
         format!(
             "{} {:?} is read directly in {context}, which does not track; the read sees the current value once and never updates when {:?} changes",
@@ -309,6 +410,31 @@ fn reactive_value_label(kind: &str) -> &'static str {
         "store-path" => "reactive store path",
         "component-props" => "component prop",
         _ => "reactive accessor",
+    }
+}
+
+/// The last evidence step: either the proof that the site is outside every
+/// tracked region, or — when the compiler censused nothing in the containing
+/// JSX region — the statement that no such proof exists. "Outside every
+/// compiler-tracked JSX region" reads as a completed search of the compiler's
+/// facts; over a census hole it would be an overstatement, since the compiler
+/// never reported on that region at all.
+fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
+    if let Some(divergence) = read.divergent_lowering {
+        let element = match divergence {
+            crate::DivergentLowering::VoidElementChild => "a void element's child",
+            crate::DivergentLowering::NoscriptChild => "a `<noscript>`'s child",
+        };
+        return format!(
+            "{subject} is {element}: the pinned compiler reports it as a reactive JSX site, the compiler Solid ships emits nothing there, and no fact available here decides which one builds this project"
+        );
+    }
+    if read.missing_jsx_census {
+        format!(
+            "{subject} sits inside a JSX expression the compiler's execution census does not cover, so no compiler fact places it inside or outside a tracked region"
+        )
+    } else {
+        format!("{subject} is outside every compiler-tracked JSX region and deferred callback")
     }
 }
 
@@ -353,8 +479,7 @@ pub fn strict_read_evidence(read: &ReactiveRead) -> Vec<EvidenceStep> {
             location: Some(read.location.clone()),
         });
         evidence.push(EvidenceStep {
-            message: "the call is outside every compiler-tracked JSX region and deferred callback"
-                .into(),
+            message: untracked_evidence_sentence(read, "the call"),
             location: Some(read.location.clone()),
         });
     } else {
@@ -363,8 +488,7 @@ pub fn strict_read_evidence(read: &ReactiveRead) -> Vec<EvidenceStep> {
             location: Some(read.location.clone()),
         });
         evidence.push(EvidenceStep {
-            message: "the read is outside every compiler-tracked JSX region and deferred callback"
-                .into(),
+            message: untracked_evidence_sentence(read, "the read"),
             location: Some(read.location.clone()),
         });
     }
@@ -438,6 +562,267 @@ pub fn assert_rules_have_documentation(
             "rule {} has no documentation page at {}",
             name,
             page.display()
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Finding, RuleMetadata, strict_read_evidence, strict_read_message};
+    use crate::{ExecutionRole, OwnerRequirement, ReactiveRead};
+    use typefacts::Location;
+
+    fn location(start: u64) -> Location {
+        Location {
+            path: "app.tsx".into(),
+            start_byte: start,
+            end_byte: start + 1,
+        }
+    }
+
+    fn read(missing_jsx_census: bool) -> ReactiveRead {
+        ReactiveRead {
+            kind: "accessor".into(),
+            accessor: "count".into(),
+            location: location(20),
+            declaration: location(10),
+            execution: ExecutionRole::UntrackedRendering,
+            context: "Panel".into(),
+            via: "".into(),
+            origin: None,
+            origin_context: "".into(),
+            uncertain: false,
+            missing_jsx_census,
+            divergent_lowering: None,
+        }
+    }
+
+    /// The census-gap wording *is* the precision claim of the escalation: a
+    /// finding that says "outside every compiler-tracked JSX region" asserts a
+    /// completed search of facts that were never collected. The two census-gap
+    /// fixtures pin the message through the snapshot (they are in coverage's
+    /// `KEEPS_WORDING` set), but nothing in the snapshot carries evidence
+    /// steps, so the last evidence sentence is pinned here or nowhere.
+    #[test]
+    fn a_census_gap_never_claims_a_completed_search_of_compiler_facts() {
+        let overstatement = "outside every compiler-tracked JSX region";
+
+        let ordinary = read(false);
+        assert!(strict_read_message(&ordinary).contains("which does not track"));
+        assert!(
+            strict_read_evidence(&ordinary)
+                .last()
+                .unwrap()
+                .message
+                .contains(overstatement),
+            "a read with a census entry keeps the completed-search evidence"
+        );
+
+        let gap = read(true);
+        let message = strict_read_message(&gap);
+        assert!(
+            message.contains("execution census does not cover"),
+            "the census gap must be named in the message: {message}"
+        );
+        assert!(
+            !message.contains("which does not track") && !message.contains("never updates when"),
+            "the message must not claim the read never updates: {message}"
+        );
+        let evidence = strict_read_evidence(&gap);
+        let last = &evidence.last().unwrap().message;
+        assert!(
+            !last.contains(overstatement),
+            "the evidence must not claim a completed search: {last}"
+        );
+        assert!(
+            last.contains("no compiler fact places it inside or outside a tracked region"),
+            "the evidence must state the missing fact: {last}"
+        );
+    }
+
+    /// The interprocedural arm reaches the same sentence through a different
+    /// subject, so it gets its own assertion rather than riding on the direct
+    /// one.
+    #[test]
+    fn the_census_gap_evidence_covers_the_propagated_read_too() {
+        let mut gap = read(true);
+        gap.via = "title".into();
+        gap.origin = Some(location(4));
+        let evidence = strict_read_evidence(&gap);
+        let last = &evidence.last().unwrap().message;
+        assert!(
+            last.starts_with("the call sits inside a JSX expression the compiler's execution census does not cover"),
+            "unexpected evidence for the propagated read: {last}"
+        );
+        assert!(strict_read_message(&gap).contains("read through title"));
+    }
+
+    /// The void-child divergence and the census gap are two different claims
+    /// and must not borrow each other's sentence. The gap says the compiler was
+    /// silent; the divergence says two compilers spoke and disagreed. Reporting
+    /// the second with the first's wording would tell the user to look for a
+    /// missing fact that is in fact present.
+    #[test]
+    fn a_void_child_divergence_names_the_disagreement_not_a_missing_fact() {
+        let mut divergent = read(false);
+        divergent.divergent_lowering = Some(crate::DivergentLowering::VoidElementChild);
+        // The role the pinned fork's census actually assigns. The wording must
+        // not depend on it: the whole point is that this role is not evidence.
+        divergent.execution = ExecutionRole::TrackedJsx;
+
+        let message = strict_read_message(&divergent);
+        assert!(
+            message.contains("void element")
+                && message.contains("deletes a void element's child list"),
+            "the divergence must be named in the message: {message}"
+        );
+        assert!(
+            !message.contains("does not cover"),
+            "the divergence is not a census gap; the census entry is present: {message}"
+        );
+        assert!(
+            !message.contains("which does not track") && !message.contains("never updates when"),
+            "the message must not claim the read never updates: {message}"
+        );
+
+        let evidence = strict_read_evidence(&divergent);
+        let last = &evidence.last().unwrap().message;
+        assert!(
+            !last.contains("outside every compiler-tracked JSX region"),
+            "the evidence must not claim a completed search: {last}"
+        );
+        assert!(
+            last.contains("void element's child") && last.contains("which one builds this project"),
+            "the evidence must state the disagreement: {last}"
+        );
+    }
+
+    /// The ownership consumer of the same divergence. An owner requirement whose
+    /// call sits in a divergently lowered child must not be a **violation**: the
+    /// pinned producer wraps the insert it emits (so the call runs owned) and the
+    /// parity target deletes the child (so it never runs), and neither compiler
+    /// produces the unowned live operation the violation asserts.
+    ///
+    /// Pinned here as well as in the fixture because the snapshot carries no
+    /// evidence steps and no hint, and because the *absence* of the ordinary
+    /// no-owner sentence is the claim — an appended clause would leave the
+    /// finding still asserting a completed search for an owner.
+    #[test]
+    fn a_divergent_child_makes_an_owner_requirement_uncertifiable_not_a_violation() {
+        let metadata = RuleMetadata {
+            code: "SC4001",
+            name: "missing-owner",
+            severity: "error",
+            uncertifiable: false,
+            default_enabled: true,
+            presets: &[],
+        };
+        let requirement = |divergent_lowering: Option<crate::DivergentLowering>| OwnerRequirement {
+            operation: crate::OwnerRequirementOperation::Cleanup,
+            location: location(20),
+            uncertain: divergent_lowering.is_some(),
+            runtime_uncertain: false,
+            caller_uncertain: false,
+            conditional_owner: false,
+            component_uncertain: false,
+            divergent_lowering,
+            report: true,
+        };
+
+        let ordinary = Finding::for_owner_requirement(
+            metadata,
+            &requirement(None),
+            "onCleanup is called without a reactive owner",
+            "Register it under a component or root.",
+        );
+        assert_eq!(ordinary.kind, "violation");
+        assert!(
+            ordinary.evidence[0]
+                .message
+                .contains("no containing component, computation, or root owner dominates"),
+            "the ordinary requirement keeps its completed-search evidence: {:?}",
+            ordinary.evidence[0].message
+        );
+
+        let divergent = Finding::for_owner_requirement(
+            metadata,
+            &requirement(Some(crate::DivergentLowering::VoidElementChild)),
+            "onCleanup is called without a reactive owner",
+            "Register it under a component or root.",
+        );
+        assert_eq!(divergent.kind, "uncertifiable");
+        assert_eq!(divergent.severity, "error");
+        assert!(
+            divergent
+                .message
+                .contains("children of an HTML void element")
+                && divergent
+                    .message
+                    .contains("depends on which compiler builds this project"),
+            "the divergence must be named in the message: {}",
+            divergent.message
+        );
+        assert!(
+            !divergent.message.contains("this function is exported"),
+            "a divergence is not caller uncertainty: {}",
+            divergent.message
+        );
+        assert_eq!(divergent.evidence.len(), 1);
+        assert!(
+            !divergent.evidence[0]
+                .message
+                .contains("no containing component, computation, or root owner dominates"),
+            "the evidence must not assert a completed search for an owner: {:?}",
+            divergent.evidence[0].message
+        );
+
+        let noscript = Finding::for_owner_requirement(
+            metadata,
+            &requirement(Some(crate::DivergentLowering::NoscriptChild)),
+            "onCleanup is called without a reactive owner",
+            "Register it under a component or root.",
+        );
+        assert!(
+            noscript.message.contains("children of a `<noscript>`")
+                && noscript
+                    .message
+                    .contains("never lowers `<noscript>` children in any position"),
+            "the noscript arm keeps its own reason here too: {}",
+            noscript.message
+        );
+    }
+
+    /// The `<noscript>` arm (the fork's divergence 3) must not borrow the void
+    /// arm's sentence. "Deletes it" is false of `<noscript>`: the shipped
+    /// compiler does not delete a child it kept, it never lowers the subtree at
+    /// all. Two divergences, two reasons, two sentences.
+    ///
+    /// Pinned here because the fixture coverage for this arm is narrower than
+    /// the void arm's: the 1.x producer exits 2 on the `<noscript>` fast-path
+    /// shape, so no fixture pins the retracting position under 1.x.
+    #[test]
+    fn the_noscript_divergence_has_its_own_reason_not_the_void_ones() {
+        let mut noscript = read(false);
+        noscript.divergent_lowering = Some(crate::DivergentLowering::NoscriptChild);
+        noscript.execution = ExecutionRole::TrackedJsx;
+
+        let message = strict_read_message(&noscript);
+        assert!(
+            message.contains("`<noscript>`")
+                && message.contains("never lowers `<noscript>` children in any position"),
+            "the noscript divergence must state its own reason: {message}"
+        );
+        assert!(
+            !message.contains("void element") && !message.contains("does not cover"),
+            "it is neither the void arm nor a census gap: {message}"
+        );
+
+        let evidence = strict_read_evidence(&noscript);
+        let last = &evidence.last().unwrap().message;
+        assert!(
+            last.contains("`<noscript>`'s child")
+                && !last.contains("outside every compiler-tracked JSX region"),
+            "unexpected noscript evidence: {last}"
         );
     }
 }

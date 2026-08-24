@@ -377,6 +377,47 @@ pub struct ReactiveRead {
     /// than a proven violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub uncertain: bool,
+    /// The untracked-rendering role rests on a *missing* compiler fact: the
+    /// narrowest JSX region containing the read carries no census entry, so
+    /// the producer never reported how — or whether — that expression is
+    /// lowered. Distinct from [`Self::uncertain`], which is uncertainty about
+    /// the reactive backing rather than about the execution context, and
+    /// worded separately for that reason. Projection reports either as
+    /// uncertifiable.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub missing_jsx_census: bool,
+    /// The read sits in a JSX child region the pinned compiler fork lowered and
+    /// the compiler Solid ships does not lower. The census entry here is present
+    /// and claims a reactive rerun, so this is not [`Self::missing_jsx_census`]:
+    /// the fact exists, is truthful about the producer, and is still not
+    /// evidence about the user's build. Projection reports it as uncertifiable —
+    /// the read can be certified neither tracked (only the fork's output tracks
+    /// it) nor untracked (only Babel's output drops it). The variant selects the
+    /// wording, because the two divergences are true for different reasons.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divergent_lowering: Option<DivergentLowering>,
+}
+
+/// Which of the pinned compiler fork's lowering divergences a fact about a
+/// source position rests on — a read's execution role
+/// ([`ReactiveRead::divergent_lowering`]) or an operation's ownership
+/// ([`OwnerRequirement::divergent_lowering`]).
+///
+/// Both are declared binding on the consumer by the fork's
+/// docs/execution-contract.md ("The trace describes this compiler, not the
+/// parity target"), and both are mitigated by `divergent_lowered_child` in
+/// `execution_role.rs`. See docs/compiler-facts.md, "Divergent lowering".
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DivergentLowering {
+    /// Divergence 1: the children of a void element the fork lowered anyway.
+    /// Under 2.0 that is the nested native-child position only; under 1.x the
+    /// template-root position lowers them too (probed).
+    VoidElementChild,
+    /// Divergence 3: the children of a `<noscript>` the fork lowered anyway —
+    /// where the element is its own template root, or its attributes force it
+    /// off the static-template fast path. Babel drops them in every position.
+    NoscriptChild,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -821,6 +862,23 @@ pub struct OwnerRequirement {
     /// owner contexts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub component_uncertain: bool,
+    /// The operation is written inside a JSX child region the pinned producer
+    /// lowers and this dialect's parity-target compiler discards — the same
+    /// divergence [`ReactiveRead::divergent_lowering`] carries, reaching the
+    /// ownership question instead of the tracking one.
+    ///
+    /// Both halves of the ordinary proof are gone here, in opposite directions.
+    /// The producer's `Owned` ownership region over that child is not evidence
+    /// of an owner (the parity target emits neither the insert nor its wrapper),
+    /// which is why `owners.rs` drops it from `providing_regions`; but the
+    /// absence of an owner is not proven either, because under the parity target
+    /// the operation is inside deleted code and never executes at all. Neither
+    /// compiler produces an unowned live operation, so a *violation* here would
+    /// assert a defect no build can exhibit. Projection reports it as
+    /// uncertifiable and the message names the divergence rather than the
+    /// missing owner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub divergent_lowering: Option<DivergentLowering>,
     pub report: bool,
 }
 

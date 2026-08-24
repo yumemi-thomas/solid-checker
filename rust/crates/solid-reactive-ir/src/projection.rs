@@ -501,7 +501,13 @@ pub fn project_findings(
             .reads
             .iter()
             .filter(|read| {
-                read.execution.reports_untracked_read()
+                // A divergently lowered child is reported whatever role the
+                // census put it in — the point is precisely that the role came
+                // from a fact about a compiler that may not build this project.
+                // Under the pinned fork that role is `TrackedJsx`, which reports
+                // nothing, so without this the divergence would be certified by
+                // silence.
+                (read.execution.reports_untracked_read() || read.divergent_lowering.is_some())
                     && (capabilities.module_scope_strict_reads
                         || read.execution != crate::ExecutionRole::ModuleInitialization)
             })
@@ -689,8 +695,16 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             finding.related_locations = crate::strict_read_related_locations(read);
             // Fail-honest: a props read whose component's callers cannot be
             // enumerated may or may not be signal-backed, so the finding is a
-            // proof obligation, not a proven runtime warning.
-            if read.uncertain {
+            // proof obligation, not a proven runtime warning. The census gap is
+            // the same escalation for the other half of the proof — the
+            // execution context rather than the reactive backing: the compiler
+            // never reported on the JSX region this read sits in, and absence
+            // of a fact proves neither that the region is untracked nor that
+            // it was dropped.
+            // A child the pinned fork lowers and the shipped compiler deletes
+            // is the third: the fact is present and truthful about its producer,
+            // and still proves nothing about the build the user will run.
+            if read.uncertain || read.missing_jsx_census || read.divergent_lowering.is_some() {
                 finding.kind = "uncertifiable".into();
             }
         }

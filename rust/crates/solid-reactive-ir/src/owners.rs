@@ -86,6 +86,7 @@ pub(crate) fn collect_project(
 
 pub(crate) fn component_props_parameter_fix(
     facts: &ProjectFacts,
+    dialect: &dyn solid_dialect::Dialect,
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
     parameter: &solid_facts::ast::BindingFact,
@@ -158,6 +159,15 @@ pub(crate) fn component_props_parameter_fix(
             );
             if parameter.pattern.contains(span) {
                 continue;
+            }
+            // A reference inside a divergently lowered child satisfies the
+            // tracked-position requirement below only through the pinned fork's
+            // own lowering; the compiler Solid ships deletes that child, so the
+            // reference is not provably a reactive reader and must not license
+            // the rewrite. No fix beats a fix whose soundness rests on which
+            // compiler runs.
+            if crate::execution_role::divergent_lowered_child(dialect, file, span).is_some() {
+                return None;
             }
             if !function.body.contains(span)
                 || (!matches!(
@@ -333,8 +343,20 @@ impl OwnerFileIndex {
                 })
             })
             .chain(file.compiler.ownership_regions.iter().filter_map(|region| {
-                (region.kind == solid_facts::compiler::OwnershipRegionKind::Owned)
-                    .then_some(region.span)
+                // A child that only the pinned fork lowers — a void
+                // element's, or a `<noscript>`'s — carries an `Owned` region
+                // because the fork wraps the insert it emits. The compiler Solid
+                // ships emits neither the insert nor an owner, so this region is
+                // not evidence that a call inside it runs under an owner. See
+                // `divergent_lowered_child`.
+                (region.kind == solid_facts::compiler::OwnershipRegionKind::Owned
+                    && crate::execution_role::divergent_lowered_child(
+                        lookup.dialect,
+                        file,
+                        region.span,
+                    )
+                    .is_none())
+                .then_some(region.span)
             }))
             .collect();
         Self {
@@ -383,7 +405,7 @@ fn owner_node(
     let component_status = lookup.function_component_status(file, function);
     let component = component_status == crate::indexes::ComponentStatus::Proven;
     let component_uncertain = component_status == crate::indexes::ComponentStatus::Uncertain;
-    let mut seed_context = compiler_owner_context(&file.compiler, function.body);
+    let mut seed_context = compiler_owner_context(lookup.dialect, file, function.body);
     match component_status {
         crate::indexes::ComponentStatus::Proven => seed_context |= OWNER_CONTEXT_OWNED,
         crate::indexes::ComponentStatus::Uncertain => {
@@ -417,11 +439,25 @@ fn owner_node(
     }
 }
 
-fn compiler_owner_context(facts: &solid_facts::compiler::ExecutionMap, body: Span) -> u8 {
-    facts
+/// The owner context bits an enclosing compiler ownership region proves for a
+/// function body.
+///
+/// A region the pinned fork emitted only because it lowers a divergent child —
+/// a void element's, or a `<noscript>`'s — is skipped in either direction. It
+/// neither seeds an owner nor proves one absent, because the compiler Solid
+/// ships deletes that child along with the wrapper the region describes.
+fn compiler_owner_context(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &solid_facts::FileFacts,
+    body: Span,
+) -> u8 {
+    file.compiler
         .ownership_regions
         .iter()
         .filter(|region| region.span.contains(body))
+        .filter(|region| {
+            crate::execution_role::divergent_lowered_child(dialect, file, region.span).is_none()
+        })
         .fold(0, |context, region| {
             context
                 | match region.kind {
@@ -796,7 +832,8 @@ pub(crate) fn find_missing_owners(
                         &mut requirements,
                         &mut seen,
                         operation,
-                        file.path.as_str(),
+                        lookup.dialect,
+                        file,
                         call.span,
                         OwnerRequirementStatus {
                             uncertain: conditional_owner || component_uncertain,
@@ -959,7 +996,8 @@ pub(crate) fn find_missing_owners(
                     &mut requirements,
                     &mut seen,
                     operation,
-                    file.path.as_str(),
+                    lookup.dialect,
+                    file,
                     operation_span,
                     OwnerRequirementStatus {
                         uncertain,
@@ -1012,7 +1050,8 @@ pub(crate) fn find_missing_owners(
                 &mut requirements,
                 &mut seen,
                 "boundary",
-                file.path.as_str(),
+                lookup.dialect,
+                file,
                 Span::new(element.span.start, element.name.span.end),
                 OwnerRequirementStatus {
                     uncertain: conditional_owner || component_uncertain,
@@ -1470,7 +1509,8 @@ pub(crate) fn find_missing_owners_incremental(
                 &mut requirements,
                 &mut seen,
                 candidate.operation,
-                file.path.as_str(),
+                lookup.dialect,
+                file,
                 candidate.operation_span,
                 OwnerRequirementStatus {
                     uncertain,
@@ -1551,29 +1591,49 @@ pub(crate) fn owner_context_at(
         .map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index])
 }
 
+/// The one place an owner requirement becomes a finding seed — both owner
+/// passes, every operation, every uncertainty source — which is why the
+/// divergent-lowering escalation is applied here rather than at each of the four
+/// push sites.
+///
+/// Two passes build these candidates (`find_missing_owners` in batch,
+/// `discover_owner_file` plus the incremental emission), and the comments above
+/// record what happens when a rule is duplicated across them: they drift.
+/// Deriving the divergence from `file` and the dialect at the single funnel makes
+/// the escalation unmissable — a new candidate kind cannot forget it — and keeps
+/// the two passes' answers identical by construction rather than by review.
 pub(crate) fn push_owner_requirement(
     requirements: &mut Vec<OwnerRequirement>,
     seen: &mut HashSet<(String, u64, u64, String)>,
     operation: &str,
-    path: &str,
+    dialect: &dyn solid_dialect::Dialect,
+    file: &solid_facts::FileFacts,
     span: Span,
     status: OwnerRequirementStatus,
 ) {
-    let location = location(path, span);
+    let location = location(file.path.as_str(), span);
     if seen.insert((
         location.path.to_string(),
         location.start_byte,
         location.end_byte,
         operation.into(),
     )) {
+        // The site sits in a child only this producer lowers. The ownership
+        // question has no answer there: the parity target deletes the child, so
+        // the operation never runs, and this producer wraps the insert it emits,
+        // so it runs owned. Neither is a defect, and `uncertain` is what stops
+        // the projection from reporting one.
+        let divergent_lowering =
+            crate::execution_role::divergent_lowered_child(dialect, file, span);
         requirements.push(OwnerRequirement {
             operation: crate::OwnerRequirementOperation::from_internal(operation),
             location,
-            uncertain: status.uncertain,
+            uncertain: status.uncertain || divergent_lowering.is_some(),
             runtime_uncertain: status.runtime_uncertain,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
             component_uncertain: status.component_uncertain,
+            divergent_lowering,
             report: status.report,
         });
     }
@@ -2822,11 +2882,25 @@ mod tests {
         assert!(!binding_accepts("const [, go] = makeGate();"));
     }
 
+    /// One file with a real AST and a hand-built execution map.
+    fn owner_context_file(source: &str, compiler: ExecutionMap) -> solid_facts::FileFacts {
+        const PATH: &str = "test.tsx";
+        solid_facts::FileFacts {
+            generation: solid_facts::core::Generation::new(1).unwrap(),
+            path: solid_facts::core::SourcePath::new(PATH).unwrap(),
+            source_hash: SourceHash::of(source),
+            source: std::sync::Arc::from(source),
+            ast: std::sync::Arc::new(ast::extract(PATH, source).unwrap()),
+            compiler: std::sync::Arc::new(compiler),
+        }
+    }
+
     #[test]
     fn compiler_ownership_regions_seed_owner_analysis() {
+        let source = "function run() {}";
         let facts = ExecutionMap {
             compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
-            source_hash: SourceHash::of("function run() {}"),
+            source_hash: SourceHash::of(source),
             tracked_regions: vec![],
             untracked_regions: vec![],
             ownership_regions: vec![OwnershipRegion {
@@ -2837,8 +2911,64 @@ mod tests {
             jsx_operations: vec![],
         };
         assert_eq!(
-            compiler_owner_context(&facts, Span::new(15, 17)),
+            compiler_owner_context(
+                solid_dialect::Version::V2.dialect(),
+                &owner_context_file(source, facts),
+                Span::new(15, 17)
+            ),
             OWNER_CONTEXT_LEAF
+        );
+    }
+
+    /// An ownership region the pinned fork emits only because it lowers a void
+    /// element's child seeds nothing. The compiler Solid ships deletes that
+    /// child, so the region describes a wrapper that may never be emitted, and
+    /// an owner seeded from it would certify ownership from a divergence.
+    #[test]
+    fn a_divergent_void_child_region_seeds_no_owner_context() {
+        let source = "const view = <div><br>{() => track()}</br></div>;";
+        let child = Span::new(
+            u32::try_from(source.find("{() => track()}").unwrap()).unwrap(),
+            u32::try_from(source.find("</br>").unwrap()).unwrap(),
+        );
+        let inner = Span::new(
+            u32::try_from(source.find("track()").unwrap()).unwrap(),
+            u32::try_from(source.find("}</br>").unwrap()).unwrap(),
+        );
+        let body = Span::new(
+            u32::try_from(source.find("track()").unwrap()).unwrap(),
+            u32::try_from(source.find("}</br>").unwrap()).unwrap(),
+        );
+        let facts = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: SourceHash::of(source),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            ownership_regions: vec![OwnershipRegion {
+                span: inner,
+                kind: OwnershipRegionKind::Owned,
+            }],
+            callback_roles: vec![],
+            // The positive fact that makes this a divergence rather than a
+            // census hole: the fork really lowered the void element's child.
+            jsx_operations: vec![solid_facts::compiler::JsxOperation {
+                span: inner,
+                kind: "jsx-expression".into(),
+            }],
+        };
+        let file = owner_context_file(source, facts);
+        assert_eq!(
+            crate::execution_role::divergent_lowered_child(
+                solid_dialect::Version::V2.dialect(),
+                &file,
+                inner
+            ),
+            Some(crate::DivergentLowering::VoidElementChild),
+            "the lowered void-element child is the divergence, child span {child:?}"
+        );
+        assert_eq!(
+            compiler_owner_context(solid_dialect::Version::V2.dialect(), &file, body),
+            0
         );
     }
 

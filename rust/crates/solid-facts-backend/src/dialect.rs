@@ -641,6 +641,8 @@ mod tests {
                 origin: None,
                 origin_context: "".into(),
                 uncertain: false,
+                missing_jsx_census: false,
+                divergent_lowering: None,
             }],
             writes: vec![ReactiveWrite {
                 setter: "sampleSetter".into(),
@@ -660,6 +662,7 @@ mod tests {
                 caller_uncertain: false,
                 conditional_owner: false,
                 component_uncertain: false,
+                divergent_lowering: None,
                 report: true,
             }],
             async_reads: vec![AsyncRead {

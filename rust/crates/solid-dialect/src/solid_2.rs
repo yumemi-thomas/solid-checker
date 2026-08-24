@@ -787,6 +787,27 @@ impl Dialect for Solid2 {
         true
     }
 
+    /// Empty, and that is a checked claim rather than an absence.
+    ///
+    /// 2.0's parity target is `packages/babel-plugin-jsx` in the pinned
+    /// `dom-expressions` fork (rev `c6008f01`), whose `src/dom/element.ts` and
+    /// `src/ssr/element.ts` import `VoidElements` from
+    /// `packages/runtime/src/constants.js`. That set is exactly the 14 tags the
+    /// Rust producer's `void_elements`
+    /// (`packages/compiler/src/shared/constants.rs`, same rev) carries, so the
+    /// two agree tag for tag and no tag is void in only one of them.
+    ///
+    /// `keygen` and `menuitem` are the tags this could plausibly have held, and
+    /// their absence is deliberate upstream: the fork's
+    /// `packages/babel-plugin-jsx/CHANGELOG.md` (`1cc342c`) records unifying the
+    /// plugin's former `src/VoidElements.ts` with the runtime set precisely to
+    /// drop them, so under 2.0 both compilers lower a `<keygen>`'s children.
+    /// Claiming them here would withhold a certification the facts support. The
+    /// 1.x parity target still lists them; see `Solid1x`.
+    fn parity_target_only_void_elements(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// Source: `solid-reactive-ir/src/directives.rs` `is_created_primitive`.
     fn creates_directive_owner(&self, primitive: Primitive) -> bool {
         matches!(
