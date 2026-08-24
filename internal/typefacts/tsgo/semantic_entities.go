@@ -102,25 +102,70 @@ func callabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefa
 	if len(constituents) == 0 {
 		return typefacts.CallabilityUnknown
 	}
-	callable, nonCallable := false, false
+	callable, untypedCallable, nonCallable := false, false, false
 	for _, constituent := range constituents {
 		if constituent == nil || constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
 			return typefacts.CallabilityUnknown
 		}
-		if len(typeChecker.GetSignaturesOfType(constituent, checker.SignatureKindCall)) != 0 {
+		switch {
+		case len(typeChecker.GetSignaturesOfType(constituent, checker.SignatureKindCall)) != 0:
 			callable = true
-		} else {
+		case callableWithoutSignatures(typeChecker, constituent):
+			untypedCallable = true
+		default:
 			nonCallable = true
 		}
 	}
 	switch {
-	case callable && nonCallable:
+	case nonCallable && (callable || untypedCallable):
 		return typefacts.CallabilityMixed
+	case untypedCallable:
+		// The weaker of the two callable answers wins: a constituent whose
+		// signatures cannot be read makes the union's signatures unreadable
+		// too, while every constituent is still callable.
+		return typefacts.CallabilityUntypedCallable
 	case callable:
 		return typefacts.CallabilityCallable
 	default:
 		return typefacts.CallabilityNonCallable
 	}
+}
+
+// callableWithoutSignatures reports whether the compiler permits calling a
+// constituent that exposes no call *or* construct signature — the
+// signature-less Function-supertype family. It is the compiler's own TS 1.0
+// §4.12 rule, asked with the same apparent type its call-resolution sites use,
+// so the fact answers what `constituent()` would actually do rather than
+// re-deriving assignability here.
+//
+// It is deliberately the untyped-call rule and not checker.isFunctionObjectType,
+// the `typeof x === "function"` narrowing predicate. The two agree on
+// `Function`, `CallableFunction`, `NewableFunction` and any alias or interface
+// reaching them, and both reject `object`, `{}`, `Record<string, unknown>` and
+// an interface that merely declares `bind`. They diverge on an intersection
+// such as `Function & { tag: 1 }`: isFunctionObjectType's `bind`-member
+// quick-out reads resolveStructuredTypeMembers().members, which the compiler
+// leaves empty for every intersection by construction, so that predicate
+// answers false there while the call is in fact permitted. Only callability
+// asks this question of the fact vocabulary, so it asks the rule that decides
+// the call.
+//
+// The caller must already have excluded any/unknown/never/error constituents;
+// this only adds the signature-less case to what GetSignaturesOfType saw. The
+// same exclusion is repeated against the *apparent* type, because the rule has
+// a disjunct that admits any type parameter whose constraint is `any`, and an
+// `any`-derived positive is not something this fact may produce: such a
+// constituent keeps whatever answer it had before this rule existed.
+func callableWithoutSignatures(typeChecker *checker.Checker, value *checker.Type) bool {
+	if len(typeChecker.GetSignaturesOfType(value, checker.SignatureKindConstruct)) != 0 {
+		return false
+	}
+	apparent := checker.Checker_getReducedApparentType(typeChecker, value)
+	if apparent == nil ||
+		apparent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
+		return false
+	}
+	return checker.Checker_isUntypedFunctionCall(typeChecker, value, apparent, 0, 0)
 }
 
 // constructabilityOfType is callabilityOfType asked of construct signatures.
@@ -132,6 +177,13 @@ func callabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefa
 // question is whether the type has a construct signature, and an abstract
 // class is still a function object at runtime. A caller that needs
 // instantiability must ask something else.
+//
+// It has no counterpart to callability's untypedCallable, and that asymmetry is
+// the compiler's: `new x()` on a signature-less Function-supertype value is a
+// compile error, because resolveNewExpression carries no untyped fallback the
+// way call, tagged-template and decorator resolution do. nonConstructable there
+// is what the type system itself says, so answering anything else would invent
+// a claim tsc contradicts.
 func constructabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefacts.Constructability {
 	if value == nil || value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
 		return typefacts.ConstructabilityUnknown

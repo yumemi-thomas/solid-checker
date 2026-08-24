@@ -24,8 +24,13 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V11: u64 = 11;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V12: u64 = 12;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V13: u64 = 13;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V14: u64 = 14;
+/// v15 keeps v14's row layout exactly and widens one closed tag space:
+/// callability admits tag 4, `untypedCallable`. The version is what carries
+/// that, because a flag set cannot: a v14 payload never holds tag 4 (the
+/// producer degrades it to `unknown` there), and a v14 decoder refuses it.
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:56121a12f3d551194a40552c3886aadcb542aee9ca1cf22b6f0a2484afac6212";
+    "sha256:ed2954fdd8ea18506556cd6232664851e03d088bd0d46873e829dd0c2afe6041";
 /// 2 because the lifecycle operation set widened: `Operation::Modules` is an
 /// operation a peer must know about to be paired at all, where every earlier
 /// vocabulary change added a fact to an existing operation and moved the schema
@@ -639,7 +644,7 @@ impl<'a> PackedCursor<'a> {
                 } else {
                     None
                 };
-                let callability = parse_callability(self.u64()?)?;
+                let callability = parse_callability(self.u64()?, table_schema)?;
                 let type_descriptor = if flags & 8 != 0 {
                     Some(self.type_descriptor(strings)?)
                 } else {
@@ -770,7 +775,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
-            TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
+            TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
             TYPE_FACTS_TABLE_SCHEMA_V11 => 2047,
@@ -795,7 +800,7 @@ fn decode_entity_run(
             None
         };
         let callability = if flags & 4 != 0 {
-            Some(parse_callability(cursor.u64()?)?)
+            Some(parse_callability(cursor.u64()?, table_schema)?)
         } else {
             None
         };
@@ -849,7 +854,7 @@ fn decode_entity_run(
         };
         let tuple_shape = if flags & 1024 != 0 {
             let packed = cursor.u64()?;
-            let element_zero = parse_callability(cursor.u64()?)?;
+            let element_zero = parse_callability(cursor.u64()?, table_schema)?;
             let element_zero_min_parameters = u32::try_from(cursor.u64()?)
                 .map_err(|_| "packed tuple parameter count overflows".to_string())?;
             let exact_length = if table_schema >= 13 {
@@ -968,13 +973,21 @@ fn parse_array_shape(value: u64) -> Result<ArrayShape, String> {
     }
 }
 
-fn parse_callability(value: u64) -> Result<Callability, String> {
+/// Callability's tag space is closed per table schema: tags 0..=3 are frozen
+/// for every schema, and tag 4 (`UntypedCallable`) exists only from v15. A v14
+/// or earlier payload carrying it is refused rather than read forward, because
+/// a producer at those schemas emits `Unknown` in its place and anything else
+/// there is a producer that does not mean what its own version says.
+fn parse_callability(value: u64, table_schema: u64) -> Result<Callability, String> {
     match value {
         0 => Ok(Callability::Callable),
         1 => Ok(Callability::NonCallable),
         2 => Ok(Callability::Mixed),
         3 => Ok(Callability::Unknown),
-        _ => Err(format!("unknown callability tag {value}")),
+        4 if table_schema >= TYPE_FACTS_TABLE_SCHEMA_V15 => Ok(Callability::UntypedCallable),
+        _ => Err(format!(
+            "unknown callability tag {value} at Wire table schema {table_schema}"
+        )),
     }
 }
 
@@ -1176,6 +1189,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V12
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V13
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V14
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V15
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1516,7 +1530,8 @@ mod tests {
     };
 
     use super::{
-        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TransitionMode, decode_table_transition,
+        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
+        TYPE_FACTS_TABLE_SCHEMA_V15, TransitionMode, decode_table_transition,
         parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
         parse_callability, parse_constructability, parse_reference_space,
         parse_resolved_call_validity, push_uvarint,
@@ -1651,6 +1666,26 @@ mod tests {
         }
         // One entity: start 0, length 1, no symbol, constructability field.
         for value in [1, 0, 1, 0, 8192, tag, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
+    fn callability_transition(table_schema: u64, tag: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 3] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, callability field. The flag
+        // bit and the row layout are identical at v14 and v15 — only the tag
+        // space differs, which is exactly what the freeze below checks.
+        for value in [1, 0, 1, 0, 4, tag, 0] {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1977,6 +2012,42 @@ mod tests {
     }
 
     #[test]
+    fn wire_table_v15_decodes_untyped_callable_and_v14_stays_frozen() {
+        for (tag, expected) in [
+            (0, Callability::Callable),
+            (1, Callability::NonCallable),
+            (2, Callability::Mixed),
+            (3, Callability::Unknown),
+            (4, Callability::UntypedCallable),
+        ] {
+            let transition = decode_table_transition(&callability_transition(15, tag)).unwrap();
+            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+                panic!("entity row was not replaced");
+            };
+            assert_eq!(entities[0].callability, Some(expected));
+            assert_eq!(entities[0].constructability, None);
+        }
+
+        // v15 adds no flag bit and no field, so a v14 row decodes unchanged for
+        // every tag v14 ever emitted — and refuses the one it never could.
+        for (tag, expected) in [
+            (0, Callability::Callable),
+            (1, Callability::NonCallable),
+            (2, Callability::Mixed),
+            (3, Callability::Unknown),
+        ] {
+            let transition = decode_table_transition(&callability_transition(14, tag)).unwrap();
+            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+                panic!("entity row was not replaced");
+            };
+            assert_eq!(entities[0].callability, Some(expected));
+        }
+        assert!(decode_table_transition(&callability_transition(14, 4)).is_err());
+        assert!(decode_table_transition(&callability_transition(13, 4)).is_err());
+        assert!(decode_table_transition(&callability_transition(15, 5)).is_err());
+    }
+
+    #[test]
     fn numeric_enum_tags_decode_the_dense_go_golden() {
         let response: super::Response = crate::decode(include_bytes!(
             "../../../benchmarks/phase1/typefacts-v3-response-golden.cbor"
@@ -2011,11 +2082,24 @@ mod tests {
 
     #[test]
     fn closed_wire_enum_tags_reject_unknown_and_inconsistent_values() {
-        assert_eq!(parse_callability(0).unwrap(), Callability::Callable);
-        assert_eq!(parse_callability(1).unwrap(), Callability::NonCallable);
-        assert_eq!(parse_callability(2).unwrap(), Callability::Mixed);
-        assert_eq!(parse_callability(3).unwrap(), Callability::Unknown);
-        assert!(parse_callability(4).is_err());
+        for schema in [TYPE_FACTS_TABLE_SCHEMA_V14, TYPE_FACTS_TABLE_SCHEMA_V15] {
+            assert_eq!(parse_callability(0, schema).unwrap(), Callability::Callable);
+            assert_eq!(
+                parse_callability(1, schema).unwrap(),
+                Callability::NonCallable
+            );
+            assert_eq!(parse_callability(2, schema).unwrap(), Callability::Mixed);
+            assert_eq!(parse_callability(3, schema).unwrap(), Callability::Unknown);
+            assert!(parse_callability(5, schema).is_err());
+        }
+        // Tag 4 belongs to v15's vocabulary and to no earlier one. A frozen
+        // schema refuses it instead of reading it forward.
+        assert_eq!(
+            parse_callability(4, TYPE_FACTS_TABLE_SCHEMA_V15).unwrap(),
+            Callability::UntypedCallable
+        );
+        assert!(parse_callability(4, TYPE_FACTS_TABLE_SCHEMA_V14).is_err());
+        assert!(parse_callability(4, TYPE_FACTS_TABLE_SCHEMA_V3).is_err());
 
         assert_eq!(
             parse_constructability(0).unwrap(),

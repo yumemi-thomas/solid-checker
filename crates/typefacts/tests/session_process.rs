@@ -723,6 +723,121 @@ fn constructability_crosses_the_wire_for_a_re_exported_class() {
     let _ = fs::remove_dir_all(&root);
 }
 
+/// The follow-up ADR 0020 named, end to end across the real producer: an export
+/// typed against the signature-less `Function` supertype family. The type
+/// carries no call or construct signature, so the pair used to answer
+/// `nonCallable` + `nonConstructable` and a consumer reading that as proof of
+/// non-function published `value` for a runtime function. Callability now
+/// answers `untypedCallable` — the compiler permits the call and no signature
+/// can be read — and the delta leg pins the boundary: retyping the same export
+/// as `object`, which is *not* assignable to `Function`, returns it to
+/// `nonCallable`, where `value` is what the type actually proves.
+#[test]
+fn untyped_callability_crosses_the_wire_for_a_function_typed_export() {
+    let root =
+        std::env::temp_dir().join(format!("typefacts-untyped-callable-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let origin = root.join("origin.ts");
+    fs::write(&origin, "export declare const middleware: Function;\n").unwrap();
+    let path = root.join("source.ts");
+    let source = concat!(
+        "import { middleware } from \"./origin\";\n",
+        "declare const plain: object;\n",
+        "declare const typed: () => void;\n",
+        "export { middleware, plain, typed };\n",
+    );
+    fs::write(&path, source).unwrap();
+    let span = |needle: &str, name: &str| {
+        let start = source.find(needle).unwrap();
+        Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + name.len()) as u64,
+        }
+    };
+    let demands = vec![
+        EntityDemand {
+            location: span("middleware, plain", "middleware"),
+            callability: true,
+            constructability: true,
+            ..EntityDemand::default()
+        },
+        EntityDemand {
+            location: span("plain, typed", "plain"),
+            callability: true,
+            constructability: true,
+            ..EntityDemand::default()
+        },
+        EntityDemand {
+            location: span("typed };", "typed"),
+            callability: true,
+            constructability: true,
+            ..EntityDemand::default()
+        },
+    ];
+    let analysis = || AnalysisDemand {
+        entities: demands.clone(),
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let full = session.analyze(&analysis()).unwrap();
+    let rows: Vec<_> = full.entities().collect();
+    assert_eq!(rows.len(), 3);
+    // Callable with nothing to read, and still not constructable: `new` on a
+    // Function-typed value is a compile error, so the two facts disagree about
+    // this one type on purpose.
+    assert_eq!(rows[0].callability, Some(Callability::UntypedCallable));
+    assert_eq!(
+        rows[0].constructability,
+        Some(Constructability::NonConstructable)
+    );
+    // The control that keeps the new value from swallowing the family list
+    // prose reached for: `object` admits functions as values and is not
+    // assignable to `Function`, so it is honestly non-callable.
+    assert_eq!(rows[1].callability, Some(Callability::NonCallable));
+    assert_eq!(
+        rows[1].constructability,
+        Some(Constructability::NonConstructable)
+    );
+    // A readable signature still answers `callable`; the frozen value's meaning
+    // did not move.
+    assert_eq!(rows[2].callability, Some(Callability::Callable));
+
+    let reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(reused.entities().collect::<Vec<_>>(), rows);
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+
+    session
+        .update([FileChange {
+            path: origin.to_string_lossy().into_owned(),
+            source: b"export declare const middleware: object;\n".to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let delta = session.analyze(&analysis()).unwrap();
+    let changed: Vec<_> = delta.entities().collect();
+    assert_eq!(changed[0].callability, Some(Callability::NonCallable));
+    assert_eq!(
+        changed[0].constructability,
+        Some(Constructability::NonConstructable)
+    );
+    session.close().unwrap();
+    let _ = fs::remove_dir_all(&root);
+}
+
 #[test]
 fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
     let project = project();

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/microsoft/typescript-go/shim/checker"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
 
@@ -155,16 +156,17 @@ export { Local, Abstract, plain, value, Widget as ReWidget, originNamespace, fac
 		{"anyValue", typefacts.CallabilityUnknown, typefacts.ConstructabilityUnknown},
 		{"unknownValue", typefacts.CallabilityUnknown, typefacts.ConstructabilityUnknown},
 		{"neverValue", typefacts.CallabilityUnknown, typefacts.ConstructabilityUnknown},
-		// The trap docs/migration-solid-checker.md's callability+constructability
-		// recipe now names explicitly: lib.es5.d.ts's `Function` interface
-		// declares apply/call/bind but no call or construct signature of its
-		// own, so the pair answers nonCallable + nonConstructable here even
-		// though every runtime function value is assignable to `Function`.
-		// This is exactly why the pair proves "the declared type has no
-		// signatures", not "the value is not a function": a real project can
-		// export `declare const middleware: Function` and this fact pair
-		// will say it is not a function.
-		{"middleware", typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		// lib.es5.d.ts's `Function` interface declares apply/call/bind but no
+		// call or construct signature of its own. Constructability answers by
+		// the signature it does not have, and that answer is the compiler's:
+		// `new` on a Function-typed value is a compile error. Callability does
+		// not, because calling one is legal — see
+		// TestCallabilityAnswersTheSignatureLessFunctionSupertypeFamily, which
+		// owns this family, and TestTheFunctionSupertypeFamilyIsCallableButNot-
+		// Constructable, which pins the asymmetry against the compiler's own
+		// diagnostics. Kept here so the pair's two halves are read together:
+		// this is the one row where they disagree about a single type.
+		{"middleware", typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
 	}
 	demands := make([]typefacts.EntityDemand, 0, len(cases))
 	for _, testCase := range cases {
@@ -2407,5 +2409,274 @@ tuple;
 	}
 	if got := undemanded[0].LibraryTypes; got != nil {
 		t.Errorf("undemanded library types = %v, want absent", got)
+	}
+}
+
+// The signature-less `Function`-supertype family, which ADR 0020 named as a
+// follow-up: lib.es5.d.ts's `Function` interface declares apply/call/bind and
+// no call or construct signature, so GetSignaturesOfType alone reports it as a
+// non-function and a consumer reading `nonCallable` + `nonConstructable` as
+// proof of non-function was wrong about every value of that type.
+//
+// The boundary is the compiler's, not this repository's, and it is narrower
+// than the family list that prose reached for. Every row below carries the
+// subtype answer that decides it, so the boundary is pinned as a *relation* and
+// not as a list of type names: `object`, `{}`, `Record<string, unknown>` and an
+// interface that merely declares `bind` are NOT subtypes of `Function`, the
+// compiler refuses to call them, and `nonCallable` is the honest answer there.
+func TestCallabilityAnswersTheSignatureLessFunctionSupertypeFamily(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare const bare: Function;
+declare const callableFunction: CallableFunction;
+declare const newableFunction: NewableFunction;
+type Handler = Function;
+declare const aliased: Handler;
+interface Middleware extends Function { tag: string }
+declare const extended: Middleware;
+declare const branded: Function & { brand: "route" };
+const assignedFunction: Function = () => {};
+declare const plainObject: object;
+declare const emptyObject: {};
+declare const record: Record<string, unknown>;
+interface OnlyBind { bind(this: void): void }
+declare const onlyBind: OnlyBind;
+declare const numeric: number;
+declare const typedFunction: () => void;
+class Widget {}
+declare const withNumber: Function | number;
+declare const optional: Function | undefined;
+declare const eitherFunction: Function | (() => void);
+export { bare, callableFunction, newableFunction, aliased, extended, branded, assignedFunction, plainObject, emptyObject, record, onlyBind, numeric, typedFunction, Widget, withNumber, optional, eitherFunction };
+`
+	sourcePath := filepath.Join(dir, "facts.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	cases := []struct {
+		// expression is matched at its LAST occurrence: the export clause.
+		expression string
+		// subtypeOfFunction is the compiler's own isTypeSubtypeOf answer
+		// against the global Function type, which is the relation
+		// isFunctionObjectType and the untyped-call rule both turn on.
+		subtypeOfFunction bool
+		callability       typefacts.Callability
+		constructability  typefacts.Constructability
+	}{
+		// The family. Every one of these is callable at runtime and exposes no
+		// signature; `untypedCallable` says exactly that.
+		{"bare", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+		{"callableFunction", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+		// Named "Newable" and still not constructable: `new x()` on it is a
+		// compile error, pinned below. Its declared overloads live on `bind`,
+		// not on a construct signature.
+		{"newableFunction", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+		// An alias renders as its own name, which is why no consumer could
+		// detect this family from typeDescriptor.text. The type is transparent.
+		{"aliased", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+		// An interface *extending* Function inherits the shape and adds
+		// members; still no signature of its own.
+		{"extended", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+		// A branded intersection is the row that decides which compiler
+		// predicate this fact uses. isFunctionObjectType answers false here —
+		// its `bind` quick-out reads the resolved members map, which the
+		// compiler leaves empty for every intersection by construction — while
+		// the untyped-call rule, and the subtype relation below it, answer
+		// true. The call is permitted, so the fact follows the call rule.
+		{"branded", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+		// The annotation, not the initializer, is the fact: a real function
+		// declared as `Function` answers by its declared type, and that answer
+		// is now the same one the value deserves.
+		{"assignedFunction", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+
+		// Outside the family. These are the controls that keep the new value
+		// from becoming "anything a function could be assigned to": a function
+		// *is* assignable to `object`, and `object` is still not callable.
+		{"plainObject", false, typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		{"emptyObject", false, typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		{"record", false, typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		// A `bind` member alone is not the rule — it is only the compiler's
+		// cheap pre-filter before the subtype check that is.
+		{"onlyBind", false, typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		{"numeric", false, typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+
+		// Unchanged answers: a readable signature still answers `callable`, and
+		// a class value type still answers `constructable`.
+		{"typedFunction", true, typefacts.CallabilityCallable, typefacts.ConstructabilityNonConstructable},
+		{"Widget", true, typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+
+		// Aggregation. A non-callable constituent beside a callable one is
+		// still `mixed`, which is where `Function | number` and the optional
+		// case land — both answered `nonCallable` before this rule and both
+		// were wrong.
+		{"withNumber", false, typefacts.CallabilityMixed, typefacts.ConstructabilityNonConstructable},
+		{"optional", false, typefacts.CallabilityMixed, typefacts.ConstructabilityNonConstructable},
+		// Every constituent callable, one of them unreadably: the weaker of the
+		// two callable answers wins, because the union's signatures cannot be
+		// read either.
+		// Subtype-of-Function is true for the union as a whole here, because it
+		// is true of every constituent — the relation is not a proxy for "is a
+		// single Function-family type".
+		{"eitherFunction", true, typefacts.CallabilityUntypedCallable, typefacts.ConstructabilityNonConstructable},
+	}
+	demands := make([]typefacts.EntityDemand, 0, len(cases))
+	for _, testCase := range cases {
+		start := strings.LastIndex(source, testCase.expression)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.expression)
+		}
+		demands = append(demands, typefacts.EntityDemand{
+			Location: typefacts.Location{
+				Path:      sourcePath,
+				StartByte: start,
+				EndByte:   start + len(testCase.expression),
+			},
+			Callability:      true,
+			Constructability: true,
+		})
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entities) != len(cases) {
+		t.Fatalf("entities = %d, want %d", len(entities), len(cases))
+	}
+	for index, testCase := range cases {
+		if got := entities[index].Callability; got != testCase.callability {
+			t.Errorf("%s callability = %q, want %q", testCase.expression, got, testCase.callability)
+		}
+		if got := entities[index].Constructability; got != testCase.constructability {
+			t.Errorf("%s constructability = %s, want %s", testCase.expression, got, testCase.constructability)
+		}
+	}
+
+	// The relation itself, asked of the compiler. Without this the rows above
+	// would only pin the answers and not the boundary that produces them, and a
+	// compiler bump that moved `Record<string, unknown>` into the family would
+	// look like a producer bug rather than an upstream change.
+	proj := opened.(*project)
+	proj.mu.Lock()
+	defer proj.mu.Unlock()
+	typeChecker := proj.checker
+	if typeChecker == nil {
+		t.Fatal("callability demands did not create a checker")
+	}
+	file := proj.program.GetSourceFile(sourcePath)
+	if file == nil {
+		t.Fatalf("source file %q is not in the program", sourcePath)
+	}
+	cursor := &semanticNodeCursor{sourceFile: file}
+	typeOf := func(expression string) *checker.Type {
+		t.Helper()
+		start := strings.LastIndex(source, expression)
+		node := cursor.exactExpressionAt(start, start+len(expression))
+		if node == nil {
+			t.Fatalf("%q has no expression at its export specifier", expression)
+		}
+		return typeChecker.GetTypeAtLocation(node)
+	}
+	functionType := typeOf("bare")
+	for _, testCase := range cases {
+		valueType := typeOf(testCase.expression)
+		if got := checker.Checker_isTypeSubtypeOf(typeChecker, valueType, functionType); got != testCase.subtypeOfFunction {
+			t.Errorf(
+				"%s (%s) isTypeSubtypeOf(Function) = %v, want %v",
+				testCase.expression,
+				typeChecker.TypeToString(valueType),
+				got,
+				testCase.subtypeOfFunction,
+			)
+		}
+		// isFunctionObjectType — the predicate ADR 0020's follow-up named — is
+		// the compiler's `typeof x === "function"` answer. It is also true for
+		// any type that simply has signatures, including a construct-only class
+		// value type that callability answers `nonCallable` for on purpose, so
+		// the conformance claim is about the signature-less case only: where the
+		// compiler calls a signature-less object type a function, this fact must
+		// not answer nonCallable. The `branded` intersection row is where the
+		// predicate is *false* and this fact is positive anyway, which is why
+		// the untyped-call rule replaced it rather than joining it.
+		if valueType.Flags()&checker.TypeFlagsObject == 0 {
+			continue
+		}
+		if len(typeChecker.GetSignaturesOfType(valueType, checker.SignatureKindCall)) != 0 ||
+			len(typeChecker.GetSignaturesOfType(valueType, checker.SignatureKindConstruct)) != 0 {
+			continue
+		}
+		if !checker.Checker_isFunctionObjectType(typeChecker, valueType) {
+			continue
+		}
+		if testCase.callability == typefacts.CallabilityNonCallable {
+			t.Errorf(
+				"%s (%s) is a signature-less compiler function object but callability = %q",
+				testCase.expression,
+				typeChecker.TypeToString(valueType),
+				testCase.callability,
+			)
+		}
+	}
+}
+
+// The asymmetry the family forces on the pair, asked of the compiler's own
+// diagnostics rather than asserted from prose: calling a `Function`-typed value
+// is legal (TS 1.0 §4.12's untyped call, resolved to anySignature), and `new`-ing
+// one is not (resolveNewExpression has no untyped fallback). That is why
+// callability gained a value for this family and constructability did not.
+func TestTheFunctionSupertypeFamilyIsCallableButNotConstructable(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare const handler: Function;
+export const called = handler();
+export const constructed = new handler();
+`
+	sourcePath := filepath.Join(dir, "facts.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+
+	proj := opened.(*project)
+	proj.mu.Lock()
+	defer proj.mu.Unlock()
+	if err := proj.ensureCheckerLocked(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	file := proj.program.GetSourceFile(sourcePath)
+	if file == nil {
+		t.Fatalf("source file %q is not in the program", sourcePath)
+	}
+	callStart := strings.Index(source, "handler()")
+	constructStart := strings.Index(source, "new handler()")
+	var onCall, onConstruct []int32
+	for _, diagnostic := range proj.program.GetSemanticDiagnostics(context.Background(), file) {
+		position := diagnostic.Pos()
+		switch {
+		case position >= callStart && position < callStart+len("handler()"):
+			onCall = append(onCall, diagnostic.Code())
+		case position >= constructStart && position < constructStart+len("new handler()"):
+			onConstruct = append(onConstruct, diagnostic.Code())
+		}
+	}
+	if len(onCall) != 0 {
+		t.Errorf("calling a Function-typed value reported diagnostic codes %v, want none", onCall)
+	}
+	if len(onConstruct) == 0 {
+		t.Error("new on a Function-typed value reported no diagnostic, want one")
 	}
 }

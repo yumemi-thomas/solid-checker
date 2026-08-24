@@ -36,13 +36,35 @@ type TypeDescriber interface {
 // Callability is the compiler's call-signature classification for a demanded
 // expression. It is derived from TypeChecker.GetSignaturesOfType over the
 // actual union constituents, never from rendered type text.
+//
+// CallabilityUntypedCallable is the signature-less function-supertype family:
+// a constituent the compiler permits calling even though it exposes no call
+// signature to read. lib.es5.d.ts's Function interface declares
+// apply/call/bind and no signature of its own, and CallableFunction,
+// NewableFunction, an alias or interface reaching them, and an intersection
+// containing one all inherit that shape. The compiler resolves such a call
+// through its TS 1.0 §4.12 rule (checker.isUntypedFunctionCall: no signatures
+// of either kind, not a union, and assignable to the global Function type) and
+// gives it anySignature, so `nonCallable` there would claim the call is illegal
+// when the compiler allows it, and `unknown` would claim no domain was closed
+// when one was. The value proves the constituent *is* callable and that no
+// signature, arity, or parameter type can be read from it.
+//
+// It never reaches `object`, `{}`, `Record<string, unknown>`, or an interface
+// that merely declares a `bind` method: none of those is assignable to
+// Function, and the compiler refuses to call them, so they remain
+// CallabilityNonCallable. Aggregation places it below CallabilityCallable and
+// above CallabilityMixed: constituents that are all callable in either sense
+// answer the weaker of the two, and any non-callable constituent beside a
+// callable one still answers CallabilityMixed.
 type Callability string
 
 const (
-	CallabilityCallable    Callability = "callable"
-	CallabilityNonCallable Callability = "nonCallable"
-	CallabilityMixed       Callability = "mixed"
-	CallabilityUnknown     Callability = "unknown"
+	CallabilityCallable        Callability = "callable"
+	CallabilityUntypedCallable Callability = "untypedCallable"
+	CallabilityNonCallable     Callability = "nonCallable"
+	CallabilityMixed           Callability = "mixed"
+	CallabilityUnknown         Callability = "unknown"
 )
 
 // Constructability is the compiler's construct-signature classification for a

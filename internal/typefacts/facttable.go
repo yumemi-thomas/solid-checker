@@ -27,4 +27,11 @@ const TypeFactsTableSchemaVersionV11 uint64 = 11
 const TypeFactsTableSchemaVersionV12 uint64 = 12
 const TypeFactsTableSchemaVersionV13 uint64 = 13
 const TypeFactsTableSchemaVersionV14 uint64 = 14
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV14
+
+// v15 changes no row layout: it widens callability's closed tag space by one
+// value (untypedCallable). A v14 decoder rejects that tag rather than guessing,
+// so the version — not the flag set — is what tells a reader which vocabulary
+// the tags in front of it come from. Emission at v14 or earlier degrades the
+// new value to unknown so those frozen schemas stay exactly decodable.
+const TypeFactsTableSchemaVersionV15 uint64 = 15
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV15
