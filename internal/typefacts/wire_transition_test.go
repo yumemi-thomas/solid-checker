@@ -258,3 +258,58 @@ func TestWireTransitionRejectsContradictorySymbolResolution(t *testing.T) {
 		t.Fatal("resolved and unresolved symbol state was encoded together")
 	}
 }
+
+// untypedCallable is tag 4, and tag 4 exists only from Wire table schema v15.
+// Every frozen schema before it must keep emitting a tag its own decoder
+// accepts, and the substitute must be unknown — an absent answer — because
+// nonCallable would turn "callable, no signature to read" into a claim that the
+// value cannot be called at all.
+func TestUntypedCallableDegradesToUnknownOnFrozenTableSchemas(t *testing.T) {
+	for _, schema := range []uint64{
+		TypeFactsTableSchemaVersionV3,
+		TypeFactsTableSchemaVersionV13,
+		TypeFactsTableSchemaVersionV14,
+	} {
+		code, err := wireTransitionCallabilityCode(CallabilityUntypedCallable, schema)
+		if err != nil {
+			t.Fatalf("schema %d: %v", schema, err)
+		}
+		unknown, err := wireTransitionCallabilityCode(CallabilityUnknown, schema)
+		if err != nil {
+			t.Fatalf("schema %d: %v", schema, err)
+		}
+		if code != unknown {
+			t.Errorf("schema %d encoded untypedCallable as %d, want unknown's %d", schema, code, unknown)
+		}
+	}
+	code, err := wireTransitionCallabilityCode(CallabilityUntypedCallable, TypeFactsTableSchemaVersionV15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code != 4 {
+		t.Errorf("v15 encoded untypedCallable as %d, want 4", code)
+	}
+
+	// The four frozen tags keep their codes at every schema, v15 included:
+	// widening the space may not renumber it.
+	for _, schema := range []uint64{
+		TypeFactsTableSchemaVersionV3,
+		TypeFactsTableSchemaVersionV14,
+		TypeFactsTableSchemaVersionV15,
+	} {
+		for value, want := range map[Callability]uint64{
+			CallabilityCallable:    0,
+			CallabilityNonCallable: 1,
+			CallabilityMixed:       2,
+			CallabilityUnknown:     3,
+		} {
+			got, err := wireTransitionCallabilityCode(value, schema)
+			if err != nil {
+				t.Fatalf("schema %d %q: %v", schema, value, err)
+			}
+			if got != want {
+				t.Errorf("schema %d encoded %q as %d, want %d", schema, value, got, want)
+			}
+		}
+	}
+}

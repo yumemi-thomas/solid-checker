@@ -14,6 +14,12 @@ operation rather than an operation a peer must know about — so only the schema
 digest and the build id move, exactly as every other vocabulary change before
 the `modules` one did.
 
+The follow-up this ADR named has since landed as ADR 0021, which moved the wire
+table schema to v15 and the digest again: `callability` gained one value,
+`untypedCallable`. Read that ADR for the family's measured boundary, the
+derivation, and the wire consequences; this one describes constructability at
+v14 and the residue it left.
+
 `constructability` is `callability` asked of `SignatureKindConstruct`. It reads
 the same `GetTypeAtLocation` type, distributes the same real union constituents
 with `Type.Distributed`, fails closed on the same type flags (`any`, `unknown`,
@@ -84,26 +90,14 @@ instantiability. And a class *declaration name* is not the same span as an
 export specifier: the compiler's type at the name is the class's instance type,
 which is honestly `nonConstructable`. Both are pinned by tests.
 
-`nonCallable` + `nonConstructable` together prove only that the *declared
-type* carries no call or construct signature of its own — not that the
-runtime value cannot be a function. lib.es5.d.ts's `Function` interface (and
-`CallableFunction`/`NewableFunction`, which extend it, and any other type a
-value is assignable to that itself declares no signature, such as `object`,
-`{}`, or `Record<string, unknown>`) declares `apply`/`call`/`bind` but no call
-or construct signature, so `export declare const x: Function` answers this
-pair `nonCallable` + `nonConstructable` even though every function is
-assignable to `Function`. This is not an oversight this fact introduces:
-TypeScript-Go's own `typeof x === "function"` narrowing
-(`checker.isFunctionObjectType`) tests for exactly this shape — no
-signatures, but a `bind` member and assignability to the global `Function`
-type — and treats it as a function for that purpose. `constructabilityOfType`
-has no equivalent fallback, so a consumer must fail closed (uncertifiable, not
-"proven not a function") whenever the demanded span's type is assignable to
-this Function-supertype family; the pair remains full proof for every type
-outside it. **Follow-up (not part of this ADR): give the producer's
-`constructabilityOfType`/`callabilityOfType` walk the same `bind`-member
-subtype-of-`Function` fallback `isFunctionObjectType` already has**, so the
-fact vocabulary closes this gap instead of pushing it onto every consumer.
+`nonCallable` + `nonConstructable` together proved only that the *declared
+type* carries no call or construct signature of its own — not that the runtime
+value cannot be a function. lib.es5.d.ts's `Function` interface declares
+`apply`/`call`/`bind` and no signature, so `export declare const x: Function`
+answered this pair `nonCallable` + `nonConstructable` even though every function
+is assignable to `Function`. **That residue is closed by ADR 0021**, which is
+also where the family turned out to be narrower than this paragraph originally
+claimed.
 
 ## Performance and representation
 
@@ -137,10 +131,10 @@ and nothing else.
 
 Consumers can prove that an exported binding is a runtime function without a
 syntactic class search, and — with `nonCallable` and `nonConstructable`
-together, *and* the demanded type not assignable to the `Function`-supertype
-family described above — can prove that one is not. They must remain
-fail-closed on `unknown`, on `mixed`, on absence, and on `nonCallable` +
-`nonConstructable` for a type assignable to that family, and must demand the
-fact at the export-specifier span rather than at a declaration name. Bundler
-lowering, runtime prototype patching, and instantiability remain outside this
-structural fact.
+together — can prove that one is not, because the family that used to satisfy
+that conjunction while being callable now answers `untypedCallable` instead (ADR
+0021). They must remain fail-closed on `unknown`, on `mixed`, and on absence;
+must treat `untypedCallable` as a function whose signature may not be read; and
+must demand the fact at the export-specifier span rather than at a declaration
+name. Bundler lowering, runtime prototype patching, and instantiability remain
+outside this structural fact.

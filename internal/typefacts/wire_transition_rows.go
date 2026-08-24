@@ -126,7 +126,7 @@ func writeWireTransitionEntityRun(
 		var callability uint64
 		var err error
 		if entity.Callability != "" {
-			callability, err = wireTransitionCallabilityCode(entity.Callability)
+			callability, err = wireTransitionCallabilityCode(entity.Callability, tableSchema)
 			if err != nil {
 				return fmt.Errorf("entity %d: %w", index, err)
 			}
@@ -158,7 +158,7 @@ func writeWireTransitionEntityRun(
 			if elementZero == "" {
 				elementZero = CallabilityUnknown
 			}
-			tupleElementZero, err = wireTransitionCallabilityCode(elementZero)
+			tupleElementZero, err = wireTransitionCallabilityCode(elementZero, tableSchema)
 			if err != nil {
 				return fmt.Errorf("entity %d tuple shape: %w", index, err)
 			}
@@ -357,7 +357,7 @@ func writeWireTransitionResolvedCall(w *packedWriter, call *Call, tableSchema ui
 		if mapping.Parameter == nil {
 			continue
 		}
-		if err := writeWireTransitionParameter(w, index, mapping.Parameter); err != nil {
+		if err := writeWireTransitionParameter(w, index, mapping.Parameter, tableSchema); err != nil {
 			return err
 		}
 	}
@@ -368,6 +368,7 @@ func writeWireTransitionParameter(
 	w *packedWriter,
 	mappingIndex int,
 	parameter *ParameterFact,
+	tableSchema uint64,
 ) error {
 	if parameter.Index < 0 {
 		return fmt.Errorf(
@@ -376,7 +377,7 @@ func writeWireTransitionParameter(
 			parameter.Index,
 		)
 	}
-	callability, err := wireTransitionCallabilityCode(parameter.Callability)
+	callability, err := wireTransitionCallabilityCode(parameter.Callability, tableSchema)
 	if err != nil {
 		return fmt.Errorf("argument mapping %d parameter: %w", mappingIndex, err)
 	}
@@ -592,7 +593,17 @@ func wireTransitionMappingReasonCode(value ArgumentMappingReason) (uint64, error
 	}
 }
 
-func wireTransitionCallabilityCode(value Callability) (uint64, error) {
+// wireTransitionCallabilityCode maps callability onto its closed tag space.
+// Tag 4 (untypedCallable) joined the space at table schema v15; a decoder for
+// v14 or earlier refuses it, so emission at those schemas degrades the value to
+// unknown — the one answer that stays true when the vocabulary carrying it
+// cannot be expressed, since untypedCallable is precisely "callable, with no
+// signature to read" and unknown claims nothing at all. It never degrades to
+// nonCallable: that would turn an absent answer into a negative one.
+func wireTransitionCallabilityCode(value Callability, tableSchema uint64) (uint64, error) {
+	if value == CallabilityUntypedCallable && tableSchema < TypeFactsTableSchemaVersionV15 {
+		value = CallabilityUnknown
+	}
 	switch value {
 	case CallabilityCallable:
 		return 0, nil
@@ -602,6 +613,8 @@ func wireTransitionCallabilityCode(value Callability) (uint64, error) {
 		return 2, nil
 	case CallabilityUnknown:
 		return 3, nil
+	case CallabilityUntypedCallable:
+		return 4, nil
 	default:
 		return 0, fmt.Errorf("unknown callability %q", value)
 	}
