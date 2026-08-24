@@ -36,9 +36,11 @@ solid-checker contract check
 ```
 
 Packages are reported as `bundled`, `published`, `local`, `explicit`,
-`unverified`, `stale`, or `missing`; every status that cannot certify prints
-the command that resolves it, and the command exits non-zero when any package
-needs action. `stale` means the contract was generated against a different
+`unverified`, `stale`, `unbound`, or `missing`; every status that cannot certify
+prints the command that resolves it, and the command exits non-zero when any
+package needs action. `unbound` is a usable contract that describes no import in
+the project, because every specifier carrying its name resolves somewhere the
+contract's package is not. `stale` means the contract was generated against a different
 version of the package than the installed one — regenerate and re-review it
 after an upgrade.
 

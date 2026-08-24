@@ -51,7 +51,7 @@ if (args.includes("--validate-contract")) process.exit(0);
 if (args.includes("--check-contracts")) {
   const report = JSON.parse(process.env.STUB_CONTRACT_REPORT ?? '{"packages":[]}');
   const actionable = report.packages.filter(entry =>
-    ["missing", "unverified", "stale"].includes(entry.status)
+    ["missing", "unverified", "stale", "unbound"].includes(entry.status)
   );
   const stale = report.packages.filter(entry => entry.status === "stale");
   process.stdout.write(

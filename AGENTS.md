@@ -267,7 +267,13 @@ proportionality rules and the report format.
   conclude “no finding moved” from a run that may have used a stale binary.
   Do not rebuild or overwrite bin/solid-checker-rust merely to test a source
   change. The Node CLI launcher override is `SOLID_CHECKER_NATIVE_BIN`, not
-  `SOLID_CHECKER_BIN`.
+  `SOLID_CHECKER_BIN`. The checked-in bin/solid-checker-rust currently speaks
+  compiler-facts protocol 1 and *refuses the pinned producer outright*, so a
+  manual `node scripts/contract-corpus.mjs` (whose default is that binary)
+  fails on the handshake instead of testing anything. Point it at the fresh
+  build with `SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust"`;
+  `make contract-corpus` is unaffected because it depends on `build-rust`,
+  which rebuilds bin/ first.
 - **Dialect selection follows the installed solid-js.** A project runs the v1
   catalog only when the nearest node_modules/solid-js/package.json above it
   resolves to a 1.x version (rust/crates/solid-facts-backend/src/dialect.rs).

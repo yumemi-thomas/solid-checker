@@ -1369,10 +1369,11 @@ their directory structure). Both the package roots it reads and the outputs it
 writes are anchored at the project directory, exactly as contract discovery
 resolves them.
 
-`missing` is the only status it acts on. An `unverified` or `stale` package
-already has a contract on disk that someone owns — a draft mid-review, or one
-whose remedy is a regeneration *plus* a re-review — so the sweep lists it with
-the remedy the report printed and does not touch the file. Statuses that
+`missing` is the only status it acts on. An `unverified`, `stale`, or `unbound`
+package already has a contract on disk that someone owns — a draft mid-review,
+one whose remedy is a regeneration *plus* a re-review, or one whose remedy is a
+decision about what owns the specifier — so the sweep lists it with the
+remedy the report printed and does not touch the file. Statuses that
 certify are not listed at all. Because `--missing` describes a set of packages
 rather than one, it takes only `--project` and `--format`; `--package-root`,
 `--output`, `--entrypoint`, `--conditions`, and `--contract` are single-package
@@ -1421,6 +1422,7 @@ package is reported as exactly one status:
 | `explicit` | A contract passed with `--contract`. | yes |
 | `unverified` | A contract whose evidence is `inferred`; its claims were never reviewed. | no |
 | `stale` | A contract that describes a **different artifact** than the one installed — another version, or another npm integrity under the same version. | no |
+| `unbound` | A usable contract for the installed version that describes **no import in this project**: every specifier carrying its name resolves somewhere the contract's package is not. See [Which imports a loaded contract describes](#which-imports-a-loaded-contract-describes). | no |
 | `missing` | No contract for a package whose manifest depends on or peers with Solid. | no |
 
 Every non-certifying status prints the action that resolves it, and the command
@@ -1428,7 +1430,8 @@ exits with status 1 when any package needs action, so it works as a CI gate.
 The JSON format reports, per package, a `remedy` field carrying the same action
 and a `detail` field naming the reason when the status alone does not say it
 (the two disagreeing versions behind `stale`, the evidence kind behind
-`unverified`). Both are omitted for a status that certifies. The report also
+`unverified`, the install nothing resolves into behind `unbound`). Both are
+omitted for a status that certifies. The report also
 carries `missing` (the count of packages needing action) and `stale` (the drift
 subset of that count).
 
@@ -1575,6 +1578,156 @@ It refuses the contract without failing the run — the stale path — on:
   project's npm lockfile records for the installed copy. See
   [Integrity drift under an unchanged version](#integrity-drift-under-an-unchanged-version)
   for exactly when that fact is available and what happens when it is not.
+
+### Which imports a loaded contract describes
+
+A contract describes one installed package, so loading it is only half the
+question: the other half is which import specifiers it may be applied to. That
+is decided per specifier, by the resolution the compiler itself recorded, in
+`PackageContract::for_import`
+(`rust/crates/solid-reactive-ir/src/lib.rs`).
+
+The specifier's name is the prefilter and the attested resolution is the
+confirmation:
+
+1. **No resolution facts at all.** The analysis was not configured to attest
+   identities, and the older name-matched answer stands unchanged. This is the
+   WASM adapter without `resolvedImports` in its request — see below.
+2. **The specifier is not attested** — the answer did not cover its file, holds
+   no row for it, or holds more than one row it could be. The contract is
+   refused.
+3. **The compiler resolved nothing** for the specifier: the contract applies.
+   This is the honest answer for an untyped JavaScript package, which is
+   precisely where a contract matters most, and for a specifier typed by an
+   ambient `declare module`. Nothing resolved means no *TypeScript-visible*
+   claim on the specifier — which is the limit of this clause, and the limit of
+   every fact the checker holds. An ambient `declare module` for a package that
+   is installed nowhere is accepted here on exactly that basis: the compiler
+   could not resolve it, so no shadowing package can be what the contract is
+   describing *as far as the compiler can see*. What the runtime loads for that
+   specifier is out of reach, and `tsc` says nothing about it either. See the
+   residue list in
+   [precision-backlog.md](precision-backlog.md#named-residues).
+4. **The compiler resolved a file** and the contract was classified against an
+   installed directory: the resolved file must lie inside that directory,
+   compared on realpaths so a pnpm or workspace-linked install is not a
+   mismatch.
+5. **The compiler resolved a file** and classification had no installed
+   directory — an explicit `--contract` for a package the ancestor walk never
+   found: the resolution must have walked into a `node_modules` tree, *and* the
+   contract's package name must be the one the resolution recorded, by *either*
+   the nearest manifest above the resolved file or the identity the resolver
+   itself recorded. Two package identities exist and can disagree, and both are
+   accepted, because a published package routinely ships an unnamed
+   `{"type":"module"}` manifest beside its output and a subpath resolution
+   routinely records no resolver identity.
+
+   The `node_modules` requirement is what keeps this clause off the analyzed
+   project's own source, and name equality alone cannot do it. A bare specifier
+   that resolves *outside* every install tree is a `paths` or `baseUrl`
+   mapping, a package self-name, or a project-reference redirect — the compiler
+   records the resolution as `nonRelative` and does not say which — and all
+   three name source this project owns. The names can still agree there: a
+   monorepo package aliased to its own sources has a root manifest declaring
+   the very name its published contract carries, which is the whole of the
+   shape pinned by
+   `fixtures/reactive-ir/package-contract-uninstalled-name-match`. With no
+   install directory to compare against, the resolution having landed in an
+   install tree is the only remaining fact that the contract is describing
+   installed bytes. The clause still has work to do: a nested or unhoisted
+   install (`packages/app/node_modules/pkg` under a root-level tsconfig) is one
+   the ancestor walk never classified while the resolution reports it plainly.
+
+What this closes is a false certification, not a missed one: a tsconfig `paths`
+entry mapping `"reactive-package"` onto project source while
+`node_modules/reactive-package` is installed used to get the installed
+package's contract applied to code its author never saw, driving reactive-read,
+callback-timing, and owner-requirement conclusions about it. The refusal is
+deliberately silent — it produces no finding of its own, and the import becomes
+uncertifiable exactly as an unknown package's would.
+
+**A refusal is silent, not invisible.** Two places report it. `SOLID_CHECKER_TIMINGS=1`
+adds `contractBindingsBound` and `contractBindingsRefused` — declarations a
+contract named and the resolution then confirmed or refused — so a defect in the
+span join, in the attestation scope, or in a WASM host's specifier offsets shows
+up as a count rather than as contract coverage quietly draining away. And
+`solid-checker contract check` reports a contract that binds *no* import in the
+project as `unbound` rather than as the tier that supplied it: that command
+answers "is my contract coverage complete?", and a contract nothing binds is not
+coverage. It counts toward the packages needing action, with a remedy that names
+what to look for — a path or baseUrl mapping, or a typings entry pointing
+outside the package — rather than anything to do to the contract file. The
+analysis path deliberately does **not** raise a finding for the same fact — the
+imports go uncertifiable on the rules' own terms — and that split is why
+`--check-contracts` now performs the same identity attestation a diagnostic run
+does.
+
+Two outcomes are accepted rather than worked around, and both are pinned by
+`fixtures/reactive-ir/package-contract-install-shapes`. A package typed through
+`@types/<name>` resolves into the `@types` package, which is not the contract's
+install, so its contract is refused: reading "`@types/x` describes `x`" out of
+the two names is exactly the name-only reasoning this rule removes. And a
+refusal does not fall back to a shorter name-matching contract.
+
+The resolutions come from the Type Facts producer's resolved module graph, asked
+once per program generation and scoped to the files that carry at least one bare
+specifier (`contract_identity_scope` in
+`rust/crates/solid-facts-backend/src/lib.rs`). The scope deliberately does not
+consult contract discovery: a retained session reuses one generation's facts
+across many checks while contracts are re-discovered on every check, so a scope
+keyed on today's contracts would answer for a contract that appeared afterwards
+by silently omitting its files — name-only binding restored by accident.
+`SOLID_CHECKER_TIMINGS=1` reports the operation's cost and coverage as
+`importIdentityNs` and the `importIdentityFiles*` counts.
+
+**This is not dialect selection, and deliberately so.** The dialect walk
+(`rust/crates/solid-facts-backend/src/dialect.rs`) also keys on `solid-js`, and
+it answers a different question about a different object: which Solid version is
+*installed* for this project, read from that package's own manifest, before any
+program exists — the compiler that produces the facts is the dialect's, so the
+answer cannot depend on facts. Identity binding answers where one specifier
+resolves. The two agree on the object they both look at (the install), and a
+project that maps `"solid-js"` through `paths` onto its own source keeps running
+the installed version's catalog while the bundled `solid-js` contract is refused
+for that import. That split is correct: the catalog is the vocabulary of the
+Solid version installed, and `native_vocabulary_outranks_contract` already gives
+those native semantics precedence over the contract, so refusing the contract
+removes only the contract-derived summaries. Nothing here changes dialect
+selection.
+
+`fixtures/reactive-ir/ported-structure-v2` is that split, live and committed:
+its `solid-js` stub sets `"types": "../../solid-js.d.ts"`, so the specifier
+resolves *outside* `node_modules/solid-js` and the bundled contract is refused
+(`contractBindingsRefused: 1`, `contractBindingsBound: 0`) while every finding
+in the fixture is unchanged, because the 2.0 catalog the stub selects is what
+those findings rest on. `contract check` on that project reports `solid-js` as
+`unbound`, which is the honest answer about the *contract* and says nothing
+about the catalog. A published package cannot point `types` outside its own
+tarball, so this is a fixture shape rather than one a real install produces.
+
+**The WASM adapter.** `solid-checker-wasm` has no Type Facts session of its own —
+the host runs TypeScript and hands the finished tables in — so it cannot ask
+where a specifier resolves. `CheckRequest.resolvedImports` is how a host
+supplies the answer; see [packages/wasm/README.md](../packages/wasm/README.md).
+A request that omits the field binds package contracts by specifier name, which
+is what that adapter has always done: a stated limitation of the adapter, not a
+weaker analysis of the same request. When the field *is* supplied it is
+all-or-nothing per specifier — a file it omits has no answer, and a contract is
+refused there rather than falling back to the name.
+
+Two things about a supplied row are checked rather than trusted, because this
+interface's failure mode is silence: a row that cannot be joined refuses the
+contract exactly as a project with no contract would, so a host mistake would
+read as contract coverage varying by file. The spans are UTF-8 **byte** offsets
+into the source the same request carries, and the source at the span must read
+as the specifier — TypeScript reports positions in UTF-16 code units, so a host
+forwarding them unconverted is right for ASCII and silently wrong after the
+first non-ASCII character. And `resolvedPath` must be empty exactly when
+`resolution` is `unresolved`; an `unresolved` row is *accepted* by clause 3, so
+labelling resolutions the host did not perform is the one mistake here that
+fails open. Either violation is a hard error naming the row, like an
+unrecognized `resolution` value. The native path needs neither check: the same
+pinned producer reports the spans and the sources they index.
 
 Artifact hashes use `sha256:<lowercase hex>`. The artifact flags hash exact file
 bytes and require each file to be inside the emitted contract's directory.

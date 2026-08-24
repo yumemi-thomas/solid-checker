@@ -69,6 +69,8 @@ use sha2::{Digest, Sha256};
 use solid_dialect::{Dialect, Primitive};
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
+use solid_facts::resolution::{ImportResolution, SpecifierAttestation};
+use std::path::Path;
 use thiserror::Error;
 use typefacts::Location;
 
@@ -1020,6 +1022,78 @@ pub struct PackageContract {
     /// boundary without being re-proved.
     #[serde(skip)]
     pub run_generated: bool,
+    /// The installed package directory this contract was classified against,
+    /// when the loader found one.
+    ///
+    /// Provenance, not evidence: it names *which install on disk* the name and
+    /// version comparison was made against, and it is what
+    /// [`PackageContract::for_import`] requires an import to have resolved into
+    /// before the contract may describe that import. `None` means
+    /// classification had no installed directory — an explicit `--contract`
+    /// for a package that is not installed under any `node_modules`, or a
+    /// bundled contract for a package whose manifest the project does not
+    /// carry — and the identity comparison is then the attested package name
+    /// *plus* the requirement that the resolution landed in a `node_modules`
+    /// tree at all, because a name alone cannot tell an install from the
+    /// analyzed project's own source (clause 5 of
+    /// [`PackageContract::for_import`]).
+    #[serde(skip)]
+    pub installed_root: Option<ContractInstallRoot>,
+}
+
+/// The installed package directory a contract was classified against, in both
+/// spellings the analyzed program may hold it under.
+///
+/// TypeScript takes a realpath only where resolution walked a symlink under
+/// `node_modules`, so a project reached through a symlinked path — every
+/// `/var/folders/...` temporary directory on macOS, and a pnpm or workspace
+/// link — holds some files under the spelled path and some under the canonical
+/// one. Both name the same directory, so accepting either is not a widening;
+/// accepting only one silently matched nothing. This mirrors the same
+/// two-spelling rule the attested closure applies in
+/// `solid-facts-backend`'s module inventory.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractInstallRoot {
+    /// The directory as the ancestor walk spelled it.
+    pub path: String,
+    /// The same directory's realpath, when it differs from `path`.
+    pub canonical: Option<String>,
+}
+
+impl ContractInstallRoot {
+    /// Whether `path` names a file inside this installed package directory.
+    ///
+    /// Component-wise containment, never a string prefix: `node_modules/pkg`
+    /// must not claim `node_modules/pkg-extra`.
+    #[must_use]
+    pub fn contains(&self, path: &str) -> bool {
+        let candidate = Path::new(path);
+        candidate.starts_with(&self.path)
+            || self
+                .canonical
+                .as_deref()
+                .is_some_and(|canonical| candidate.starts_with(canonical))
+    }
+}
+
+/// Whether a package contract may describe one import declaration's specifier.
+///
+/// [`PackageContract::bind_import`] answers this; [`PackageContract::for_import`]
+/// is the same answer with the two negative arms collapsed, because a rule
+/// treats them identically.
+#[derive(Clone, Copy, Debug)]
+pub enum ImportBinding<'a> {
+    /// No loaded contract's package name prefixes this specifier. The ordinary
+    /// case for every import in a project.
+    NoCandidate,
+    /// A contract named this specifier and the attested resolution confirmed
+    /// it.
+    Bound(&'a PackageContract),
+    /// A contract named this specifier and the attested resolution did not
+    /// confirm it: the specifier was unattested, or it resolved somewhere the
+    /// contract's package is not. The import is uncertifiable, exactly as an
+    /// unknown package's would be.
+    Refused,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1315,6 +1389,28 @@ impl PackageContract {
 
         let mut hasher = Sha256::new();
         field(&mut hasher, self.source_path.as_bytes());
+        // Which install this contract was classified against decides which
+        // imports it may describe ([`Self::for_import`]), so a retained
+        // analysis must not answer for a different one. Both spellings are
+        // hashed: containment accepts either, so a `node_modules/<name>`
+        // symlink retargeted to another store directory -- same spelled path,
+        // same name, same version, same contract bytes -- changes which files
+        // the contract covers and must not reuse the earlier answer.
+        field(
+            &mut hasher,
+            self.installed_root
+                .as_ref()
+                .map_or("", |root| root.path.as_str())
+                .as_bytes(),
+        );
+        field(
+            &mut hasher,
+            self.installed_root
+                .as_ref()
+                .and_then(|root| root.canonical.as_deref())
+                .unwrap_or("")
+                .as_bytes(),
+        );
         field(&mut hasher, self.contract_hash.as_bytes());
         if self.contract_hash.is_empty() {
             let encoded = serde_json::to_vec(self)
@@ -1611,6 +1707,141 @@ impl PackageContract {
             .max_by_key(|contract| contract.package.name.len())
     }
 
+    /// The contract governing one import or export-from declaration's module
+    /// specifier: the name-matched candidate, confirmed against the installed
+    /// package the specifier actually resolves to.
+    ///
+    /// [`Self::for_module`] can only over-approximate — it compares the
+    /// specifier's *text* against a package name, and a tsconfig `paths` entry,
+    /// a `baseUrl` mapping, or a project reimplementation can own a bare
+    /// specifier while a package of the same name is installed beside it.
+    /// Applying the installed package's contract there would drive
+    /// reactive-read, callback-timing, and owner-requirement conclusions about
+    /// code the contract's author never saw: a false certification, not a
+    /// missed one. So the name match is the prefilter and the attested
+    /// resolution is the confirmation.
+    ///
+    /// The confirmation, in order:
+    ///
+    /// 1. **No resolution facts at all** (`facts.resolved_imports` is `None`):
+    ///    the analysis was not configured to attest identities, so the older
+    ///    name-matched answer stands unchanged. This is the WASM adapter
+    ///    without the resolved-import field in its request — a documented
+    ///    limitation of that adapter, never a silent upgrade in either
+    ///    direction.
+    /// 2. **The specifier is not attested** — the answer did not cover this
+    ///    file, holds no row for this specifier, or holds more than one it
+    ///    could be: refuse. The import is then exactly as uncertifiable as an
+    ///    import of a package with no contract.
+    /// 3. **The compiler resolved nothing** for the specifier: apply. This is
+    ///    the honest answer for an untyped JavaScript package — which is
+    ///    precisely where a contract matters most — and for a specifier typed
+    ///    by an ambient `declare module`. Nothing resolved means nothing
+    ///    *else* claimed the specifier, so no shadowing package can be what
+    ///    the contract is describing.
+    /// 4. **The compiler resolved a file** and the contract was classified
+    ///    against an installed directory: the resolved file must lie inside
+    ///    that directory. This is the containment check the resolved module
+    ///    graph makes possible, and it is decided on realpaths on both sides,
+    ///    so a pnpm or workspace-linked install is not a mismatch.
+    /// 5. **The compiler resolved a file** and classification had no installed
+    ///    directory: the resolution must have walked into a `node_modules` tree,
+    ///    *and* the contract's package name must be the one that resolution
+    ///    recorded. Two package identities exist and they can disagree, so this
+    ///    says which: the nearest manifest above the resolved file, *or* the
+    ///    identity the resolver itself recorded. Either is accepted, because a
+    ///    published package routinely ships an unnamed nested `package.json`
+    ///    beside its output (the nearest manifest then declares no name) and a
+    ///    subpath resolution routinely records no resolver identity.
+    ///
+    ///    The `node_modules` requirement is what keeps a contract off the
+    ///    analyzed project's own source. A bare specifier that resolves
+    ///    *outside* every install tree is a `paths` or `baseUrl` mapping, a
+    ///    package self-name, or a project-reference redirect — the compiler
+    ///    records that as `NonRelative` and does not say which — and all three
+    ///    name source this project owns and the contract's author never saw.
+    ///    Name equality is no defense there: the manifest above that source can
+    ///    declare the contract's own package name, which is exactly what a
+    ///    monorepo package aliased to its own source looks like. With no
+    ///    install directory to compare against, the only remaining fact that a
+    ///    contract is describing installed bytes is that the resolution landed
+    ///    in an install tree, so that is required rather than inferred from the
+    ///    path's spelling. The clause still has work to do: a nested or
+    ///    unhoisted install (`packages/app/node_modules/pkg` under a
+    ///    root-level tsconfig) is one the ancestor walk never classified while
+    ///    the resolution reports it plainly.
+    ///
+    /// A refusal is deliberately silent and produces no finding of its own: the
+    /// import becomes uncertifiable exactly as an unknown package's would, and
+    /// the rules that needed the summary fail closed on their own terms. It is
+    /// counted, though — see [`ImportBinding`] and `Program::contract_binding`
+    /// — so a defect that refuses everything is visible instead of merely
+    /// quiet.
+    ///
+    /// Two consequences are accepted and pinned by fixtures rather than worked
+    /// around. A package typed through `@types/<name>` resolves into the
+    /// `@types` package, which is not the contract's install, so its contract
+    /// is refused; deriving "`@types/x` describes `x`" from the two names is
+    /// the name-only reasoning this method exists to remove. And a refusal does
+    /// not fall back to a shorter name-matching contract.
+    #[must_use]
+    pub fn for_import<'a>(
+        contracts: &'a [Self],
+        facts: &ProjectFacts,
+        file: &str,
+        declaration: Span,
+        module: &str,
+    ) -> Option<&'a Self> {
+        match Self::bind_import(contracts, facts, file, declaration, module) {
+            ImportBinding::Bound(contract) => Some(contract),
+            ImportBinding::NoCandidate | ImportBinding::Refused => None,
+        }
+    }
+
+    /// As [`Self::for_import`], distinguishing "no contract names this
+    /// specifier" from "a contract named it and the resolution refused it".
+    ///
+    /// The two are the same thing to a rule — both leave the import
+    /// uncertifiable — and different things to a maintainer: the second is the
+    /// only outcome a defect in the span join, the attestation scope, or a
+    /// host's offsets can manufacture, so it is the one worth counting.
+    #[must_use]
+    pub fn bind_import<'a>(
+        contracts: &'a [Self],
+        facts: &ProjectFacts,
+        file: &str,
+        declaration: Span,
+        module: &str,
+    ) -> ImportBinding<'a> {
+        let Some(contract) = Self::for_module(contracts, module) else {
+            return ImportBinding::NoCandidate;
+        };
+        let Some(index) = &facts.resolved_imports else {
+            return ImportBinding::Bound(contract);
+        };
+        let SpecifierAttestation::Attested(attested) = index.specifier(file, declaration, module)
+        else {
+            return ImportBinding::Refused;
+        };
+        let bound = match attested.resolution {
+            ImportResolution::Unresolved => true,
+            _ => match &contract.installed_root {
+                Some(root) => root.contains(&attested.resolved_path),
+                None => {
+                    let name = contract.package.name.as_str();
+                    attested.resolution == ImportResolution::NodeModules
+                        && (attested.package_name.as_deref() == Some(name)
+                            || attested.resolver_package_name.as_deref() == Some(name))
+                }
+            },
+        };
+        if bound {
+            ImportBinding::Bound(contract)
+        } else {
+            ImportBinding::Refused
+        }
+    }
+
     pub fn exports_for_module(&self, module: &str) -> Option<&BTreeMap<String, ContractExport>> {
         let suffix = module.strip_prefix(&self.package.name)?;
         if !suffix.is_empty() && !suffix.starts_with('/') {
@@ -1698,6 +1929,29 @@ pub struct Program {
     /// whose location is outside every function body.
     pub obligation_reach: Vec<ObligationReach>,
     pub obligation_counts: ObligationCounts,
+    /// How many import and `export … from` declarations a contract named and
+    /// the attested resolution then bound or refused.
+    #[serde(default)]
+    pub contract_binding: ContractBindingCounts,
+}
+
+/// How contract binding answered across the program's declarations.
+///
+/// A refusal is deliberately silent in the findings — the import becomes
+/// uncertifiable on the rules' own terms — but silent is not the same as
+/// invisible. A defect in the span join, in the attestation scope, or in a
+/// host's specifier offsets degrades contract coverage toward nothing without
+/// an error, and this is what makes that countable: `refused` above zero on a
+/// project whose contracts are supposed to apply is the signal.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractBindingCounts {
+    /// Declarations whose specifier a contract named and the resolution
+    /// confirmed.
+    pub bound: usize,
+    /// Declarations whose specifier a contract named and the resolution
+    /// refused.
+    pub refused: usize,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -2518,6 +2772,282 @@ mod tests {
         assert!(!browser.matches_entrypoint_conditions(&["require".into()]));
     }
 
+    /// The declaration span an import fact would carry, and the specifier span
+    /// inside it, for `import { x } from "<module>";`.
+    fn spans(module: &str) -> (Span, Span) {
+        let prefix = "import { x } from ".len() as u32;
+        let specifier = Span::new(prefix, prefix + module.len() as u32 + 2);
+        (Span::new(0, specifier.end + 1), specifier)
+    }
+
+    fn contract_named(name: &str, installed_root: Option<ContractInstallRoot>) -> PackageContract {
+        PackageContract {
+            schema_version: 1,
+            package: ContractPackage {
+                name: name.to_owned(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            compiler_facts_protocol: 1,
+            artifacts: ContractArtifacts::default(),
+            entrypoints: BTreeMap::new(),
+            evidence: ContractEvidence::default(),
+            contract_hash: String::new(),
+            source_path: format!("node_modules/{name}/solid-reactivity.json"),
+            run_generated: false,
+            installed_root,
+        }
+    }
+
+    fn attested(
+        module: &str,
+        resolution: solid_facts::ImportResolution,
+        resolved_path: &str,
+        package_name: Option<&str>,
+        resolver_package_name: Option<&str>,
+    ) -> ProjectFacts {
+        let (_, specifier) = spans(module);
+        let mut index = solid_facts::AttestedImportIndex::default();
+        index.insert_file(
+            "/p/App.ts",
+            vec![solid_facts::AttestedImport {
+                span: specifier,
+                text: module.into(),
+                resolution,
+                resolved_path: resolved_path.into(),
+                package_name: package_name.map(Into::into),
+                package_manifest: None,
+                resolver_package_name: resolver_package_name.map(Into::into),
+            }],
+        );
+        let mut facts = empty_project(1);
+        facts.resolved_imports = Some(index);
+        facts
+    }
+
+    fn binds(contracts: &[PackageContract], facts: &ProjectFacts, module: &str) -> bool {
+        let (declaration, _) = spans(module);
+        PackageContract::for_import(contracts, facts, "/p/App.ts", declaration, module).is_some()
+    }
+
+    #[test]
+    fn an_analysis_with_no_resolution_facts_keeps_name_matched_contracts() {
+        let contracts = [contract_named("pkg", None)];
+        // The WASM adapter without the resolved-import field: unchanged
+        // behavior, not a weaker one.
+        assert!(binds(&contracts, &empty_project(1), "pkg"));
+        assert!(binds(&contracts, &empty_project(1), "pkg/sub"));
+        assert!(!binds(&contracts, &empty_project(1), "pkg-extra"));
+    }
+
+    #[test]
+    fn an_unattested_specifier_refuses_the_contract() {
+        let contracts = [contract_named("pkg", None)];
+        // The answer covered another file entirely.
+        let mut facts = empty_project(1);
+        let mut index = solid_facts::AttestedImportIndex::default();
+        index.insert_file("/p/Other.ts", vec![]);
+        facts.resolved_imports = Some(index);
+        assert!(!binds(&contracts, &facts, "pkg"));
+
+        // The answer covered this file and holds no row for the specifier.
+        let mut facts = empty_project(1);
+        let mut index = solid_facts::AttestedImportIndex::default();
+        index.insert_file("/p/App.ts", vec![]);
+        facts.resolved_imports = Some(index);
+        assert!(!binds(&contracts, &facts, "pkg"));
+    }
+
+    #[test]
+    fn a_specifier_the_compiler_resolved_nothing_for_keeps_its_contract() {
+        // The untyped-JavaScript and ambient-`declare module` shapes. Nothing
+        // resolved, so no other package can be what the contract describes.
+        let contracts = [contract_named(
+            "pkg",
+            Some(ContractInstallRoot {
+                path: "/p/node_modules/pkg".into(),
+                canonical: None,
+            }),
+        )];
+        let facts = attested(
+            "pkg",
+            solid_facts::ImportResolution::Unresolved,
+            "",
+            None,
+            None,
+        );
+        assert!(binds(&contracts, &facts, "pkg"));
+    }
+
+    #[test]
+    fn a_resolved_specifier_must_land_inside_the_classified_install() {
+        let contracts = [contract_named(
+            "pkg",
+            Some(ContractInstallRoot {
+                path: "/p/node_modules/pkg".into(),
+                canonical: None,
+            }),
+        )];
+        let inside = attested(
+            "pkg",
+            solid_facts::ImportResolution::NodeModules,
+            "/p/node_modules/pkg/index.d.ts",
+            Some("pkg"),
+            Some("pkg"),
+        );
+        assert!(binds(&contracts, &inside, "pkg"));
+
+        // The shadow shape: a `paths` entry owns the specifier while the
+        // package is still installed. The name matches and the resolution does
+        // not.
+        let shadowed = attested(
+            "pkg",
+            solid_facts::ImportResolution::NonRelative,
+            "/p/src/local-impl.ts",
+            Some("my-app"),
+            None,
+        );
+        assert!(!binds(&contracts, &shadowed, "pkg"));
+
+        // A sibling install whose directory name merely begins with the
+        // contract's: containment is component-wise, never a string prefix.
+        let sibling = attested(
+            "pkg",
+            solid_facts::ImportResolution::NodeModules,
+            "/p/node_modules/pkg-extra/index.d.ts",
+            Some("pkg-extra"),
+            Some("pkg-extra"),
+        );
+        assert!(!binds(&contracts, &sibling, "pkg"));
+    }
+
+    #[test]
+    fn either_spelling_of_the_install_directory_is_accepted() {
+        // A symlinked or realpath-normalized program holds the same directory
+        // under the other spelling; accepting one alone matched nothing.
+        let contracts = [contract_named(
+            "pkg",
+            Some(ContractInstallRoot {
+                path: "/p/node_modules/pkg".into(),
+                canonical: Some("/store/.pnpm/pkg@1.0.0/node_modules/pkg".into()),
+            }),
+        )];
+        let through_realpath = attested(
+            "pkg",
+            solid_facts::ImportResolution::NodeModules,
+            "/store/.pnpm/pkg@1.0.0/node_modules/pkg/index.d.ts",
+            Some("pkg"),
+            Some("pkg"),
+        );
+        assert!(binds(&contracts, &through_realpath, "pkg"));
+    }
+
+    #[test]
+    fn with_no_classified_install_a_resolution_outside_every_install_tree_refuses() {
+        // The shadow shape with the install removed, which is the one clause
+        // where there is no directory to compare against: a monorepo package
+        // aliased to its own source through `paths`, with a project-owned
+        // contract for its published name. The nearest manifest above that
+        // source declares the contract's own package name, so name equality
+        // agrees -- and the contract's author still never saw the file. The
+        // compiler reports the resolution as landing outside every install
+        // tree, and that is what refuses it.
+        let contracts = [contract_named("pkg", None)];
+        let own_source = attested(
+            "pkg",
+            solid_facts::ImportResolution::NonRelative,
+            "/p/src/local-impl.ts",
+            Some("pkg"),
+            Some("pkg"),
+        );
+        assert!(!binds(&contracts, &own_source, "pkg"));
+
+        // Same shape reported as a relative resolution, which a bare specifier
+        // cannot legitimately be: refused rather than accepted on the name.
+        let relative = attested(
+            "pkg",
+            solid_facts::ImportResolution::Relative,
+            "/p/src/local-impl.ts",
+            Some("pkg"),
+            Some("pkg"),
+        );
+        assert!(!binds(&contracts, &relative, "pkg"));
+    }
+
+    #[test]
+    fn with_no_classified_install_either_attested_package_identity_answers() {
+        // An explicit `--contract` for a package the ancestor walk never
+        // classified -- a nested or unhoisted install under a root-level
+        // tsconfig -- resolving into an install tree all the same. There is no
+        // directory to compare, so the two identities the producer records are
+        // what is left.
+        let contracts = [contract_named("pkg", None)];
+        let by_manifest = attested(
+            "pkg",
+            solid_facts::ImportResolution::NodeModules,
+            "/p/packages/app/node_modules/pkg/index.d.ts",
+            Some("pkg"),
+            None,
+        );
+        assert!(binds(&contracts, &by_manifest, "pkg"));
+
+        // The nearest manifest declares no name -- the `{"type":"module"}` file
+        // a published package ships beside its output -- and the resolver's own
+        // record answers instead.
+        let by_resolver = attested(
+            "pkg",
+            solid_facts::ImportResolution::NodeModules,
+            "/p/packages/app/node_modules/pkg/esm/index.d.ts",
+            None,
+            Some("pkg"),
+        );
+        assert!(binds(&contracts, &by_resolver, "pkg"));
+
+        // Neither identity is the contract's package.
+        let other = attested(
+            "pkg",
+            solid_facts::ImportResolution::NodeModules,
+            "/elsewhere/@types/pkg/index.d.ts",
+            Some("@types/pkg"),
+            Some("@types/pkg"),
+        );
+        assert!(!binds(&contracts, &other, "pkg"));
+    }
+
+    #[test]
+    fn the_install_directory_is_part_of_the_analysis_fingerprint() {
+        let here = contract_named(
+            "pkg",
+            Some(ContractInstallRoot {
+                path: "/p/node_modules/pkg".into(),
+                canonical: None,
+            }),
+        );
+        let hoisted = contract_named(
+            "pkg",
+            Some(ContractInstallRoot {
+                path: "/node_modules/pkg".into(),
+                canonical: None,
+            }),
+        );
+        assert_ne!(here.analysis_fingerprint(), hoisted.analysis_fingerprint());
+
+        // Both spellings are load-bearing: a retargeted `node_modules/<name>`
+        // symlink keeps the spelled path and changes the realpath, and
+        // containment accepts either, so the answer cannot be reused.
+        let retargeted = contract_named(
+            "pkg",
+            Some(ContractInstallRoot {
+                path: "/p/node_modules/pkg".into(),
+                canonical: Some("/store/pkg@1.0.0/node_modules/pkg".into()),
+            }),
+        );
+        assert_ne!(
+            here.analysis_fingerprint(),
+            retargeted.analysis_fingerprint()
+        );
+    }
+
     #[test]
     fn package_contract_validation_enforces_release_identity_and_surface() {
         let valid = PackageContract {
@@ -2549,6 +3079,7 @@ mod tests {
             contract_hash: String::new(),
             source_path: String::new(),
             run_generated: false,
+            installed_root: None,
         };
         assert!(valid.validate().is_ok());
 
@@ -2633,6 +3164,7 @@ mod tests {
             contract_hash: String::new(),
             source_path: String::new(),
             run_generated: false,
+            installed_root: None,
         };
         assert!(contract_with("partial", unknown).validate().is_ok());
 
@@ -2687,6 +3219,7 @@ mod tests {
             contract_hash: String::new(),
             source_path: String::new(),
             run_generated: false,
+            installed_root: None,
         };
         assert!(contract.validate().is_ok());
         assert!(!contract.claims_are_certifiable());
@@ -2822,6 +3355,7 @@ mod tests {
             contract_hash: String::new(),
             source_path: String::new(),
             run_generated: false,
+            installed_root: None,
         };
         assert!(owner_claim.validate().is_ok());
         assert!(!owner_claim.claims_are_certifiable());
@@ -2988,6 +3522,7 @@ mod tests {
                 Vec::new(),
             ),
             typescript_changes: None,
+            resolved_imports: None,
         }
     }
 

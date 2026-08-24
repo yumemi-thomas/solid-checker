@@ -48,6 +48,9 @@ pub(crate) struct ProgramDraft {
     pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
+    /// How contract binding answered, carried through so a refusal is
+    /// countable in the finished [`Program`].
+    pub(crate) contract_binding: crate::ContractBindingCounts,
     /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
     pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
@@ -114,6 +117,7 @@ impl ProgramDraft {
                 writes_and_actions: self.write_action_obligations.len(),
                 factory_instances,
             },
+            contract_binding: self.contract_binding,
         }
     }
 }
@@ -318,6 +322,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
         static_defects: missing_contract_exports,
+        contract_binding: resolved_contracts.counts,
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;

@@ -2665,70 +2665,209 @@ never a refusal:
 
 A contract with no `package.integrity` is unaffected in every case.
 
-## Open: package contracts are bound to a module *name*, not a resolved module
+## Closed 2026-08-24: package contracts are bound to an installed package, not a module name
 
-Contract discovery and contract application both key on the import specifier's
-package root and nothing else. `discover_package_directory`
-(`rust/crates/solid-facts-backend/src/diagnostics.rs`) walks ancestors for
+Contract discovery and contract application both keyed on the import
+specifier's package root and nothing else. `discover_package_directory`
+(`rust/crates/solid-facts-backend/src/diagnostics.rs`) walked ancestors for
 `node_modules/<name>`, and `PackageContract::for_module` — the only gate in
 `resolve_contract_imports` (`rust/crates/solid-reactive-ir/src/contracts.rs`) —
-compares `contract.package.name` against `import.module`'s root. Neither asks
-where the specifier actually resolves.
+compared `contract.package.name` against `import.module`'s root. Neither asked
+where the specifier actually resolved.
 
-**The failing scenario.** A tsconfig `paths` entry maps
-`"reactive-package": ["src/local-impl"]`, while `node_modules/reactive-package`
-is still installed (a common shape: a local reimplementation, a fork under
-development, a test double). The published or project-owned contract for the
-installed package is discovered by name, passes name and version
-classification, and is applied to imports that resolve to project source that
-the contract never described. Its summaries then drive reactive-read,
-callback-timing, and owner-requirement conclusions about code the contract's
-author never saw — a false certification, not merely a missed one. A workspace
-`link:` is *not* an instance of this: `discover_package_directory` follows the
-symlink and reads the linked package's own manifest, so name and version are
-classified against the package that is really there.
+**The failing scenario, reproduced.** A tsconfig `paths` entry maps
+`"reactive-package": ["./src/local-impl"]` while `node_modules/reactive-package`
+is still installed (a local reimplementation, a fork under development, a test
+double). Against a pre-change binary, the installed package's reviewed contract
+was discovered by name, passed version classification, and raised its
+`SC9005` callback-argument obligation *at a call whose callee is
+`src/local-impl.ts`* — a file the contract's author never saw. Its summaries
+were driving reactive-read, callback-timing, and owner-requirement conclusions
+about project source: a false certification, not merely a missed one. The same
+project against the fixed binary refuses the contract for that specifier and
+raises nothing, while an identically shaped package with no `paths` entry in the
+same file still binds and still raises its obligation
+(`fixtures/reactive-ir/package-contract-paths-shadow`).
 
-**Investigated 2026-08-22: no narrow safe check exists with today's facts.**
-The obvious verification — the imported module's resolved declaration must sit
-inside the discovered package directory — fails on the facts the backend has:
+**What closed it.** The Type Facts producer's resolved module graph
+(protocol 2's `modules` operation) forwards, per import specifier occurrence,
+the file the resolver selected, the shape of the resolution, the owning
+manifest's name and path, and the identity the resolver itself recorded. That
+answer is carried as a fact table — `ProjectFacts.resolved_imports`
+(`rust/crates/solid-facts/src/resolution.rs`) — and joined to the syntax facts by
+the specifier's own span inside the declaration's, never by matching specifier
+text. `PackageContract::for_import`
+(`rust/crates/solid-reactive-ir/src/lib.rs`) then applies the name match as a
+prefilter and the attested resolution as the confirmation. The full rule and its
+five clauses are in
+[package-contracts.md](package-contracts.md#which-imports-a-loaded-contract-describes).
 
-- **`ImportFact` carries only the specifier text** (`module: CompactString` in
-  `rust/crates/solid-facts/src/ast/mod.rs`). There is no resolved module path
-  anywhere in the fact tables.
-- **Declaration paths exist but are the wrong evidence.** `Declaration.location`
-  does carry a path, but `alias_roots_and_source_declarations`
-  (`rust/crates/solid-reactive-ir/src/symbols.rs`) deliberately *skips* `.d.ts`
-  declarations, which are exactly the ones that would locate an external
-  package. Reading them instead would then be wrong in three routine cases: a
-  package typed through `@types/<name>` declares into
-  `node_modules/@types/<name>` and would fail containment; a pnpm or
-  workspace-symlinked install can report the realpath
-  (`.pnpm/<name>@<version>/node_modules/<name>`) while discovery returns the
-  link path; and an untyped JavaScript package has no declaration inside the
-  package at all, which is precisely where a contract matters most. Each of
-  those would turn a correct contract into a false `SC9005`.
-- **The package directory is not on the IR side of the seam.** Only the backend
-  computes it; `PackageContract` carries `source_path`, which locates the
-  package directory for a *published* contract and not for a bundled, local, or
-  explicit one. Threading it through would be new data across the fact
-  interface, for all four tiers.
-- **`paths` itself is not read anywhere.** Detecting the alias directly would
-  mean parsing `compilerOptions.paths` with its `extends` chain, `baseUrl`, and
-  wildcard patterns — a new fact source — and would still be ambiguous, because
-  TypeScript falls back to `node_modules` resolution when a mapped path does
-  not exist.
+Each of the three objections recorded when this was investigated on 2026-08-22
+is answered by the fact rather than worked around:
 
-**What closing it needs.** One fact the producer already computes and does not
-forward: the resolved module file for each import specifier, from the same
-TypeScript resolution the checker's type facts come from. With that, contract
-application can require the resolved file to lie inside the package directory
-the contract was classified against, fail closed when it does not, and stay
-silent (no fact, current behavior) when resolution is unavailable. That is a
-Type Facts protocol addition and a `PackageContract` provenance field, and it
-should be designed as one change rather than approximated by a path heuristic.
-Half-implementing it — a containment check on declaration paths — would trade a
-rare false certification for a routine false uncertifiable result on every
-`@types`-typed and pnpm-installed package.
+- **A pnpm or workspace-symlinked install** reports the realpath while discovery
+  returns the link path. Both spellings of the classified directory are
+  accepted, and the comparison is component-wise containment rather than a
+  string prefix, so `node_modules/pkg` cannot claim `node_modules/pkg-extra`.
+  Pinned by `contracts_process::a_linked_install_binds_its_contract_through_the_realpath`,
+  which builds the symlink in a temporary directory — the add-fixture skill
+  forbids committing one.
+- **An untyped JavaScript package**, which is precisely where a contract matters
+  most, resolves to nothing at all. The compiler answering `unresolved` is an
+  attested fact, and it is accepted: nothing resolved means nothing *else*
+  claimed the specifier, so no shadowing package can be what the contract
+  describes. The same clause covers a specifier typed by an ambient
+  `declare module`, which is how an untyped package is normally typed.
+- **An `@types`-typed package** resolves into `node_modules/@types/<name>`,
+  which is a different installed package, and its contract is **refused**. This
+  is a deliberate fail-closed outcome and the one named residue below.
+
+**A refusal is silent in the findings and visible everywhere else.** The import
+goes uncertifiable on the rules' own terms, which is the right answer for the
+code under analysis — the alternative is a finding about the project's tsconfig,
+which is not this checker's subject. But a refusal is also what a *defect* in
+this machinery produces, so it is reported in the two places that describe the
+run rather than the code. `SOLID_CHECKER_TIMINGS=1` carries
+`contractBindingsBound` and `contractBindingsRefused`
+(`Program::contract_binding`), and `solid-checker contract check` reports a
+contract that binds no import as `unbound` and counts it as needing action —
+that command answers whether contract coverage is complete, and it previously
+answered `missing: 0` for a contract the analysis refused at every import. It
+now performs the same identity attestation a diagnostic run does, which is what
+makes that answer possible.
+
+The earlier conclusion that "no narrow safe check exists with today's facts" was
+correct about the facts it named — declaration paths and specifier text — and is
+superseded by a fact that did not cross the seam then. What was rejected as
+"half-implementing it" was containment on *declaration* paths; this is
+containment on the *resolved module*, which is a different fact with none of the
+three failure modes.
+
+`tsc` has nothing to say about any of it. `tsc --noEmit` is silent on both new
+fixtures: the local reimplementation type-checks, the `@types` package
+type-checks, and the ambient declaration type-checks. Which installed package a
+specifier resolves to, and which contract may therefore describe it, is a
+resolution and provenance question the type system does not model.
+
+### Named residues
+
+- **With no classified install, a resolution outside every `node_modules` tree
+  is refused even when the names agree.** Clause 5 compares package *names*,
+  and names are not evidence about bytes: a monorepo package aliased to its own
+  sources through `paths` has a root manifest declaring the very name its
+  published contract carries, so name equality agrees while the file is source
+  the contract's reviewer never saw. Requiring the resolution to have landed in
+  an install tree closes that — it was a live false certification in the first
+  version of this change, reproduced with a project-owned contract, no
+  `node_modules/<name>` at all, and a root manifest sharing the contract's name
+  — and the cost is the reverse case: a contract for a package that resolves
+  outside every install tree can no longer apply at all. Nothing produces that
+  shape except an alias, so the residue is theoretical, and the clause's
+  remaining positive case is not: an explicit `--contract` for a package the
+  ancestor walk never classified, resolving into
+  `packages/app/node_modules/<name>` under a root-level tsconfig, was measured
+  against the real producer and binds identically before and after this
+  narrowing. That case is pinned by
+  `with_no_classified_install_either_attested_package_identity_answers`, and
+  both directions of the refusal are pinned end to end by
+  `fixtures/reactive-ir/package-contract-uninstalled-name-match`.
+- **Clause 3 is bounded by what TypeScript can see, not by what runs.** "The
+  compiler resolved nothing, so nothing else claimed the specifier" is true of
+  claims the compiler can make. An ambient `declare module` for a package that
+  is installed nowhere reaches clause 3 and the contract applies, against
+  whatever the runtime actually loads for that specifier — a bundler alias, an
+  import map, a Node loader hook. `tsc --noEmit` is silent on such a project, so
+  the absolute rule does not cover it either. This is the same limit as the
+  runtime-alias residue below, reached from the other side: there the compiler
+  resolves into the install and the runtime does not, here the compiler resolves
+  nothing at all. The compiler's resolution is the only resolution this checker
+  has.
+- **An `@types`-typed package with a contract goes uncertifiable.** The
+  resolution lands in `@types/<name>`, so neither identity is the contract's
+  package and the contract is refused. Deriving "`@types/x` describes `x`" from
+  the two names is the name-only reasoning the precision contract forbids, and a
+  Solid-aware package that both ships a reactivity contract and is typed only
+  through DefinitelyTyped is a shape nothing in the corpus has. The outcome is
+  pinned in `fixtures/reactive-ir/package-contract-install-shapes` so it cannot
+  be reversed silently.
+- **A refusal does not fall back to a shorter name-matching contract.** The
+  prefilter selects the longest matching package name, and a refusal ends the
+  question for that specifier.
+- **A runtime alias TypeScript cannot see is still invisible.** A bundler alias
+  (`resolve.alias`, an import map) can make the runtime load something other
+  than the installed package while the compiler resolves into it. The
+  compiler's resolution is the only resolution this checker has, so that shape
+  is out of reach of this rule and of every fact domain the checker holds.
+- **The WASM adapter without `resolvedImports` binds by name.** That adapter has
+  no session with which to ask, so a request omitting the field keeps the older
+  behavior exactly. Documented in
+  [packages/wasm/README.md](../packages/wasm/README.md) and pinned from both
+  sides by `packages/wasm/test/resolved-imports.test.mjs`. Two properties of a
+  *supplied* row are validated rather than trusted, because a wrong row refuses
+  contracts exactly as a contract-less project does and would otherwise read as
+  coverage varying by file: the span must be byte offsets naming the specifier
+  in the source the request carries (a host forwarding TypeScript's UTF-16
+  positions unconverted was silently correct for ASCII and silently wrong after
+  the first non-ASCII character), and `resolvedPath` must be empty exactly when
+  `resolution` is `unresolved` (an `unresolved` row is *accepted* by clause 3,
+  making it the one host mistake here that failed open). Both are hard errors.
+- **Contract emission still binds dependency contracts by module name.** Within
+  one `--emit-contract` run the obligations of the package under generation are
+  computed identity-bound (`resolve_contract_imports`), while
+  `dependency_export_summary` and the export-all lookup in
+  `solid-facts-backend/src/main.rs` call `for_module`. They can only disagree for
+  a package whose own tsconfig shadows a declared dependency with a `paths`
+  entry; no corpus package has that shape, and the generator produces these
+  dependency contracts from the dependency's installed sources in the same run.
+  Both sites say so in a comment. Routing them through `for_import` needs the
+  declaration span threaded through two call chains and would move generation
+  answers, so it is recorded rather than attempted.
+- **The attestation is re-asked on every program generation, including every
+  incremental edit.** Measured on this machine with
+  `benchmarks/compare-performance.mjs` racing the pre-change binary: the
+  one-file incremental edit on a 1,000-file corpus goes 35.3 ms → 39.2 ms
+  (ratio 1.112, against the gate's 1.35 limit), first-IR ns/source is unchanged
+  at 0.981, and a cold one-shot run costs 4.7 µs/source (+2.6 % of total wall
+  time at 1,000 files, +1.2 % at 500). **That ratio is specific to 1,000 files,
+  which is the only size the gate measures.** The module-graph operation answers
+  the whole program's file inventory unconditionally, so the per-edit cost grows
+  with program size rather than with the edit: an independent re-measurement at
+  3,000 files put the incremental ratio at 1.152, consistent with ≈ 5.5 µs per
+  program file per edit (+4.1 ms at 1,000 files, +16.7 ms at 3,000).
+  `benchmarks/compare-performance.mjs` hardcodes 1,000 files, so the 1.35 gate
+  will not see that trend; read the recorded figure as a point measurement, not
+  as the shape of the cost. A sound reduction exists and is not attempted here:
+  an edit that only *modifies* existing files cannot change another file's
+  resolution, so those files' rows could be reused and only the edited files
+  re-asked — and that is exactly the optimization that would flatten the trend.
+  It is not attempted because a creation or deletion *can* change an unedited
+  file's resolution, and reusing a row across that would fail open — the one
+  direction this change exists to remove.
+- **An attestation failure is fail-to-run, not fail-to-certify.**
+  `attest_import_identities` propagates its error through
+  `NativeIncrementalSession::attested` and the one-shot path with `?`, so a
+  failing `modules` operation turns a previously analyzable project into a
+  non-zero exit (exit 3 on a producer handshake mismatch) on *every* diagnostic
+  run of *every* project with a bare specifier. The precision contract asks for
+  an explicit uncertifiable result instead, and no degrade tier exists: there is
+  deliberately no "attest what you can and name-match the rest", because that
+  tier is name-only binding with extra steps. What is missing is the honest
+  third option — refuse *every* contract for the run and say so once — which
+  needs a place to say it that is not a finding about the user's code. Until
+  then a producer or protocol failure is loud rather than silent, which is the
+  safe direction but not the specified one.
+- **`install_root` drops the canonical spelling when `canonicalize` fails.**
+  `diagnostics.rs`: the spelled path can then be relative (`--project
+  ./tsconfig.json` yields `./node_modules/pkg`), and containment against an
+  absolute resolved path matches nothing, so the contract is refused everywhere
+  for that run. Verified not to bite on the happy path — absolute,
+  bare-relative, and `./`-relative invocations of the same fixture all bind
+  identically — because the walk only returns a directory that exists, and
+  `canonicalize` on an existing directory fails essentially only on permissions
+  or a symlink loop. Absolutizing the spelled path without touching the
+  filesystem would close it; it is left open because it has no reproduction
+  outside those two conditions and the failure direction is a refusal.
+
 
 ## Open: contracts have no distribution mechanism beyond four local tiers
 
@@ -3362,17 +3501,21 @@ the same direction, all downstream of that one split:
   trace.
 
 **Why not an exact fix.** Nothing pairs a declaration file with the runtime
-module it describes. `ImportFact` carries only specifier text (the same finding
-as *Open: package contracts are bound to a module name*), and the compiler
-holds no link between the two files — they are separate modules that happen to
-share a name on disk. Recovering the edge would mean matching `channel.d.ts` to
-`channel.js` by path, which is exactly the substitution the precision contract
-forbids. The generator's own runtime resolver *does* know the pairing
-(`closureOf` resolved `./channel.js` to the runtime file), so an exact fix
-exists in principle: thread the resolved runtime module graph through
-`--emit-contract` and join a declaration-bound import to the runtime module's
-export by module identity plus ESM export name. That is new data across the
-backend/IR seam for all four tiers and is not attempted here.
+module it describes, and the resolved module graph that closed *package
+contracts are bound to an installed package* does not close this. That graph
+answers where a specifier resolved and which installed package owns the file;
+the producer states outright that a shipped `channel.d.ts` beside a
+`channel.js` answers *no* pairing field, because resolution selected the
+declaration and never opened the implementation, and that reconstructing the
+edge from the two file names is the substitution the fact exists to avoid
+(`ModuleImportFact.IncludedPath` is populated only for a configured project
+reference's declaration output). So the two files remain separate modules that
+happen to share a name on disk. The generator's own runtime resolver *does* know
+the pairing (`closureOf` resolved `./channel.js` to the runtime file), so an
+exact fix exists in principle: join a declaration-bound import to the runtime
+module's export by module identity plus ESM export name, using the generator's
+resolution rather than the compiler's. That is new data across the backend/IR
+seam for all four tiers and is not attempted here.
 
 **The fix (fail closed).** `module_surface_is_unaccounted`
 (rust/crates/solid-facts-backend/src/main.rs) gates the reachability rung. A

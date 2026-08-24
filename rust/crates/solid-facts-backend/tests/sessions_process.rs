@@ -1214,3 +1214,79 @@ fn edit_recovers_when_the_service_dies_between_update_and_analyze() {
         "recovery must converge on the same facts"
     );
 }
+
+/// A generation that asks for no identity attestation reports no counts.
+///
+/// The measurement is per generation, and a retained session keeps the last
+/// one. An edit that removes the program's only bare specifier asks for nothing
+/// -- there is no specifier a contract could describe -- so leaving the previous
+/// generation's counts in place would make `SOLID_CHECKER_TIMINGS` attribute
+/// them to a generation that never issued the operation.
+#[test]
+fn an_empty_identity_scope_clears_the_previous_generations_measurement() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("identity-scope-reset");
+    let package = directory.join("node_modules/plain-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        "{\"name\":\"plain-package\",\"version\":\"1.0.0\",\"types\":\"index.d.ts\"}\n",
+    )
+    .unwrap();
+    fs::write(
+        package.join("index.d.ts"),
+        "export declare function mapValue(map: (index: number) => unknown): void;\n",
+    )
+    .unwrap();
+    let app = directory.join("App.ts");
+    fs::write(
+        &app,
+        "import { mapValue } from \"plain-package\";\nexport const use = () => mapValue(() => 1);\n",
+    )
+    .unwrap();
+    let project = directory.join("tsconfig.json");
+    fs::write(
+        &project,
+        "{\"compilerOptions\":{\"module\":\"ESNext\",\"moduleResolution\":\"Bundler\",\
+         \"strict\":true,\"target\":\"ES2022\"},\"include\":[\"App.ts\"]}\n",
+    )
+    .unwrap();
+    let project_id = project
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let sources = vec![SourceFile {
+        path: app.canonicalize().unwrap().to_string_lossy().into_owned(),
+        source: fs::read_to_string(&app).unwrap().into(),
+        compiler_options: CompilerOptions::default(),
+    }];
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let mut session =
+        NativeIncrementalSession::open(dialect::default_dialect(), project_id, sources, typescript)
+            .unwrap();
+    session.analyze().unwrap();
+    assert_eq!(session.last_import_identity().requested, 1);
+    assert_eq!(session.last_import_identity().specifiers, 1);
+
+    session
+        .edit(
+            vec![SourceChange {
+                path: app.canonicalize().unwrap().to_string_lossy().into_owned(),
+                version: 1,
+                source: Some("export const use = () => 1;\n".to_owned()),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    let measurement = session.last_import_identity();
+    assert_eq!(measurement.requested, 0);
+    assert_eq!(measurement.attested, 0);
+    assert_eq!(measurement.specifiers, 0);
+    assert_eq!(measurement.modules, 0);
+    fs::remove_dir_all(directory).unwrap();
+}

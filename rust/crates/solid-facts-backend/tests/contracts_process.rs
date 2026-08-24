@@ -3611,3 +3611,422 @@ fn cli_refuses_a_contract_whose_lockfile_integrity_moved_under_the_same_version(
     assert_eq!(package_status["status"], "local", "{package_status}");
     fs::remove_dir_all(directory).unwrap();
 }
+
+/// One minimal contract for `package`: a single export whose callback claim
+/// carries an argument descriptor a by-name callback cannot bind, so a bound
+/// contract raises exactly one `SC9005` and a refused one raises none.
+fn identity_probe_contract(package: &str, entrypoint: &str) -> String {
+    format!(
+        "{{\"schemaVersion\":1,\"package\":{{\"name\":\"{package}\",\"version\":\"1.0.0\"}},\
+         \"compilerFactsProtocol\":1,\
+         \"summaries\":{{\"map-value\":{{\"kind\":\"function\",\"callbacks\":[{{\"parameter\":0,\
+         \"execution\":\"inline\",\"arguments\":[null,{{\"kind\":\"accessor\",\"label\":\"item\"}}]}}]}}}},\
+         \"entrypoints\":{{\"{entrypoint}\":{{\"exports\":{{\"map-value\":[\"mapValue\"]}}}}}},\
+         \"evidence\":{{\"kind\":\"reviewed\"}}}}\n"
+    )
+}
+
+const IDENTITY_PROBE_DECLARATION: &str = "export declare function mapValue(\n  \
+     map: (index: number, item: () => number) => unknown\n): void;\n";
+
+const IDENTITY_PROBE_CONSUMER: &str = "import { mapValue } from \"linked-package\";\nfunction named(index: number, item: () => number) {\n  \
+     return item();\n}\nexport function use() {\n  mapValue(named);\n}\n";
+
+/// A workspace- or pnpm-linked install still binds its contract.
+///
+/// Contract discovery walks `node_modules/<name>` and finds the link; the
+/// compiler reports the resolution's realpath, which is the *target*. Comparing
+/// those two spellings directly would refuse every linked install, so the
+/// classified directory is compared in both spellings. This cannot be a
+/// committed fixture -- it would be this repository's first committed symlink,
+/// and a Windows checkout materializes one as a plain file -- so it is built
+/// against the real producer here.
+#[cfg(unix)]
+#[test]
+fn a_linked_install_binds_its_contract_through_the_realpath() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("linked-install");
+    let real = directory.join("packages/linked-package");
+    fs::create_dir_all(&real).unwrap();
+    fs::write(
+        real.join("package.json"),
+        "{\"name\":\"linked-package\",\"version\":\"1.0.0\",\"types\":\"index.d.ts\"}\n",
+    )
+    .unwrap();
+    fs::write(real.join("index.d.ts"), IDENTITY_PROBE_DECLARATION).unwrap();
+    fs::write(
+        real.join("solid-reactivity.json"),
+        identity_probe_contract("linked-package", "."),
+    )
+    .unwrap();
+    fs::create_dir_all(directory.join("node_modules")).unwrap();
+    std::os::unix::fs::symlink(
+        Path::new("../packages/linked-package"),
+        directory.join("node_modules/linked-package"),
+    )
+    .unwrap();
+    fs::write(directory.join("App.ts"), IDENTITY_PROBE_CONSUMER).unwrap();
+    let project = directory.join("tsconfig.json");
+    fs::write(
+        &project,
+        "{\"compilerOptions\":{\"module\":\"ESNext\",\"moduleResolution\":\"Bundler\",\
+         \"strict\":true,\"target\":\"ES2022\"},\"include\":[\"App.ts\"]}\n",
+    )
+    .unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--project"])
+        .arg(&project)
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    let findings = decode_findings(&result.stdout);
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC9005")
+            .count(),
+        1,
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+/// The identity attestation is scoped to the files that carry a bare specifier,
+/// and its answer covers every one of them.
+///
+/// The module-graph operation answers the whole program's file inventory
+/// unconditionally, so a program in which no specifier could name a package
+/// must not pay for one at all. And a requested file the program does not hold
+/// refuses every specifier in it, which would be a plumbing defect rather than
+/// a project property -- so it is counted rather than left silent.
+#[test]
+fn the_identity_attestation_is_scoped_to_files_a_contract_could_bind_in() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("identity-scope");
+    let package = directory.join("node_modules/contracted-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        "{\"name\":\"contracted-package\",\"version\":\"1.0.0\",\"types\":\"index.d.ts\"}\n",
+    )
+    .unwrap();
+    fs::write(package.join("index.d.ts"), IDENTITY_PROBE_DECLARATION).unwrap();
+    fs::write(
+        package.join("solid-reactivity.json"),
+        identity_probe_contract("contracted-package", "."),
+    )
+    .unwrap();
+    let plain = directory.join("node_modules/plain-package");
+    fs::create_dir_all(&plain).unwrap();
+    fs::write(
+        plain.join("package.json"),
+        "{\"name\":\"plain-package\",\"version\":\"1.0.0\",\"types\":\"index.d.ts\"}\n",
+    )
+    .unwrap();
+    fs::write(plain.join("index.d.ts"), IDENTITY_PROBE_DECLARATION).unwrap();
+    fs::write(
+        directory.join("Contracted.ts"),
+        "import { mapValue } from \"contracted-package\";\nexport const use = () => mapValue(() => 1);\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("Plain.ts"),
+        "import { mapValue } from \"plain-package\";\nexport const use = () => mapValue(() => 1);\n",
+    )
+    .unwrap();
+    fs::write(directory.join("Local.ts"), "export const local = 1;\n").unwrap();
+    let timings = |files: &[&str]| {
+        let project = directory.join(format!("tsconfig-{}.json", files.join("-")));
+        fs::write(
+            &project,
+            format!(
+                "{{\"compilerOptions\":{{\"module\":\"ESNext\",\"moduleResolution\":\"Bundler\",\
+                 \"strict\":true,\"target\":\"ES2022\"}},\"files\":{}}}\n",
+                serde_json::to_string(files).unwrap()
+            ),
+        )
+        .unwrap();
+        let result = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .env("SOLID_CHECKER_TIMINGS", "1")
+            .args(["--project"])
+            .arg(&project)
+            .args(["--format", "json"])
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+        let line = stderr
+            .lines()
+            .rev()
+            .find(|line| line.contains("importIdentityFilesRequested"))
+            .unwrap_or_else(|| panic!("no timings line in {stderr}"))
+            .to_owned();
+        serde_json::from_str::<serde_json::Value>(&line).expect("timings json")
+    };
+
+    // No specifier in the program could name a package, so nothing is asked
+    // for at all -- not even the inventory the operation always answers.
+    let none = timings(&["Local.ts"]);
+    assert_eq!(none["importIdentityFilesRequested"], 0);
+    assert_eq!(none["importIdentityModules"], 0);
+
+    // Two files carry a bare specifier and one carries none. The two are asked
+    // about, every requested file is answered, and each answer covers its one
+    // specifier. `Plain.ts` is in scope even though no contract exists for the
+    // package it names: the scope is keyed on the program, never on today's
+    // contract discovery, because a contract that appears later must not find
+    // its files silently unanswered.
+    let scoped = timings(&["Contracted.ts", "Plain.ts", "Local.ts"]);
+    assert_eq!(scoped["importIdentityFilesRequested"], 2);
+    assert_eq!(scoped["importIdentityFilesAttested"], 2);
+    assert_eq!(scoped["importIdentityFilesUnknown"], 0);
+    assert_eq!(scoped["importIdentitySpecifiers"], 2);
+    // The inventory half is the whole program and is not scoped: it is the
+    // operation's reason to exist.
+    assert!(scoped["importIdentityModules"].as_u64().unwrap() >= 3);
+}
+
+/// A contract every import refuses is reported as `unbound`, not as coverage.
+///
+/// `contract check` exists to answer "is my contract coverage complete?", and
+/// loading a contract is only half of that: this project's `paths` entry owns
+/// the one specifier carrying the contract's name, so the contract describes
+/// nothing here. The report used to say `published` and `missing: 0` about
+/// exactly this project while the analysis refused the contract at every
+/// import -- the command's answer and the analysis's behavior disagreeing in
+/// silence. The refusal stays silent in the *findings* by design, and the same
+/// run's timings count it.
+#[test]
+fn a_contract_no_import_binds_is_reported_as_unbound() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("unbound-contract");
+    let package = directory.join("node_modules/reactive-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        "{\"name\":\"reactive-package\",\"version\":\"1.0.0\",\"types\":\"index.d.ts\",\
+         \"peerDependencies\":{\"solid-js\":\"^2.0.0\"}}\n",
+    )
+    .unwrap();
+    fs::write(package.join("index.d.ts"), IDENTITY_PROBE_DECLARATION).unwrap();
+    fs::write(
+        package.join("solid-reactivity.json"),
+        identity_probe_contract("reactive-package", "."),
+    )
+    .unwrap();
+    fs::create_dir_all(directory.join("src")).unwrap();
+    fs::write(
+        directory.join("src/local-impl.ts"),
+        "export function mapValue(\n  map: (index: number, item: () => number) => unknown\n\
+         ): void {\n  setTimeout(() => map(0, () => 1), 0);\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        directory.join("App.ts"),
+        "import { mapValue } from \"reactive-package\";\n\
+         function named(index: number, item: () => number) {\n  return item();\n}\n\
+         export function use() {\n  mapValue(named);\n}\n",
+    )
+    .unwrap();
+    let project = directory.join("tsconfig.json");
+    fs::write(
+        &project,
+        "{\"compilerOptions\":{\"baseUrl\":\".\",\"module\":\"ESNext\",\
+         \"moduleResolution\":\"Bundler\",\"strict\":true,\"target\":\"ES2022\",\
+         \"paths\":{\"reactive-package\":[\"./src/local-impl\"]}},\
+         \"include\":[\"*.ts\",\"src/*.ts\"]}\n",
+    )
+    .unwrap();
+
+    let report = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--check-contracts", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    let decoded: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+    assert_eq!(decoded["packages"][0]["status"], "unbound");
+    assert_eq!(decoded["missing"], 1);
+    // Not drift: the contract describes the version that is installed.
+    assert_eq!(decoded["stale"], 0);
+    assert_eq!(report.status.code(), Some(1));
+    let remedy = decoded["packages"][0]["remedy"].as_str().unwrap();
+    assert!(remedy.contains("tsconfig path mapping"), "{remedy}");
+    assert!(!remedy.contains("contract generate"), "{remedy}");
+
+    // The analysis raises nothing for the refusal, and counts it.
+    let analysis = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .env("SOLID_CHECKER_TIMINGS", "1")
+        .args(["--format", "json", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    assert_eq!(
+        decode_findings(&analysis.stdout),
+        Vec::<serde_json::Value>::new()
+    );
+    let stderr = String::from_utf8_lossy(&analysis.stderr).into_owned();
+    let timings: serde_json::Value = serde_json::from_str(
+        stderr
+            .lines()
+            .rev()
+            .find(|line| line.contains("contractBindingsRefused"))
+            .unwrap_or_else(|| panic!("no timings line in {stderr}")),
+    )
+    .unwrap();
+    assert_eq!(timings["contractBindingsRefused"], 1);
+    assert_eq!(timings["contractBindingsBound"], 0);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// The same project with the `paths` entry removed: the contract binds, the
+/// report says `published`, and the counts swap. Without this control an
+/// `unbound` verdict could come from binding being broken outright.
+#[test]
+fn the_same_contract_without_the_path_mapping_binds_and_reports_published() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("bound-contract");
+    let package = directory.join("node_modules/reactive-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        "{\"name\":\"reactive-package\",\"version\":\"1.0.0\",\"types\":\"index.d.ts\",\
+         \"peerDependencies\":{\"solid-js\":\"^2.0.0\"}}\n",
+    )
+    .unwrap();
+    fs::write(package.join("index.d.ts"), IDENTITY_PROBE_DECLARATION).unwrap();
+    fs::write(
+        package.join("solid-reactivity.json"),
+        identity_probe_contract("reactive-package", "."),
+    )
+    .unwrap();
+    fs::write(
+        directory.join("App.ts"),
+        "import { mapValue } from \"reactive-package\";\n\
+         function named(index: number, item: () => number) {\n  return item();\n}\n\
+         export function use() {\n  mapValue(named);\n}\n",
+    )
+    .unwrap();
+    let project = directory.join("tsconfig.json");
+    fs::write(
+        &project,
+        "{\"compilerOptions\":{\"module\":\"ESNext\",\"moduleResolution\":\"Bundler\",\
+         \"strict\":true,\"target\":\"ES2022\"},\"include\":[\"App.ts\"]}\n",
+    )
+    .unwrap();
+
+    let report = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--check-contracts", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    let decoded: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+    assert_eq!(decoded["packages"][0]["status"], "published");
+    assert_eq!(decoded["missing"], 0);
+    assert_eq!(report.status.code(), Some(0));
+
+    let analysis = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .env("SOLID_CHECKER_TIMINGS", "1")
+        .args(["--format", "json", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    let findings = decode_findings(&analysis.stdout);
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC9005")
+            .count(),
+        1
+    );
+    let stderr = String::from_utf8_lossy(&analysis.stderr).into_owned();
+    let timings: serde_json::Value = serde_json::from_str(
+        stderr
+            .lines()
+            .rev()
+            .find(|line| line.contains("contractBindingsRefused"))
+            .unwrap_or_else(|| panic!("no timings line in {stderr}")),
+    )
+    .unwrap();
+    assert_eq!(timings["contractBindingsBound"], 1);
+    assert_eq!(timings["contractBindingsRefused"], 0);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// A project whose only mention of a contracted package is `import type` keeps
+/// the tier that supplied the contract.
+///
+/// Zero bindings is not by itself a complaint: a type-only declaration carries
+/// no bindable specifier — contract resolution skips it exactly as analysis
+/// does — so there is nothing for the contract to describe and nothing wrong
+/// with the contract. `unbound` requires a *refusal*, which is the state where
+/// a bindable specifier exists and resolves somewhere the contract's package is
+/// not.
+#[test]
+fn a_type_only_import_of_a_contracted_package_is_not_unbound() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("type-only-contract");
+    let package = directory.join("node_modules/reactive-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::write(
+        package.join("package.json"),
+        "{\"name\":\"reactive-package\",\"version\":\"1.0.0\",\"types\":\"index.d.ts\",\
+         \"peerDependencies\":{\"solid-js\":\"^2.0.0\"}}\n",
+    )
+    .unwrap();
+    fs::write(
+        package.join("index.d.ts"),
+        "export declare function mapValue(\n  map: (index: number, item: () => number) => unknown\n\
+         ): void;\nexport type MapCallback = (index: number, item: () => number) => unknown;\n",
+    )
+    .unwrap();
+    fs::write(
+        package.join("solid-reactivity.json"),
+        identity_probe_contract("reactive-package", "."),
+    )
+    .unwrap();
+    fs::write(
+        directory.join("App.ts"),
+        "import type { MapCallback } from \"reactive-package\";\n\
+         export const named: MapCallback = (index, item) => item();\n",
+    )
+    .unwrap();
+    let project = directory.join("tsconfig.json");
+    fs::write(
+        &project,
+        "{\"compilerOptions\":{\"module\":\"ESNext\",\"moduleResolution\":\"Bundler\",\
+         \"strict\":true,\"target\":\"ES2022\"},\"include\":[\"App.ts\"]}\n",
+    )
+    .unwrap();
+    let report = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--check-contracts", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    let decoded: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+    assert_eq!(decoded["packages"][0]["status"], "published");
+    assert_eq!(decoded["missing"], 0);
+    assert_eq!(report.status.code(), Some(0));
+    fs::remove_dir_all(directory).unwrap();
+}

@@ -38,6 +38,9 @@ pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
     pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
     pub(super) missing_exports: Vec<StaticDefect>,
+    /// How binding answered per declaration, so a refusal is countable rather
+    /// than merely silent. See [`crate::ContractBindingCounts`].
+    pub(super) counts: crate::ContractBindingCounts,
 }
 
 fn runtime_identity_at(facts: &ProjectFacts, location: &Location) -> String {
@@ -360,13 +363,28 @@ pub(super) fn resolve_contract_imports(
     let mut bindings = Vec::new();
     let mut by_symbol = HashMap::new();
     let mut missing_exports = Vec::new();
+    let mut counts = crate::ContractBindingCounts::default();
     for file in &facts.files {
         for import in &file.ast.imports {
             if import.type_only {
                 continue;
             }
-            let Some(contract) = PackageContract::for_module(contracts, &import.module) else {
-                continue;
+            let contract = match PackageContract::bind_import(
+                contracts,
+                facts,
+                file.path.as_str(),
+                import.span,
+                &import.module,
+            ) {
+                crate::ImportBinding::Bound(contract) => {
+                    counts.bound += 1;
+                    contract
+                }
+                crate::ImportBinding::Refused => {
+                    counts.refused += 1;
+                    continue;
+                }
+                crate::ImportBinding::NoCandidate => continue,
             };
             for binding in &import.bindings {
                 if binding.type_only {
@@ -559,8 +577,22 @@ pub(super) fn resolve_contract_imports(
             let Some(module) = export.module.as_deref() else {
                 continue;
             };
-            let Some(contract) = PackageContract::for_module(contracts, module) else {
-                continue;
+            let contract = match PackageContract::bind_import(
+                contracts,
+                facts,
+                file.path.as_str(),
+                export.span,
+                module,
+            ) {
+                crate::ImportBinding::Bound(contract) => {
+                    counts.bound += 1;
+                    contract
+                }
+                crate::ImportBinding::Refused => {
+                    counts.refused += 1;
+                    continue;
+                }
+                crate::ImportBinding::NoCandidate => continue,
             };
             for specifier in &export.specifiers {
                 if specifier.type_only {
@@ -641,6 +673,7 @@ pub(super) fn resolve_contract_imports(
         bindings,
         by_symbol,
         missing_exports,
+        counts,
     }
 }
 
@@ -1968,6 +2001,7 @@ mod export_kind_proof_tests {
                 Vec::new(),
             ),
             typescript_changes: None,
+            resolved_imports: None,
         };
         export_kind_proof(&facts, &location)
     }
