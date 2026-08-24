@@ -55,6 +55,41 @@ new facts:
   For policies that accept only finite numbers, require `numbersAreFinite`
   whenever `mayBeNumber` is set; do not infer finiteness from a number literal's
   rendered type text.
+- Whether an exported binding is a runtime *function*: demand `callability`
+  **and** `constructability` at the export-specifier span, and treat
+  `callable` or `constructable` as a function. Neither alone answers it: a
+  class is `nonCallable`, because the type system reads a construct signature
+  as not a call signature, so `callability` alone reports a class as a
+  non-function. Do not substitute a syntactic search for a `class` keyword — a
+  bundled class reached only through a value expression
+  (`const C = (() => { class C {…}; …; return C; })()`, or a tuple element
+  whose element type is a class) has no class expression to find. `unknown` on
+  either fact, `mixed` on either fact, and absence are all fail-closed.
+  Demand at the export-specifier span, never at a declaration name: a class
+  *declaration name* (as opposed to the specifier that exports it) types as
+  the class's instance type, which answers `nonCallable` + `nonConstructable`
+  silently, with no `unknown` or `mixed` to flag the wrong span (see
+  docs/compiler-semantic-facts.md and ADR 0020's "What it does not answer").
+  **`nonCallable` + `nonConstructable` is proof only that the declared type
+  carries no call or construct signature — not proof that the runtime value
+  cannot be a function.** lib.es5.d.ts's `Function`-supertype family
+  (`Function`, `CallableFunction`, `NewableFunction`, and any type a value
+  is assignable to that carries no signature of its own, such as `object`,
+  `{}`, or `Record<string, unknown>`) declares `apply`/`call`/`bind` but no
+  call or construct signature, so `export declare const x: Function`
+  answers `nonCallable` + `nonConstructable` even though every function
+  value is assignable to `Function` and `typeof x === "function"` holds at
+  runtime for every value that type admits. This is not a corner case the
+  fact accidentally misses: TypeScript-Go's own `typeof` narrowing
+  (`isFunctionObjectType`) has a `bind`-member subtype-of-`Function`
+  fallback for exactly this family, so the compiler's own "is this a
+  function" answer and the callability/constructability pair's answer
+  diverge by design for these types. A consumer must fail closed
+  (uncertifiable, not "not a function") whenever the demanded span's type is
+  assignable to this Function-supertype family, until a producer-side
+  refinement carries that `bind` fallback into the fact itself (tracked as a
+  named follow-up in ADR 0020). For every type *not* in that family, the
+  pair remains the proof it always was.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

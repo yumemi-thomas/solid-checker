@@ -271,6 +271,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.TypeDescriptor &&
 				!demand.ResolvedCall &&
 				!demand.Callability &&
+				!demand.Constructability &&
 				!demand.RuntimeValueDomain &&
 				!demand.PrimitiveValueDomain &&
 				!demand.CallResultDomain &&
@@ -336,13 +337,16 @@ func (p *project) SemanticDemandRuns(
 				}
 				evidence[runIndex].descriptor(entity.TypeDescriptor)
 			}
-			if (demand.Callability || demand.RuntimeValueDomain) && queryNode != nil {
+			if (demand.Callability || demand.Constructability || demand.RuntimeValueDomain) && queryNode != nil {
 				if !queryTypeLoaded {
 					queryType = p.checker.GetTypeAtLocation(queryNode)
 					queryTypeLoaded = true
 				}
 				if demand.Callability {
 					entity.Callability = callabilityOfType(p.checker, queryType)
+				}
+				if demand.Constructability {
+					entity.Constructability = constructabilityOfType(p.checker, queryType)
 				}
 				if demand.RuntimeValueDomain {
 					domain := runtimeValueDomainOfType(p.checker, queryType)

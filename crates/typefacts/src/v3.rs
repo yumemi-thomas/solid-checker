@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
-    CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Declaration,
-    DeclarationOwner, EntityFact, FileFact, Location, ModuleFact, ModuleImportFact, ParameterFact,
-    PrimitiveValueDomain, ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration,
-    RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
-    TupleShape, TypeDescriptor,
+    CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Constructability,
+    Declaration, DeclarationOwner, EntityFact, FileFact, Location, ModuleFact, ModuleImportFact,
+    ParameterFact, PrimitiveValueDomain, ReferenceSpace, ResolvedCall, ResolvedCallValidity,
+    ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash,
+    SymbolFact, TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -23,8 +23,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V9: u64 = 9;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V11: u64 = 11;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V12: u64 = 12;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V13: u64 = 13;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V14: u64 = 14;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:4cd699bb6872dcfb6f9c2acd57b62217e174c3a4dc3a79477b21545c1e372802";
+    "sha256:56121a12f3d551194a40552c3886aadcb542aee9ca1cf22b6f0a2484afac6212";
 /// 2 because the lifecycle operation set widened: `Operation::Modules` is an
 /// operation a peer must know about to be paired at all, where every earlier
 /// vocabulary change added a fact to an existing operation and moved the schema
@@ -91,6 +92,8 @@ pub struct EntityDemand {
     pub structural_accessor: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub callability: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub constructability: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runtime_value_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -318,6 +321,7 @@ pub const DEMAND_FLAG_ARRAY_SHAPE: u64 = 1 << 12;
 pub const DEMAND_FLAG_TUPLE_SHAPE: u64 = 1 << 13;
 pub const DEMAND_FLAG_LIBRARY_TYPES: u64 = 1 << 14;
 pub const DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN: u64 = 1 << 15;
+pub const DEMAND_FLAG_CONSTRUCTABILITY: u64 = 1 << 16;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -766,6 +770,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
             TYPE_FACTS_TABLE_SCHEMA_V11 => 2047,
@@ -887,6 +892,11 @@ fn decode_entity_run(
         } else {
             PrimitiveValueDomain::default()
         };
+        let constructability = if flags & 8192 != 0 {
+            Some(parse_constructability(cursor.u64()?)?)
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -902,6 +912,7 @@ fn decode_entity_run(
             type_descriptor,
             resolved_call,
             callability,
+            constructability,
             runtime_value_domain,
             call_result_domain,
             constant_value,
@@ -964,6 +975,19 @@ fn parse_callability(value: u64) -> Result<Callability, String> {
         2 => Ok(Callability::Mixed),
         3 => Ok(Callability::Unknown),
         _ => Err(format!("unknown callability tag {value}")),
+    }
+}
+
+/// Constructability has its own tag space rather than borrowing
+/// callability's, so neither can be decoded as the other if either vocabulary
+/// grows.
+fn parse_constructability(value: u64) -> Result<Constructability, String> {
+    match value {
+        0 => Ok(Constructability::Constructable),
+        1 => Ok(Constructability::NonConstructable),
+        2 => Ok(Constructability::Mixed),
+        3 => Ok(Constructability::Unknown),
+        _ => Err(format!("unknown constructability tag {value}")),
     }
 }
 
@@ -1151,6 +1175,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V11
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V12
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V13
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V14
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1448,6 +1473,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.primitive_value_domain {
             flags |= DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN;
         }
+        if demand.constructability {
+            flags |= DEMAND_FLAG_CONSTRUCTABILITY;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -1483,14 +1511,15 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     use crate::{
-        ArgumentMappingReason, ArgumentMappingStatus, CallKind, Callability, ReferenceSpace,
-        ResolvedCallValidity,
+        ArgumentMappingReason, ArgumentMappingStatus, CallKind, Callability, Constructability,
+        ReferenceSpace, ResolvedCallValidity,
     };
 
     use super::{
         SlotOp, TYPE_FACTS_SCHEMA_SHA256, TransitionMode, decode_table_transition,
         parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
-        parse_callability, parse_reference_space, parse_resolved_call_validity, push_uvarint,
+        parse_callability, parse_constructability, parse_reference_space,
+        parse_resolved_call_validity, push_uvarint,
     };
 
     fn push_test_string(frame: &mut Vec<u8>, value: &str) {
@@ -1604,6 +1633,24 @@ mod tests {
         }
         // One entity: start 0, length 1, no symbol, primitive-domain field.
         for value in [1, 0, 1, 0, 4096, domain_bits, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
+    fn constructability_transition(table_schema: u64, tag: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 3] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, constructability field.
+        for value in [1, 0, 1, 0, 8192, tag, 0] {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1907,6 +1954,29 @@ mod tests {
     }
 
     #[test]
+    fn wire_table_v14_decodes_constructability_and_v13_stays_frozen() {
+        for (tag, expected) in [
+            (0, Constructability::Constructable),
+            (1, Constructability::NonConstructable),
+            (2, Constructability::Mixed),
+            (3, Constructability::Unknown),
+        ] {
+            let transition =
+                decode_table_transition(&constructability_transition(14, tag)).unwrap();
+            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+                panic!("entity row was not replaced");
+            };
+            assert_eq!(entities[0].constructability, Some(expected));
+            // The fact is independent: nothing else on the row is invented.
+            assert_eq!(entities[0].callability, None);
+        }
+
+        // v13 froze at flag bit 12, so bit 13 is an unknown flag there.
+        assert!(decode_table_transition(&constructability_transition(13, 0)).is_err());
+        assert!(decode_table_transition(&constructability_transition(14, 4)).is_err());
+    }
+
+    #[test]
     fn numeric_enum_tags_decode_the_dense_go_golden() {
         let response: super::Response = crate::decode(include_bytes!(
             "../../../benchmarks/phase1/typefacts-v3-response-golden.cbor"
@@ -1946,6 +2016,21 @@ mod tests {
         assert_eq!(parse_callability(2).unwrap(), Callability::Mixed);
         assert_eq!(parse_callability(3).unwrap(), Callability::Unknown);
         assert!(parse_callability(4).is_err());
+
+        assert_eq!(
+            parse_constructability(0).unwrap(),
+            Constructability::Constructable
+        );
+        assert_eq!(
+            parse_constructability(1).unwrap(),
+            Constructability::NonConstructable
+        );
+        assert_eq!(parse_constructability(2).unwrap(), Constructability::Mixed);
+        assert_eq!(
+            parse_constructability(3).unwrap(),
+            Constructability::Unknown
+        );
+        assert!(parse_constructability(4).is_err());
 
         assert_eq!(parse_reference_space(0).unwrap(), ReferenceSpace::Value);
         assert_eq!(parse_reference_space(1).unwrap(), ReferenceSpace::Type);

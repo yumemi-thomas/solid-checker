@@ -20,6 +20,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 			Location:             location,
 			TypeDescriptor:       &TypeDescriptor{Text: "Value"},
 			Callability:          CallabilityCallable,
+			Constructability:     ConstructabilityConstructable,
 			RuntimeValueDomain:   domain,
 			PrimitiveValueDomain: primitiveDomain,
 			CallResultDomain:     callResultDomain,
@@ -35,7 +36,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		1,
 		[]EntityDemand{
 			{Location: location, Symbol: true},
-			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, PrimitiveValueDomain: true, CallResultDomain: true, ConstantValue: true, ArrayShape: true, TupleShape: true, LibraryTypes: true},
+			{Location: location, TypeDescriptor: true, Callability: true, Constructability: true, RuntimeValueDomain: true, PrimitiveValueDomain: true, CallResultDomain: true, ConstantValue: true, ArrayShape: true, TupleShape: true, LibraryTypes: true},
 		},
 		SemanticDemandRunResult{
 			Entities:   entities,
@@ -59,6 +60,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	}
 	if contribution.entities[0].Symbol != "symbol" ||
 		contribution.entities[0].Callability != CallabilityCallable ||
+		contribution.entities[0].Constructability != ConstructabilityConstructable ||
 		contribution.entities[0].RuntimeValueDomain != domain ||
 		contribution.entities[0].PrimitiveValueDomain != primitiveDomain ||
 		contribution.entities[0].CallResultDomain != callResultDomain ||

@@ -92,6 +92,33 @@ The TypeScript-Go adapter obtains the expression type with
 `never`, compiler error types, and missing types report `unknown`. No
 `TypeToString` result participates in this decision.
 
+## Constructability
+
+`EntityDemand.constructability` produces `EntityFact.constructability`:
+`constructable`, `nonConstructable`, `mixed`, or `unknown`. It is callability
+asked of `SignatureKindConstruct` — same type, same
+`GetTypeAtLocation`/`Distributed` walk, same fail-closed type flags — so a
+consumer demanding both gets two answers partitioned over the same
+constituents.
+
+It exists because construct signatures are exactly what callability does not
+count, which leaves a class's value type unanswerable: `typeof C` for
+`class C {}` is `nonCallable` and yet `typeof C === "function"` at runtime.
+That same type is `constructable` here, and only the pair decides whether an
+export is a runtime function. `mixed` on *either* fact does not compose with
+the other into a per-constituent proof:
+`(() => void) | number | (new () => X)` answers `mixed` twice and still holds a
+constituent that is neither.
+
+Abstract construct signatures are deliberately not filtered out — an abstract
+class is still a function object at runtime — so this fact does not answer
+instantiability. A class *declaration name* is not the same span as an export
+specifier: the compiler's type at the name is the class's *instance* type,
+which is `nonConstructable`. Aliases, imports, and re-export specifiers are
+transparent, as they are for callability. Absence means the fact was not
+demanded or the span carried no expression; `unknown` means the checker closed
+no domain. Neither is evidence of a non-constructable type.
+
 ## Runtime value domain
 
 `EntityDemand.runtimeValueDomain` produces

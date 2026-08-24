@@ -99,6 +99,35 @@ pub enum Callability {
     Unknown,
 }
 
+/// The compiler's construct-signature classification for one demanded
+/// expression's type: `new X()` where [`Callability`] answers `X()`.
+///
+/// It exists because a class's *value* type is otherwise unanswerable. The
+/// type system reads a construct signature as *not* a call signature, so
+/// `typeof C` for `class C {}` is [`Callability::NonCallable`] while
+/// `typeof C === "function"` holds at runtime. This fact is the missing half:
+/// that same type is [`Constructability::Constructable`].
+///
+/// `Unknown` is `any`, `unknown`, `never` or an error type — the checker
+/// closed no domain, so this is the *absence* of an answer and not a negative
+/// one. `Mixed` is a union holding both a constructable and a
+/// non-constructable constituent: proven, and proves neither side.
+///
+/// The producer answers it over the same constituent partition of the same
+/// type as [`Callability`], but the two aggregate *independently*, so a
+/// `Mixed` verdict on either does not compose with the other into a
+/// per-constituent proof. `(() => void) | number | (new () => X)` answers
+/// `Mixed` twice over and still holds a constituent that is neither callable
+/// nor constructable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Constructability {
+    Constructable,
+    NonConstructable,
+    Mixed,
+    Unknown,
+}
+
 /// Checker-derived runtime value classes for one demanded expression.
 ///
 /// `unknown` means the checker could not provide a closed domain. In that
@@ -762,6 +791,16 @@ pub struct EntityFact {
     pub resolved_call: Option<Arc<ResolvedCall>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callability: Option<Callability>,
+    /// Whether the type at this span has construct signatures. Read it beside
+    /// `callability`: a class is `NonCallable` and `Constructable`, and only
+    /// the two together decide whether an export is a runtime function.
+    ///
+    /// `None` means the fact was not demanded here, or the span carried no
+    /// expression to classify. It is never evidence of a non-constructable
+    /// type — and neither is `Some(Constructability::Unknown)`, which is the
+    /// checker declining to close a domain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constructability: Option<Constructability>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_value_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "primitive_value_domain_is_absent")]
@@ -1545,6 +1584,7 @@ mod tests {
                 r#async: false,
                 structural_accessor: false,
                 callability: false,
+                constructability: false,
                 runtime_value_domain: false,
                 primitive_value_domain: false,
                 call_result_domain: false,
@@ -1593,6 +1633,7 @@ mod tests {
                 r#async: false,
                 structural_accessor: false,
                 callability: false,
+                constructability: false,
                 runtime_value_domain: false,
                 primitive_value_domain: false,
                 call_result_domain: false,
@@ -1613,6 +1654,7 @@ mod tests {
                 r#async: true,
                 structural_accessor: true,
                 callability: true,
+                constructability: true,
                 runtime_value_domain: true,
                 primitive_value_domain: true,
                 call_result_domain: true,
@@ -1633,6 +1675,7 @@ mod tests {
                 r#async: true,
                 structural_accessor: false,
                 callability: false,
+                constructability: false,
                 runtime_value_domain: false,
                 primitive_value_domain: false,
                 call_result_domain: false,

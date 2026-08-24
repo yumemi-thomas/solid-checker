@@ -25,6 +25,7 @@ const (
 	wireTransitionEntityHasTupleShape
 	wireTransitionEntityHasLibraryTypes
 	wireTransitionEntityHasPrimitiveValueDomain
+	wireTransitionEntityHasConstructability
 )
 
 const (
@@ -130,6 +131,13 @@ func writeWireTransitionEntityRun(
 				return fmt.Errorf("entity %d: %w", index, err)
 			}
 		}
+		var constructability uint64
+		if entity.Constructability.IsPresent() {
+			constructability, err = wireTransitionConstructabilityCode(entity.Constructability)
+			if err != nil {
+				return fmt.Errorf("entity %d: %w", index, err)
+			}
+		}
 		var referenceSpace uint64
 		if entity.ReferenceSpace != "" {
 			referenceSpace, err = wireTransitionReferenceSpaceCode(entity.ReferenceSpace)
@@ -200,6 +208,9 @@ func writeWireTransitionEntityRun(
 		if tableSchema >= TypeFactsTableSchemaVersionV13 && entity.PrimitiveValueDomain.IsPresent() {
 			flags |= wireTransitionEntityHasPrimitiveValueDomain
 		}
+		if tableSchema >= TypeFactsTableSchemaVersionV14 && entity.Constructability.IsPresent() {
+			flags |= wireTransitionEntityHasConstructability
+		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
 		}
@@ -268,6 +279,9 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV13 && entity.PrimitiveValueDomain.IsPresent() {
 			w.u64(wireTransitionPrimitiveValueDomainBits(entity.PrimitiveValueDomain))
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV14 && entity.Constructability.IsPresent() {
+			w.u64(constructability)
 		}
 		previousStart = start
 	}
@@ -590,6 +604,24 @@ func wireTransitionCallabilityCode(value Callability) (uint64, error) {
 		return 3, nil
 	default:
 		return 0, fmt.Errorf("unknown callability %q", value)
+	}
+}
+
+// wireTransitionConstructabilityCode keeps its own code space rather than
+// borrowing callability's. The two facts are separate rows and nothing may
+// silently decode one as the other if either vocabulary ever grows.
+func wireTransitionConstructabilityCode(value Constructability) (uint64, error) {
+	switch value {
+	case ConstructabilityConstructable:
+		return 0, nil
+	case ConstructabilityNonConstructable:
+		return 1, nil
+	case ConstructabilityMixed:
+		return 2, nil
+	case ConstructabilityUnknown:
+		return 3, nil
+	default:
+		return 0, fmt.Errorf("unknown constructability %d", uint8(value))
 	}
 }
 

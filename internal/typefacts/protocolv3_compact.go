@@ -72,6 +72,7 @@ const (
 	demandFlagTupleShape           = 1 << 13
 	demandFlagLibraryTypes         = 1 << 14
 	demandFlagPrimitiveValueDomain = 1 << 15
+	demandFlagConstructability     = 1 << 16
 )
 
 // stringTableV3 interns strings in first-occurrence order; index 0 is "".
@@ -172,6 +173,9 @@ func CompactDemandsV3From(demands []EntityDemand) CompactDemandsV3 {
 		if demand.PrimitiveValueDomain {
 			flags |= demandFlagPrimitiveValueDomain
 		}
+		if demand.Constructability {
+			flags |= demandFlagConstructability
+		}
 		header := flags << 1
 		if demand.QueryLocation != nil {
 			header |= 1
@@ -255,6 +259,7 @@ func (compact CompactDemandsV3) Expand() ([]EntityDemand, error) {
 				TupleShape:           flags&demandFlagTupleShape != 0,
 				LibraryTypes:         flags&demandFlagLibraryTypes != 0,
 				PrimitiveValueDomain: flags&demandFlagPrimitiveValueDomain != 0,
+				Constructability:     flags&demandFlagConstructability != 0,
 			}
 			if header&1 != 0 {
 				queryPathIndex, next, err := takeCompactUvarint(rest)
@@ -390,6 +395,7 @@ func appendCompactDemandsWithFlag(
 				TupleShape:           flags&demandFlagTupleShape != 0,
 				LibraryTypes:         flags&demandFlagLibraryTypes != 0,
 				PrimitiveValueDomain: flags&demandFlagPrimitiveValueDomain != 0,
+				Constructability:     flags&demandFlagConstructability != 0,
 			}
 		}
 		if header&1 != 0 {

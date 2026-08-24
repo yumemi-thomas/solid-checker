@@ -123,6 +123,44 @@ func callabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefa
 	}
 }
 
+// constructabilityOfType is callabilityOfType asked of construct signatures.
+// The two walk the same constituents of the same type and fail closed on the
+// same type flags, so a caller demanding both gets two answers partitioned
+// alike.
+//
+// Abstract construct signatures are deliberately not filtered out: the
+// question is whether the type has a construct signature, and an abstract
+// class is still a function object at runtime. A caller that needs
+// instantiability must ask something else.
+func constructabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefacts.Constructability {
+	if value == nil || value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
+		return typefacts.ConstructabilityUnknown
+	}
+	constituents := value.Distributed()
+	if len(constituents) == 0 {
+		return typefacts.ConstructabilityUnknown
+	}
+	constructable, nonConstructable := false, false
+	for _, constituent := range constituents {
+		if constituent == nil || constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
+			return typefacts.ConstructabilityUnknown
+		}
+		if len(typeChecker.GetSignaturesOfType(constituent, checker.SignatureKindConstruct)) != 0 {
+			constructable = true
+		} else {
+			nonConstructable = true
+		}
+	}
+	switch {
+	case constructable && nonConstructable:
+		return typefacts.ConstructabilityMixed
+	case constructable:
+		return typefacts.ConstructabilityConstructable
+	default:
+		return typefacts.ConstructabilityNonConstructable
+	}
+}
+
 func unknownRuntimeValueDomain() typefacts.RuntimeValueDomain {
 	return typefacts.RuntimeValueDomain{
 		MayBeCallable: true, MayBeUndefined: true, MayBeOther: true, Unknown: true,

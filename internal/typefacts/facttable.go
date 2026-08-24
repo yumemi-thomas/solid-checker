@@ -26,4 +26,5 @@ const TypeFactsTableSchemaVersionV9 uint64 = 9
 const TypeFactsTableSchemaVersionV11 uint64 = 11
 const TypeFactsTableSchemaVersionV12 uint64 = 12
 const TypeFactsTableSchemaVersionV13 uint64 = 13
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV13
+const TypeFactsTableSchemaVersionV14 uint64 = 14
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV14

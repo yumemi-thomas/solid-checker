@@ -45,6 +45,57 @@ const (
 	CallabilityUnknown     Callability = "unknown"
 )
 
+// Constructability is the compiler's construct-signature classification for a
+// demanded expression: the exact counterpart of Callability, asking `new X()`
+// where Callability asks `X()`. It is derived from
+// TypeChecker.GetSignaturesOfType with SignatureKindConstruct over the actual
+// union constituents, never from rendered type text, and the two are answered
+// over the same constituent partition of the same type.
+//
+// A class declaration's *value* type is the case the type system otherwise
+// leaves unanswerable: it is `nonCallable` and `constructable`, because a
+// construct signature is not a call signature.
+//
+// The two facts aggregate independently, so a `mixed` verdict on either one
+// does not compose with the other into a per-constituent proof: a union of a
+// function, a number, and a constructor answers `mixed` twice over and still
+// holds a constituent that is neither.
+//
+// Unlike Callability it is a compact integer rather than a string, and is
+// stored inline in the field padding an EntityFact already carries, so a
+// retained row pays nothing for it. As a string it cost every row 16 bytes to
+// carry an absence — the same call PrimitiveValueDomain made, for the same
+// reason. The zero value is the absence of the fact, not a verdict.
+type Constructability uint8
+
+const (
+	ConstructabilityAbsent Constructability = iota
+	ConstructabilityConstructable
+	ConstructabilityNonConstructable
+	ConstructabilityMixed
+	ConstructabilityUnknown
+)
+
+// IsPresent reports whether the fact was answered at all. It is false for a
+// span nobody demanded it at; ConstructabilityUnknown is present and means the
+// checker closed no domain.
+func (c Constructability) IsPresent() bool { return c != ConstructabilityAbsent }
+
+func (c Constructability) String() string {
+	switch c {
+	case ConstructabilityConstructable:
+		return "constructable"
+	case ConstructabilityNonConstructable:
+		return "nonConstructable"
+	case ConstructabilityMixed:
+		return "mixed"
+	case ConstructabilityUnknown:
+		return "unknown"
+	default:
+		return ""
+	}
+}
+
 // RuntimeValueDomain summarizes the possible runtime values of a demanded
 // expression without exposing a compiler type or relying on rendered type
 // text. Unknown means the checker could not provide a closed value domain; in
