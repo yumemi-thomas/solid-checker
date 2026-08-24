@@ -2,8 +2,9 @@ use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
     AnalysisDemand, ArrayShape, CallKind, Callability, ConstantValue, ConstantValueKind,
-    DemandGroup, Location, ModuleGraphDemand, ModuleResolution, PrimitiveValueDomain, Producer,
-    ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain, Session, SessionError,
+    Constructability, DemandGroup, Location, ModuleGraphDemand, ModuleResolution,
+    PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain,
+    Session, SessionError,
     v3::{EntityDemand, FileChange},
 };
 
@@ -612,6 +613,114 @@ fn shared_transition_arena_matches_the_inline_process_adapter() {
         shared.take_last_table_changes(),
         inline.take_last_table_changes()
     );
+}
+
+/// The fact's reason for existing, end to end and across the real producer:
+/// a re-exported class is the one runtime `typeof === "function"` the type
+/// system will not say yes to. `callability` answers `nonCallable` for it, so
+/// only the pair decides. The class is declared in another file and reached
+/// through an export specifier, which is the exact span and the exact hop a
+/// package-contract consumer has.
+#[test]
+fn constructability_crosses_the_wire_for_a_re_exported_class() {
+    let root =
+        std::env::temp_dir().join(format!("typefacts-constructability-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let origin = root.join("origin.ts");
+    fs::write(&origin, "export class Widget {}\n").unwrap();
+    let path = root.join("source.ts");
+    let source = concat!(
+        "import { Widget } from \"./origin\";\n",
+        "declare const opaque: any;\n",
+        "export { Widget, opaque };\n",
+        "const probe = Widget;\n",
+    );
+    fs::write(&path, source).unwrap();
+    // One group per path, ascending by start byte, so each span is located by
+    // its own unique needle rather than by name.
+    let span = |needle: &str, name: &str| {
+        let start = source.find(needle).unwrap();
+        Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + name.len()) as u64,
+        }
+    };
+    let demands = vec![
+        EntityDemand {
+            location: span("Widget, opaque", "Widget"),
+            callability: true,
+            constructability: true,
+            ..EntityDemand::default()
+        },
+        EntityDemand {
+            location: span("opaque };", "opaque"),
+            callability: true,
+            constructability: true,
+            ..EntityDemand::default()
+        },
+        EntityDemand {
+            location: span("Widget;", "Widget"),
+            callability: true,
+            ..EntityDemand::default()
+        },
+    ];
+    let analysis = || AnalysisDemand {
+        entities: demands.clone(),
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let full = session.analyze(&analysis()).unwrap();
+    let rows: Vec<_> = full.entities().collect();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0].callability, Some(Callability::NonCallable));
+    assert_eq!(
+        rows[0].constructability,
+        Some(Constructability::Constructable)
+    );
+    // `any` closes no domain, so the fact is the absence of an answer rather
+    // than a negative one. A consumer must fail closed on it.
+    assert_eq!(rows[1].callability, Some(Callability::Unknown));
+    assert_eq!(rows[1].constructability, Some(Constructability::Unknown));
+    // Undemanded is distinct from unknown: nothing is published at all.
+    assert_eq!(rows[2].callability, Some(Callability::NonCallable));
+    assert_eq!(rows[2].constructability, None);
+
+    // Reuse and delta legs carry it identically, and an edit to the class's
+    // own file must re-derive rather than reuse.
+    let reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(reused.entities().collect::<Vec<_>>(), rows);
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+
+    session
+        .update([FileChange {
+            path: origin.to_string_lossy().into_owned(),
+            source: b"export const Widget = 1;\n".to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let delta = session.analyze(&analysis()).unwrap();
+    let changed: Vec<_> = delta.entities().collect();
+    assert_eq!(changed[0].callability, Some(Callability::NonCallable));
+    assert_eq!(
+        changed[0].constructability,
+        Some(Constructability::NonConstructable)
+    );
+    session.close().unwrap();
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]

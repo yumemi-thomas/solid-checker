@@ -81,6 +81,278 @@ export const neverValue = null as never;
 	}
 }
 
+// TestDemandedConstructabilityUsesCompilerConstructSignatures is the exact
+// counterpart of TestDemandedCallabilityUsesCompilerCallSignatures, and the
+// class rows are why the fact exists: the same declaration is nonCallable
+// there and constructable here.
+func TestDemandedConstructabilityUsesCompilerConstructSignatures(t *testing.T) {
+	dir := t.TempDir()
+	origin := `export class Widget {}
+export function make() {}
+`
+	source := `import { Widget, make } from "./origin";
+import * as originNamespace from "./origin";
+class Local {}
+abstract class Abstract { abstract render(): void }
+function plain() {}
+const value = 1;
+interface Factory { (): Widget; new (): Widget }
+declare const factory: Factory;
+declare const constructorOnly: new () => Widget;
+declare const mixedConstruct: (new () => Widget) | number;
+declare const anyValue: any;
+declare const unknownValue: unknown;
+declare const neverValue: never;
+declare const middleware: Function;
+const aliasedWidget = Widget;
+const aliasedMake = make;
+export { Local, Abstract, plain, value, Widget as ReWidget, originNamespace, factory, constructorOnly, mixedConstruct, anyValue, unknownValue, neverValue, middleware, aliasedWidget, aliasedMake };
+`
+	sourcePath := filepath.Join(dir, "facts.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext","moduleResolution":"bundler"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "origin.ts"), []byte(origin), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	cases := []struct {
+		// expression is matched at its LAST occurrence, which is the export
+		// clause for every re-exported name.
+		expression       string
+		callability      typefacts.Callability
+		constructability typefacts.Constructability
+	}{
+		// A class: the pair the type system cannot answer alone. The same
+		// declaration is nonCallable and constructable.
+		{"Local", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		// Abstract construct signatures are not filtered out: an abstract
+		// class is still a function object at runtime.
+		{"Abstract", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		{"plain", typefacts.CallabilityCallable, typefacts.ConstructabilityNonConstructable},
+		{"value", typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		// An interface carrying both signature kinds answers both positively.
+		{"factory", typefacts.CallabilityCallable, typefacts.ConstructabilityConstructable},
+		{"constructorOnly", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		{"mixedConstruct", typefacts.CallabilityNonCallable, typefacts.ConstructabilityMixed},
+		// A namespace object has neither signature kind: an honest negative.
+		{"originNamespace", typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		// Aliases and re-exports are transparent, exactly as for callability.
+		{"ReWidget", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		{"aliasedWidget", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		{"aliasedMake", typefacts.CallabilityCallable, typefacts.ConstructabilityNonConstructable},
+		// No closed type: the fact is the absence of an answer, never a
+		// negative one.
+		{"anyValue", typefacts.CallabilityUnknown, typefacts.ConstructabilityUnknown},
+		{"unknownValue", typefacts.CallabilityUnknown, typefacts.ConstructabilityUnknown},
+		{"neverValue", typefacts.CallabilityUnknown, typefacts.ConstructabilityUnknown},
+		// The trap docs/migration-solid-checker.md's callability+constructability
+		// recipe now names explicitly: lib.es5.d.ts's `Function` interface
+		// declares apply/call/bind but no call or construct signature of its
+		// own, so the pair answers nonCallable + nonConstructable here even
+		// though every runtime function value is assignable to `Function`.
+		// This is exactly why the pair proves "the declared type has no
+		// signatures", not "the value is not a function": a real project can
+		// export `declare const middleware: Function` and this fact pair
+		// will say it is not a function.
+		{"middleware", typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+	}
+	demands := make([]typefacts.EntityDemand, 0, len(cases))
+	for _, testCase := range cases {
+		start := strings.LastIndex(source, testCase.expression)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.expression)
+		}
+		demands = append(demands, typefacts.EntityDemand{
+			Location: typefacts.Location{
+				Path:      sourcePath,
+				StartByte: start,
+				EndByte:   start + len(testCase.expression),
+			},
+			Callability:      true,
+			Constructability: true,
+		})
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entities) != len(cases) {
+		t.Fatalf("entities = %d, want %d", len(entities), len(cases))
+	}
+	for index, testCase := range cases {
+		if got := entities[index].Constructability; got != testCase.constructability {
+			t.Errorf("%s constructability = %s, want %s", testCase.expression, got, testCase.constructability)
+		}
+		if got := entities[index].Callability; got != testCase.callability {
+			t.Errorf("%s callability = %q, want %q", testCase.expression, got, testCase.callability)
+		}
+	}
+
+	// A class *declaration name* is not the same span as an export
+	// specifier: the compiler's type there is the class's instance type,
+	// which has no construct signature. Pinned because it is the shape a
+	// consumer gets wrong by demanding at the wrong span, and because
+	// callability answers nonCallable there too and so hides the difference.
+	declarationName := strings.Index(source, "Local")
+	instance, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location: typefacts.Location{
+			Path:      sourcePath,
+			StartByte: declarationName,
+			EndByte:   declarationName + len("Local"),
+		},
+		Callability:      true,
+		Constructability: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := instance[0].Constructability; got != typefacts.ConstructabilityNonConstructable {
+		t.Errorf("class declaration-name constructability = %s, want %s", got, typefacts.ConstructabilityNonConstructable)
+	}
+
+	// An undemanded span carries no constructability at all, which is what
+	// separates "never asked" from "asked and got no closed answer".
+	undemanded, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:    demands[0].Location,
+		Callability: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := undemanded[0].Constructability; got.IsPresent() {
+		t.Errorf("undemanded constructability = %s, want absent", got)
+	}
+}
+
+// The measured shapes the fact was written for, reproduced from the published
+// artifacts named in solid-checker's precision backlog: a class a bundler
+// hides behind an IIFE, a class reached only as a cross-file tuple element
+// type, and the two destructuring patterns. None has a class expression a
+// syntactic search could find at the exported binding.
+func TestConstructabilityAnswersBundlerLoweredClasses(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext","moduleResolution":"bundler","allowJs":true},"include":["*.ts","*.js"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A cross-package tuple element type, as @tanstack/devtools-utils declares it.
+	if err := os.WriteFile(filepath.Join(dir, "utils.ts"), []byte(
+		"export declare class DevtoolsCore { mount(): void }\n"+
+			"export declare function constructCoreClass(): [typeof DevtoolsCore];\n"+
+			"export declare const pair: [typeof DevtoolsCore, number];\n"+
+			"export declare const Container: { Inner: typeof DevtoolsCore; label: string };\n",
+	), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// @solidjs/web@2.0.0-rc.1 ships ResponseEnvelope as plain JavaScript, not
+	// TypeScript. A .ts transcription of the same shape (a `class` expression
+	// cast `as any` to satisfy the compiler) never exercises .js inference,
+	// which is the exact path a consumer's real project takes: allowJs is on
+	// specifically so this file is checked as authored, without a TypeScript
+	// cast smoothing over anything. The file is named distinctly from the
+	// "artifact.ts" test source below it on purpose: giving a .js file the
+	// same basename as a sibling .ts file makes bundler-mode module
+	// resolution conflate "./envelope.js" with "./envelope.ts" (a file that
+	// does not even exist here) and, when it does exist as in an earlier
+	// version of this fixture, resolve the specifier back to the .ts
+	// importer itself, producing a self-referential TS2303 "circular
+	// definition of import alias" and answering unknown/unknown for reasons
+	// that have nothing to do with .js inference.
+	if err := os.WriteFile(filepath.Join(dir, "envelope.js"), []byte(
+		"const ENVELOPE = Symbol(\"envelope\");\n"+
+			"export const ResponseEnvelope = /* @__PURE__ */ (() => {\n"+
+			"  class ResponseEnvelope {}\n"+
+			"  ResponseEnvelope.prototype[ENVELOPE] = true;\n"+
+			"  return ResponseEnvelope;\n"+
+			"})();\n",
+	), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source := `import { constructCoreClass, pair, Container } from "./utils";
+import { ResponseEnvelope } from "./envelope.js";
+const coreClasses = constructCoreClass();
+const TableDevtoolsCore = coreClasses[0];
+const { Inner } = Container;
+const { label } = Container;
+const [Core] = pair;
+var Downleveled: any;
+(function (Downleveled) { Downleveled[Downleveled["A"] = 0] = "A"; })(Downleveled || (Downleveled = {}));
+const AnonymousClassExpr = class {};
+export { ResponseEnvelope, TableDevtoolsCore, Inner, label, Core, Downleveled, AnonymousClassExpr };
+`
+	sourcePath := filepath.Join(dir, "artifact.ts")
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	cases := []struct {
+		name             string
+		callability      typefacts.Callability
+		constructability typefacts.Constructability
+	}{
+		// @solidjs/web@2.0.0-rc.1 ResponseEnvelope, sourced from a real
+		// artifact.js above rather than a .ts transcription: the type must
+		// come from checking authored JavaScript, not a cast TypeScript file.
+		{"ResponseEnvelope", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		// @tanstack/*-devtools *DevtoolsCore.
+		{"TableDevtoolsCore", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		// const { Inner } = Container, a static class member.
+		{"Inner", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		// const { label } = Container, the primitive the refusal also cost.
+		{"label", typefacts.CallabilityNonCallable, typefacts.ConstructabilityNonConstructable},
+		// const [Core] = pair, a tuple element whose element type is a class.
+		{"Core", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+		// A downleveled enum object stays unanswerable: `any` closes no domain
+		// for either fact, so this fact does not rescue it.
+		{"Downleveled", typefacts.CallabilityUnknown, typefacts.ConstructabilityUnknown},
+		// A bare class EXPRESSION (not a bundler-hidden one): the export's own
+		// initializer is a `class {}` expression a syntactic search could in
+		// fact find. Pinned as a control alongside the harder shapes above.
+		{"AnonymousClassExpr", typefacts.CallabilityNonCallable, typefacts.ConstructabilityConstructable},
+	}
+	demands := make([]typefacts.EntityDemand, 0, len(cases))
+	for _, testCase := range cases {
+		start := strings.LastIndex(source, testCase.name)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.name)
+		}
+		demands = append(demands, typefacts.EntityDemand{
+			Location: typefacts.Location{
+				Path: sourcePath, StartByte: start, EndByte: start + len(testCase.name),
+			},
+			Callability:      true,
+			Constructability: true,
+		})
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range cases {
+		if got := entities[index].Constructability; got != testCase.constructability {
+			t.Errorf("%s constructability = %s, want %s", testCase.name, got, testCase.constructability)
+		}
+		if got := entities[index].Callability; got != testCase.callability {
+			t.Errorf("%s callability = %s, want %s", testCase.name, got, testCase.callability)
+		}
+	}
+}
+
 func TestDemandedRuntimeValueDomainUsesCheckerSemantics(t *testing.T) {
 	dir := t.TempDir()
 	source := `

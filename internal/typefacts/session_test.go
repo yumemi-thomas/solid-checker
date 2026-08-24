@@ -170,6 +170,7 @@ func TestLatestSemanticDomainsAreAvailableInV1(t *testing.T) {
 	projectID := "/project/tsconfig.json"
 	demand := EntityDemand{
 		Location:           Location{Path: "/project/source.ts", StartByte: 7, EndByte: 12},
+		Constructability:   true,
 		RuntimeValueDomain: true, PrimitiveValueDomain: true, CallResultDomain: true, ConstantValue: true, ArrayShape: true, TupleShape: true, LibraryTypes: true,
 	}
 	session, err := NewSession(newSessionTestBackend(), projectID, nil)
@@ -185,8 +186,8 @@ func TestLatestSemanticDomainsAreAvailableInV1(t *testing.T) {
 	if !response.OK {
 		t.Fatalf("v1 rejected semantic domains: %+v", response.Error)
 	}
-	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV13 {
-		t.Fatalf("active Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV13)
+	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV14 {
+		t.Fatalf("active Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV14)
 	}
 
 	compact := CompactDemandsV3From([]EntityDemand{demand})

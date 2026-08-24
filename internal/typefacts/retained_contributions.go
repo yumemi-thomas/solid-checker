@@ -159,6 +159,9 @@ func prepareRetainedContribution(
 		if entity.Callability != "" {
 			target.Callability = entity.Callability
 		}
+		if entity.Constructability.IsPresent() {
+			target.Constructability = entity.Constructability
+		}
 		if entity.RuntimeValueDomain != nil {
 			target.RuntimeValueDomain = entity.RuntimeValueDomain
 		}
