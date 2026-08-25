@@ -6114,7 +6114,7 @@ above but an attribute-*order* predicate (does a dynamic `textContent` follow a
 own probe of both compilers' emitted output for the ordering cases before a rule
 rests on it. The producer fix merged as `bf437061`: the template-root capture
 now follows Babel's source-order overwrite, so the later dynamic `textContent`
-drops the earlier `children` value. Pin `0ce01d74` descends that merge. The
+drops the earlier `children` value. Pin `b22de4ad` descends that merge. The
 checker therefore consumes an `elided` loser rather than certifying a divergent
 tracked child; no consumer mitigation was added or remains. Divergences 6-9
 reach no rule here and remain open.
