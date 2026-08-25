@@ -6252,42 +6252,52 @@ Deleted with it: `ExportKindProof::DestructuredMember`,
 `destructured_binding_at`, `location_destructures`). `Callability::Mixed` is no
 longer read on its own anywhere in the `kind` decision.
 
-**What is expected to move. The ecosystem benchmark was NOT re-run**, so the
-three bullets below are the discharge map this change was written against, not
-a measurement. The only corpus-level numbers here are the ones the previous two
-entries measured; re-measuring is the next pass's work and is the honest
-before/after target.
+**Measured 2026-08-25 against the full 416-row ecosystem corpus.** The discharge
+map below is now an observed result rather than a prediction. Against the
+attested-closure state, verified rows moved **275 -> 281**, refused rows
+**121 -> 116**, generation failures **15 -> 14**, failing claims **24 -> 11**,
+and contradicted `kind` claims **13 -> 0**. Exactly six rows changed outcome and
+none regressed; the complete account and binary identities are in
+[ecosystem-benchmark.md](ecosystem-benchmark.md#measured-state-2026-08-25-phase-a-constructability-closure-full-corpus-416-probe-rows).
 
 - The **13 wrong-kind claims** those entries left publishing `value` —
   `@solidjs/web@2.0.0-rc.1`'s `ResponseEnvelope` (6 rows, an IIFE-wrapped class
   whose initializer is a *call*) and `@tanstack/*-devtools`' `*DevtoolsCore`
   (7 rows, a class reached only as a tuple element type declared in another
-  package) — should be `Constructable` and raise to `function`. Neither shape
+  package) — are now `Constructable` and raise to `function`. Neither shape
   has a class expression in the analyzed artifact, which is why no amount of
   further syntax chasing could have closed them, and both shapes are reproduced
   as fixture rows here
-  (`export_kind_proof_tests::a_class_is_proven_by_constructability_alone`).
+  (`export_kind_proof_tests::a_class_is_proven_by_constructability_alone`). All
+  seven TanStack claims now pass and their five rows move `refused -> verified`.
+  All six `@solidjs/web` claims now pass too; those two rows remain refused only
+  because their attested module-closure note independently blocks promotion.
 - The **4 destructured-member refusals** should become decisions. The type
   answers a binding pattern directly: `(class Named {}).name` is a `string` and
   carries both closed negatives, so `@solid-devtools/ui@0.10.3`'s `./theme`
-  `color` and its kin should publish `value` and their entrypoints emit; a
+  `color` and its kin publish `value` and their entrypoints emit; a
   static class member (`const { Inner } = Container`) and a tuple element whose
   type is a class (`const [Core] = pair`) are `Constructable` and raise. The
   cost that entry recorded — a destructured primitive refused with the
   class-shaped ones — is discharged, and this one *is* measured locally:
   `fixtures/package-contracts/class-expression-kind`'s `./destructured`
   entrypoint flipped from **refused** to **two published `value` claims**,
-  pinned in its `expected.json` and its closure record.
-- The **17 `Callability::Unknown` refusals** are unchanged, as
-  [that entry predicted explicitly](#the-refusal-path-costs-enums-and-untyped-values-2026-08-24):
-  a downleveled enum, a value computed from an untyped global, and
-  `Object.assign(Object.create(null), …)` are `any`, and constructability reads
-  the same type and fails closed on the same flags. That one is measured
-  locally too, by `class-expression-kind`'s `./unresolvable` entrypoint, which
-  still refuses with both facts `Unknown`. `solid-js@1.9.14`'s `./web` is still
-  the most consequential single refusal in the corpus. The candidate that
-  closes it is still `primitive_value_domain` or an object-literal domain
-  demanded at export-specifier spans, unchanged and still open.
+  pinned in its `expected.json` and its closure record. Corpus-wide,
+  `@solid-devtools/ui@0.10.3` remains verified while its emitted exports move
+  **2 -> 13** and its driven/passing claims move **17 -> 28**.
+- The **17 `Callability::Unknown` refusals** were unchanged by constructability
+  alone, as
+  [that entry predicted explicitly](#the-refusal-path-costs-enums-and-untyped-values-2026-08-24).
+  The schema-15 follow-up below subsequently closes the signature-less
+  `Function` subset. The remaining shapes — a downleveled enum, a value computed
+  from an untyped global, and `Object.assign(Object.create(null), …)` — are
+  `any`, and constructability reads the same type and fails closed on the same
+  flags. That behavior is measured locally by `class-expression-kind`'s
+  `./unresolvable` entrypoint, which still refuses with both facts `Unknown`.
+  `solid-js@1.9.14`'s `./web` remains the most consequential single refusal in
+  the corpus. Its open candidate is still `primitive_value_domain` or an
+  object-literal domain demanded at export-specifier spans, and the full run
+  confirms that the entrypoint remains refused.
 
 ### The refusal message changed shape
 
@@ -6392,12 +6402,17 @@ answer and `kind: "value"` remains correct. The updated
 `fixtures/package-contracts/function-supertype-kind` pins six positive family
 shapes and those three broad negative controls beside a `number`.
 
+**Measured corpus effect:** `@tanstack/ai-devtools-core@0.5.6` moved from a
+whole-package generation failure to verified. Both exports now generate, both
+planned claims are driven, and both pass. It is the sixth and only
+`generate-failure -> verified` outcome movement in the 2026-08-25 run; the other
+five gains are the constructability-backed TanStack rows above.
+
 **Remaining producer limits:** `UntypedCallable` does not imply a readable
 signature; constructability remains `NonConstructable` for this family;
 runtime-value-domain does not add a second positive; union constituent
 aggregation remains coarser than a per-constituent proof; declaration lies are
-still possible; and the ecosystem corpus has not been remeasured for how often
-this answer changes a real export.
+still possible.
 
 ### Gates
 
@@ -6411,10 +6426,11 @@ packages, one added), `node --test scripts/*.test.mjs` (281, which `make verify`
 does not run and CI does), and `make verify`. `git diff --check`,
 workspace-wide `cargo clippy -D warnings`, and `cargo fmt --check` all clean.
 
-**Not run: the ecosystem benchmark.** It installs real packages from the
-registry, and the three corpus-level bullets above are therefore predictions
-from the discharge map rather than measurements. `benchmarks/ecosystem/` is
-untouched.
+**Deferred at the implementation handoff, completed 2026-08-25:** the ecosystem
+benchmark installs real packages from the registry, so it was not part of the
+original gate pass. The later full 416-row run measured the discharge map above
+and rewrote `benchmarks/ecosystem/verification-report.{json,md}`; its harness
+tests passed 230/230, and the universal handoff set remained clean.
 
 ## Investigated: `./web`, `onSettled`, and undeclared-dependency corpus failures — all honest (2026-08-24)
 

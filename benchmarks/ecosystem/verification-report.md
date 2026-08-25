@@ -8,12 +8,12 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 > ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran
 > under both a per-mode timeout and a whole-phase wall budget.
 
-- Started: 2026-08-23T22:33:21.496Z
-- Finished: 2026-08-23T22:39:45.956Z
+- Started: 2026-08-25T00:16:45.837Z
+- Finished: 2026-08-25T00:23:50.247Z
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Probe rows run: 416
-- Checker native binary: `0356938638a2d6594452dd574dcff4a82332b2f0a4d58abed21b578a759a3588` (14654736 bytes, mtime 2026-08-23T22:31:05.221Z)
-- Type Facts binary: `2bbdef833749ed8c9fdda60ed9245b54baeaa9ceb98b1a880853a2c90ac56f2d` (28389218 bytes, mtime 2026-08-23T22:31:05.229Z)
+- Checker native binary: `b1c027420756dcd377d6928ed650155da4546befa9c844da3030d0a33001c2bd` (14834288 bytes, mtime 2026-08-25T00:16:27.021Z)
+- Type Facts binary: `31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889` (28390098 bytes, mtime 2026-08-25T00:16:27.039Z)
 - Budgets: install 240000 ms, generate 120000 ms, probe 20000 ms per condition mode / 90000 ms + 500 ms per planned claim, capped at 900000 ms, whole phase, verify 90000 ms; concurrency 6
 - Import-environment shim: enabled (client, development and production sessions only; server sessions never)
 
@@ -22,18 +22,18 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 | Figure | Count |
 | --- | --- |
 | Probe rows run | 416 |
-| Reached a generated contract | 398/416 (95.67%) |
-| **Reached `verified`** | **275/416 (66.11%)** of all rows |
-| Reached `verified`, of rows that produced a contract | 275/398 (69.10%) |
-| Refused by `contract verify` | 121/416 (29.09%) |
+| Reached a generated contract | 399/416 (95.91%) |
+| **Reached `verified`** | **281/416 (67.55%)** of all rows |
+| Reached `verified`, of rows that produced a contract | 281/399 (70.43%) |
+| Refused by `contract verify` | 116/416 (27.88%) |
 
 Outcome classes, raw:
 
 | Outcome | Rows |
 | --- | --- |
-| `verified` | 275 |
-| `refused` | 121 |
-| `generate-failure` | 15 |
+| `verified` | 281 |
+| `refused` | 116 |
+| `generate-failure` | 14 |
 | `install-failure` | 3 |
 | `no-runtime` | 2 |
 
@@ -41,30 +41,30 @@ Outcome classes, raw:
 
 | Family | Rows | Contracts | Verified | Refused | Claims driven | Claims passed | Conversions | Exports certified | Exports unknown |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 23 | 8/23 (34.78%) | 13 | 1567/2964 (52.87%) | 1556/1567 (99.30%) | 28 | 15 | 56 |
+| Official Solid | 23 | 23 | 8/23 (34.78%) | 13 | 1608/2964 (54.25%) | 1603/1608 (99.69%) | 28 | 15 | 56 |
 | Kobalte | 6 | 3 | 1/6 (16.67%) | 2 | 887/1622 (54.69%) | 887/887 (100.00%) | 4 | 6 | 4 |
 | Solid Primitives | 289 | 281 | 220/289 (76.12%) | 61 | 1904/3167 (60.12%) | 1898/1904 (99.68%) | 566 | 564 | 806 |
 | Corvu | 28 | 28 | 18/28 (64.29%) | 10 | 289/426 (67.84%) | 289/289 (100.00%) | 36 | 60 | 60 |
-| TanStack | 52 | 48 | 21/52 (40.38%) | 27 | 1762/2729 (64.57%) | 1755/1762 (99.60%) | 159 | 248 | 380 |
-| Solid Devtools | 12 | 9 | 5/12 (41.67%) | 4 | 63/271 (23.25%) | 63/63 (100.00%) | 0 | 6 | 9 |
+| TanStack | 52 | 49 | 27/52 (51.92%) | 22 | 1765/2732 (64.60%) | 1765/1765 (100.00%) | 160 | 248 | 405 |
+| Solid Devtools | 12 | 9 | 5/12 (41.67%) | 4 | 74/284 (26.06%) | 74/74 (100.00%) | 2 | 14 | 12 |
 | Solid Recharts | 3 | 3 | 1/3 (33.33%) | 2 | 124/364 (34.07%) | 124/124 (100.00%) | 29 | 6 | 103 |
 | Motion for Solid | 3 | 3 | 1/3 (33.33%) | 2 | 908/966 (94.00%) | 908/908 (100.00%) | 0 | 24 | 333 |
 
 | Solid target | Rows | Contracts | Verified | Refused |
 | --- | --- | --- | --- | --- |
-| solid1 | 168 | 154 | 105/168 (62.50%) | 49 |
+| solid1 | 168 | 155 | 111/168 (66.07%) | 44 |
 | solid2 | 248 | 244 | 170/248 (68.55%) | 72 |
 
 ## Why verification refuses
 
-121 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
+116 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
 
 | Blocker (RFC 0002 §3) | Rows raising it | Blocker lines |
 | --- | --- | --- |
-| `kind-observed` | 69 | 165 |
-| `probe-report-includes-evidence-write` | 50 | 50 |
+| `kind-observed` | 65 | 156 |
+| `probe-report-includes-evidence-write` | 46 | 46 |
 | `incompleteness` | 40 | 592 |
-| `probe-failed` | 15 | 24 |
+| `probe-failed` | 8 | 11 |
 | `attested-closure-note` | 5 | 17 |
 | `closure-note` | 2 | 5 |
 
@@ -74,19 +74,19 @@ Attributed to one root cause per row instead. `probe-report-includes-evidence-wr
 | --- | --- |
 | `kind-observed` | 64 |
 | `incompleteness` | 38 |
-| `probe-failed` | 15 |
-| `attested-closure-note` | 2 |
+| `probe-failed` | 8 |
+| `attested-closure-note` | 4 |
 | `closure-note` | 2 |
 
 ## Drivability
 
 | Figure | Count |
 | --- | --- |
-| Claims planned across every probed contract | 12509 |
-| Driven | 7504/12509 (59.99%) |
-| Passed | 7480/12509 (59.80%) |
-| Failed | 24 |
-| Undriven | 5005/12509 (40.01%) |
+| Claims planned across every probed contract | 12525 |
+| Driven | 7559/12525 (60.35%) |
+| Passed | 7548/12525 (60.26%) |
+| Failed | 11 |
+| Undriven | 4966/12525 (39.65%) |
 | Incompleteness findings | 592 |
 
 Undriven claims by reason:
@@ -95,12 +95,12 @@ Undriven claims by reason:
 | --- | --- |
 | no probe form: reactiveReads | 1314 |
 | probe session aborted by package code | 671 |
-| entrypoint import threw | 634 |
+| entrypoint import threw | 584 |
 | no probe form: ownerRequirements | 556 |
-| no probe form: parameter identity | 398 |
-| synthesized call threw | 334 |
+| no probe form: parameter identity | 400 |
+| synthesized call threw | 341 |
 | no probe form: nested return leaf | 257 |
-| synthesized call did not invoke the callback | 227 |
+| synthesized call did not invoke the callback | 229 |
 | no plantable reactive source | 212 |
 | no probe form: asyncBehavior | 100 |
 | probe session wrote no report | 91 |
@@ -119,12 +119,12 @@ Undriven claims by reason:
 `kind` is the one claim schema v1 has no unknown sentinel for, so an unobserved one blocks rather than converting — which makes *why* it was unobserved the number the rule's next revision turns on. An **observation of absence** (`export-missing`: the namespace loaded and the binding was not in it) says the export does not exist in that artifact, so there is no consumer claim about that mode to certify. Every other non-observation is a **gap** — an import that threw, a session that died, a mode never attempted, a mode where no unambiguous summary resolves — and a gap must keep blocking. Every number in this section counts gaps only: a mode that was observed and *disagreed* is a failing claim, and it has its own section below rather than a row here, because amendment A9 forbids the two sharing a number.
 
 - Rows with at least one gap in a stated `kind` mode: 85
-- `kind` obligations with at least one gapped stated mode: 3083
+- `kind` obligations with at least one gapped stated mode: 3079
 
 | Why the mode produced no passing `kind` observation | (claim, mode) pairs |
 | --- | --- |
-| entrypoint import threw | 3878 |
-| probe session aborted by package code | 2629 |
+| entrypoint import threw | 3759 |
+| probe session aborted by package code | 2630 |
 | probe session wrote no report | 328 |
 | probe session hit the per-mode timeout | 306 |
 | no unambiguous summary resolves in the mode (no kind claim exists) | 82 |
@@ -133,27 +133,20 @@ Undriven claims by reason:
 | Mode | Gapped `kind` obligations |
 | --- | --- |
 | `server` | 2525 |
-| `client` | 1752 |
-| `production` | 1499 |
-| `development` | 1492 |
+| `client` | 1714 |
+| `production` | 1461 |
+| `development` | 1450 |
 
 ### `kind` claims the probe contradicted
 
 A mode whose observation **exists and disagreed** with the contract. Nothing above counts these, and nothing in any relaxation of the `kind` rule may absorb them: the package answered the claim differently, which is a generator bug or a package change, and neither is fixed by narrowing a mode away or converting a claim to unknown. They refuse the whole document today and must keep doing so.
 
-- Rows with at least one contradicted `kind` claim: 7
-- `kind` claims contradicted in at least one mode: 13
-
-| Mode | Contradicted `kind` claims |
-| --- | --- |
-| `client` | 13 |
-| `development` | 13 |
-| `production` | 13 |
-| `server` | 13 |
+- Rows with at least one contradicted `kind` claim: 0
+- `kind` claims contradicted in at least one mode: 0
 
 ## The probe environment
 
-An entrypoint whose module cannot be imported yields no observation at all. 33 of the corpus's rows had at least one entrypoint import throw. The probe worker is a bare Node process: no DOM, no bundler, no JSX or TypeScript loader, and only the packages the corpus manifest installs beside the probed one. Some of these throws are facts about the package; others are facts about that environment, and the two are not separated here.
+An entrypoint whose module cannot be imported yields no observation at all. 32 of the corpus's rows had at least one entrypoint import throw. The probe worker is a bare Node process: no DOM, no bundler, no JSX or TypeScript loader, and only the packages the corpus manifest installs beside the probed one. Some of these throws are facts about the package; others are facts about that environment, and the two are not separated here.
 
 | Import failure | Claims left undriven |
 | --- | --- |
@@ -162,7 +155,6 @@ An entrypoint whose module cannot be imported yields no observation at all. 33 o
 | Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './web' is not defined by "exports" in <path> | 81 |
 | Error: [solid-devtools]: Debugger hasn't found the exposed Solid Devtools API | 66 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'server-only' imported from <path> | 60 |
-| TypeError: Cannot read properties of null (reading '_depth') | 50 |
 | TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".jsx" for <path> | 27 |
 | SyntaxError: The requested module 'solid-js' does not provide an export named 'onSe | 10 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from <path> | 6 |
@@ -185,25 +177,25 @@ A module that reads `window` while it is being evaluated throws in a bare Node p
 
 `server` sessions are never shimmed: an import that throws on `window` under `--conditions node` is a truthful observation of that entrypoint in that mode, and faking it there would manufacture a pass the package never earned.
 
-- Rows where at least one session faked at least one global: 393
+- Rows where at least one session faked at least one global: 394
 
 | Faked global | Rows |
 | --- | --- |
-| `IntersectionObserver` | 393 |
-| `MutationObserver` | 393 |
-| `ResizeObserver` | 393 |
-| `cancelAnimationFrame` | 393 |
-| `document` | 393 |
-| `getComputedStyle` | 393 |
-| `history` | 393 |
-| `localStorage` | 393 |
-| `location` | 393 |
-| `matchMedia` | 393 |
-| `requestAnimationFrame` | 393 |
-| `screen` | 393 |
-| `self` | 393 |
-| `sessionStorage` | 393 |
-| `window` | 393 |
+| `IntersectionObserver` | 394 |
+| `MutationObserver` | 394 |
+| `ResizeObserver` | 394 |
+| `cancelAnimationFrame` | 394 |
+| `document` | 394 |
+| `getComputedStyle` | 394 |
+| `history` | 394 |
+| `localStorage` | 394 |
+| `location` | 394 |
+| `matchMedia` | 394 |
+| `requestAnimationFrame` | 394 |
+| `screen` | 394 |
+| `self` | 394 |
+| `sessionStorage` | 394 |
+| `window` | 394 |
 
 ### Worker processes
 
@@ -211,9 +203,9 @@ A worker stops at its first throw and the mode is restarted for what is left —
 
 | Figure | Count |
 | --- | --- |
-| Worker processes started | 16822 |
-| Of those, restarts after a throw | 15282 |
-| Sessions that died (crash, timeout, unreadable output) | 64 |
+| Worker processes started | 16829 |
+| Of those, restarts after a throw | 15285 |
+| Sessions that died (crash, timeout, unreadable output) | 65 |
 
 ## The install environment
 
@@ -232,11 +224,10 @@ A package that **imports something it declares nowhere** — not a dependency, n
 
 A **failure** is the strongest thing this measurement produces. The contract states a claim, the probe drove it, and the package did something else — a generator bug or a package change, never an environment gap and never an unreachable claim. Verification refuses the whole contract on one of these, deliberately: converting a contradicted claim to the unknown sentinel would hide it.
 
-24 failing claim(s) across the corpus, by shape:
+11 failing claim(s) across the corpus, by shape:
 
 | Claim, claimed, observed | Claims |
 | --- | --- |
-| kind: claimed value, observed function | 13 |
 | callbacks[n]: claimed inline, observed tracked | 3 |
 | callbacks[n]: claimed deferred, observed tracked | 3 |
 | callbacks[n]: claimed tracked, observed inline | 3 |
@@ -257,19 +248,6 @@ Each one, in full:
 | `@solid-primitives/date-difference@1.0.2|solid1|only` | `.:createDateNow` | `callbacks[0]=tracked` | inline | client, development, production |
 | `@solid-primitives/pagination@1.0.0-next.6|solid2|floor` | `.:createInfiniteScroll` | `callbacks[0]=tracked` | inline | client, development, production |
 | `@solid-primitives/pagination@1.0.0-next.6|solid2|head` | `.:createInfiniteScroll` | `callbacks[0]=tracked` | inline | client, development, production |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `.:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `./jsx-dev-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `./jsx-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | `.:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | `./jsx-dev-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | `./jsx-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
-| `@tanstack/devtools-a11y@0.2.2|solid1|only` | `./core:A11yDevtoolsCore` | `kind=value` | function | client, development, production, server |
-| `@tanstack/devtools-a11y@0.2.2|solid1|only` | `./core/production:A11yDevtoolsCore` | `kind=value` | function | client, development, production, server |
-| `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | `.:FormDevtoolsCore` | `kind=value` | function | client, development, production, server |
-| `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | `./production:HotkeysDevtoolsCore` | `kind=value` | function | client, development, production, server |
-| `@tanstack/pacer-devtools@1.4.0|solid1|only` | `.:PacerDevtoolsCore` | `kind=value` | function | client, development, production, server |
-| `@tanstack/pacer-devtools@1.4.0|solid1|only` | `./production:PacerDevtoolsCore` | `kind=value` | function | client, development, production, server |
-| `@tanstack/table-devtools@9.2.0|solid1|only` | `./production:TableDevtoolsCore` | `kind=value` | function | client, development, production, server |
 
 ## Conversion volume
 
@@ -277,20 +255,20 @@ A conversion replaces one export's whole claim domain with the `{"status":"unkno
 
 | Figure | Count |
 | --- | --- |
-| Claim domains converted to unknown | 822 |
-| Exports carrying an unknown in the verified rows, at generation | 1293/3014 (42.90%) |
-| Exports carrying an unknown in the verified rows, after verification | 1751/2680 (65.34%) |
+| Claim domains converted to unknown | 825 |
+| Exports carrying an unknown in the verified rows, at generation | 1325/3056 (43.36%) |
+| Exports carrying an unknown in the verified rows, after verification | 1779/2716 (65.50%) |
 
 How much a verified contract actually certifies from observation:
 
 | Figure | Count |
 | --- | --- |
-| Verified rows carrying at least one probed behavioral row | 3/275 (1.09%) |
+| Verified rows carrying at least one probed behavioral row | 3/281 (1.07%) |
 | Probed behavioral row markers kept across the whole corpus | 3 |
-| Inferred row markers dropped by verification | 3200 |
-| Probed markers discarded as unwitnessed by this run's report | 129 |
-| Entrypoints verification refused inside a promoted document | 30 |
-| Verified rows carrying at least one such refusal | 8 |
+| Inferred row markers dropped by verification | 3235 |
+| Probed markers discarded as unwitnessed by this run's report | 130 |
+| Entrypoints verification refused inside a promoted document | 33 |
+| Verified rows carrying at least one such refusal | 9 |
 
 The last two rows are a **cost made visible, not a regression**. An entrypoint whose `kind` claims this run did not observe is refused and omitted, exactly as `contract generate` already refuses an entrypoint it cannot certify, so the package's other entrypoints are not sunk by one unimportable subpath. A refused entrypoint is absent from the contract, which is an explicit uncertifiable result at the consumer rather than a wrong claim; a document where *no* entrypoint would certify anything is still refused whole. The exports it dropped are their own state in the composite below, still inside its denominator: a certified *share* that rose because unobservable exports left the population would be measuring nothing.
 
@@ -298,8 +276,8 @@ Converted domains by field:
 
 | Field | Conversions |
 | --- | --- |
-| `returns` | 448 |
-| `callbacks` | 362 |
+| `returns` | 450 |
+| `callbacks` | 363 |
 | `asyncBehavior` | 12 |
 
 ## The composite a consumer feels
@@ -308,10 +286,10 @@ Of every export the corpus's generated contracts describe:
 
 | State | Exports |
 | --- | --- |
-| (a) certified by a verified contract | 929/8696 (10.68%) |
-| (b) honest unknown inside a verified contract | 1751/8696 (20.14%) |
-| (c) dropped from a verified contract with its refused entrypoint | 334/8696 (3.84%) |
-| (d) inside a contract that never reached `verified` | 5682/8696 (65.34%) |
+| (a) certified by a verified contract | 937/8710 (10.76%) |
+| (b) honest unknown inside a verified contract | 1779/8710 (20.42%) |
+| (c) dropped from a verified contract with its refused entrypoint | 340/8710 (3.90%) |
+| (d) inside a contract that never reached `verified` | 5654/8710 (64.91%) |
 
 (c) is the cost of amendment A9 stage 1 stated as a consumer-facing number: the row verified, and these exports are absent from the document it promoted, so importing one is an explicit uncertifiable result. They stay in the denominator — a certified *share* that rose because unobservable exports left the population would be measuring nothing. (d) is every export of a contract that was generated and then refused, timed out, or errored before a probe report existed. Rows whose `npm install` or `contract generate` failed describe no exports at all and are in none of the four states.
 
@@ -319,12 +297,12 @@ Of every export the corpus's generated contracts describe:
 
 | Phase | Rows | Median | p90 | Max | Mean |
 | --- | --- | --- | --- | --- | --- |
-| install | 416 | 351 ms | 615 ms | 14336 ms | 507 ms |
-| generate | 413 | 121 ms | 667 ms | 18554 ms | 470 ms |
-| probe | 396 | 663 ms | 3242 ms | 202807 ms | 3063 ms |
-| verify | 396 | 52 ms | 61 ms | 81 ms | 52 ms |
-| pipelineWithoutInstall | 413 | 879 ms | 4031 ms | 221421 ms | 3457 ms |
-| total | 416 | 1348 ms | 4962 ms | 221942 ms | 3975 ms |
+| install | 416 | 754 ms | 1799 ms | 17298 ms | 1040 ms |
+| generate | 413 | 146 ms | 671 ms | 16910 ms | 459 ms |
+| probe | 397 | 692 ms | 3377 ms | 202677 ms | 3080 ms |
+| verify | 397 | 50 ms | 67 ms | 136 ms | 54 ms |
+| pipelineWithoutInstall | 413 | 953 ms | 3952 ms | 219645 ms | 3471 ms |
+| total | 416 | 1862 ms | 5977 ms | 220818 ms | 4527 ms |
 
 `install` may run against a warm npm cache, so it is a lower bound; `pipelineWithoutInstall` is the number that describes the checker's own cost.
 
@@ -333,7 +311,7 @@ Of every export the corpus's generated contracts describe:
 | Stage | Rows |
 | --- | --- |
 | `npm install` failed | 3 |
-| `contract generate` failed | 15 |
+| `contract generate` failed | 14 |
 | `contract probe` errored before writing a report | 0 |
 | no Solid runtime the row could honestly be probed against | 2 |
 | timed out under the harness budget | 0 |
@@ -347,7 +325,7 @@ Generation failures by class:
 
 | Class | Rows |
 | --- | --- |
-| `unclassified` | 11 |
+| `unclassified` | 10 |
 | `no-esm-runtime-target` | 2 |
 | `cjs-only-entrypoint` | 1 |
 | `no-exported-surface` | 1 |
@@ -443,21 +421,17 @@ Generation failures by class:
 | `@solid-primitives/virtual@1.0.0-next.4|solid2|floor` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x8 |
 | `@solid-primitives/virtual@1.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x8 |
 | `@solidjs/html@2.0.0-rc.1|solid2|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
-| `@solidjs/router@1.0.0|solid1|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x152 |
-| `@solidjs/start-devtools@1.0.0-next.3|solid2|floor` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x2, no unambiguous summary resolves in the mode (no kind claim exists) x1 |
-| `@solidjs/start-devtools@1.0.0-next.3|solid2|head` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x3 |
+| `@solidjs/router@1.0.0|solid1|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x38 |
+| `@solidjs/start-devtools@1.0.0-next.3|solid2|floor` | official-solid | `kind-observed` | 2 | kind-observed | no unambiguous summary resolves in the mode (no kind claim exists) x1 |
+| `@solidjs/start-devtools@1.0.0-next.3|solid2|head` | official-solid | `kind-observed` | 2 | kind-observed | probe session aborted by package code x1 |
 | `@solidjs/start@2.0.3|solid1|only` | official-solid | `closure-note` | 11 | attested-closure-note, closure-note | entrypoint import threw x332 |
 | `@solidjs/testing-library@0.8.10|solid1|only` | official-solid | `probe-failed` | 5 | incompleteness, probe-failed, probe-report-includes-evidence-write | — |
 | `@solidjs/vite-plugin@3.0.0-next.31|solid2|floor` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
 | `@solidjs/vite-plugin@3.0.0-next.31|solid2|head` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | official-solid | `probe-failed` | 8 | attested-closure-note, probe-failed, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x35, export-missing in this mode x22, **contradicted** x3 |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | official-solid | `probe-failed` | 8 | attested-closure-note, probe-failed, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x38, export-missing in this mode x22, **contradicted** x3 |
+| `@solidjs/web@2.0.0-rc.1|solid2|floor` | official-solid | `attested-closure-note` | 4 | attested-closure-note | no unambiguous summary resolves in the mode (no kind claim exists) x35, export-missing in this mode x22 |
+| `@solidjs/web@2.0.0-rc.1|solid2|head` | official-solid | `attested-closure-note` | 4 | attested-closure-note | no unambiguous summary resolves in the mode (no kind claim exists) x38, export-missing in this mode x22 |
 | `@tanstack/ai-solid-ui@0.7.18|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x36 |
 | `@tanstack/charts@0.14.0|solid1|only` | tanstack | `closure-note` | 1 | closure-note | probe session aborted by package code x957, entrypoint import threw x8, no unambiguous summary resolves in the mode (no kind claim exists) x3 |
-| `@tanstack/devtools-a11y@0.2.2|solid1|only` | tanstack | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write | entrypoint import threw x24, **contradicted** x2 |
-| `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | tanstack | `probe-failed` | 3 | kind-observed, probe-failed | **contradicted** x1 |
-| `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | tanstack | `probe-failed` | 3 | kind-observed, probe-failed | **contradicted** x1 |
-| `@tanstack/pacer-devtools@1.4.0|solid1|only` | tanstack | `probe-failed` | 5 | kind-observed, probe-failed | **contradicted** x2 |
 | `@tanstack/solid-charts@0.14.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
 | `@tanstack/solid-form@2.0.0-alpha.2|solid1|only` | tanstack | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write | — |
 | `@tanstack/solid-pacer-devtools@0.14.0|solid1|only` | tanstack | `kind-observed` | 3 | kind-observed | entrypoint import threw x2 |
@@ -478,7 +452,6 @@ Generation failures by class:
 | `@tanstack/solid-start@1.168.46|solid1|only` | tanstack | `kind-observed` | 11 | kind-observed | probe session aborted by package code x180, entrypoint import threw x88 |
 | `@tanstack/solid-store@0.11.1|solid1|only` | tanstack | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write | — |
 | `@tanstack/solid-table@9.1.2|solid1|only` | tanstack | `incompleteness` | 10 | incompleteness, kind-observed, probe-report-includes-evidence-write | probe session hit the per-mode timeout x306 |
-| `@tanstack/table-devtools@9.2.0|solid1|only` | tanstack | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write | **contradicted** x1 |
 | `motion-solidjs@0.6.0|solid1|only` | motion-solidjs | `incompleteness` | 19 | incompleteness, probe-report-includes-evidence-write | — |
 | `motion-solidjs@0.7.0-beta.4|solid2|head` | motion-solidjs | `incompleteness` | 31 | incompleteness, probe-report-includes-evidence-write | — |
 | `solid-js@1.9.14|solid1|only` | official-solid | `probe-failed` | 20 | incompleteness, probe-failed, probe-report-includes-evidence-write | probe session aborted by package code x86, no unambiguous summary resolves in the mode (no kind claim exists) x3, export-missing in this mode x1 |
@@ -512,7 +485,7 @@ Generation failures by class:
 | `@solid-devtools/debugger@0.28.1|solid1|only` | 5 | 5 | 0 | 0 | `.`, `./bundled`, `./index` |
 | `@solid-devtools/overlay@0.33.5|solid1|only` | 1 | 1 | 0 | 0 | — |
 | `@solid-devtools/transform@0.10.4|solid1|only` | 2 | 0 | 0 | 0 | — |
-| `@solid-devtools/ui@0.10.3|solid1|only` | 2 | 0 | 0 | 0 | `.`, `./icons` |
+| `@solid-devtools/ui@0.10.3|solid1|only` | 13 | 3 | 2 | 0 | `.`, `./icons` |
 | `@solid-primitives/a11y@1.0.0-next.3|solid2|floor` | 7 | 3 | 2 | 0 | — |
 | `@solid-primitives/a11y@1.0.0-next.3|solid2|head` | 7 | 3 | 2 | 0 | — |
 | `@solid-primitives/active-element@2.1.6|solid1|only` | 5 | 4 | 1 | 0 | — |
@@ -741,10 +714,15 @@ Generation failures by class:
 | `@solidjs/meta@1.0.0-next.2|solid2|head` | 8 | 7 | 0 | 0 | — |
 | `@solidjs/router@2.0.0-next.17|solid2|only` | 30 | 29 | 25 | 0 | — |
 | `@solidjs/universal@2.0.0-rc.1|solid2|only` | 1 | 0 | 0 | 0 | — |
+| `@tanstack/ai-devtools-core@0.5.6|solid1|only` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/ai-solid@0.18.3|solid1|only` | 21 | 16 | 4 | 0 | — |
+| `@tanstack/devtools-a11y@0.2.2|solid1|only` | 8 | 8 | 0 | 0 | `./angular`, `./react`, `./react/production` |
 | `@tanstack/devtools-ui@0.7.1|solid1|only` | 8 | 0 | 0 | 0 | `.`, `./icons` |
 | `@tanstack/devtools-utils@0.7.0|solid1|only` | 7 | 1 | 0 | 0 | `./preact`, `./react`, `./svelte`, `./vue` |
 | `@tanstack/devtools@0.14.2|solid1|only` | 3 | 1 | 0 | 0 | — |
+| `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | 2 | 2 | 0 | 0 | — |
+| `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | 1 | 1 | 0 | 0 | — |
+| `@tanstack/pacer-devtools@1.4.0|solid1|only` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/solid-ai-devtools@0.2.70|solid1|only` | 4 | 4 | 0 | 0 | — |
 | `@tanstack/solid-db@0.2.37|solid1|only` | 207 | 128 | 20 | 0 | — |
 | `@tanstack/solid-devtools@0.8.12|solid1|only` | 1 | 1 | 0 | 0 | — |
@@ -762,6 +740,7 @@ Generation failures by class:
 | `@tanstack/solid-start@2.0.0-rc.1|solid2|head` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
 | `@tanstack/solid-table-devtools@9.2.0|solid1|only` | 3 | 1 | 0 | 0 | — |
 | `@tanstack/solid-virtual@3.13.37|solid1|only` | 17 | 7 | 6 | 0 | — |
+| `@tanstack/table-devtools@9.2.0|solid1|only` | 10 | 10 | 1 | 0 | — |
 | `corvu@0.7.2|solid1|only` | 43 | 21 | 11 | 0 | `./otp-field`, `./popover`, `./resizable`, `./tooltip` |
 | `motion-solidjs@0.7.0-beta.4|solid2|floor` | 357 | 333 | 0 | 0 | — |
 | `solid-devtools@0.34.5|solid1|only` | 5 | 3 | 0 | 0 | — |
