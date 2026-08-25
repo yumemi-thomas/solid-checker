@@ -945,7 +945,7 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(property)?;
             }
         }
-        "argument" | "callback-result" => {
+        "argument" | "callback-result" | "callback-result-function" => {
             if returned.parameter.is_none()
                 || !returned.label.is_empty()
                 || !returned.elements.is_empty()
@@ -3516,6 +3516,13 @@ mod tests {
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&callback_result).is_ok());
+
+        let callback_result_function = ContractReturn {
+            kind: "callback-result-function".into(),
+            parameter: Some(0),
+            ..ContractReturn::default()
+        };
+        assert!(validate_contract_return(&callback_result_function).is_ok());
 
         let mixed = ContractReturn {
             kind: "object".into(),

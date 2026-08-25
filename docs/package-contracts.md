@@ -514,7 +514,8 @@ callback `owner` rows (no observation distinguishes inherited from created
 ownership — permanently out of reach), callback `arguments` descriptors, reactive
 reads, owner requirements, `asyncBehavior` (which has no evidence slot in the
 schema, so a driven observation could not be recorded), nested return leaves,
-and `returns` of kind `store-path`, `argument`, or `callback-result`.
+and `returns` of kind `store-path`, `argument`, `callback-result`, or
+`callback-result-function`.
 
 **What a probe observes.** `inline`, `deferred` and `tracked` classify
 attribution, so the export call sits inside a memo, the probe callback reads a
@@ -766,8 +767,8 @@ They used to be reported as **(C)**, the family whose definition is "converted
 to the unknown sentinel before promotion", while verification kept them; the
 report and the code told different stories about the same row. Callback
 `owner` rows, callback argument descriptors, nested return leaves, store-path,
-`argument`, and `callback-result` returns, and `asyncBehavior` are family (C)
-and do convert.
+`argument`, `callback-result`, and `callback-result-function` returns, and
+`asyncBehavior` are family (C) and do convert.
 
 **`returns=accessor` needs caching, not just reactivity.** The observation
 plants its signal read inside the callback the contract states, so a plain
@@ -859,7 +860,7 @@ Everything else converts, per **domain**:
 | `returns` (top-level `accessor`) | kept when probed and witnessed in every stated mode |
 | `callbacks[].owner` | converts the whole `callbacks` domain — permanently out of a machine's reach |
 | `callbacks[].arguments[]` descriptors | converts the whole `callbacks` domain |
-| `returns` `store-path`, `argument`, `callback-result`, or nested `elements`/`properties` leaves | converts `returns` |
+| `returns` `store-path`, `argument`, `callback-result`, `callback-result-function`, or nested `elements`/`properties` leaves | converts `returns` |
 | `asyncBehavior` | converts, always — no probe claim string, and no evidence slot in schema v1 to record one in |
 | any row carrying `inherited-from` evidence | converts its domain, at the top level **and inside every variant** |
 
@@ -2195,6 +2196,16 @@ the call site and preserve its accessor/store/tuple/object result. An external,
 conditional, or otherwise unresolved callback stays unknown; the relation does
 not turn a generic `T` into a guessed reactive kind. This is the shape used by
 `@solid-primitives/rootless`' `createSubRoot` and `createBranch`.
+
+A `callback-result-function` return identifies the narrower factory shape: the
+exported call returns a function, and invoking that returned function yields
+the result of the named callback parameter from the exported call. Consumers
+follow one exact same-file binding back to the contracted factory call, then
+instantiate the callback result as above. An alias, assignment, cross-file
+callable, or callback without an exact local body remains unknown. This is the
+shape used by `@solid-primitives/rootless`' singleton-root and root-pool
+factories; it does not claim that an arbitrary function-typed result is a
+reactive source.
 
 A shorthand property (`{ pathname }`) writes one identifier where a key and a
 value both stand, and TypeScript answers a symbol query at that span with the

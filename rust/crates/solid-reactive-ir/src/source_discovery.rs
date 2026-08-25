@@ -308,6 +308,57 @@ fn effective_inner_call_return(
         })
 }
 
+/// Resolve a call through one exact local binding whose initializer is a
+/// contracted callback-result function factory. The relation's parameter is
+/// scoped to the outer contracted call, not to the returned function's own
+/// arguments. Aliases, assignments, cross-file values, and unresolved
+/// callbacks deliberately yield no fact.
+fn effective_returned_callable_call(
+    call: &solid_facts::ast::CallFact,
+    context: &EffectiveReturnContext<'_>,
+    depth: usize,
+) -> Option<(ContractReturn, String, Location)> {
+    if depth == 0 {
+        return None;
+    }
+    let callee = context
+        .entities
+        .at(context.file.path.as_str(), call.callee)?;
+    let initializer = context.file.ast.bindings.iter().find_map(|binding| {
+        binding
+            .names
+            .iter()
+            .any(|name| context.entities.at(context.file.path.as_str(), name.span) == Some(callee))
+            .then_some(binding.call_initializer)
+            .flatten()
+    })?;
+    let factory_call = context.ast_index.call_by_span(initializer)?;
+    let contracted = context
+        .entities
+        .at(context.file.path.as_str(), factory_call.callee)
+        .and_then(|symbol| context.resolved_contracts.by_symbol.get(symbol))?;
+    let returned = contracted
+        .summary
+        .returns
+        .known()
+        .and_then(Option::as_ref)?;
+    if returned.kind != "callback-result-function" {
+        return None;
+    }
+    let relation = ContractReturn {
+        kind: "callback-result".into(),
+        parameter: returned.parameter,
+        ..ContractReturn::default()
+    };
+    effective_call_return(&relation, factory_call, context, depth - 1).map(|returned| {
+        (
+            returned,
+            contracted.local_name.clone(),
+            contracted.contract_location.clone(),
+        )
+    })
+}
+
 /// The statically-proven rc.0 async/hydration options declared on one
 /// reactive source. All flags default to `false` when there is no options
 /// argument (or an explicit `undefined`/`null`), which keeps that case on the
@@ -717,6 +768,31 @@ pub(crate) fn discover_file_sources(
                 }
                 _ => {}
             }
+            continue;
+        }
+        let context = EffectiveReturnContext {
+            file,
+            ast_index,
+            entities,
+            symbol_names,
+            resolved_contracts,
+            bundled_returns,
+            dialect: lookup.dialect,
+        };
+        if let Some((returned, export_name, contract_location)) =
+            effective_returned_callable_call(call, &context, 16)
+            && matches!(returned.kind.as_str(), "accessor" | "store-path")
+            && let Some(name) = binding.names.first()
+            && let Some(symbol) = entities.at(file.path.as_str(), name.span)
+        {
+            push_contracted_return_source(
+                &mut result,
+                symbol,
+                symbol_id(file.source_text(name.span).unwrap_or_default()),
+                &returned,
+                &export_name,
+                &contract_location,
+            );
             continue;
         }
         let primitive = primitive_name(

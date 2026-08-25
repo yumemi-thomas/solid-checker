@@ -3507,6 +3507,13 @@ TypeScript, and is fully certified with no findings.
   `@solid-primitives/rootless@1.5.4` contract and its exact runtime dependency
   closure are now bundled; the consumer fixture proves that a memo returned
   through `createSubRoot` remains a reactive source.
+- **Returned callback-result functions are now representable without a generic
+  callable guess.** `callback-result-function` states only that invoking the
+  returned function yields the named factory callback's result. The consumer
+  follows an exact same-file binding to the contracted factory call and fails
+  closed for aliases, assignments, cross-file values, and callbacks without a
+  local body. The singleton-root and root-pool exports now preserve memos
+  returned by their factories.
 - **Solid 2 callback timing now has one condition-aware owner.** The browser
   fallback tables match the observed `repeat` and boundary behavior. For an
   exact installed Solid release, its selected package-contract variant may
@@ -3514,12 +3521,11 @@ TypeScript, and is fully certified with no findings.
   async behavior, and all other primitive facts remain native. Node/server
   behavior therefore no longer has to be flattened into the browser table.
 
-The honest residue is narrower: schema v1 still has no returned-callable
-relation for singleton/root-pool wrappers, and its flat callback list cannot
-state Solid 1.x `createResource`'s overload-dependent slots or `mergeProps`'s
-variadic callback tail. The native Solid 1.x dialect remains call-shape exact
-for both, so this is contract portability/audit duplication rather than a
-consumer correctness gap.
+The honest residue is now the flat callback list: it cannot state Solid 1.x
+`createResource`'s overload-dependent slots or `mergeProps`'s variadic callback
+tail. The native Solid 1.x dialect remains call-shape exact for both, so this
+is contract portability/audit duplication rather than a consumer correctness
+gap.
 
 ## Closed 2026-08-23: a declaration sibling no longer certifies what it hid
 

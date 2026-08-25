@@ -277,7 +277,9 @@
           "additionalProperties": false,
           "required": ["kind", "parameter"],
           "properties": {
-            "kind": { "enum": ["argument", "callback-result"] },
+            "kind": {
+              "enum": ["argument", "callback-result", "callback-result-function"]
+            },
             "parameter": { "type": "integer", "minimum": 0 },
             "evidence": { "$ref": "#/$defs/claimEvidence" }
           }

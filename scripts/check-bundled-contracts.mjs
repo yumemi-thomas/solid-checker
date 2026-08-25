@@ -148,14 +148,15 @@ const callbackRows = summary =>
 const callbacksAreUnknown = summary =>
   Boolean(summary?.callbacks) && !Array.isArray(summary.callbacks);
 
-// `argument` and `callback-result` are relations between values, not concrete
-// runtime shapes. The generic driver can observe an accessor/store/structure;
-// it cannot establish identity or which callback produced a value without a
-// package-specific oracle, so reviewed relational rows deliberately have no
+// Relational returns are not concrete runtime shapes. The generic driver can
+// observe an accessor/store/structure; it cannot establish identity, which
+// callback produced a value, or what a returned function later yields without
+// a package-specific oracle, so reviewed relational rows deliberately have no
 // generic probe claim.
 const returnClaim = summary => {
   const kind = summary?.returns?.kind;
-  return typeof kind === "string" && !["argument", "callback-result"].includes(kind)
+  return typeof kind === "string" &&
+    !["argument", "callback-result", "callback-result-function"].includes(kind)
     ? `returns=${kind}`
     : undefined;
 };

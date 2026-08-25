@@ -50,6 +50,11 @@
     },
     "singleton-root": {
       "kind": "function",
+      "returns": {
+        "kind": "callback-result-function",
+        "parameter": 0,
+        "evidence": { "kind": "reviewed" }
+      },
       "callbacks": [
         {
           "parameter": 0,
@@ -62,6 +67,11 @@
     },
     "root-pool": {
       "kind": "function",
+      "returns": {
+        "kind": "callback-result-function",
+        "parameter": 0,
+        "evidence": { "kind": "reviewed" }
+      },
       "callbacks": [
         {
           "parameter": 0,

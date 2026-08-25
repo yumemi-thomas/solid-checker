@@ -7,8 +7,28 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/bundled-rootless-consumer/App.tsx",
-      "start": 513,
-      "end": 522,
+      "start": 1092,
+      "end": 1101,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bundled-rootless-consumer/App.tsx",
+      "start": 1126,
+      "end": 1135,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bundled-rootless-consumer/App.tsx",
+      "start": 1160,
+      "end": 1172,
       "fixes": 0
     }
   ]

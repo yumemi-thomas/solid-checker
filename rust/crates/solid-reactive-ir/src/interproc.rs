@@ -2674,8 +2674,11 @@ impl StructuredReturnDiscovery<'_, '_> {
                         .find(|function| function.span == initializer)?;
                     let index = self.indexes.get(&(file.path.to_string(), function.span))?;
                     let resolved = self.structured_returns[*index].as_ref()?;
-                    (!matches!(resolved.kind.as_str(), "argument" | "callback-result"))
-                        .then(|| resolved.clone())
+                    (!matches!(
+                        resolved.kind.as_str(),
+                        "argument" | "callback-result" | "callback-result-function"
+                    ))
+                    .then(|| resolved.clone())
                 }),
             "tuple" => Some(ContractReturn {
                 elements: returned
@@ -2702,6 +2705,40 @@ impl StructuredReturnDiscovery<'_, '_> {
             }),
             _ => Some(returned.clone()),
         }
+    }
+
+    /// Resolve `const use = contractedFactory(callback); use()` when the
+    /// contract states that the factory returns a callable whose invocation
+    /// yields that callback's result. The outer binding and contracted callee
+    /// must both resolve exactly in this file; wider value flow stays unknown.
+    fn returned_callable_call_return(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        fallback_label: &str,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        let initializer = self.binding_initializer(file, call.callee)?;
+        let factory_call = file
+            .ast
+            .calls
+            .iter()
+            .find(|candidate| candidate.span == initializer)?;
+        let symbol = self.entities.at(file.path.as_str(), factory_call.callee)?;
+        let returned = self
+            .contract_returns
+            .get(symbol)
+            .map(|(returned, _)| returned)
+            .filter(|returned| returned.kind == "callback-result-function")?;
+        let relation = ContractReturn {
+            kind: "callback-result".into(),
+            parameter: returned.parameter,
+            ..ContractReturn::default()
+        };
+        self.instantiate_return(file, factory_call, &relation, fallback_label, depth - 1)
     }
 
     fn context_return(
@@ -2919,6 +2956,11 @@ impl StructuredReturnDiscovery<'_, '_> {
             });
         }
         if let Some(returned) = self.reactive_proxy_return(file, call, fallback_label) {
+            return Some(returned);
+        }
+        if let Some(returned) =
+            self.returned_callable_call_return(file, call, fallback_label, depth - 1)
+        {
             return Some(returned);
         }
         if file.ast.members.iter().any(|member| {
@@ -5556,7 +5598,7 @@ fn interprocedural_reads(
         .any(|returned| {
             matches!(
                 returned.kind.as_str(),
-                "tuple" | "object" | "callback-result"
+                "tuple" | "object" | "callback-result" | "callback-result-function"
             )
         });
     if has_structured_return_seed {
