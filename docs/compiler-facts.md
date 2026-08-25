@@ -422,7 +422,7 @@ the tag, that arm would take the divergence wording and fail the gate.
 **Divergence 4 (nested `children` attribute promotion) was resolved by
 `fea62adb5d0332a4a3cb5088e97283673c40b540`** (upstream PR #3, "nested
 children attribute promotion") and is retained by the current
-`0ce01d7476367dab2f4d067f4771d5010e347c75` lineage on `next`. At the prior pin
+`b22de4ada7cbdedc24fa26b3d25b5b723f5c18fa` lineage on `next`. At the prior pin
 (`c6008f01…`), a `children`
 attribute on a nested native element with no source children —
 `<div><span children={x()}/></div>` — was a deliberate hard reconciliation
