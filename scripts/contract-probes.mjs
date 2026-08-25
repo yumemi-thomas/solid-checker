@@ -59,9 +59,9 @@ await probe("solid-js", ".", "createMemo", "callbacks[0]=tracked", () => {
 // executions for the same two slots -- it runs both synchronously inside the
 // call -- and is probed separately below; registering the browser bodies there
 // would record a failing result for a claim no variant states in that mode.
-async function probeSplitEffect(pkg, name, create) {
+async function probeSplitEffect(pkg, entrypoint, name, create) {
   if (mode === "server") return;
-  await probe(pkg, ".", name, "callbacks[0]=tracked", () => {
+  await probe(pkg, entrypoint, name, "callbacks[0]=tracked", () => {
     const [source, setSource] = solid.createSignal(0);
     let runs = 0;
     create(
@@ -77,7 +77,7 @@ async function probeSplitEffect(pkg, name, create) {
     solid.flush();
     return runs > before;
   }, 2);
-  await probe(pkg, ".", name, "callbacks[1]=deferred", () => {
+  await probe(pkg, entrypoint, name, "callbacks[1]=deferred", () => {
     const [source] = solid.createSignal(0);
     const [other, setOther] = solid.createSignal(0);
     let applyRuns = 0;
@@ -97,9 +97,9 @@ async function probeSplitEffect(pkg, name, create) {
   }, 2);
 }
 
-await probeSplitEffect("solid-js", "createEffect", solid.createEffect);
-await probeSplitEffect("solid-js", "createRenderEffect", solid.createRenderEffect);
-await probeSplitEffect("@solidjs/web", "effect", web.effect);
+await probeSplitEffect("solid-js", ".", "createEffect", solid.createEffect);
+await probeSplitEffect("solid-js", ".", "createRenderEffect", solid.createRenderEffect);
+await probeSplitEffect("@solidjs/web", ".", "effect", web.effect);
 
 await probe("solid-js", ".", "createTrackedEffect", "callbacks[0]=tracked", () => {
   const [source, setSource] = solid.createSignal(0);
@@ -458,43 +458,47 @@ for (const [name, create] of [
 // and nothing ever re-runs. `createEffect` passes `undefined` for `effectFn`,
 // so its parameter 1 is genuinely never invoked there and states no row.
 if (isServer) {
-  await probe("solid-js", ".", "createMemo", "callbacks[0]=inline", () => {
-    let runs = 0;
-    const memo = solid.createMemo(() => {
-      runs++;
-      return 1;
+  for (const [pkg, entrypoint, name, create] of [
+    ["solid-js", ".", "createMemo", solid.createMemo],
+    ["@solidjs/web", ".", "memo", web.memo],
+  ]) {
+    await probe(pkg, entrypoint, name, "callbacks[0]=inline", () => {
+      let runs = 0;
+      const memo = create(() => {
+        runs++;
+        return 1;
+      });
+      memo();
+      if (runs !== 1) return false;
+      solid.flush();
+      memo();
+      return runs === 1;
     });
-    memo();
-    if (runs !== 1) return false;
-    solid.flush();
-    memo();
-    return runs === 1;
-  });
+  }
 
-  for (const [pkg, name, create] of [
-    ["solid-js", "createEffect", (compute, apply) => solid.createEffect(compute, apply)],
+  for (const [pkg, entrypoint, name, create] of [
+    ["solid-js", ".", "createEffect", (compute, apply) => solid.createEffect(compute, apply)],
     [
       "solid-js",
+      ".",
       "createRenderEffect",
       (compute, apply) => solid.createRenderEffect(compute, apply),
     ],
-    ["@solidjs/web", "effect", (compute, apply) => web.effect(compute, apply)],
+    ["@solidjs/web", ".", "effect", (compute, apply) => web.effect(compute, apply)],
   ]) {
-    if (pkg === "solid-js") {
-      await probe(pkg, ".", name, "callbacks[0]=inline", () => {
-        let runs = 0;
-        create(
-          () => {
-            runs++;
-            return 1;
-          },
-          () => {},
-        );
-        return runs === 1;
-      });
-    }
+    await probe(pkg, entrypoint, name, "callbacks[0]=inline", () => {
+      let runs = 0;
+      create(
+        () => {
+          runs++;
+          return 1;
+        },
+        () => {},
+      );
+      return runs === 1;
+    });
     if (name === "createEffect") continue;
-    await probe(pkg, ".", name, "callbacks[1]=inline", () => {
+    await probe(pkg, entrypoint, name, "callbacks[1]=inline", () => {
       let applyRuns = 0;
       create(
         () => 1,
