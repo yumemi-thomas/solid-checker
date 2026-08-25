@@ -1256,6 +1256,10 @@ mod tests {
     ///   `createOptimisticStore`: the derived `createX(fn, …)` forms branch on
     ///   `typeof first === "function"` at runtime; the contract describes the
     ///   value form, which takes no callback.
+    /// - 2.0 `dynamic`: the browser implementation owns a tracked memo. The
+    ///   root server helper is eager, while the JSX runtime's lazy memo defers
+    ///   the same source. The flat review contract records `unknown`; the
+    ///   bundled entrypoint variants retain the exact executions.
     /// - 1.x `on`: the dialect's `(0, Inline)` row is an engine keying — the
     ///   returned adapter's invocation site decides the role (see
     ///   `callback_executions`' comment) — not a package fact the review
@@ -1265,7 +1269,11 @@ mod tests {
             Version::V1 => name == "on",
             Version::V2 => matches!(
                 name,
-                "createSignal" | "createStore" | "createOptimistic" | "createOptimisticStore"
+                "createSignal"
+                    | "createStore"
+                    | "createOptimistic"
+                    | "createOptimisticStore"
+                    | "dynamic"
             ),
         }
     }
