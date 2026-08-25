@@ -6,5 +6,5 @@
     "moduleResolution": "bundler",
     "jsx": "preserve"
   },
-  "include": ["App.tsx", "solid-js.d.ts", "jsx.d.ts"]
+  "include": ["App.tsx", "solid-js.d.ts", "solidjs-web.d.ts", "jsx.d.ts"]
 }

@@ -3292,9 +3292,9 @@ not attempt:
 
 ## Open: probe discovery contradicts bundled Solid negative claims (2026-08-23)
 
-**`solid-v2/solid-js` is resolved (2026-08-23); `solid-v2/@solidjs/web` and
-`solid-v1/solid-js` are not.** The resolution is recorded at the end of this
-entry, together with the exact worklist the two remaining contracts still carry.
+**`solid-v2/solid-js` was resolved on 2026-08-23 and
+`solid-v2/@solidjs/web` on 2026-08-25; `solid-v1/solid-js` remains open.** The
+resolutions and the remaining exact worklist are recorded below.
 
 The Stage-1 probe driver (`contract probe`, RFC 0002), run with discovery
 against the bundled `solid-js@2.0.0-rc.0` contract, reports 65 incompleteness
@@ -3430,14 +3430,47 @@ dialect-shadowed control and does not move. Only that fixture's snapshot
 changed — no existing finding moved, because every other contradicted export a
 fixture touches is in the dialect's primitive table.
 
+### Resolved for `solid-v2/@solidjs/web` (2026-08-25)
+
+The 40 discovered rows are no longer certified negatives. The exact RC.0
+runtime was read per export condition and subpath, rather than treating the
+root, JSX runtimes, frames server and storage entrypoints as one implementation:
+
+- `applyRef`, `createComponent` and `untrack` are inline; the browser
+  `getNextElement` template is inline while the root server binding is a
+  throwing client-only stub.
+- `effect` and `memo` now carry their missing server rows (`inline`) and their
+  JSX-runtime re-exports use the same condition-aware summaries. Root-server
+  `dynamic` is eager/inline; the JSX runtime's lazy memo makes its server
+  source deferred; browser builds track it.
+- Root `renderToString` invokes parameter 0 only on the server. Server
+  `ssrElement` invokes function-valued props (parameter 1) and children
+  (parameter 2) inline; recording parameter 2 goes beyond discovery's current
+  two-parameter sampling bound.
+- `frameTransformResult` parameter 1, `serverComponentResponse` parameter 0,
+  and server `provideRequestEvent` parameter 1 are inline. The storage browser
+  build throws before the callback and therefore retains a real negative.
+- `mergeProps` is variadic and memoizes every function source, so schema v1's
+  `{"status":"unknown"}` is used instead of a finite list that would certify
+  a false negative at the next parameter.
+
+The flat review contract also uses `unknown` wherever a single name-level row
+cannot represent these condition splits. The bundled artifact retains exact
+variants. Runtime verification uses three isolated workers because importing
+the root, JSX and frames runtimes together changes renderer-wide trace hooks
+and contaminates later observations. `contract probe` against the exact
+package with `--no-environment-shim` reports 539 claims, 515 passed, 24
+undriven, **0 failed and 0 incompleteness**; the declared bundled-contract
+probe gate drives every new row without fake DOM globals.
+
+`fixtures/reactive-ir/bundled-contract-callback-consumer` pins the consumer
+effect with `@solidjs/web`'s exact browser `applyRef` declaration: an indirect
+reactive read passed as its callback reaches the untracked component call,
+while the same call in compiler-tracked JSX stays clean. TypeScript accepts
+both against the published signature.
+
 ### Still open
 
-- **`solid-v2/@solidjs/web`.** 40 rows over `applyRef`, `createComponent`,
-  `dynamic`, `effect`, `getNextElement`, `memo`, `mergeProps` (parameters 0 and
-  1), `renderToString`, `ssrElement`, `untrack`, `frameTransformResult`,
-  `serverComponentResponse` and `provideRequestEvent`, most repeated across
-  `.`, `./jsx-runtime` and `./jsx-dev-runtime`, which re-export the same
-  functions.
 - **`solid-v1/solid-js`.** 13 rows: `createComponent 0=inline` and
   `createResource 0=tracked` under `.`, `./jsx-runtime` and
   `./jsx-dev-runtime`; `mergeProps 0=tracked, 1=tracked` under `.` and
