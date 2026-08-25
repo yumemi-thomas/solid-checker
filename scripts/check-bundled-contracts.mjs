@@ -67,7 +67,11 @@ const manifests = loadDialectManifests({ requireArtifacts: true });
 // install it runs in. Every worker of a dialect runs in every condition mode.
 const probeWorkers = {
   "solid-v1": ["scripts/contract-probes-solid-v1-core.mjs", "scripts/contract-probes-solid-v1.mjs"],
-  "solid-v2": ["scripts/contract-probes.mjs"],
+  "solid-v2": [
+    "scripts/contract-probes.mjs",
+    "scripts/contract-probes-solid-v2-web-root.mjs",
+    "scripts/contract-probes-solid-v2-web.mjs",
+  ],
 };
 const definitions = manifests.flatMap(manifest =>
   manifest.contracts

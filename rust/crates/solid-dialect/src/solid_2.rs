@@ -1147,15 +1147,18 @@ mod tests {
     /// callback-taking export is in the vocabulary" can be asserted rather
     /// than asserted-with-exceptions-nobody-wrote-down.
     ///
-    /// All six are internals. `createComponent` and `devComponent` are
+    /// The compiler helpers are internals. `createComponent` and `devComponent` are
     /// emitted by the JSX transform; `ssrScope` and
     /// `runInServerComponentScope` support server compilation; `effect` and
     /// `memo` are `@solidjs/web`'s dom-expressions runtime helpers, called by
     /// compiled JSX output rather than written by hand (unlike 1.x, whose
     /// `solid-js/web` re-exports them as public aliases of
     /// `createRenderEffect` and a memo factory, which that dialect models).
-    /// None appears in application code, and modelling one would mean
-    /// inventing behavioural columns nothing could check.
+    /// The remaining names are contract-owned helpers rather than dialect
+    /// primitives. They stay outside the native vocabulary so their exact
+    /// package/entrypoint variants, including schema-v1 unknown sentinels, are
+    /// consumed through the bundled contract instead of being flattened into
+    /// one dialect-wide execution role.
     ///
     /// The generator records the same reviewed callback shapes in the checked-
     /// in contract, which the completeness test below reads directly.
@@ -1163,8 +1166,16 @@ mod tests {
         "createComponent",
         "devComponent",
         "effect",
+        "frameTransformResult",
+        "getNextElement",
+        "applyRef",
+        "mergeProps",
         "memo",
+        "provideRequestEvent",
+        "renderToString",
         "runInServerComponentScope",
+        "serverComponentResponse",
+        "ssrElement",
         "ssrScope",
     ];
 

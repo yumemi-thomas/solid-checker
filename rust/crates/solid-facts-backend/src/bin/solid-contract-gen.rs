@@ -44,20 +44,31 @@ struct Callback(usize, &'static str);
 struct Returns(&'static str, &'static str);
 
 struct Semantics {
-    callbacks: &'static [Callback],
+    /// `Some` is a reviewed finite callback domain; `None` is schema-v1's
+    /// honest unknown sentinel. The latter is required for variadic APIs and
+    /// for exports whose condition-selected implementations disagree, because
+    /// this flat review artifact cannot carry entrypoint variants.
+    callbacks: Option<&'static [Callback]>,
     returns: Option<Returns>,
 }
 
 const fn cb(callbacks: &'static [Callback]) -> Semantics {
     Semantics {
-        callbacks,
+        callbacks: Some(callbacks),
+        returns: None,
+    }
+}
+
+const fn unknown_callbacks() -> Semantics {
+    Semantics {
+        callbacks: None,
         returns: None,
     }
 }
 
 const fn ret(kind: &'static str, label: &'static str) -> Semantics {
     Semantics {
-        callbacks: &[],
+        callbacks: Some(&[]),
         returns: Some(Returns(kind, label)),
     }
 }
@@ -68,7 +79,14 @@ const fn both(
     label: &'static str,
 ) -> Semantics {
     Semantics {
-        callbacks,
+        callbacks: Some(callbacks),
+        returns: Some(Returns(kind, label)),
+    }
+}
+
+const fn unknown_callbacks_and_return(kind: &'static str, label: &'static str) -> Semantics {
+    Semantics {
+        callbacks: None,
         returns: Some(Returns(kind, label)),
     }
 }
@@ -453,12 +471,35 @@ static SOLIDJS_WEB: ContractTarget = ContractTarget {
     semantics: &[
         ("render", cb(&[Callback(0, "inline")])),
         ("hydrate", cb(&[Callback(0, "inline")])),
-        ("dynamic", cb(&[Callback(0, "tracked")])),
+        ("applyRef", cb(&[Callback(0, "inline")])),
+        ("createComponent", cb(&[Callback(0, "inline")])),
+        // Browser `dynamic` owns a tracked memo. The root server helper's memo
+        // is eager, while the JSX runtime's `{ lazy: true }` keeps it deferred;
+        // one name-level row cannot represent both public entrypoints.
+        ("dynamic", unknown_callbacks()),
         // Compiler-runtime helpers the JSX transform emits calls to; the
-        // dialect reviews them as unmodelled callback-takers rather than
-        // user-facing primitives, but the contract still carries their shape.
-        ("effect", cb(&[Callback(0, "tracked")])),
-        ("memo", cb(&[Callback(0, "tracked")])),
+        // dialect reviews them as unmodelled callback-takers. Their browser
+        // and server executions differ, so the flat artifact must not pick one.
+        ("effect", unknown_callbacks()),
+        (
+            "memo",
+            unknown_callbacks_and_return("accessor", "memo result"),
+        ),
+        // Browser calls the hydration template; the server binding is a
+        // client-only throwing stub.
+        ("getNextElement", unknown_callbacks()),
+        // Variadic: every function source is memoized, so no finite parameter
+        // list can close the callback domain.
+        ("mergeProps", unknown_callbacks()),
+        // Browser stubs versus server implementations that invoke callbacks.
+        ("renderToString", unknown_callbacks()),
+        ("ssrElement", unknown_callbacks()),
+        ("untrack", cb(&[Callback(0, "inline")])),
+        ("frameTransformResult", cb(&[Callback(1, "inline")])),
+        ("serverComponentResponse", cb(&[Callback(0, "inline")])),
+        // The storage module is fixed, but its `isServer` import follows the
+        // host conditions: browser builds throw before invoking the callback.
+        ("provideRequestEvent", unknown_callbacks()),
         // Browser default is immediate, `{ lazy: true }` defers until the
         // wrapper renders, and the server never invokes the loader. The flat
         // schema cannot express that condition, so `deferred` is the safe
@@ -634,7 +675,15 @@ fn render(target: &ContractTarget, version: &str, names: &BTreeSet<String>) -> S
                 ",\n      \"returns\": {{\n        \"kind\": \"{kind}\",\n        \"label\": \"{label}\"\n      }}"
             ));
         }
-        if let Some(Semantics { callbacks, .. }) = entry
+        if let Some(Semantics {
+            callbacks: None, ..
+        }) = entry
+        {
+            body.push_str(",\n      \"callbacks\": {\n        \"status\": \"unknown\"\n      }");
+        } else if let Some(Semantics {
+            callbacks: Some(callbacks),
+            ..
+        }) = entry
             && !callbacks.is_empty()
         {
             body.push_str(",\n      \"callbacks\": [\n");

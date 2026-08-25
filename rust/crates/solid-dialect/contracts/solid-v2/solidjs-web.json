@@ -16,7 +16,13 @@
       "kind": "function"
     },
     "applyRef": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "assign": {
       "kind": "function"
@@ -67,7 +73,13 @@
       "kind": "function"
     },
     "createComponent": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "createFrame": {
       "kind": "function"
@@ -152,24 +164,18 @@
     },
     "dynamic": {
       "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ]
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "dynamicProperty": {
       "kind": "function"
     },
     "effect": {
       "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ]
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "enableRichArguments": {
       "kind": "function"
@@ -214,7 +220,13 @@
       "kind": "function"
     },
     "frameTransformResult": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "inline"
+        }
+      ]
     },
     "FUNCTION_HEADER": {
       "kind": "value"
@@ -250,7 +262,10 @@
       "kind": "function"
     },
     "getNextElement": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "getNextMarker": {
       "kind": "function"
@@ -353,15 +368,19 @@
     },
     "memo": {
       "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ]
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result"
+      },
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "mergeProps": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "Namespaces": {
       "kind": "value"
@@ -379,7 +398,10 @@
       "kind": "function"
     },
     "provideRequestEvent": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "RawTextElements": {
       "kind": "value"
@@ -427,7 +449,10 @@
       "kind": "function"
     },
     "renderToString": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "Repeat": {
       "kind": "function"
@@ -481,7 +506,13 @@
       "kind": "value"
     },
     "serverComponentResponse": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "setAttribute": {
       "kind": "function"
@@ -517,7 +548,10 @@
       "kind": "function"
     },
     "ssrElement": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "ssrGroup": {
       "kind": "function"
@@ -553,7 +587,13 @@
       "kind": "function"
     },
     "untrack": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "useHead": {
       "kind": "function",
