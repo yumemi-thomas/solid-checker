@@ -5850,8 +5850,9 @@ other:
 
 Each required its own probe against the real fork output before a checker rule
 could rest on it, the same discipline that produced divergences 1-4's
-mitigations. Divergence 5 and divergence 2 are closed by the later producer-pin
-entries below; divergences 6-9 remain open.
+mitigations. Divergence 5 and divergence 2 are closed by later producer-pin
+entries below, and divergence 8 is closed by the nested-owner entry below;
+divergences 6, 7, and 9 remain open.
 
 ## `Value(Elided)` was projected as code that runs (2026-08-24)
 
@@ -6114,10 +6115,27 @@ above but an attribute-*order* predicate (does a dynamic `textContent` follow a
 own probe of both compilers' emitted output for the ordering cases before a rule
 rests on it. The producer fix merged as `bf437061`: the template-root capture
 now follows Babel's source-order overwrite, so the later dynamic `textContent`
-drops the earlier `children` value. Pin `b22de4ad` descends that merge. The
+drops the earlier `children` value. Pin `aa7fffb1` descends that merge. The
 checker therefore consumes an `elided` loser rather than certifying a divergent
-tracked child; no consumer mitigation was added or remains. Divergences 6-9
-reach no rule here and remain open.
+tracked child; no consumer mitigation was added or remains. Divergences 6, 7,
+and 9 reach no rule here and remain open.
+
+## Closed 2026-08-25: nested custom elements retain their owner context
+
+Producer merge `aa7fffb1d36fb3ef6004e0ad8808d6be9dde9afc` resolves divergence 8.
+When `contextToCustomElements` is enabled, the nested native-element path now
+emits the same `_$owner = _$getOwner()` assignment as template-root lowering.
+The fix covers dashed custom elements, customized built-ins carrying `is=`, and
+`<slot>`; three parity probes pin those forms across all ten modes, with the
+applicable DOM outputs corrected and SSR/universal controls unchanged.
+
+This is a real runtime ownership correction, but not a checker execution-site
+change: the semantic trace schema has no fact for the custom-element owner tag,
+and no checker rule or mitigation consumed the divergent shape. A fresh debug
+coverage run at this pin therefore remains at 567 findings across 91 fixture
+projects, and the ownership gate remains at 289 cases / 465 ledger rows / 0
+pending. No snapshot or ledger expectation moves. Divergences 6, 7, and 9
+remain open.
 
 ## Closed 2026-08-25: nested dynamic `textContent` keeps existing children
 

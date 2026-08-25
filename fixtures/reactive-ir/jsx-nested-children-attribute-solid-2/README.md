@@ -21,7 +21,7 @@ At the new pin, `lower_dynamic_native_child` performs the same promotion
 onto the (empty) child list as an ordinary expression container, so it lowers
 and censuses exactly like any other nested child.
 
-The current `b22de4ada7cbdedc24fa26b3d25b5b723f5c18fa` pin retains this work from
+The current `aa7fffb1d36fb3ef6004e0ad8808d6be9dde9afc` pin retains this work from
 `main` onto `next`; the historical `c6008f01` → `fea62adb` transition above is
 the semantic change this fixture exists to pin.
 

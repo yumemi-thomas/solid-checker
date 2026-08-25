@@ -7,7 +7,7 @@ whose original notices remain applicable.
 
 - Upstream: https://github.com/ryansolid/dom-expressions
 - Consumed fork: https://github.com/yumemi-thomas/dom-expressions
-- Pinned revision: `b22de4ada7cbdedc24fa26b3d25b5b723f5c18fa`
+- Pinned revision: `aa7fffb1d36fb3ef6004e0ad8808d6be9dde9afc`
 - License: MIT
 
 The `dom-expressions-compiler` crate is consumed as a pinned Cargo git

@@ -422,7 +422,7 @@ the tag, that arm would take the divergence wording and fail the gate.
 **Divergence 4 (nested `children` attribute promotion) was resolved by
 `fea62adb5d0332a4a3cb5088e97283673c40b540`** (upstream PR #3, "nested
 children attribute promotion") and is retained by the current
-`b22de4ada7cbdedc24fa26b3d25b5b723f5c18fa` lineage on `next`. At the prior pin
+`aa7fffb1d36fb3ef6004e0ad8808d6be9dde9afc` lineage on `next`. At the prior pin
 (`c6008f01…`), a `children`
 attribute on a nested native element with no source children —
 `<div><span children={x()}/></div>` — was a deliberate hard reconciliation
@@ -451,7 +451,9 @@ already discarded.
 Divergence 5's template-root slot ordering is resolved by the `bf437061`
 lineage, and divergence 2's nested dynamic-`textContent` gate is resolved by
 `0ce01d74`: real children now carry ordinary tracked sites instead of becoming
-a census gap. Divergences 6-9 remain open and reach no rule in this checker.
+a census gap. Divergence 8's nested custom-element owner context is resolved by
+`aa7fffb1`; divergences 6, 7, and 9 remain open and reach no rule in this
+checker.
 The static `<noscript>` fast-path retraction remains an ordinary census gap in
 both dialects. These states are recorded in `docs/precision-backlog.md`.
 
