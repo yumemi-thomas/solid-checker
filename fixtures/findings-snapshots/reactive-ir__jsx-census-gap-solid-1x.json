@@ -31,8 +31,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-census-gap-solid-1x/App.tsx",
-      "start": 1654,
-      "end": 1660,
+      "start": 1680,
+      "end": 1686,
       "fixes": 0,
       "message": "reactive accessor \"note\" is read in ReadInsideDiscardedNoscript, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
@@ -43,8 +43,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-census-gap-solid-1x/App.tsx",
-      "start": 2398,
-      "end": 2405,
+      "start": 2424,
+      "end": 2431,
       "fixes": 0,
       "message": "reactive accessor \"count\" is read directly in ReadOutsideJsxStaysAViolation, which does not track; the read sees the current value once and never updates when \"count\" changes",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."

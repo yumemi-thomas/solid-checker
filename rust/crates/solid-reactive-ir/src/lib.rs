@@ -458,14 +458,10 @@ impl ReactiveRead {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum DivergentLowering {
-    /// Divergence 1: the children of a void element the fork lowered anyway.
-    /// Under 2.0 that is the nested native-child position only; under 1.x the
-    /// template-root position lowers them too (probed).
+    /// A child of a tag the dialect's parity target treats as void while the
+    /// pinned producer does not. At the current pins this is Solid 1.x's
+    /// `<keygen>` and `<menuitem>` only.
     VoidElementChild,
-    /// Divergence 3: the children of a `<noscript>` the fork lowered anyway —
-    /// where the element is its own template root, or its attributes force it
-    /// off the static-template fast path. Babel drops them in every position.
-    NoscriptChild,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -910,6 +906,13 @@ pub struct OwnerRequirement {
     /// owner contexts.
     #[serde(default, skip_serializing_if = "is_false")]
     pub component_uncertain: bool,
+    /// The operation sits in a source-level JSX region for which the compiler
+    /// emitted no execution census. The absence of an owner region is not a
+    /// proof that a live operation runs unowned: the compiler may have deleted
+    /// the expression or omitted a live lowering fact. Projection therefore
+    /// reports an uncertifiable proof obligation rather than a violation.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub missing_jsx_census: bool,
     /// The operation is written inside a JSX child region the pinned producer
     /// lowers and this dialect's parity-target compiler discards — the same
     /// divergence [`ReactiveRead::divergent_lowering`] carries, reaching the

@@ -2,23 +2,23 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
-      "start": 6986,
-      "end": 6992,
-      "fixes": 0
-    },
-    {
       "rule": "no-destructure",
       "code": "SC1003",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
-      "start": 11948,
-      "end": 11957,
+      "start": 10020,
+      "end": 10029,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 11422,
+      "end": 11434,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
-      "start": 13167,
-      "end": 13176,
+      "start": 11814,
+      "end": 11823,
       "fixes": 1
     }
   ]

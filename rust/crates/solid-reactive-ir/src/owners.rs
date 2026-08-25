@@ -1634,14 +1634,16 @@ pub(crate) fn push_owner_requirement(
         // the projection from reporting one.
         let divergent_lowering =
             crate::execution_role::divergent_lowered_child(dialect, file, span);
+        let missing_jsx_census = crate::execution_role::missing_jsx_census_region(file, span);
         requirements.push(OwnerRequirement {
             operation: crate::OwnerRequirementOperation::from_internal(operation),
             location,
-            uncertain: status.uncertain || divergent_lowering.is_some(),
+            uncertain: status.uncertain || divergent_lowering.is_some() || missing_jsx_census,
             runtime_uncertain: status.runtime_uncertain,
             caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
             component_uncertain: status.component_uncertain,
+            missing_jsx_census,
             divergent_lowering,
             report: status.report,
         });
@@ -2936,18 +2938,18 @@ mod tests {
     /// an owner seeded from it would certify ownership from a divergence.
     #[test]
     fn a_divergent_void_child_region_seeds_no_owner_context() {
-        let source = "const view = <div><br>{() => track()}</br></div>;";
+        let source = "const view = <div><keygen>{() => track()}</keygen></div>;";
         let child = Span::new(
             u32::try_from(source.find("{() => track()}").unwrap()).unwrap(),
-            u32::try_from(source.find("</br>").unwrap()).unwrap(),
+            u32::try_from(source.find("</keygen>").unwrap()).unwrap(),
         );
         let inner = Span::new(
             u32::try_from(source.find("track()").unwrap()).unwrap(),
-            u32::try_from(source.find("}</br>").unwrap()).unwrap(),
+            u32::try_from(source.find("}</keygen>").unwrap()).unwrap(),
         );
         let body = Span::new(
             u32::try_from(source.find("track()").unwrap()).unwrap(),
-            u32::try_from(source.find("}</br>").unwrap()).unwrap(),
+            u32::try_from(source.find("}</keygen>").unwrap()).unwrap(),
         );
         let facts = ExecutionMap {
             compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
@@ -2970,7 +2972,7 @@ mod tests {
         let file = owner_context_file(source, facts);
         assert_eq!(
             crate::execution_role::divergent_lowered_child(
-                solid_dialect::Version::V2.dialect(),
+                solid_dialect::Version::V1.dialect(),
                 &file,
                 inner
             ),
@@ -2978,7 +2980,7 @@ mod tests {
             "the lowered void-element child is the divergence, child span {child:?}"
         );
         assert_eq!(
-            compiler_owner_context(solid_dialect::Version::V2.dialect(), &file, body),
+            compiler_owner_context(solid_dialect::Version::V1.dialect(), &file, body),
             0
         );
     }

@@ -27,6 +27,7 @@ use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
 };
 use solid_dialect::Dialect;
+use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;
 
@@ -73,6 +74,43 @@ impl ProgramDraft {
         )) {
             self.static_defects.push(defect);
         }
+    }
+
+    /// Removes source-derived diagnostics and contract-generation obligations
+    /// whose primary operation the compiler proved it deleted.
+    ///
+    /// These tables are intentionally filtered together at the last common
+    /// pipeline seam. Their producers range from API-shape checks through the
+    /// upstream-compat pass and directive discovery, and none should have to
+    /// duplicate compiler-region policy. A discarded region is stronger than
+    /// a merely untracked one: there is no call, handler, mutation, directive
+    /// application, or callback obligation in the emitted program to report.
+    pub(crate) fn discard_deleted_static_diagnostics(&mut self, facts: &ProjectFacts) {
+        let files = facts
+            .files
+            .iter()
+            .map(|file| (file.path.as_str(), file))
+            .collect::<HashMap<_, _>>();
+        let retained = |location: &Location| {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(location.start_byte),
+                u32::try_from(location.end_byte),
+            ) else {
+                return true;
+            };
+            !files.get(location.path.as_ref()).is_some_and(|file| {
+                crate::execution_role::discarded_region_contains(file, Span::new(start, end))
+            })
+        };
+
+        self.static_defects
+            .retain(|defect| retained(&defect.location));
+        self.static_violations
+            .retain(|violation| retained(&violation.location));
+        self.directive_creations
+            .retain(|creation| retained(&creation.location));
+        self.contract_generation_obligations
+            .retain(|obligation| retained(&obligation.location));
     }
 
     /// Orders every table by location and assembles the final [`Program`].
@@ -473,6 +511,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
+    // Static and compatibility passes deliberately operate on source facts.
+    // Apply the compiler's stronger "this code was not emitted" fact once,
+    // after every producer has run and before unresolved obligations are
+    // attributed to exported surfaces.
+    draft.discard_deleted_static_diagnostics(facts);
     // Every stage that can file an unresolved obligation has run, so the
     // attribution question is answerable exactly once, over the final defect
     // list, rather than per stage over a partial one.

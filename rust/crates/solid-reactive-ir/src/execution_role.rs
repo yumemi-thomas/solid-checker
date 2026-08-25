@@ -62,6 +62,14 @@ pub(crate) fn missing_jsx_census(
     if execution != ExecutionRole::UntrackedRendering {
         return false;
     }
+    missing_jsx_census_region(file, span)
+}
+
+/// Whether the narrowest JSX region containing `span` has no compiler census
+/// entry. Ownership uses the structural question directly: unlike a reactive
+/// read, an owner requirement does not carry an [`ExecutionRole`] whose
+/// fallback classification can gate the check.
+pub(crate) fn missing_jsx_census_region(file: &solid_facts::FileFacts, span: Span) -> bool {
     narrowest_jsx_region_containing(file, span).is_some_and(|region| !census_touches(file, region))
 }
 
@@ -145,41 +153,6 @@ fn census_touches(file: &solid_facts::FileFacts, region: Span) -> bool {
         || facts.callback_roles.iter().any(|role| overlaps(role.span))
 }
 
-/// The HTML void elements, exactly the set both pinned compiler *producers*
-/// match.
-///
-/// Both spell it `void_elements` in `packages/compiler/src/shared/constants.rs`
-/// — the 2.0 fork at the `dom-expressions-compiler` rev in rust/Cargo.toml and
-/// the 1.x fork at the `solid1-dom-expressions-compiler` rev beside it — and
-/// the two lists are byte-identical (checked at both revs, not assumed). This
-/// is deliberately the only copy in this repository: the mitigation below is
-/// sound only while it names the same tags the compiler names, and a tag
-/// missing here is a divergently lowered child the checker would certify.
-///
-/// It is the *producers'* list, which is why it can be shared. The compilers
-/// Solid ships do not agree with each other about it: 1.x's parity-target Babel
-/// plugin treats two further tags as void, 2.0's deliberately does not, and a
-/// divergence exists exactly where a producer and its own parity target
-/// disagree. Those extras are dialect vocabulary and arrive through
-/// [`Dialect::parity_target_only_void_elements`] — never merged in here, because
-/// a union would withhold certification under the dialect whose compilers agree.
-const VOID_ELEMENTS: [&str; 14] = [
-    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
-    "track", "wbr",
-];
-
-/// The inert-markup element whose children the compiler Solid ships drops in
-/// every position: the fork's parity divergence 3.
-///
-/// Deliberately **not** a member of [`VOID_ELEMENTS`]. That list is
-/// byte-checked against the compiler's own `void_elements`, and `<noscript>` is
-/// not in it — it has an ordinary content model and diverges for an unrelated
-/// reason (its markup is inert, so the shipped compiler drops the subtree
-/// rather than the element being childless). Folding it in would make the void
-/// list stop matching the compiler's, which is the one property that makes the
-/// void arm auditable.
-const INERT_MARKUP_ELEMENT: &str = "noscript";
-
 /// Whether `span` sits inside a JSX child region that the pinned compiler
 /// lowered and the compiler Solid actually ships does not lower — and if so,
 /// which divergence it is.
@@ -187,25 +160,11 @@ const INERT_MARKUP_ELEMENT: &str = "noscript";
 /// This is the consumer half of the fork's known parity divergences
 /// (docs/execution-contract.md in the pinned fork, "The trace describes this
 /// compiler, not the parity target", which states the rule as binding on the
-/// consumer). Two of the four reach a rule here, and they share this predicate
-/// because they share their entire structure — a child region the fork lowers
-/// into a reactive `insert` and Babel emits nothing for:
-///
-/// - [`DivergentLowering::VoidElementChild`] (divergence 1).
-///   `<div><br>{x()}</br></div>`: the fork's nested native-child lowering walks
-///   into the children unconditionally and emits `_$insert(_el$2, x)`, so the
-///   census reports a `jsx-child` site resolved as `reactive-rerun`, while
-///   Babel discards a void element's child list in every position. Which tags
-///   count is partly a dialect question: the shared [`VOID_ELEMENTS`] are void
-///   in both producers *and* both parity targets, while
-///   [`Dialect::parity_target_only_void_elements`] adds the tags void in only
-///   *this* dialect's parity target — `<keygen>` and `<menuitem>` under 1.x,
-///   none under 2.0.
-/// - [`DivergentLowering::NoscriptChild`] (divergence 3).
-///   `<noscript>{x()}</noscript>`: Babel drops `<noscript>` children in every
-///   position; the fork drops them only on the static-template fast path, and
-///   where the `<noscript>` is its own template root — or its attributes force
-///   it off that fast path — it emits `_$insert(_el$, x)`.
+/// consumer). At the current pins only one class reaches a rule here: a child
+/// of a tag named by [`Dialect::parity_target_only_void_elements`]. Solid 1.x's
+/// Babel compiler treats `<keygen>` and `<menuitem>` as void while the Rust
+/// producer deliberately follows the modern 14-tag set and lowers their
+/// children. Solid 2 has no parity-target-only tags.
 ///
 /// Both traces are truthful about their own compiler. Neither is evidence about
 /// the *other*, and the checker does not know which compiler will build the
@@ -221,12 +180,9 @@ const INERT_MARKUP_ELEMENT: &str = "noscript";
 ///
 /// The compiler fact this *does* consult is a positive one, and it is what
 /// separates the divergence from an ordinary census gap: only a child the
-/// producer actually lowered diverges. Where the producer discarded the list
-/// instead it emits nothing and agrees with Babel — a 2.0 void element at its
-/// own template root, a `<noscript>` on the static-template fast path — so the
-/// site is an ordinary hole and [`missing_jsx_census`] owns it with its own
-/// wording. Probed at both pins rather than reasoned about; the fixtures name
-/// which position does which under which producer.
+/// producer actually lowered diverges. The former standard void and
+/// `<noscript>` divergences were fixed upstream; their surviving source
+/// expressions are ordinary census holes and [`missing_jsx_census`] owns them.
 pub(crate) fn divergent_lowered_child(
     dialect: &dyn Dialect,
     file: &solid_facts::FileFacts,
@@ -258,44 +214,23 @@ pub(crate) fn divergent_lowered_child(
         .then_some(divergence)
 }
 
-/// The innermost enclosing element whose children diverge, paired with the
-/// child region of it that contains `span`.
-///
-/// Narrowest region wins, the same rule [`narrowest_jsx_region_containing`]
-/// uses: for `<noscript><br>{x()}</br></noscript>` both elements qualify and
-/// the `<br>` is the nearer cause, so the message names the divergence the
-/// reader can act on. Either answer would be uncertifiable, but only one of
-/// them is the accurate reason.
+/// The innermost parity-target-only void element whose child contains `span`.
 ///
 /// An element's *attributes* are not its children — with exactly one
 /// exception, and it is not an exception to the rule so much as the rule
-/// applied to a different spelling. `children={…}` **is** the child list:
-/// Babel's preprocessing promotes the attribute to a real child before
-/// `transformElement` ever sees the element, and this fork's `captured_child`
-/// mirrors that. So a read written there is a read in the child position, and
-/// it diverges on the same elements for the same reason — the fork's
-/// `lower_dom_element` emits `_$insert(_el$, c)` for a template-root
-/// `<noscript children={c()}/>` while Babel, having promoted the value into a
-/// child list it then never visits, emits nothing (the fork's
-/// docs/execution-contract.md, divergence 3: *"The root-level
-/// `children`-attribute-promoted variant is the same divergence by another
-/// route"*). Every *other* attribute, event handler and `ref` on a void element
-/// and on a `<noscript>` lowers in both compilers and in every position, and
-/// stays outside this predicate.
+/// applied to a different spelling. `children={…}` **is** the child list when
+/// preprocessing promotes it before element lowering. A promoted value on
+/// Solid 1.x's `<keygen>` or `<menuitem>` therefore reaches the same surviving
+/// divergence as a source child. Every other attribute, event handler and
+/// `ref` stays outside this predicate.
 ///
 /// The attribute only counts where it is actually *promoted*, which is what
 /// [`promoted_children_attribute_value`] decides — the same conditions the
 /// fork's own capture is gated on. The positive-lowering test in
-/// [`divergent_lowered_child`] then keeps the arm honest across positions: the
-/// *nested* `<noscript children={c()}/>` discards the capture instead of
-/// promoting it, both compilers emit nothing, and the discarded region there
-/// withholds the divergence claim.
+/// [`divergent_lowered_child`] then keeps the arm honest across positions.
 ///
-/// Void membership is the shared [`VOID_ELEMENTS`] *or* this dialect's
-/// parity-target-only extras. The two are separate constants and joined only
-/// here, at the one question that needs the union — "does the compiler this
-/// project builds with drop this element's children?" — so neither list has to
-/// absorb the other's provenance.
+/// Membership is deliberately dialect-owned: only tags that the dialect's
+/// parity target alone calls void can diverge at the current producer pins.
 fn divergent_candidate_child(
     dialect: &dyn Dialect,
     file: &solid_facts::FileFacts,
@@ -305,22 +240,16 @@ fn divergent_candidate_child(
         .jsx_containing(span)
         .filter_map(|element| {
             let name = file.source_text(element.name.span)?;
-            let divergence = if VOID_ELEMENTS.contains(&name)
-                || dialect.parity_target_only_void_elements().contains(&name)
-            {
-                DivergentLowering::VoidElementChild
-            } else if name == INERT_MARKUP_ELEMENT {
-                DivergentLowering::NoscriptChild
-            } else {
+            if !dialect.parity_target_only_void_elements().contains(&name) {
                 return None;
-            };
+            }
             element
                 .children
                 .iter()
                 .copied()
                 .chain(promoted_children_attribute_value(file, element))
                 .find(|child| child.contains(span))
-                .map(|child| (divergence, child))
+                .map(|child| (DivergentLowering::VoidElementChild, child))
         })
         .min_by_key(|(_, child)| child.end - child.start)
 }
@@ -1755,7 +1684,7 @@ mod tests {
     /// element's *attribute*, which both compilers lower in every position.
     #[test]
     fn the_void_child_divergence_needs_a_lowered_site_not_a_void_tag() {
-        let source = "const view = <div><br>{count()}</br></div>;\n";
+        let source = "const view = <div><keygen>{count()}</keygen></div>;\n";
         let read = span_of(source, "count()");
         let mut census = execution_map();
         census.source_hash = SourceHash::of(source);
@@ -1764,7 +1693,7 @@ mod tests {
         // list, the two compilers agree, and this is a census hole rather than
         // a divergence.
         let hole = file(source, census.clone());
-        assert!(divergent_lowered_child(v2(), &hole, read).is_none());
+        assert!(divergent_lowered_child(v1(), &hole, read).is_none());
         assert!(missing_jsx_census(
             &hole,
             read,
@@ -1785,7 +1714,7 @@ mod tests {
         });
         let divergent = file(source, census);
         assert_eq!(
-            divergent_lowered_child(v2(), &divergent, read),
+            divergent_lowered_child(v1(), &divergent, read),
             Some(DivergentLowering::VoidElementChild)
         );
         assert!(!missing_jsx_census(
@@ -1854,8 +1783,8 @@ mod tests {
         ));
     }
 
-    /// `children={…}` is the child list written as an attribute, and on the two
-    /// divergent elements it diverges for the same reason their children do:
+    /// `children={…}` is the child list written as an attribute, and on a
+    /// parity-target-only void element it diverges for the same reason its children do:
     /// the fork promotes it to a real child and lowers it, while Babel promotes
     /// it into a child list it then never visits.
     ///
@@ -1865,7 +1794,7 @@ mod tests {
     /// compilers emit nothing there — and must not.
     #[test]
     fn a_promoted_children_attribute_diverges_only_where_the_producer_lowered_it() {
-        let source = "const view = <noscript children={c()} />;\n";
+        let source = "const view = <keygen children={c()} />;\n";
         let read = span_of(source, "c()");
         let mut census = execution_map();
         census.source_hash = SourceHash::of(source);
@@ -1884,8 +1813,8 @@ mod tests {
             reason: RegionReason::JsxChild,
         });
         assert_eq!(
-            divergent_lowered_child(v2(), &file(source, lowered), read),
-            Some(DivergentLowering::NoscriptChild)
+            divergent_lowered_child(v1(), &file(source, lowered), read),
+            Some(DivergentLowering::VoidElementChild)
         );
 
         let mut discarded = census;
@@ -1894,7 +1823,7 @@ mod tests {
             reason: RegionReason::JsxChild,
         });
         let discarded = file(source, discarded);
-        assert!(divergent_lowered_child(v2(), &discarded, read).is_none());
+        assert!(divergent_lowered_child(v1(), &discarded, read).is_none());
         assert!(!missing_jsx_census(
             &discarded,
             read,
@@ -1919,8 +1848,8 @@ mod tests {
     #[test]
     fn a_spread_carrying_element_promotes_no_children_attribute_in_either_position() {
         for source in [
-            "const view = <noscript {...p} children={c()} />;\n",
-            "const view = <div><noscript {...p} children={c()} /></div>;\n",
+            "const view = <keygen {...p} children={c()} />;\n",
+            "const view = <div><keygen {...p} children={c()} /></div>;\n",
         ] {
             let read = span_of(source, "c()");
             let mut census = execution_map();
@@ -1939,7 +1868,7 @@ mod tests {
             });
             let file = file(source, census);
             assert!(
-                divergent_lowered_child(v2(), &file, read).is_none(),
+                divergent_lowered_child(v1(), &file, read).is_none(),
                 "{source}"
             );
             // And it stays certified rather than becoming a census hole: the
@@ -1957,7 +1886,7 @@ mod tests {
     /// spread — still divergent at the template root, still silent nested.
     #[test]
     fn without_a_spread_the_same_two_positions_keep_their_verdicts() {
-        let root = "const view = <noscript children={c()} />;\n";
+        let root = "const view = <keygen children={c()} />;\n";
         let mut census = execution_map();
         census.source_hash = SourceHash::of(root);
         census
@@ -1971,11 +1900,11 @@ mod tests {
             reason: RegionReason::JsxChild,
         });
         assert_eq!(
-            divergent_lowered_child(v2(), &file(root, census), span_of(root, "c()")),
-            Some(DivergentLowering::NoscriptChild)
+            divergent_lowered_child(v1(), &file(root, census), span_of(root, "c()")),
+            Some(DivergentLowering::VoidElementChild)
         );
 
-        let nested = "const view = <div><noscript children={c()} /></div>;\n";
+        let nested = "const view = <div><keygen children={c()} /></div>;\n";
         let mut census = execution_map();
         census.source_hash = SourceHash::of(nested);
         census
@@ -1989,7 +1918,7 @@ mod tests {
             reason: RegionReason::JsxChild,
         });
         assert!(
-            divergent_lowered_child(v2(), &file(nested, census), span_of(nested, "c()")).is_none()
+            divergent_lowered_child(v1(), &file(nested, census), span_of(nested, "c()")).is_none()
         );
     }
 
@@ -2056,85 +1985,7 @@ mod tests {
         assert!(divergent_lowered_child(v2(), &file(source, census), read).is_none());
     }
 
-    /// `<noscript>` is the second named condition (the fork's divergence 3),
-    /// and it must be gated on a lowered site exactly as the void arm is. The
-    /// retracting position — the static-template fast path, where the producer
-    /// and Babel agree — is a census gap, and pinning that distinction here
-    /// matters more than usual: the 1.x producer exits 2 on that shape, so no
-    /// fixture pins it under 1.x.
-    #[test]
-    fn a_noscript_child_diverges_only_where_the_producer_lowered_it() {
-        let source = "const view = <div><noscript>{note()}</noscript></div>;\n";
-        let read = span_of(source, "note()");
-        let mut census = execution_map();
-        census.source_hash = SourceHash::of(source);
-
-        // Retracted (or never censused): the two compilers agree and this is a
-        // hole, not a divergence.
-        let retracted = file(source, census.clone());
-        assert!(divergent_lowered_child(v2(), &retracted, read).is_none());
-        assert!(missing_jsx_census(
-            &retracted,
-            read,
-            ExecutionRole::UntrackedRendering
-        ));
-
-        // Lowered: the divergence, and *not* the census gap.
-        census
-            .jsx_operations
-            .push(solid_facts::compiler::JsxOperation {
-                span: span_of(source, "note()"),
-                kind: "jsx-expression".into(),
-            });
-        let lowered = file(source, census);
-        assert_eq!(
-            divergent_lowered_child(v2(), &lowered, read),
-            Some(DivergentLowering::NoscriptChild)
-        );
-        assert!(!missing_jsx_census(
-            &lowered,
-            read,
-            ExecutionRole::UntrackedRendering
-        ));
-    }
-
-    /// `<noscript>` must not have leaked into the void-element list, and the
-    /// void list must still be exactly the compiler's. Checked by behavior
-    /// rather than by reading the constant: a `<noscript>` reports the noscript
-    /// divergence, and the tag the compiler does *not* call void reports none.
-    #[test]
-    fn the_two_divergence_conditions_stay_distinct() {
-        let lowered = |source: &str, needle: &str| {
-            let mut census = execution_map();
-            census.source_hash = SourceHash::of(source);
-            census
-                .jsx_operations
-                .push(solid_facts::compiler::JsxOperation {
-                    span: span_of(source, needle),
-                    kind: "jsx-expression".into(),
-                });
-            file(source, census)
-        };
-
-        let noscript = "const view = <div><noscript>{x()}</noscript></div>;\n";
-        assert_eq!(
-            divergent_lowered_child(v2(), &lowered(noscript, "x()"), span_of(noscript, "x()")),
-            Some(DivergentLowering::NoscriptChild),
-            "noscript is its own condition, not a void element"
-        );
-
-        // `<template>` also holds inert markup and is *not* one the compiler
-        // treats specially, so it must report nothing. This is the guard against
-        // widening the condition to "elements that feel inert".
-        let template = "const view = <div><template>{x()}</template></div>;\n";
-        assert!(
-            divergent_lowered_child(v2(), &lowered(template, "x()"), span_of(template, "x()"))
-                .is_none()
-        );
-    }
-
-    /// Void membership is not one list, and this is the case that proves it has
-    /// to be two.
+    /// Parity-target-only membership is dialect-specific.
     ///
     /// `<keygen>` and `<menuitem>` are void in the Babel plugin Solid **1.x**
     /// ships (`VoidElements.ts` at the pinned 1.x rev, 16 tags, gating the whole
@@ -2183,28 +2034,11 @@ mod tests {
             );
         }
 
-        // The extras are *extras*: a tag in both lists would mean one of the two
-        // provenances is wrong, since the shared list's members are void in every
-        // producer and parity target and so cannot be void in only one of them.
-        for dialect in [v1(), v2()] {
-            for tag in dialect.parity_target_only_void_elements() {
-                assert!(
-                    !super::VOID_ELEMENTS.contains(tag),
-                    "{tag} is in the shared producers' list and cannot also be parity-target-only"
-                );
-            }
-        }
-
-        // The shared list is not dialect-dependent: a `<br>` diverges under both,
-        // so the two lists stay separate concerns rather than one list that
-        // happens to be longer under 1.x.
+        // A standard void element is no longer a divergence at either pin.
         let br = "const view = <div><br>{x()}</br></div>;\n";
         let facts = lowered(br, "x()");
         for dialect in [v1(), v2()] {
-            assert_eq!(
-                divergent_lowered_child(dialect, &facts, span_of(br, "x()")),
-                Some(DivergentLowering::VoidElementChild)
-            );
+            assert!(divergent_lowered_child(dialect, &facts, span_of(br, "x()")).is_none());
         }
     }
 
@@ -2225,28 +2059,6 @@ mod tests {
             read,
             ExecutionRole::UntrackedRendering
         ));
-    }
-
-    /// The innermost divergent element is the one named, because it is the one
-    /// the reader can act on. Both answers would be uncertifiable; only one is
-    /// the accurate reason.
-    #[test]
-    fn the_narrowest_divergent_child_decides_the_reason() {
-        let source = "const view = <div><noscript><br>{x()}</br></noscript></div>;\n";
-        let read = span_of(source, "x()");
-        let mut census = execution_map();
-        census.source_hash = SourceHash::of(source);
-        census
-            .jsx_operations
-            .push(solid_facts::compiler::JsxOperation {
-                span: span_of(source, "x()"),
-                kind: "jsx-expression".into(),
-            });
-        assert_eq!(
-            divergent_lowered_child(v2(), &file(source, census), read),
-            Some(DivergentLowering::VoidElementChild),
-            "the <br> is nearer than the <noscript>"
-        );
     }
 
     #[test]

@@ -46,15 +46,10 @@ rust-version = "1.97"
 # producer's constant — equal to `SEMANTIC_TRACE_VERSION` in a const assert.
 # That is deliberate. Fix the projection for the new schema, then move both the
 # rev and the literal.
-# The port includes fork PR #2 (`fix/void-child-census`):
-# the semantic-trace census now includes a *nested* void element's children,
-# which the fork's transform really does lower -- a deliberate parity
-# divergence from Babel, which deletes them -- and the textarea `value` fold
-# and the inert `<noscript>` fast path retract the children they discard. The
-# fork's docs/execution-contract.md names every divergence with a binding
-# consumer rule; the two this checker mitigates are in docs/compiler-facts.md,
-# "Divergent lowering", implemented by `divergent_lowered_child` in
-# rust/crates/solid-reactive-ir/src/execution_role.rs.
+# The merged `next` head keeps Ryan's transform semantics and carries the
+# output-neutral semantic-trace fixes. Standard void and `<noscript>` child
+# differences are closed at this pin; uncensused source expressions use the
+# checker's ordinary fail-closed census-gap path.
 # It also includes fork PR #3 (`fix/nested-children-attribute-promotion`),
 # resolving divergence 4: a `children` attribute on a nested
 # native element with no source children now promotes to a real child insert,
@@ -67,14 +62,17 @@ rust-version = "1.97"
 # promotion instead of falling through to an earlier non-literal one) present
 # in the template-root path too. This revision additionally resolves divergence
 # 5's template-root `children`/dynamic-`textContent` slot order and divergence
-# 2's nested dynamic-`textContent` child-list gate. Divergences 6-9 remain open
-# but reach no rule in this checker; see docs/precision-backlog.md for their
-# emitted-code evidence. See docs/compiler-facts.md for the divergences this
-# checker still mitigates. The only `next`-specific trace adaptation is a DOM-mode dynamic
+# 2's nested dynamic-`textContent` child-list gate. The exact revision also
+# carries the remaining reviewed alignment work and output-neutral trace wiring;
+# the checker revalidates the former divergence mitigations at this exact pin.
+# The only `next`-specific trace adaptation is a DOM-mode dynamic
 # intrinsic `$key`: lowering strips the server-component identity attribute,
 # so the trace now resolves its value as `Elided` instead of leaving the census
-# open. `SEMANTIC_TRACE_VERSION` remains 2.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "b22de4ada7cbdedc24fa26b3d25b5b723f5c18fa", default-features = false }
+# open. It also retains the outer `Elided` decision for a JSX-valued `children`
+# attribute shadowed at a template root while retracting the deleted nested
+# sites, closing that file-level reconciliation refusal. These are trace-only;
+# `SEMANTIC_TRACE_VERSION` remains 2 and generated JavaScript is unchanged.
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "c7e83a1bb0fc8e8f7fad37a7523db9fcce568820", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on
@@ -110,7 +108,11 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # discards (including static `<noscript>` and hydratable `<head>` paths). The
 # latter is trace-only: emitted JavaScript and `SEMANTIC_TRACE_VERSION = 2`
 # remain unchanged, while file-level exit-2 census gaps are closed.
-solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "d1e089581231b3028b7e8ce838ceed0f3c83e154", default-features = false }
+# The exact revision additionally matches Babel's native child lowering,
+# preserves the expression-bodied JSX-hole thunk/IIFE output shape, and closes
+# the same template-root shadowed-children reconciliation refusal without
+# changing generated JavaScript.
+solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "a4566086a457a4f2ec2964350fd86f3ad5139ee7", default-features = false }
 # Moved from `3296ec8` for the signature-less `Function`-supertype answer
 # (producer ADR 0021): wire table schema 15, handshake protocol still 2.
 # `Callability::UntypedCallable` is positive runtime-function evidence without
