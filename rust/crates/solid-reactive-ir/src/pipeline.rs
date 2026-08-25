@@ -283,7 +283,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
     let typescript_unchanged = facts
         .typescript_changes
         .as_ref()
-        .is_some_and(|changes| changes.unchanged);
+        .is_some_and(|changes| changes.unchanged)
+        // Runtime redirects are generation-request facts outside the retained
+        // TypeScript snapshot. Rebuild the derived symbol indexes when any are
+        // present rather than reusing a cache whose key cannot see them.
+        && facts.runtime_symbol_redirects.is_empty();
     let owned_typescript_indexes;
     let typescript_indexes = if let Some(cache) = typescript_indexes_cache {
         let patch_timings = (!typescript_unchanged)
@@ -309,8 +313,12 @@ pub(crate) fn build_with_contracts_measured_incremental(
         }
         if (!typescript_unchanged && !indexes_patched) || cache.is_none() {
             let substage_started = Instant::now();
-            let (indexes, alias_roots, entity_symbols) =
-                build_typescript_indexes(&facts.typescript, dialect, facts.files.len());
+            let (indexes, alias_roots, entity_symbols) = build_typescript_indexes(
+                &facts.typescript,
+                dialect,
+                facts.files.len(),
+                &facts.runtime_symbol_redirects,
+            );
             build_timings.alias_roots = alias_roots;
             build_timings.entity_symbols = entity_symbols;
             build_timings.alias_and_entity_indexes = substage_started.elapsed();
@@ -321,8 +329,12 @@ pub(crate) fn build_with_contracts_measured_incremental(
         cache.as_ref().expect("TypeScript indexes initialized")
     } else {
         let substage_started = Instant::now();
-        let (indexes, alias_roots, entity_symbols) =
-            build_typescript_indexes(&facts.typescript, dialect, facts.files.len());
+        let (indexes, alias_roots, entity_symbols) = build_typescript_indexes(
+            &facts.typescript,
+            dialect,
+            facts.files.len(),
+            &facts.runtime_symbol_redirects,
+        );
         build_timings.alias_roots = alias_roots;
         build_timings.entity_symbols = entity_symbols;
         build_timings.alias_and_entity_indexes = substage_started.elapsed();

@@ -942,6 +942,13 @@ export function noteFor(problem) {
 export function runtimeModuleClosure({ packageRoot, entryFile, excludedFiles, resolver }) {
   const files = [];
   const problems = [];
+  // Exact static edges the same walk used to seed the analyzing program.
+  // These are not a second resolver answer: each target is the `file` returned
+  // by `resolver.resolve` for this importer and literal specifier. Contract
+  // generation passes them to the native analysis so a TypeScript import that
+  // binds through an adjacent declaration file can still be joined to the
+  // runtime implementation the published ESM graph actually loads.
+  const resolutions = [];
   const seen = new Set();
   const pending = [entryFile];
   const visited = new Set();
@@ -990,8 +997,16 @@ export function runtimeModuleClosure({ packageRoot, entryFile, excludedFiles, re
         record(file, "specifier", resolved.problem, specifier, resolved.runtimeTargets);
         continue;
       }
-      if (resolved.file && !visited.has(resolved.file)) pending.push(resolved.file);
+      if (resolved.file) {
+        resolutions.push({ importer: file, specifier, target: resolved.file });
+        if (!visited.has(resolved.file)) pending.push(resolved.file);
+      }
     }
   }
-  return { files, problems, notes: [...new Set(problems.map(noteFor))].sort() };
+  resolutions.sort((left, right) =>
+    left.importer.localeCompare(right.importer) ||
+    left.specifier.localeCompare(right.specifier) ||
+    left.target.localeCompare(right.target)
+  );
+  return { files, resolutions, problems, notes: [...new Set(problems.map(noteFor))].sort() };
 }

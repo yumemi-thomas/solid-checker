@@ -1,4 +1,4 @@
-# A sibling `.d.ts` splits the helper's identity, so the reach enumeration says so
+# A sibling `.d.ts` is joined to its exact runtime module before attribution
 
 **The trap this fixture exists for: `channel.d.ts` must stay beside
 `channel.js`.** Delete it and the fixture silently stops testing anything — the
@@ -12,7 +12,8 @@ generator uses. The two files are unrelated modules to the compiler, so the
 call in `forwarded` carries the *declaration's* runtime identity and the
 implementation's symbol has no reference outside `channel.js` at all.
 
-Everything downstream of that identity split fails in the same direction:
+Without the generator's runtime-resolution fact, everything downstream of that
+identity split fails in the same direction:
 
 - `function_call_sites` finds no caller for `channel.js`'s `channelFor`, so the
   call graph enumerates the helper alone;
@@ -24,23 +25,22 @@ Everything downstream of that identity split fails in the same direction:
   certified.
 
 Since a published package almost always ships a `.d.ts` beside each runtime
-module, that silent certification was the normal case, not the exotic one.
+module, that silent certification was the normal case, not the exotic one. The
+previous soundness repair detected the unaccounted module surface and widened
+the whole entrypoint to `fallback-all`; sound, but it also marked `Isolated`.
 
-There is no fact that pairs a declaration file with the runtime module it
-describes. `ImportFact` carries only the specifier text, and the compiler holds
-no link between the two files, so the edge cannot be recovered exactly. The
-enumeration therefore reports itself **incomplete** instead of dropping
-members: a reaching function that is decided *not* an export of this
-entrypoint, is published by its own module, and has no reference anywhere else
-in the project, cannot have had its entry set enumerated
-(`module_surface_is_unaccounted` in
-rust/crates/solid-facts-backend/src/main.rs). Attribution widens to
-`fallback-all` and the marker records the widening.
+The package generator now supplies the fact the compiler intentionally does
+not: the successful static runtime edge for the exact importer, literal
+specifier, and runtime target selected by the same closure walk that seeded the
+analysis. The backend accepts it only when Type Facts confirms that exact
+specifier resolved to a declaration file with no compiler-provided
+`includedPath`, then joins the import binding and runtime export through exact
+compiler entities. Reactive IR uses that runtime symbol as the alias root, so
+the existing call graph sees `forwarded -> channelFor`; no filename pairing or
+name-only fallback is involved.
 
-- `.` — `forwarded` and `Isolated` both go unknown. `Isolated` reaches nothing
-  and is over-marked; that is the honest cost of the widening, recorded in
-  docs/precision-backlog.md. The direction that matters is that `forwarded` is
-  never certified.
+- `.` — only `forwarded` goes unknown, by the exact `reachability` rung.
+  `Isolated` reaches nothing and retains its independently proven summary.
 - `./direct` — the control, and the half that stays exact. Its entry file *is*
   `channel.js`, so `channelFor` resolves to an export name and the module
   surface question never arises: the export publishes its exact

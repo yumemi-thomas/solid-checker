@@ -2390,6 +2390,17 @@ rung above the last resolves an exact identity, never a name-text match.
    at all. Every function export of the entrypoint is marked. This rung is
    fail-closed and still reachable; it is not the ordinary case.
 
+Published packages commonly bind `import "./impl.js"` through an adjacent
+`impl.d.ts` while their ESM runtime loads `impl.js`. Contract generation joins
+that split only from the exact static edge already selected by the generator's
+runtime closure: importer, literal specifier, and runtime target. The backend
+then requires TypeFacts to confirm the declaration-bound import and to resolve
+both the runtime-referenced named/default binding and the same exact runtime
+export. This restores the call edge before the ladder runs. Missing,
+package-external, namespace, incomplete, or conflicting joins add no identity;
+the ladder therefore keeps its existing `fallback-all` safety net instead of
+pairing declaration and implementation files by name.
+
 Schema v1's `unknownClaim` carries only `status`, so the rung that answered
 cannot be recorded in the contract. It is recorded instead on the matching
 `unknown-sentinel` item of `<contract>.review.json`, under `because`, together

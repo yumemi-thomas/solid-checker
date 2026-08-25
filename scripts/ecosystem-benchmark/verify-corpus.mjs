@@ -1493,6 +1493,14 @@ export function renderVerificationMarkdown(report) {
   lines.push("| --- | --- |");
   for (const [name, count] of sortedEntries(overall.undriven)) lines.push(`| ${name} | ${count} |`);
   lines.push("");
+  lines.push(
+    "`no probe form: reactiveReads` and `no probe form: ownerRequirements` are family-A " +
+      "compiler proofs that verification retains; *undriven* means no independent generic runtime " +
+      "probe exists for them, not that the verified contract discarded those static claims. The " +
+      "other rows must be read by their named reason: some become unknown, while a failed claim or " +
+      "incompleteness remains a blocker."
+  );
+  lines.push("");
 
   const kindGaps = { rows: 0, ...emptyKindGaps(), ...(overall.kindGaps ?? {}) };
   const kindContradictions = {

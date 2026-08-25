@@ -85,10 +85,36 @@ pub(super) fn add_solid_import_names(
 pub(super) fn alias_roots_and_source_declarations(
     table: &TypeScriptTable,
     interner: &SymbolInterner,
+    runtime_redirects: &HashMap<String, String>,
 ) -> (HashMap<SymbolId, SymbolId>, HashMap<SymbolId, Declaration>) {
     let targets = symbol_alias_targets(table, interner);
+    // Preserve the ordinary-analysis path byte for byte. Runtime redirects are
+    // generation-only facts; an empty map must not perturb declaration
+    // selection or alias-root ordering for every other project.
+    if runtime_redirects.is_empty() {
+        let mut roots = HashMap::new();
+        let mut declarations = HashMap::new();
+        for symbol in table.symbols() {
+            let mut root = interner.intern(symbol.id());
+            for _ in 0..=targets.len() {
+                let Some(next) = targets.get(root.as_str()) else {
+                    break;
+                };
+                root.clone_from(next);
+            }
+            if !declarations.contains_key(root.as_str())
+                && let Some(declaration) = symbol
+                    .declarations()
+                    .iter()
+                    .find(|declaration| !declaration.location.path.ends_with(".d.ts"))
+            {
+                declarations.insert(root.clone(), declaration.clone());
+            }
+            roots.insert(interner.intern(symbol.id()), root);
+        }
+        return (roots, declarations);
+    }
     let mut roots = HashMap::new();
-    let mut declarations = HashMap::new();
     for symbol in table.symbols() {
         let mut root = interner.intern(symbol.id());
         for _ in 0..=targets.len() {
@@ -97,6 +123,37 @@ pub(super) fn alias_roots_and_source_declarations(
             };
             root.clone_from(next);
         }
+        roots.insert(interner.intern(symbol.id()), root);
+    }
+    // The backend produced these redirects only after joining the exact
+    // static import binding and exact runtime export to compiler entities.
+    // Apply them after TypeScript's own alias closure so references to the
+    // declaration and implementation share the runtime implementation root.
+    for _ in 0..=runtime_redirects.len() {
+        let previous = roots.clone();
+        let mut changed = false;
+        for root in roots.values_mut() {
+            if let Some(target) = runtime_redirects.get(root.as_str()) {
+                let target = previous
+                    .get(target.as_str())
+                    .cloned()
+                    .unwrap_or_else(|| interner.intern(target));
+                if *root != target {
+                    *root = target;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let mut declarations = HashMap::new();
+    for symbol in table.symbols() {
+        let root = roots
+            .get(symbol.id())
+            .cloned()
+            .unwrap_or_else(|| interner.intern(symbol.id()));
         if !declarations.contains_key(root.as_str())
             && let Some(declaration) = symbol
                 .declarations()
@@ -105,7 +162,6 @@ pub(super) fn alias_roots_and_source_declarations(
         {
             declarations.insert(root.clone(), declaration.clone());
         }
-        roots.insert(interner.intern(symbol.id()), root);
     }
     (roots, declarations)
 }

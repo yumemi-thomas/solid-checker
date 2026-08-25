@@ -385,12 +385,14 @@ pub(crate) fn build_typescript_indexes(
     table: &solid_facts::TypeScriptTable,
     dialect: &dyn Dialect,
     project_files: usize,
+    runtime_redirects: &HashMap<String, String>,
 ) -> (CachedTypeScriptIndexes, Duration, Duration) {
     let parallel =
         project_files >= PARALLEL_INDEX_FILE_THRESHOLD && available_analysis_workers() > 1;
     let interner = SymbolInterner::from_table(table);
     let aliases_started = Instant::now();
-    let (aliases, source_declarations) = alias_roots_and_source_declarations(table, &interner);
+    let (aliases, source_declarations) =
+        alias_roots_and_source_declarations(table, &interner, runtime_redirects);
     let aliases_elapsed = aliases_started.elapsed();
     let (
         (entities, entities_elapsed),

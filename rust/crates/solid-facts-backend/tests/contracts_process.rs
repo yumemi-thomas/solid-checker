@@ -3143,6 +3143,81 @@ fn unknown_claim_attribution_markers_reach_the_review_plan() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+#[test]
+fn declaration_bound_imports_join_their_exact_runtime_target_before_attribution() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/declaration-sibling-reach");
+    let directory = temporary_directory("declaration-runtime-attribution");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let contract = expanded_contract(&output);
+    let root_exports = &contract["entrypoints"]["."]["exports"];
+    assert_eq!(
+        root_exports["forwarded"]["reactiveReads"]["status"], "unknown",
+        "{contract:#}"
+    );
+    assert!(
+        root_exports["Isolated"].get("reactiveReads").is_none(),
+        "the unrelated export must retain its certified-negative omission: {contract:#}"
+    );
+    assert_eq!(
+        without_claim_evidence(
+            &contract["entrypoints"]["./direct"]["exports"]["channelFor"]["reactiveReads"]
+        ),
+        serde_json::json!([{"kind": "parameter-member", "parameter": 0}]),
+        "the direct-entrypoint control must remain exact: {contract:#}"
+    );
+
+    let plan: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(directory.join("solid-reactivity.review.json")).unwrap(),
+    )
+    .unwrap();
+    let items = plan["items"].as_array().unwrap();
+    let mechanisms = items
+        .iter()
+        .filter(|item| {
+            item["kind"] == "unknown-sentinel" && item["target"]["export"] == "forwarded"
+        })
+        .flat_map(|item| {
+            item["because"]["attributions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(|attribution| attribution["mechanism"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(mechanisms, vec!["reachability", "reachability"], "{plan:#}");
+    assert!(
+        items.iter().all(|item| {
+            item["kind"] != "unknown-sentinel" || item["target"]["export"] != "Isolated"
+        }),
+        "the declaration/runtime bridge must not widen to the unrelated export: {plan:#}"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
 /// An obligation the ladder resolves to *no* export marks nothing, so there is
 /// no `unknown-sentinel` item to hang the reason on -- and the resulting
 /// contract is byte-identical to one where the analyzer never saw the

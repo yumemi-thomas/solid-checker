@@ -3527,12 +3527,15 @@ tail. The native Solid 1.x dialect remains call-shape exact for both, so this
 is contract portability/audit duplication rather than a consumer correctness
 gap.
 
-## Closed 2026-08-23: a declaration sibling no longer certifies what it hid
+## Closed 2026-08-26: declaration-bound imports join their exact runtime target
 
-The `.d.ts` residual recorded under *Closed 2026-08-23: under-marking in the
-attribution ladder* was a certified negative, and it fired on the shape almost
-every published package has. It is closed in the only direction the facts
-allow: the enumeration now reports itself incomplete, and emission widens.
+The `.d.ts` residual first closed fail-closed on 2026-08-23: when TypeScript
+bound an import through a declaration sibling while the package runtime loaded
+the adjacent implementation, the generator could no longer certify a negative
+from the disconnected call graph. That safe repair widened the whole
+entrypoint. The exact generator-owned runtime edge now restores the missing
+identity join, so only exports proven to reach the implementation obligation
+are made unknown.
 
 **Mechanism.** `index.js` writes `import { channelFor } from "./channel.js"`.
 TypeScript resolves that specifier to `channel.d.ts` whenever one exists beside
@@ -3561,24 +3564,27 @@ the same direction, all downstream of that one split:
   degradation, and (before this) a zero-export review-plan note as the only
   trace.
 
-**Why not an exact fix.** Nothing pairs a declaration file with the runtime
-module it describes, and the resolved module graph that closed *package
-contracts are bound to an installed package* does not close this. That graph
-answers where a specifier resolved and which installed package owns the file;
-the producer states outright that a shipped `channel.d.ts` beside a
-`channel.js` answers *no* pairing field, because resolution selected the
-declaration and never opened the implementation, and that reconstructing the
-edge from the two file names is the substitution the fact exists to avoid
-(`ModuleImportFact.IncludedPath` is populated only for a configured project
-reference's declaration output). So the two files remain separate modules that
-happen to share a name on disk. The generator's own runtime resolver *does* know
-the pairing (`closureOf` resolved `./channel.js` to the runtime file), so an
-exact fix exists in principle: join a declaration-bound import to the runtime
-module's export by module identity plus ESM export name, using the generator's
-resolution rather than the compiler's. That is new data across the backend/IR
-seam for all four tiers and is not attempted here.
+**The exact seam.** The TypeFacts module graph still answers the declaration
+binding; it must not guess that two similarly named files describe one runtime
+module. The package generator already has the other exact answer: its static
+runtime resolver selected `channel.js` for the literal `./channel.js` edge, and
+that same closure seeded the analyzing program. It now passes those successful
+`importer` / `specifier` / runtime-`target` triples to the native generator.
+The backend accepts a redirect only when all of the following hold:
 
-**The fix (fail closed).** `module_surface_is_unaccounted`
+- TypeFacts confirms that exact importer/specifier edge resolved through a
+  declaration file, without a configured-project `includedPath`;
+- importer and runtime target canonicalize inside the installed package root;
+- the exact import is a runtime-referenced named or default binding; and
+- both the local binding and the same named export of the exact runtime target
+  join to compiler entities.
+
+A missing join changes nothing. Conflicting targets remove the redirect. An
+incomplete TypeFacts module graph rejects the whole map. There is no adjacent
+filename pairing, name-only matching, namespace substitution, or guessed
+member dispatch.
+
+**The safety net remains.** `module_surface_is_unaccounted`
 (rust/crates/solid-facts-backend/src/main.rs) gates the reachability rung. A
 reaching function that is *decided: not an export of this entrypoint*, is
 published by its own module's export surface, and has no reference anywhere
@@ -3597,23 +3603,29 @@ this is what keeps `unreached-private-obligation`'s zero-export answer).
 **Before/after**, `fixtures/package-contracts/parameter-member-forwarded` with
 a `channel.d.ts` added:
 
-| | before | after |
+| | fail-closed intermediate | exact join |
 | --- | --- | --- |
-| mechanism | `reachability` | `fallback-all` |
-| `.:forwarded` | certified | `reactiveReads`, `returns` unknown |
-| `.:Isolated` | certified | `reactiveReads`, `returns` unknown |
+| mechanism | `fallback-all` | `reachability` |
+| `.:forwarded` | `reactiveReads`, `returns` unknown | `reactiveReads`, `returns` unknown |
+| `.:Isolated` | `reactiveReads`, `returns` unknown | independently proven |
 | `./direct:channelFor` | exact `parameter-member` row | unchanged |
 
-**The over-marking cost, honestly.** `Isolated` reaches nothing and is marked
-anyway; the widening is to *every* export of the entrypoint, because that is
-what `fallback-all` means. For a package that ships a `.d.ts` beside every
-runtime module — the normal published shape — every internal-module obligation
-now widens this way, so a generated contract's unknown surface grows by roughly
-the number of exports per affected entrypoint. Those exports were previously
-published as certified negatives about behavior the analyzer had not seen, so
-the trade is real precision lost for real soundness gained, not noise for
-nothing. Recovering the precision needs the exact fix above, not a narrower
-heuristic.
+`Isolated` reaches nothing and is no longer charged for `channelFor`; the
+redirect also restores the call graph for other exact consumers of the same
+symbol. If any proof above is absent, the 2026-08-23 safety gate still falls to
+`fallback-all`, so precision recovery never substitutes for refusal.
+
+The full 416-row authority comparison found 393 rows with claim summaries in
+both runs and 19 structural changes: claims **+47**, driven **+2**, passed
+**+2**, undriven **+45**, failed **unchanged at 8**, and incompleteness
+**unchanged at 589**. Generated unknown-bearing exports increased by 55 and
+promoted unknown-bearing exports by 53 because restored call edges exposed
+obligations the declaration split had hidden. This is mostly a soundness gain;
+the exact narrowing is still visible where the graph supports it—for example,
+`@solid-primitives/range@0.2.5` gained one driven passing claim and lost two
+generated unknown-bearing exports. No common row's verified/refused outcome
+changed. The raw headline moved from 286/110 to 284/109 only because three
+previously measured TanStack rows failed npm installation in the later run.
 
 Pinned by `fixtures/package-contracts/declaration-sibling-reach` (the split,
 including the `./direct` control that must stay exact) and
@@ -3621,11 +3633,11 @@ including the `./direct` control that must stay exact) and
 identity intact, which must keep its three-way answer). Both are in
 `scripts/contract-corpus.mjs`; the corpus is 24 packages.
 
-**Not closed by this.** A declaration sibling still costs the whole entrypoint
-its claims rather than just the reaching exports, and every other consumer of
-the split identity — anything that resolves a call through
-`functions_by_symbol` — still silently sees no edge. The gate protects the
-attribution ladder's answer; it does not restore the call graph.
+**Still fail closed.** Open dynamic imports, unresolved or namespace bindings,
+ambiguous runtime exports, incomplete module facts, package-external targets,
+and conflicting declaration roots receive no redirect. They retain the
+existing unknown or whole-entrypoint refusal. The bridge covers only static
+runtime edges the generator actually used to seed this package analysis.
 
 ## Closed 2026-08-23: `contract verify` certified what no run had observed
 

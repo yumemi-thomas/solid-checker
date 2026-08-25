@@ -41,6 +41,17 @@ pub struct ProjectFacts {
     /// [`crate::resolution`].
     #[serde(skip)]
     pub resolved_imports: Option<AttestedImportIndex>,
+    /// Exact TypeScript-symbol redirects from a declaration-bound import to
+    /// the package-local runtime implementation selected for that same static
+    /// specifier.
+    ///
+    /// Empty for ordinary project analysis. Package-contract generation fills
+    /// it only from the generator's resolved importer/specifier/target map,
+    /// after joining both ends to compiler entities. Reactive IR then treats
+    /// the runtime implementation as the alias root; missing or ambiguous
+    /// joins add no redirect and preserve the existing fail-closed result.
+    #[serde(skip)]
+    pub runtime_symbol_redirects: HashMap<String, String>,
 }
 
 #[derive(Clone)]
@@ -478,6 +489,7 @@ impl ProjectFacts {
             typescript,
             typescript_changes: None,
             resolved_imports: None,
+            runtime_symbol_redirects: HashMap::new(),
         })
     }
 }

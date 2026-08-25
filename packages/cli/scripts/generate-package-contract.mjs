@@ -1857,10 +1857,12 @@ async function analyzeTarget({
   const excludedFiles = new Set(
     excludedTargets.map(target => packageLocalTarget(packageRoot, target))
   );
-  const implementationFiles = closureOf(packageRoot, resolver, entryFile, excludedFiles).files;
+  const runtimeClosure = closureOf(packageRoot, resolver, entryFile, excludedFiles);
+  const implementationFiles = runtimeClosure.files;
   const project = join(temporaryDirectory, `${identifier}-tsconfig.json`);
   const output = join(temporaryDirectory, `${identifier}.json`);
   const inventoryPath = join(temporaryDirectory, `${identifier}-inventory.json`);
+  const runtimeResolutionPath = join(temporaryDirectory, `${identifier}-runtime-resolutions.json`);
   writeFileSync(
     project,
     `${JSON.stringify(
@@ -1880,6 +1882,17 @@ async function analyzeTarget({
         // behavior by this entrypoint's exact runtime identities, so private
         // siblings cannot poison its public contract.
         files: implementationFiles
+      },
+      null,
+      2
+    )}\n`
+  );
+  writeFileSync(
+    runtimeResolutionPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        resolutions: runtimeClosure.resolutions
       },
       null,
       2
@@ -1907,6 +1920,14 @@ async function analyzeTarget({
       // than a per-entrypoint refusal, which would exit 0.
       "--emit-module-inventory",
       inventoryPath,
+      // Exact importer/specifier/runtime-target triples from the same closure
+      // walk that seeded `files` above. This is the missing declaration/runtime
+      // identity seam: TypeScript may bind `./impl.js` through `impl.d.ts`, but
+      // the published ESM graph still loads the exact `impl.js` target recorded
+      // here. The native side accepts only bindings and runtime exports it can
+      // join by compiler symbol; a missing or ambiguous join changes nothing.
+      "--runtime-module-resolutions",
+      runtimeResolutionPath,
       "--package-name",
       packageName,
       "--package-version",
@@ -2006,6 +2027,7 @@ async function analyzeTarget({
   } finally {
     rmSync(project, { force: true });
     rmSync(inventoryPath, { force: true });
+    rmSync(runtimeResolutionPath, { force: true });
   }
 }
 

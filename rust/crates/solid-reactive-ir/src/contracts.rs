@@ -1930,6 +1930,7 @@ mod export_kind_proof_tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_symbol_redirects: Default::default(),
         };
         export_kind_proof(&facts, &location)
     }

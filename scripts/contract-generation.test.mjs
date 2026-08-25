@@ -20,8 +20,10 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 
 import {
+  createModuleResolver,
   moduleSpecifiers,
-  openDynamicImportReachability
+  openDynamicImportReachability,
+  runtimeModuleClosure
 } from "../packages/cli/scripts/runtime-module-closure.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -808,6 +810,36 @@ test("finite dynamic imports seed and attest every reachable runtime module", ()
     ]);
     assert.equal(closure.notes, undefined);
     assert.equal(closure.runtimeNotes, undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("the closure exposes the exact static edges used to seed analysis", () => {
+  const { directory, packageRoot } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js": 'import { helper } from "./helper.js"; export { helper };\n',
+        "helper.js": "export function helper() {}\n"
+      }
+    }
+  );
+  try {
+    const resolver = createModuleResolver({ packageRoot });
+    const closure = runtimeModuleClosure({
+      packageRoot,
+      entryFile: join(packageRoot, "index.js"),
+      excludedFiles: new Set(),
+      resolver
+    });
+    assert.deepEqual(closure.resolutions, [
+      {
+        importer: join(packageRoot, "index.js"),
+        specifier: "./helper.js",
+        target: join(packageRoot, "helper.js")
+      }
+    ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -1064,6 +1064,71 @@ the numbers are a measurement of*, and each is recorded in the report's
 wall budget is its own outcome class and is counted as neither verified nor
 refused. So is a row for which no Solid runtime can honestly be chosen.
 
+### Measured state (2026-08-26, exact declaration/runtime attribution, full corpus, 416 probe rows)
+
+This run carries the generator's exact successful static runtime edges across
+the native boundary, then joins a declaration-bound import to the same named
+export of that exact package-local runtime target. It does not pair `.d.ts` and
+implementation files by filename. Missing compiler entities, namespace
+bindings, incomplete module facts, external targets, and conflicting joins add
+no redirect and retain the existing fail-closed attribution.
+
+The user-requested small set ran before the corpus: both `@solidjs/web` Solid 2
+rows verified, and `@tanstack/ai-solid-ui@0.7.18` remained refused because Node
+cannot execute its published TypeScript entrypoint under `node_modules`. The
+focused `declaration-sibling-reach` fixture supplies the actual precision
+proof: `forwarded` alone keeps the reached unknown claims, `Isolated` regains
+its independent summary, and the direct-entrypoint control stays exact.
+
+The raw no-subsetting, concurrency-6 authority result is the checked-in
+`verification-report.{json,md}`. It used native SHA-256
+`1ae57d08854302148fd7613a4c628c52e569cdd80c4067019b89856eea4c4a83`
+and the unchanged Type Facts SHA-256
+`31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`:
+
+| Figure | Previous authority run | This run | Movement |
+| --- | ---: | ---: | ---: |
+| Reached `verified` | 286/416 | **284/416** | -2 raw |
+| Refused by `contract verify` | 110 | **109** | -1 raw |
+| Install failures | 3 | **6** | +3 raw |
+| Generation failures | 15 | **15** | 0 |
+| Claims total / driven / passed | 11,935 / 8,333 / 8,325 | **11,969 / 8,327 / 8,319** | +34 / -6 / -6 raw |
+| Failed claims | 8 | **8** | 0 |
+| Undriven claims | 3,602 | **3,642** | +40 raw |
+| Conversions (return conversions) | 802 (348) | **819 (365)** | +17 (+17) |
+| Probed rows retained | 83 | **83** | 0 |
+| Rows with probed evidence | 20 | **20** | 0 |
+
+The outcome movement is registry/install environment movement, not a semantic
+outcome change. Three rows that previously reached the checker now fail npm
+installation: `@tanstack/solid-query-devtools@5.101.4`,
+`@tanstack/solid-query-persist-client@5.101.4`, and
+`@tanstack/solid-router-ssr-query@1.167.2-pre.0`. Across every row that reached
+both binaries, no outcome changed. Substituting only those three previous
+install outcomes yields the same **286 verified / 110 refused** split as the
+preceding authority state.
+
+Across the 393 rows with claim summaries in both runs, 19 changed
+structurally: **claims +47, driven +2, passed +2, undriven +45, failed 0,
+incompleteness 0**. Generated unknown-bearing exports rose by 55 and promoted
+unknown-bearing exports by 53. That is primarily a soundness gain, not a
+headline coverage gain: restoring real call edges exposes obligations and
+return shapes the declaration split previously hid. The exact bridge also
+narrows where the graph proves it can—`@solid-primitives/range@0.2.5` gained one
+driven, passing claim and reduced its generated unknown-bearing exports by two.
+No contradiction was suppressed or converted into fake evidence.
+
+The report's 1,113 `reactiveReads` and 465 `ownerRequirements` rows are
+**family-A compiler proofs retained by verification**. They are labelled
+undriven only because there is no independent generic runtime probe for those
+static claims; they are not claims verification discarded. Genuine remaining
+probe/schema gaps include 270 nested return leaves, 23 store paths, 13 callback
+argument descriptors, 96 async claims, 235 accessor returns with no plantable
+reactive source, and executions lost to import throws, synthesized-call throws,
+timeouts, or package process aborts.
+
+**This supersedes the export-scoped open-load authority state below.**
+
 ### Measured state (2026-08-26, export-scoped open loads and isolated entrypoint imports, full corpus, 416 probe rows)
 
 This run keeps the same stable native and Type Facts binaries as the preceding
