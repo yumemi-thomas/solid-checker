@@ -365,6 +365,16 @@ export function runSessionWithRestarts({ session, spawn }) {
       results.push(...sessionFailure(remaining, answer.failed));
       return finish();
     }
+    // A worker deliberately stops after an import or invocation failure to
+    // protect later observations from partially initialized runtime state. If
+    // that stopping probe was the last one in this isolated specifier batch,
+    // every requested claim still received an answer; `completed` describes
+    // coverage, not whether the worker chose to keep its process alive.
+    if (remaining.length === 0) {
+      accounting.completed = true;
+      pending = [];
+      break;
+    }
     if (answer.completed || remaining.length === pending.length) {
       // A process that answered nothing made no progress, so the loop stops
       // here rather than restarting into the same abort. When an asynchronous
@@ -386,6 +396,40 @@ export function runSessionWithRestarts({ session, spawn }) {
     )
   );
   return finish();
+}
+
+/// Runs one mode with a separate worker lifetime for each exact entrypoint
+/// specifier.
+///
+/// Importing an ESM entrypoint necessarily evaluates that entrypoint's whole
+/// module, so there is no sound way to recover one named export when that
+/// evaluation throws. It is equally unsound to let that throw suppress a
+/// *different* entrypoint, though: the package export map already proves the
+/// two specifiers are separate runtime loads. Isolating them in separate child
+/// processes preserves the real published runtime and the no-shim server
+/// environment while containing partial initialization to its exact specifier.
+export function runSessionBySpecifier({ session, spawn }) {
+  const groups = new Map();
+  for (const probe of session.probes) {
+    const probes = groups.get(probe.specifier) ?? [];
+    probes.push(probe);
+    groups.set(probe.specifier, probes);
+  }
+  const runs = [...groups.values()].map(probes =>
+    runSessionWithRestarts({ session: { ...session, probes }, spawn })
+  );
+  return {
+    results: runs.flatMap(run => run.results),
+    accounting: {
+      mode: session.mode,
+      started: runs.reduce((total, run) => total + run.accounting.started, 0),
+      restarts: runs.reduce((total, run) => total + run.accounting.restarts, 0),
+      failed: runs.reduce((total, run) => total + run.accounting.failed, 0),
+      completed: runs.every(run => run.accounting.completed),
+      runtime: runs.find(run => run.accounting.runtime)?.accounting.runtime ?? null
+    },
+    environment: runs.find(run => run.environment)?.environment
+  };
 }
 
 function sessionFailure(probes, error) {
@@ -491,7 +535,7 @@ function defaultRunSessions({ sessions, dialect, projectRoot, timeout }) {
     const worker = join(stagingDirectory, "contract-probe-worker.mjs");
     copyFileSync(fileURLToPath(new URL("./contract-probe-worker.mjs", import.meta.url)), worker);
     return sessions.map(session => {
-      const run = runSessionWithRestarts({
+      const run = runSessionBySpecifier({
         session,
         spawn: probes =>
           spawnSession({ probes, session, worker, stagingDirectory, dialect, timeout })

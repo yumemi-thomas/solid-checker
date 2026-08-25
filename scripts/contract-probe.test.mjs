@@ -31,6 +31,7 @@ import {
   classifyExecutionResult,
   environmentForMode,
   interpretSession,
+  returnClaim,
   settleClaims,
   synthesizeArguments,
   writeProbeEvidence
@@ -39,6 +40,7 @@ import {
   probeContract,
   probeReportPath,
   resolveProbeRuntime,
+  runSessionBySpecifier,
   runSessionWithRestarts
 } from "../packages/cli/scripts/probe-contract.mjs";
 
@@ -514,6 +516,98 @@ test("returns=accessor is undrivable without a callback to plant a signal read i
   );
   assert.equal(record.family, "C");
   assert.match(record.reason, /no plantable reactive source/);
+});
+
+test("relational returns are family B probes whose claim identity includes the parameter", () => {
+  const document = {
+    schemaVersion: 1,
+    package: { name: "relations", version: "1.0.0" },
+    compilerFactsProtocol: 1,
+    summaries: {
+      argument: { kind: "function", returns: { kind: "argument", parameter: 1 } },
+      callback: { kind: "function", returns: { kind: "callback-result", parameter: 0 } },
+      factory: {
+        kind: "function",
+        returns: { kind: "callback-result-function", parameter: 2 }
+      }
+    },
+    entrypoints: {
+      ".": { exports: { argument: ["identity"], callback: ["call"], factory: ["factory"] } }
+    },
+    evidence: { kind: "inferred", generator: "test" }
+  };
+  const plan = buildProbePlan(expandContract(document), {
+    modes: [PROBE_MODES[0]],
+    discovery: false
+  });
+  const relations = plan.claims.filter(claim => claim.claim.startsWith("returns="));
+  assert.deepEqual(
+    relations.map(claim => [claim.export, claim.claim, claim.family]),
+    [
+      ["identity", "returns=argument[1]", "B"],
+      ["call", "returns=callback-result[0]", "B"],
+      ["factory", "returns=callback-result-function[2]", "B"]
+    ]
+  );
+  assert.equal(returnClaim({ kind: "argument", parameter: 0 }), "returns=argument[0]");
+  const probes = plan.sessions[0].probes.filter(probe => probe.type.startsWith("returns-"));
+  assert.deepEqual(
+    probes.map(probe => [probe.type, probe.parameter, probe.arguments]),
+    [
+      ["returns-argument", 1, ["undefined", "probe-value"]],
+      ["returns-callback-result", 0, ["probe-callback"]],
+      ["returns-callback-result-function", 2, ["undefined", "undefined", "probe-callback"]]
+    ]
+  );
+
+  const passed = drive(plan, probe =>
+    probe.type === "kind"
+      ? { outcome: "observed", observation: { typeofValue: "function" } }
+      : {
+          outcome: "observed",
+          observation: {
+            returnedType: probe.type.endsWith("function") ? "function" : "object",
+            invocationResultType: "object",
+            identityMatched: true,
+            calls: 1
+          },
+          calls: 1
+        }
+  );
+  for (const claim of passed.claims.filter(claim => claim.claim.startsWith("returns="))) {
+    assert.equal(claim.status, "passed", claim.claim);
+  }
+});
+
+test("a completed relational return that breaks strict identity is a witnessed failure", () => {
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-1"] = {
+    kind: "function",
+    returns: { kind: "callback-result-function", parameter: 0 }
+  };
+  const plan = buildProbePlan(expandContract(document), {
+    modes: [PROBE_MODES[0]],
+    discovery: false
+  });
+  const { claims } = drive(plan, probe =>
+    probe.type === "kind"
+      ? { outcome: "observed", observation: { typeofValue: "function" } }
+      : probe.type === "returns-callback-result-function"
+        ? {
+            outcome: "observed",
+            observation: {
+              returnedType: "function",
+              invocationResultType: "object",
+              identityMatched: false,
+              calls: 1
+            },
+            calls: 1
+          }
+        : { outcome: "threw", error: "not relevant" }
+  );
+  const relation = claims.find(claim => claim.claim === "returns=callback-result-function[0]");
+  assert.equal(relation.status, "failed");
+  assert.match(relation.reason, /did not return the planted callback value by identity/);
 });
 
 test("discovery plants a callback exactly where the contract states none", () => {
@@ -1178,6 +1272,46 @@ test("a worker that stopped at a throw is restarted for what is left", () => {
   });
 });
 
+test("an entrypoint import failure cannot suppress a different entrypoint", () => {
+  const session = {
+    mode: "server",
+    conditions: ["node"],
+    probes: [
+      { id: "bad", specifier: "pkg/browser-only" },
+      { id: "good", specifier: "pkg/server-safe" }
+    ]
+  };
+  const attempts = [];
+  const { results, accounting } = runSessionBySpecifier({
+    session,
+    spawn: probes => {
+      attempts.push(probes.map(probe => probe.specifier));
+      if (probes[0].specifier === "pkg/browser-only") {
+        return {
+          completed: false,
+          runtime: { reruns: false },
+          results: [{ id: "bad", outcome: "import-failed" }]
+        };
+      }
+      return {
+        completed: true,
+        runtime: { reruns: false },
+        results: [{ id: "good", outcome: "observed" }]
+      };
+    }
+  });
+  assert.deepEqual(attempts, [["pkg/browser-only"], ["pkg/server-safe"]]);
+  assert.deepEqual(results.map(result => result.outcome), ["import-failed", "observed"]);
+  assert.deepEqual(accounting, {
+    mode: "server",
+    started: 2,
+    restarts: 0,
+    failed: 0,
+    completed: true,
+    runtime: { reruns: false }
+  });
+});
+
 test("a crashed or timed-out mode records what is left undriven rather than retrying", () => {
   const session = {
     mode: "client",
@@ -1692,6 +1826,57 @@ function runWorker({
   assert.equal(child.status, 0, child.stderr);
   return JSON.parse(child.stdout);
 }
+
+test("the worker establishes all three relational returns with a fresh identity sentinel", () => {
+  const solid = [
+    "export const createSignal = value => [() => value, next => { value = next }];",
+    "export const createMemo = body => body;",
+    "export const untrack = body => body();",
+    "export const createRoot = body => body(() => {});"
+  ].join("\n");
+  const body = [
+    "export const argument = (_unused, value) => value;",
+    "export const callback = fn => fn();",
+    "export const factory = (_a, _b, fn) => () => fn();",
+    "export const wrong = fn => () => ({ value: fn() });"
+  ].join("\n");
+  const probe = (id, type, exportName, parameter, arguments_) => ({
+    id,
+    type,
+    specifier: "env-fixture",
+    export: exportName,
+    parameter,
+    arguments: arguments_
+  });
+  const answer = runWorker({
+    body,
+    solid,
+    environment: { kind: "none", globals: [] },
+    probes: [
+      probe("p1", "returns-argument", "argument", 1, ["undefined", "probe-value"]),
+      probe("p2", "returns-callback-result", "callback", 0, ["probe-callback"]),
+      probe(
+        "p3",
+        "returns-callback-result-function",
+        "factory",
+        2,
+        ["undefined", "undefined", "probe-callback"]
+      ),
+      probe("p4", "returns-callback-result-function", "wrong", 0, ["probe-callback"])
+    ]
+  });
+  assert.deepEqual(
+    answer.results.map(result => [result.export, result.observation.identityMatched]),
+    [
+      ["argument", true],
+      ["callback", true],
+      ["factory", true],
+      ["wrong", false]
+    ]
+  );
+  assert.equal(answer.results[2].observation.returnedFunctionCalls, 1);
+  assert.equal(answer.results[3].observation.callbackCalls, 1);
+});
 
 test("the worker defines the requested globals before it imports anything", () => {
   // The failure the shim exists for is a *module-evaluation-time* dereference,

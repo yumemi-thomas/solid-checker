@@ -2623,6 +2623,13 @@ impl StructuredReturnDiscovery<'_, '_> {
         if depth == 0 {
             return None;
         }
+        let span = file.ast.peel_ts_sugar_span(span);
+        if !file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == span
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        }) {
+            return None;
+        }
         let symbol = self.entities.at(file.path.as_str(), span)?;
         if let Some(parameter) = function.parameters.iter().position(|parameter| {
             parameter
@@ -3664,58 +3671,80 @@ fn discover_structured_returns(
             .functions
             .iter()
             .find(|function| function.span == node.span)?;
-        function
+        let returned = function
             .expression_return
             .iter()
             .chain(file.ast.returns.iter().filter(|returned| {
                 containing_ast_function(&file.ast, returned.span)
                     .is_some_and(|owner| owner.span == function.span)
             }))
-            .find_map(|returned| {
-                if !returned.elements().is_empty() {
-                    let elements = returned
-                        .elements()
-                        .iter()
-                        .enumerate()
-                        .map(|(index, element)| {
-                            element.and_then(|span| {
-                                discovery.leaf(file, span, &format!("result[{index}]"))
-                            })
+            .collect::<Vec<_>>();
+        let resolve = |returned: &&solid_facts::ast::ReturnFact| {
+            if !returned.elements().is_empty() {
+                let elements = returned
+                    .elements()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, element)| {
+                        element.and_then(|span| {
+                            discovery.leaf(file, span, &format!("result[{index}]"))
                         })
-                        .collect::<Vec<_>>();
-                    if elements.iter().any(Option::is_some) {
-                        return Some(ContractReturn {
-                            kind: "tuple".into(),
-                            elements,
-                            ..ContractReturn::default()
-                        });
-                    }
+                    })
+                    .collect::<Vec<_>>();
+                if elements.iter().any(Option::is_some) {
+                    return Some(ContractReturn {
+                        kind: "tuple".into(),
+                        elements,
+                        ..ContractReturn::default()
+                    });
                 }
-                if !returned.properties().is_empty() {
-                    let properties = returned
-                        .properties()
-                        .iter()
-                        .filter_map(|property| {
-                            discovery
-                                .leaf(file, property.value, property.name.as_str())
-                                .map(|returned| (property.name.to_string(), returned))
-                        })
-                        .collect::<BTreeMap<_, _>>();
-                    if !properties.is_empty() {
-                        return Some(ContractReturn {
-                            kind: "object".into(),
-                            properties,
-                            ..ContractReturn::default()
-                        });
-                    }
+            }
+            if !returned.properties().is_empty() {
+                let properties = returned
+                    .properties()
+                    .iter()
+                    .filter_map(|property| {
+                        discovery
+                            .leaf(file, property.value, property.name.as_str())
+                            .map(|returned| (property.name.to_string(), returned))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                if !properties.is_empty() {
+                    return Some(ContractReturn {
+                        kind: "object".into(),
+                        properties,
+                        ..ContractReturn::default()
+                    });
                 }
-                if let Some(argument) =
-                    discovery.parameter_return(file, function, returned.span, 16)
-                {
-                    return Some(argument);
-                }
-                discovery.leaf(file, returned.span, "result")
-            })
+            }
+            let value = returned.argument?;
+            if let Some(argument) = discovery.parameter_return(file, function, value, 16) {
+                return Some(argument);
+            }
+            discovery.leaf(file, value, "result")
+        };
+        let first = returned.iter().find_map(&resolve)?;
+        if matches!(
+            first.kind.as_str(),
+            "argument" | "callback-result" | "callback-result-function"
+        ) {
+            // A relation is universal over the exported call, not evidence that
+            // one branch once returned a parameter. Every explicit return path
+            // must prove the same relation, including its parameter index.
+            // Otherwise predicates (`isObject`), comparators and fallback
+            // helpers become false identity contracts merely because one
+            // branch contains `return value`.
+            returned
+                .iter()
+                .all(|candidate| {
+                    candidate.control_tests.is_empty()
+                        && !candidate.conditional
+                        && resolve(candidate).as_ref() == Some(&first)
+                })
+                .then_some(first)
+        } else {
+            Some(first)
+        }
     })
 }
 

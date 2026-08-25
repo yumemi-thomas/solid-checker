@@ -7030,3 +7030,125 @@ still reach `missing_jsx_census` and remain explicitly uncertifiable. Those are
 fact-coverage gaps, not known transform disagreements. The ecosystem corpus was
 not rerun for this trace-only closure; the preceding 416-row measurement remains
 the latest ecosystem result until a new run is recorded.
+
+## 2026-08-25 — generic relational probes, entrypoint isolation, and finite dynamic imports
+
+Three schema-v1 relational return claims now have honest generic probes:
+`argument[N]`, `callback-result[N]`, and `callback-result-function[N]`. Each
+claim identity includes its parameter index. The worker plants a fresh frozen
+object and requires strict reference equality; the returned-function form also
+requires a callable result and invokes it with no arguments. A completed
+mismatch is a failure. A throw, including a returned function that needs
+arguments the schema cannot describe, remains undriven.
+
+The probes exposed false generator claims rather than evidence to relax. A
+relational return is now emitted only when every return fact proves the same
+relation, with no conditional/control-test path. Returned expressions are
+peeled through transparent TypeScript wrappers but must then be an exact
+identifier reference before compiler symbol identity can connect them to a
+parameter. Predicates, conditional identities, and guarded fallthroughs remain
+without a relational contract; the direct generic identity control remains
+`argument[0]`.
+
+The remaining `@solidjs/web` failures exposed a second ownership bug in the
+Node generator. Two public entrypoints sharing one runtime target were treated
+as semantic aliases, so the root entrypoint's server-only `ssrGroup` identity
+variant was merged into `./jsx-runtime` and `./jsx-dev-runtime`, which always
+select the void web/dev bodies. Cross-entrypoint merging is removed. Target
+analysis is still cached by exact target, excluded siblings, and conditions,
+but each public entrypoint retains only its own projection. The focused
+`entrypoint-condition-isolation` fixture pins the same-name identity/void pair.
+
+Finally, the closure seeder can close two finite dynamic-import forms without a
+package-specific oracle: nested conditional expressions whose leaves are all
+string literals, and inline (optionally `Object.freeze`d) literal tables indexed
+by a finite literal selector. Both enumerate every target into the seed and the
+attested module record. An identifier, template substitution, arbitrary lookup
+key, or one open conditional branch keeps the existing fail-closed runtime
+note. The note now says the specifier is not statically bounded to a finite
+literal set, which is the actual missing proof.
+
+### Full-corpus measurement
+
+The final fresh run used stable checker SHA-256
+`da63bebcad37215615392ca8f7ae03cefccc70ee2d9fb185470d62d3c85648e5`
+and Type Facts SHA-256
+`31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`
+over all 416 probe rows. Raw counts moved as follows:
+
+| Figure | Before | After |
+| --- | ---: | ---: |
+| Claims total | 12,470 | **11,941** |
+| Driven / passed / failed | 7,827 / 7,815 / 12 | **7,959 / 7,951 / 8** |
+| Undriven | 4,643 | **3,982** |
+| Parameter identity without a probe | 400 | **0** |
+| Conversions (return conversions) | 829 (450) | **699 (320)** |
+| Probed rows kept / rows with evidence | 3 / 3 | **69 / 18** |
+
+The raw outcome table is 281 verified, 115 refused, 15 generation failures, 3
+install failures, and 2 rows with no runtime. Two no-contention reruns establish
+the environment qualification: `@tanstack/ai-devtools-core` verified after its
+full-run generation exceeded 120 seconds, and `@tanstack/solid-table` verified
+after its full-run client children exceeded the 20-second per-mode timeout.
+Replacing only those timing outcomes yields the semantic comparison: **283
+verified, 114 refused, and 14 generation failures**, versus 282/115/14 before.
+
+Finite dynamic imports change no ecosystem outcome or note count. The five rows
+carrying all 17 such notes still use specifiers outside the accepted finite
+syntax. This deliberately does not claim that `@solidjs/web` is unblocked: its
+runtime `entryUrl` remains open.
+
+### Remaining fail-closed surface
+
+Generic probes still do not name nested return leaves, store paths, callback
+arguments, reactive reads, owner requirements, or most async behavior. The raw
+final report records 254, 23, 13, 1,107, 465, and 92 undriven claims in those
+classes respectively. It also records 585 entrypoint-import throws, 379
+synthesized throws, and 386 session aborts caused by package code. Those remain
+uncertifiable; none was converted into negative evidence by this slice.
+
+### Export-scoped open loads and entrypoint worker isolation
+
+The former `@solidjs/web` qualification is now closed without pretending its
+runtime `entryUrl` is finite. For flat entry modules, an open `import()` is
+attributed to its exact containing named function and propagated through exact
+local function references to explicit export bindings. Affected exports are
+omitted; a top-level load, affected-function escape, duplicate/missing binding,
+or cross-module attribution stays entrypoint-wide. The focused
+`open-dynamic-import-attribution` fixture omits two transitively affected
+loaders while retaining an independently proved `identity` summary.
+
+On published `@solidjs/web@2.0.0-rc.1`, the only reachable public export is
+`hydrate` in the web and development targets. The root, `./jsx-runtime`, and
+`./jsx-dev-runtime` contracts omit that export and retain `ssrGroup`. Targeted
+floor/head benchmark rows both moved from refused to verified. This is a
+withdrawal, not invented evidence: callers of the omitted `hydrate` remain
+uncertifiable.
+
+Probe workers are also isolated by exact entrypoint specifier. The
+`@solidjs/start@2.0.3` control remains refused with the same 5 passed and 90
+undriven claims, but its four modes now finish all specifier batches instead of
+ending with an entrypoint's partial module state: 60 worker starts, 12 restarts,
+all four modes complete, versus 52 starts, 48 restarts, and four incomplete
+modes before. Its `.jsx`, `solid-start:`, and missing `server-only` imports are
+real published-runtime failures and stay undriven.
+
+The fresh 416-row authority run moves from 281 verified / 115 refused / 15
+generation failures to **286 / 110 / 15**. Claims move from 11,941 total,
+7,959 driven, 7,951 passed, and 3,982 undriven to **11,935 total, 8,333 driven,
+8,325 passed, and 3,602 undriven**. The eight failed claims are unchanged. One
+raw generation timeout verified in a no-contention rerun, so the
+environment-controlled interpretation is 287 verified / 109 refused / 14
+generation failures; the checked-in report preserves the unmodified raw run.
+The remaining broad static gaps are 254 nested return leaves, 23 store paths,
+13 callback arguments, 1,107 reactive reads, 465 owner requirements, and 92
+async claims. Published-runtime behavior still leaves 601 import throws and 41
+session-abort withdrawals; those are not converted into negative evidence.
+
+No callback-argument or nested-return probe was added merely on the strength of
+`typeof`. The generated callback descriptors are reactive accessors, but schema
+v1 names neither a source nor a mutation that a generic probe could drive;
+common nested accessor/store leaves have the same missing observation path.
+Those rows stay family C until the schema fully describes construction and
+mutation. Relational top-level returns remain the only new generic forms in
+this slice because strict sentinel identity proves exactly what they claim.

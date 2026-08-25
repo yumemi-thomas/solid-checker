@@ -192,7 +192,13 @@ function rows(value) {
 /// the wrong thing. A slot the vocabulary cannot fill is `undefined`, and if the
 /// export refuses it the claim is undriven with the throw as its reason -- which
 /// is the measurement RFC 0002's unresolved question 1 asks for.
-export const ARGUMENT_SYNTHESIS = ["probe-callback", "noop-callback", "empty-object", "undefined"];
+export const ARGUMENT_SYNTHESIS = [
+  "probe-callback",
+  "probe-value",
+  "noop-callback",
+  "empty-object",
+  "undefined"
+];
 
 export function synthesizeArguments(summary, probedParameter) {
   const callbackParameters = rows(summary.callbacks)
@@ -211,6 +217,34 @@ export function synthesizeArguments(summary, probedParameter) {
     else if (memberParameters.includes(index)) descriptors.push("empty-object");
     else descriptors.push("undefined");
   }
+  return descriptors;
+}
+
+/// The exact identity of a return claim.
+///
+/// Relational returns include their parameter because the parameter is part of
+/// the schema claim: evidence for `argument[0]` must never corroborate a later
+/// artifact that says `argument[1]`. Concrete return shapes have no parameter
+/// and keep the original spelling.
+export function returnClaim(returned) {
+  if (!returned || isUnknown(returned) || typeof returned.kind !== "string") return undefined;
+  if (
+    ["argument", "callback-result", "callback-result-function"].includes(returned.kind) &&
+    Number.isInteger(returned.parameter)
+  ) {
+    return `returns=${returned.kind}[${returned.parameter}]`;
+  }
+  return `returns=${returned.kind}`;
+}
+
+function synthesizeReturnArguments(summary, returned) {
+  const callbackRelation = ["callback-result", "callback-result-function"].includes(returned.kind);
+  const descriptors = synthesizeArguments(
+    summary,
+    callbackRelation ? returned.parameter : undefined
+  );
+  while (descriptors.length <= returned.parameter) descriptors.push("undefined");
+  if (returned.kind === "argument") descriptors[returned.parameter] = "probe-value";
   return descriptors;
 }
 
@@ -235,8 +269,7 @@ export const UNDRIVABLE = {
   storePath:
     "no generic store-path observation: confirming a store path means writing through the package's own setter, which the contract does not name",
   nestedReturn:
-    "writeProbeEvidence does not descend into return leaves and no claim string names one",
-  argumentReturn: "an identity claim about a parameter; no probe form exists"
+    "writeProbeEvidence does not descend into return leaves and no claim string names one"
 };
 
 /// The family label a report row carries, spelled so the report, this driver,
@@ -260,8 +293,7 @@ const UNDRIVABLE_FAMILY = {
   ownerRequirement: "A",
   asyncBehavior: "C",
   storePath: "C",
-  nestedReturn: "C",
-  argumentReturn: "C"
+  nestedReturn: "C"
 };
 
 /// The opaque identity of one claim.
@@ -392,7 +424,7 @@ export function buildProbePlan(
         }
 
         if (selected.returns && !isUnknown(selected.returns)) {
-          const claim = `returns=${selected.returns.kind}`;
+          const claim = returnClaim(selected.returns);
           const record = claimRecord(entrypoint, exportName, claim, "B");
           if (selected.returns.kind === "accessor") {
             const plant = rows(selected.callbacks)[0]?.parameter;
@@ -416,14 +448,31 @@ export function buildProbePlan(
                 }
               );
             }
+          } else if (
+            ["argument", "callback-result", "callback-result-function"].includes(
+              selected.returns.kind
+            )
+          ) {
+            record.modesAttempted.push(mode.name);
+            record.arguments = synthesizeReturnArguments(selected, selected.returns);
+            request(
+              mode,
+              { entrypoint, export: exportName, claim },
+              {
+                type: `returns-${selected.returns.kind}`,
+                entrypoint,
+                specifier,
+                export: exportName,
+                parameter: selected.returns.parameter,
+                arguments: record.arguments
+              }
+            );
           } else {
             record.family = "C";
             record.reason =
               selected.returns.kind === "store-path"
                 ? UNDRIVABLE.storePath
-                : selected.returns.kind === "argument"
-                  ? UNDRIVABLE.argumentReturn
-                  : UNDRIVABLE.nestedReturn;
+                : UNDRIVABLE.nestedReturn;
           }
         }
 
@@ -782,6 +831,31 @@ function verdictFor(claim, observation) {
       ? { status: "passed", observed }
       : { status: "failed", observed, reason: `runtime kind is ${observed}` };
   }
+  if (claim.startsWith("returns=argument[") || claim.startsWith("returns=callback-result[")) {
+    return observation.identityMatched
+      ? { status: "passed", observed: "identity" }
+      : {
+          status: "failed",
+          observed: observation.returnedType,
+          reason: "the completed call did not return the planted value by identity"
+        };
+  }
+  if (claim.startsWith("returns=callback-result-function[")) {
+    if (observation.returnedType !== "function") {
+      return {
+        status: "failed",
+        observed: observation.returnedType,
+        reason: `the call returned a ${observation.returnedType}, so there was no returned function to invoke`
+      };
+    }
+    return observation.identityMatched
+      ? { status: "passed", observed: "identity" }
+      : {
+          status: "failed",
+          observed: observation.invocationResultType,
+          reason: "invoking the returned function did not return the planted callback value by identity"
+        };
+  }
   if (claim.startsWith("returns=")) {
     if (observation.typeofValue !== "function") {
       return {
@@ -991,9 +1065,8 @@ export function writeProbeEvidence(
   const callbackClaims = rows(summary.callbacks).map(
     callback => `callbacks[${callback.parameter}]=${callback.execution}`
   );
-  const returnClaim =
-    summary.returns && !isUnknown(summary.returns) ? `returns=${summary.returns.kind}` : undefined;
-  const exportClaims = [...callbackClaims, ...(returnClaim ? [returnClaim] : [])];
+  const returnClaimName = returnClaim(summary.returns);
+  const exportClaims = [...callbackClaims, ...(returnClaimName ? [returnClaimName] : [])];
   const exportResults = exportClaims.map(claim => claimResults(claim)).flat();
   const summaryMarker = settleMarker(
     summary.evidence,
@@ -1021,11 +1094,11 @@ export function writeProbeEvidence(
       return row;
     });
   }
-  if (returnClaim) {
+  if (returnClaimName) {
     const marker = settleMarker(
       summary.returns.evidence,
-      probeEvidence(claimResults(returnClaim)),
-      returnClaim,
+      probeEvidence(claimResults(returnClaimName)),
+      returnClaimName,
       field("returns")
     );
     if (marker !== summary.returns.evidence) {

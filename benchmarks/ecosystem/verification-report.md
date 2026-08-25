@@ -8,12 +8,12 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 > ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran
 > under both a per-mode timeout and a whole-phase wall budget.
 
-- Started: 2026-08-25T07:47:13.920Z
-- Finished: 2026-08-25T07:54:35.526Z
+- Started: 2026-08-25T15:01:03.391Z
+- Finished: 2026-08-25T15:09:55.045Z
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Probe rows run: 416
-- Checker native binary: `39092fddc704f622536aa5c6dbead39b6dd057b0520d433d5ccb38046c377de2` (14911936 bytes, mtime 2026-08-25T07:44:22.042Z)
-- Type Facts binary: `31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889` (28390098 bytes, mtime 2026-08-25T07:44:22.053Z)
+- Checker native binary: `da63bebcad37215615392ca8f7ae03cefccc70ee2d9fb185470d62d3c85648e5` (73475744 bytes, mtime 2026-08-25T13:59:12.959Z)
+- Type Facts binary: `31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889` (28390098 bytes, mtime 2026-08-25T12:41:36.432Z)
 - Budgets: install 240000 ms, generate 120000 ms, probe 20000 ms per condition mode / 90000 ms + 500 ms per planned claim, capped at 900000 ms, whole phase, verify 90000 ms; concurrency 6
 - Import-environment shim: enabled (client, development and production sessions only; server sessions never)
 
@@ -22,18 +22,18 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 | Figure | Count |
 | --- | --- |
 | Probe rows run | 416 |
-| Reached a generated contract | 399/416 (95.91%) |
-| **Reached `verified`** | **281/416 (67.55%)** of all rows |
-| Reached `verified`, of rows that produced a contract | 281/399 (70.43%) |
-| Refused by `contract verify` | 116/416 (27.88%) |
+| Reached a generated contract | 398/416 (95.67%) |
+| **Reached `verified`** | **286/416 (68.75%)** of all rows |
+| Reached `verified`, of rows that produced a contract | 286/398 (71.86%) |
+| Refused by `contract verify` | 110/416 (26.44%) |
 
 Outcome classes, raw:
 
 | Outcome | Rows |
 | --- | --- |
-| `verified` | 281 |
-| `refused` | 116 |
-| `generate-failure` | 14 |
+| `verified` | 286 |
+| `refused` | 110 |
+| `generate-failure` | 15 |
 | `install-failure` | 3 |
 | `no-runtime` | 2 |
 
@@ -41,112 +41,117 @@ Outcome classes, raw:
 
 | Family | Rows | Contracts | Verified | Refused | Claims driven | Claims passed | Conversions | Exports certified | Exports unknown |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 23 | 8/23 (34.78%) | 13 | 1608/2964 (54.25%) | 1603/1608 (99.69%) | 28 | 15 | 56 |
-| Kobalte | 6 | 3 | 1/6 (16.67%) | 2 | 887/1622 (54.69%) | 887/887 (100.00%) | 4 | 6 | 4 |
-| Solid Primitives | 289 | 281 | 220/289 (76.12%) | 61 | 1904/3167 (60.12%) | 1898/1904 (99.68%) | 566 | 564 | 806 |
+| Official Solid | 23 | 23 | 11/23 (47.83%) | 10 | 1669/2519 (66.26%) | 1668/1669 (99.94%) | 121 | 525 | 188 |
+| Kobalte | 6 | 3 | 1/6 (16.67%) | 2 | 1149/1567 (73.32%) | 1148/1149 (99.91%) | 2 | 7 | 3 |
+| Solid Primitives | 289 | 281 | 220/289 (76.12%) | 61 | 1941/3119 (62.23%) | 1935/1941 (99.69%) | 492 | 634 | 736 |
 | Corvu | 28 | 28 | 18/28 (64.29%) | 10 | 289/426 (67.84%) | 289/289 (100.00%) | 36 | 60 | 60 |
-| TanStack | 52 | 49 | 27/52 (51.92%) | 22 | 1765/2732 (64.60%) | 1765/1765 (100.00%) | 160 | 248 | 405 |
-| Solid Devtools | 12 | 9 | 5/12 (41.67%) | 4 | 74/284 (26.06%) | 74/74 (100.00%) | 2 | 14 | 12 |
+| TanStack | 52 | 48 | 28/52 (53.85%) | 20 | 2126/2702 (78.68%) | 2126/2126 (100.00%) | 116 | 573 | 376 |
+| Solid Devtools | 12 | 9 | 6/12 (50.00%) | 3 | 127/274 (46.35%) | 127/127 (100.00%) | 6 | 29 | 18 |
 | Solid Recharts | 3 | 3 | 1/3 (33.33%) | 2 | 124/364 (34.07%) | 124/124 (100.00%) | 29 | 6 | 103 |
-| Motion for Solid | 3 | 3 | 1/3 (33.33%) | 2 | 908/966 (94.00%) | 908/908 (100.00%) | 0 | 24 | 333 |
+| Motion for Solid | 3 | 3 | 1/3 (33.33%) | 2 | 908/964 (94.19%) | 908/908 (100.00%) | 0 | 24 | 333 |
 
 | Solid target | Rows | Contracts | Verified | Refused |
 | --- | --- | --- | --- | --- |
-| solid1 | 168 | 155 | 111/168 (66.07%) | 44 |
-| solid2 | 248 | 244 | 170/248 (68.55%) | 72 |
+| solid1 | 168 | 154 | 113/168 (67.26%) | 41 |
+| solid2 | 248 | 244 | 173/248 (69.76%) | 69 |
 
 ## Why verification refuses
 
-116 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
+110 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
 
 | Blocker (RFC 0002 §3) | Rows raising it | Blocker lines |
 | --- | --- | --- |
-| `kind-observed` | 65 | 156 |
-| `probe-report-includes-evidence-write` | 46 | 46 |
-| `incompleteness` | 40 | 592 |
-| `probe-failed` | 8 | 11 |
-| `attested-closure-note` | 5 | 17 |
+| `kind-observed` | 61 | 132 |
+| `probe-report-includes-evidence-write` | 45 | 45 |
+| `incompleteness` | 38 | 589 |
+| `probe-failed` | 8 | 8 |
+| `attested-closure-note` | 3 | 9 |
 | `closure-note` | 2 | 5 |
 
 Attributed to one root cause per row instead. `probe-report-includes-evidence-write` is a *consequence*: `contract probe --write` declines to write evidence once a probe failed or an incompleteness was reported, so verification then sees passing claims that never reached the contract. It is counted as a root cause only on a row where it stands alone.
 
 | Root cause | Refused rows |
 | --- | --- |
-| `kind-observed` | 64 |
-| `incompleteness` | 38 |
+| `kind-observed` | 61 |
+| `incompleteness` | 37 |
 | `probe-failed` | 8 |
-| `attested-closure-note` | 4 |
 | `closure-note` | 2 |
+| `attested-closure-note` | 2 |
 
 ## Drivability
 
 | Figure | Count |
 | --- | --- |
-| Claims planned across every probed contract | 12525 |
-| Driven | 7559/12525 (60.35%) |
-| Passed | 7548/12525 (60.26%) |
-| Failed | 11 |
-| Undriven | 4966/12525 (39.65%) |
-| Incompleteness findings | 592 |
+| Claims planned across every probed contract | 11935 |
+| Driven | 8333/11935 (69.82%) |
+| Passed | 8325/11935 (69.75%) |
+| Failed | 8 |
+| Undriven | 3602/11935 (30.18%) |
+| Incompleteness findings | 589 |
 
 Undriven claims by reason:
 
 | Reason | Claims |
 | --- | --- |
-| no probe form: reactiveReads | 1314 |
-| probe session aborted by package code | 671 |
-| entrypoint import threw | 584 |
-| no probe form: ownerRequirements | 556 |
-| no probe form: parameter identity | 400 |
-| synthesized call threw | 341 |
-| no probe form: nested return leaf | 257 |
-| synthesized call did not invoke the callback | 229 |
-| no plantable reactive source | 212 |
-| no probe form: asyncBehavior | 100 |
-| probe session wrote no report | 91 |
-| no unambiguous summary for the mode | 82 |
-| runtime re-runs nothing in this mode | 49 |
+| no probe form: reactiveReads | 1107 |
+| entrypoint import threw | 601 |
+| no probe form: ownerRequirements | 465 |
+| synthesized call threw | 381 |
+| no probe form: nested return leaf | 254 |
+| synthesized call did not invoke the callback | 237 |
+| no plantable reactive source | 217 |
+| no probe form: asyncBehavior | 92 |
+| no unambiguous summary for the mode | 56 |
+| probe session aborted by package code | 41 |
+| runtime re-runs nothing in this mode | 37 |
+| probe session wrote no report | 35 |
 | callback ran more often than the call site | 25 |
 | no probe form: store path | 23 |
 | no probe form: callback arguments | 13 |
-| planted write was never re-read | 9 |
+| planted write was never re-read | 7 |
 | callback re-ran with nothing written | 6 |
 | probe session hit the per-mode timeout | 3 |
-| callback ownership ambiguous in the driver's read scope | 1 |
+| callback ownership ambiguous in the driver's read scope | 2 |
 
 ### Why a `kind` observation is missing
 
 `kind` is the one claim schema v1 has no unknown sentinel for, so an unobserved one blocks rather than converting — which makes *why* it was unobserved the number the rule's next revision turns on. An **observation of absence** (`export-missing`: the namespace loaded and the binding was not in it) says the export does not exist in that artifact, so there is no consumer claim about that mode to certify. Every other non-observation is a **gap** — an import that threw, a session that died, a mode never attempted, a mode where no unambiguous summary resolves — and a gap must keep blocking. Every number in this section counts gaps only: a mode that was observed and *disagreed* is a failing claim, and it has its own section below rather than a row here, because amendment A9 forbids the two sharing a number.
 
-- Rows with at least one gap in a stated `kind` mode: 85
-- `kind` obligations with at least one gapped stated mode: 3079
+- Rows with at least one gap in a stated `kind` mode: 84
+- `kind` obligations with at least one gapped stated mode: 2264
 
 | Why the mode produced no passing `kind` observation | (claim, mode) pairs |
 | --- | --- |
-| entrypoint import threw | 3759 |
-| probe session aborted by package code | 2630 |
-| probe session wrote no report | 328 |
-| probe session hit the per-mode timeout | 306 |
-| no unambiguous summary resolves in the mode (no kind claim exists) | 82 |
+| entrypoint import threw | 3819 |
+| probe session wrote no report | 116 |
+| probe session aborted by package code | 96 |
+| no unambiguous summary resolves in the mode (no kind claim exists) | 56 |
 | export-missing in this mode | 45 |
+| probe session hit the per-mode timeout | 8 |
 
 | Mode | Gapped `kind` obligations |
 | --- | --- |
-| `server` | 2525 |
-| `client` | 1714 |
-| `production` | 1461 |
-| `development` | 1450 |
+| `server` | 2170 |
+| `production` | 684 |
+| `development` | 647 |
+| `client` | 639 |
 
 ### `kind` claims the probe contradicted
 
 A mode whose observation **exists and disagreed** with the contract. Nothing above counts these, and nothing in any relaxation of the `kind` rule may absorb them: the package answered the claim differently, which is a generator bug or a package change, and neither is fixed by narrowing a mode away or converting a claim to unknown. They refuse the whole document today and must keep doing so.
 
-- Rows with at least one contradicted `kind` claim: 0
-- `kind` claims contradicted in at least one mode: 0
+- Rows with at least one contradicted `kind` claim: 1
+- `kind` claims contradicted in at least one mode: 1
+
+| Mode | Contradicted `kind` claims |
+| --- | --- |
+| `client` | 1 |
+| `development` | 1 |
+| `production` | 1 |
 
 ## The probe environment
 
-An entrypoint whose module cannot be imported yields no observation at all. 32 of the corpus's rows had at least one entrypoint import throw. The probe worker is a bare Node process: no DOM, no bundler, no JSX or TypeScript loader, and only the packages the corpus manifest installs beside the probed one. Some of these throws are facts about the package; others are facts about that environment, and the two are not separated here.
+An entrypoint whose module cannot be imported yields no observation at all. 33 of the corpus's rows had at least one entrypoint import throw. The probe worker is a bare Node process: no DOM, no bundler, no JSX or TypeScript loader, and only the packages the corpus manifest installs beside the probed one. Some of these throws are facts about the package; others are facts about that environment, and the two are not separated here.
 
 | Import failure | Claims left undriven |
 | --- | --- |
@@ -155,18 +160,20 @@ An entrypoint whose module cannot be imported yields no observation at all. 32 o
 | Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './web' is not defined by "exports" in <path> | 81 |
 | Error: [solid-devtools]: Debugger hasn't found the exposed Solid Devtools API | 66 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'server-only' imported from <path> | 60 |
-| TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".jsx" for <path> | 27 |
+| TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".jsx" for <path> | 28 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from <path> | 12 |
 | SyntaxError: The requested module 'solid-js' does not provide an export named 'onSe | 10 |
-| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from <path> | 6 |
 | Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: No "exports" main defined in <path> | 4 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@angular/core' imported from <path> | 4 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'preact' imported from <path> | 3 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vue' imported from <path> | 3 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@rsbuild/core' imported from <path> | 3 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from <path> | 3 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'octane' imported from <path> | 3 |
 | Error [ERR_UNSUPPORTED_ESM_URL_SCHEME]: Only URLs with a scheme in: file, data, and node are supported by the  | 2 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<path> | 2 |
-| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'preact' imported from <path> | 2 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'svelte' imported from <path> | 2 |
-| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vue' imported from <path> | 2 |
-| Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@rsbuild/core' imported from <path> | 2 |
-| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'vite' imported from <path> | 2 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'lit' imported from <path> | 2 |
 | SyntaxError: The requested module '@tanstack/router-generator' does not provide an  | 1 |
 
 ### The globals the probe worker faked
@@ -177,25 +184,25 @@ A module that reads `window` while it is being evaluated throws in a bare Node p
 
 `server` sessions are never shimmed: an import that throws on `window` under `--conditions node` is a truthful observation of that entrypoint in that mode, and faking it there would manufacture a pass the package never earned.
 
-- Rows where at least one session faked at least one global: 394
+- Rows where at least one session faked at least one global: 393
 
 | Faked global | Rows |
 | --- | --- |
-| `IntersectionObserver` | 394 |
-| `MutationObserver` | 394 |
-| `ResizeObserver` | 394 |
-| `cancelAnimationFrame` | 394 |
-| `document` | 394 |
-| `getComputedStyle` | 394 |
-| `history` | 394 |
-| `localStorage` | 394 |
-| `location` | 394 |
-| `matchMedia` | 394 |
-| `requestAnimationFrame` | 394 |
-| `screen` | 394 |
-| `self` | 394 |
-| `sessionStorage` | 394 |
-| `window` | 394 |
+| `IntersectionObserver` | 393 |
+| `MutationObserver` | 393 |
+| `ResizeObserver` | 393 |
+| `cancelAnimationFrame` | 393 |
+| `document` | 393 |
+| `getComputedStyle` | 393 |
+| `history` | 393 |
+| `localStorage` | 393 |
+| `location` | 393 |
+| `matchMedia` | 393 |
+| `requestAnimationFrame` | 393 |
+| `screen` | 393 |
+| `self` | 393 |
+| `sessionStorage` | 393 |
+| `window` | 393 |
 
 ### Worker processes
 
@@ -203,9 +210,9 @@ A worker stops at its first throw and the mode is restarted for what is left —
 
 | Figure | Count |
 | --- | --- |
-| Worker processes started | 16829 |
-| Of those, restarts after a throw | 15285 |
-| Sessions that died (crash, timeout, unreadable output) | 65 |
+| Worker processes started | 19556 |
+| Of those, restarts after a throw | 16303 |
+| Sessions that died (crash, timeout, unreadable output) | 69 |
 
 ## The install environment
 
@@ -224,14 +231,14 @@ A package that **imports something it declares nowhere** — not a dependency, n
 
 A **failure** is the strongest thing this measurement produces. The contract states a claim, the probe drove it, and the package did something else — a generator bug or a package change, never an environment gap and never an unreachable claim. Verification refuses the whole contract on one of these, deliberately: converting a contradicted claim to the unknown sentinel would hide it.
 
-11 failing claim(s) across the corpus, by shape:
+8 failing claim(s) across the corpus, by shape:
 
 | Claim, claimed, observed | Claims |
 | --- | --- |
-| callbacks[n]: claimed inline, observed tracked | 3 |
-| callbacks[n]: claimed deferred, observed tracked | 3 |
 | callbacks[n]: claimed tracked, observed inline | 3 |
 | callbacks[n]: claimed deferred, observed inline | 2 |
+| callbacks[n]: claimed deferred, observed tracked | 2 |
+| kind: claimed function, observed value | 1 |
 
 Each one, in full:
 
@@ -241,13 +248,10 @@ Each one, in full:
 | `@solidjs/testing-library@0.8.10|solid1|only` | `.:testEffect` | `callbacks[0]=deferred` | inline | client, development, production |
 | `@solid-primitives/memo@2.0.0-next.2|solid2|floor` | `.:createWritableMemo` | `callbacks[0]=deferred` | tracked | client, development, production |
 | `@solid-primitives/memo@2.0.0-next.2|solid2|head` | `.:createWritableMemo` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createSelector` | `callbacks[0]=deferred` | tracked | server |
-| `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createComputed` | `callbacks[0]=inline` | tracked | server |
-| `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createMemo` | `callbacks[0]=inline` | tracked | server |
-| `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createRenderEffect` | `callbacks[0]=inline` | tracked | server |
 | `@solid-primitives/date-difference@1.0.2|solid1|only` | `.:createDateNow` | `callbacks[0]=tracked` | inline | client, development, production |
 | `@solid-primitives/pagination@1.0.0-next.6|solid2|floor` | `.:createInfiniteScroll` | `callbacks[0]=tracked` | inline | client, development, production |
 | `@solid-primitives/pagination@1.0.0-next.6|solid2|head` | `.:createInfiniteScroll` | `callbacks[0]=tracked` | inline | client, development, production |
+| `@kobalte/core@2.0.0-alpha.0|solid2|only` | `./menubar:t` | `kind=function` | value | client, development, production |
 
 ## Conversion volume
 
@@ -255,20 +259,20 @@ A conversion replaces one export's whole claim domain with the `{"status":"unkno
 
 | Figure | Count |
 | --- | --- |
-| Claim domains converted to unknown | 825 |
-| Exports carrying an unknown in the verified rows, at generation | 1325/3056 (43.36%) |
-| Exports carrying an unknown in the verified rows, after verification | 1779/2716 (65.50%) |
+| Claim domains converted to unknown | 802 |
+| Exports carrying an unknown in the verified rows, at generation | 1499/4646 (32.26%) |
+| Exports carrying an unknown in the verified rows, after verification | 1817/3675 (49.44%) |
 
 How much a verified contract actually certifies from observation:
 
 | Figure | Count |
 | --- | --- |
-| Verified rows carrying at least one probed behavioral row | 3/281 (1.07%) |
-| Probed behavioral row markers kept across the whole corpus | 3 |
-| Inferred row markers dropped by verification | 3235 |
-| Probed markers discarded as unwitnessed by this run's report | 130 |
-| Entrypoints verification refused inside a promoted document | 33 |
-| Verified rows carrying at least one such refusal | 9 |
+| Verified rows carrying at least one probed behavioral row | 20/286 (6.99%) |
+| Probed behavioral row markers kept across the whole corpus | 83 |
+| Inferred row markers dropped by verification | 4363 |
+| Probed markers discarded as unwitnessed by this run's report | 163 |
+| Entrypoints verification refused inside a promoted document | 50 |
+| Verified rows carrying at least one such refusal | 14 |
 
 The last two rows are a **cost made visible, not a regression**. An entrypoint whose `kind` claims this run did not observe is refused and omitted, exactly as `contract generate` already refuses an entrypoint it cannot certify, so the package's other entrypoints are not sunk by one unimportable subpath. A refused entrypoint is absent from the contract, which is an explicit uncertifiable result at the consumer rather than a wrong claim; a document where *no* entrypoint would certify anything is still refused whole. The exports it dropped are their own state in the composite below, still inside its denominator: a certified *share* that rose because unobservable exports left the population would be measuring nothing.
 
@@ -276,9 +280,9 @@ Converted domains by field:
 
 | Field | Conversions |
 | --- | --- |
-| `returns` | 450 |
-| `callbacks` | 363 |
-| `asyncBehavior` | 12 |
+| `callbacks` | 424 |
+| `returns` | 348 |
+| `asyncBehavior` | 30 |
 
 ## The composite a consumer feels
 
@@ -286,10 +290,10 @@ Of every export the corpus's generated contracts describe:
 
 | State | Exports |
 | --- | --- |
-| (a) certified by a verified contract | 937/8710 (10.76%) |
-| (b) honest unknown inside a verified contract | 1779/8710 (20.42%) |
-| (c) dropped from a verified contract with its refused entrypoint | 340/8710 (3.90%) |
-| (d) inside a contract that never reached `verified` | 5654/8710 (64.91%) |
+| (a) certified by a verified contract | 1858/8702 (21.35%) |
+| (b) honest unknown inside a verified contract | 1817/8702 (20.88%) |
+| (c) dropped from a verified contract with its refused entrypoint | 971/8702 (11.16%) |
+| (d) inside a contract that never reached `verified` | 4056/8702 (46.61%) |
 
 (c) is the cost of amendment A9 stage 1 stated as a consumer-facing number: the row verified, and these exports are absent from the document it promoted, so importing one is an explicit uncertifiable result. They stay in the denominator — a certified *share* that rose because unobservable exports left the population would be measuring nothing. (d) is every export of a contract that was generated and then refused, timed out, or errored before a probe report existed. Rows whose `npm install` or `contract generate` failed describe no exports at all and are in none of the four states.
 
@@ -297,12 +301,12 @@ Of every export the corpus's generated contracts describe:
 
 | Phase | Rows | Median | p90 | Max | Mean |
 | --- | --- | --- | --- | --- | --- |
-| install | 416 | 868 ms | 1707 ms | 18444 ms | 1040 ms |
-| generate | 413 | 152 ms | 739 ms | 17329 ms | 514 ms |
-| probe | 397 | 732 ms | 3930 ms | 219074 ms | 3328 ms |
-| verify | 397 | 53 ms | 103 ms | 174 ms | 60 ms |
-| pipelineWithoutInstall | 413 | 1011 ms | 4778 ms | 236496 ms | 3770 ms |
-| total | 416 | 1899 ms | 6364 ms | 239417 ms | 4832 ms |
+| install | 416 | 738 ms | 1777 ms | 16150 ms | 1046 ms |
+| generate | 413 | 180 ms | 1589 ms | 120006 ms | 1447 ms |
+| probe | 396 | 696 ms | 3624 ms | 204825 ms | 3535 ms |
+| verify | 396 | 51 ms | 79 ms | 163 ms | 56 ms |
+| pipelineWithoutInstall | 413 | 959 ms | 5177 ms | 247254 ms | 4890 ms |
+| total | 416 | 1919 ms | 7956 ms | 250202 ms | 5947 ms |
 
 `install` may run against a warm npm cache, so it is a lower bound; `pipelineWithoutInstall` is the number that describes the checker's own cost.
 
@@ -311,15 +315,15 @@ Of every export the corpus's generated contracts describe:
 | Stage | Rows |
 | --- | --- |
 | `npm install` failed | 3 |
-| `contract generate` failed | 14 |
+| `contract generate` failed | 15 |
 | `contract probe` errored before writing a report | 0 |
 | no Solid runtime the row could honestly be probed against | 2 |
 | timed out under the harness budget | 0 |
 
 The manifest pins the runtime each row runs against, and for these it pins no `solid-js` — `@solidjs/signals` *is* the reactive core, so there is no second package to settle a probe with. Pairing one in would be this harness auditing a combination the corpus deliberately did not. They are their own class rather than an error:
 
-- `@solidjs/signals@2.0.0-rc.1|solid2|floor`
 - `@solidjs/signals@2.0.0-rc.1|solid2|head`
+- `@solidjs/signals@2.0.0-rc.1|solid2|floor`
 
 Generation failures by class:
 
@@ -327,6 +331,7 @@ Generation failures by class:
 | --- | --- |
 | `unclassified` | 10 |
 | `no-esm-runtime-target` | 2 |
+| `timeout` | 1 |
 | `cjs-only-entrypoint` | 1 |
 | `no-exported-surface` | 1 |
 
@@ -354,11 +359,10 @@ Generation failures by class:
 | `@corvu/tooltip@0.2.2|solid1|only` | corvu | `kind-observed` | 2 | kind-observed | entrypoint import threw x8 |
 | `@corvu/utils@0.4.2|solid1|only` | corvu | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write | entrypoint import threw x1 |
 | `@kobalte/core@0.13.13|solid1|only` | kobalte | `incompleteness` | 22 | incompleteness, probe-report-includes-evidence-write | entrypoint import threw x409 |
-| `@kobalte/core@2.0.0-alpha.0|solid2|only` | kobalte | `incompleteness` | 16 | incompleteness, probe-report-includes-evidence-write | probe session aborted by package code x1185, entrypoint import threw x333 |
+| `@kobalte/core@2.0.0-alpha.0|solid2|only` | kobalte | `probe-failed` | 25 | incompleteness, probe-failed, probe-report-includes-evidence-write | entrypoint import threw x333, **contradicted** x1 |
 | `@solid-devtools/extension-adapter@0.12.1|solid1|only` | solid-devtools | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
 | `@solid-devtools/frontend@0.15.4|solid1|only` | solid-devtools | `kind-observed` | 2 | kind-observed | entrypoint import threw x3 |
 | `@solid-devtools/logger@0.9.11|solid1|only` | solid-devtools | `kind-observed` | 2 | kind-observed | entrypoint import threw x6 |
-| `@solid-devtools/shared@0.20.0|solid1|only` | solid-devtools | `kind-observed` | 6 | kind-observed | probe session wrote no report x328 |
 | `@solid-primitives/controlled-props@0.1.4|solid1|only` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x6 |
 | `@solid-primitives/controlled-props@1.0.0-next.3|solid2|floor` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x28 |
 | `@solid-primitives/controlled-props@1.0.0-next.3|solid2|head` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x28 |
@@ -422,16 +426,13 @@ Generation failures by class:
 | `@solid-primitives/virtual@1.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x8 |
 | `@solidjs/html@2.0.0-rc.1|solid2|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
 | `@solidjs/router@1.0.0|solid1|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x38 |
-| `@solidjs/start-devtools@1.0.0-next.3|solid2|floor` | official-solid | `kind-observed` | 2 | kind-observed | no unambiguous summary resolves in the mode (no kind claim exists) x1 |
 | `@solidjs/start-devtools@1.0.0-next.3|solid2|head` | official-solid | `kind-observed` | 2 | kind-observed | probe session aborted by package code x1 |
 | `@solidjs/start@2.0.3|solid1|only` | official-solid | `closure-note` | 11 | attested-closure-note, closure-note | entrypoint import threw x332 |
-| `@solidjs/testing-library@0.8.10|solid1|only` | official-solid | `probe-failed` | 5 | incompleteness, probe-failed, probe-report-includes-evidence-write | — |
+| `@solidjs/testing-library@0.8.10|solid1|only` | official-solid | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write | — |
 | `@solidjs/vite-plugin@3.0.0-next.31|solid2|floor` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
 | `@solidjs/vite-plugin@3.0.0-next.31|solid2|head` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | official-solid | `attested-closure-note` | 4 | attested-closure-note | no unambiguous summary resolves in the mode (no kind claim exists) x35, export-missing in this mode x22 |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | official-solid | `attested-closure-note` | 4 | attested-closure-note | no unambiguous summary resolves in the mode (no kind claim exists) x38, export-missing in this mode x22 |
 | `@tanstack/ai-solid-ui@0.7.18|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x36 |
-| `@tanstack/charts@0.14.0|solid1|only` | tanstack | `closure-note` | 1 | closure-note | probe session aborted by package code x957, entrypoint import threw x8, no unambiguous summary resolves in the mode (no kind claim exists) x3 |
+| `@tanstack/charts@0.14.0|solid1|only` | tanstack | `closure-note` | 1 | closure-note | entrypoint import threw x62, probe session aborted by package code x4, no unambiguous summary resolves in the mode (no kind claim exists) x3 |
 | `@tanstack/solid-charts@0.14.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
 | `@tanstack/solid-form@2.0.0-alpha.2|solid1|only` | tanstack | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write | — |
 | `@tanstack/solid-pacer-devtools@0.14.0|solid1|only` | tanstack | `kind-observed` | 3 | kind-observed | entrypoint import threw x2 |
@@ -440,21 +441,19 @@ Generation failures by class:
 | `@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | probe session aborted by package code x3 |
 | `@tanstack/solid-router-devtools@1.167.1|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
 | `@tanstack/solid-router-devtools@2.0.0-rc.1|solid2|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4, probe session aborted by package code x3 |
-| `@tanstack/solid-router@1.170.29|solid1|only` | tanstack | `kind-observed` | 3 | kind-observed | probe session aborted by package code x66, entrypoint import threw x23 |
-| `@tanstack/solid-router@2.0.0-rc.1|solid2|only` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x120, probe session aborted by package code x66 |
-| `@tanstack/solid-start-client@1.168.28|solid1|only` | tanstack | `kind-observed` | 4 | kind-observed | probe session aborted by package code x27, entrypoint import threw x10 |
+| `@tanstack/solid-router@1.170.29|solid1|only` | tanstack | `kind-observed` | 3 | kind-observed | entrypoint import threw x23 |
+| `@tanstack/solid-router@2.0.0-rc.1|solid2|only` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x120 |
+| `@tanstack/solid-start-client@1.168.28|solid1|only` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x10, probe session aborted by package code x3 |
 | `@tanstack/solid-start-client@2.0.0-rc.1|solid2|floor` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x10 |
 | `@tanstack/solid-start-client@2.0.0-rc.1|solid2|head` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x10 |
 | `@tanstack/solid-start-config@1.120.20|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
 | `@tanstack/solid-start-server@1.167.35|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
 | `@tanstack/solid-start-server@2.0.0-rc.1|solid2|floor` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
 | `@tanstack/solid-start-server@2.0.0-rc.1|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
-| `@tanstack/solid-start@1.168.46|solid1|only` | tanstack | `kind-observed` | 11 | kind-observed | probe session aborted by package code x180, entrypoint import threw x88 |
 | `@tanstack/solid-store@0.11.1|solid1|only` | tanstack | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write | — |
-| `@tanstack/solid-table@9.1.2|solid1|only` | tanstack | `incompleteness` | 10 | incompleteness, kind-observed, probe-report-includes-evidence-write | probe session hit the per-mode timeout x306 |
 | `motion-solidjs@0.6.0|solid1|only` | motion-solidjs | `incompleteness` | 19 | incompleteness, probe-report-includes-evidence-write | — |
 | `motion-solidjs@0.7.0-beta.4|solid2|head` | motion-solidjs | `incompleteness` | 31 | incompleteness, probe-report-includes-evidence-write | — |
-| `solid-js@1.9.14|solid1|only` | official-solid | `probe-failed` | 20 | incompleteness, probe-failed, probe-report-includes-evidence-write | probe session aborted by package code x86, no unambiguous summary resolves in the mode (no kind claim exists) x3, export-missing in this mode x1 |
+| `solid-js@1.9.14|solid1|only` | official-solid | `incompleteness` | 12 | incompleteness, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x3, export-missing in this mode x1 |
 | `solid-js@2.0.0-rc.1|solid2|floor` | official-solid | `incompleteness` | 16 | incompleteness, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x1 |
 | `solid-js@2.0.0-rc.1|solid2|head` | official-solid | `incompleteness` | 16 | incompleteness, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x1 |
 | `solid-recharts@2.0.0-beta.1|solid2|floor` | solid-recharts | `kind-observed` | 2 | kind-observed | entrypoint import threw x436 |
@@ -481,11 +480,12 @@ Generation failures by class:
 | `@corvu/dialog@0.2.4|solid1|only` | 10 | 2 | 2 | 0 | — |
 | `@corvu/disclosure@0.2.2|solid1|only` | 5 | 2 | 2 | 0 | — |
 | `@corvu/drawer@0.2.4|solid1|only` | 11 | 8 | 10 | 0 | — |
-| `@kobalte/utils@2.0.0-alpha.0|solid2|only` | 10 | 4 | 4 | 0 | — |
+| `@kobalte/utils@2.0.0-alpha.0|solid2|only` | 10 | 3 | 2 | 0 | — |
 | `@solid-devtools/debugger@0.28.1|solid1|only` | 5 | 5 | 0 | 0 | `.`, `./bundled`, `./index` |
 | `@solid-devtools/overlay@0.33.5|solid1|only` | 1 | 1 | 0 | 0 | — |
+| `@solid-devtools/shared@0.20.0|solid1|only` | 21 | 8 | 6 | 0 | `./chunk-DTKGRNV6`, `./detect`, `./utils` |
 | `@solid-devtools/transform@0.10.4|solid1|only` | 2 | 0 | 0 | 0 | — |
-| `@solid-devtools/ui@0.10.3|solid1|only` | 13 | 3 | 2 | 0 | `.`, `./icons` |
+| `@solid-devtools/ui@0.10.3|solid1|only` | 13 | 1 | 0 | 0 | `.`, `./icons` |
 | `@solid-primitives/a11y@1.0.0-next.3|solid2|floor` | 7 | 3 | 2 | 0 | — |
 | `@solid-primitives/a11y@1.0.0-next.3|solid2|head` | 7 | 3 | 2 | 0 | — |
 | `@solid-primitives/active-element@2.1.6|solid1|only` | 5 | 4 | 1 | 0 | — |
@@ -516,21 +516,21 @@ Generation failures by class:
 | `@solid-primitives/controlled-signal@1.0.0-next.3|solid2|floor` | 5 | 5 | 5 | 0 | — |
 | `@solid-primitives/controlled-signal@1.0.0-next.3|solid2|head` | 5 | 5 | 5 | 0 | — |
 | `@solid-primitives/cookies@0.0.3|solid1|only` | 4 | 3 | 0 | 0 | — |
-| `@solid-primitives/cookies@1.0.0-next.2|solid2|floor` | 4 | 3 | 3 | 0 | — |
-| `@solid-primitives/cookies@1.0.0-next.2|solid2|head` | 4 | 3 | 3 | 0 | — |
+| `@solid-primitives/cookies@1.0.0-next.2|solid2|floor` | 4 | 2 | 2 | 0 | — |
+| `@solid-primitives/cookies@1.0.0-next.2|solid2|head` | 4 | 2 | 2 | 0 | — |
 | `@solid-primitives/cursor@0.1.4|solid1|only` | 2 | 2 | 1 | 0 | — |
 | `@solid-primitives/db-store@1.1.4|solid1|only` | 2 | 2 | 2 | 0 | — |
 | `@solid-primitives/debounce@1.3.0|solid1|only` | 2 | 2 | 2 | 0 | — |
-| `@solid-primitives/deep@0.3.7|solid1|only` | 4 | 4 | 3 | 0 | — |
-| `@solid-primitives/deep@1.0.0-next.3|solid2|floor` | 4 | 4 | 3 | 0 | — |
-| `@solid-primitives/deep@1.0.0-next.3|solid2|head` | 4 | 4 | 3 | 0 | — |
+| `@solid-primitives/deep@0.3.7|solid1|only` | 4 | 1 | 0 | 3 | — |
+| `@solid-primitives/deep@1.0.0-next.3|solid2|floor` | 4 | 1 | 0 | 3 | — |
+| `@solid-primitives/deep@1.0.0-next.3|solid2|head` | 4 | 1 | 0 | 3 | — |
 | `@solid-primitives/destructure@0.2.4|solid1|only` | 1 | 1 | 0 | 0 | — |
 | `@solid-primitives/devices@1.3.1|solid1|only` | 6 | 6 | 6 | 0 | — |
 | `@solid-primitives/devices@3.0.0-next.2|solid2|floor` | 4 | 4 | 4 | 0 | — |
 | `@solid-primitives/devices@3.0.0-next.2|solid2|head` | 4 | 4 | 4 | 0 | — |
 | `@solid-primitives/event-bus@1.1.4|solid1|only` | 11 | 7 | 4 | 0 | — |
-| `@solid-primitives/event-bus@3.0.0-next.3|solid2|floor` | 11 | 8 | 6 | 0 | — |
-| `@solid-primitives/event-bus@3.0.0-next.3|solid2|head` | 11 | 8 | 6 | 0 | — |
+| `@solid-primitives/event-bus@3.0.0-next.3|solid2|floor` | 11 | 7 | 5 | 1 | — |
+| `@solid-primitives/event-bus@3.0.0-next.3|solid2|head` | 11 | 7 | 5 | 1 | — |
 | `@solid-primitives/event-dispatcher@0.1.1|solid1|only` | 1 | 0 | 0 | 0 | — |
 | `@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|floor` | 1 | 0 | 0 | 0 | — |
 | `@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|head` | 1 | 0 | 0 | 0 | — |
@@ -538,9 +538,9 @@ Generation failures by class:
 | `@solid-primitives/event-props@0.3.1|solid1|only` | 1 | 0 | 0 | 0 | — |
 | `@solid-primitives/event-props@1.0.0-next.2|solid2|floor` | 1 | 0 | 0 | 0 | — |
 | `@solid-primitives/event-props@1.0.0-next.2|solid2|head` | 1 | 0 | 0 | 0 | — |
-| `@solid-primitives/filesystem@1.3.4|solid1|only` | 15 | 8 | 8 | 0 | — |
-| `@solid-primitives/filesystem@3.0.0-next.3|solid2|floor` | 15 | 8 | 8 | 0 | — |
-| `@solid-primitives/filesystem@3.0.0-next.3|solid2|head` | 15 | 8 | 8 | 0 | — |
+| `@solid-primitives/filesystem@1.3.4|solid1|only` | 15 | 7 | 6 | 0 | — |
+| `@solid-primitives/filesystem@3.0.0-next.3|solid2|floor` | 15 | 7 | 6 | 0 | — |
+| `@solid-primitives/filesystem@3.0.0-next.3|solid2|head` | 15 | 7 | 6 | 0 | — |
 | `@solid-primitives/flux-store@0.1.1|solid1|only` | 4 | 3 | 2 | 0 | — |
 | `@solid-primitives/flux-store@1.0.0-next.2|solid2|floor` | 4 | 2 | 3 | 0 | — |
 | `@solid-primitives/flux-store@1.0.0-next.2|solid2|head` | 4 | 2 | 3 | 0 | — |
@@ -555,17 +555,17 @@ Generation failures by class:
 | `@solid-primitives/gestures@1.2.1|solid1|only` | 9 | 6 | 1 | 0 | — |
 | `@solid-primitives/gestures@3.0.0-next.3|solid2|floor` | 11 | 1 | 1 | 0 | — |
 | `@solid-primitives/gestures@3.0.0-next.3|solid2|head` | 11 | 1 | 1 | 0 | — |
-| `@solid-primitives/i18n@2.2.1|solid1|only` | 9 | 7 | 5 | 0 | — |
-| `@solid-primitives/i18n@3.0.0-next.4|solid2|floor` | 12 | 7 | 7 | 0 | — |
-| `@solid-primitives/i18n@3.0.0-next.4|solid2|head` | 12 | 7 | 7 | 0 | — |
+| `@solid-primitives/i18n@2.2.1|solid1|only` | 9 | 4 | 2 | 3 | — |
+| `@solid-primitives/i18n@3.0.0-next.4|solid2|floor` | 12 | 2 | 2 | 4 | — |
+| `@solid-primitives/i18n@3.0.0-next.4|solid2|head` | 12 | 2 | 2 | 4 | — |
 | `@solid-primitives/idle@0.2.3|solid1|only` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/idle@1.0.0-next.3|solid2|floor` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/idle@1.0.0-next.3|solid2|head` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/input-mask@0.3.1|solid1|only` | 7 | 2 | 1 | 0 | — |
 | `@solid-primitives/input-mask@1.0.0-next.2|solid2|floor` | 7 | 2 | 2 | 0 | — |
 | `@solid-primitives/input-mask@1.0.0-next.2|solid2|head` | 7 | 2 | 2 | 0 | — |
-| `@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor` | 12 | 5 | 5 | 0 | — |
-| `@solid-primitives/intersection-observer@3.0.0-next.3|solid2|head` | 12 | 5 | 5 | 0 | — |
+| `@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor` | 12 | 4 | 4 | 0 | — |
+| `@solid-primitives/intersection-observer@3.0.0-next.3|solid2|head` | 12 | 4 | 4 | 0 | — |
 | `@solid-primitives/jsx-parser@0.2.0|solid1|only` | 4 | 2 | 3 | 0 | — |
 | `@solid-primitives/jsx-tokenizer@1.1.4|solid1|only` | 4 | 2 | 1 | 0 | — |
 | `@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor` | 4 | 2 | 2 | 0 | — |
@@ -586,9 +586,9 @@ Generation failures by class:
 | `@solid-primitives/map@0.7.4|solid1|only` | 4 | 4 | 0 | 0 | — |
 | `@solid-primitives/map@1.0.0-next.2|solid2|floor` | 4 | 2 | 0 | 0 | — |
 | `@solid-primitives/map@1.0.0-next.2|solid2|head` | 4 | 2 | 0 | 0 | — |
-| `@solid-primitives/marker@0.2.2|solid1|only` | 2 | 2 | 2 | 0 | — |
-| `@solid-primitives/marker@2.0.0-next.2|solid2|floor` | 2 | 2 | 2 | 0 | — |
-| `@solid-primitives/marker@2.0.0-next.2|solid2|head` | 2 | 2 | 2 | 0 | — |
+| `@solid-primitives/marker@0.2.2|solid1|only` | 2 | 1 | 1 | 0 | — |
+| `@solid-primitives/marker@2.0.0-next.2|solid2|floor` | 2 | 1 | 1 | 0 | — |
+| `@solid-primitives/marker@2.0.0-next.2|solid2|head` | 2 | 1 | 1 | 0 | — |
 | `@solid-primitives/masonry@0.1.4|solid1|only` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/masonry@2.0.0-next.2|solid2|floor` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/masonry@2.0.0-next.2|solid2|head` | 1 | 1 | 1 | 0 | — |
@@ -598,11 +598,11 @@ Generation failures by class:
 | `@solid-primitives/media@2.3.6|solid1|only` | 6 | 4 | 0 | 0 | — |
 | `@solid-primitives/media@4.0.0-next.2|solid2|floor` | 6 | 1 | 0 | 0 | — |
 | `@solid-primitives/media@4.0.0-next.2|solid2|head` | 6 | 1 | 0 | 0 | — |
-| `@solid-primitives/memo@1.5.1|solid1|only` | 12 | 12 | 9 | 0 | — |
+| `@solid-primitives/memo@1.5.1|solid1|only` | 12 | 12 | 11 | 0 | — |
 | `@solid-primitives/mouse@2.1.7|solid1|only` | 8 | 8 | 1 | 0 | — |
 | `@solid-primitives/mutable@1.1.1|solid1|only` | 2 | 2 | 0 | 0 | — |
-| `@solid-primitives/mutable@3.0.0-next.2|solid2|floor` | 2 | 2 | 2 | 0 | — |
-| `@solid-primitives/mutable@3.0.0-next.2|solid2|head` | 2 | 2 | 2 | 0 | — |
+| `@solid-primitives/mutable@3.0.0-next.2|solid2|floor` | 2 | 1 | 1 | 0 | — |
+| `@solid-primitives/mutable@3.0.0-next.2|solid2|head` | 2 | 1 | 1 | 0 | — |
 | `@solid-primitives/mutation-observer@1.2.4|solid1|only` | 2 | 2 | 0 | 0 | — |
 | `@solid-primitives/mutation-observer@3.0.0-next.2|solid2|floor` | 2 | 2 | 0 | 0 | — |
 | `@solid-primitives/mutation-observer@3.0.0-next.2|solid2|head` | 2 | 2 | 0 | 0 | — |
@@ -629,33 +629,33 @@ Generation failures by class:
 | `@solid-primitives/props@4.0.0-next.3|solid2|head` | 8 | 4 | 4 | 0 | — |
 | `@solid-primitives/queue@1.0.0-next.3|solid2|floor` | 6 | 5 | 5 | 0 | — |
 | `@solid-primitives/queue@1.0.0-next.3|solid2|head` | 6 | 5 | 5 | 0 | — |
-| `@solid-primitives/raf@2.3.5|solid1|only` | 4 | 4 | 5 | 0 | — |
-| `@solid-primitives/raf@4.0.0-next.2|solid2|floor` | 4 | 4 | 5 | 0 | — |
-| `@solid-primitives/raf@4.0.0-next.2|solid2|head` | 4 | 4 | 5 | 0 | — |
+| `@solid-primitives/raf@2.3.5|solid1|only` | 4 | 4 | 4 | 0 | — |
+| `@solid-primitives/raf@4.0.0-next.2|solid2|floor` | 4 | 4 | 4 | 0 | — |
+| `@solid-primitives/raf@4.0.0-next.2|solid2|head` | 4 | 4 | 4 | 0 | — |
 | `@solid-primitives/range@0.2.5|solid1|only` | 6 | 6 | 2 | 0 | — |
 | `@solid-primitives/range@1.0.0-next.3|solid2|floor` | 7 | 6 | 6 | 0 | — |
 | `@solid-primitives/range@1.0.0-next.3|solid2|head` | 7 | 6 | 6 | 0 | — |
 | `@solid-primitives/reducer@0.0.101|solid1|only` | 1 | 1 | 2 | 0 | — |
 | `@solid-primitives/resize-observer@2.2.0|solid1|only` | 7 | 5 | 2 | 0 | — |
-| `@solid-primitives/resource@0.4.3|solid1|only` | 8 | 7 | 1 | 0 | — |
-| `@solid-primitives/rootless@1.5.4|solid1|only` | 8 | 8 | 7 | 0 | — |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|floor` | 8 | 8 | 8 | 0 | — |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|head` | 8 | 8 | 8 | 0 | — |
+| `@solid-primitives/resource@0.4.3|solid1|only` | 8 | 7 | 2 | 0 | — |
+| `@solid-primitives/rootless@1.5.4|solid1|only` | 8 | 8 | 6 | 0 | — |
+| `@solid-primitives/rootless@2.0.0-next.2|solid2|floor` | 8 | 8 | 7 | 0 | — |
+| `@solid-primitives/rootless@2.0.0-next.2|solid2|head` | 8 | 8 | 7 | 0 | — |
 | `@solid-primitives/scheduled@1.5.3|solid1|only` | 6 | 6 | 5 | 0 | — |
 | `@solid-primitives/script-loader@2.3.2|solid1|only` | 1 | 0 | 0 | 0 | — |
 | `@solid-primitives/script-loader@3.0.0-next.2|solid2|floor` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/script-loader@3.0.0-next.2|solid2|head` | 1 | 1 | 1 | 0 | — |
-| `@solid-primitives/scroll@2.1.6|solid1|only` | 5 | 3 | 1 | 0 | — |
-| `@solid-primitives/scroll@3.0.0-next.4|solid2|floor` | 6 | 3 | 2 | 0 | — |
-| `@solid-primitives/scroll@3.0.0-next.4|solid2|head` | 6 | 3 | 2 | 0 | — |
+| `@solid-primitives/scroll@2.1.6|solid1|only` | 5 | 2 | 0 | 0 | — |
+| `@solid-primitives/scroll@3.0.0-next.4|solid2|floor` | 6 | 2 | 1 | 0 | — |
+| `@solid-primitives/scroll@3.0.0-next.4|solid2|head` | 6 | 2 | 1 | 0 | — |
 | `@solid-primitives/selection@0.1.3|solid1|only` | 2 | 1 | 1 | 0 | — |
 | `@solid-primitives/selection@1.0.0-next.2|solid2|floor` | 2 | 1 | 1 | 0 | — |
 | `@solid-primitives/selection@1.0.0-next.2|solid2|head` | 2 | 1 | 1 | 0 | — |
 | `@solid-primitives/sensors@1.0.0-next.3|solid2|floor` | 10 | 6 | 7 | 0 | — |
 | `@solid-primitives/sensors@1.0.0-next.3|solid2|head` | 10 | 6 | 7 | 0 | — |
 | `@solid-primitives/set@0.7.4|solid1|only` | 4 | 4 | 0 | 0 | — |
-| `@solid-primitives/set@1.0.0-next.2|solid2|floor` | 9 | 7 | 5 | 0 | — |
-| `@solid-primitives/set@1.0.0-next.2|solid2|head` | 9 | 7 | 5 | 0 | — |
+| `@solid-primitives/set@1.0.0-next.2|solid2|floor` | 9 | 6 | 4 | 1 | — |
+| `@solid-primitives/set@1.0.0-next.2|solid2|head` | 9 | 6 | 4 | 1 | — |
 | `@solid-primitives/share@2.2.5|solid1|only` | 35 | 2 | 2 | 0 | — |
 | `@solid-primitives/spring@0.1.2|solid1|only` | 2 | 2 | 3 | 0 | — |
 | `@solid-primitives/spring@1.0.0-next.3|solid2|floor` | 3 | 3 | 5 | 0 | — |
@@ -666,18 +666,18 @@ Generation failures by class:
 | `@solid-primitives/state-machine@0.1.1|solid1|only` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/state-machine@1.0.0-next.2|solid2|floor` | 1 | 1 | 1 | 0 | — |
 | `@solid-primitives/state-machine@1.0.0-next.2|solid2|head` | 1 | 1 | 1 | 0 | — |
-| `@solid-primitives/static-store@0.1.4|solid1|only` | 3 | 2 | 0 | 0 | — |
+| `@solid-primitives/static-store@0.1.4|solid1|only` | 3 | 2 | 1 | 0 | — |
 | `@solid-primitives/static-store@1.0.0-next.2|solid2|floor` | 3 | 2 | 1 | 0 | — |
 | `@solid-primitives/static-store@1.0.0-next.2|solid2|head` | 3 | 2 | 1 | 0 | — |
 | `@solid-primitives/storage@4.4.0|solid1|only` | 11 | 8 | 0 | 0 | — |
-| `@solid-primitives/storage@5.0.0-next.4|solid2|floor` | 11 | 4 | 2 | 0 | — |
-| `@solid-primitives/storage@5.0.0-next.4|solid2|head` | 11 | 4 | 2 | 0 | — |
+| `@solid-primitives/storage@5.0.0-next.4|solid2|floor` | 11 | 3 | 1 | 0 | — |
+| `@solid-primitives/storage@5.0.0-next.4|solid2|head` | 11 | 3 | 1 | 0 | — |
 | `@solid-primitives/stream@0.7.4|solid1|only` | 5 | 4 | 5 | 0 | — |
 | `@solid-primitives/styles@0.1.4|solid1|only` | 4 | 2 | 0 | 0 | — |
 | `@solid-primitives/styles@1.0.0-next.2|solid2|floor` | 4 | 2 | 0 | 0 | — |
 | `@solid-primitives/styles@1.0.0-next.2|solid2|head` | 4 | 2 | 0 | 0 | — |
 | `@solid-primitives/throttle@1.2.0|solid1|only` | 1 | 1 | 1 | 0 | — |
-| `@solid-primitives/timer@1.4.4|solid1|only` | 5 | 5 | 3 | 0 | — |
+| `@solid-primitives/timer@1.4.4|solid1|only` | 5 | 5 | 4 | 0 | — |
 | `@solid-primitives/timer@1.4.5-next.1|solid2|floor` | 5 | 5 | 4 | 0 | — |
 | `@solid-primitives/timer@1.4.5-next.1|solid2|head` | 5 | 5 | 4 | 0 | — |
 | `@solid-primitives/transition-group@1.1.2|solid1|only` | 2 | 2 | 2 | 0 | — |
@@ -692,9 +692,9 @@ Generation failures by class:
 | `@solid-primitives/upload@0.1.5|solid1|only` | 3 | 3 | 3 | 0 | — |
 | `@solid-primitives/url@0.2.0-next.2|solid2|floor` | 12 | 6 | 1 | 0 | — |
 | `@solid-primitives/url@0.2.0-next.2|solid2|head` | 12 | 6 | 1 | 0 | — |
-| `@solid-primitives/utils@6.4.1|solid1|only` | 75 | 54 | 18 | 0 | — |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|floor` | 99 | 38 | 27 | 0 | — |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|head` | 99 | 38 | 27 | 0 | — |
+| `@solid-primitives/utils@6.4.1|solid1|only` | 75 | 49 | 13 | 0 | — |
+| `@solid-primitives/utils@7.0.0-next.4|solid2|floor` | 99 | 27 | 16 | 5 | — |
+| `@solid-primitives/utils@7.0.0-next.4|solid2|head` | 99 | 27 | 16 | 5 | — |
 | `@solid-primitives/vibrate@1.0.0-next.2|solid2|floor` | 6 | 2 | 4 | 0 | — |
 | `@solid-primitives/vibrate@1.0.0-next.2|solid2|head` | 6 | 2 | 4 | 0 | — |
 | `@solid-primitives/video@1.0.0-next.3|solid2|floor` | 7 | 3 | 4 | 0 | — |
@@ -712,9 +712,11 @@ Generation failures by class:
 | `@solidjs/meta@0.29.4|solid1|only` | 9 | 7 | 2 | 0 | — |
 | `@solidjs/meta@1.0.0-next.2|solid2|floor` | 8 | 7 | 0 | 0 | — |
 | `@solidjs/meta@1.0.0-next.2|solid2|head` | 8 | 7 | 0 | 0 | — |
-| `@solidjs/router@2.0.0-next.17|solid2|only` | 30 | 29 | 25 | 0 | — |
+| `@solidjs/router@2.0.0-next.17|solid2|only` | 30 | 28 | 22 | 3 | — |
+| `@solidjs/start-devtools@1.0.0-next.3|solid2|floor` | 3 | 3 | 0 | 0 | — |
 | `@solidjs/universal@2.0.0-rc.1|solid2|only` | 1 | 0 | 0 | 0 | — |
-| `@tanstack/ai-devtools-core@0.5.6|solid1|only` | 2 | 2 | 0 | 0 | — |
+| `@solidjs/web@2.0.0-rc.1|solid2|floor` | 318 | 64 | 47 | 7 | `.`, `./frames`, `./server-functions` |
+| `@solidjs/web@2.0.0-rc.1|solid2|head` | 321 | 66 | 49 | 7 | `.`, `./frames`, `./server-functions` |
 | `@tanstack/ai-solid@0.18.3|solid1|only` | 21 | 16 | 4 | 0 | — |
 | `@tanstack/devtools-a11y@0.2.2|solid1|only` | 8 | 8 | 0 | 0 | `./angular`, `./react`, `./react/production` |
 | `@tanstack/devtools-ui@0.7.1|solid1|only` | 8 | 0 | 0 | 0 | `.`, `./icons` |
@@ -724,22 +726,24 @@ Generation failures by class:
 | `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | 1 | 1 | 0 | 0 | — |
 | `@tanstack/pacer-devtools@1.4.0|solid1|only` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/solid-ai-devtools@0.2.70|solid1|only` | 4 | 4 | 0 | 0 | — |
-| `@tanstack/solid-db@0.2.37|solid1|only` | 207 | 128 | 20 | 0 | — |
+| `@tanstack/solid-db@0.2.37|solid1|only` | 207 | 120 | 10 | 0 | — |
 | `@tanstack/solid-devtools@0.8.12|solid1|only` | 1 | 1 | 0 | 0 | — |
 | `@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only` | 1 | 0 | 0 | 0 | — |
-| `@tanstack/solid-hotkeys@0.10.0|solid1|only` | 64 | 16 | 8 | 0 | — |
-| `@tanstack/solid-pacer@0.22.0|solid1|only` | 108 | 55 | 34 | 0 | — |
+| `@tanstack/solid-hotkeys@0.10.0|solid1|only` | 64 | 13 | 5 | 0 | — |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | 108 | 36 | 15 | 19 | — |
 | `@tanstack/solid-query-devtools@5.101.4|solid1|only` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head` | 2 | 2 | 0 | 0 | — |
-| `@tanstack/solid-query@5.101.4|solid1|only` | 57 | 44 | 37 | 1 | — |
-| `@tanstack/solid-query@6.0.0-rc.0|solid2|floor` | 57 | 47 | 25 | 1 | — |
-| `@tanstack/solid-query@6.0.0-rc.0|solid2|head` | 57 | 47 | 25 | 1 | — |
+| `@tanstack/solid-query@5.101.4|solid1|only` | 57 | 40 | 35 | 4 | — |
+| `@tanstack/solid-query@6.0.0-rc.0|solid2|floor` | 57 | 47 | 21 | 4 | — |
+| `@tanstack/solid-query@6.0.0-rc.0|solid2|head` | 57 | 47 | 21 | 4 | — |
 | `@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only` | 1 | 0 | 0 | 0 | — |
+| `@tanstack/solid-start@1.168.46|solid1|only` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
 | `@tanstack/solid-start@2.0.0-rc.1|solid2|floor` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
 | `@tanstack/solid-start@2.0.0-rc.1|solid2|head` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
 | `@tanstack/solid-table-devtools@9.2.0|solid1|only` | 3 | 1 | 0 | 0 | — |
-| `@tanstack/solid-virtual@3.13.37|solid1|only` | 17 | 7 | 6 | 0 | — |
+| `@tanstack/solid-table@9.1.2|solid1|only` | 295 | 7 | 1 | 0 | `.` |
+| `@tanstack/solid-virtual@3.13.37|solid1|only` | 17 | 4 | 3 | 1 | — |
 | `@tanstack/table-devtools@9.2.0|solid1|only` | 10 | 10 | 1 | 0 | — |
 | `corvu@0.7.2|solid1|only` | 43 | 21 | 11 | 0 | `./otp-field`, `./popover`, `./resizable`, `./tooltip` |
 | `motion-solidjs@0.7.0-beta.4|solid2|floor` | 357 | 333 | 0 | 0 | — |

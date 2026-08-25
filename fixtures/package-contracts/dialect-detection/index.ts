@@ -78,6 +78,22 @@ export function identityResult<T>(value: T): T {
   return value;
 }
 
+// One identity-looking branch is not an identity contract. The generic probe
+// supplies a fresh object here and observes `false` on the other path; package
+// generation must therefore omit `returns` instead of claiming `argument[0]`.
+export function conditionalIdentity<T>(value: T, keep: boolean): T | false {
+  if (keep) return value;
+  return false;
+}
+
+export function isObject(value: unknown): boolean {
+  return typeof value === "object";
+}
+
+export function guardedIdentity<T>(value: T, keep: boolean): T | undefined {
+  if (keep) return value;
+}
+
 type RouterState = {
   location: { pathname: () => string };
   params: Record<string, string>;

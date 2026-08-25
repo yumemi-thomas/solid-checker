@@ -1064,6 +1064,131 @@ the numbers are a measurement of*, and each is recorded in the report's
 wall budget is its own outcome class and is counted as neither verified nor
 refused. So is a row for which no Solid runtime can honestly be chosen.
 
+### Measured state (2026-08-26, export-scoped open loads and isolated entrypoint imports, full corpus, 416 probe rows)
+
+This run keeps the same stable native and Type Facts binaries as the preceding
+relational-probe measurement and changes only the Node generator/probe layer.
+An open dynamic import in a flat entry module is attributed through exact local
+function references to explicit exports. Those exports are omitted; ambiguity
+retains the entrypoint-wide blocker. Probe child lifetimes are also partitioned
+by exact package specifier, so one entrypoint's failed or partially initialized
+module cannot affect another entrypoint in the same mode.
+
+The raw no-subsetting, concurrency-6 result is the checked-in
+`verification-report.{json,md}`:
+
+| Figure | Previous authority run | This run | Movement |
+| --- | ---: | ---: | ---: |
+| Reached `verified` | 281/416 | **286/416** | +5 |
+| Refused by `contract verify` | 115 | **110** | -5 |
+| Generation failures | 15 | **15** | 0 |
+| Claims total / driven / passed | 11,941 / 7,959 / 7,951 | **11,935 / 8,333 / 8,325** | -6 / +374 / +374 |
+| Failed claims | 8 | **8** | 0 |
+| Undriven claims | 3,982 | **3,602** | -380 |
+| Conversions (return conversions) | 699 (320) | **802 (348)** | +103 (+28) |
+| Probed rows retained | 69 | **83** | +14 |
+| Rows with probed evidence | 18 | **20** | +2 |
+
+Both `@solidjs/web@2.0.0-rc.1` floor/head rows now verify. The open runtime
+`entryUrl` remains open: `hydrate` is omitted from the root,
+`./jsx-runtime`, and `./jsx-dev-runtime` contracts, while `ssrGroup` and every
+export proven unable to reach the load retain their summaries. The eight
+remaining failed claims are unchanged; no contradiction was hidden or demoted.
+
+Entrypoint worker isolation also moved `@tanstack/solid-start@1.168.46` and
+`@solid-devtools/shared@0.20.0` from refused to verified. It reduced aggregate
+package-code session-abort withdrawals from 386 to 41. Import throws rose from
+585 to 601 because later independent entrypoints are now actually attempted;
+that is more complete attribution, not a regression. The main static gaps are
+unchanged: 254 nested return leaves, 23 store paths, 13 callback-argument rows,
+92 async claims, 1,107 reactive reads, and 465 owner requirements remain
+undriven.
+
+The raw run includes one environment timeout:
+`@tanstack/ai-devtools-core@0.5.6` exceeded the fixed 120-second generation
+limit. A no-contention rerun with identical inputs verified in 116.6 seconds.
+Replacing only that timing outcome gives the environment-controlled
+interpretation: **287 verified, 109 refused, and 14 generation failures**. The
+checked-in report remains the unmodified authority result, 286/110/15.
+
+No callback-argument or nested-leaf probe was added from a `typeof` sighting.
+The current generated rows do not name a source and mutation path with which a
+generic probe could establish reactivity or store behavior, so they remain
+family C rather than acquiring fake evidence.
+
+**This supersedes the 2026-08-25 relational-probe authority state below.**
+
+### Measured state (2026-08-25, generic relational probes and entrypoint isolation, full corpus, 416 probe rows)
+
+This run adds strict-identity probes for `returns=argument[N]`,
+`returns=callback-result[N]`, and `returns=callback-result-function[N]`, repairs
+the relational-return generator paths those probes falsified, and keeps a
+conditional entrypoint's summaries from being merged into another entrypoint
+merely because they share one runtime target. Stable copies were used for all
+416 rows:
+
+- native `solid-checker-rust`
+  `da63bebcad37215615392ca8f7ae03cefccc70ee2d9fb185470d62d3c85648e5`
+  (73,475,744 bytes)
+- `solid-typefacts`
+  `31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`
+  (28,390,098 bytes)
+
+The raw no-subsetting, concurrency-6 result is the checked-in
+`verification-report.{json,md}`:
+
+| Figure | Before relational probes | This run | Movement |
+| --- | ---: | ---: | ---: |
+| Reached `verified` | 282/416 | **281/416** | -1 raw |
+| Refused by `contract verify` | 115 | **115** | 0 raw |
+| Generation failures | 14 | **15** | +1 raw |
+| Claims total / driven / passed | 12,470 / 7,827 / 7,815 | **11,941 / 7,959 / 7,951** | -529 / +132 / +136 |
+| Failed claims | 12 | **8** | -4 |
+| Undriven claims | 4,643 | **3,982** | -661 |
+| Return conversions | 450 | **320** | -130 |
+| Probed rows retained | 3 | **69** | +66 |
+| Rows with probed evidence | 3 | **18** | +15 |
+
+The raw outcome movement is timing noise, not a semantic regression. Two rows
+that the earlier run verified were the only outcome differences:
+`@tanstack/ai-devtools-core@0.5.6` hit the fixed 120-second generation timeout,
+and `@tanstack/solid-table@9.1.2` lost its client observations when three probe
+children hit their 20-second per-mode timeout. Rerunning exactly those two rows
+with concurrency 1 and otherwise identical inputs verified both (116.7 s and
+192.4 s respectively). Substituting those environment-controlled outcomes gives
+**283 verified, 114 refused, 14 generation failures**: the one-row semantic gain
+measured by the corrected composite, without hiding what the authoritative
+concurrency-6 run actually observed.
+
+The main coverage result is not the outcome count. The parameter-identity gap
+is **400 undriven claims to zero**. Strict identity drove 132 more claims even
+though the generator now emits 529 fewer total claims: false relational
+summaries and cross-entrypoint duplicates disappeared rather than being made
+easier to pass. The four `@solidjs/web` `ssrGroup` contradictions on
+`./jsx-runtime` and `./jsx-dev-runtime` are gone. The root server variants keep
+their proven `argument[0]` relation; the web/dev entrypoints keep their actual
+void return.
+
+The finite-dynamic-import follow-up recognizes nested literal conditionals and
+inline literal lookup tables with finite literal selectors. Focused generation
+tests prove that every enumerated target enters the attested module set, while
+an open branch or key retains `runtimeNotes`. It changes **zero** corpus rows:
+all five rows carrying the corpus's 17 dynamic-import notes (`@solidjs/start`,
+both `@solidjs/vite-plugin` probes, and both `@solidjs/web` probes) remain
+unbounded under the exact syntax rule. In particular, `@solidjs/web` imports a
+runtime `entryUrl`; it is not a finite map the generator may guess closed.
+
+This state still does not probe nested return leaves, store paths, callback
+arguments, async behavior, reactive reads, or owner requirements generically.
+The raw undriven table records 254 nested-return leaves, 23 store paths, 13
+callback-argument claims, 92 async claims, 1,107 reactive-read claims, and 465
+owner-requirement claims. Import throws, synthesized throws, and package-code
+session failures remain observations of an environment that could not drive a
+claim, not evidence for or against it.
+
+**This supersedes the Phase A constructability state below.** That section
+remains as the before-state history.
+
 ### Measured state (2026-08-25, Phase A constructability closure, full corpus, 416 probe rows)
 
 This is the first full-corpus verification run after the span-exact

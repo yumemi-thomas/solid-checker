@@ -30,6 +30,7 @@ import {
   PROBE_MODES,
   conditionsMatchMode,
   modeApplies,
+  returnClaim,
   summaryForMode
 } from "./contract-probe-driver.mjs";
 import { isUnknownClaim } from "./contract-review-plan.mjs";
@@ -162,7 +163,7 @@ function returnReason(returned, modes, witness) {
   if (hasReturnLeaf(returned)) return CONVERSION_REASON.nestedReturn;
   if (returned.evidence?.kind !== "probed") return CONVERSION_REASON.unprobed;
   if (!probedCovers(returned.evidence, modes)) return CONVERSION_REASON.modes(modes);
-  const claim = `returns=${returned.kind}`;
+  const claim = returnClaim(returned);
   if (!witness(claim, returned.evidence)) {
     return CONVERSION_REASON.staleProbe(claim, returned.evidence);
   }
@@ -363,17 +364,17 @@ export function convertUnconfirmedClaims(contract, report) {
       const reason = returnReason(summary.returns, modes, witness);
       if (
         summary.returns.evidence?.kind === "probed" &&
-        !witness(`returns=${summary.returns.kind}`, summary.returns.evidence)
+        !witness(returnClaim(summary.returns), summary.returns.evidence)
       ) {
-        noteStale("returns", `returns=${summary.returns.kind}`, summary.returns.evidence);
+        noteStale("returns", returnClaim(summary.returns), summary.returns.evidence);
       }
-      if (reason) convert("returns", [`returns=${summary.returns.kind}`], reason);
+      if (reason) convert("returns", [returnClaim(summary.returns)], reason);
       else {
         probed.push({
           entrypoint,
           export: exportName,
           field: fieldPath(prefix, "returns"),
-          claim: `returns=${summary.returns.kind}`,
+          claim: returnClaim(summary.returns),
           modes: summary.returns.evidence.modes,
           calls: summary.returns.evidence.calls
         });

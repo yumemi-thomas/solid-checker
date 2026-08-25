@@ -148,11 +148,11 @@ const callbackRows = summary =>
 const callbacksAreUnknown = summary =>
   Boolean(summary?.callbacks) && !Array.isArray(summary.callbacks);
 
-// Relational returns are not concrete runtime shapes. The generic driver can
-// observe an accessor/store/structure; it cannot establish identity, which
-// callback produced a value, or what a returned function later yields without
-// a package-specific oracle, so reviewed relational rows deliberately have no
-// generic probe claim.
+// This bundled-contract harness consumes package-specific oracle results, whose
+// historical claim vocabulary has no relational-return spellings. The generic
+// `contract probe` driver does establish these relations with parameter-indexed
+// strict-identity probes; omitting them here prevents an unrelated oracle row
+// from being mistaken for that evidence.
 const returnClaim = summary => {
   const kind = summary?.returns?.kind;
   return typeof kind === "string" &&

@@ -1917,6 +1917,104 @@ fn package_generator_isolates_each_entrypoint_from_unrelated_runtime_files() {
 }
 
 #[test]
+fn package_generator_keeps_shared_targets_scoped_to_each_entrypoint() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/entrypoint-condition-isolation");
+    let directory = temporary_directory("entrypoint-condition-isolation-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    let root_summary = &contract["entrypoints"]["."]["exports"]["sameName"];
+    assert_eq!(root_summary["returns"]["status"], "unknown");
+    let variants = root_summary["variants"].as_array().unwrap();
+    assert!(variants.iter().any(|variant| {
+        variant["conditions"] == serde_json::json!(["node"])
+            && without_claim_evidence(&variant["summary"]["returns"])
+                == serde_json::json!({ "kind": "argument", "parameter": 0 })
+    }));
+    assert!(variants.iter().any(|variant| {
+        variant["conditions"] == serde_json::json!(["default"])
+            && variant["summary"]["returns"].is_null()
+    }));
+    let jsx_summary = &contract["entrypoints"]["./jsx-runtime"]["exports"]["sameName"];
+    assert!(jsx_summary["returns"].is_null(), "{jsx_summary:#}");
+    assert!(jsx_summary["variants"].is_null(), "{jsx_summary:#}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_generator_scopes_open_runtime_loads_to_reachable_exports() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/open-dynamic-import-attribution");
+    let directory = temporary_directory("open-dynamic-import-attribution-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    let exports = contract["entrypoints"]["."]["exports"].as_object().unwrap();
+    assert!(!exports.contains_key("load"), "{exports:#?}");
+    assert!(!exports.contains_key("loadLater"), "{exports:#?}");
+    assert_eq!(
+        without_claim_evidence(&exports["identity"]["returns"]),
+        serde_json::json!({ "kind": "argument", "parameter": 0 })
+    );
+    let plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(directory.join("solid-reactivity.review.json")).unwrap())
+            .unwrap();
+    assert!(plan["generation"]["entrypoints"]["."]["runtimeNotes"].is_null());
+    let obligations = plan["generation"]["entrypoints"]["."]["runtimeObligations"]
+        .as_array()
+        .unwrap();
+    assert_eq!(obligations.len(), 1);
+    assert_eq!(
+        obligations[0]["exports"],
+        serde_json::json!(["load", "loadLater"])
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn package_generator_detects_the_dialect_from_the_package_root() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
@@ -2006,6 +2104,24 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
             &contract["entrypoints"]["."]["exports"]["identityResult"]["returns"]
         ),
         serde_json::json!({ "kind": "argument", "parameter": 0 })
+    );
+    assert!(
+        contract["entrypoints"]["."]["exports"]["conditionalIdentity"]
+            .get("returns")
+            .is_none(),
+        "one parameter-returning branch must not become a universal identity contract"
+    );
+    assert!(
+        contract["entrypoints"]["."]["exports"]["isObject"]
+            .get("returns")
+            .is_none(),
+        "an identifier contained in a return expression is not the returned value"
+    );
+    assert!(
+        contract["entrypoints"]["."]["exports"]["guardedIdentity"]
+            .get("returns")
+            .is_none(),
+        "a conditional identity return does not prove the implicit fallthrough"
     );
     assert_eq!(
         without_claim_evidence(

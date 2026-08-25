@@ -212,9 +212,9 @@ promotion**, and it is larger than it sounds.
 | `callbacks[].arguments[]` descriptors | C today | no claim string, no probe shape; consumers are already demand-sensitive on every shape but an inline literal carrying `accessor` descriptors |
 | `returns` (top-level `accessor` / `store-path`) | B | claim string `returns=<kind>` |
 | `returns` nested `elements` / `properties` leaves | C today | `writeProbeEvidence` does not descend into leaves and no claim string names one |
-| `returns` `kind: argument` | C today | an identity claim; observable in principle, no probe form |
-| `returns` `kind: callback-result` | C today | a reviewed relation to one callback's runtime result; no generic probe form |
-| `returns` `kind: callback-result-function` | C today | a reviewed relation from a returned function invocation to one callback's runtime result; no generic probe form |
+| `returns` `kind: argument` | B | claim string `returns=argument[N]`; a fresh object sentinel is supplied at parameter N and strict return identity is observed |
+| `returns` `kind: callback-result` | B | claim string `returns=callback-result[N]`; callback N returns a fresh object sentinel and strict return identity is observed |
+| `returns` `kind: callback-result-function` | B | claim string `returns=callback-result-function[N]`; callback N returns a fresh object sentinel and the returned function's result is compared by strict identity |
 | `reactiveReads[]`, including `parameter-member` | A where compiler facts are exact; otherwise C | no probe claim string exists; confirming one means synthesizing a reactive source and observing the subscription |
 | `asyncBehavior` | C today | no claim string — **and no evidence slot in the schema**, so a probed async claim could not be recorded even if it were driven |
 | `ownerRequirements[]` | A | compiler symbol identity; the slot exists, nothing writes `probed` into it |
@@ -376,7 +376,8 @@ one clear line each, contract untouched — unless **all** of the following hold
    plan's `generation.entrypoints` block means the runtime-module closure could
    not be fully enumerated — a relative or `#` specifier that names no runtime
    module, a conditional `imports` branch generation cannot choose between, a
-   non-literal dynamic `import()`, unreadable bytes. A note is an omission, and
+   dynamic `import()` not bounded to a finite literal set, unreadable bytes. A
+   note is an omission, and
    an entrypoint carrying one already transfers nothing. It must block
    auto-verification outright: the summaries were derived from a file set the
    generator itself declines to claim it enumerated, and no probe covers the
@@ -386,13 +387,20 @@ one clear line each, contract untouched — unless **all** of the following hold
    sentence, for the cases where the record still cannot be established. A
    second field, `runtimeNotes`, carries the other half: the record *is* the
    analyzing program's own file list and complete for what it read, and what
-   remains unproven is that the runtime loads nothing else — which a non-literal
+   remains unproven is that the runtime loads nothing else — which an unbounded
    dynamic `import()`, and an unselected conditional `imports` branch whose
    targets are real modules on disk, both make unprovable by any module graph.
    Both fields block, under two blocker kinds (`closure-note` and
    `attested-closure-note`) so a corpus measurement can attribute them. Only
    `notes` blocks a review transfer, because two generations with identical
    attested records do describe the same bytes.
+
+   A proven export-scoped open load is narrower. The generation record carries
+   a `runtimeObligations` item naming the exact exports that can reach it, and
+   schema v1 represents their unknown semantics by omitting those exports from
+   the contract. Retained exports remain eligible for verification. If lexical
+   containment, symbol identity, export binding, or reachability is ambiguous,
+   the generator emits the entrypoint-wide `runtimeNotes` blocker instead.
 5. **Artifact binding is recorded where schema v1 can carry it.** That means:
    the contract's emitted entrypoints resolve to exactly one runtime artifact
    inside the contract's own directory. Where they do not, the review plan's

@@ -1,0 +1,12 @@
+{
+  "name": "entrypoint-condition-isolation-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "node": "./server.js",
+      "default": "./web.js"
+    },
+    "./jsx-runtime": "./web.js"
+  }
+}

@@ -72,7 +72,8 @@ const STALE_BYTES =
 const ATTESTED_CLOSURE_NOTE =
   ". carries an attested closure note: index.js: the module record is attested -- it names every " +
   "file the analyzing program opened under this package -- and complete except for what a dynamic " +
-  "import() whose specifier is not a string literal may load at runtime, which no module graph can " +
+  "import() whose specifier is not statically bounded to a finite set of string literals may load " +
+  "at runtime, which no module graph can " +
   "enumerate. The record names every module the analysis read";
 
 test("blockerClass names every RFC 0002 blocker the corpus actually raised", () => {

@@ -291,7 +291,8 @@ and the **verifier of that seed**.
 So the walk still fails closed on every static specifier form it recognizes — a
 relative or `#` specifier that names no runtime module inside the package, a
 conditional `imports` branch this generation cannot choose between, a
-non-literal dynamic `import()`, a module whose bytes are unreadable — and each
+  dynamically imported specifier that cannot be bounded to a finite literal set,
+  a module whose bytes are unreadable — and each
 problem is then reconciled against the attestation, never quoted blind:
 
 - **The compiler resolved it.** The analysis read a module the walk did not
@@ -311,9 +312,18 @@ problem is then reconciled against the attestation, never quoted blind:
   is not in question and the runtime's boundedness is, so this rides
   `runtimeNotes` with the reachable branches named. The distinction is a fact
   about files on disk, never a judgement about a file suffix.
-- **A non-literal dynamic `import()`** makes the same claim, on the same field:
+- **An unbounded dynamic `import()`** makes the same claim, on the same field:
   the record names every byte the analysis read, and no module graph can
-  enumerate what the runtime resolves.
+  enumerate what the runtime resolves. Literal conditionals and inline literal
+  lookup tables with finite literal selectors are enumerated exactly and seed
+  every selected runtime module; an open branch, identifier, template
+  substitution, or lookup key stays refused. For a flat entry module, the
+  generator can attribute the open load to its exact containing function,
+  propagate it through exact local references, and bind those functions to the
+  module's explicit exports. The affected exports are omitted from schema-v1;
+  unrelated exports retain their summaries. A top-level load, affected function
+  escape, non-unique binding, or cross-module ambiguity keeps the entrypoint-wide
+  `runtimeNotes` fallback.
 - **A module the program opened that the walk never seeded**, a module the walk
   seeded that the program never opened, or a module the program opened that the
   record's scope excludes, is its own **note**, in all three directions. This is
@@ -480,6 +490,14 @@ bounded. A whole-process failure — a crash, a timeout, unreadable output — n
 no particular probe, so the rest of that mode is recorded undriven rather than
 retried.
 
+**Different entrypoint specifiers have different worker lifetimes.** A failed
+ESM evaluation can leave arbitrary module and reactive-runtime state behind, so
+the worker never continues from one published subpath to another in that same
+process. Each exact package specifier is probed in an isolated child while its
+mode, conditions, and server no-shim policy stay unchanged. A module that throws
+still makes every export of that module undriven; it cannot contaminate a
+separate subpath that imports successfully.
+
 **An asynchronous throw stops the process, not the mode.** Package code the
 probe set running — a deferred callback, a promise left rejected — throws
 outside every `try` the worker has. The process used to die with status 1 and
@@ -509,13 +527,22 @@ call could not be constructed or did not reach the callback is recorded
 `undriven` with the exact reason. Undriven is never a failure and never
 evidence; it is the measurement of how far the boundary reaches.
 
-Claims with no probe form at all are recorded undriven with a standing reason:
+Claims with no honest generic probe form are recorded undriven with a standing reason:
 callback `owner` rows (no observation distinguishes inherited from created
 ownership — permanently out of reach), callback `arguments` descriptors, reactive
 reads, owner requirements, `asyncBehavior` (which has no evidence slot in the
 schema, so a driven observation could not be recorded), nested return leaves,
-and `returns` of kind `store-path`, `argument`, `callback-result`, or
-`callback-result-function`.
+and `returns` of kind `store-path`. Relational `argument`, `callback-result`,
+and `callback-result-function` returns are driven with a fresh object sentinel
+and strict identity. Their claim strings include the parameter index, so evidence
+for parameter 0 cannot corroborate a later contract that names parameter 1.
+The callback-argument rows the current generator emits describe reactive
+accessors, but the schema does not describe a source or setter with which a
+generic probe could cause and observe an update. Likewise, most nested accessor
+and store-path leaves do not name the mutation that would exercise them.
+Checking only `typeof value === "function"` would be fake evidence, so these
+remain family C until the contract describes a complete construction and
+observation path.
 
 **What a probe observes.** `inline`, `deferred` and `tracked` classify
 attribution, so the export call sits inside a memo, the probe callback reads a
@@ -767,8 +794,10 @@ They used to be reported as **(C)**, the family whose definition is "converted
 to the unknown sentinel before promotion", while verification kept them; the
 report and the code told different stories about the same row. Callback
 `owner` rows, callback argument descriptors, nested return leaves, store-path,
-`argument`, `callback-result`, and `callback-result-function` returns, and
-`asyncBehavior` are family (C) and do convert.
+and `asyncBehavior` are family (C) and do convert. `argument`,
+`callback-result`, and `callback-result-function` returns are family (B): a
+completed strict-identity mismatch is a witnessed failure, while a throw stays
+undriven and writes no evidence.
 
 **`returns=accessor` needs caching, not just reactivity.** The observation
 plants its signal read inside the callback the contract states, so a plain
@@ -860,7 +889,8 @@ Everything else converts, per **domain**:
 | `returns` (top-level `accessor`) | kept when probed and witnessed in every stated mode |
 | `callbacks[].owner` | converts the whole `callbacks` domain — permanently out of a machine's reach |
 | `callbacks[].arguments[]` descriptors | converts the whole `callbacks` domain |
-| `returns` `store-path`, `argument`, `callback-result`, `callback-result-function`, or nested `elements`/`properties` leaves | converts `returns` |
+| `returns` `store-path` or nested `elements`/`properties` leaves | converts `returns` |
+| `returns` `argument`, `callback-result`, or `callback-result-function` | keeps the relation only with current, parameter-specific probed evidence covering every stated mode; otherwise converts `returns` |
 | `asyncBehavior` | converts, always — no probe claim string, and no evidence slot in schema v1 to record one in |
 | any row carrying `inherited-from` evidence | converts its domain, at the top level **and inside every variant** |
 
