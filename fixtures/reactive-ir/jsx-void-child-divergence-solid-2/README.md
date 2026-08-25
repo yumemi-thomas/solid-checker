@@ -27,7 +27,7 @@ the fixture names below.
 ## The divergences
 
 The pinned fork's own `docs/execution-contract.md` (current revision
-`eabc563d812e9854d67cee63777483df150538cc`; the contract was ported from
+`0ce01d7476367dab2f4d067f4771d5010e347c75`; the contract was ported from
 `fea62adb5d0332a4a3cb5088e97283673c40b540`, "The trace describes this compiler,
 not the parity target") names both and states each as a **binding consumer
 rule**: *"A consumer must treat a `jsx-child` site inside a void native element
@@ -241,9 +241,9 @@ uncertifiable path; forcing the *role* away from `TrackedJsx` to reach them
 would manufacture proven disallowed-write findings inside a subtree that may not
 exist, which is a worse claim than the one it fixes.
 
-The fork's divergence 2 (nested dynamic `textContent`) needs no mitigation here
-— the producer retracts, so the pre-existing census-gap path already answers
-uncertifiable. Divergence 4 (a `children` attribute on a nested void element
+The fork's former divergence 2 (nested dynamic `textContent`) needs no
+mitigation here — producer `0ce01d74` matches Babel's child-list gate, so real
+children carry tracked sites normally. Divergence 4 (a `children` attribute on a nested void element
 with no source children) stays a hard reconciliation failure in the producer by
 design. Both are recorded in the backlog.
 

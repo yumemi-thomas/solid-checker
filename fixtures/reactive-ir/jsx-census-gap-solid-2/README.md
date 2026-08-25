@@ -13,8 +13,8 @@ is shared and dialect-free, while the shapes that reach it are per-producer.
 
 ## Why these shapes
 
-Two ways a source-level JSX expression reaches the checker with no census entry,
-arrived at from opposite directions.
+Two ways a source-level JSX expression can reach the checker with no census
+entry, arrived at from opposite directions.
 
 **Never censused.** A void element at its own template root: the 2.0 compiler
 gates child lowering on `!is_void_element` there, so it emits no execution site
@@ -24,14 +24,16 @@ untracked region, no callback role, no JSX operation. That hole used to fall
 through to "inside a component body, classified by nothing" and SC1001 fired as
 a **proven violation** about an expression the compiler declined to report on.
 
-**Censused, then retracted.** Two shapes. A nested element with a dynamic
-`textContent` replaces its content with a text placeholder and discards its
-source children; and a `<noscript>` on the static-template fast path has its tag
-emitted with the children never visited at all. Both times the recorder retracts
-the censused sites during lowering. What arrives is a hole in exactly the same
-shape as a never-censused one, so it takes the same wording and the same
-verdict. That the mitigation cannot key on *why* the hole exists is the point of
-having every arm here.
+**Censused, then retracted.** A `<noscript>` on the static-template fast path
+has its tag emitted with the children never visited at all. The recorder
+retracts those censused sites during lowering. What arrives is a hole in exactly
+the same shape as a never-censused one, so it takes the same wording and the same
+verdict. The mitigation cannot key on *why* the hole exists.
+
+The former second retraction arm is now a negative control. At producer
+`0ce01d74`, a nested element with dynamic `textContent` and real children
+matches Babel's `!hasChildren` gate: the children lower normally, their sites
+remain tracked, and only an empty child list receives a synthesized placeholder.
 
 The `<br>` stays at the root of its own component deliberately. **Nested**
 (`<div><br>{count()}</br></div>`) the producer really lowers the child and
@@ -51,17 +53,16 @@ that keyed on the `<noscript>` tag alone rather than on a lowered site would fli
 this arm to the divergence wording. This fixture is in coverage's
 `KEEPS_WORDING` set, so that flip fails the gate instead of passing quietly.
 
-The dynamic-`textContent` retraction remains **2.0-only**. The 1.x producer still
-fails reconciliation on that shape, so it cannot have a 1.x fixture without
-pinning an exit code. The static-`<noscript>` retraction is now shared: the 1.x
-pin at `d1e08958` added it, and the 1.x census-gap fixture pins that arm.
+The static-`<noscript>` retraction is shared: the 1.x pin at `d1e08958` added
+it, and the 1.x census-gap fixture pins that arm. The 1.x producer already had
+the correct dynamic-`textContent` child-list gate before this 2.0 pin move.
 
 ## Cases
 
 | function | expected |
 | --- | --- |
 | `ReadInsideVoidElementChild` | SC1001 **uncertifiable** — template-root void-element child, never censused |
-| `RetractedTextContentShadowedChild` | SC1001 **uncertifiable** — censused, then retracted by the `textContent` placeholder path; plus SC8003 **violation** on the element for the unrelated children-and-`textContent` conflict |
+| `TextContentChildNowCertified` | SC1001 **silent** — the real child is an explicit tracked site; SC8003 remains a **violation** on the element for the independent children-and-`textContent` conflict |
 | `RetractedInertNoscriptChild` | SC1001 **uncertifiable** — censused, then retracted by the inert-`<noscript>` fast path; **and** the guard that the void/`<noscript>` divergence mitigation stays keyed on a lowered site rather than on a tag |
 | `TrackedChildStaysCertified` | **silent** — an ordinary censused tracked child; the escalation must not start reporting these |
 | `ReadOutsideJsxStaysAViolation` | SC1001 **violation** — the read is in no JSX expression at all, so its untracked-rendering proof owes nothing to the census |
