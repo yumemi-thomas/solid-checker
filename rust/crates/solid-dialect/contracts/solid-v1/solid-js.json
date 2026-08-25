@@ -69,7 +69,13 @@
       "kind": "function"
     },
     "createComponent": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "createComputed": {
       "kind": "function",
@@ -157,12 +163,9 @@
     },
     "createResource": {
       "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "deferred"
-        }
-      ]
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "createRoot": {
       "kind": "function",
@@ -276,7 +279,13 @@
       "kind": "function"
     },
     "getNextElement": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "getNextMarker": {
       "kind": "function"
@@ -380,7 +389,10 @@
       ]
     },
     "mergeProps": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "modifyMutable": {
       "kind": "function",
@@ -476,7 +488,13 @@
       "kind": "function"
     },
     "requestCallback": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
+      ]
     },
     "RequestContext": {
       "kind": "value"
@@ -593,7 +611,13 @@
       "kind": "function"
     },
     "use": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "useAssets": {
       "kind": "function"

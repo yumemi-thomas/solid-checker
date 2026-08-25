@@ -122,6 +122,10 @@ await inlineClearingProbe("createRoot", "callbacks[0]=inline", (S, read) =>
   }),
 );
 
+await inlineClearingProbe("createComponent", "callbacks[0]=inline", (S, read) =>
+  S.createComponent(read, {}),
+);
+
 await inlineProbe("catchError", (S, read) => S.catchError(read, () => {}));
 
 await inlineClearingProbe("runWithOwner", "callbacks[1]=inline", (S, read) =>
@@ -220,6 +224,22 @@ await core("lazy", "callbacks[0]=deferred", S => {
   });
   return !called;
 });
+
+await core(
+  "requestCallback",
+  "callbacks[0]=deferred",
+  async S => {
+    let inside = true;
+    let runs = 0;
+    S.requestCallback(() => {
+      if (!inside) runs++;
+    });
+    inside = false;
+    await settle();
+    return runs === 1;
+  },
+  2,
+);
 
 
 
@@ -392,6 +412,37 @@ const container = () => ({
   textContent: "",
   nodeType: 1,
 });
+
+// These renderer helpers need no browser global. Keep their probes ahead of
+// the legacy render/hydrate shim so their evidence does not depend on it.
+await probe(SOLID, "./web", "getNextElement", "callbacks[0]=inline", () => {
+  const value = {};
+  return web.getNextElement(() => value) === value;
+});
+
+await probe(
+  SOLID,
+  "./web",
+  "use",
+  "callbacks[0]=inline",
+  () =>
+    underRoot(solid, async () =>
+      !(await attributesToCaller((_S, read) => web.use(read, {}, undefined))(solid)),
+    ),
+  2,
+);
+
+await probe(
+  SOLID,
+  "./web",
+  "createComponent",
+  "callbacks[0]=inline",
+  () =>
+    underRoot(solid, async () =>
+      !(await attributesToCaller((_S, read) => web.createComponent(read, {}))(solid)),
+    ),
+  2,
+);
 
 // 1.x render compares its container against the global document before
 // inserting, and insert builds nodes through it. Neither claim under probe is

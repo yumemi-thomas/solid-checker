@@ -66,7 +66,11 @@ const manifests = loadDialectManifests({ requireArtifacts: true });
 // import different packages, and a worker's bare imports are what tie it to the
 // install it runs in. Every worker of a dialect runs in every condition mode.
 const probeWorkers = {
-  "solid-v1": ["scripts/contract-probes-solid-v1-core.mjs", "scripts/contract-probes-solid-v1.mjs"],
+  "solid-v1": [
+    "scripts/contract-probes-solid-v1-core.mjs",
+    "scripts/contract-probes-solid-v1.mjs",
+    "scripts/contract-probes-solid-v1-debounce.mjs",
+  ],
   "solid-v2": [
     "scripts/contract-probes.mjs",
     "scripts/contract-probes-solid-v2-web-root.mjs",
@@ -81,6 +85,7 @@ const definitions = manifests.flatMap(manifest =>
       name: contract.package,
       dialect: manifest.id,
       modes: contractModes(contract),
+      includeDefault: contract.probeDefaultExport === true,
     })),
 );
 const peerDefinitions = manifests.flatMap(manifest =>
@@ -143,6 +148,11 @@ const callbackRows = summary =>
 const callbacksAreUnknown = summary =>
   Boolean(summary?.callbacks) && !Array.isArray(summary.callbacks);
 
+const returnClaim = summary =>
+  typeof summary?.returns?.kind === "string"
+    ? `returns=${summary.returns.kind}`
+    : undefined;
+
 function probeEvidence(resultsForClaim) {
   if (resultsForClaim.length === 0 || resultsForClaim.some(result => !result.ok)) {
     return undefined;
@@ -191,7 +201,7 @@ function writeProbeEvidence(summary, dialect, packageName, entrypoint, name, all
     ...callbackRows(summary).map(callback =>
       claimResults(`callbacks[${callback.parameter}]=${callback.execution}`),
     ),
-    ...(summary.returns ? [claimResults(`returns=${summary.returns.kind}`)] : []),
+    ...(returnClaim(summary) ? [claimResults(returnClaim(summary))] : []),
   ].flat();
   const evidence = probeEvidence(exportResults);
   if (evidence && (!next.evidence || next.evidence.kind === "inferred")) {
@@ -207,8 +217,8 @@ function writeProbeEvidence(summary, dialect, packageName, entrypoint, name, all
         : callback;
     });
   }
-  if (summary.returns) {
-    const returnEvidence = probeEvidence(claimResults(`returns=${summary.returns.kind}`));
+  if (returnClaim(summary)) {
+    const returnEvidence = probeEvidence(claimResults(returnClaim(summary)));
     if (returnEvidence && (!summary.returns.evidence || summary.returns.evidence.kind === "inferred")) {
       next.returns = { ...summary.returns, evidence: returnEvidence };
     }
@@ -305,6 +315,7 @@ for (const installation of installations) {
   const packages = installation.probed.map(({ name }) => ({
     name,
     directory: join(installation.directory, "node_modules", ...name.split("/")),
+    includeDefault: installation.probed.find(contract => contract.name === name)?.includeDefault,
   }));
   const dialectModes = probeModes.filter(mode =>
     installation.probed.some(contract => contract.modes.includes(mode)),
@@ -573,7 +584,7 @@ for (const item of contracts) {
           ...callbackRows(selected).map(
             callback => `callbacks[${callback.parameter}]=${callback.execution}`,
           ),
-          ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
+          ...(returnClaim(selected) ? [returnClaim(selected)] : []),
         ];
         for (const claim of claims) {
           const key = `${item.dialect}:${item.name}:${entrypoint}:${name}:${claim}`;
@@ -612,7 +623,7 @@ for (const observation of observed.discoveredClaims) {
         ...callbackRows(selected).map(
           callback => `callbacks[${callback.parameter}]=${callback.execution}`,
         ),
-        ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
+        ...(returnClaim(selected) ? [returnClaim(selected)] : []),
     ]
     : [];
   if (declared.includes(observation.claim)) continue;

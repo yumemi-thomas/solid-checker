@@ -52,11 +52,19 @@ function canonicalSummary(entry) {
   if (entry.returns !== undefined) {
     summary.returns = { kind: entry.returns.kind, label: entry.returns.label };
   }
-  if (entry.callbacks !== undefined && entry.callbacks.length > 0) {
-    summary.callbacks = entry.callbacks.map(({ parameter, execution }) => ({
-      parameter,
-      execution,
-    }));
+  if (entry.callbacks !== undefined) {
+    if (Array.isArray(entry.callbacks)) {
+      if (entry.callbacks.length > 0) {
+        summary.callbacks = entry.callbacks.map(({ parameter, execution }) => ({
+          parameter,
+          execution,
+        }));
+      }
+    } else if (entry.callbacks?.status === "unknown") {
+      summary.callbacks = { status: "unknown" };
+    } else {
+      fail(`unsupported callbacks value ${JSON.stringify(entry.callbacks)}`);
+    }
   }
   return summary;
 }

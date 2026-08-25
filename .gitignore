@@ -36,6 +36,8 @@ fixtures/upstream-parity/.staging/
 # reproducible from a clean checkout.
 !fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/
 !fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/**
+!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/
+!fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/**
 !fixtures/package-contracts/shorthand-block-scope/node_modules/
 !fixtures/package-contracts/shorthand-block-scope/node_modules/**
 # Dialect detection reads the installed solid-js version from these stubs.

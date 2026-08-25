@@ -63,6 +63,13 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
             fail(`${source} contracts[].probeModes has no meaning without probeRuntime`);
           }
         }
+        if (typeof contract.probeDefaultExport !== "undefined") {
+          if (typeof contract.probeDefaultExport !== "boolean") {
+            fail(`${source} contracts[].probeDefaultExport must be a boolean`);
+          } else if (!contract.probeRuntime) {
+            fail(`${source} contracts[].probeDefaultExport has no meaning without probeRuntime`);
+          }
+        }
         const generatorFields = [
           "packagePathEnv",
           "defaultPackagePath",

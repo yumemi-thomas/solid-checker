@@ -495,6 +495,48 @@ fn bundled_scheduled_contract_marks_debounce_callback_deferred() {
 }
 
 #[test]
+fn bundled_solid1_contracts_certify_the_reviewed_consumer() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args([
+            "--format",
+            "json",
+            "--runtime-target",
+            "browser",
+            "--runtime-conditions",
+            "browser,import",
+            "--project",
+        ])
+        .arg(root.join("fixtures/reactive-ir/bundled-contract-solid1-consumer/tsconfig.json"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["status"], "certified");
+    assert_eq!(report["findings"], serde_json::json!([]));
+    let packages = report["packageSummaries"].as_array().unwrap();
+    assert!(packages.iter().any(|package| {
+        package["name"] == "solid-js"
+            && package["version"] == "1.9.14"
+            && package["evidence"] == "verified"
+    }));
+    assert!(packages.iter().any(|package| {
+        package["name"] == "@solid-primitives/debounce"
+            && package["version"] == "1.3.0"
+            && package["evidence"] == "reviewed"
+    }));
+}
+
+#[test]
 fn bundled_contract_refuses_a_different_installed_version() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,

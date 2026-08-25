@@ -44,4 +44,7 @@ test("runtime lock pins the Solid 1.x probe closure", () => {
   const scheduled = lock.packages["@solid-primitives/scheduled@1.5.3"];
   assert.equal(scheduled.peerDependencies["solid-js"].range, "^1.6.12");
   assert.equal(scheduled.peerDependencies["solid-js"].version, "1.9.14");
+  const debounce = lock.packages["@solid-primitives/debounce@1.3.0"];
+  assert.equal(debounce.peerDependencies["solid-js"].range, ">=1.0.0");
+  assert.equal(debounce.peerDependencies["solid-js"].version, "1.9.14");
 });

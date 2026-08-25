@@ -471,7 +471,11 @@ static SOLID_V1: Dialect = Dialect {
     semantic_demands: SemanticDemandCapabilities::SOLID_1,
     catalog_capabilities: solid_v1_rules::CATALOG_CAPABILITIES,
     package_contract_finding: solid_v1_rules::package_contract_finding,
-    bundled_packages: &["solid-js", "@solid-primitives/scheduled"],
+    bundled_packages: &[
+        "solid-js",
+        "@solid-primitives/debounce",
+        "@solid-primitives/scheduled",
+    ],
     bundled_contract: crate::diagnostics::bundled_contract_v1,
 };
 

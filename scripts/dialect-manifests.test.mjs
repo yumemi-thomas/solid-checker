@@ -65,6 +65,18 @@ test("generated must be a boolean when present", () => {
   assert.throws(load([{ ...generated, generated: "false" }]), /must be a boolean/);
 });
 
+test("default-export probing is explicit and requires runtime probing", () => {
+  assert.throws(
+    load([{ ...overlay, probeDefaultExport: "true" }]),
+    /probeDefaultExport must be a boolean/
+  );
+  assert.throws(
+    load([{ ...overlay, probeDefaultExport: true }]),
+    /probeDefaultExport has no meaning without probeRuntime/
+  );
+  assert.doesNotThrow(load([{ ...overlay, probeRuntime: true, probeDefaultExport: true }]));
+});
+
 test("one package cannot be declared twice in a dialect", () => {
   assert.throws(
     load([generated, { ...generated, generatorTarget: "solid-v9/solid-js-again" }]),

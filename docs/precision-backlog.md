@@ -3469,26 +3469,42 @@ reactive read passed as its callback reaches the untracked component call,
 while the same call in compiler-tracked JSX stays clean. TypeScript accepts
 both against the published signature.
 
+### Resolved for `solid-v1/solid-js` and `@solid-primitives/debounce` (2026-08-25)
+
+The exact `solid-js@1.9.14` audit now closes the 1.x certified-negative callback
+gap. `createComponent`, `requestCallback`, `getNextElement` and `use` have their
+missing rows. `requestCallback` has a dedicated valid-function probe, so generic
+discovery no longer schedules a non-function and later crashes the worker from
+the `MessagePort` loop. The no-environment-shim probe now reports **374 claims,
+322 passed, 52 undriven, 0 failed and 0 incompleteness**.
+
+Two exports deliberately remain unknown rather than being forced into false
+finite rows:
+
+- `createResource` overloads parameter 0 as either a tracked source or the
+  deferred fetcher, which schema v1 cannot select by overload.
+- `mergeProps` is variadic and memoizes every function-valued source, so any
+  finite callback list would certify the first omitted parameter incorrectly.
+
+The 1.x composer now preserves unknown callback sentinels and the probe gate's
+evidence shape. `scripts/check-bundled-contracts.mjs` also treats an unknown
+return as the absence of a positive return-kind claim rather than generating
+the meaningless string `returns=undefined`.
+
+`@solid-primitives/debounce@1.3.0` is the next exact Solid 1.x package contract.
+Both its named and default exports defer callback parameter 0 without an owner,
+and creation requires a cleanup-capable caller owner. Those facts are fully
+representable in schema v1 and are probed in all four runtime modes without DOM
+shims. The consumer fixture uses the published signatures, is accepted by
+TypeScript, and is fully certified with no findings.
+
 ### Still open
 
-- **`solid-v1/solid-js`.** 13 rows: `createComponent 0=inline` and
-  `createResource 0=tracked` under `.`, `./jsx-runtime` and
-  `./jsx-dev-runtime`; `mergeProps 0=tracked, 1=tracked` under `.` and
-  `./web`; and `getNextElement 0=inline`, `use 0=inline` under `./web`.
-- **`requestCallback` (1.x) cannot be measured by discovery at all.** Its probe
-  schedules a task whose callback is not a function, and 1.x's `workLoop`
-  throws from a `MessagePort` handler *after* the worker has answered, killing
-  the process. `runSessionWithRestarts` treats a whole-process failure as a
-  mode-wide fact and records the remaining claims undriven rather than
-  retrying, so one export truncates the whole run: the 1.x worklist above had
-  to be rebuilt by probing the contract in eight-export chunks. It is a
-  callback taker by construction (`workLoop` invokes `task.fn`) and its
-  negative is wrong, but no automated observation of it exists.
-- **`scripts/check-bundled-contracts.mjs --write` cannot be used on the
-  composed 1.x contract.** The row evidence it writes is not something
-  `scripts/generate-bundled-solid1-contract.mjs` reproduces from its inputs, so
-  the write immediately makes `check-composed-contracts` report the artifact
-  stale. Recording probed evidence for 1.x needs the composer to carry it.
+- **Generic callback-result returns are not representable in schema v1.**
+  `@solid-primitives/rootless@1.5.4` was audited as the next candidate, but its
+  core exports return arbitrary generic callback results. Bundling an unknown
+  return makes every use uncertifiable; claiming a concrete return kind would
+  be false. It remains unbundled until the schema can express that relation.
 - **The review contract's tables disagree with the runtime in two places.**
   `rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs` states
   `repeat` `Callback(1, "tracked")` and the boundary fallbacks as `deferred`;

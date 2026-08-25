@@ -102,18 +102,15 @@
       "callbacks": [
         {
           "parameter": 1,
-          "execution": "deferred"
+          "execution": "inline"
         }
       ]
     },
     "function-6": {
       "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "inline"
-        }
-      ]
+      "callbacks": {
+        "status": "unknown"
+      }
     },
     "function-7": {
       "kind": "function",
@@ -178,7 +175,6 @@
           "SuspenseList",
           "Switch",
           "cancelCallback",
-          "createComponent",
           "createContext",
           "createSignal",
           "createUniqueId",
@@ -188,10 +184,8 @@
           "equalFn",
           "getListener",
           "getOwner",
-          "mergeProps",
           "observable",
           "on",
-          "requestCallback",
           "resetErrorBoundaries",
           "splitProps",
           "useContext",
@@ -202,7 +196,8 @@
           "lazy",
           "onCleanup",
           "onError",
-          "onMount"
+          "onMount",
+          "requestCallback"
         ],
         "function-10": [
           "createMemo"
@@ -218,6 +213,7 @@
         ],
         "function-3": [
           "batch",
+          "createComponent",
           "createRoot",
           "startTransition",
           "untrack"
@@ -228,10 +224,11 @@
           "createRenderEffect"
         ],
         "function-5": [
-          "createResource"
+          "runWithOwner"
         ],
         "function-6": [
-          "runWithOwner"
+          "createResource",
+          "mergeProps"
         ],
         "function-7": [
           "createDeferred"
@@ -296,7 +293,6 @@
           "SuspenseList",
           "Switch",
           "cancelCallback",
-          "createComponent",
           "createContext",
           "createSignal",
           "createUniqueId",
@@ -306,10 +302,8 @@
           "equalFn",
           "getListener",
           "getOwner",
-          "mergeProps",
           "observable",
           "on",
-          "requestCallback",
           "resetErrorBoundaries",
           "splitProps",
           "useContext",
@@ -320,7 +314,8 @@
           "lazy",
           "onCleanup",
           "onError",
-          "onMount"
+          "onMount",
+          "requestCallback"
         ],
         "function-10": [
           "createMemo"
@@ -336,6 +331,7 @@
         ],
         "function-3": [
           "batch",
+          "createComponent",
           "createRoot",
           "startTransition",
           "untrack"
@@ -346,10 +342,11 @@
           "createRenderEffect"
         ],
         "function-5": [
-          "createResource"
+          "runWithOwner"
         ],
         "function-6": [
-          "runWithOwner"
+          "createResource",
+          "mergeProps"
         ],
         "function-7": [
           "createDeferred"
@@ -386,7 +383,6 @@
           "SuspenseList",
           "Switch",
           "cancelCallback",
-          "createComponent",
           "createContext",
           "createSignal",
           "createUniqueId",
@@ -396,10 +392,8 @@
           "equalFn",
           "getListener",
           "getOwner",
-          "mergeProps",
           "observable",
           "on",
-          "requestCallback",
           "resetErrorBoundaries",
           "splitProps",
           "useContext",
@@ -410,7 +404,8 @@
           "lazy",
           "onCleanup",
           "onError",
-          "onMount"
+          "onMount",
+          "requestCallback"
         ],
         "function-10": [
           "createMemo"
@@ -426,6 +421,7 @@
         ],
         "function-3": [
           "batch",
+          "createComponent",
           "createRoot",
           "startTransition",
           "untrack"
@@ -436,10 +432,11 @@
           "createRenderEffect"
         ],
         "function-5": [
-          "createResource"
+          "runWithOwner"
         ],
         "function-6": [
-          "runWithOwner"
+          "createResource",
+          "mergeProps"
         ],
         "function-7": [
           "createDeferred"
@@ -480,7 +477,7 @@
         "function-3": [
           "produce"
         ],
-        "function-6": [
+        "function-5": [
           "modifyMutable"
         ],
         "value": [
@@ -526,14 +523,12 @@
           "classList",
           "className",
           "clearDelegatedEvents",
-          "createComponent",
           "delegateEvents",
           "dynamicProperty",
           "escape",
           "generateHydrationScript",
           "getAssets",
           "getHydrationKey",
-          "getNextElement",
           "getNextMarker",
           "getNextMatch",
           "getOwner",
@@ -541,7 +536,6 @@
           "getRequestEvent",
           "innerHTML",
           "insert",
-          "mergeProps",
           "pipeToNodeWritable",
           "pipeToWritable",
           "renderToStream",
@@ -565,20 +559,25 @@
           "ssrStyleProperty",
           "style",
           "template",
-          "use",
           "useAssets"
         ],
         "function-10": [
           "memo"
         ],
         "function-3": [
+          "createComponent",
+          "getNextElement",
           "hydrate",
           "render",
-          "untrack"
+          "untrack",
+          "use"
         ],
         "function-4": [
           "createDynamic",
           "effect"
+        ],
+        "function-6": [
+          "mergeProps"
         ],
         "value": [
           "Aliases",

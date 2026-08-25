@@ -27,6 +27,13 @@
       "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json",
       "generated": false,
       "probeRuntime": true
+    },
+    {
+      "package": "@solid-primitives/debounce",
+      "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-debounce.json",
+      "generated": false,
+      "probeRuntime": true,
+      "probeDefaultExport": true
     }
   ]
 }
