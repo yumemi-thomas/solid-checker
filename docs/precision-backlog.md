@@ -5820,10 +5820,10 @@ divergence 1 (void-element children), 2 (nested dynamic `textContent`), or 3
 records divergence 4 as resolved and divergences 5-9 as open in one place;
 this entry is the detailed record.
 
-### Divergences 5-9 remain open, and reach no rule here
+### Divergences 5-9 were open at this pin, and reached no rule here
 
-None of the five newly-documented divergences reaches a rule in this checker
-today, and none was introduced by this pin — the fork's contract states all
+None of the five newly-documented divergences reached a rule in this checker at
+this pin, and none was introduced by it — the fork's contract states all
 five as pre-existing, surfaced only because resolving divergence 4 required
 auditing the nested and template-root `children`-attribute paths against each
 other:
@@ -5848,9 +5848,10 @@ other:
    `children` — a real `children` attribute alongside such a `value` is
    promoted by Babel but not by this fork.
 
-Each would need its own probe against the real fork output before a checker
-rule could rest on it, the same discipline that produced divergences 1-4's
-mitigations; none is scheduled.
+Each required its own probe against the real fork output before a checker rule
+could rest on it, the same discipline that produced divergences 1-4's
+mitigations. Divergence 5 and divergence 2 are closed by the later producer-pin
+entries below; divergences 6-9 remain open.
 
 ## `Value(Elided)` was projected as code that runs (2026-08-24)
 
@@ -6096,7 +6097,7 @@ repository has no Babel harness. Recorded as a pre-existing fork-repo divergence
 note, not as a claim about this checker. `"a" + "b"` is non-literal in spelling
 and confidently foldable in value, which both compilers agree on.
 
-### Open: divergence 5's certification residue
+### Closed later: divergence 5's certification residue
 
 `<span children={c()} textContent={t()}/>` at a **template root**: the fork's
 template-root capture ignores attribute order and inserts the `children` value
@@ -6107,12 +6108,34 @@ affected). The census therefore reports a lowered, tracked child and this
 checker **certifies** the read — a certification resting on a fact a named
 divergence touches, which is precisely what the consumer rule forbids.
 
-Not fixed here, deliberately: the mitigation is not the `children`-attribute arm
+Not fixed in that discarded-region slice, deliberately: the mitigation is not the `children`-attribute arm
 above but an attribute-*order* predicate (does a dynamic `textContent` follow a
 `children` attribute on this element, at a template root only), which needs its
 own probe of both compilers' emitted output for the ordering cases before a rule
-rests on it. Divergences 6-9 reach no rule here at all and remain as recorded in
-the previous section.
+rests on it. The producer fix merged as `bf437061`: the template-root capture
+now follows Babel's source-order overwrite, so the later dynamic `textContent`
+drops the earlier `children` value. Pin `0ce01d74` descends that merge. The
+checker therefore consumes an `elided` loser rather than certifying a divergent
+tracked child; no consumer mitigation was added or remains. Divergences 6-9
+reach no rule here and remain open.
+
+## Closed 2026-08-25: nested dynamic `textContent` keeps existing children
+
+Producer `0ce01d7476367dab2f4d067f4771d5010e347c75` resolves divergence 2. Nested
+lowering now uses the same `!hasChildren` gate as template-root lowering and as
+the already-correct 1.x producer: source children, a promoted `children` value,
+or a textarea `value` replacement block the synthesized placeholder. The
+`firstChild` declaration and effect still emit, while ordinary child lowering
+supplies the node the effect updates.
+
+The fork's parity harness adds two probes — a real reactive child and a folded
+textarea seed — and matches Babel in all ten modes. Its DOM transform baseline
+adds exactly those two outputs and changes no prior row. In this checker,
+`TextContentChildNowCertified` replaces the former retraction arm in
+`fixtures/reactive-ir/jsx-census-gap-solid-2`: SC1001 drops because `body()` now
+has a tracked execution site, while the independent SC8003 children-versus-
+`textContent` authoring violation remains. Coverage moves only that project,
+from 568 to 567 findings across 91 fixtures.
 
 ### Two more funnels were fixed, and the rest of the sweep is named
 

@@ -65,16 +65,16 @@ rust-version = "1.97"
 # `children_attribute_container` (name-first selection, matching Babel's own
 # attribute dedup, so a trailing literal `children` duplicate blocks
 # promotion instead of falling through to an earlier non-literal one) present
-# in the template-root path too. Divergences 5-9 remain open: none of them
-# reaches a rule in this checker yet, and each is recorded with its emitted-code
-# evidence in docs/precision-backlog.md ("Divergence 4 is resolved, and it
-# surfaced five more"), with divergence 5's certification residue tracked there
-# as open. See docs/compiler-facts.md for the divergences this checker does
-# mitigate. The only `next`-specific trace adaptation is a DOM-mode dynamic
+# in the template-root path too. This revision additionally resolves divergence
+# 5's template-root `children`/dynamic-`textContent` slot order and divergence
+# 2's nested dynamic-`textContent` child-list gate. Divergences 6-9 remain open
+# but reach no rule in this checker; see docs/precision-backlog.md for their
+# emitted-code evidence. See docs/compiler-facts.md for the divergences this
+# checker still mitigates. The only `next`-specific trace adaptation is a DOM-mode dynamic
 # intrinsic `$key`: lowering strips the server-component identity attribute,
 # so the trace now resolves its value as `Elided` instead of leaving the census
 # open. `SEMANTIC_TRACE_VERSION` remains 2.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "eabc563d812e9854d67cee63777483df150538cc", default-features = false }
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "0ce01d7476367dab2f4d067f4771d5010e347c75", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on

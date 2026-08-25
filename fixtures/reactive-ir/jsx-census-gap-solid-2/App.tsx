@@ -24,29 +24,22 @@ function ReadInsideVoidElementChild() {
   return <br>{count()}</br>;
 }
 
-// The retraction arm of the same gap, and the reason the mitigation cannot key
-// on "the compiler emitted no site for a shape we recognize": here the
-// producer *did* census `{y()}` and then retracted it during lowering, because
-// its nested dynamic-`textContent` path replaces the element's content with a
-// text placeholder and discards the source children. What reaches the checker
-// is a hole in exactly the same shape as above, arrived at from the opposite
-// direction -- so it takes the same wording and the same verdict.
-//
-// The shipped compiler diverges here too (it emits no placeholder with
-// children present, inserts `y`, and writes `.data` into whatever the insert
-// produced), which is why the retraction may not be read as no-execution.
-// Uncertifiable is the only honest answer either way.
+// Resolved control. The current producer matches Babel's `!hasChildren` gate:
+// with a real child it emits the insert and makes the textContent effect target
+// that child's text node. `{body()}` therefore has an explicit tracked site and
+// SC1001 stays silent. Keeping the authoring conflict beside it proves that the
+// pin move removes only the obsolete census-gap claim.
 //
 // SC8003 fires on the same element for an unrelated, legitimate reason: JSX
 // children and `textContent` at once is a conflict the author can see. Two
 // claims about one element, neither duplicating the other.
-function RetractedTextContentShadowedChild() {
+function TextContentChildNowCertified() {
   const [label] = createSignal("l");
   const [body] = createSignal("b");
   return <div><span textContent={label()}>{body()}</span></div>;
 }
 
-// The third way a hole arrives, and the negative control for the `<noscript>`
+// The retraction way a hole arrives, and the negative control for the `<noscript>`
 // divergence mitigation. `<noscript>`'s markup is inert, so on the
 // static-template fast path this producer emits the tag and returns without
 // visiting the children at all; the recorder retracts every site in the
@@ -62,8 +55,7 @@ function RetractedTextContentShadowedChild() {
 // dynamic attribute).
 //
 // The 1.x producer learned the same retraction at `d1e08958`; its focused
-// census-gap fixture now pins that dialect's arm too. The dynamic
-// `textContent` retraction above remains 2.0-only.
+// census-gap fixture now pins that dialect's arm too.
 function RetractedInertNoscriptChild() {
   const [note] = createSignal("n");
   return <div><noscript>{note()}</noscript></div>;
@@ -100,7 +92,7 @@ export function Root() {
   return (
     <div>
       <ReadInsideVoidElementChild />
-      <RetractedTextContentShadowedChild />
+      <TextContentChildNowCertified />
       <RetractedInertNoscriptChild />
       <TrackedChildStaysCertified />
       <ReadOutsideJsxStaysAViolation />

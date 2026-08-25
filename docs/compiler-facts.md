@@ -136,16 +136,16 @@ A hole arrives two ways, and the mitigation cannot key on which. Either the
 producer never censused the expression (1.x's nested non-hydratable `<head>`;
 2.0's template-root void element, which gates child lowering on
 `!is_void_element`), or it censused the expression and then **retracted** the
-site during lowering because the path discarded the child list (2.0's nested
-dynamic-`textContent` placeholder, the textarea `value` fold, the inert
-`<noscript>` fast path). Both leave the same shape, so both take the same
+site during lowering because the path discarded the child list (the textarea
+`value` fold or the inert `<noscript>` fast path). Both leave the same shape, so both take the same
 wording and the same verdict.
 
 Fixtures: `fixtures/reactive-ir/jsx-census-gap-solid-1x` (a read in a nested
 non-hydratable `<head>`, child and attribute arms) and
 `fixtures/reactive-ir/jsx-census-gap-solid-2` (a template-root void element's
-child, never censused; and a `textContent`-shadowed child, censused then
-retracted). Each also pins the two negatives — a censused tracked read stays
+child, never censused; and an inert `<noscript>` child, censused then
+retracted). Its former dynamic-`textContent` arm is now a tracked negative
+control at producer `0ce01d74`. Each fixture also pins the two negatives — a censused tracked read stays
 silent, and an untracked read outside all JSX stays a proven violation.
 
 ## Discarded regions
@@ -422,7 +422,7 @@ the tag, that arm would take the divergence wording and fail the gate.
 **Divergence 4 (nested `children` attribute promotion) was resolved by
 `fea62adb5d0332a4a3cb5088e97283673c40b540`** (upstream PR #3, "nested
 children attribute promotion") and is retained by the current
-`eabc563d812e9854d67cee63777483df150538cc` port to `next`. At the prior pin
+`0ce01d7476367dab2f4d067f4771d5010e347c75` lineage on `next`. At the prior pin
 (`c6008f01…`), a `children`
 attribute on a nested native element with no source children —
 `<div><span children={x()}/></div>` — was a deliberate hard reconciliation
@@ -448,11 +448,12 @@ before judging whether its value is literal, so a trailing literal duplicate
 falling through to an earlier non-literal `children` attribute the dedup
 already discarded.
 
-Divergences 5-9 — all pre-existing, none of them nesting-specific, surfaced
-only while resolving divergence 4 — remain open and reach no rule in this
-checker today. The 1.x producer now retracts the static `<noscript>` fast path;
-its dynamic-`textContent` shadowed-child path remains a file-level gap. Both
-states are recorded in `docs/precision-backlog.md`.
+Divergence 5's template-root slot ordering is resolved by the `bf437061`
+lineage, and divergence 2's nested dynamic-`textContent` gate is resolved by
+`0ce01d74`: real children now carry ordinary tracked sites instead of becoming
+a census gap. Divergences 6-9 remain open and reach no rule in this checker.
+The static `<noscript>` fast-path retraction remains an ordinary census gap in
+both dialects. These states are recorded in `docs/precision-backlog.md`.
 
 `Value(CallerContext)` is the dynamic component property: the expression is
 handed to the child as a getter and re-evaluated in the child's tracking
