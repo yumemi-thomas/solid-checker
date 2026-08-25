@@ -1064,6 +1064,70 @@ the numbers are a measurement of*, and each is recorded in the report's
 wall budget is its own outcome class and is counted as neither verified nor
 refused. So is a row for which no Solid runtime can honestly be chosen.
 
+### Measured state (2026-08-25, Phase A constructability closure, full corpus, 416 probe rows)
+
+This is the first full-corpus verification run after the span-exact
+`constructability` fact, its consumer wiring, and the schema-15
+`UntypedCallable` follow-up landed on the measurement branch. Both binaries were
+copied out of the repository before the run, so one revision produced all 416
+answers:
+
+- native `solid-checker-rust`
+  `b1c027420756dcd377d6928ed650155da4546befa9c844da3030d0a33001c2bd`
+  (14,834,288 bytes, source revision `77067725`)
+- `solid-typefacts`
+  `31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`
+  (28,390,098 bytes, producer revision `19671a889b273da135024722c5957b8979e43fbb`)
+
+Budgets and corpus are unchanged from the state below: install 240 s, generate
+120 s, probe 20 s per condition mode and 90 s + 500 ms per planned claim (cap
+900 s) for the whole phase, verify 90 s, concurrency 6, no subsetting. Wall
+clock was 7 m 04 s. The checked-in
+`benchmarks/ecosystem/verification-report.{json,md}` is the complete report.
+
+| Figure | 2026-08-24 attested closure | 2026-08-25 constructability | Movement |
+| --- | ---: | ---: | ---: |
+| Reached a generated contract | 398/416 | **399/416** | +1 |
+| Reached `verified` | 275/416 (66.11%) | **281/416 (67.55%)** | +6 / -0 |
+| Refused by `contract verify` | 121/416 | **116/416** | -5 |
+| Generation failures | 15 | **14** | -1 |
+| Claims planned / driven / passed | 12,509 / 7,504 / 7,480 | **12,525 / 7,559 / 7,548** | +16 / +55 / +68 |
+| Failing claims | 24 | **11** | -13 |
+| Contradicted `kind` claims | 13 | **0** | -13 |
+| Exports certified by a verified contract | 929 | **937** | +8 |
+
+Exactly six rows changed outcome and none regressed. Five moved `refused ->
+verified`: `@tanstack/devtools-a11y@0.2.2`,
+`@tanstack/form-devtools@1.0.0-alpha.2`,
+`@tanstack/hotkeys-devtools@0.9.0`, `@tanstack/pacer-devtools@1.4.0`, and
+`@tanstack/table-devtools@9.2.0`. Together they carried the seven remaining
+`*DevtoolsCore` claims that said `value` while every mode observed `function`.
+All seven now pass as `function`.
+
+The sixth row, `@tanstack/ai-devtools-core@0.5.6`, moved
+`generate-failure -> verified`: both of its exports now generate, both planned
+claims are driven, and both pass. This is the corpus-visible recovery from the
+schema-15 signature-less `Function` answer.
+
+The other six corrected claims are `@solidjs/web@2.0.0-rc.1`'s
+`ResponseEnvelope` on `.`, `./jsx-runtime`, and `./jsx-dev-runtime` in both
+Solid 2 probes. Both rows remain refused, but only on their independently
+documented attested module-closure note: their root cause moved
+`probe-failed -> attested-closure-note`, and their 3/3 failed claims became 3/3
+passing claims. That distinction is why the headline gains five refused rows,
+not seven, even though all thirteen wrong-kind claims are gone.
+
+The destructuring recovery moved content without changing a row outcome:
+`@solid-devtools/ui@0.10.3` was verified before and remains verified, but now
+emits 13 exports rather than 2, drives and passes 28 rather than 17 claims, and
+keeps the same explicit refusals for `.` and `./icons`. General
+`Callability::Unknown` shapes remain fail-closed; in particular
+`solid-js@1.9.14`'s `./web` entrypoint is still refused.
+
+**This supersedes the 2026-08-24 attested-module-closure state below.** That
+state remains intact as the before column and as the history of the earlier
+probe-environment, execution-kind, export-kind, and closure measurements.
+
 ### Measured state (2026-08-24, attested module closure, full corpus, 416 probe rows)
 
 Binaries were **copied out of the repository before the run and used from the

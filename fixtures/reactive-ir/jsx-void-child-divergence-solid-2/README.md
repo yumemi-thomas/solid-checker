@@ -26,7 +26,8 @@ the fixture names below.
 
 ## The divergences
 
-The pinned fork's own `docs/execution-contract.md` (revision
+The pinned fork's own `docs/execution-contract.md` (current revision
+`eabc563d812e9854d67cee63777483df150538cc`; the contract was ported from
 `fea62adb5d0332a4a3cb5088e97283673c40b540`, "The trace describes this compiler,
 not the parity target") names both and states each as a **binding consumer
 rule**: *"A consumer must treat a `jsx-child` site inside a void native element

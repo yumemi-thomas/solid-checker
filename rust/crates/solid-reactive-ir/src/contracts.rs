@@ -1507,7 +1507,8 @@ pub fn raised_function_export(mut summary: ContractExport) -> ContractExport {
 /// 0020.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExportKindProof {
-    /// The type has a call signature, or a construct signature, or both.
+    /// The type has a call signature, belongs to the signature-less
+    /// `Function` family, has a construct signature, or combines them.
     /// `typeof === "function"` at runtime either way, and a raise leaves
     /// `callbacks` unknown because no body was summarized — see
     /// [`raised_function_export`].
@@ -1525,20 +1526,11 @@ pub enum ExportKindProof {
     /// The type has neither a call nor a construct signature: `NonCallable`
     /// **and** `NonConstructable`.
     ///
-    /// This is the full negative for every type outside lib.es5.d.ts's
-    /// signature-less `Function`-supertype family (`Function`,
-    /// `CallableFunction`, `NewableFunction`, and any type a function value is
-    /// assignable to that declares no signature of its own — `object`, `{}`,
-    /// `Record<string, unknown>`). For those, the pair answers this way while
-    /// `typeof x === "function"` still holds at runtime, and TypeScript-Go's
-    /// own narrowing agrees with the runtime through a `bind`-member fallback
-    /// these facts do not carry. Nothing here can detect that family, so such
-    /// an export publishes `value` — a *pre-existing* hole this consumer had
-    /// through `callability` alone, neither widened nor closed by the
-    /// constructability fact. The producer follow-up named in ADR 0020 (give
-    /// the `callabilityOfType`/`constructabilityOfType` walk the same
-    /// `bind`-member fallback) is what closes it. See
-    /// docs/precision-backlog.md.
+    /// This is the full negative. Signature-less `Function` supertypes no
+    /// longer reach it: producer ADR 0021 gives them the distinct positive
+    /// `UntypedCallable` answer. Broad non-callable supertypes such as
+    /// `object`, `{}`, and `Record<string, unknown>` remain here because those
+    /// declared types genuinely admit non-function values.
     NonCallable,
     /// One or both facts are present and closed nothing. `Unknown` is `any`,
     /// `unknown`, `never` or an error type; `Mixed` is a union holding both a
@@ -1565,9 +1557,11 @@ pub enum ExportKindProof {
 ///
 /// The whole rule, in order:
 ///
-/// 1. `Callable ∨ Constructable ⇒` [`ExportKindProof::Callable`]. Either
-///    signature kind is a function at runtime, and neither fact's own absence
-///    or uncertainty can subtract from the other's positive.
+/// 1. `(Callable ∨ UntypedCallable) ∨ Constructable ⇒`
+///    [`ExportKindProof::Callable`]. Either callability positive or a construct
+///    signature is a function at runtime, and neither fact's own absence or
+///    uncertainty can subtract from the other's positive. `UntypedCallable`
+///    deliberately proves no readable signature or parameter facts.
 /// 2. `NonCallable ∧ NonConstructable ⇒` [`ExportKindProof::NonCallable`].
 ///    Both closed negatives, and only both.
 /// 3. Either fact absent `⇒` [`ExportKindProof::Unanswered`].
@@ -1591,9 +1585,8 @@ pub fn export_kind_proof(facts: &ProjectFacts, target: &Location) -> ExportKindP
     let callability = entity.and_then(|entity| entity.callability);
     let constructability = entity.and_then(|entity| entity.constructability);
     match (callability, constructability) {
-        (Some(Callability::Callable), _) | (_, Some(Constructability::Constructable)) => {
-            ExportKindProof::Callable
-        }
+        (Some(Callability::Callable | Callability::UntypedCallable), _)
+        | (_, Some(Constructability::Constructable)) => ExportKindProof::Callable,
         (Some(Callability::NonCallable), Some(Constructability::NonConstructable)) => {
             ExportKindProof::NonCallable
         }
@@ -1781,9 +1774,9 @@ mod callback_contradiction_tests {
 /// The two process tests in
 /// rust/crates/solid-facts-backend/tests/contracts_process.rs pin what the
 /// *generator* publishes end to end; these pin the decision itself over the
-/// complete 5x5 product of what the two facts can say — each of the four
-/// closed answers plus absence, on each side — including the combinations no
-/// fixture reaches.
+/// complete 6x5 product of what the two facts can say — each callability
+/// answer, each constructability answer, and absence on either side —
+/// including the combinations no fixture reaches.
 #[cfg(test)]
 mod export_kind_proof_tests {
     use super::{ExportKindProof, ProjectFacts, export_kind_proof, raised_function_export};
@@ -1878,8 +1871,9 @@ mod export_kind_proof_tests {
         export_kind_proof(&facts, &location)
     }
 
-    const CALLABILITIES: [Option<Callability>; 5] = [
+    const CALLABILITIES: [Option<Callability>; 6] = [
         Some(Callability::Callable),
+        Some(Callability::UntypedCallable),
         Some(Callability::NonCallable),
         Some(Callability::Mixed),
         Some(Callability::Unknown),
@@ -1901,8 +1895,10 @@ mod export_kind_proof_tests {
         callability: Option<Callability>,
         constructability: Option<Constructability>,
     ) -> ExportKindProof {
-        if callability == Some(Callability::Callable)
-            || constructability == Some(Constructability::Constructable)
+        if matches!(
+            callability,
+            Some(Callability::Callable | Callability::UntypedCallable)
+        ) || constructability == Some(Constructability::Constructable)
         {
             return ExportKindProof::Callable;
         }
@@ -1982,8 +1978,8 @@ mod export_kind_proof_tests {
                 );
             }
         }
-        // Ten of the twenty-five decide anything, and the shape of that split
-        // is the claim: nine functions, one value, eight unresolvable, seven
+        // Fifteen of the thirty decide anything, and the shape of that split
+        // is the claim: fourteen functions, one value, eight unresolvable, seven
         // unanswered — counted so a rule change cannot widen the certified
         // side unnoticed.
         let mut function = 0;
@@ -2000,7 +1996,21 @@ mod export_kind_proof_tests {
                 }
             }
         }
-        assert_eq!((function, value, unresolvable, unanswered), (9, 1, 8, 7));
+        assert_eq!((function, value, unresolvable, unanswered), (14, 1, 8, 7));
+    }
+
+    #[test]
+    fn an_untyped_callable_proves_kind_without_a_signature_claim() {
+        let source = "export const value = host.create();";
+        assert_eq!(
+            proof(
+                source,
+                "value",
+                Some(Callability::UntypedCallable),
+                Some(Constructability::NonConstructable),
+            ),
+            ExportKindProof::Callable
+        );
     }
 
     #[test]

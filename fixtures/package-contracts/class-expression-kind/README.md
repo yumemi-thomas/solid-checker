@@ -122,11 +122,11 @@ claim rather than a default. That arm is unreached by any fixture here and
 pinned by unit test instead
 (`export_kind_proof_tests::absence_on_either_fact_is_unanswered_not_a_negative`).
 
-The residual hole is a different one: lib.es5.d.ts's signature-less
-`Function`-supertype family answers both closed negatives while
-`typeof x === "function"` can still hold at runtime, and nothing on this side
-can detect it. `fixtures/package-contracts/function-supertype-kind` pins that
-wrong answer deliberately. See docs/precision-backlog.md.
+The former signature-less `Function` residue is now closed by Type Facts schema
+15's `UntypedCallable` answer. It remains separate from this fixture because it
+proves runtime function kind without a readable signature; the focused
+`fixtures/package-contracts/function-supertype-kind` fixture pins that boundary.
+See docs/precision-backlog.md.
 
 
 ## What the closure record pins here

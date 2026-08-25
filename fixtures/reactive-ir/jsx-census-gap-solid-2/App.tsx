@@ -61,11 +61,9 @@ function RetractedTextContentShadowedChild() {
 // producer *does* keep the children (template root, and off the fast path via a
 // dynamic attribute).
 //
-// 2.0 only. The 1.x producer does not retract this subtree at all -- it fails
-// reconciliation and the file is rejected (`semantic trace has unresolved
-// execution sites`), the same shape of producer gap as the `textContent` arm
-// above. Recorded in docs/precision-backlog.md rather than pinned, because a
-// fixture there would pin an exit code.
+// The 1.x producer learned the same retraction at `d1e08958`; its focused
+// census-gap fixture now pins that dialect's arm too. The dynamic
+// `textContent` retraction above remains 2.0-only.
 function RetractedInertNoscriptChild() {
   const [note] = createSignal("n");
   return <div><noscript>{note()}</noscript></div>;

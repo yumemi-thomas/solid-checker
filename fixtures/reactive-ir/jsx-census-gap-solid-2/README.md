@@ -51,10 +51,10 @@ that keyed on the `<noscript>` tag alone rather than on a lowered site would fli
 this arm to the divergence wording. This fixture is in coverage's
 `KEEPS_WORDING` set, so that flip fails the gate instead of passing quietly.
 
-Both retraction arms are **2.0-only**. The 1.x producer retracts neither and
-fails reconciliation on both (`semantic trace has unresolved execution sites`),
-so neither can have a 1.x sibling; `docs/precision-backlog.md` records that gap
-rather than pinning an exit code.
+The dynamic-`textContent` retraction remains **2.0-only**. The 1.x producer still
+fails reconciliation on that shape, so it cannot have a 1.x fixture without
+pinning an exit code. The static-`<noscript>` retraction is now shared: the 1.x
+pin at `d1e08958` added it, and the 1.x census-gap fixture pins that arm.
 
 ## Cases
 
