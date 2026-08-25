@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 
-// Compiler silence inside source JSX is an uncertifiable execution fact, not a
-// proof that the read is stale and not a certification that it was deleted.
+// Positive deletion control. At a template root Ryan's next transform discards
+// the void child list, and the current trace records that list as Elided.
 function ReadInsideVoidElementChild() {
   const [count] = createSignal(0);
   return <br>{count()}</br>;

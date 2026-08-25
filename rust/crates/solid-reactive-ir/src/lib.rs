@@ -99,12 +99,9 @@ pub enum ExecutionRole {
     /// it (a write that never runs is not a render-phase write, an action that
     /// never runs is not invoked in the wrong phase).
     ///
-    /// It certifies nothing either. Silence here means "both compilers deleted
-    /// this", never "this was proven safe": a discarded region satisfies no
-    /// reactive reader, establishes no owner, and settles no value. Where the
-    /// same span is *also* touched by a named producer/parity-target divergence,
-    /// the divergence wins — that span's deletion is exactly what the two
-    /// compilers disagree about (see `divergent_lowered_child`).
+    /// It certifies nothing either. Silence here means the compiler deleted the
+    /// operation: a discarded region satisfies no reactive reader, establishes
+    /// no owner, and settles no value.
     DiscardedRendering,
 }
 
@@ -412,29 +409,17 @@ pub struct ReactiveRead {
     /// uncertifiable.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
-    /// The read sits in a JSX child region the pinned compiler fork lowered and
-    /// the compiler Solid ships does not lower. The census entry here is present
-    /// and claims a reactive rerun, so this is not [`Self::missing_jsx_census`]:
-    /// the fact exists, is truthful about the producer, and is still not
-    /// evidence about the user's build. Projection reports it as uncertifiable —
-    /// the read can be certified neither tracked (only the fork's output tracks
-    /// it) nor untracked (only Babel's output drops it). The variant selects the
-    /// wording, because the two divergences are true for different reasons.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub divergent_lowering: Option<DivergentLowering>,
 }
 
 impl ReactiveRead {
     /// Whether a finding about this read is **uncertifiable** rather than a
     /// proven violation.
     ///
-    /// Three independent holes, any one of which is enough: the reactive
+    /// Two independent holes, either of which is enough: the reactive
     /// backing cannot be established because the component's callers cannot be
     /// enumerated ([`Self::uncertain`]), the execution context cannot be
     /// established because the compiler reported no census for the JSX region
-    /// ([`Self::missing_jsx_census`]), or the region's lowering differs between
-    /// the pinned fork and the compiler Solid ships
-    /// ([`Self::divergent_lowering`]).
+    /// ([`Self::missing_jsx_census`]).
     ///
     /// This is one predicate on purpose. The projection sets a finding's `kind`
     /// from it and each dialect's wording selects its hint from it; when the two
@@ -442,26 +427,8 @@ impl ReactiveRead {
     /// carrying a proof-obligation hint, or the reverse.
     #[must_use]
     pub fn is_uncertifiable(&self) -> bool {
-        self.uncertain || self.missing_jsx_census || self.divergent_lowering.is_some()
+        self.uncertain || self.missing_jsx_census
     }
-}
-
-/// Which of the pinned compiler fork's lowering divergences a fact about a
-/// source position rests on — a read's execution role
-/// ([`ReactiveRead::divergent_lowering`]) or an operation's ownership
-/// ([`OwnerRequirement::divergent_lowering`]).
-///
-/// Both are declared binding on the consumer by the fork's
-/// docs/execution-contract.md ("The trace describes this compiler, not the
-/// parity target"), and both are mitigated by `divergent_lowered_child` in
-/// `execution_role.rs`. See docs/compiler-facts.md, "Divergent lowering".
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum DivergentLowering {
-    /// A child of a tag the dialect's parity target treats as void while the
-    /// pinned producer does not. At the current pins this is Solid 1.x's
-    /// `<keygen>` and `<menuitem>` only.
-    VoidElementChild,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -913,23 +880,6 @@ pub struct OwnerRequirement {
     /// reports an uncertifiable proof obligation rather than a violation.
     #[serde(default, skip_serializing_if = "is_false")]
     pub missing_jsx_census: bool,
-    /// The operation is written inside a JSX child region the pinned producer
-    /// lowers and this dialect's parity-target compiler discards — the same
-    /// divergence [`ReactiveRead::divergent_lowering`] carries, reaching the
-    /// ownership question instead of the tracking one.
-    ///
-    /// Both halves of the ordinary proof are gone here, in opposite directions.
-    /// The producer's `Owned` ownership region over that child is not evidence
-    /// of an owner (the parity target emits neither the insert nor its wrapper),
-    /// which is why `owners.rs` drops it from `providing_regions`; but the
-    /// absence of an owner is not proven either, because under the parity target
-    /// the operation is inside deleted code and never executes at all. Neither
-    /// compiler produces an unowned live operation, so a *violation* here would
-    /// assert a defect no build can exhibit. Projection reports it as
-    /// uncertifiable and the message names the divergence rather than the
-    /// missing owner.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub divergent_lowering: Option<DivergentLowering>,
     pub report: bool,
 }
 

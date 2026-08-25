@@ -26,9 +26,9 @@ use std::{
 };
 
 use crate::execution_role::{
-    allowed_callback_spans, async_execution_role, control_flow_execution_role,
-    divergent_lowered_child, missing_jsx_census, named_callback_execution_role,
-    read_analysis_context, semantic_execution_role, semantic_write_execution_role,
+    allowed_callback_spans, async_execution_role, control_flow_execution_role, missing_jsx_census,
+    named_callback_execution_role, read_analysis_context, semantic_execution_role,
+    semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -471,11 +471,6 @@ impl LocalAccessContext<'_, '_> {
                         origin_context: Arc::from("package return contract"),
                         uncertain: self.lookup.inside_possible_component(file, call.span),
                         missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                        divergent_lowering: divergent_lowered_child(
-                            self.lookup.dialect,
-                            file,
-                            call.span,
-                        ),
                     }));
                     if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                         result.strict_read_obligations += 1;
@@ -561,11 +556,6 @@ impl LocalAccessContext<'_, '_> {
                         .into(),
                     uncertain: self.lookup.inside_possible_component(file, call.span),
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                    divergent_lowering: divergent_lowered_child(
-                        self.lookup.dialect,
-                        file,
-                        call.span,
-                    ),
                 }));
                 if !matches!(
                     self.source_primitives.get(symbol).map(SymbolId::as_str),
@@ -638,11 +628,6 @@ impl LocalAccessContext<'_, '_> {
                     origin_context: Arc::from(""),
                     uncertain: self.lookup.inside_possible_component(file, call.span),
                     missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                    divergent_lowering: divergent_lowered_child(
-                        self.lookup.dialect,
-                        file,
-                        call.span,
-                    ),
                 }));
                 result.strict_read_obligations += 1;
             }
@@ -670,11 +655,6 @@ impl LocalAccessContext<'_, '_> {
                             origin_context: via.clone().into(),
                             uncertain: self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                            divergent_lowering: divergent_lowered_child(
-                                self.lookup.dialect,
-                                file,
-                                call.span,
-                            ),
                         }));
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
@@ -726,11 +706,6 @@ impl LocalAccessContext<'_, '_> {
                             origin_context: via.clone().into(),
                             uncertain: self.lookup.inside_possible_component(file, call.span),
                             missing_jsx_census: missing_jsx_census(file, call.span, execution),
-                            divergent_lowering: divergent_lowered_child(
-                                self.lookup.dialect,
-                                file,
-                                call.span,
-                            ),
                         }));
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
@@ -923,7 +898,6 @@ impl LocalAccessContext<'_, '_> {
                 origin_context: Arc::from(""),
                 uncertain,
                 missing_jsx_census: missing_jsx_census(file, member.span, execution),
-                divergent_lowering: divergent_lowered_child(self.lookup.dialect, file, member.span),
             }));
             if !matches!(
                 self.source_primitives.get(symbol).map(SymbolId::as_str),
@@ -1031,7 +1005,6 @@ impl LocalAccessContext<'_, '_> {
                 origin_context: Arc::from(""),
                 uncertain,
                 missing_jsx_census: missing_jsx_census(file, spread.span, execution),
-                divergent_lowering: divergent_lowered_child(self.lookup.dialect, file, spread.span),
             }));
             if !matches!(
                 self.source_primitives.get(symbol).map(SymbolId::as_str),

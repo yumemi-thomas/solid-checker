@@ -155,59 +155,16 @@ impl Finding {
         let runtime_uncertain = requirement.runtime_uncertain;
         let component_uncertain = requirement.component_uncertain;
         let missing_jsx_census = requirement.missing_jsx_census;
-        let divergent_lowering = requirement.divergent_lowering;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
-        // row with no explicit reason as caller uncertainty. A divergence is an
-        // explicit reason and must not be re-read as that legacy default, or the
-        // message would also blame callers it has no complaint about.
+        // row with no explicit reason as caller uncertainty.
         let caller_uncertain = requirement.caller_uncertain
             || (uncertain
                 && !runtime_uncertain
                 && !conditional_owner
                 && !component_uncertain
-                && !missing_jsx_census
-                && divergent_lowering.is_none());
+                && !missing_jsx_census);
         let mut message = message.to_string();
         let mut hint = hint.to_string();
-        // The divergence returns early instead of appending a clause like the
-        // other reasons, because it disagrees with the sentence they decorate.
-        // "No containing owner dominates this operation" is a completed search of
-        // the compiler's facts; here the facts are not incomplete but
-        // contradictory, and that sentence would assert the half of them that
-        // happens to be this producer's. Appending would leave the evidence chain
-        // still claiming the search finished.
-        //
-        // It also subsumes the other reasons when they coincide: if the call
-        // cannot be shown to run at all, whether its unenumerable callers would
-        // have supplied an owner is not the reader's next question. The fields
-        // stay on the requirement, so the serialized row still records them; only
-        // the prose leads with the reason that dominates.
-        if let Some(divergence) = divergent_lowering {
-            let (position, shipped) = match divergence {
-                crate::DivergentLowering::VoidElementChild => (
-                    "inside the children of an element the Solid 1.x Babel compiler treats as void",
-                    "that compiler deletes the element's child list",
-                ),
-            };
-            message.push_str(&format!(
-                "; but this call is written {position}, and {shipped} while the pinned Solid compiler lowers that child into a reactive insert that owns it — so whether this call runs at all, and under which owner, depends on which compiler builds this project"
-            ));
-            hint.push_str(
-                " Move the call out of that element's children: while it sits there, no compiler fact decides its owner, and the two candidate compilers disagree about whether it executes.",
-            );
-            return Self {
-                kind: "uncertifiable".into(),
-                severity: "error".into(),
-                evidence: vec![EvidenceStep {
-                    message: format!(
-                        "the operation sits {position}: the pinned compiler reports that child as a reactive JSX site and owns it, the compiler Solid ships emits nothing there, and no fact available here decides which one builds this project"
-                    ),
-                    location: Some(requirement.location.clone()),
-                }],
-                hint,
-                ..Self::new(metadata, message, requirement.location.clone())
-            };
-        }
         if missing_jsx_census {
             message.push_str(
                 "; but this call is written inside a JSX expression the Solid compiler's execution census does not cover, so whether the operation executes — and under which owner — cannot be proven",
@@ -359,35 +316,6 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
     // silence about this JSX region — which is equally consistent with the
     // expression having been dropped, or lowered into something tracked that
     // the producer did not census. So the message says what is actually known.
-    // Checked before the census gap, and they are mutually exclusive by
-    // construction: the divergence requires a census entry the producer really
-    // emitted, and the gap requires there to be none. The order is fixed
-    // anyway, because this is the more specific claim — the census here is not
-    // silent, it speaks for a compiler that may not be the one building this
-    // project.
-    //
-    // The two divergences share a shape and differ in why they are true, so the
-    // sentence differs in exactly that clause. Saying "deletes it" of
-    // `<noscript>` would be wrong: the shipped compiler does not delete a
-    // `<noscript>` child it decided to keep, it never lowers the subtree at all.
-    if let Some(divergence) = read.divergent_lowering {
-        let through = if read.via.is_empty() {
-            String::new()
-        } else {
-            format!(" through {}", read.via)
-        };
-        let (position, shipped) = match divergence {
-            crate::DivergentLowering::VoidElementChild => (
-                "inside the children of an element the Solid 1.x Babel compiler treats as void",
-                "that compiler deletes the element's child list",
-            ),
-        };
-        return format!(
-            "{} {:?} is read{through} in {context}, {position}; the pinned Solid compiler lowers that child into a reactive insert while {shipped}, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
-            reactive_value_label(&read.kind),
-            read.accessor,
-        );
-    }
     if read.missing_jsx_census {
         let through = if read.via.is_empty() {
             String::new()
@@ -433,16 +361,6 @@ fn reactive_value_label(kind: &str) -> &'static str {
 /// facts; over a census hole it would be an overstatement, since the compiler
 /// never reported on that region at all.
 fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
-    if let Some(divergence) = read.divergent_lowering {
-        let element = match divergence {
-            crate::DivergentLowering::VoidElementChild => {
-                "an element child the Solid 1.x Babel compiler treats as void"
-            }
-        };
-        return format!(
-            "{subject} is {element}: the pinned compiler reports it as a reactive JSX site, the compiler Solid ships emits nothing there, and no fact available here decides which one builds this project"
-        );
-    }
     if read.missing_jsx_census {
         format!(
             "{subject} sits inside a JSX expression the compiler's execution census does not cover, so no compiler fact places it inside or outside a tracked region"
@@ -607,7 +525,6 @@ mod tests {
             origin_context: "".into(),
             uncertain: false,
             missing_jsx_census,
-            divergent_lowering: None,
         }
     }
 
@@ -671,59 +588,10 @@ mod tests {
         assert!(strict_read_message(&gap).contains("read through title"));
     }
 
-    /// The void-child divergence and the census gap are two different claims
-    /// and must not borrow each other's sentence. The gap says the compiler was
-    /// silent; the divergence says two compilers spoke and disagreed. Reporting
-    /// the second with the first's wording would tell the user to look for a
-    /// missing fact that is in fact present.
+    /// A missing-census owner requirement must not claim a completed search for
+    /// a live, unowned operation.
     #[test]
-    fn a_void_child_divergence_names_the_disagreement_not_a_missing_fact() {
-        let mut divergent = read(false);
-        divergent.divergent_lowering = Some(crate::DivergentLowering::VoidElementChild);
-        // The role the pinned fork's census actually assigns. The wording must
-        // not depend on it: the whole point is that this role is not evidence.
-        divergent.execution = ExecutionRole::TrackedJsx;
-
-        let message = strict_read_message(&divergent);
-        assert!(
-            message.contains("Babel compiler treats as void")
-                && message.contains("deletes the element's child list"),
-            "the divergence must be named in the message: {message}"
-        );
-        assert!(
-            !message.contains("does not cover"),
-            "the divergence is not a census gap; the census entry is present: {message}"
-        );
-        assert!(
-            !message.contains("which does not track") && !message.contains("never updates when"),
-            "the message must not claim the read never updates: {message}"
-        );
-
-        let evidence = strict_read_evidence(&divergent);
-        let last = &evidence.last().unwrap().message;
-        assert!(
-            !last.contains("outside every compiler-tracked JSX region"),
-            "the evidence must not claim a completed search: {last}"
-        );
-        assert!(
-            last.contains("Babel compiler treats as void")
-                && last.contains("which one builds this project"),
-            "the evidence must state the disagreement: {last}"
-        );
-    }
-
-    /// The ownership consumer of the same divergence. An owner requirement whose
-    /// call sits in a divergently lowered child must not be a **violation**: the
-    /// pinned producer wraps the insert it emits (so the call runs owned) and the
-    /// parity target deletes the child (so it never runs), and neither compiler
-    /// produces the unowned live operation the violation asserts.
-    ///
-    /// Pinned here as well as in the fixture because the snapshot carries no
-    /// evidence steps and no hint, and because the *absence* of the ordinary
-    /// no-owner sentence is the claim — an appended clause would leave the
-    /// finding still asserting a completed search for an owner.
-    #[test]
-    fn a_divergent_child_makes_an_owner_requirement_uncertifiable_not_a_violation() {
+    fn a_census_gap_makes_an_owner_requirement_uncertifiable_not_a_violation() {
         let metadata = RuleMetadata {
             code: "SC4001",
             name: "missing-owner",
@@ -732,22 +600,21 @@ mod tests {
             default_enabled: true,
             presets: &[],
         };
-        let requirement = |divergent_lowering: Option<crate::DivergentLowering>| OwnerRequirement {
+        let requirement = || OwnerRequirement {
             operation: crate::OwnerRequirementOperation::Cleanup,
             location: location(20),
-            uncertain: divergent_lowering.is_some(),
+            uncertain: false,
             runtime_uncertain: false,
             caller_uncertain: false,
             conditional_owner: false,
             component_uncertain: false,
             missing_jsx_census: false,
-            divergent_lowering,
             report: true,
         };
 
         let ordinary = Finding::for_owner_requirement(
             metadata,
-            &requirement(None),
+            &requirement(),
             "onCleanup is called without a reactive owner",
             "Register it under a component or root.",
         );
@@ -760,37 +627,7 @@ mod tests {
             ordinary.evidence[0].message
         );
 
-        let divergent = Finding::for_owner_requirement(
-            metadata,
-            &requirement(Some(crate::DivergentLowering::VoidElementChild)),
-            "onCleanup is called without a reactive owner",
-            "Register it under a component or root.",
-        );
-        assert_eq!(divergent.kind, "uncertifiable");
-        assert_eq!(divergent.severity, "error");
-        assert!(
-            divergent.message.contains("Babel compiler treats as void")
-                && divergent
-                    .message
-                    .contains("depends on which compiler builds this project"),
-            "the divergence must be named in the message: {}",
-            divergent.message
-        );
-        assert!(
-            !divergent.message.contains("this function is exported"),
-            "a divergence is not caller uncertainty: {}",
-            divergent.message
-        );
-        assert_eq!(divergent.evidence.len(), 1);
-        assert!(
-            !divergent.evidence[0]
-                .message
-                .contains("no containing component, computation, or root owner dominates"),
-            "the evidence must not assert a completed search for an owner: {:?}",
-            divergent.evidence[0].message
-        );
-
-        let mut missing = requirement(None);
+        let mut missing = requirement();
         missing.uncertain = true;
         missing.missing_jsx_census = true;
         let missing = Finding::for_owner_requirement(

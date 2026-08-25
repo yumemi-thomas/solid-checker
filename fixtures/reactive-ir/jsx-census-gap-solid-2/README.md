@@ -3,8 +3,9 @@
 This fixture pins the rule that absence of a compiler execution fact is not
 proof of untracked execution or deletion.
 
-- A template-root void child and a static `<noscript>` child have no usable
-  execution site and produce uncertifiable SC1001 findings.
+- A template-root void child is positively reported as discarded and remains
+  silent. A static `<noscript>` child still has no usable execution site and
+  produces an uncertifiable SC1001 finding.
 - Under Ryan's authoritative `next` transform semantics, the child beside a
   dynamic `textContent` attribute is also uncensused. SC8003 independently
   reports the visible children/`textContent` authoring conflict.

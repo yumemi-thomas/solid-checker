@@ -83,7 +83,6 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                         }),
                     fixes: component_props_parameter_fix(
                         ctx.facts,
-                        ctx.semantic_lookup.dialect,
                         file,
                         function,
                         parameter,

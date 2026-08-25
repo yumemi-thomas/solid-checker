@@ -72,7 +72,7 @@ rust-version = "1.97"
 # attribute shadowed at a template root while retracting the deleted nested
 # sites, closing that file-level reconciliation refusal. These are trace-only;
 # `SEMANTIC_TRACE_VERSION` remains 2 and generated JavaScript is unchanged.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "c7e83a1bb0fc8e8f7fad37a7523db9fcce568820", default-features = false }
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "26e744fb4feb973a3652bfc45a8c3938ece667f0", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on
@@ -109,10 +109,12 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # latter is trace-only: emitted JavaScript and `SEMANTIC_TRACE_VERSION = 2`
 # remain unchanged, while file-level exit-2 census gaps are closed.
 # The exact revision additionally matches Babel's native child lowering,
-# preserves the expression-bodied JSX-hole thunk/IIFE output shape, and closes
-# the same template-root shadowed-children reconciliation refusal without
-# changing generated JavaScript.
-solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "a4566086a457a4f2ec2964350fd86f3ad5139ee7", default-features = false }
+# including the legacy `keygen` and `menuitem` void tags, preserves the
+# expression-bodied JSX-hole thunk/IIFE output shape, and closes the same
+# template-root shadowed-children reconciliation refusal. Discarded void and
+# `<noscript>` child lists are traced as one `Elided` range; the trace additions
+# do not change generated JavaScript.
+solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "ca3bbfae7d1e00e28ef73f9af58bdb46e248b512", default-features = false }
 # Moved from `3296ec8` for the signature-less `Function`-supertype answer
 # (producer ADR 0021): wire table schema 15, handshake protocol still 2.
 # `Callability::UntypedCallable` is positive runtime-function evidence without

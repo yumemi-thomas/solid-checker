@@ -86,21 +86,17 @@ impl CompilerFactsProvider for NativeCompilerFacts {
 /// untracked, discarded, or callback categories, and
 /// `ExecutionMap::uncovered_jsx_expressions` is empty by construction rather
 /// than by luck. That is not the same as total over the JSX the source
-/// contains — this compiler censuses what it lowers — and it is not the same as
-/// truthful about the compiler Solid *ships*. Two consequences, both handled
-/// downstream and both documented in docs/compiler-facts.md:
+/// contains — this compiler censuses what it lowers. Two consequences are
+/// documented in docs/compiler-facts.md:
 ///
-/// - A source expression this compiler does not lower (a template-root void
-///   element's children) or lowers and then retracts (a nested dynamic
-///   `textContent`, the textarea `value` fold, the inert `<noscript>` fast
-///   path) leaves a hole — `solid-reactive-ir`'s `missing_jsx_census`, under
-///   "Census gaps".
-/// - A site this compiler lowers that Babel emits nothing for (a *nested* void
-///   element's children; a `<noscript>`'s children where it is its own template
-///   root or its attributes force it off the fast path) is a present, truthful
-///   fact that is still not evidence about the user's build —
-///   `divergent_lowered_child`, under "Divergent lowering". The fork's own
-///   docs/execution-contract.md declares that consumer rule binding.
+/// - A source expression this compiler lowers and then retracts without an
+///   `Elided` decision (the textarea `value` fold or inert `<noscript>` fast
+///   path) leaves a hole handled by `solid-reactive-ir`'s
+///   `missing_jsx_census`.
+/// - Ryan's `next` transform semantics are authoritative for Solid 2. Nested
+///   native void children remain live and are reported as tracked; a
+///   template-root void child list is discarded and reported as one `Elided`
+///   range. The checker consumes both facts without a Babel-parity mitigation.
 fn execution_map_from_trace(
     trace: &dom_expressions_compiler::SemanticTrace,
     source: &str,
@@ -311,14 +307,10 @@ mod tests {
         assert!(facts.uncovered_jsx_expressions().is_empty(), "{facts:#?}");
     }
 
-    // The producer fact the divergence arm in `solid-reactive-ir`'s
-    // `divergent_lowered_child` rests on, pinned where the producer is: a
-    // template-root `<noscript children={c()}/>` is promoted to a real child
-    // and *lowered* — `lower_dom_element` emits `_$insert(_el$, c)` — so the
-    // census reports an ordinary tracked child. Babel emits nothing there (its
-    // `transformElement` never visits a `<noscript>`'s children), which is what
-    // makes the shape divergent rather than certified, and this assertion is
-    // what fails if a pin move ever turns the promotion into an elision.
+    // Ryan's authoritative `next` semantics promote a template-root
+    // `<noscript children={c()}/>` to a real child and lower it. This assertion
+    // pins the positive tracked fact the checker consumes; it is not a request
+    // to force Babel output parity into this fork.
     #[test]
     fn a_template_root_noscript_children_attribute_is_lowered_not_deleted() {
         let facts = compile_source("const view = <noscript children={c()} />;");
@@ -345,18 +337,13 @@ mod tests {
         assert!(facts.tracked_regions.is_empty(), "{facts:#?}");
     }
 
-    // The producer fact the *boundary* of that arm rests on, and the reason the
-    // boundary cannot be left to the checker's positive-lowering test: with a
-    // spread on the element the `children` member is censused as a **child**
+    // With a spread on the element the `children` member is censused as a
+    // **child**
     // (`ExecutionSiteKind::JsxChild` -> `jsx-expression`) and decided
     // `ReactiveRerun`, which is truthful -- `spread()` assigns it as the
     // element's children through a `mergeProps` getter -- and yet neither this
-    // compiler nor Babel *promotes* it (both gate the capture on `!has_spread`
-    // and keep it in the merged props). So this census entry is
-    // indistinguishable from a promotion by kind and decision alone, and
-    // `promoted_children_attribute_value` in `solid-reactive-ir` has to ask the
-    // AST about the spread instead. If a pin move ever changes this decision,
-    // this is the assertion that says so.
+    // compiler promotes it (both keep it in the merged props). This assertion
+    // pins that distinct positive execution path.
     #[test]
     fn a_spread_carrying_children_attribute_is_censused_as_a_reactive_child() {
         for source in [

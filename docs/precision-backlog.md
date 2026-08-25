@@ -6935,3 +6935,37 @@ producer output is aligned, the dialect's two-tag parity-target-only set stays
 uncertifiable. This is the remaining transform item before calling the Solid
 1.x Babel-faithfulness work complete; it is separate from the now-closed
 discarded-region and divergences 6–9 work above.
+
+## 2026-08-25 — final legacy void divergence closed; Phase B complete
+
+This entry supersedes the remaining item above. Solid 1.x is pinned at
+`ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`: its compiler now treats `keygen`
+and `menuitem` as void, matching `babel-plugin-jsx-dom-expressions@0.40.10`, and
+records every discarded void or `<noscript>` child list as one positive
+`Elided` range. The producer suite passed 100 tests with one intentional
+baseline-regeneration test ignored, and all 4,665 Babel differential probes
+passed.
+
+Solid 2 is pinned at `26e744fb4feb973a3652bfc45a8c3938ece667f0`.
+That change is semantic-trace-only: template-root void child lists now carry a
+positive `Elided` range, while nested native void children remain live under
+Ryan's authoritative `next` semantics. Generated JavaScript and the transform
+baseline are unchanged; the producer's 59 Rust tests passed with one intentional
+regeneration test ignored, and all 6,148 Jest assertions passed.
+
+With those facts available, the checker deletes the obsolete consumer
+mitigation rather than leaving it dormant: `DivergentLowering`, the dialect
+parity-target-only void-list hook, rerun and ownership suppression, projection
+wording, and autofix suppression are gone. Fresh compiler-backed coverage moved
+only the four dedicated census/void snapshots, from 564 to 554 total findings:
+ten obsolete uncertifiable findings disappeared, with no new violation and no
+unrelated fixture movement. The paired fixtures retain byte-identical source
+and certify each dialect's intentional result.
+
+This completes the planned Phase B transform work. It does not make the compiler
+fact boundary total over all source JSX: the Solid 1.x nested non-hydratable
+`<head>` path and retraction shapes such as the inert `<noscript>` fast path can
+still reach `missing_jsx_census` and remain explicitly uncertifiable. Those are
+fact-coverage gaps, not known transform disagreements. The ecosystem corpus was
+not rerun for this trace-only closure; the preceding 416-row measurement remains
+the latest ecosystem result until a new run is recorded.

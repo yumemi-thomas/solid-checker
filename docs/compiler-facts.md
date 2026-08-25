@@ -17,15 +17,14 @@ decision. The compiler censuses the JSX execution sites it lowers before
 lowering them, and fails closed if any censused site reaches the end without a
 decision — so within the census there is no unclassified hole.
 
-The census is *not* a census of the JSX the source contains. Each producer
-censuses the JSX it lowers, and it does not lower everything: 1.x drops a
-nested non-hydratable `<head>`, and 2.0 emits no site for a void element's
-children **in the template-root position**, where `lower_dom_element` gates the
-child pass on `!is_void_element`. Nested, both producers lower those children and
-census them — which is a divergence rather than a gap, and the distinction is the
-whole of "Census gaps" versus "Divergent lowering" below. A source-level JSX
-expression a producer never censused reaches the checker as absence, and absence
-is indistinguishable from "the compiler proved this never re-runs".
+The census is *not* a census of every JSX expression in the source. Each
+producer censuses the JSX it lowers, and it does not lower everything: 1.x
+drops a nested non-hydratable `<head>` before recording its descendants, while
+some lowering paths retract sites without replacing them with an `Elided`
+decision. A source-level JSX expression a producer never censused reaches the
+checker as absence, and absence is not evidence that it runs untracked or that
+it was deleted. By contrast, current-pin void child lists are positive facts:
+kept positions are tracked and deleted positions are one discarded range.
 
 The trace carries a `version` field (`SEMANTIC_TRACE_VERSION`, currently 2), and
 each dialect adapter refuses a trace whose version is not the one it was written
@@ -133,20 +132,20 @@ in (`reports_untracked_reads_at`, `RunWithOwner` argument 1, giving
 control.
 
 A hole arrives two ways, and the mitigation cannot key on which. Either the
-producer never censused the expression (1.x's nested non-hydratable `<head>`;
-2.0's template-root void element, which gates child lowering on
-`!is_void_element`), or it censused the expression and then **retracted** the
-site during lowering because the path discarded the child list (the textarea
-`value` fold or the inert `<noscript>` fast path). Both leave the same shape, so both take the same
-wording and the same verdict.
+producer never censused the expression (1.x's nested non-hydratable `<head>`),
+or it censused the expression and then **retracted** the site during lowering
+without a replacement decision (the textarea `value` fold or the inert
+`<noscript>` fast path). Both leave the same shape, so both take the same
+wording and verdict. Current-pin void child lists are not holes: the producers
+record their discarded ranges explicitly.
 
 Fixtures: `fixtures/reactive-ir/jsx-census-gap-solid-1x` (a read in a nested
 non-hydratable `<head>`, child and attribute arms) and
-`fixtures/reactive-ir/jsx-census-gap-solid-2` (a template-root void element's
-child, never censused; and an inert `<noscript>` child, censused then
-retracted). Its former dynamic-`textContent` arm is now a tracked negative
-control at producer `0ce01d74`. Each fixture also pins the two negatives — a censused tracked read stays
-silent, and an untracked read outside all JSX stays a proven violation.
+`fixtures/reactive-ir/jsx-census-gap-solid-2` (an inert `<noscript>` child,
+censused then retracted, with a template-root void child as a positive discarded
+control). Its dynamic-`textContent` arm follows Ryan's current `next` semantics.
+Each fixture also pins the two negatives — a censused tracked read stays silent,
+and an untracked read outside all JSX stays a proven violation.
 
 ## Discarded regions
 
@@ -194,291 +193,27 @@ shape such as a one-argument `createEffect` inside compiler-deleted JSX is
 absent, while the byte-identical live shape still reports. Individual rules do
 not get to invent different dead-code policies.
 
-The one thing that outranks it is a **named divergence** (below). Where the two
-candidate compilers disagree about whether the span is deleted, its deletion is
-not a shared fact and silence would certify one compiler's output. That is why
-`divergent_lowered_child` covers the promoted-`children`-attribute span as well
-as source child regions: `children={…}` *is* the child list, since Babel
-promotes it to a real child before `transformElement` runs. A template-root
-`<noscript children={c()}/>` is promoted **and lowered** by the fork
-(`_$insert(_el$, c)`) while Babel emits nothing — uncertifiable — whereas the
-*nested* spelling discards the capture and both compilers agree, which is why
-the divergence predicate requires a censused site the producer did not discard.
-It also requires the attribute to have been **promoted at all**: with a spread
-on the element neither compiler promotes it, both keep it in the merged props,
-and the predicate's spread gate is what says so — see "Divergent lowering"
-below, where the condition and the reason the census cannot express it are set
-out.
+At the current pins there is no checker-maintained child-content transform
+divergence. Solid 1.x is intentionally faithful to its shipped Babel compiler:
+its void set includes the legacy `keygen` and `menuitem` tags, and discarded
+void or `<noscript>` child lists carry positive `Elided` facts. Solid 2 follows
+Ryan's authoritative `next` semantics rather than treating Babel parity as its
+target: nested native void children remain live and tracked, while a
+template-root void child list is discarded and reported as one `Elided` range.
 
-## Divergent lowering
+That distinction belongs in the producers' traces, not in a consumer-side tag
+table. The former `DivergentLowering` carrier, dialect void-list hook, rerun
+suppression, owner suppression, and autofix suppression were deleted after both
+pins supplied truthful facts. `fixtures/reactive-ir/jsx-void-child-divergence-solid-{1x,2}`
+keeps byte-identical source across the dialects and proves that the different
+intentional outcomes are both certified. Missing facts still fail closed through
+`missing_jsx_census`; positive deletion facts still dominate through
+`DiscardedRendering`.
 
-> **Current-pin status (2026-08-25).** The detailed investigation below records
-> the mitigations required by earlier compiler revisions. At the current pins
-> (`dom-expressions#next` `c7e83a1b…`, Solid 1.x `a4566083…`), ordinary HTML
-> void children and `<noscript>` children are no longer checker-maintained
-> transform divergences. If a source expression survives without an execution
-> entry, it is handled by the ordinary census-gap rule above. Ownership uses the
-> same fail-closed rule, so missing census cannot become a proven missing-owner
-> violation. The sole remaining positive divergence detector is Solid 1.x's
-> parity-target-only `<keygen>` and `<menuitem>` set; Solid 2 returns an empty
-> set. Divergences 6–9 are closed in the Babel-targeting Solid 1.x fork; Ryan's
-> `next` output deliberately remains authoritative for Solid 2, so its
-> documented Babel differences are not checker-maintained parity targets. The
-> subsections through “Per producer” are retained as historical design
-> rationale for the removed mitigations, not as the current rule set.
-
-A census gap is the compiler saying nothing. This is the compiler saying
-something true about *itself* that is false about the compiler Solid ships — and
-it is the more dangerous of the two, because the fact is present, claims a
-reactive rerun, and looks like any other. Before this was mitigated, every
-affected shape was **silently certified**: no finding at all.
-
-The pinned fork's `docs/execution-contract.md` names every known divergence from
-the parity-target Babel plugin, with both compilers' emitted code as evidence,
-and states the consumer rule as binding: **a consumer must not certify from
-facts an affected divergence touches.** The trace is accurate about the fork's
-output and inaccurate about the parity target, and only the consumer knows which
-one it is reasoning about — which is to say, it does not know at all.
-
-### Historical rules at earlier pins (superseded as noted above)
-
-**A `jsx-child` execution site whose enclosing JSX element is void for the
-compiler this project builds with, or is a `<noscript>`, is uncertifiable.** Not
-tracked (only the fork's output tracks it), not untracked-and-stale (only Babel's
-output drops it). "Void for the compiler this project builds with" is two lists —
-the shared one and the dialect's parity-target-only extras; see "The void tag set
-is two lists" below. Concretely:
-
-- `<div><br>{count()}</br></div>` — the fork emits `_$insert(_el$2, count)` and
-  censuses a `reactive-rerun` site; Babel discards a void element's child list in
-  every position (divergence 1).
-- `<noscript>{count()}</noscript>` — the fork emits `_$insert(_el$, count)` at
-  template root and wherever attributes force the element off the
-  static-template fast path; Babel never lowers `<noscript>` children in any
-  position (divergence 3).
-- `<noscript children={count()}/>` at template root — the same divergence
-  reached through the `children`-attribute promotion, and named as such in the
-  fork's divergence 3 (*"Still divergent"*). The attribute **is** the child
-  list: Babel promotes it to a real child before `transformElement` runs and
-  then never visits it, while `lower_dom_element` promotes and lowers it. So
-  the predicate's region set is an element's source children *plus* its
-  **promoted** `children` attribute value — expression containers only, and
-  `children` only, because every other attribute, event handler and `ref` on
-  these elements lowers in both compilers and in every position.
-
-  "Promoted" is a condition, not a spelling. Both compilers gate the capture
-  the same way — the fork on
-  `!is_void_element && !has_spread && element.children.is_empty()` plus a
-  non-literal, non-confidently-foldable value; Babel through the matching
-  preprocessing — and where promotion does not happen the value is an ordinary
-  `children` prop or a deleted value in *both*, so nothing diverges.
-  `promoted_children_attribute_value` writes exactly one of those conditions
-  down, **no spread**, because it is the only one the census cannot express:
-  the producer censuses a spread's `children` member as a *child* claiming
-  `ReactiveRerun` (`semantic_trace.rs` gates the child kind on
-  `has_spread || element.children.is_empty()`) since `spread()` really does
-  assign it through a `mergeProps` getter, so it is indistinguishable from a
-  promotion to the positive-lowering test below — while Babel's
-  `processSpreads` consumes it into the merged props before its capture runs,
-  and the fork lists "a spread keeps `children` in the merged props" among the
-  shapes the two already agree on. Every other condition makes the producer
-  census or resolve the value as something other than a lowered child (a void
-  element's or a shadowed `children` attribute is `native-attribute`/`elided`,
-  a foldable one is resolved `elided`, a dedup loser is an elided value span),
-  which the positive-lowering test already refuses. The *parity-target-only*
-  void tags stay divergent here and correctly so: the 1.x fork does not treat
-  `<keygen>`/`<menuitem>` as void, so it promotes and lowers where 1.x's Babel
-  skips `transformChildren` entirely.
-
-`divergent_lowered_child` in
-`rust/crates/solid-reactive-ir/src/execution_role.rs` implements both, beside
-`missing_jsx_census` because it is the same kind of thing: dialect-independent
-consumer policy over producer facts, not dialect vocabulary. It carries
-`ReactiveRead::divergent_lowering`, which `projection.rs` reports whatever role
-the census assigned — under the pinned fork that role is `TrackedJsx`, which
-reports nothing, so without this the divergence would be certified by silence —
-and marks `uncertifiable`.
-
-The carrier is an `Option<DivergentLowering>` rather than a bool because the two
-conditions need **different sentences**. Babel *deletes* a void element's child
-list; it never *lowers* a `<noscript>` subtree at all. "Deletes it" would name a
-compiler step that does not happen, and a reader who went looking for it would
-find nothing. Where the two nest, the narrowest enclosing divergent element
-decides the wording: both answers are uncertifiable, only the nearer one is the
-reason.
-
-**`<noscript>` is in neither void list.** `VOID_ELEMENTS` is byte-checked against
-the producers' own `void_elements` and `<noscript>` is not a member; nor is it in
-either parity target's list — it has an ordinary content model and diverges
-because its markup is inert. It is a separate named condition,
-`INERT_MARKUP_ELEMENT`, in the same predicate. Merging them would destroy the one
-property that makes the void arm auditable, and the two divergences can be fixed
-upstream independently.
-
-Three consumption points are closed. Two are pure fail-closed and one replaces a
-proven claim with a weaker one; none of the three ever adds a **violation**:
-
-- **Rerun certification.** The read becomes an uncertifiable finding where the
-  census would have certified it silently.
-- **Ownership attribution**, which has two halves and needs both.
-  `owners.rs` skips an `ownership_regions` entry inside a divergent child, in
-  both `providing_regions` and `compiler_owner_context` — the fork wraps the
-  insert it emits, Babel emits neither, so the region is not evidence of an
-  owner. Dropping it is only half the answer: where the surrounding context is
-  *proven unowned* (module scope), the requirement then stands, and SC4001 would
-  report a **proven violation** about an operation neither compiler leaves
-  unowned — under the fork it runs under the insert's owner, under Babel it sits
-  in deleted code and never runs. So `push_owner_requirement` — the single funnel
-  both owner passes use — carries `OwnerRequirement::divergent_lowering` and
-  marks such a requirement uncertain. The finding is uncertifiable and its
-  message and evidence name the disagreement instead of asserting a completed
-  search for an owner. Like the rerun mitigation above, this can report where
-  the checker was silent before the mitigations existed; in both cases what is
-  reported is a proof obligation, never a defect.
-- **Reactive-reader satisfaction.** The props-destructure autofix refuses a
-  rewrite whose soundness would rest on which compiler runs.
-
-### Detection is positive, and from the AST
-
-Two properties are load-bearing:
-
-- **The void element comes from solid-facts' AST**, which owns JSX element-name
-  syntax — never from census absence. `census_touches` overlaps deliberately, so
-  a wider censused region can shadow a narrower hole; and after this pin the
-  divergent child is not a hole at all, but an entry claiming `ReactiveRerun`.
-- **The one compiler fact consulted is also positive**: a `jsx-expression`
-  operation inside the region, *not* inside a discarded region. That is what
-  separates the divergence (the producer lowered the child) from an ordinary
-  census gap (it never censused or retracted the site, agreeing with Babel) and
-  from a discarded region (it censused the site and deleted it, also agreeing
-  with Babel); the three must not borrow each other's wording — one says a fact
-  is missing, one says the code is gone, the third says two facts conflict. The
-  discarded exclusion is what makes the `children`-attribute arm position-aware
-  without naming positions: the nested `<noscript children={c()}/>` capture is
-  discarded rather than promoted, so it is not divergent, while the
-  template-root one is lowered and is.
-
-  It cannot carry the whole `children`-attribute question, though, and that is
-  why the spread gate is in the predicate: a spread's `children` member is
-  censused as a lowered child *and* decided `ReactiveRerun`, so the positive
-  test passes and the discarded exclusion does not apply. Position-awareness
-  comes from the census; promotion-awareness has to be asked of the AST.
-
-### The void tag set is two lists, and one of them is dialect vocabulary
-
-`VOID_ELEMENTS` in `execution_role.rs` is the only copy of the *producers'* tag
-list in this repository, byte-checked against `void_elements` in
-`packages/compiler/src/shared/constants.rs` at both pinned producer revisions
-(14 tags, identical at both). A tag it missed would be a divergently lowered
-child the checker certified, so the list and the compilers' must move together.
-
-That list cannot answer the whole question, because a divergence is a producer
-disagreeing with **its own parity target**, and the two parity targets disagree
-with each other:
-
-| | Rust producer | parity target |
-| --- | --- | --- |
-| 1.x | 14 tags (`void_elements`) | **16** — `packages/babel-plugin-jsx-dom-expressions/src/VoidElements.ts`, adding `keygen` and `menuitem` |
-| 2.0 | 14 tags (`void_elements`) | 14 — `VoidElements` in `packages/runtime/src/constants.js`, imported by `babel-plugin-jsx` |
-
-1.x's plugin computes `voidTag = VoidElements.indexOf(tagName) > -1` and gates
-the whole child pass on `if (!voidTag)`, so `<keygen>{count()}</keygen>` under
-1.x is the divergence exactly as `<br>` is: the producer lowers the child and
-censuses `reactive-rerun`, the compiler the user builds with deletes it. Before
-this was dialect-aware the checker **certified that read by silence**. 2.0's
-parity target dropped both tags on purpose (its `babel-plugin-jsx/CHANGELOG.md`,
-`1cc342c`, unifies the plugin's former `src/VoidElements.ts` with the runtime
-set), so under 2.0 both compilers lower those children and the read is
-genuinely certifiable — a merged union list would withhold a certification the
-facts support.
-
-So the extras are dialect vocabulary and travel the dialect seam:
-`Dialect::parity_target_only_void_elements` in `solid-dialect`, answered
-`["keygen", "menuitem"]` by `Solid1x` and `[]` by `Solid2`, each with its parity
-target's file and revision named at the implementation. It is a required trait
-method rather than a defaulted one: an empty answer is a claim about a specific
-parity target's list, and a new dialect must make it deliberately.
-`divergent_candidate_child` joins the two lists at the one question that needs
-the union, so neither absorbs the other's provenance.
-
-The dialect-only extras are not a second *kind* of divergence — they take the
-same `VoidElementChild` wording, because the reason is the same one (the child
-list is discarded in every position). The positive lowered-site fact still gates
-them: a `<keygen>` whose children the producer discarded is an ordinary census
-gap.
-
-### Per producer
-
-Probed, not assumed: 1.x lowers a void element's children in the *template-root*
-position too, so the same source is the divergence under 1.x and an ordinary
-census gap under 2.0. Fixtures
-`fixtures/reactive-ir/jsx-void-child-divergence-solid-{2,1x}` hold
-byte-identical sources for exactly that reason, and their snapshots now differ in
-three findings:
-
-- the template-root `<br>` child — the *producer* difference above, same verdict
-  with the census-gap reason under 2.0 and the divergence reason under 1.x;
-- the `<keygen>` and `<menuitem>` children — the *parity-target* difference,
-  uncertifiable under 1.x and **certified (silent)** under 2.0.
-
-The sources stay identical through both, so nothing had to be split per dialect
-and `IDENTICAL_SOURCES` is unchanged. The pair also carries the ownership arms
-(`CleanupInsideADivergentChild`, its certified `<span>` twin, and a plain
-module-scope `onCleanup` that stays a proven violation), which answer the same
-way under both dialects.
-
-One cosmetic consequence of the `<keygen>` arms: both producers print an HTML
-round-trip warning to **stderr** for it (`The HTML provided is malformed …
-Browser HTML: <keygen>`), because their template validator follows the HTML
-standard's legacy void list while their lowering does not. It is stderr noise
-around the same disagreement the fixture pins, no gate reads it, and the analysis
-result is unaffected.
-
-The `<noscript>` positions where the fork *retracts* instead — the
-static-template fast path — are not divergences: there it agrees with Babel, so
-the hole is an ordinary census gap and `missing_jsx_census` answers it. That is
-why the predicate is gated on a positive lowered-site fact and not on the tag,
-and `RetractedInertNoscriptChild` in
-`fixtures/reactive-ir/jsx-census-gap-solid-2` is the mechanical guard: keyed on
-the tag, that arm would take the divergence wording and fail the gate.
-
-**Divergence 4 (nested `children` attribute promotion) was resolved by
-`fea62adb5d0332a4a3cb5088e97283673c40b540`** (upstream PR #3, "nested
-children attribute promotion") and is retained by the current
-`b22de4ada7cbdedc24fa26b3d25b5b723f5c18fa` lineage on `next`. At the prior pin
-(`c6008f01…`), a `children`
-attribute on a nested native element with no source children —
-`<div><span children={x()}/></div>` — was a deliberate hard reconciliation
-failure in the producer: the census named a `jsx-child` site nested lowering
-never resolved, so the file was rejected outright rather than analyzed, and
-there was no fact for a checker-side mitigation to distrust. At the new pin
-`lower_dynamic_native_child` performs the same promotion `lower_dom_element`
-already performed at a template root, so the shape now lowers to an ordinary
-`jsx-child` / `reactive-rerun` site and this checker's existing tracked-JSX
-and ownership machinery certifies it exactly as it would any other nested
-child — no new rule, no new mitigation, because the divergence this checker
-had nothing to say about no longer exists. Pinned in
-`fixtures/reactive-ir/jsx-nested-children-attribute-solid-2`, which also pins
-that a confidently-foldable `children` value is still never promoted and that
-the with-source-children shape (the attribute is captured-then-discarded,
-reported `native-attribute`/`elided`) is unaffected by the move.
-
-The fix also corrects a latent dedup bug in `children_attribute_container`
-present in the template-root path too, not only the newly-lowered nested one:
-Babel's own attribute dedup selects the last attribute *named* `children`
-before judging whether its value is literal, so a trailing literal duplicate
-(`<span children={x()} children={"s"}/>`) blocks promotion outright instead of
-falling through to an earlier non-literal `children` attribute the dedup
-already discarded.
-
-Divergence 5's template-root slot ordering is resolved by the `bf437061`
-lineage, and divergence 2's nested dynamic-`textContent` gate is resolved by
-`0ce01d74`: real children now carry ordinary tracked sites instead of becoming
-a census gap. Divergences 6–9 are resolved in the Solid 1.x fork and remain
-documented differences in Ryan's `next`, whose output is the Solid 2 target;
-none reaches a checker rule. The static `<noscript>` fast-path retraction
-remains an ordinary census gap in both dialects. These states are recorded in
-`docs/precision-backlog.md`.
+The historical investigations and baseline measurements for the retired
+mitigations remain in `docs/precision-backlog.md`. New compiler disagreements
+must be established with producer probes before adding consumer policy; compiler
+silence is never enough.
 
 `Value(CallerContext)` is the dynamic component property: the expression is
 handed to the child as a getter and re-evaluated in the child's tracking
