@@ -795,7 +795,7 @@ impl Dialect for Solid1x {
     }
 
     /// 1.x's parity target is `babel-plugin-jsx-dom-expressions@0.40.10`, whose
-    /// source sits in the pinned `solid-1x-compiler` fork (rev `d1e08958`) at
+    /// source sits in the pinned `solid-1x-compiler` fork (rev `98d265c3`) at
     /// `packages/babel-plugin-jsx-dom-expressions/src/VoidElements.ts`. That
     /// file lists **16** tags: the 14 the Rust producer's `void_elements`
     /// (`packages/compiler/src/shared/constants.rs`, same rev) carries, plus

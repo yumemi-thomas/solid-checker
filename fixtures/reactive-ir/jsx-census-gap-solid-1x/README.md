@@ -10,7 +10,8 @@ Each dialect's compiler censuses the JSX *it* lowers. Two paths reach the same
 hole here. The 1.x compiler drops a nested, non-hydratable `<head>` — for
 `ReadInsideDroppedHead` it warns that the browser will read the template as
 `<div><title></title></div>` — before it is censused. The static-template
-`<noscript>` fast path instead censuses first and, since `d1e08958`, retracts
+`<noscript>` fast path instead censuses first and, since the lineage containing
+`d1e08958`, retracts
 the sites in the subtree it discards unvisited. In either case the read reaches
 the checker with no tracked region, untracked region, callback role, or JSX
 operation.

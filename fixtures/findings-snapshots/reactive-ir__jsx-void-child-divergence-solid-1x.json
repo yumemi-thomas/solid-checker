@@ -7,10 +7,10 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 1435,
-      "end": 1442,
+      "start": 472,
+      "end": 479,
       "fixes": 0,
-      "message": "reactive accessor \"count\" is read in NestedVoidChild, inside the children of an HTML void element; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships deletes a void element's child list in every position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
+      "message": "reactive accessor \"count\" is read in NestedVoidChild, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
     },
     {
@@ -19,10 +19,10 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 2562,
-      "end": 2569,
+      "start": 592,
+      "end": 599,
       "fixes": 0,
-      "message": "reactive accessor \"total\" is read in RootVoidChildDependsOnTheProducer, inside the children of an HTML void element; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships deletes a void element's child list in every position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
+      "message": "reactive accessor \"total\" is read in RootVoidChildDependsOnTheProducer, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
     },
     {
@@ -31,10 +31,10 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 4532,
-      "end": 4535,
+      "start": 1022,
+      "end": 1025,
       "fixes": 0,
-      "message": "reactive accessor \"a\" is read in RootNoscriptChild, inside the children of a `<noscript>`; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships never lowers `<noscript>` children in any position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
+      "message": "reactive accessor \"a\" is read in RootNoscriptChild, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
     },
     {
@@ -43,10 +43,10 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 5466,
-      "end": 5472,
+      "start": 1189,
+      "end": 1195,
       "fixes": 0,
-      "message": "reactive accessor \"body\" is read in NestedNoscriptOffTheFastPath, inside the children of a `<noscript>`; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships never lowers `<noscript>` children in any position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
+      "message": "reactive accessor \"body\" is read in NestedNoscriptOffTheFastPath, inside a JSX expression the Solid compiler's execution census does not cover; whether that read is tracked cannot be proven either way, because the compiler reported no execution site for this JSX region and its silence is not evidence that the read never updates",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
     },
     {
@@ -55,10 +55,10 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 6734,
-      "end": 6741,
+      "start": 1542,
+      "end": 1549,
       "fixes": 0,
-      "message": "reactive accessor \"keyed\" is read in NestedKeygenChild, inside the children of an HTML void element; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships deletes a void element's child list in every position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
+      "message": "reactive accessor \"keyed\" is read in NestedKeygenChild, inside the children of an element the Solid 1.x Babel compiler treats as void; the pinned Solid compiler lowers that child into a reactive insert while that compiler deletes the element's child list, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
     },
     {
@@ -67,10 +67,10 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 7131,
-      "end": 7137,
+      "start": 1655,
+      "end": 1661,
       "fixes": 0,
-      "message": "reactive accessor \"item\" is read in RootMenuitemChild, inside the children of an HTML void element; the pinned Solid compiler lowers that child into a reactive insert while the compiler Solid ships deletes a void element's child list in every position, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
+      "message": "reactive accessor \"item\" is read in RootMenuitemChild, inside the children of an element the Solid 1.x Babel compiler treats as void; the pinned Solid compiler lowers that child into a reactive insert while that compiler deletes the element's child list, so whether this read exists at runtime — let alone whether it is tracked — cannot be certified either way",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
     },
     {
@@ -79,11 +79,11 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 8768,
-      "end": 8777,
+      "start": 1935,
+      "end": 1944,
       "fixes": 0,
-      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; but this call is written inside the children of an HTML void element, and the compiler Solid ships deletes a void element's child list in every position while the pinned Solid compiler lowers that child into a reactive insert that owns it — so whether this call runs at all, and under which owner, depends on which compiler builds this project",
-      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. Move the call out of that element's children: while it sits there, no compiler fact decides its owner, and the two candidate compilers disagree about whether it executes."
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; but this call is written inside a JSX expression the Solid compiler's execution census does not cover, so whether the operation executes — and under which owner — cannot be proven",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. Move the call to a compiler-censused position, or extend the compiler trace so its execution and owner context can be certified."
     },
     {
       "rule": "v1/missing-owner",
@@ -91,8 +91,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 9437,
-      "end": 9446,
+      "start": 2214,
+      "end": 2223,
       "fixes": 0,
       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."

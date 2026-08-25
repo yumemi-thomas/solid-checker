@@ -154,6 +154,7 @@ impl Finding {
         let conditional_owner = requirement.conditional_owner;
         let runtime_uncertain = requirement.runtime_uncertain;
         let component_uncertain = requirement.component_uncertain;
+        let missing_jsx_census = requirement.missing_jsx_census;
         let divergent_lowering = requirement.divergent_lowering;
         // `uncertain` predates the reason fields. Treat a deserialized legacy
         // row with no explicit reason as caller uncertainty. A divergence is an
@@ -164,6 +165,7 @@ impl Finding {
                 && !runtime_uncertain
                 && !conditional_owner
                 && !component_uncertain
+                && !missing_jsx_census
                 && divergent_lowering.is_none());
         let mut message = message.to_string();
         let mut hint = hint.to_string();
@@ -183,12 +185,8 @@ impl Finding {
         if let Some(divergence) = divergent_lowering {
             let (position, shipped) = match divergence {
                 crate::DivergentLowering::VoidElementChild => (
-                    "inside the children of an HTML void element",
-                    "the compiler Solid ships deletes a void element's child list in every position",
-                ),
-                crate::DivergentLowering::NoscriptChild => (
-                    "inside the children of a `<noscript>`",
-                    "the compiler Solid ships never lowers `<noscript>` children in any position",
+                    "inside the children of an element the Solid 1.x Babel compiler treats as void",
+                    "that compiler deletes the element's child list",
                 ),
             };
             message.push_str(&format!(
@@ -204,6 +202,25 @@ impl Finding {
                     message: format!(
                         "the operation sits {position}: the pinned compiler reports that child as a reactive JSX site and owns it, the compiler Solid ships emits nothing there, and no fact available here decides which one builds this project"
                     ),
+                    location: Some(requirement.location.clone()),
+                }],
+                hint,
+                ..Self::new(metadata, message, requirement.location.clone())
+            };
+        }
+        if missing_jsx_census {
+            message.push_str(
+                "; but this call is written inside a JSX expression the Solid compiler's execution census does not cover, so whether the operation executes — and under which owner — cannot be proven",
+            );
+            hint.push_str(
+                " Move the call to a compiler-censused position, or extend the compiler trace so its execution and owner context can be certified.",
+            );
+            return Self {
+                kind: "uncertifiable".into(),
+                severity: "error".into(),
+                evidence: vec![EvidenceStep {
+                    message: "the operation sits inside a JSX expression the compiler's execution census does not cover, so no compiler fact proves that a live unowned operation exists"
+                        .into(),
                     location: Some(requirement.location.clone()),
                 }],
                 hint,
@@ -361,12 +378,8 @@ pub fn strict_read_message(read: &ReactiveRead) -> String {
         };
         let (position, shipped) = match divergence {
             crate::DivergentLowering::VoidElementChild => (
-                "inside the children of an HTML void element",
-                "the compiler Solid ships deletes a void element's child list in every position",
-            ),
-            crate::DivergentLowering::NoscriptChild => (
-                "inside the children of a `<noscript>`",
-                "the compiler Solid ships never lowers `<noscript>` children in any position",
+                "inside the children of an element the Solid 1.x Babel compiler treats as void",
+                "that compiler deletes the element's child list",
             ),
         };
         return format!(
@@ -422,8 +435,9 @@ fn reactive_value_label(kind: &str) -> &'static str {
 fn untracked_evidence_sentence(read: &ReactiveRead, subject: &str) -> String {
     if let Some(divergence) = read.divergent_lowering {
         let element = match divergence {
-            crate::DivergentLowering::VoidElementChild => "a void element's child",
-            crate::DivergentLowering::NoscriptChild => "a `<noscript>`'s child",
+            crate::DivergentLowering::VoidElementChild => {
+                "an element child the Solid 1.x Babel compiler treats as void"
+            }
         };
         return format!(
             "{subject} is {element}: the pinned compiler reports it as a reactive JSX site, the compiler Solid ships emits nothing there, and no fact available here decides which one builds this project"
@@ -672,8 +686,8 @@ mod tests {
 
         let message = strict_read_message(&divergent);
         assert!(
-            message.contains("void element")
-                && message.contains("deletes a void element's child list"),
+            message.contains("Babel compiler treats as void")
+                && message.contains("deletes the element's child list"),
             "the divergence must be named in the message: {message}"
         );
         assert!(
@@ -692,7 +706,8 @@ mod tests {
             "the evidence must not claim a completed search: {last}"
         );
         assert!(
-            last.contains("void element's child") && last.contains("which one builds this project"),
+            last.contains("Babel compiler treats as void")
+                && last.contains("which one builds this project"),
             "the evidence must state the disagreement: {last}"
         );
     }
@@ -725,6 +740,7 @@ mod tests {
             caller_uncertain: false,
             conditional_owner: false,
             component_uncertain: false,
+            missing_jsx_census: false,
             divergent_lowering,
             report: true,
         };
@@ -753,9 +769,7 @@ mod tests {
         assert_eq!(divergent.kind, "uncertifiable");
         assert_eq!(divergent.severity, "error");
         assert!(
-            divergent
-                .message
-                .contains("children of an HTML void element")
+            divergent.message.contains("Babel compiler treats as void")
                 && divergent
                     .message
                     .contains("depends on which compiler builds this project"),
@@ -776,53 +790,21 @@ mod tests {
             divergent.evidence[0].message
         );
 
-        let noscript = Finding::for_owner_requirement(
+        let mut missing = requirement(None);
+        missing.uncertain = true;
+        missing.missing_jsx_census = true;
+        let missing = Finding::for_owner_requirement(
             metadata,
-            &requirement(Some(crate::DivergentLowering::NoscriptChild)),
+            &missing,
             "onCleanup is called without a reactive owner",
             "Register it under a component or root.",
         );
+        assert_eq!(missing.kind, "uncertifiable");
+        assert!(missing.message.contains("execution census does not cover"));
         assert!(
-            noscript.message.contains("children of a `<noscript>`")
-                && noscript
-                    .message
-                    .contains("never lowers `<noscript>` children in any position"),
-            "the noscript arm keeps its own reason here too: {}",
-            noscript.message
-        );
-    }
-
-    /// The `<noscript>` arm (the fork's divergence 3) must not borrow the void
-    /// arm's sentence. "Deletes it" is false of `<noscript>`: the shipped
-    /// compiler does not delete a child it kept, it never lowers the subtree at
-    /// all. Two divergences, two reasons, two sentences.
-    ///
-    /// Pinned here because the fixture coverage for this arm is narrower than
-    /// the void arm's: the 1.x producer exits 2 on the `<noscript>` fast-path
-    /// shape, so no fixture pins the retracting position under 1.x.
-    #[test]
-    fn the_noscript_divergence_has_its_own_reason_not_the_void_ones() {
-        let mut noscript = read(false);
-        noscript.divergent_lowering = Some(crate::DivergentLowering::NoscriptChild);
-        noscript.execution = ExecutionRole::TrackedJsx;
-
-        let message = strict_read_message(&noscript);
-        assert!(
-            message.contains("`<noscript>`")
-                && message.contains("never lowers `<noscript>` children in any position"),
-            "the noscript divergence must state its own reason: {message}"
-        );
-        assert!(
-            !message.contains("void element") && !message.contains("does not cover"),
-            "it is neither the void arm nor a census gap: {message}"
-        );
-
-        let evidence = strict_read_evidence(&noscript);
-        let last = &evidence.last().unwrap().message;
-        assert!(
-            last.contains("`<noscript>`'s child")
-                && !last.contains("outside every compiler-tracked JSX region"),
-            "unexpected noscript evidence: {last}"
+            !missing.evidence[0]
+                .message
+                .contains("no containing component, computation, or root owner dominates")
         );
     }
 }

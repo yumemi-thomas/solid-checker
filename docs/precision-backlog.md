@@ -6846,3 +6846,36 @@ install from the registry) were not run either.
 *namespace* export through it — the pin is the generator's corpus row. A
 reactive-ir fixture with a local package that exports a namespace would close
 that.
+
+## 2026-08-25 — merged compiler pins remeasured and obsolete divergence arms removed
+
+Pinned `dom-expressions#next` at `ead46d12da34db2ae366e1c02183a87f7479f05c`
+and `solid-1x-compiler` at
+`98d265c38dbf63e363c9846048a93461e66f44c7`, then reran the compiler-backed
+fixtures before changing expectations.
+
+That measurement supersedes the earlier standard-void and `<noscript>`
+mitigations. Neither is a current positive compiler disagreement. Surviving
+source expressions without an execution site remain uncertifiable through
+`missing_jsx_census`; operations in the same holes now fail closed for
+ownership as well, preventing a deleted-or-uncensused cleanup from being
+reported as a proven SC4001 violation. The tag-specific `<noscript>` arm and
+the shared 14-tag void list were removed from `divergent_lowered_child`.
+
+One transform divergence remains: Solid 1.x Babel calls `<keygen>` and
+`<menuitem>` void while the 1.x Rust producer lowers their children. That list
+stays in the Solid 1 dialect and continues to produce compiler-disagreement
+wording. Solid 2 deliberately has no corresponding list and follows Ryan's
+`next` transform semantics; in particular, the dynamic-`textContent` child
+case is an ordinary census gap rather than a reason to force Babel output
+parity into the fork.
+
+The full handoff gate passed (`make verify`, 357.59 s). Its two optional
+registry-install integration tests skipped when npm DNS was unavailable; the
+five bundled registry pins were verified from the input-bound memo and every
+non-network gate passed. The fresh full ecosystem run covered 416 probes:
+390 complete contracts, 9 partial contracts and 17 failures. Solid 1.x moved
+from 143/168 complete (85.12%) to 146/168 (86.9%), with 9 partial and 13 failed;
+Solid 2 remained 244/248 complete (98.39%), with no partial and 4 failed. The
+canonical JSON and Markdown reports were regenerated under
+`benchmarks/ecosystem/`.

@@ -97,32 +97,10 @@ function SourceChildrenShadowChildrenAttribute() {
   );
 }
 
-// The exception to discarded-silence: where the promotion lands on an element
-// a named fork divergence touches, the divergence wins. A template-root
-// `<noscript children={c()}/>` is promoted to a real child and lowered by
-// `lower_dom_element` like any other root child -- it emits
-// `_$insert(_el$, c)` -- while Babel promotes the attribute into a child list
-// its `transformElement` then never visits (`if (tagName !== "noscript")
-// transformChildren(...)`) and emits nothing. The fork names this itself: "The
-// root-level `children`-attribute-promoted variant is the same divergence by
-// another route ... Still divergent" (its docs/execution-contract.md,
-// divergence 3).
-//
-// So `c()` is an SC1001 **uncertifiable** finding, the same verdict
-// `<noscript>{c()}</noscript>` gets in the sibling divergence fixture, and for
-// the same reason: one compiler reruns the read, the other never runs it, and
-// no fact here says which one builds this project. Before the attribute arm
-// was added to `divergent_lowered_child`, this shape was silently *certified*
-// -- the census reports the promoted site as an ordinary tracked child, and
-// the predicate's child-region containment never looked at attribute spans.
-//
-// Position is what makes it divergent, not the tag: the *nested* spelling
-// (`<div><noscript children={c()}/></div>`) discards the capture instead of
-// promoting it, precisely because promoting would emit an insert Babel does
-// not, so both compilers agree and the discarded region withholds the
-// divergence claim. That side is pinned in
-// rust/crates/solid-reactive-ir/src/execution_role.rs rather than here,
-// because this fixture's `Root` would have to nest it to write it down.
+// Current-next control: this shape is no longer maintained as a checker-side
+// transform divergence. The producer trace decides whether the promoted value
+// is live; missing facts use the ordinary census-gap path rather than a
+// tag-specific mitigation.
 function NoscriptPromotedChildrenAttribute() {
   const [note] = createSignal(0);
   return <noscript children={note()} />;

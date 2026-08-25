@@ -35,7 +35,8 @@ function AttributeReadInsideDroppedHead() {
 }
 
 // Censused, then retracted. The static-template `<noscript>` fast path emits
-// the inert tag and skips its children wholesale. At `d1e08958` the producer
+// the inert tag and skips its children wholesale. In the lineage containing
+// `d1e08958` the producer
 // began withdrawing every site in that discarded range instead of rejecting
 // the whole file during trace reconciliation. The resulting source/census hole
 // is an uncertifiable proof obligation, exactly like the dropped-head paths.

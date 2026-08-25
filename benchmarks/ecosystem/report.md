@@ -1,10 +1,10 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-08-23T22:31:31.204Z
-- Finished: 2026-08-23T22:33:08.258Z
-- Duration: 97054 ms
-- Checker native binary: /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/0284cce1-b5a3-4bdc-98fc-13749b2e3f46/scratchpad/bin-d1/solid-checker-rust
-- Type Facts binary: /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/0284cce1-b5a3-4bdc-98fc-13749b2e3f46/scratchpad/bin-d1/solid-typefacts
+- Started: 2026-08-25T06:45:26.128Z
+- Finished: 2026-08-25T06:47:35.162Z
+- Duration: 129034 ms
+- Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
+- Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Scope: full corpus (416 probes run)
 
@@ -51,12 +51,12 @@
 Failure groups:
 - 1x no-esm-runtime-target: @kobalte/themes has no supported ESM runtime entrypoints (packages: @kobalte/themes)
 - 1x install-failure: npm error code ERESOLVE npm error ERESOLVE could not resolve npm error npm error While resolving: @solidjs/start@ npm error Found: @solidjs/router@ npm error node_modules/@solidjs/router npm error @solidjs/router@"<value>" from @kobalte/solidbase@ npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"<value>" from the root project npm error npm error Could not resolve dependency: npm error peerOptional @solidjs/router@"<value>" from @solidjs/start@ npm error node_modules/@solidjs/start npm error peer @solidjs/start@"<value>" from @kobalte/solidbase@ npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"<value>" from the root project npm error npm error Conflicting peer dependency: @solidjs/router@ npm error node_modules/@solidjs/router npm error peerOptional @solidjs/router@"<value>" from @solidjs/start@ npm error node_modules/@solidjs/start npm error peer @solidjs/start@"<value>" from @kobalte/solidbase@ npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"<value>" from the root project npm error npm error Fix the upstream dependency conflict, or retry npm error this command with --force or --legacy-peer-deps npm error to accept an incorrect (and potentially broken) dependency resolution. npm error npm error npm error For a full report see: npm error npm error A complete log of this run can be found in: (packages: @kobalte/solidbase)
-- 1x unclassified: @kobalte/utils has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @kobalte/utils)
+- 1x unclassified: @kobalte/utils has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @kobalte/utils)
 
 Failure details:
-- **@kobalte/solidbase@0.6.13** (only, install-failure): npm error code ERESOLVE npm error ERESOLVE could not resolve npm error npm error While resolving: @solidjs/start@2.0.3 npm error Found: @solidjs/router@0.15.4 npm error node_modules/@solidjs/router npm error @solidjs/router@"^0.15.3" from @kobalte/solidbase@0.6.13 npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"0.6.13" from the root project npm error npm error Could not res... _(stderr truncated for readability)_
+- **@kobalte/solidbase@0.6.13** (only, install-failure): npm error code ERESOLVE npm error ERESOLVE could not resolve npm error npm error While resolving: @solidjs/start@2.0.4 npm error Found: @solidjs/router@0.15.4 npm error node_modules/@solidjs/router npm error @solidjs/router@"^0.15.3" from @kobalte/solidbase@0.6.13 npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"0.6.13" from the root project npm error npm error Could not res... _(stderr truncated for readability)_
 - **@kobalte/themes@0.0.1-next.0** (only, no-esm-runtime-target): solid-checker: @kobalte/themes has no supported ESM runtime entrypoints
-- **@kobalte/utils@0.9.2** (only, unclassified): solid-checker: @kobalte/utils has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Ju8BBn/node_modules/@kobalte/utils/dist/index.js exports "EventKey", whose runtime kind no closed type answers (Unknown); publishing kind "value" would certify it invokes no caller-supplied cal... _(stderr truncated for readability)_
+- **@kobalte/utils@0.9.2** (only, unclassified): solid-checker: @kobalte/utils has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-dYPdpp/node_modules/@kobalte/utils/dist/index.js exports "EventKey", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify it invokes no caller-sup... _(stderr truncated for readability)_
 
 ### Solid Primitives
 
@@ -171,19 +171,19 @@ Failure details:
 
 Failure groups:
 - 1x no-esm-runtime-target: @solid-primitives/composites has no supported ESM runtime entrypoints; legacy module target does not exist or is unsupported: ./dist/index.js (packages: @solid-primitives/composites)
-- 1x unclassified: @solid-primitives/analytics has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/analytics)
-- 1x unclassified: @solid-primitives/audio has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/audio)
-- 1x unclassified: @solid-primitives/cookies-store has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/cookies-store)
-- 1x unclassified: @solid-primitives/intersection-observer has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/intersection-observer)
-- 1x unclassified: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/platform)
+- 1x unclassified: @solid-primitives/analytics has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/analytics)
+- 1x unclassified: @solid-primitives/audio has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/audio)
+- 1x unclassified: @solid-primitives/cookies-store has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/cookies-store)
+- 1x unclassified: @solid-primitives/intersection-observer has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/intersection-observer)
+- 1x unclassified: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/platform)
 
 Failure details:
-- **@solid-primitives/analytics@0.2.1** (only, unclassified): solid-checker: @solid-primitives/analytics has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EkwwYh/node_modules/@solid-primitives/analytics/dist/index.js exports "EventType", whose runtime kind no closed type answers (Unknown); publishing kind "value" would certify it inv... _(stderr truncated for readability)_
-- **@solid-primitives/audio@1.4.5** (only, unclassified): solid-checker: @solid-primitives/audio has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-4SjrzS/node_modules/@solid-primitives/audio/dist/index.js exports "AudioState", whose runtime kind no closed type answers (Unknown); publishing kind "value" would certify it invokes no... _(stderr truncated for readability)_
+- **@solid-primitives/analytics@0.2.1** (only, unclassified): solid-checker: @solid-primitives/analytics has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ritGhD/node_modules/@solid-primitives/analytics/dist/index.js exports "EventType", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certi... _(stderr truncated for readability)_
+- **@solid-primitives/audio@1.4.5** (only, unclassified): solid-checker: @solid-primitives/audio has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-5CM4cf/node_modules/@solid-primitives/audio/dist/index.js exports "AudioState", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify it i... _(stderr truncated for readability)_
 - **@solid-primitives/composites@1.1.1** (only, no-esm-runtime-target): solid-checker: @solid-primitives/composites has no supported ESM runtime entrypoints; legacy module target does not exist or is unsupported: ./dist/index.js
-- **@solid-primitives/cookies-store@1.1.11** (only, unclassified): solid-checker: @solid-primitives/cookies-store has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-yV5Uoh/node_modules/@solid-primitives/cookies-store/dist/index.js exports "CookieSitePolicy", whose runtime kind no closed type answers (Unknown); publishing kind "value" would... _(stderr truncated for readability)_
-- **@solid-primitives/intersection-observer@2.2.5** (only, unclassified): solid-checker: @solid-primitives/intersection-observer has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Vj6gt4/node_modules/@solid-primitives/intersection-observer/dist/index.js exports "DirectionX", whose runtime kind no closed type answers (Unknown); publishing kind "va... _(stderr truncated for readability)_
-- **@solid-primitives/platform@0.2.1** (only, unclassified): solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-T9ixCG/node_modules/@solid-primitives/platform/dist/index.js exports "isBrave", whose runtime kind no closed type answers (Unknown); publishing kind "value" would certify it invokes... _(stderr truncated for readability)_
+- **@solid-primitives/cookies-store@1.1.11** (only, unclassified): solid-checker: @solid-primitives/cookies-store has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-1RLnJM/node_modules/@solid-primitives/cookies-store/dist/index.js exports "CookieSitePolicy", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "val... _(stderr truncated for readability)_
+- **@solid-primitives/intersection-observer@2.2.5** (only, unclassified): solid-checker: @solid-primitives/intersection-observer has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-MwuNDd/node_modules/@solid-primitives/intersection-observer/dist/index.js exports "DirectionX", whose runtime kind no closed type answers (Unknown, Unknown); publishing... _(stderr truncated for readability)_
+- **@solid-primitives/platform@0.2.1** (only, unclassified): solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-EpaBMf/node_modules/@solid-primitives/platform/dist/index.js exports "isBrave", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify i... _(stderr truncated for readability)_
 
 ### Corvu
 
@@ -215,15 +215,15 @@ Failure details:
 - Compatible packages: 36
 - Probes run: 36
 - Declared entrypoints: 230
-- Generated entrypoints: 188
-- Refused entrypoints (partial contracts): 8
-- Success (complete contracts): 27/36 (75%)
-- Partial contracts: 7
-- Failures: 2
+- Generated entrypoints: 191
+- Refused entrypoints (partial contracts): 7
+- Success (complete contracts): 29/36 (80.56%)
+- Partial contracts: 6
+- Failures: 1
 
 | Package | Version | Probe | Outcome | Class |
 | --- | --- | --- | --- | --- |
-| @tanstack/ai-devtools-core | 0.5.6 | only | failure | unclassified |
+| @tanstack/ai-devtools-core | 0.5.6 | only | success | success |
 | @tanstack/ai-solid | 0.18.3 | only | success | success |
 | @tanstack/ai-solid-ui | 0.7.18 | only | success | success |
 | @tanstack/charts | 0.14.0 | only | partial-success | partial-success |
@@ -231,7 +231,7 @@ Failure details:
 | @tanstack/devtools-a11y | 0.2.2 | only | success | success |
 | @tanstack/devtools-ui | 0.7.1 | only | success | success |
 | @tanstack/devtools-utils | 0.7.0 | only | success | success |
-| @tanstack/form-devtools | 1.0.0-alpha.2 | only | partial-success | partial-success |
+| @tanstack/form-devtools | 1.0.0-alpha.2 | only | success | success |
 | @tanstack/hotkeys-devtools | 0.9.0 | only | partial-success | partial-success |
 | @tanstack/pacer-devtools | 1.4.0 | only | success | success |
 | @tanstack/solid-ai-devtools | 0.2.70 | only | success | success |
@@ -261,22 +261,20 @@ Failure details:
 | @tanstack/table-devtools | 9.2.0 | only | partial-success | partial-success |
 
 Failure groups:
-- 1x unclassified: @tanstack/ai-devtools-core has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", which destructures a member of another value, so no fact here rules out a class; publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @tanstack/ai-devtools-core)
-- 1x unclassified: @tanstack/solid-hotkeys-devtools has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @tanstack/solid-hotkeys-devtools)
+- 1x unclassified: @tanstack/solid-hotkeys-devtools has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @tanstack/solid-hotkeys-devtools)
 
 Failure details:
-- **@tanstack/ai-devtools-core@0.5.6** (only, unclassified): solid-checker: @tanstack/ai-devtools-core has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Tur0fr/node_modules/@tanstack/ai-devtools-core/dist/server.js exports "AiDevtoolsCore", which destructures a member of another value, so no fact here rules out a class; publishing k... _(stderr truncated for readability)_
-- **@tanstack/solid-hotkeys-devtools@0.7.0** (only, unclassified): solid-checker: @tanstack/solid-hotkeys-devtools has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-c93jWL/node_modules/@tanstack/solid-hotkeys-devtools/dist/index.js exports "HotkeysDevtoolsPanel", whose runtime kind no closed type answers (Unknown); publishing kind "value"... _(stderr truncated for readability)_
+- **@tanstack/solid-hotkeys-devtools@0.7.0** (only, unclassified): solid-checker: @tanstack/solid-hotkeys-devtools has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-Wx30BT/node_modules/@tanstack/solid-hotkeys-devtools/dist/index.js exports "HotkeysDevtoolsPanel", whose runtime kind no closed type answers (Unknown, Unknown); publishing kin... _(stderr truncated for readability)_
 
 ### Solid Devtools
 
 - Compatible packages: 12
 - Probes run: 12
 - Declared entrypoints: 21
-- Generated entrypoints: 19
-- Refused entrypoints (partial contracts): 4
-- Success (complete contracts): 6/12 (50%)
-- Partial contracts: 3
+- Generated entrypoints: 20
+- Refused entrypoints (partial contracts): 3
+- Success (complete contracts): 7/12 (58.33%)
+- Partial contracts: 2
 - Failures: 3
 
 | Package | Version | Probe | Outcome | Class |
@@ -291,18 +289,18 @@ Failure details:
 | @solid-devtools/overlay | 0.33.5 | only | success | success |
 | @solid-devtools/shared | 0.20.0 | only | success | success |
 | @solid-devtools/transform | 0.10.4 | only | success | success |
-| @solid-devtools/ui | 0.10.3 | only | partial-success | partial-success |
+| @solid-devtools/ui | 0.10.3 | only | success | success |
 | solid-devtools | 0.34.5 | only | partial-success | partial-success |
 
 Failure groups:
 - 1x no-exported-surface: @solid-devtools/ext-adapter has no runtime ESM exports (packages: @solid-devtools/ext-adapter)
 - 1x cjs-only-entrypoint: . has only a CJS runtime target; CJS contract generation is unsupported (packages: @solid-devtools/babel-plugin)
-- 1x unclassified: @solid-devtools/locator has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-devtools/locator)
+- 1x unclassified: @solid-devtools/locator has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-devtools/locator)
 
 Failure details:
 - **@solid-devtools/babel-plugin@0.3.1** (only, cjs-only-entrypoint): solid-checker: . has only a CJS runtime target; CJS contract generation is unsupported
 - **@solid-devtools/ext-adapter@0.17.0** (only, no-exported-surface): solid-checker: @solid-devtools/ext-adapter has no runtime ESM exports
-- **@solid-devtools/locator@0.16.7** (only, unclassified): solid-checker: @solid-devtools/locator has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ydLuO4/node_modules/@solid-devtools/locator/dist/index.js exports "addClickInterceptor", whose runtime kind no closed type answers (Unknown); publishing kind "value" would certify it i... _(stderr truncated for readability)_
+- **@solid-devtools/locator@0.16.7** (only, unclassified): solid-checker: @solid-devtools/locator has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-6ODfoU/node_modules/@solid-devtools/locator/dist/index.js exports "addClickInterceptor", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would cer... _(stderr truncated for readability)_
 
 ### Solid Recharts
 
@@ -334,7 +332,7 @@ Failure details:
 | --- | --- | --- | --- | --- |
 | motion-solidjs | 0.6.0 | only | success | success |
 
-**Solid 1.x totals:** 143/168 (85.12%) complete, 11 partial, 14 failed
+**Solid 1.x totals:** 146/168 (86.9%) complete, 9 partial, 13 failed
 
 ## Solid 2.x
 
@@ -592,11 +590,11 @@ Failure details:
 | @solid-primitives/workers | 2.0.1-next.1 | head | success | success |
 
 Failure groups:
-- 2x unclassified: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/platform)
+- 2x unclassified: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/platform)
 
 Failure details:
-- **@solid-primitives/platform@1.0.0-next.2** (floor, unclassified): solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-h0sYkF/node_modules/@solid-primitives/platform/dist/index.js exports "isBrave", whose runtime kind no closed type answers (Unknown); publishing kind "value" would certify it invokes... _(stderr truncated for readability)_
-- **@solid-primitives/platform@1.0.0-next.2** (head, unclassified): solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-ovSFCZ/node_modules/@solid-primitives/platform/dist/index.js exports "isBrave", whose runtime kind no closed type answers (Unknown); publishing kind "value" would certify it invokes... _(stderr truncated for readability)_
+- **@solid-primitives/platform@1.0.0-next.2** (floor, unclassified): solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-PhotzQ/node_modules/@solid-primitives/platform/dist/index.js exports "isBrave", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify i... _(stderr truncated for readability)_
+- **@solid-primitives/platform@1.0.0-next.2** (head, unclassified): solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file /private/var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-TYhgNZ/node_modules/@solid-primitives/platform/dist/index.js exports "isBrave", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify i... _(stderr truncated for readability)_
 
 ### Corvu
 
@@ -753,15 +751,15 @@ None.
 
 ## Contract content (what the emitted contracts claim)
 
-- Contracts measured: 398 probe(s) across 202 package(s)
-- Probes fully proven (no unknown claim, no refused entrypoint, no closure note): 125/398 (31.41%)
-- Packages fully proven (every one of their probes): 44/202 (21.78%)
-- Probes with at least one unknown claim: 269
-- Probes with at least one refused entrypoint: 11
+- Contracts measured: 399 probe(s) across 203 package(s)
+- Probes fully proven (no unknown claim, no refused entrypoint, no closure note): 124/399 (31.08%)
+- Packages fully proven (every one of their probes): 43/203 (21.18%)
+- Probes with at least one unknown claim: 273
+- Probes with at least one refused entrypoint: 9
 - Probes with at least one closure note: 2
-- Exports proven: 4450/8082 (55.06%) (with unknown: 3632, without a summary: 0)
+- Exports proven: 4451/8094 (54.99%) (with unknown: 3643, without a summary: 0)
 - Of those unknown exports: 528 unknown in ALL five domains (the generator said nothing about them at all), 0 unknown only inside a conditional variant (the default resolution is fully claimed)
-- Entrypoints: 829 emitted, 13 refused
+- Entrypoints: 833 emitted, 11 refused
 - Closure notes (block byte-attested verification): 5
 - Attested closure notes (record complete, runtime unbounded): 17
 
@@ -769,14 +767,14 @@ None.
 
 | Domain | Exports carrying an unknown |
 | --- | --- |
-| callbacks | 2337 |
-| reactiveReads | 2060 |
-| returns | 2168 |
+| callbacks | 2348 |
+| reactiveReads | 2065 |
+| returns | 2173 |
 | ownerRequirements | 528 |
 | asyncBehavior | 529 |
-| **total** | **7622** |
+| **total** | **7643** |
 
-Read the five columns together, not separately: 528 of the 3632 unknown exports are unknown in every domain at once, so most of each column is the same exports counted five times.
+Read the five columns together, not separately: 528 of the 3643 unknown exports are unknown in every domain at once, so most of each column is the same exports counted five times.
 
 ### Positive behavioral rows (what a probe step would have to drive)
 
@@ -784,7 +782,7 @@ Read the five columns together, not separately: 528 of the 3632 unknown exports 
 | --- | --- |
 | callbackExecution | 1247 |
 | reactiveRead | 1160 |
-| returnTree | 1165 |
+| returnTree | 1167 |
 | ownerRequirement | 533 |
 | asyncBehavior | 100 |
 
@@ -792,12 +790,12 @@ Read the five columns together, not separately: 528 of the 3632 unknown exports 
 
 | Family | Contracts | Fully proven | With unknowns | With refusals | Exports proven | Unknown claims |
 | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 1/23 (4.35%) | 20 | 1 | 906/1470 (61.63%) | 740 |
+| Official Solid | 23 | 1/23 (4.35%) | 20 | 1 | 902/1470 (61.36%) | 744 |
 | Kobalte | 3 | 0/3 (0%) | 3 | 0 | 252/1147 (21.97%) | 2376 |
 | Solid Primitives | 281 | 112/281 (39.86%) | 169 | 0 | 1453/1949 (74.55%) | 790 |
 | Corvu | 28 | 3/28 (10.71%) | 25 | 0 | 188/266 (70.68%) | 121 |
-| TanStack | 48 | 7/48 (14.58%) | 39 | 7 | 1402/2121 (66.1%) | 1237 |
-| Solid Devtools | 9 | 2/9 (22.22%) | 7 | 3 | 149/184 (80.98%) | 66 |
+| TanStack | 49 | 6/49 (12.24%) | 43 | 6 | 1397/2122 (65.83%) | 1253 |
+| Solid Devtools | 9 | 2/9 (22.22%) | 7 | 2 | 159/195 (81.54%) | 67 |
 | Solid Recharts | 3 | 0/3 (0%) | 3 | 0 | 16/327 (4.89%) | 644 |
 | Motion for Solid | 3 | 0/3 (0%) | 3 | 0 | 84/618 (13.59%) | 1648 |
 
@@ -827,33 +825,30 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 698622 ms
-- Phases: install 495377 ms, generation 202504 ms, harness 741 ms
+- Worker time: 951591 ms
+- Phases: install 728402 ms, generation 222507 ms, harness 682 ms
 
 ### Top failure signatures
 
-- 3x unclassified: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/platform)
+- 3x unclassified: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/platform)
 - 2x install-failure: npm error code ERESOLVE npm error ERESOLVE unable to resolve dependency tree npm error npm error While resolving: solid-checker-ecosystem-probe@ npm error Found: solid-js@ npm error node_modules/solid-js npm error solid-js@"<value>" from the root project npm error peer solid-js@"<value>" from @tanstack/solid-router-ssr-query@ npm error node_modules/@tanstack/solid-router-ssr-query npm error @tanstack/solid-router-ssr-query@"<value>" from the root project npm error 1 more (@solidjs/web) npm error npm error Could not resolve dependency: npm error peer solid-js@"<value>" from @tanstack/solid-query@ npm error node_modules/@tanstack/solid-query npm error peer @tanstack/solid-query@"<value>" from @tanstack/solid-router-ssr-query@ npm error node_modules/@tanstack/solid-router-ssr-query npm error @tanstack/solid-router-ssr-query@"<value>" from the root project npm error npm error Fix the upstream dependency conflict, or retry npm error this command with --force or --legacy-peer-deps npm error to accept an incorrect (and potentially broken) dependency resolution. npm error npm error npm error For a full report see: npm error npm error A complete log of this run can be found in: (packages: @tanstack/solid-router-ssr-query)
 - 1x no-esm-runtime-target: @kobalte/themes has no supported ESM runtime entrypoints (packages: @kobalte/themes)
 - 1x no-esm-runtime-target: @solid-primitives/composites has no supported ESM runtime entrypoints; legacy module target does not exist or is unsupported: ./dist/index.js (packages: @solid-primitives/composites)
 - 1x no-exported-surface: @solid-devtools/ext-adapter has no runtime ESM exports (packages: @solid-devtools/ext-adapter)
 - 1x cjs-only-entrypoint: . has only a CJS runtime target; CJS contract generation is unsupported (packages: @solid-devtools/babel-plugin)
 - 1x install-failure: npm error code ERESOLVE npm error ERESOLVE could not resolve npm error npm error While resolving: @solidjs/start@ npm error Found: @solidjs/router@ npm error node_modules/@solidjs/router npm error @solidjs/router@"<value>" from @kobalte/solidbase@ npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"<value>" from the root project npm error npm error Could not resolve dependency: npm error peerOptional @solidjs/router@"<value>" from @solidjs/start@ npm error node_modules/@solidjs/start npm error peer @solidjs/start@"<value>" from @kobalte/solidbase@ npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"<value>" from the root project npm error npm error Conflicting peer dependency: @solidjs/router@ npm error node_modules/@solidjs/router npm error peerOptional @solidjs/router@"<value>" from @solidjs/start@ npm error node_modules/@solidjs/start npm error peer @solidjs/start@"<value>" from @kobalte/solidbase@ npm error node_modules/@kobalte/solidbase npm error @kobalte/solidbase@"<value>" from the root project npm error npm error Fix the upstream dependency conflict, or retry npm error this command with --force or --legacy-peer-deps npm error to accept an incorrect (and potentially broken) dependency resolution. npm error npm error npm error For a full report see: npm error npm error A complete log of this run can be found in: (packages: @kobalte/solidbase)
-- 1x unclassified: @kobalte/utils has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @kobalte/utils)
-- 1x unclassified: @solid-devtools/locator has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-devtools/locator)
-- 1x unclassified: @solid-primitives/analytics has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/analytics)
-- 1x unclassified: @solid-primitives/audio has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/audio)
-- 1x unclassified: @solid-primitives/cookies-store has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/cookies-store)
-- 1x unclassified: @solid-primitives/intersection-observer has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/intersection-observer)
-- 1x unclassified: @tanstack/ai-devtools-core has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", which destructures a member of another value, so no fact here rules out a class; publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @tanstack/ai-devtools-core)
-- 1x unclassified: @tanstack/solid-hotkeys-devtools has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @tanstack/solid-hotkeys-devtools)
+- 1x unclassified: @kobalte/utils has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @kobalte/utils)
+- 1x unclassified: @solid-devtools/locator has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-devtools/locator)
+- 1x unclassified: @solid-primitives/analytics has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/analytics)
+- 1x unclassified: @solid-primitives/audio has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/audio)
+- 1x unclassified: @solid-primitives/cookies-store has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/cookies-store)
+- 1x unclassified: @solid-primitives/intersection-observer has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @solid-primitives/intersection-observer)
+- 1x unclassified: @tanstack/solid-hotkeys-devtools has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "<value>", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "<value>" would certify it invokes no caller-supplied callback (packages: @tanstack/solid-hotkeys-devtools)
 
 ### Partial contracts
 
 - @solid-devtools/debugger@0.28.1 (solid-devtools): 4 entrypoint(s) generated, 2 refused
-- @solid-devtools/ui@0.10.3 (solid-devtools): 3 entrypoint(s) generated, 1 refused
 - @tanstack/charts@0.14.0 (tanstack): 110 entrypoint(s) generated, 2 refused
-- @tanstack/form-devtools@1.0.0-alpha.2 (tanstack): 1 entrypoint(s) generated, 1 refused
 - @tanstack/hotkeys-devtools@0.9.0 (tanstack): 1 entrypoint(s) generated, 1 refused
 - @tanstack/solid-pacer@0.22.0 (tanstack): 13 entrypoint(s) generated, 1 refused
 - @tanstack/solid-router@1.170.29 (tanstack): 2 entrypoint(s) generated, 1 refused
@@ -878,8 +873,8 @@ None.
 | Kobalte | 1/4 (25%) | 2/2 (100%) |
 | Solid Primitives | 91/97 (93.81%) | 190/192 (98.96%) |
 | Corvu | 11/11 (100%) | 17/17 (100%) |
-| TanStack | 27/36 (75%) | 14/16 (87.5%) |
-| Solid Devtools | 6/12 (50%) | 0/0 (no probes run) |
+| TanStack | 29/36 (80.56%) | 14/16 (87.5%) |
+| Solid Devtools | 7/12 (58.33%) | 0/0 (no probes run) |
 | Solid Recharts | 1/1 (100%) | 2/2 (100%) |
 | Motion for Solid | 1/1 (100%) | 2/2 (100%) |
 

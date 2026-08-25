@@ -7,7 +7,7 @@ whose original notices remain applicable.
 
 - Upstream: https://github.com/ryansolid/dom-expressions
 - Consumed fork: https://github.com/yumemi-thomas/dom-expressions
-- Pinned revision: `b22de4ada7cbdedc24fa26b3d25b5b723f5c18fa`
+- Pinned revision: `ead46d12da34db2ae366e1c02183a87f7479f05c`
 - License: MIT
 
 The `dom-expressions-compiler` crate is consumed as a pinned Cargo git
@@ -19,7 +19,7 @@ upstream in that fork.
 
 - Upstream: https://github.com/ryansolid/dom-expressions
 - Consumed fork: https://github.com/yumemi-thomas/solid-1x-compiler
-- Pinned revision: `d1e089581231b3028b7e8ce838ceed0f3c83e154`
+- Pinned revision: `98d265c38dbf63e363c9846048a93461e66f44c7`
 - License: MIT
 
 The Solid 1.x dialect consumes the same `dom-expressions-compiler` crate name

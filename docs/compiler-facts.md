@@ -204,6 +204,18 @@ out.
 
 ## Divergent lowering
 
+> **Current-pin status (2026-08-25).** The detailed investigation below records
+> the mitigations required by earlier compiler revisions. At the current pins
+> (`dom-expressions#next` `ead46d12…`, Solid 1.x `98d265c3…`), ordinary HTML
+> void children and `<noscript>` children are no longer checker-maintained
+> transform divergences. If a source expression survives without an execution
+> entry, it is handled by the ordinary census-gap rule above. Ownership uses the
+> same fail-closed rule, so missing census cannot become a proven missing-owner
+> violation. The sole remaining positive divergence detector is Solid 1.x's
+> parity-target-only `<keygen>` and `<menuitem>` set; Solid 2 returns an empty
+> set. The subsections through “Per producer” are retained as historical design
+> rationale for the removed mitigations, not as the current rule set.
+
 A census gap is the compiler saying nothing. This is the compiler saying
 something true about *itself* that is false about the compiler Solid ships — and
 it is the more dangerous of the two, because the fact is present, claims a
@@ -217,7 +229,7 @@ facts an affected divergence touches.** The trace is accurate about the fork's
 output and inaccurate about the parity target, and only the consumer knows which
 one it is reasoning about — which is to say, it does not know at all.
 
-### The rules this checker applies
+### Historical rules at earlier pins (superseded as noted above)
 
 **A `jsx-child` execution site whose enclosing JSX element is void for the
 compiler this project builds with, or is a `<noscript>`, is uncertifiable.** Not
