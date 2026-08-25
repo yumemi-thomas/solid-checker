@@ -8,12 +8,12 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 > ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran
 > under both a per-mode timeout and a whole-phase wall budget.
 
-- Started: 2026-08-25T00:16:45.837Z
-- Finished: 2026-08-25T00:23:50.247Z
+- Started: 2026-08-25T07:47:13.920Z
+- Finished: 2026-08-25T07:54:35.526Z
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Probe rows run: 416
-- Checker native binary: `b1c027420756dcd377d6928ed650155da4546befa9c844da3030d0a33001c2bd` (14834288 bytes, mtime 2026-08-25T00:16:27.021Z)
-- Type Facts binary: `31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889` (28390098 bytes, mtime 2026-08-25T00:16:27.039Z)
+- Checker native binary: `39092fddc704f622536aa5c6dbead39b6dd057b0520d433d5ccb38046c377de2` (14911936 bytes, mtime 2026-08-25T07:44:22.042Z)
+- Type Facts binary: `31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889` (28390098 bytes, mtime 2026-08-25T07:44:22.053Z)
 - Budgets: install 240000 ms, generate 120000 ms, probe 20000 ms per condition mode / 90000 ms + 500 ms per planned claim, capped at 900000 ms, whole phase, verify 90000 ms; concurrency 6
 - Import-environment shim: enabled (client, development and production sessions only; server sessions never)
 
@@ -214,9 +214,9 @@ Each row installs the pinned package, the Solid runtime the manifest row pins, a
 | Figure | Rows |
 | --- | --- |
 | Solid 2 rows given the `@solidjs/web` half of the runtime the row pinned only half of | 53 |
-| Rows with a completed peer install | 27 |
-| Peer packages installed | 37 |
-| Rows whose peer install failed or moved a pin | 4 |
+| Rows with a completed peer install | 26 |
+| Peer packages installed | 36 |
+| Rows whose peer install failed or moved a pin | 5 |
 
 A package that **imports something it declares nowhere** — not a dependency, not a peer — is outside what any install policy can supply, and is reported above as an import throw rather than fixed here. Completing an undeclared import would mean this harness choosing a version the package never named.
 
@@ -297,12 +297,12 @@ Of every export the corpus's generated contracts describe:
 
 | Phase | Rows | Median | p90 | Max | Mean |
 | --- | --- | --- | --- | --- | --- |
-| install | 416 | 754 ms | 1799 ms | 17298 ms | 1040 ms |
-| generate | 413 | 146 ms | 671 ms | 16910 ms | 459 ms |
-| probe | 397 | 692 ms | 3377 ms | 202677 ms | 3080 ms |
-| verify | 397 | 50 ms | 67 ms | 136 ms | 54 ms |
-| pipelineWithoutInstall | 413 | 953 ms | 3952 ms | 219645 ms | 3471 ms |
-| total | 416 | 1862 ms | 5977 ms | 220818 ms | 4527 ms |
+| install | 416 | 868 ms | 1707 ms | 18444 ms | 1040 ms |
+| generate | 413 | 152 ms | 739 ms | 17329 ms | 514 ms |
+| probe | 397 | 732 ms | 3930 ms | 219074 ms | 3328 ms |
+| verify | 397 | 53 ms | 103 ms | 174 ms | 60 ms |
+| pipelineWithoutInstall | 413 | 1011 ms | 4778 ms | 236496 ms | 3770 ms |
+| total | 416 | 1899 ms | 6364 ms | 239417 ms | 4832 ms |
 
 `install` may run against a warm npm cache, so it is a lower bound; `pipelineWithoutInstall` is the number that describes the checker's own cost.
 

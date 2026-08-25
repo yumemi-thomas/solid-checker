@@ -29,6 +29,7 @@
 declare namespace JSX {
   interface IntrinsicElements {
     div: { children?: unknown };
+    b: { children?: unknown };
     span: { children?: unknown };
     noscript: { children?: unknown; id?: string };
   }
@@ -36,6 +37,12 @@ declare namespace JSX {
 }
 
 declare module "solid-js" {
+  type ComputeFunction<Prev, Next extends Prev = Prev> = (value: Prev) => PromiseLike<Next> | AsyncIterable<Next> | Next;
+  type EffectFunction<Prev, Next extends Prev = Prev> = (value: Next, previous?: Prev) => (() => void) | void;
+  type EffectBundle<Prev, Next extends Prev = Prev> = { effect: EffectFunction<Prev, Next>; error: (error: unknown, cleanup: () => void) => void };
+  export function createEffect<T>(compute: ComputeFunction<undefined | T, T>, effect: EffectFunction<T, T> | EffectBundle<T, T>, options?: { name?: string }): void;
+  /** @deprecated The client runtime throws MISSING_EFFECT_FN. */
+  export function createEffect<T>(compute: ComputeFunction<undefined | T, T>): never;
   export function createSignal<T>(v: T): [() => T, (n: T) => void];
   export function onCleanup(fn: () => void): void;
   // Byte-faithful to `@solidjs/signals@2.0.0-rc.0`'s

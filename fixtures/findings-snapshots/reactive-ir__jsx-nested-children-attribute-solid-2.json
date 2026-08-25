@@ -7,8 +7,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
-      "start": 10484,
-      "end": 10493,
+      "start": 10020,
+      "end": 10029,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
+      "start": 11422,
+      "end": 11434,
       "fixes": 0
     },
     {
@@ -17,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-nested-children-attribute-solid-2/App.tsx",
-      "start": 11703,
-      "end": 11712,
+      "start": 11814,
+      "end": 11823,
       "fixes": 1
     }
   ]

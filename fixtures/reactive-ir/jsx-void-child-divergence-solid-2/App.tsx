@@ -50,6 +50,16 @@ function RootMenuitemChild() {
   return <menuitem>{item()}</menuitem>;
 }
 
+// The former producer-side exit-2 residue is closed here too. The compiler
+// retains the outer elided attribute decision while retracting its unvisited
+// nested JSX site, so the deleted read is silent and the visible source child
+// remains tracked.
+function ShadowedJsxValuedChildrenReconciles() {
+  const [hidden] = createSignal(0);
+  const [visible] = createSignal(0);
+  return <span children={<b>{hidden()}</b>}>{visible()}</span>;
+}
+
 // Ownership must fail closed over the same uncertainty. If the producer emits
 // no census for this source child, absence of an owner region cannot establish
 // that a live unowned cleanup exists.
@@ -76,6 +86,7 @@ export function Root() {
       <NestedNoscriptOffTheFastPath />
       <NestedKeygenChild />
       <RootMenuitemChild />
+      <ShadowedJsxValuedChildrenReconciles />
     </div>
   );
 }

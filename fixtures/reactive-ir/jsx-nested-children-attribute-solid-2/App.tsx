@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onSettled } from "solid-js";
+import { createEffect, createSignal, onCleanup, onSettled } from "solid-js";
 
 // The pin this fixture exists for: `dom-expressions-compiler` moved from
 // c6008f01 to fea62adb (upstream PR #3, "nested children attribute
@@ -10,22 +10,12 @@ import { createSignal, onCleanup, onSettled } from "solid-js";
 // checker-side mitigation to test, because there was nothing to certify or
 // mark uncertain -- the process never got that far.
 //
-// At the new pin `lower_dynamic_native_child` performs the same promotion
-// `lower_dom_element` already did at a template root, so the file compiles,
-// the site resolves as an ordinary `jsx-child` / `reactive-rerun`, and this
-// checker's existing tracked-JSX machinery certifies it exactly as it would
-// any other nested child -- no new rule, no new mitigation, because the
-// divergence this checker used to have nothing to say about no longer exists.
-//
-// Positive: the promoted value is read exactly like an ordinary tracked JSX
-// child. Silent is the correct verdict here, and it is a meaningful one: had
-// this shape still been treated as divergent or otherwise uncertain, it would
-// have surfaced as an SC1001 uncertainty finding the way the void-element and
-// `<noscript>` divergences do
-// (fixtures/reactive-ir/jsx-void-child-divergence-solid-2). It does not,
-// because resolving upstream PR #3 removed the divergence rather than adding
-// a case to it.
-function NestedChildrenAttributePromoted() {
+// At the current `next` pin the file compiles, but Ryan's nested static-template
+// fast path remains output-authoritative: it accepts the span before
+// `lower_dynamic_native_child` can promote the value, so the value is resolved
+// as elided. This is intentionally not a Babel-parity claim. Solid 2 follows
+// `next`; the sibling Solid 1 compiler remains faithful to Babel 1.x.
+function NestedChildrenAttributeFollowsNextFastPath() {
   const [content] = createSignal(0);
   return (
     <div>
@@ -106,27 +96,31 @@ function NoscriptPromotedChildrenAttribute() {
   return <noscript children={note()} />;
 }
 
-// The ownership half of the same claim. The fork wraps the insert it emits
-// for the promoted value in its default effect wrapper exactly as it does for
-// any other nested child, so a cleanup registered inside the promoted
-// expression is owned by that insert -- not left standing the way an
-// unowned-context requirement would. Compare
-// `CleanupInsideACertifiedChild` in the sibling void-element fixture, which
-// pins the same shape of claim (owned exactly like an ordinary tracked
-// child) for a divergence that *is* still open; this is the same proof for
-// the one that just closed.
+// The ownership half of the same current-next claim. Because this nested
+// value is elided, its cleanup call does not execute and cannot create an
+// owner requirement. Silence proves absence, not ownership.
 //
 // The comma expression is not decoration: `onCleanup` returns `Disposable`
 // under this dialect's real published typings, which is not a `JSX.Element`,
 // so `children={onCleanup(() => {})}` alone is a `tsc` error (TS2322) against
 // the real `solid-js@2.0.0-rc.0` typings. `(onCleanup(() => {}), null)`
 // evaluates to `null`, which the real `Element` union accepts, and keeps the
-// call inside the promoted child's expression.
-export const CleanupOwnedByPromotedChild = (
+// call inside the elided child's expression.
+export const CleanupInsideElidedNextChild = (
   <div>
     <span children={(onCleanup(() => {}), null)} />
   </div>
 );
+
+// The former producer-side exit-2 residue: a JSX-valued `children` attribute
+// shadowed by source children contains its own nested JSX child site. Both
+// current producers now reconcile that inner site. The deleted `hidden()`
+// read is silent; `visible()` remains an ordinary tracked source child.
+function ShadowedJsxValuedChildrenReconciles() {
+  const [hidden] = createSignal(0);
+  const [visible] = createSignal(0);
+  return <span children={<b>{hidden()}</b>}>{visible()}</span>;
+}
 
 // The boundary of the divergence arm above, and the shape that showed the arm
 // had to have one: a spread means the attribute was never promoted, so nothing
@@ -231,6 +225,24 @@ function LeafOwnerInsideADeletedChildrenValue() {
   );
 }
 
+// Static/API checks used to bypass execution projection entirely. The final
+// pipeline gate now applies the producer's discarded-region fact uniformly,
+// so this one-argument createEffect is absent rather than an SC7001 violation.
+function MissingEffectInsideADeletedChildrenValue() {
+  return (
+    <div>
+      <noscript children={(createEffect(() => {}), null)} />
+    </div>
+  );
+}
+
+// Live control: the identical API defect outside a deleted region still
+// reports SC7001.
+function MissingEffectAtComponentBodyScope() {
+  createEffect(() => {});
+  return <div />;
+}
+
 // Its live control, and the pair that isolates deletion as the only
 // difference: the same call in a *promoted* `children` value -- lowered by
 // `lower_dom_element` into a real insert -- is an SC3001 proven violation.
@@ -263,16 +275,19 @@ export function Root() {
   const [tick] = createSignal(0);
   return (
     <div>
-      <NestedChildrenAttributePromoted />
+      <NestedChildrenAttributeFollowsNextFastPath />
       <LiteralChildrenAttributeStaysSilent />
       <SourceChildrenShadowChildrenAttribute />
       <NoscriptPromotedChildrenAttribute />
       <SpreadKeepsChildrenInMergedProps id="a" />
       <NestedSpreadKeepsChildrenInMergedProps id="b" />
+      <ShadowedJsxValuedChildrenReconciles />
       <DestructureInsideADeletedChildrenValue hidden={tick()} />
       <DestructureAtComponentBodyScope shown={tick()} />
       <LeafOwnerInsideADeletedChildrenValue />
       <LeafOwnerInsideAPromotedChildrenValue />
+      <MissingEffectInsideADeletedChildrenValue />
+      <MissingEffectAtComponentBodyScope />
     </div>
   );
 }

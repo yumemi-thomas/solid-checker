@@ -2,7 +2,7 @@
 
 This fixture revalidates discarded child-content behavior at
 `solid1-dom-expressions-compiler`
-`98d265c38dbf63e363c9846048a93461e66f44c7`.
+`a4566086a457a4f2ec2964350fd86f3ad5139ee7`.
 
 Ordinary HTML void children and `<noscript>` children are no longer known
 transform divergences. Where the producer emits no execution entry for their
@@ -20,3 +20,8 @@ tags as non-void.
 
 The ordinary `<span>` cleanup is a certified-owner control. The module-scope
 `onCleanup` remains a proven violation.
+
+The JSX-valued shadowed-`children` arm ratchets the former producer exit-2
+residue. The exact pin now retains the outer elided decision while retracting
+the nested read, so the deleted operation is silent without hiding its live
+source-child control.

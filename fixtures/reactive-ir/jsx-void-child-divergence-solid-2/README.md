@@ -2,7 +2,7 @@
 
 This fixture revalidates discarded child-content behavior at
 `dom-expressions#next`
-`ead46d12da34db2ae366e1c02183a87f7479f05c`.
+`c7e83a1bb0fc8e8f7fad37a7523db9fcce568820`.
 
 Its source is byte-identical to the Solid 1.x sibling. Ordinary HTML void and
 `<noscript>` child expressions are not checker-maintained transform

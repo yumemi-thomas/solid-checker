@@ -186,6 +186,14 @@ a certification channel:
   child *value* expression, never a wider enclosing construct — checked at both
   pins, and pinned by the adapters' own unit tests.
 
+The deletion gate is applied once at the final common IR seam to every
+source-derived diagnostic table that does not otherwise ask for an execution
+role: structured static defects, upstream-compatible static violations,
+directive creations, and contract-generation obligations. Thus a syntax/API
+shape such as a one-argument `createEffect` inside compiler-deleted JSX is
+absent, while the byte-identical live shape still reports. Individual rules do
+not get to invent different dead-code policies.
+
 The one thing that outranks it is a **named divergence** (below). Where the two
 candidate compilers disagree about whether the span is deleted, its deletion is
 not a shared fact and silence would certify one compiler's output. That is why
@@ -206,14 +214,17 @@ out.
 
 > **Current-pin status (2026-08-25).** The detailed investigation below records
 > the mitigations required by earlier compiler revisions. At the current pins
-> (`dom-expressions#next` `ead46d12…`, Solid 1.x `98d265c3…`), ordinary HTML
+> (`dom-expressions#next` `c7e83a1b…`, Solid 1.x `a4566083…`), ordinary HTML
 > void children and `<noscript>` children are no longer checker-maintained
 > transform divergences. If a source expression survives without an execution
 > entry, it is handled by the ordinary census-gap rule above. Ownership uses the
 > same fail-closed rule, so missing census cannot become a proven missing-owner
 > violation. The sole remaining positive divergence detector is Solid 1.x's
 > parity-target-only `<keygen>` and `<menuitem>` set; Solid 2 returns an empty
-> set. The subsections through “Per producer” are retained as historical design
+> set. Divergences 6–9 are closed in the Babel-targeting Solid 1.x fork; Ryan's
+> `next` output deliberately remains authoritative for Solid 2, so its
+> documented Babel differences are not checker-maintained parity targets. The
+> subsections through “Per producer” are retained as historical design
 > rationale for the removed mitigations, not as the current rule set.
 
 A census gap is the compiler saying nothing. This is the compiler saying
@@ -463,9 +474,11 @@ already discarded.
 Divergence 5's template-root slot ordering is resolved by the `bf437061`
 lineage, and divergence 2's nested dynamic-`textContent` gate is resolved by
 `0ce01d74`: real children now carry ordinary tracked sites instead of becoming
-a census gap. Divergences 6-9 remain open and reach no rule in this checker.
-The static `<noscript>` fast-path retraction remains an ordinary census gap in
-both dialects. These states are recorded in `docs/precision-backlog.md`.
+a census gap. Divergences 6–9 are resolved in the Solid 1.x fork and remain
+documented differences in Ryan's `next`, whose output is the Solid 2 target;
+none reaches a checker rule. The static `<noscript>` fast-path retraction
+remains an ordinary census gap in both dialects. These states are recorded in
+`docs/precision-backlog.md`.
 
 `Value(CallerContext)` is the dynamic component property: the expression is
 handed to the child as a getter and re-evaluated in the child's tracking

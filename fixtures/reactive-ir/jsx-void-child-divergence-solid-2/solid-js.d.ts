@@ -34,6 +34,7 @@
 declare namespace JSX {
   interface IntrinsicElements {
     div: { children?: unknown };
+    b: { children?: unknown };
     br: { children?: unknown; id?: string };
     hr: { children?: unknown };
     keygen: { children?: unknown };

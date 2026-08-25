@@ -79,8 +79,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 1935,
-      "end": 1944,
+      "start": 2377,
+      "end": 2386,
       "fixes": 0,
       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run; but this call is written inside a JSX expression the Solid compiler's execution census does not cover, so whether the operation executes — and under which owner — cannot be proven",
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. Move the call to a compiler-censused position, or extend the compiler trace so its execution and owner context can be certified."
@@ -91,8 +91,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/jsx-void-child-divergence-solid-1x/App.tsx",
-      "start": 2214,
-      "end": 2223,
+      "start": 2656,
+      "end": 2665,
       "fixes": 0,
       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."

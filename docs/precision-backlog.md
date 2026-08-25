@@ -6879,3 +6879,59 @@ from 143/168 complete (85.12%) to 146/168 (86.9%), with 9 partial and 13 failed;
 Solid 2 remained 244/248 complete (98.39%), with no partial and 4 failed. The
 canonical JSON and Markdown reports were regenerated under
 `benchmarks/ecosystem/`.
+
+## 2026-08-25 — discarded syntax and shadowed JSX reconciliation closed
+
+The remaining producer refusal from the discarded-region audit is closed at
+`dom-expressions#next` `c7e83a1bb0fc8e8f7fad37a7523db9fcce568820`
+and `solid-1x-compiler`
+`a4566086a457a4f2ec2964350fd86f3ad5139ee7`. For
+`<span children={<b>{hidden()}</b>}>{visible()}</span>`, each producer now
+records the surviving outer attribute value as `Elided` before retracting the
+nested JSX sites. The outer positive deletion fact therefore survives even at
+a template root, the deleted `hidden()` read is absent, and the live
+`visible()` child remains tracked. This closes the former file-level exit-2
+failure without changing emitted JavaScript or semantic-trace version 2.
+
+The producer handoff suites passed against the exact revisions: `next` 59
+tests passed with one ignored baseline-regeneration test; Solid 1.x 99 passed
+with one ignored. Both transform-output baselines remained byte-identical. The
+Solid 1.x parity corpus also passed all 4,555 probes, covering the previously
+documented divergences 6–9. Ryan's `next` retains its own documented Babel
+differences by design; Solid 2 consumes that output truthfully rather than
+turning the fork into a Babel-parity compiler.
+
+The syntax-only policy left undecided in the earlier discarded-region entry is
+also closed. After all IR producers run, one common pipeline gate removes any
+structured static defect, upstream-compatible static violation, directive
+creation, or contract-generation obligation whose primary location is inside
+a producer-proven discarded region. This is a deletion fact, not ordinary
+source dead-code inference. The fixture pairs a one-argument `createEffect`
+inside deleted `<noscript children={...}>` with the identical live API defect:
+the deleted call is absent and the live control remains SC7001. Reactive-read,
+destructure, leaf-owner and ordinary owner controls continue to pin the other
+projection funnels.
+
+Fresh checker coverage against these exact heads completed all 91 fixture
+projects with 564 findings. The only snapshot changes are the new live SC7001
+control and source-offset shifts in the three edited fixtures; neither
+shadowed JSX inner read produces a finding or a producer refusal.
+
+The full 416-row ecosystem verification corpus was then rerun with stable
+copies of the exact release checker and Type Facts binaries. Its semantic
+result is unchanged: 281 rows verified, 116 refused, 14 generation failures,
+3 install failures, and 2 rows with no probeable Solid runtime. Solid 1.x is
+111/168 verified with 44 refused; Solid 2 is 170/248 verified with 72 refused.
+All claim totals, failure shapes, blocker counts, and conversion counts match
+the preceding report exactly. The regenerated reports record the new checker
+hash and timing sample; one peer-complete install moved to peer-install failure,
+an environment/install outcome that changed neither contract nor verification
+classification.
+
+One positive Solid 1.x transform disagreement still has a checker mitigation:
+the Rust producer lowers children of `<keygen>` and `<menuitem>`, while
+`babel-plugin-jsx-dom-expressions@0.40.10` treats those tags as void. Until that
+producer output is aligned, the dialect's two-tag parity-target-only set stays
+uncertifiable. This is the remaining transform item before calling the Solid
+1.x Babel-faithfulness work complete; it is separate from the now-closed
+discarded-region and divergences 6–9 work above.
