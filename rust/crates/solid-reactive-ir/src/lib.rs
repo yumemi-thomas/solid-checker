@@ -945,13 +945,13 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(property)?;
             }
         }
-        "argument" => {
+        "argument" | "callback-result" => {
             if returned.parameter.is_none()
                 || !returned.label.is_empty()
                 || !returned.elements.is_empty()
                 || !returned.properties.is_empty()
             {
-                return Err("an argument return requires a parameter only");
+                return Err("a relational return requires a parameter only");
             }
         }
         _ => return Err("the return kind is unsupported"),
@@ -3509,6 +3509,13 @@ mod tests {
             ..ContractReturn::default()
         };
         assert!(validate_contract_return(&argument).is_ok());
+
+        let callback_result = ContractReturn {
+            kind: "callback-result".into(),
+            parameter: Some(0),
+            ..ContractReturn::default()
+        };
+        assert!(validate_contract_return(&callback_result).is_ok());
 
         let mixed = ContractReturn {
             kind: "object".into(),

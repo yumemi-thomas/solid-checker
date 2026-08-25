@@ -38,6 +38,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/**
 !fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/
 !fixtures/reactive-ir/bundled-contract-solid1-consumer/node_modules/**
+!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/
+!fixtures/reactive-ir/bundled-rootless-consumer/node_modules/**
 !fixtures/package-contracts/shorthand-block-scope/node_modules/
 !fixtures/package-contracts/shorthand-block-scope/node_modules/**
 # Dialect detection reads the installed solid-js version from these stubs.
@@ -61,6 +63,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
 !fixtures/reactive-ir/solid2-precision/node_modules/**
+!fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/
+!fixtures/reactive-ir/solid2-contract-callback-variants-node/node_modules/**
 !fixtures/reactive-ir/ported-structure-v2/node_modules/
 !fixtures/reactive-ir/ported-structure-v2/node_modules/**
 # solid-1x-sources selects the 1.x catalog from this stub. Without the

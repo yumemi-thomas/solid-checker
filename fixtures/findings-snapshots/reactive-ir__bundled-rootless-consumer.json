@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bundled-rootless-consumer/App.tsx",
+      "start": 513,
+      "end": 522,
+      "fixes": 0
+    }
+  ]
+}

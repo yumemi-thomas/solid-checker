@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@solid-primitives/rootless",
+    "version": "1.5.4",
+    "integrity": "sha512-TOIZa1VUfVJ+9nkCcRajw3U4t9vBOP1HxX1WHNTbXq32mXwlqTvUnC4CRIilohcryBkT9u2ZkhUDSHRTaGp55g=="
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "sub-root": {
+      "kind": "function",
+      "returns": {
+        "kind": "callback-result",
+        "parameter": 0,
+        "evidence": { "kind": "reviewed" }
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "owner": "created",
+          "evidence": { "kind": "reviewed" }
+        }
+      ],
+      "evidence": { "kind": "reviewed" }
+    },
+    "disposable": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "owner": "created",
+          "evidence": { "kind": "reviewed" }
+        }
+      ],
+      "evidence": { "kind": "reviewed" }
+    },
+    "owned-callback": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred",
+          "owner": "conditional",
+          "evidence": { "kind": "reviewed" }
+        }
+      ],
+      "evidence": { "kind": "reviewed" }
+    },
+    "singleton-root": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred",
+          "owner": "created",
+          "evidence": { "kind": "reviewed" }
+        }
+      ],
+      "evidence": { "kind": "reviewed" }
+    },
+    "root-pool": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred",
+          "owner": "created",
+          "arguments": [
+            { "kind": "accessor", "label": "pooled argument" },
+            { "kind": "accessor", "label": "pool activity" },
+            null
+          ],
+          "evidence": { "kind": "reviewed" }
+        }
+      ],
+      "ownerRequirements": [
+        {
+          "operation": "cleanup",
+          "evidence": { "kind": "reviewed" }
+        }
+      ],
+      "evidence": { "kind": "reviewed" }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "sub-root": ["createBranch", "createSubRoot"],
+        "disposable": ["createDisposable"],
+        "owned-callback": ["createCallback"],
+        "singleton-root": [
+          "createHydratableSingletonRoot",
+          "createSharedRoot",
+          "createSingletonRoot"
+        ],
+        "root-pool": ["createRootPool"]
+      },
+      "conditions": ["import"]
+    }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "solid-checker review of @solid-primitives/rootless 1.5.4"
+  }
+}

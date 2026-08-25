@@ -846,6 +846,13 @@ pub(crate) fn bundled_contract_v1(package: &str) -> Result<Option<PackageContrac
             bundled.source_path = "bundled://solid-v1/solid-primitives-debounce.json".into();
             Some(bundled)
         }
+        "@solid-primitives/rootless" => {
+            let mut bundled = decode_package_contract(include_bytes!(
+                "../../../../pkg/contracts/bundled/solid-v1/solid-primitives-rootless.json"
+            ))?;
+            bundled.source_path = "bundled://solid-v1/solid-primitives-rootless.json".into();
+            Some(bundled)
+        }
         _ => None,
     })
 }

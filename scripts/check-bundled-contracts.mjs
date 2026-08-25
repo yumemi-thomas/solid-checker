@@ -70,6 +70,7 @@ const probeWorkers = {
     "scripts/contract-probes-solid-v1-core.mjs",
     "scripts/contract-probes-solid-v1.mjs",
     "scripts/contract-probes-solid-v1-debounce.mjs",
+    "scripts/contract-probes-solid-v1-rootless.mjs",
   ],
   "solid-v2": [
     "scripts/contract-probes.mjs",
@@ -85,7 +86,6 @@ const definitions = manifests.flatMap(manifest =>
       name: contract.package,
       dialect: manifest.id,
       modes: contractModes(contract),
-      includeDefault: contract.probeDefaultExport === true,
     })),
 );
 const peerDefinitions = manifests.flatMap(manifest =>
@@ -148,10 +148,17 @@ const callbackRows = summary =>
 const callbacksAreUnknown = summary =>
   Boolean(summary?.callbacks) && !Array.isArray(summary.callbacks);
 
-const returnClaim = summary =>
-  typeof summary?.returns?.kind === "string"
-    ? `returns=${summary.returns.kind}`
+// `argument` and `callback-result` are relations between values, not concrete
+// runtime shapes. The generic driver can observe an accessor/store/structure;
+// it cannot establish identity or which callback produced a value without a
+// package-specific oracle, so reviewed relational rows deliberately have no
+// generic probe claim.
+const returnClaim = summary => {
+  const kind = summary?.returns?.kind;
+  return typeof kind === "string" && !["argument", "callback-result"].includes(kind)
+    ? `returns=${kind}`
     : undefined;
+};
 
 function probeEvidence(resultsForClaim) {
   if (resultsForClaim.length === 0 || resultsForClaim.some(result => !result.ok)) {
@@ -248,6 +255,11 @@ const contracts = definitions.map(definition => {
   return { ...definition, path, contract };
 });
 
+const contractDeclaresDefault = contract =>
+  Object.values(contract.entrypoints).some(entrypoint =>
+    Object.hasOwn(entrypoint.exports ?? {}, "default"),
+  );
+
 /** The exact release a declared contract pins, for install specifiers. */
 const pinnedVersion = definition =>
   JSON.parse(readFileSync(join(root, definition.file), "utf8")).package?.version;
@@ -315,7 +327,9 @@ for (const installation of installations) {
   const packages = installation.probed.map(({ name }) => ({
     name,
     directory: join(installation.directory, "node_modules", ...name.split("/")),
-    includeDefault: installation.probed.find(contract => contract.name === name)?.includeDefault,
+    includeDefault: contractDeclaresDefault(
+      installation.probed.find(contract => contract.name === name).contract,
+    ),
   }));
   const dialectModes = probeModes.filter(mode =>
     installation.probed.some(contract => contract.modes.includes(mode)),

@@ -214,7 +214,10 @@ static SOLID_2: ContractTarget = ContractTarget {
             "mapArray",
             both(&[Callback(1, "tracked")], "accessor", "mapped array"),
         ),
-        ("repeat", cb(&[Callback(1, "tracked")])),
+        (
+            "repeat",
+            cb(&[Callback(0, "tracked"), Callback(1, "inline")]),
+        ),
         ("createReaction", cb(&[Callback(0, "deferred")])),
         // Both own the scope their body runs in and return an accessor. The
         // fallback argument is a callback too, invoked only when the boundary
@@ -222,7 +225,7 @@ static SOLID_2: ContractTarget = ContractTarget {
         (
             "createErrorBoundary",
             both(
-                &[Callback(0, "tracked"), Callback(1, "deferred")],
+                &[Callback(0, "tracked"), Callback(1, "tracked")],
                 "accessor",
                 "guarded value or error fallback",
             ),
@@ -230,7 +233,7 @@ static SOLID_2: ContractTarget = ContractTarget {
         (
             "createLoadingBoundary",
             both(
-                &[Callback(0, "tracked"), Callback(1, "deferred")],
+                &[Callback(0, "tracked"), Callback(1, "tracked")],
                 "accessor",
                 "guarded value or loading fallback",
             ),

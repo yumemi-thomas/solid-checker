@@ -32,8 +32,13 @@
       "package": "@solid-primitives/debounce",
       "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-debounce.json",
       "generated": false,
-      "probeRuntime": true,
-      "probeDefaultExport": true
+      "probeRuntime": true
+    },
+    {
+      "package": "@solid-primitives/rootless",
+      "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-rootless.json",
+      "generated": false,
+      "probeRuntime": true
     }
   ]
 }

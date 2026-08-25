@@ -2112,8 +2112,10 @@ mod tests {
         for (primitive, argument, execution) in [
             (Primitive::Action, 0, Execution::Deferred),
             (Primitive::Flush, 0, Execution::Inline),
-            (Primitive::CreateErrorBoundary, 1, Execution::Deferred),
-            (Primitive::CreateLoadingBoundary, 1, Execution::Deferred),
+            (Primitive::CreateErrorBoundary, 1, Execution::Tracked),
+            (Primitive::CreateLoadingBoundary, 1, Execution::Tracked),
+            (Primitive::RepeatMap, 0, Execution::Tracked),
+            (Primitive::RepeatMap, 1, Execution::Inline),
         ] {
             assert_eq!(
                 two.callback_execution_at(primitive, argument, 2),

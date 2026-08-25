@@ -213,6 +213,7 @@ promotion**, and it is larger than it sounds.
 | `returns` (top-level `accessor` / `store-path`) | B | claim string `returns=<kind>` |
 | `returns` nested `elements` / `properties` leaves | C today | `writeProbeEvidence` does not descend into leaves and no claim string names one |
 | `returns` `kind: argument` | C today | an identity claim; observable in principle, no probe form |
+| `returns` `kind: callback-result` | C today | a reviewed relation to one callback's runtime result; no generic probe form |
 | `reactiveReads[]`, including `parameter-member` | A where compiler facts are exact; otherwise C | no probe claim string exists; confirming one means synthesizing a reactive source and observing the subscription |
 | `asyncBehavior` | C today | no claim string — **and no evidence slot in the schema**, so a probed async claim could not be recorded even if it were driven |
 | `ownerRequirements[]` | A | compiler symbol identity; the slot exists, nothing writes `probed` into it |

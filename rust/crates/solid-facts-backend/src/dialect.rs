@@ -474,6 +474,7 @@ static SOLID_V1: Dialect = Dialect {
     bundled_packages: &[
         "solid-js",
         "@solid-primitives/debounce",
+        "@solid-primitives/rootless",
         "@solid-primitives/scheduled",
     ],
     bundled_contract: crate::diagnostics::bundled_contract_v1,

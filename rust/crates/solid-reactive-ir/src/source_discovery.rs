@@ -170,13 +170,71 @@ fn effective_call_return(
     context: &EffectiveReturnContext<'_>,
     depth: usize,
 ) -> Option<ContractReturn> {
-    if returned.kind != "argument" {
+    if !matches!(returned.kind.as_str(), "argument" | "callback-result") {
         return Some(returned.clone());
     }
     if depth == 0 {
         return None;
     }
     let argument = call.arguments.get(returned.parameter?)?;
+    if returned.kind == "callback-result" {
+        let function_span = if context
+            .file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == argument.span)
+        {
+            argument.span
+        } else {
+            let symbol = context
+                .entities
+                .at(context.file.path.as_str(), argument.span)?;
+            context.file.ast.bindings.iter().find_map(|binding| {
+                binding
+                    .names
+                    .iter()
+                    .any(|name| {
+                        context.entities.at(context.file.path.as_str(), name.span) == Some(symbol)
+                    })
+                    .then_some(binding.initializer)
+                    .flatten()
+            })?
+        };
+        let function = context
+            .file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == function_span)?;
+        let returns =
+            function
+                .expression_return
+                .iter()
+                .chain(context.file.ast.returns.iter().filter(|candidate| {
+                    containing_ast_function(&context.file.ast, candidate.span)
+                        .is_some_and(|owner| owner.span == function.span)
+                }));
+        let mut resolved = None::<ContractReturn>;
+        for returned_value in returns {
+            let value = returned_value.argument?;
+            let inner = context.ast_index.call_by_span(value).or_else(|| {
+                context
+                    .file
+                    .ast
+                    .calls
+                    .iter()
+                    .filter(|candidate| value.contains(candidate.span))
+                    .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+            })?;
+            let candidate = effective_inner_call_return(inner, context, depth - 1)?;
+            if resolved.as_ref().is_some_and(|prior| prior != &candidate) {
+                return None;
+            }
+            resolved = Some(candidate);
+        }
+        return resolved;
+    }
     let inner = context.ast_index.call_by_span(argument.span).or_else(|| {
         context
             .file
@@ -186,6 +244,14 @@ fn effective_call_return(
             .filter(|candidate| argument.span.contains(candidate.span))
             .max_by_key(|candidate| candidate.span.end - candidate.span.start)
     })?;
+    effective_inner_call_return(inner, context, depth - 1)
+}
+
+fn effective_inner_call_return(
+    inner: &solid_facts::ast::CallFact,
+    context: &EffectiveReturnContext<'_>,
+    depth: usize,
+) -> Option<ContractReturn> {
     if let Some(contracted) = context
         .entities
         .at(context.file.path.as_str(), inner.callee)
@@ -193,7 +259,7 @@ fn effective_call_return(
         .and_then(|contracted| contracted.summary.returns.known())
         .and_then(Option::as_ref)
     {
-        return effective_call_return(contracted, inner, context, depth - 1);
+        return effective_call_return(contracted, inner, context, depth);
     }
     let primitive = primitive_name(
         context.file.path.as_str(),

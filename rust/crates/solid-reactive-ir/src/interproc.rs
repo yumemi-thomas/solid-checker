@@ -2660,6 +2660,23 @@ impl StructuredReturnDiscovery<'_, '_> {
                 .and_then(|argument| {
                     self.leaf_with_depth(file, argument.span, fallback_label, depth - 1)
                 }),
+            "callback-result" => call
+                .arguments
+                .get(returned.parameter?)
+                .and_then(|argument| {
+                    let initializer = self
+                        .binding_initializer(file, argument.span)
+                        .unwrap_or(argument.span);
+                    let function = file
+                        .ast
+                        .functions
+                        .iter()
+                        .find(|function| function.span == initializer)?;
+                    let index = self.indexes.get(&(file.path.to_string(), function.span))?;
+                    let resolved = self.structured_returns[*index].as_ref()?;
+                    (!matches!(resolved.kind.as_str(), "argument" | "callback-result"))
+                        .then(|| resolved.clone())
+                }),
             "tuple" => Some(ContractReturn {
                 elements: returned
                     .elements
@@ -5536,7 +5553,12 @@ fn interprocedural_reads(
     }) || bundled_returns
         .values()
         .chain(contract_returns.values().map(|(returned, _)| returned))
-        .any(|returned| matches!(returned.kind.as_str(), "tuple" | "object"));
+        .any(|returned| {
+            matches!(
+                returned.kind.as_str(),
+                "tuple" | "object" | "callback-result"
+            )
+        });
     if has_structured_return_seed {
         for _ in 0..=nodes.len() {
             let discovered = discover_structured_returns(&StructuredReturnDiscovery {

@@ -201,6 +201,21 @@ fn native_vocabulary_outranks_contract(
     dialect.owns_module(module) && dialect.declares_primitive(imported)
 }
 
+/// Keep exact, condition-selected callback timing from a reviewed package
+/// contract even when the dialect owns the rest of the primitive. Ownership,
+/// returns, reads, and async behavior remain native; this narrow overlay is
+/// what lets browser/server export variants refine a native vocabulary without
+/// replacing its richer semantics.
+fn native_callback_overlay(summary: &ContractExport) -> Option<ContractExport> {
+    let callbacks = summary.callbacks.known()?.clone();
+    (!callbacks.is_empty()).then(|| ContractExport {
+        kind: summary.kind.clone(),
+        evidence: summary.evidence.clone(),
+        callbacks: ContractClaim::Known(callbacks),
+        ..ContractExport::default()
+    })
+}
+
 fn push_environment_dependent_export(
     missing_exports: &mut Vec<StaticDefect>,
     module: &str,
@@ -429,15 +444,17 @@ pub(super) fn resolve_contract_imports(
                         let Some(symbol) = entities.get(&member_location).cloned() else {
                             continue;
                         };
-                        if native_vocabulary_outranks_contract(dialect, &import.module, &imported) {
-                            continue;
-                        }
-                        let Some(summary) = selected_contract_export(
+                        let native =
+                            native_vocabulary_outranks_contract(dialect, &import.module, &imported);
+                        let Some(mut summary) = selected_contract_export(
                             contract,
                             &import.module,
                             summary,
                             environment,
                         ) else {
+                            if native {
+                                continue;
+                            }
                             push_environment_dependent_export(
                                 &mut missing_exports,
                                 &import.module,
@@ -447,6 +464,12 @@ pub(super) fn resolve_contract_imports(
                             );
                             continue;
                         };
+                        if native {
+                            let Some(overlay) = native_callback_overlay(&summary) else {
+                                continue;
+                            };
+                            summary = overlay;
+                        }
                         push_unknown_contract_claims(
                             &mut missing_exports,
                             &summary,
@@ -522,12 +545,13 @@ pub(super) fn resolve_contract_imports(
                     });
                     continue;
                 };
-                if native_vocabulary_outranks_contract(dialect, &import.module, imported) {
-                    continue;
-                }
-                let Some(summary) =
+                let native = native_vocabulary_outranks_contract(dialect, &import.module, imported);
+                let Some(mut summary) =
                     selected_contract_export(contract, &import.module, summary, environment)
                 else {
+                    if native {
+                        continue;
+                    }
                     push_environment_dependent_export(
                         &mut missing_exports,
                         &import.module,
@@ -537,6 +561,12 @@ pub(super) fn resolve_contract_imports(
                     );
                     continue;
                 };
+                if native {
+                    let Some(overlay) = native_callback_overlay(&summary) else {
+                        continue;
+                    };
+                    summary = overlay;
+                }
                 push_unknown_contract_claims(
                     &mut missing_exports,
                     &summary,
@@ -621,12 +651,13 @@ pub(super) fn resolve_contract_imports(
                     });
                     continue;
                 };
-                if native_vocabulary_outranks_contract(dialect, module, imported) {
-                    continue;
-                }
-                let Some(summary) =
+                let native = native_vocabulary_outranks_contract(dialect, module, imported);
+                let Some(mut summary) =
                     selected_contract_export(contract, module, summary, environment)
                 else {
+                    if native {
+                        continue;
+                    }
                     push_environment_dependent_export(
                         &mut missing_exports,
                         module,
@@ -636,6 +667,12 @@ pub(super) fn resolve_contract_imports(
                     );
                     continue;
                 };
+                if native {
+                    let Some(overlay) = native_callback_overlay(&summary) else {
+                        continue;
+                    };
+                    summary = overlay;
+                }
                 push_unknown_contract_claims(
                     &mut missing_exports,
                     &summary,
@@ -1664,7 +1701,8 @@ fn promote_callable_export(
 
 #[cfg(test)]
 mod variant_selection_tests {
-    use super::{ContractExport, ContractExportVariant, selected_variant};
+    use super::{ContractExport, ContractExportVariant, native_callback_overlay, selected_variant};
+    use crate::{ContractCallback, ContractClaim, ContractReturn};
 
     fn variant(conditions: &[&str], precedence: Option<u32>) -> ContractExportVariant {
         ContractExportVariant {
@@ -1718,6 +1756,31 @@ mod variant_selection_tests {
         let right = variant(&["node"], Some(2));
         let tied = [&left, &right];
         assert!(selected_variant(&tied).is_none());
+    }
+
+    #[test]
+    fn native_overlay_keeps_only_exact_callback_timing() {
+        let summary = ContractExport {
+            kind: "function".into(),
+            callbacks: ContractClaim::Known(vec![ContractCallback {
+                parameter: 1,
+                execution: "inline".into(),
+                arguments: Vec::new(),
+                owner: None,
+                evidence: None,
+            }]),
+            returns: ContractClaim::Known(Some(ContractReturn {
+                kind: "accessor".into(),
+                label: "package return".into(),
+                ..ContractReturn::default()
+            })),
+            async_behavior: ContractClaim::Unknown(crate::ContractUnknownClaim::new()),
+            ..ContractExport::default()
+        };
+        let overlay = native_callback_overlay(&summary).expect("known callback row");
+        assert_eq!(overlay.callbacks, summary.callbacks);
+        assert_eq!(overlay.returns, ContractClaim::Known(None));
+        assert_eq!(overlay.async_behavior, ContractClaim::Known(String::new()));
     }
 }
 

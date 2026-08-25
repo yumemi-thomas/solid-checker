@@ -3498,22 +3498,28 @@ representable in schema v1 and are probed in all four runtime modes without DOM
 shims. The consumer fixture uses the published signatures, is accepted by
 TypeScript, and is fully certified with no findings.
 
-### Still open
+### Resolved in the follow-up
 
-- **Generic callback-result returns are not representable in schema v1.**
-  `@solid-primitives/rootless@1.5.4` was audited as the next candidate, but its
-  core exports return arbitrary generic callback results. Bundling an unknown
-  return makes every use uncertifiable; claiming a concrete return kind would
-  be false. It remains unbundled until the schema can express that relation.
-- **The review contract's tables disagree with the runtime in two places.**
-  `rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs` states
-  `repeat` `Callback(1, "tracked")` and the boundary fallbacks as `deferred`;
-  the runtime observations above make the first `inline` and the second
-  `tracked` on the browser. Those tables feed
-  `every_callback_taking_export_is_modelled_or_excluded` and the dialect
-  vocabulary rather than any consumer, so nothing certifies from them today,
-  but they are the same claim written twice and only one of the two was
-  audited.
+- **Generic callback-result returns are now representable in schema v1.** A
+  backward-compatible `callback-result` return names the callback parameter
+  whose exact invocation result is returned. The consumer instantiates only an
+  exact local callback result and fails closed otherwise. The reviewed
+  `@solid-primitives/rootless@1.5.4` contract and its exact runtime dependency
+  closure are now bundled; the consumer fixture proves that a memo returned
+  through `createSubRoot` remains a reactive source.
+- **Solid 2 callback timing now has one condition-aware owner.** The browser
+  fallback tables match the observed `repeat` and boundary behavior. For an
+  exact installed Solid release, its selected package-contract variant may
+  overlay callback timing on native vocabulary, while ownership, returns,
+  async behavior, and all other primitive facts remain native. Node/server
+  behavior therefore no longer has to be flattened into the browser table.
+
+The honest residue is narrower: schema v1 still has no returned-callable
+relation for singleton/root-pool wrappers, and its flat callback list cannot
+state Solid 1.x `createResource`'s overload-dependent slots or `mergeProps`'s
+variadic callback tail. The native Solid 1.x dialect remains call-shape exact
+for both, so this is contract portability/audit duplication rather than a
+consumer correctness gap.
 
 ## Closed 2026-08-23: a declaration sibling no longer certifies what it hid
 
