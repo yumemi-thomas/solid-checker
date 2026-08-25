@@ -34,12 +34,10 @@ function AttributeReadInsideDroppedHead() {
   );
 }
 
-// Censused, then retracted. The static-template `<noscript>` fast path emits
-// the inert tag and skips its children wholesale. In the lineage containing
-// `d1e08958` the producer
-// began withdrawing every site in that discarded range instead of rejecting
-// the whole file during trace reconciliation. The resulting source/census hole
-// is an uncertifiable proof obligation, exactly like the dropped-head paths.
+// Positive deletion control. The static-template `<noscript>` fast path emits
+// the inert tag and skips its children wholesale. The current producer records
+// the whole discarded child list as one Elided range, so this read is silent
+// because of a fact, not because the census omitted it.
 function ReadInsideDiscardedNoscript() {
   const [note] = createSignal("n");
   return <div><noscript>{note()}</noscript></div>;

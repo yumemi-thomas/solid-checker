@@ -2,26 +2,22 @@
 
 This fixture revalidates discarded child-content behavior at
 `solid1-dom-expressions-compiler`
-`a4566086a457a4f2ec2964350fd86f3ad5139ee7`.
+`ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`.
 
-Ordinary HTML void children and `<noscript>` children are no longer known
-transform divergences. Where the producer emits no execution entry for their
-source expressions, SC1001 fails closed with the ordinary missing-census
-wording. The cleanup inside `<br>` exercises the ownership equivalent:
-compiler silence must yield an uncertifiable obligation, not a proven
-missing-owner violation.
+Ordinary HTML void children and `<noscript>` children carry positive trace
+facts. Positions the compiler keeps are tracked; positions it deletes are one
+`Elided` child-list range. The cleanup inside `<br>` exercises the ownership
+equivalent: the deleted operation is absent rather than inferred safe from
+compiler silence.
 
-The two genuine divergence controls are `<keygen>` and `<menuitem>`. Solid
-1.x Babel treats those legacy tags as void while the Rust producer uses the
-modern 14-tag set and lowers their children. Their SC1001 rows therefore retain
-the compiler-disagreement wording. The paired Solid 2 fixture uses identical
-source and stays silent for those reads because both Solid 2 compilers treat the
-tags as non-void.
+Solid 1.x now treats `<keygen>` and `<menuitem>` as void, matching its shipped
+Babel compiler, and positively reports their child lists discarded. The paired
+Solid 2 fixture uses identical source and tracks those children because Ryan's
+`next` semantics treat both tags as non-void. Both outcomes are certified.
 
 The ordinary `<span>` cleanup is a certified-owner control. The module-scope
 `onCleanup` remains a proven violation.
 
-The JSX-valued shadowed-`children` arm ratchets the former producer exit-2
-residue. The exact pin now retains the outer elided decision while retracting
-the nested read, so the deleted operation is silent without hiding its live
-source-child control.
+The JSX-valued shadowed-`children` arm retains the outer elided decision while
+retracting the nested read, so the deleted operation is silent without hiding
+its live source-child control.

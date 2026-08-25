@@ -776,34 +776,6 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// The tags this dialect's **parity target** — the Babel plugin the Solid
-    /// version it models actually ships — treats as void while the pinned Rust
-    /// producer does not.
-    ///
-    /// A member is a divergently lowered child in exactly the sense
-    /// `divergent_lowered_child` (solid-reactive-ir's `execution_role.rs`) means
-    /// it: the producer walks into the children, emits a reactive insert and
-    /// censuses a `reactive-rerun` site, the compiler the user builds with
-    /// discards the child list in every position, and nothing available to the
-    /// checker says which one runs. Without this, such a child is **certified by
-    /// silence** — the census entry says tracked, and tracked reports nothing.
-    ///
-    /// The shared HTML void list stays a single constant in `execution_role.rs`,
-    /// byte-checked against `void_elements` in
-    /// `packages/compiler/src/shared/constants.rs` at *both* pinned producer
-    /// revisions. That list describes the producers, which agree; this one is the
-    /// difference between a producer and the compiler its users run, and the two
-    /// dialects' parity targets disagree about it. So it cannot be shared and it
-    /// cannot be a union: a tag only 1.x's Babel plugin drops would, merged into
-    /// the shared list, withhold certification under 2.0, where both compilers
-    /// lower the children and the facts support certifying the read.
-    ///
-    /// Required rather than defaulted. An empty answer is a claim about a
-    /// specific parity target's void list and has to be made deliberately; a
-    /// default would let a new dialect inherit "no divergence here" without
-    /// anyone checking its parity target.
-    fn parity_target_only_void_elements(&self) -> &'static [&'static str];
-
     /// Which parameters of a control-flow component's children callback are
     /// reactive accessors rather than plain values.
     ///

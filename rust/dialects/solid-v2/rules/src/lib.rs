@@ -46,13 +46,10 @@ pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
 // untracked in a proven tracking context, so Solid provably warns there — the
 // flat "Solid warns ... here in dev" claim is earned. An uncertifiable read is
 // not: it rests on unenumerable callers (`ReactiveRead::uncertain`), a census
-// hole (`ReactiveRead::missing_jsx_census`), or a divergent-lowering read that
-// may not exist at runtime at all (`ReactiveRead::divergent_lowering`), and in
-// every one of those the flat claim asserts a runtime behavior the finding's
-// own message says cannot be proven. The conditional phrasing stays true
-// regardless of which is the case — including divergence, where the read
-// might not execute at all: an unmet antecedent never falsifies the
-// conditional.
+// hole (`ReactiveRead::missing_jsx_census`), and in either case the flat claim
+// asserts a runtime behavior the finding's own message says cannot be proven.
+// The conditional phrasing stays true regardless of which uncertainty caused
+// the finding.
 const STRICT_READ_UNTRACKED_WARNS: &str = "Solid warns STRICT_READ_UNTRACKED here in dev.";
 const STRICT_READ_UNTRACKED_MAY_WARN: &str = "If this read executes untracked in dev, Solid warns STRICT_READ_UNTRACKED for it; this finding does not establish that it does, so confirm the read's actual execution and tracking status before relying on that warning.";
 

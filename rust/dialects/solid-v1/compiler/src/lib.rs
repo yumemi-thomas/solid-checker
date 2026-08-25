@@ -99,20 +99,12 @@ impl CompilerFactsProvider for NativeCompilerFacts {
 /// is handled downstream, in `solid-reactive-ir`'s `missing_jsx_census`; see
 /// docs/compiler-facts.md, "Census gaps".
 ///
-/// Nor is it the same as truthful about the compiler Solid 1.x *ships*. This
-/// producer lowers a void element's children in **both** the nested and the
-/// template-root position, where Babel discards them in every position, so
-/// those sites arrive as present, truthful facts that are still not evidence
-/// about the user's build. It lowers a `<noscript>`'s children the same way the
-/// 2.0 fork does — kept at template root and off the static-template fast path,
-/// where Babel drops them in every position. `divergent_lowered_child` handles
-/// both; see docs/compiler-facts.md, "Divergent lowering". (The 2.0 fork gates
-/// the *void* template-root path on `!is_void_element`, so only its nested
-/// position diverges — probed, and pinned by the fixture pair named there.
-/// The static-template `<noscript>` fast path now retracts the sites in the
-/// subtree it discards, so it agrees with Babel and projects a discarded
-/// region. The template-root and dynamic-attribute positions still lower the
-/// children and remain divergences.)
+/// The current producer is transform-faithful to the Solid 1.x Babel compiler
+/// for the audited child-content shapes. Child lists discarded by void and
+/// `<noscript>` lowering are censused as one `Elided` range, so deletion is a
+/// positive fact rather than compiler silence. A nested non-hydratable `<head>`
+/// remains a genuine source/census hole and is handled downstream by
+/// `missing_jsx_census`.
 ///
 /// `default_effect_wrapper` reports whether the compile ran under the
 /// compiler's own effect wrapper. It is not derivable from the trace, and it

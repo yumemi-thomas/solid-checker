@@ -1,16 +1,14 @@
 import { createSignal, onCleanup } from "solid-js";
 
-// At the current compiler pins, ordinary HTML void children and <noscript>
-// children are no longer transform divergences. When their source expressions
-// survive without an execution entry, the checker treats them as census gaps:
-// compiler silence cannot prove either that the expression runs untracked or
-// that it was deleted.
+// Ordinary void and <noscript> child lists carry positive compiler facts at the
+// current pins: positions the selected compiler keeps are tracked; positions it
+// deletes are one elided range. Neither outcome is inferred from silence.
 function NestedVoidChild() {
   const [count] = createSignal(0);
   return <div><br>{count()}</br></div>;
 }
 
-function RootVoidChildDependsOnTheProducer() {
+function RootVoidChildIsDiscarded() {
   const [total] = createSignal(0);
   return <br>{total()}</br>;
 }
@@ -37,9 +35,9 @@ function NestedNoscriptOffTheFastPath() {
   return <div><noscript id={tag()}>{body()}</noscript></div>;
 }
 
-// The one surviving transform divergence is dialect-specific. Solid 1.x Babel
-// treats keygen and menuitem as void, while the 1.x Rust producer lowers their
-// children. Solid 2 treats both as non-void in producer and parity target.
+// Dialect-specific controls. Solid 1.x treats these legacy tags as void and
+// reports their child lists discarded; Solid 2 treats them as non-void and
+// reports their reads tracked. Both outcomes are certified and silent.
 function NestedKeygenChild() {
   const [keyed] = createSignal(0);
   return <div><keygen>{keyed()}</keygen></div>;
@@ -60,10 +58,9 @@ function ShadowedJsxValuedChildrenReconciles() {
   return <span children={<b>{hidden()}</b>}>{visible()}</span>;
 }
 
-// Ownership must fail closed over the same uncertainty. If the producer emits
-// no census for this source child, absence of an owner region cannot establish
-// that a live unowned cleanup exists.
-export const CleanupInsideADivergentChild = (
+// Ownership follows the same positive facts: Solid 1.x discards this range;
+// Solid 2 keeps the nested child and reports the insert owner. Both are silent.
+export const CleanupInsideDiscardedChild = (
   <div><br>{(onCleanup(() => {}), null)}</br></div>
 );
 
@@ -79,7 +76,7 @@ export function Root() {
   return (
     <div>
       <NestedVoidChild />
-      <RootVoidChildDependsOnTheProducer />
+      <RootVoidChildIsDiscarded />
       <VoidAttributeStaysCertified />
       <AdjacentTrackedChildStaysCertified />
       <RootNoscriptChild />

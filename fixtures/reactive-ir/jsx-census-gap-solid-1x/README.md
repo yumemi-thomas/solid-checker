@@ -6,15 +6,13 @@ SC1001, not a proven violation and not silence.
 
 ## Why this shape
 
-Each dialect's compiler censuses the JSX *it* lowers. Two paths reach the same
-hole here. The 1.x compiler drops a nested, non-hydratable `<head>` — for
+Each dialect's compiler censuses the JSX *it* lowers. The 1.x compiler drops a
+nested, non-hydratable `<head>` — for
 `ReadInsideDroppedHead` it warns that the browser will read the template as
-`<div><title></title></div>` — before it is censused. The static-template
-`<noscript>` fast path instead censuses first and, since the lineage containing
-`d1e08958`, retracts
-the sites in the subtree it discards unvisited. In either case the read reaches
-the checker with no tracked region, untracked region, callback role, or JSX
-operation.
+`<div><title></title></div>` — before it is censused. That is the remaining
+census hole in this fixture. The static-template `<noscript>` path is now a
+positive deletion control: the producer records its discarded child list as an
+`Elided` range and the checker stays silent because it has that fact.
 
 Before this fixture existed, that hole fell through to "inside a component
 body, classified by nothing" and SC1001 fired as a **proven violation** about
@@ -36,7 +34,7 @@ has that the census does not.
 | --- | --- |
 | `ReadInsideDroppedHead` | SC1001 **uncertifiable** — child expression container, no census entry |
 | `AttributeReadInsideDroppedHead` | SC1001 **uncertifiable** — same gap reached through an attribute expression container |
-| `ReadInsideDiscardedNoscript` | SC1001 **uncertifiable** — censused, then retracted when the static `<noscript>` path discards its children |
+| `ReadInsideDiscardedNoscript` | **silent** — the producer positively reports the discarded child list as `Elided` |
 | `TrackedChildStaysCertified` | **silent** — an ordinary censused tracked child; the escalation must not start reporting these |
 | `ReadOutsideJsxStaysAViolation` | SC1001 **violation** — the read is in no JSX expression at all, so its untracked-rendering proof owes nothing to the census |
 

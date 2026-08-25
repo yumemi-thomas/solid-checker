@@ -794,26 +794,6 @@ impl Dialect for Solid1x {
         false
     }
 
-    /// 1.x's parity target is `babel-plugin-jsx-dom-expressions@0.40.10`, whose
-    /// source sits in the pinned `solid-1x-compiler` fork (rev `a4566083`) at
-    /// `packages/babel-plugin-jsx-dom-expressions/src/VoidElements.ts`. That
-    /// file lists **16** tags: the 14 the Rust producer's `void_elements`
-    /// (`packages/compiler/src/shared/constants.rs`, same rev) carries, plus
-    /// these two. `src/dom/element.js` computes
-    /// `voidTag = VoidElements.indexOf(tagName) > -1` and gates the whole child
-    /// pass on `if (!voidTag)`, so the compiler Solid 1.x ships discards a
-    /// `<keygen>`'s and a `<menuitem>`'s children in **every** position while
-    /// the producer lowers them into a reactive insert and censuses a
-    /// `reactive-rerun` site.
-    ///
-    /// Read from both files at the pinned rev, not inferred from the HTML
-    /// standard: these two tags are void in the parity target because its list
-    /// predates their removal from the standard, and 2.0's parity target
-    /// deliberately dropped them (see `Solid2`).
-    fn parity_target_only_void_elements(&self) -> &'static [&'static str] {
-        &["keygen", "menuitem"]
-    }
-
     /// Source: `docs/solid-1x-api-surface.md`, the `solid-js` and
     /// `solid-js/store` sections. The split is the difference that makes
     /// module gating worth having: every name below sits in core in 2.0.

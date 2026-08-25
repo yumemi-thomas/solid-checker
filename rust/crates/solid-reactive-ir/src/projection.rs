@@ -501,13 +501,7 @@ pub fn project_findings(
             .reads
             .iter()
             .filter(|read| {
-                // A divergently lowered child is reported whatever role the
-                // census put it in — the point is precisely that the role came
-                // from a fact about a compiler that may not build this project.
-                // Under the pinned fork that role is `TrackedJsx`, which reports
-                // nothing, so without this the divergence would be certified by
-                // silence.
-                (read.execution.reports_untracked_read() || read.divergent_lowering.is_some())
+                read.execution.reports_untracked_read()
                     && (capabilities.module_scope_strict_reads
                         || read.execution != crate::ExecutionRole::ModuleInitialization)
             })
