@@ -20,6 +20,21 @@
       "returns": {
         "status": "unknown"
       },
+      "callbacks": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-3": {
+      "kind": "function",
+      "reactiveReads": {
+        "status": "unknown"
+      },
+      "returns": {
+        "status": "unknown"
+      },
       "evidence": {
         "kind": "inferred"
       }
@@ -28,7 +43,7 @@
   "entrypoints": {
     "./argument": {
       "exports": {
-        "function-2": [
+        "function-3": [
           "Escaped",
           "Isolated"
         ]
@@ -46,7 +61,7 @@
     },
     "./called": {
       "exports": {
-        "function-2": [
+        "function-3": [
           "Direct"
         ],
         "function-1": [
@@ -55,10 +70,17 @@
       }
     },
     "./children": {
-      "sameAs": "./builtin"
+      "exports": {
+        "function-3": [
+          "App"
+        ],
+        "function-1": [
+          "Isolated"
+        ]
+      }
     },
     "./closed": {
-      "sameAs": "./builtin"
+      "sameAs": "./children"
     },
     "./intrinsic": {
       "exports": {
@@ -70,7 +92,7 @@
     },
     "./member-tag": {
       "exports": {
-        "function-2": [
+        "function-3": [
           "App",
           "Isolated"
         ]
@@ -81,25 +103,25 @@
     },
     "./prop-value": {
       "exports": {
-        "function-2": [
+        "function-3": [
           "Held",
           "Isolated"
         ]
       }
     },
     "./rendered": {
-      "sameAs": "./builtin"
+      "sameAs": "./children"
     },
     "./returned": {
       "exports": {
-        "function-2": [
+        "function-3": [
           "Isolated",
           "makePanel"
         ]
       }
     },
     "./shadowed": {
-      "sameAs": "./builtin"
+      "sameAs": "./children"
     }
   },
   "evidence": {

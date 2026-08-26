@@ -139,6 +139,23 @@
     },
     "function-8": {
       "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      },
+      "ownerRequirements": [
+        {
+          "operation": "effect",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-9": {
+      "kind": "function",
       "returns": {
         "kind": "accessor",
         "label": "memo result",
@@ -174,12 +191,15 @@
         "function-5": [
           "memoInsideUntrack"
         ],
-        "function-8": [
+        "function-9": [
           "memoShape",
           "memoThroughLocalUntrack"
         ],
-        "function-2": [
+        "function-8": [
           "mountShape",
+          "trackedThroughLocalHelper"
+        ],
+        "function-2": [
           "mountShapeArrow",
           "mountThroughLocalUntrack"
         ],
@@ -187,8 +207,7 @@
           "renderEffectShape"
         ],
         "function-6": [
-          "trackedShape",
-          "trackedThroughLocalHelper"
+          "trackedShape"
         ],
         "function-7": [
           "unestablishedDirectShape",
