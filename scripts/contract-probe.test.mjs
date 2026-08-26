@@ -8,7 +8,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "vitest";
@@ -57,7 +65,30 @@ const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 // environment. The checked-in bin/ binary lags rust/ source, which is why the
 // debug build is the default here.
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? join(root, "rust/target/debug/solid-checker-rust");
-if (existsSync(native)) process.env.SOLID_CHECKER_NATIVE_BIN = native;
+let validatorDirectory;
+if (existsSync(native)) {
+  process.env.SOLID_CHECKER_NATIVE_BIN = native;
+} else {
+  // Driver tests inject the runtime observations they exercise. A clean CI
+  // checkout has no debug checker yet, so keep their write path hermetic too:
+  // parse the candidate document, but leave native schema validation to the
+  // armed Rust/process and full-gate tests. Falling through to a stale packaged
+  // binary made this suite depend on whichever artifact happened to be present.
+  validatorDirectory = mkdtempSync(join(tmpdir(), "solid-checker-probe-validator-"));
+  const validator = join(validatorDirectory, "solid-checker");
+  writeFileSync(
+    validator,
+    `#!/usr/bin/env bun
+import { readFileSync } from "node:fs";
+const args = process.argv.slice(2);
+const index = args.indexOf("--validate-contract");
+if (index === -1 || !args[index + 1]) process.exit(2);
+JSON.parse(readFileSync(args[index + 1], "utf8"));
+`
+  );
+  chmodSync(validator, 0o755);
+  process.env.SOLID_CHECKER_NATIVE_BIN = validator;
+}
 
 const temporaries = [];
 function workspace(prefix = "solid-checker-probe-") {
@@ -67,6 +98,7 @@ function workspace(prefix = "solid-checker-probe-") {
 }
 process.on("exit", () => {
   for (const directory of temporaries) rmSync(directory, { recursive: true, force: true });
+  if (validatorDirectory) rmSync(validatorDirectory, { recursive: true, force: true });
 });
 
 const sha256 = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;

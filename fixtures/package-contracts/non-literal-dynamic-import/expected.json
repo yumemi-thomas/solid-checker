@@ -6,12 +6,6 @@
   },
   "compilerFactsProtocol": 1,
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
     "value-1": {
       "kind": "value",
       "evidence": {
@@ -22,9 +16,6 @@
   "entrypoints": {
     ".": {
       "exports": {
-        "function-1": [
-          "load"
-        ],
         "value-1": [
           "thing"
         ]

@@ -20,6 +20,13 @@ import { gateConcurrency, mapPool } from "./lib/pool.mjs";
 const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");
+// The gate itself runs under Bun, but its coverage proof is V8's
+// NODE_V8_COVERAGE format. Bun uses JavaScriptCore and silently emits nothing
+// for that variable, so run only the instrumented generator subprocess under
+// Node. Keep its identity in the cache key below: changing the runtime can
+// change both generated output and coverage ranges.
+const coverageRuntime = "node";
+const coverageRuntimeVersion = (await run(coverageRuntime, ["--version"], { encoding: "utf8" })).stdout.trim();
 const defaultNative = join(root, "rust/target/debug/solid-checker-rust");
 const defaultTypeFacts = join(root, "bin/solid-typefacts");
 const fixtures = [
@@ -256,7 +263,7 @@ async function generate(name) {
   // actually produce.
   try {
     await run(
-      process.execPath,
+      coverageRuntime,
       [cli, "contract", "generate", "--package-root", packageRoot, "--output", output],
       {
         cwd: root,
@@ -426,7 +433,8 @@ const cache = openGateCache({
   gate: "contract-corpus",
   scriptPath: import.meta.filename,
   binaries: [native, typeFacts, `${typeFacts}.buildinfo`],
-  trees: [join(root, "packages/cli")]
+  trees: [join(root, "packages/cli")],
+  extra: [`coverage-runtime:${coverageRuntime}:${coverageRuntimeVersion}`]
 });
 const concurrency = gateConcurrency();
 
