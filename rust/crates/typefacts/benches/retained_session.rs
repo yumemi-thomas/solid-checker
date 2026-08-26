@@ -57,7 +57,7 @@ const MEASURED_EDITS: usize = 24;
 const LOCAL_WORK_ROUNDS: u64 = 12_000_000;
 
 fn repository_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
 fn producer() -> PathBuf {
@@ -80,7 +80,7 @@ fn producer() -> PathBuf {
                 .current_dir(repository_root())
                 .args(["build", "-ldflags", &ldflags, "-o"])
                 .arg(&output)
-                .arg("./cmd/solid-typefacts")
+                .arg("./apps/solid-typefacts")
                 .status()
                 .expect("run go build for the retained-session benchmark");
             assert!(status.success(), "build the Type Facts benchmark producer");

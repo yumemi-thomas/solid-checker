@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts/tsgo"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts/tsgo"
 )
 
 func TestDescribeTypePreservesSolidAccessorAliasOrigin(t *testing.T) {

@@ -5,10 +5,10 @@ analysis path. The approved target co-locates the Type Facts producer and client
 with the checker, while Solid compiler source follows its upstream owner through
 a small semantic-only fork.
 
-The source bootstrap is planned, not yet implemented. Until its parity gates
-pass, `rust/Cargo.toml`'s current DOM Expressions and external Type Facts pins
-remain the build authority. Do not partially apply the target layout or remove
-the current handshake.
+The Solid 2 compiler bootstrap and Type Facts source repatriation are complete.
+The compiler remains an exact semantic-only fork dependency; Type Facts now
+builds locally as one producer/client module. The external Type Facts repository
+is retained only as import provenance until the retirement gate completes.
 
 ## Target module seams
 
@@ -36,7 +36,7 @@ cross these seams.
 
 Solid's Oxc compiler moved to
 [`solidjs/solid/packages/compiler`](https://github.com/solidjs/solid/tree/next/packages/compiler).
-The checker will consume package `solidjs-compiler` from an exact revision of
+The checker consumes package `solidjs-compiler` from an exact revision of
 [`yumemi-thomas/solid`](https://github.com/yumemi-thomas/solid), based on a
 recorded `solidjs/solid#next` commit. It will no longer develop Solid 2 facts in
 the former DOM Expressions repository.
@@ -79,9 +79,8 @@ fork. Its exact `rev` and notice move together.
 ## Type Facts colocation policy
 
 The external
-[`solid-ts-facts`](https://github.com/yumemi-thomas/solid-ts-facts) source will
-be imported at the exact current checker pin, with history, into this
-repository. The target layout is:
+[`solid-ts-facts`](https://github.com/yumemi-thomas/solid-ts-facts) history was
+imported at `92c53392388518d69ef27220729f5c061479deed`. Its active layout is:
 
 ```text
 go.mod / go.sum
@@ -100,13 +99,14 @@ The source move is behavior-neutral. Before a new demand or protocol change:
 - run every Go, Rust, retained-session, cancellation, restart, stale-generation,
   memory, and performance test;
 - prove checker findings are unchanged;
-- replace the git dependency with a path dependency and external clone build in
-  one green change.
+- keep the local path dependency and producer build atomic.
 
-After migration, `scripts/build-typefacts.sh` builds local source. Its cache
+`scripts/build-typefacts.sh` builds local source. Its cache
 stamp is a manifest digest over the producer, client, shims, schemas, dependency
-pins, relevant toolchain identity, and build id. The startup handshake continues
-to compare protocol version, schema digest, build identity, and codec limits.
+pins, relevant toolchain identity, and build id. The startup handshake compares
+protocol version, schema digest, and build identity. Codec limits are validated
+from the local language-neutral schema and bound by the source-manifest stamp;
+adding a separate wire-level codec digest is a deferred protocol change.
 
 All later Type Facts changes land atomically with the Rust client, checker
 consumer, proof fixtures, and corpus measurements they affect. After two clean
@@ -114,10 +114,9 @@ CI runs and one release build, the external repository becomes read-only or is
 archived with a pointer to the imported commit; it is no longer an active source
 or pull-request target.
 
-## Current transition rule
+## Transition invariant
 
-Before the bootstrap lands, the existing revision-pinned dependencies and build
-scripts remain authoritative. During implementation, do not mix these states:
+The completed migration must not regress into mixed ownership states:
 
 - external Type Facts producer with a local client;
 - local producer with a git-pinned client;

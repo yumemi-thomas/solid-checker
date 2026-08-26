@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
 func TestDemandedCallabilityUsesCompilerCallSignatures(t *testing.T) {

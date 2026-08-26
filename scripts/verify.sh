@@ -106,6 +106,15 @@ summarize() {
 step fmt-check
 cargo +1.97 fmt --manifest-path "$rust_manifest" --all -- --check
 
+step go-fmt-check
+test -z "$(gofmt -l apps/solid-typefacts shims)"
+
+step go-vet
+go vet ./apps/solid-typefacts/...
+
+step go-test-race
+go test -race ./apps/solid-typefacts/...
+
 step clippy
 cargo +1.97 clippy --profile "$cargo_profile" \
   --manifest-path "$rust_manifest" --workspace --all-targets
@@ -134,7 +143,7 @@ step build-typefacts
 scripts/build-typefacts.sh
 
 step test-workspace
-SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
+TYPEFACTS_TEST_BIN="$PWD/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   run_rust_tests --manifest-path "$rust_manifest" --workspace
 
 step build-checker
@@ -144,6 +153,9 @@ cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
 step coverage
 SOLID_CHECKER_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
+
+step bun-install
+bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 
 # The product-owned corpus carries exact checker expectations and per-finding
 # TypeScript ownership for every retained former parity case.
@@ -164,9 +176,6 @@ cargo +1.97 build --release --manifest-path "$rust_manifest" \
 step verify-performance
 SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   bun benchmarks/verify-performance.mjs
-
-step bun-install
-bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 
 step bun-test
 bun run --cwd packages/cli test

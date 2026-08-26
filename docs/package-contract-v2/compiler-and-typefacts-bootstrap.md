@@ -37,9 +37,9 @@ trace corrections used by the checker. The fork's observed `next` head was
 the checker pin as the behavior-preservation baseline; reconcile their delta
 explicitly.
 
-The checker and the external Type Facts repository currently agree on
-[`solid-ts-facts@92c53392`][typefacts-pin]. That exact revision is the import
-baseline.
+The external Type Facts history was imported from
+[`solid-ts-facts@92c53392`][typefacts-pin]. That exact revision remains the
+provenance and parity baseline; active builds use local source.
 
 These hashes document the review observation. At execution time, record fresh
 heads and create branches from exact commits rather than from a moving name.
@@ -258,8 +258,10 @@ after it must remain small and independently green.
 3. Replace the external-revision stamp with a source manifest digest over the
    Go producer, Rust client, shims, schemas, `go.mod`, `go.sum`, TypeScript-Go
    pin, and build id.
-4. Keep the startup handshake over protocol version, schema digest, producer
-   build identity, and codec limits.
+4. Keep the startup handshake over protocol version, schema digest, and
+   producer build identity. Keep codec limits language-neutral and bind them in
+   the local source manifest; a separate wire-level digest requires a later
+   protocol migration.
 5. Update gate-cache inputs so any Type Facts-owned source or toolchain change
    invalidates producer-dependent results.
 6. Build and test the producer in the same CI change as every Rust client or

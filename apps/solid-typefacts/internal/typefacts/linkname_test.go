@@ -28,11 +28,11 @@ func TestLinknameSignaturesMatchThePinnedCompiler(t *testing.T) {
 	}
 	compilerDir := strings.TrimSpace(string(output))
 
-	shimFiles, err := filepath.Glob("../../shims/*/shim.go")
+	shimFiles, err := filepath.Glob("../../../../shims/*/shim.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	nested, err := filepath.Glob("../../shims/*/*/shim.go")
+	nested, err := filepath.Glob("../../../../shims/*/*/shim.go")
 	if err != nil {
 		t.Fatal(err)
 	}

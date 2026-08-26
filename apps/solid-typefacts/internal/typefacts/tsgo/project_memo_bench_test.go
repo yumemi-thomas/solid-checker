@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
 // BenchmarkSourceFactsAfterLeafEdit models the narrow-affected-set workload:

@@ -2314,7 +2314,7 @@ mod tests {
     #[test]
     fn applies_the_producers_transitions_exactly() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../benchmarks/phase1/typefacts-v5-transition-golden.cbor");
+            .join("../../../benchmarks/typefacts/phase1/typefacts-v5-transition-golden.cbor");
         let bytes =
             std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
         let golden: TransitionGolden = crate::decode(&bytes).expect("decode the transition golden");

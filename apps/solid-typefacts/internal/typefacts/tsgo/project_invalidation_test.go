@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
 type updateMetricTrace struct {

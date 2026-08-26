@@ -13,8 +13,8 @@ Fact ownership is deliberately split:
   execution roles (`ExecutionMap`) and the `CompilerFactsProvider` seam; the
   crate root validates and joins the domains without exposing either Oxc or
   TypeScript-Go nodes;
-- `typefacts`: checker-derived facts and the retained producer session, from
-  [solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts);
+- `crates/typefacts`: checker-derived facts and the retained producer session;
+  the paired Go producer lives at `../apps/solid-typefacts`;
 - `crates/solid-facts-backend`: orchestration, retained caches, certification
   snapshots, contracts, and the CLI;
 - `crates/solid-dialect`: the Solid vocabulary seam — the version-specific
@@ -36,12 +36,12 @@ The production Rust path has one live seam: Rust to the `solid-typefacts`
 producer. Oxc AST facts and Solid compiler facts run in-process, the latter via
 the `solidjs-compiler` crate's semantic trace.
 
-The producer and its Rust client both live in the `solid-ts-facts` repository.
+The producer and its Rust client both live in this repository.
 `TypeFactsSession` is the checker-side adapter over `typefacts::Session`, which
 owns the process, framing, handshake, retained demands, delta application,
-cancellation, and restart-and-replay. `scripts/build-typefacts.sh` builds the
-producer from the revision `Cargo.toml` pins the client to, because the startup
-handshake rejects any other pairing.
+cancellation, and restart-and-replay. `scripts/build-typefacts.sh` builds local
+producer source and stamps its complete source-manifest identity; the startup
+handshake rejects protocol, schema, or build-id mismatches.
 
 The integration tests launch the real producer on the tracer fixture and join
 its output with the in-process Oxc and compiler facts.

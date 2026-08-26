@@ -1,12 +1,12 @@
-# Solid TS Facts
+# Solid Type Facts
 
 Type Facts provides compiler-independent semantic facts about a configured
 TypeScript project. This repository owns both sides of the protocol:
 
-- `cmd/solid-typefacts` is the TypeScript-Go producer.
-- `crates/typefacts` is the Rust model, deterministic-CBOR codec, and retained
+- `apps/solid-typefacts` is the TypeScript-Go producer.
+- `rust/crates/typefacts` is the Rust model, deterministic-CBOR codec, and retained
   session client.
-- `schema` contains the single active lifecycle schema (V1) and codec limits.
+- `schema/typefacts-*` contains the active lifecycle schema and codec limits.
   V1 carries the latest semantic vocabulary. The producer reports its digest
   in the startup handshake, and the client rejects a producer whose digest,
   protocol version, or build id differs.
@@ -46,10 +46,5 @@ for import in graph.imports_from("/project/src/index.ts") {
 make test
 ```
 
-The compiler-derived contract facts and their TypeScript API mapping are
-documented in [docs/compiler-semantic-facts.md](docs/compiler-semantic-facts.md).
-The corresponding solid-checker heuristic removals are listed in
-[docs/migration-solid-checker.md](docs/migration-solid-checker.md).
-
-Tagged releases publish `solid-typefacts` binaries for Linux, macOS, and
-Windows on x64 and arm64 where supported, plus a `SHA256SUMS` manifest.
+The imported design history is retained under `docs/typefacts/`; repository
+integration and release ownership now belong to solid-checker.

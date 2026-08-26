@@ -39,6 +39,9 @@ RC.0 bundled examples cannot override those bytes.
 - [Compiler and Type Facts bootstrap](compiler-and-typefacts-bootstrap.md) —
   early migration from DOM Expressions to Solid's compiler, followed by Type
   Facts repatriation into this repository.
+- [Type Facts repatriation conformance](typefacts-repatriation/2026-08-27-conformance.md)
+  — import identity, cross-pair protocol parity, finding parity, performance,
+  and the remaining external-repository retirement gate.
 - [Solid 2 conformance matrix](solid2-conformance-matrix.md) — required RC.3
   behaviors and evidence expectations.
 - [Migration and verification](migration-and-verification.md) — corpus

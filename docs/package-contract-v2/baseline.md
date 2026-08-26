@@ -19,6 +19,10 @@ Observed on 2026-08-27:
 | `yumemi-thomas/dom-expressions#next` | `46fe53df6bbe1bbc5fdcf96f35fc4305df09936b` | Port-ledger head observed during design review |
 | `yumemi-thomas/solid-ts-facts` | `92c53392388518d69ef27220729f5c061479deed` | Current external producer/client pin and planned import baseline |
 
+This table is the frozen pre-bootstrap observation. Type Facts was subsequently
+imported from the recorded revision and is now built locally; the Solid 2
+compiler bootstrap likewise has its own later conformance record.
+
 The official compiler crate is now named `solidjs-compiler` and does not carry
 the checker's total semantic trace. The next baseline run must record fresh
 heads, but all consumed dependencies remain exact revisions. See

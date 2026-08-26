@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
 // moduleGraphProject writes files into a fresh directory and opens it. The

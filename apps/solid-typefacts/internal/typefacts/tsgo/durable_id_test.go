@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
 // Durable IDs persist across sessions and processes, so the digest rendering

@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - "rust/crates/solid-reactive-ir/**"
+      - "rust/crates/typefacts/**"
+      - "apps/solid-typefacts/**"
+      - "shims/**"
+      - "schema/typefacts-*"
+      - "go.mod"
+      - "go.sum"
       - "packages/cli/scripts/generate-package-contract.mjs"
       - "scripts/contract-corpus.mjs"
       - "fixtures/package-contracts/torture-*/**"
@@ -12,6 +18,12 @@ on:
   pull_request:
     paths:
       - "rust/crates/solid-reactive-ir/**"
+      - "rust/crates/typefacts/**"
+      - "apps/solid-typefacts/**"
+      - "shims/**"
+      - "schema/typefacts-*"
+      - "go.mod"
+      - "go.sum"
       - "packages/cli/scripts/generate-package-contract.mjs"
       - "scripts/contract-corpus.mjs"
       - "fixtures/package-contracts/torture-*/**"

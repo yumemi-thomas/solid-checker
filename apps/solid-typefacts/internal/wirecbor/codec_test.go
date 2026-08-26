@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/wirecbor"
 )
 
 func TestMarshalIsCoreDeterministic(t *testing.T) {
@@ -30,7 +30,7 @@ func TestLimitsMatchLanguageNeutralSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("resolve test path")
 	}
-	contents, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "schema", "typefacts-codec-limits.json"))
+	contents, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "..", "..", "schema", "typefacts-codec-limits.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

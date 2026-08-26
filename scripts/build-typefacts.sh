@@ -1,15 +1,14 @@
 #!/bin/sh
-# Builds the TypeFacts producer from the revision the client crate is pinned to.
+# Builds the repository-owned Type Facts producer.
 #
 # The producer and the `typefacts` client verify each other on startup: the
 # handshake compares protocol version, schema digest, and build id, and a
-# mismatch is a hard failure. Both therefore have to come from one revision,
-# so the revision is read out of `rust/Cargo.toml` rather than written twice.
+# mismatch is a hard failure. The adjacent stamp binds the ignored binary to a
+# digest over the local producer, client, shims, schemas, Go module graph, and
+# TypeScript-Go pin, plus the linked build id.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-repo=https://github.com/yumemi-thomas/solid-ts-facts
-checkout="${SOLID_TYPEFACTS_CHECKOUT:-$root/.typefacts}"
 output="${1:-$root/bin/solid-typefacts}"
 build_id="${TYPEFACTS_BUILD_ID:-dev}"
 
@@ -18,50 +17,32 @@ case "$output" in
   *) output="$root/$output" ;;
 esac
 
-revision=$(
-  sed -n 's/^typefacts = .*rev = "\([0-9a-f]\{40\}\)".*/\1/p' "$root/rust/Cargo.toml"
-)
-if [ -z "$revision" ]; then
-  echo "build-typefacts: no typefacts rev pinned in rust/Cargo.toml" >&2
+identity=$(node "$root/scripts/typefacts-source-identity.mjs" --build-id "$build_id")
+digest=$(printf '%s' "$identity" | sed -n 's/.*"sourceDigest":"\([0-9a-f]\{64\}\)".*/\1/p')
+if [ -z "$digest" ]; then
+  echo "build-typefacts: could not compute local source identity" >&2
   exit 1
 fi
 
-# The pinned revision and the build id are the whole identity of this binary:
-# the revision fixes the source, and the handshake -- protocol version, schema
-# digest, build id -- rejects any other pairing with the client. Recording that
-# pair next to the output lets a repeat call skip the clone and the Go build
-# rather than redo them. Several `make` targets each depend on this one, and CI
-# restores the output from a cache keyed on the same pair.
-#
-# The Go toolchain version is deliberately not part of the identity: it is not
-# part of the handshake, and including it would make every toolchain bump a
-# cache miss on a binary that is still the correct one. A release never reuses
-# anything anyway, because its build id is the tag. Set TYPEFACTS_REBUILD=1 to
-# force a rebuild.
+# Several make targets depend on this producer. The exact local manifest and
+# build id make repeated calls cheap while ensuring any relevant source move
+# invalidates the ignored binary. Set TYPEFACTS_REBUILD=1 to force a rebuild.
 stamp="$output.buildinfo"
-built="revision=$revision build-id=$build_id"
 if [ "${TYPEFACTS_REBUILD:-0}" != "1" ] &&
    [ -x "$output" ] &&
    [ -f "$stamp" ] &&
-   [ "$(cat "$stamp")" = "$built" ]; then
-  echo "build-typefacts: $output already at $revision (build id $build_id)"
+   [ "$(cat "$stamp")" = "$identity" ]; then
+  echo "build-typefacts: $output already at source $digest (build id $build_id)"
   exit 0
 fi
 
-if [ ! -d "$checkout/.git" ]; then
-  rm -rf "$checkout"
-  git clone --quiet --filter=blob:none "$repo" "$checkout"
-fi
-if ! git -C "$checkout" cat-file -e "$revision^{commit}" 2>/dev/null; then
-  git -C "$checkout" fetch --quiet origin "$revision" || git -C "$checkout" fetch --quiet origin
-fi
-git -C "$checkout" -c advice.detachedHead=false checkout --quiet "$revision"
-
 mkdir -p "$(dirname -- "$output")"
-# Dropped before the build, not after: a stamp left next to a binary a failed
-# build may have already replaced would make the next call skip a rebuild it
-# needs.
-rm -f "$stamp"
-( cd "$checkout" && go build -ldflags "-X main.buildID=$build_id" -o "$output" ./cmd/solid-typefacts )
-printf '%s' "$built" > "$stamp"
-echo "build-typefacts: $output at $revision (build id $build_id)"
+temporary="$output.tmp.$$"
+temporary_stamp="$stamp.tmp.$$"
+trap 'rm -f "$temporary" "$temporary_stamp"' EXIT HUP INT TERM
+( cd "$root" && go build -ldflags "-X main.buildID=$build_id" -o "$temporary" ./apps/solid-typefacts )
+printf '%s' "$identity" > "$temporary_stamp"
+mv "$temporary" "$output"
+mv "$temporary_stamp" "$stamp"
+trap - EXIT HUP INT TERM
+echo "build-typefacts: $output at source $digest (build id $build_id)"

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
-	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/wirecbor"
 )
 
 func TestChunkedLifecycleResponseIsWireIdentical(t *testing.T) {

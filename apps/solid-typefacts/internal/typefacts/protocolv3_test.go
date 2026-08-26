@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
 func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
@@ -17,7 +17,7 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 	}{
 		{"typefacts-v1.schema.json", typefacts.TypeFactsSchemaSHA256},
 	} {
-		data, err := os.ReadFile(filepath.Join("..", "..", "schema", schema.name))
+		data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "schema", schema.name))
 		if err != nil {
 			t.Fatal(err)
 		}

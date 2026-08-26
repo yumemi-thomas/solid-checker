@@ -1,14 +1,13 @@
 # Contributing
 
-The checker and CLI are Rust. There is no Go in this repository: the
-TypeScript-Go `solid-typefacts` producer is built from its own repository by
-`scripts/build-typefacts.sh`. Keep the fact boundary explicit: Oxc owns syntax,
-the Solid compiler owns execution semantics, and TypeScript-Go owns checker
-facts.
+The checker and CLI are Rust, and the repository-owned TypeScript-Go producer
+lives under `apps/solid-typefacts`. `scripts/build-typefacts.sh` builds it from
+local source. Keep the fact boundary explicit: Oxc owns syntax, the Solid
+compiler owns execution semantics, and TypeScript-Go owns checker facts.
 
 ## Prerequisites
 
-- Go 1.26 or newer (to build the TypeFacts producer from its pinned revision)
+- Go 1.26 or newer (to build and test the local Type Facts producer)
 - Rust 1.97 with `rustfmt` and `clippy`
 - Bun 1.4.0 (published packages remain compatible with Node.js)
 - `jq`
@@ -22,8 +21,10 @@ make verify      # formatting, Clippy, tests, and schema validation
 make package     # native npm package layout
 ```
 
-Run `make verify` before proposing a change. Compiler execution semantics are
-conformance-tested in the `dom-expressions` repository, not here.
+Run `make verify` before proposing a change. Type Facts changes must keep the
+Go producer, Rust client, schemas, fixtures, and checker consumer green in one
+change. Solid 2 compiler execution facts come from the pinned semantic-only
+Solid fork; Solid 1.x remains separately conformance-tested.
 
 Full verification keeps its Rust artifacts in `rust/target/verify` with debug
 symbols and incremental object caches disabled. This bounds the disk cost of
@@ -89,7 +90,8 @@ secret after verifying the first trusted release.
 
 ## Upstream code
 
-The DOM Expressions compiler and the TypeFacts producer live in their own
-repositories and are consumed as pinned dependencies. Follow
-[the monorepo policy](docs/monorepo.md) when moving either pin. Oxc, tsgolint,
-and TypeScript-Go remain pinned dependencies too.
+The Solid 2 compiler remains an exact semantic-only fork dependency and the
+Solid 1.x compiler remains separate. Type Facts is owned here; its external
+repository is import provenance, not an active dependency or PR target. Follow
+[the monorepo policy](docs/monorepo.md). Oxc and TypeScript-Go remain pinned
+dependencies.

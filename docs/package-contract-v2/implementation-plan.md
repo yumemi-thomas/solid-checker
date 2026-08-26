@@ -93,7 +93,9 @@ T7. Build the Go producer from local source and delete clone, fetch, detached-
 T8. Replace the external revision stamp with a source-manifest digest covering
     producer, client, shims, schemas, dependency pins, toolchain identity, and
     build id.
-T9. Retain the startup protocol, schema, build, and codec-limit handshake.
+T9. Retain the startup protocol, schema, and build handshake. Validate codec
+    limits from the language-neutral schema and bind them in the source
+    manifest; do not claim a fourth handshake field before a protocol change.
 T10. Update CI, release packaging, gate caches, notices, and contributor
      instructions for local ownership.
 T11. Replay identical request transcripts through external and imported builds
@@ -103,7 +105,14 @@ T12. Prove lifecycle, cancellation, restart/replay, incremental, memory,
 T13. Run two clean CI passes and one release build before making the external
      repository read-only or archived.
 T14. Require all later Type Facts changes to include their producer, Rust
-     client, checker consumer, and proof fixtures in this repository.
+    client, checker consumer, and proof fixtures in this repository.
+
+**Status 2026-08-27:** T1-T10 and T14 are complete. T11-T12 parity evidence is
+recorded in the repatriation conformance report; response bytes are compared
+after removing only nondeterministic numeric timing values, while timings are
+gated separately. T13 remains an operational retirement gate: the external
+repository must not be archived until two clean CI runs and one release build
+have completed from the monorepo.
 
 **Exit:** Solid 2 uses a pinned semantic-only fork of the compiler at its new
 upstream location; Type Facts builds locally; both transitions preserve the

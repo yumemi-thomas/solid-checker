@@ -13,7 +13,7 @@ import (
 // internal packages. A mixed set silently pairs one package's shims with
 // another package's compiler.
 func TestAllShimsRequireOneReviewedTypeScriptGoRevision(t *testing.T) {
-	rootModule, err := os.ReadFile("../../go.mod")
+	rootModule, err := os.ReadFile("../../../../go.mod")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,11 +22,11 @@ func TestAllShimsRequireOneReviewedTypeScriptGoRevision(t *testing.T) {
 		t.Fatalf("local shim replacements = %d, want 9", len(locals))
 	}
 
-	moduleFiles, err := filepath.Glob("../../shims/*/go.mod")
+	moduleFiles, err := filepath.Glob("../../../../shims/*/go.mod")
 	if err != nil {
 		t.Fatal(err)
 	}
-	nested, err := filepath.Glob("../../shims/*/*/go.mod")
+	nested, err := filepath.Glob("../../../../shims/*/*/go.mod")
 	if err != nil {
 		t.Fatal(err)
 	}

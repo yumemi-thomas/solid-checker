@@ -1877,7 +1877,9 @@ mod tests {
     fn handshake_hash_matches_frozen_schema() {
         let actual = format!(
             "sha256:{:x}",
-            Sha256::digest(include_bytes!("../../../schema/typefacts-v1.schema.json"))
+            Sha256::digest(include_bytes!(
+                "../../../../schema/typefacts-v1.schema.json"
+            ))
         );
         assert_eq!(actual, TYPE_FACTS_SCHEMA_SHA256);
     }
@@ -2233,7 +2235,7 @@ mod tests {
     #[test]
     fn numeric_enum_tags_decode_the_dense_go_golden() {
         let response: super::Response = crate::decode(include_bytes!(
-            "../../../benchmarks/phase1/typefacts-v3-response-golden.cbor"
+            "../../../../benchmarks/typefacts/phase1/typefacts-v3-response-golden.cbor"
         ))
         .expect("decode response golden");
         let transition =

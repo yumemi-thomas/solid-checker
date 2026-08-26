@@ -11,9 +11,8 @@ CARGO_TEST_RUNNER ?= test
 
 build: build-rust
 
-# The producer lives in yumemi-thomas/solid-ts-facts and is built from the
-# revision `rust/Cargo.toml` pins the client to; the startup handshake rejects
-# any other pairing.
+# The local producer and Rust client share one source-manifest identity; the
+# startup handshake rejects any build-id, protocol, or schema mismatch.
 build-typefacts:
 	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" scripts/build-typefacts.sh
 
@@ -41,7 +40,7 @@ package: build-typefacts
 test: test-rust test-cli
 
 test-rust: build-typefacts
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
 
 test-cli:
 	$(BUN) install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
@@ -131,7 +130,7 @@ contracts-check:
 	$(BUN) scripts/dialect-manifests.mjs check-contracts
 
 clean:
-	rm -rf bin dist rust/target .typefacts
+	rm -rf bin dist rust/target
 
 # Reclaim the large handoff test/link artifacts without discarding release
 # binaries, audited TypeScript installs, or content-addressed gate results.

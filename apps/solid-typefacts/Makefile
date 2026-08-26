@@ -1,7 +1,8 @@
 RUST_TOOLCHAIN ?= 1.97
 TYPEFACTS_BUILD_ID ?= dev
-TYPEFACTS_BIN := $(CURDIR)/bin/solid-typefacts
-SOLID_CHECKER_REPO ?= ../Github/solid-checker
+REPOSITORY_ROOT := $(abspath ../..)
+TYPEFACTS_BIN ?= $(REPOSITORY_ROOT)/bin/solid-typefacts
+SOLID_CHECKER_REPO ?= $(REPOSITORY_ROOT)
 MEMORY_PROJECT ?= /tmp/bench-corpus-5k/tsconfig.json
 MEMORY_EDIT ?= /tmp/bench-corpus-5k/mod4383.tsx
 MEMORY_MAX_PHYSICAL_MIB ?= 1200
@@ -12,31 +13,30 @@ SOLID_CHECKER_SESSION_BENCH ?= $(SOLID_CHECKER_REPO)/rust/target/release/solid-c
 .PHONY: build test test-go test-rust fmt vet benchmark-memory benchmark-memory-5k
 
 build:
-	mkdir -p bin
-	go build -ldflags "-X main.buildID=$(TYPEFACTS_BUILD_ID)" -o "$(TYPEFACTS_BIN)" ./cmd/solid-typefacts
+	TYPEFACTS_BUILD_ID="$(TYPEFACTS_BUILD_ID)" "$(REPOSITORY_ROOT)/scripts/build-typefacts.sh" "$(TYPEFACTS_BIN)"
 
 test: fmt vet test-go test-rust
 
 fmt:
-	test -z "$$(gofmt -l cmd internal shims)"
-	cargo +$(RUST_TOOLCHAIN) fmt --all -- --check
+	cd "$(REPOSITORY_ROOT)" && test -z "$$(gofmt -l apps/solid-typefacts shims)"
+	cargo +$(RUST_TOOLCHAIN) fmt --manifest-path "$(REPOSITORY_ROOT)/rust/Cargo.toml" --all -- --check
 
 vet:
-	go vet ./...
-	cargo +$(RUST_TOOLCHAIN) clippy --workspace --all-targets
+	cd "$(REPOSITORY_ROOT)" && go vet ./apps/solid-typefacts/...
+	cargo +$(RUST_TOOLCHAIN) clippy --manifest-path "$(REPOSITORY_ROOT)/rust/Cargo.toml" -p typefacts --all-targets -- -D warnings
 
 test-go:
-	go test -race ./...
+	cd "$(REPOSITORY_ROOT)" && go test -race ./apps/solid-typefacts/...
 
 test-rust: build
 	TYPEFACTS_TEST_BIN="$(TYPEFACTS_BIN)" TYPEFACTS_BUILD_ID="$(TYPEFACTS_BUILD_ID)" \
-		cargo +$(RUST_TOOLCHAIN) test --workspace
+		cargo +$(RUST_TOOLCHAIN) test --manifest-path "$(REPOSITORY_ROOT)/rust/Cargo.toml" -p typefacts
 
 # Fast, repository-owned structural and latency gates. The symbol-set test
 # catches the exact-growth regression that accounted for most cold allocation.
 benchmark-memory:
-	GOCACHE="$(MEMORY_GOCACHE)" go test ./internal/typefacts -run '^Test(SymbolHandleSetGrowsGeometricallyDuringColdInterning|RetainedContributionSharesCanonicalEntityBacking|PreparedContributionTakesAndCompactsEntityBacking|SparseMaterializationLeavesSymbolClosureToClient|SessionTransfersExpandedRowsAndKeepsSparseIncrementalProof|StreamedWireTransitionIsByteIdentical|SemanticTableRetainsOnlySourceDigests|RetainedDemandStoreOwnsCompactRunsWithoutExpandedRows|SemanticMaterializationReleasesExpandedCompactDemands|CompactDemandsRoundTrip|GeneratedCorpusProducesSparseEntityRows|RetainedSparseMaterializationAtScaleMatchesFreshMaterialization)$$'
-	GOCACHE="$(MEMORY_GOCACHE)" go test ./internal/typefacts -run '^$$' \
+	cd "$(REPOSITORY_ROOT)" && GOCACHE="$(MEMORY_GOCACHE)" go test ./apps/solid-typefacts/internal/typefacts -run '^Test(SymbolHandleSetGrowsGeometricallyDuringColdInterning|RetainedContributionSharesCanonicalEntityBacking|PreparedContributionTakesAndCompactsEntityBacking|SparseMaterializationLeavesSymbolClosureToClient|SessionTransfersExpandedRowsAndKeepsSparseIncrementalProof|StreamedWireTransitionIsByteIdentical|SemanticTableRetainsOnlySourceDigests|RetainedDemandStoreOwnsCompactRunsWithoutExpandedRows|SemanticMaterializationReleasesExpandedCompactDemands|CompactDemandsRoundTrip|GeneratedCorpusProducesSparseEntityRows|RetainedSparseMaterializationAtScaleMatchesFreshMaterialization)$$'
+	cd "$(REPOSITORY_ROOT)" && GOCACHE="$(MEMORY_GOCACHE)" go test ./apps/solid-typefacts/internal/typefacts -run '^$$' \
 		-bench 'Benchmark(ColdSymbolHandleSetMemory|FullTableAnalyzeAtScale|AnalyzeAfterLeafEditAtScale)$$' \
 		-benchmem -count=5
 

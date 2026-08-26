@@ -37,26 +37,28 @@ copied into this repository.
 Oxc is consumed as published Rust crates. It is not forked or copied into this
 repository.
 
-## TypeFacts
+## Type Facts
 
-- Consumed repository: https://github.com/yumemi-thomas/solid-ts-facts
-- Pinned revision: `19671a889b273da135024722c5957b8979e43fbb`
+- Imported repository: https://github.com/yumemi-thomas/solid-ts-facts
+- Imported revision: `92c53392388518d69ef27220729f5c061479deed`
 - License: MIT
 
-The Rust client and Go producer move together at this revision. The producer
-is built from the same pin and validates its protocol, schema, and build
-identity when the checker starts.
+The exact external history was imported into this repository. The Go producer,
+Rust process/session client, schemas, goldens, tests, ADRs, and benchmarks now
+move together here; their original MIT license remains at
+`apps/solid-typefacts/LICENSE`.
 
 ## tsgolint and TypeScript-Go
 
 - tsgolint revision: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
-- TypeScript-Go revision: `2bd066d87f5b`
-- Resolution: pinned Go module versions in the `solid-ts-facts` repository,
-  which builds the TypeFacts producer
+- TypeScript-Go revision: `8d29e62f3585` (pseudo-version
+  `v0.0.0-20260724234109-8d29e62f3585`)
+- Resolution: root `go.mod`, `go.sum`, and all nine shim modules
 - Licenses: MIT
 
-Only tsgolint's TypeScript-Go shim modules are consumed. Neither repository is
-forked or copied into this repository.
+The tsgolint-derived TypeScript-Go shim modules are vendored under `shims/` and
+retain their MIT license at `shims/LICENSE`. TypeScript-Go itself remains a
+pinned Go module dependency and is not copied into this repository.
 
 ## Solid Primitives
 

@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/wirecbor"
 )
 
 // transitionGoldenStep is one retained-table transition. The Rust client
@@ -163,7 +163,7 @@ func transitionGoldenPath(t *testing.T) string {
 	if !ok {
 		t.Fatal("resolve test path")
 	}
-	return filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", "typefacts-v5-transition-golden.cbor")
+	return filepath.Join(filepath.Dir(filename), "..", "..", "..", "..", "benchmarks", "typefacts", "phase1", "typefacts-v5-transition-golden.cbor")
 }
 
 // The Rust client applies these same transitions in crates/typefacts/src.

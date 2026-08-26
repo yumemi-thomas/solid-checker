@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts/tsgo"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts/tsgo"
 )
 
 // These benchmarks price the transport stages the at-scale lifecycle

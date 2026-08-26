@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/wirecbor"
 )
 
 func goldenWireTable() FactTable {
@@ -146,7 +146,7 @@ func readV3Golden(t *testing.T, name string) []byte {
 	if !ok {
 		t.Fatal("resolve test path")
 	}
-	golden, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", name))
+	golden, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "..", "..", "benchmarks", "typefacts", "phase1", name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func v3GoldenPath(t *testing.T, name string) string {
 	if !ok {
 		t.Fatal("resolve test path")
 	}
-	return filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", name)
+	return filepath.Join(filepath.Dir(filename), "..", "..", "..", "..", "benchmarks", "typefacts", "phase1", name)
 }
 
 // The Rust client decodes these same two files in

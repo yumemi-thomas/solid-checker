@@ -202,10 +202,11 @@ the plan prints both as caveats on every run:
 - **The build products under `/bin/` and `rust/target/`.** Above all
   `bin/solid-typefacts`, the producer of every fact here: rebuilding it changes
   every answer while `git status` stays silent. So `build-typefacts` — a stamp
-  check that no-ops when the binary is already at the pinned revision — is in
-  *every* plan, and a `bin/solid-typefacts.buildinfo` whose revision differs
-  from `rust/Cargo.toml`'s pin (or is absent) escalates the whole plan. A
-  hand-replaced binary at the right revision is still not detected.
+  check that no-ops when the binary matches the local source manifest — is in
+  *every* plan, and a `bin/solid-typefacts.buildinfo` whose local source-manifest
+  identity differs from the producer, Rust client, shims, schemas, dependency
+  pins, toolchain identity, or build id (or is absent) escalates the whole plan.
+  A hand-replaced binary with a matching stamp is still not detected.
 - **Ignored fixture inputs.** A `node_modules/solid-js` stub added to an
   *already-tracked* fixture without its `.gitignore` exception lines is invisible
   to `git status`, so no row selects coverage — and `checkDialectStubs`, which
@@ -392,15 +393,14 @@ contracts accidentally. The repository audits Solid 1.x and a specific Solid
 2.0 prerelease; a newer prerelease must be reviewed rather than silently
 substituted.
 
-Current builds still consume the Solid 2 compiler and Type Facts as revision-
-pinned dependencies. Until the approved source bootstrap lands, moving either
-pin must update the corresponding notice and follow docs/monorepo.md; do not
-vendor or float a branch. Reuse the checked-in bin/solid-typefacts when present;
-rebuild it with scripts/build-typefacts.sh only when the Type Facts revision,
-protocol, build id, or producer-dependent code changed.
+Current builds consume the Solid 2 compiler at an exact semantic-only fork
+revision and own Type Facts locally. Reuse the checked-in bin/solid-typefacts
+when its source-manifest stamp matches; rebuild it with
+scripts/build-typefacts.sh when the producer, client, shims, schemas,
+dependencies, toolchain identity, protocol, or build id changes.
 
-The approved target moves the Type Facts producer/client back into this
-repository and follows the Solid 2 compiler at
+The Type Facts producer/client now lives in this repository, and the Solid 2
+compiler follows
 `solidjs/solid/packages/compiler`. Follow
 docs/package-contract-v2/compiler-and-typefacts-bootstrap.md and do not leave a
 mixed local/external producer-client state. The Solid fork is semantic-facts-

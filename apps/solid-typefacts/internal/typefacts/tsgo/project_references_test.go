@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
 )
 
 func TestReleaseAnalysisStateRehydratesDurableIdentity(t *testing.T) {

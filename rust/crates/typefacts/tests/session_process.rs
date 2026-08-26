@@ -278,7 +278,7 @@ fn explicit_unresolved_symbols_survive_the_process_seam() {
 #[test]
 fn exhaustive_call_target_sets_survive_full_delta_and_reuse_responses() {
     let project = repository_root()
-        .join("internal/typefacts/testdata/call-targets/tsconfig.json")
+        .join("apps/solid-typefacts/internal/typefacts/testdata/call-targets/tsconfig.json")
         .canonicalize()
         .unwrap();
     let path = project.parent().unwrap().join("dispatch.ts");
@@ -383,7 +383,7 @@ fn exhaustive_call_target_sets_survive_full_delta_and_reuse_responses() {
 #[test]
 fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
     let project = repository_root()
-        .join("internal/typefacts/testdata/runtime-value-domain/tsconfig.json")
+        .join("apps/solid-typefacts/internal/typefacts/testdata/runtime-value-domain/tsconfig.json")
         .canonicalize()
         .unwrap();
     let path = project.parent().unwrap().join("domains.ts");
@@ -556,7 +556,7 @@ fn v13_domains_and_exact_tuple_lengths_survive_full_delta_and_reuse_responses() 
 #[test]
 fn call_result_domain_survives_the_process_seam() {
     let project = repository_root()
-        .join("internal/typefacts/testdata/call-result-domain/tsconfig.json")
+        .join("apps/solid-typefacts/internal/typefacts/testdata/call-result-domain/tsconfig.json")
         .canonicalize()
         .unwrap();
     let path = project.parent().unwrap().join("calls.ts");
@@ -1353,7 +1353,7 @@ fn a_producer_that_differs_on_any_handshake_field_is_refused() {
             "-o",
         ])
         .arg(&output)
-        .arg("./cmd/solid-typefacts")
+        .arg("./apps/solid-typefacts")
         .status()
         .expect("run go build for the mismatched producer");
     assert!(status.success());
@@ -1380,7 +1380,7 @@ fn a_producer_that_differs_on_any_handshake_field_is_refused() {
 }
 
 fn repository_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
 fn producer() -> PathBuf {
@@ -1403,7 +1403,7 @@ fn producer() -> PathBuf {
                 .current_dir(repository_root())
                 .args(["build", "-ldflags", &ldflags, "-o"])
                 .arg(&output)
-                .arg("./cmd/solid-typefacts")
+                .arg("./apps/solid-typefacts")
                 .status()
                 .expect("run go build for the session process test");
             assert!(status.success(), "build the Type Facts test producer");
@@ -1414,7 +1414,7 @@ fn producer() -> PathBuf {
 
 fn project() -> PathBuf {
     repository_root()
-        .join("internal/typefacts/testdata/aliased-import/tsconfig.json")
+        .join("apps/solid-typefacts/internal/typefacts/testdata/aliased-import/tsconfig.json")
         .canonicalize()
         .unwrap()
 }

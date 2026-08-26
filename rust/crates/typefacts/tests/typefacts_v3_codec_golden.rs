@@ -15,7 +15,7 @@ use typefacts::{
 
 fn golden(name: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../benchmarks/phase1")
+        .join("../../../benchmarks/typefacts/phase1")
         .join(name);
     fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
 }

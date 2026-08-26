@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/wirecbor"
 )
 
 func TestCompactDemandsRoundTrip(t *testing.T) {
