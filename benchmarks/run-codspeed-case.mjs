@@ -23,9 +23,14 @@ const common = [
   "--typefacts",
   typefacts,
 ];
+// CodSpeed measures the wall time of this whole process, so each scenario has
+// to run its own phase long enough to dominate process start-up and the one
+// fresh analysis every session pays before anything can be reused.
 const scenarios = {
   fresh: ["--iterations", "1", "--warmups", "0"],
-  cached: ["--iterations", "4000", "--warmups", "3"],
+  // A cache hit costs microseconds, so 4,000 of them were about two percent of
+  // the process and a reuse regression stayed inside the fresh analysis' noise.
+  cached: ["--iterations", "100000", "--warmups", "3"],
   incremental: [
     "--iterations",
     "30",
@@ -35,6 +40,18 @@ const scenarios = {
     `${corpus}/mod0001.tsx`,
     "--edit-mode",
     "same-span-body",
+  ],
+  // The same edit as above, except that it shifts every span after it: the
+  // expensive incremental path, where positions cannot be reused.
+  structural: [
+    "--iterations",
+    "8",
+    "--warmups",
+    "2",
+    "--edit",
+    `${corpus}/mod0001.tsx`,
+    "--edit-mode",
+    "prefix",
   ],
 };
 const arguments_ = scenarios[scenario];

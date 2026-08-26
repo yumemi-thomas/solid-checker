@@ -1,5 +1,7 @@
 # solid-checker
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/yumemi-thomas/solid-checker?utm_source=badge)
+
 `solid-checker` catches [Solid](https://docs.solidjs.com) runtime bugs before they
 ship. Your code can compile, type-check, and still misbehave at runtime — these
 failures are invisible to the TypeScript compiler:

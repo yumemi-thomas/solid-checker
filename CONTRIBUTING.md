@@ -37,12 +37,25 @@ analysis. The incremental ceiling is intentionally measured on a deterministic
 1,000-source corpus and can be overridden with
 `SOLID_CHECKER_MAX_INCREMENTAL_NS` when testing that the gate turns red.
 
-The `Performance` GitHub workflow also sends fresh, cached-throughput, and
-one-file incremental wall-time benchmarks to CodSpeed on `main` and every pull
-request. Runs on `main` establish the comparison baseline; pull requests receive
-a performance check and report against that baseline. These are wall-time
-benchmarks because the end-to-end analysis includes the Type Facts child
-process, which CPU simulation does not follow.
+The `CodSpeed` GitHub workflow sends fresh, cached-throughput, same-span
+incremental, and span-shifting incremental wall-time benchmarks to CodSpeed on
+`main` and every pull request. Runs on `main` establish the comparison baseline;
+pull requests receive a performance check and report against that baseline.
+These are wall-time benchmarks because the end-to-end analysis includes the Type
+Facts child process, which CPU simulation does not follow, and they run in their
+own workflow so that a red `Performance` gate still leaves a measurement on the
+commit.
+
+The cases are declared in `codspeed.yml` and executed by
+`benchmarks/run-codspeed-case.mjs`. CodSpeed times the whole case process, so an
+iteration count there is chosen to make its own phase dominate process start-up
+and the one fresh analysis every session pays before anything can be reused.
+Reproduce a case locally with the corpus the workflow generates:
+
+```sh
+bun benchmarks/generate-bench-corpus.mjs 1000 /tmp/solid-checker-codspeed-corpus
+bun benchmarks/run-codspeed-case.mjs cached
+```
 
 ## Continuous integration caches
 
