@@ -647,7 +647,14 @@ partitioning clients for a distinction the reserved vocabulary already draws.
 
 ## Unresolved questions
 
-1. **Argument synthesis limits — how much is actually drivable.** The boundary
+1. **Argument synthesis limits — how much is actually drivable.** Generation
+   now carries a hash-bound, Type-Facts-derived candidate set for exact string,
+   finite-number, boolean, `null`, and `undefined` members plus structurally valid empty Array, Map, and Set
+   values. The driver tries at most eight deterministic argument vectors and
+   records all of them; a recipe is reachability input, never evidence. Broad
+   primitive domains still cannot soundly supply representatives, so only
+   exact compiler literal inhabitants become literal recipes.
+   The remaining boundary
    of "drivable" is whether a driver can construct a call that reaches the
    callback, and the only sound source for the other arguments is package
    declarations this generator never resolves. What fraction of real claims

@@ -787,7 +787,8 @@ to prevent. Regenerate and probe the fresh document instead.
 
 **The report.** `<contract>.probe.json` records, per `(entrypoint, export,
 claim)`, the claim family, the modes attempted, the modes passed, the measured
-call counts, the synthesized argument vocabulary, and every undriven claim's
+call counts, the synthesized argument vocabulary and all type-directed argument
+attempts, and every undriven claim's
 reason — plus the discovery state, the markers a write superseded, and the
 identities the result is a function of: the installed version and npm
 integrity, the generator identity the review plan carries, the probe driver
@@ -800,6 +801,17 @@ an unexplained duration. Nothing loads it and
 nothing certifies from it. It is the audit trail for what the machine believed
 and could not confirm, and it is the measurement of how much of a real
 package's contract a machine can reach.
+
+Generation writes probe-plan schema v2 when Type Facts proves safe inhabitants
+for a parameter. Exact string, finite-number, boolean, `null`, and `undefined`
+members and empty Array, Map, and Set shapes are retained in deterministic order. The
+driver exposes each alternate independently, then bounded combinations, with a
+hard limit of eight attempts per claim. A pass from any attempt can drive the
+claim, while a contradiction from any attempt fails it; construction recipes
+remain reachability inputs and never become evidence. Broad primitive types,
+branded intersections, enum literals, recovery types, and unconstrained
+generics contribute no literal recipe; the driver never invents a representative
+from a broad value-domain category.
 
 The `family` label is the one RFC 0002's taxonomy assigns, and it now agrees
 with what `contract verify` does with the row. `reactiveReads[]` and

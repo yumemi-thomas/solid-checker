@@ -48,7 +48,7 @@ import {
   reviewStatePath
 } from "./contract-review-plan.mjs";
 import {
-  ARGUMENT_SYNTHESIS,
+  isArgumentRecipe,
   PROBE_MODES,
   applyProbeEvidence,
   buildProbePlan,
@@ -175,7 +175,7 @@ export function readProbeConstructionPlan(contractFile, contractHash, package_) 
   const path = probeConstructionPlanPath(contractFile);
   if (!existsSync(path)) return undefined;
   const plan = JSON.parse(readFileSync(path, "utf8"));
-  if (plan.schemaVersion !== 1 || plan.source !== "typescript-value-domain") {
+  if (![1, 2].includes(plan.schemaVersion) || plan.source !== "typescript-value-domain") {
     throw new Error(`${path} is not a supported TypeFacts probe construction plan`);
   }
   if (plan.contract !== contractHash) {
@@ -188,9 +188,16 @@ export function readProbeConstructionPlan(contractFile, contractHash, package_) 
   }
   for (const entry of Object.values(plan.entrypoints ?? {})) {
     for (const recipes of Object.values(entry ?? {})) {
-      for (const recipe of Object.values(recipes ?? {})) {
-        if (!ARGUMENT_SYNTHESIS.includes(recipe)) {
-          throw new Error(`${path} contains unsupported argument recipe ${JSON.stringify(recipe)}`);
+      for (const rawCandidates of Object.values(recipes ?? {})) {
+        const candidates = Array.isArray(rawCandidates) ? rawCandidates : [rawCandidates];
+        if (
+          candidates.length === 0 ||
+          candidates.length > 8 ||
+          candidates.some(recipe => !isArgumentRecipe(recipe))
+        ) {
+          throw new Error(
+            `${path} contains unsupported argument recipe ${JSON.stringify(rawCandidates)}`
+          );
         }
       }
     }

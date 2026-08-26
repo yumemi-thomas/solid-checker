@@ -2128,9 +2128,29 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
     )
     .unwrap();
     assert_eq!(probe_plan["source"], "typescript-value-domain");
+    assert_eq!(probe_plan["schemaVersion"], 2);
+    assert!(
+        probe_plan["entrypoints"]["."]
+            .get("identityResult")
+            .is_none(),
+        "an unconstrained generic is not proof that null inhabits the parameter"
+    );
     assert_eq!(
-        probe_plan["entrypoints"]["."]["identityResult"]["0"],
-        "null"
+        probe_plan["entrypoints"]["."]["constructionCandidates"],
+        serde_json::json!({
+            "0": ["null", "undefined"],
+            "1": ["empty-array"],
+            "2": ["empty-map"],
+            "3": ["empty-set"],
+            "4": [
+                { "kind": "literal", "value": false },
+                { "kind": "literal", "value": true },
+                { "kind": "literal", "value": 0 },
+                { "kind": "literal", "value": 1 },
+                { "kind": "literal", "value": "closed" },
+                { "kind": "literal", "value": "open" }
+            ]
+        })
     );
     assert_eq!(
         contract["entrypoints"]["."]["exports"]["memoThroughConditionalAdapter"]["callbacks"],

@@ -1964,16 +1964,17 @@ fn emit_package_contract(
 struct ProbePlanFragment {
     schema_version: u32,
     source: &'static str,
-    exports: BTreeMap<String, BTreeMap<usize, String>>,
+    exports: BTreeMap<String, BTreeMap<usize, Vec<serde_json::Value>>>,
 }
 
 /// Writes probe-only argument recipes proven by Type Facts.
 ///
 /// This file is deliberately not part of the package-contract schema. A valid
 /// input helps a probe reach package behavior; it is never evidence that the
-/// behavior is correct. Recipes are emitted only for literal inhabitants the
-/// compiler's closed value-domain facts name directly. Everything else stays
-/// absent and the driver keeps its existing fail-closed synthesis.
+/// behavior is correct. Recipes are emitted only for exact singleton values or
+/// structurally valid empty standard-library containers proven by Type Facts.
+/// Everything else stays absent and the driver keeps its existing fail-closed
+/// synthesis.
 fn emit_probe_plan(
     request: &Request,
     facts: &solid_facts::ProjectFacts,
@@ -2037,34 +2038,52 @@ fn emit_probe_plan(
             else {
                 continue;
             };
-            let primitive = entity.primitive_value_domain;
-            let recipe = if primitive
+            let mut recipes = Vec::new();
+            if let Some(primitive) = entity
+                .primitive_value_domain
                 .present()
-                .is_some_and(|domain| domain.may_be_null())
+                .filter(|domain| !domain.unknown())
             {
-                Some("null")
-            } else if primitive
-                .present()
-                .is_some_and(|domain| domain.may_be_undefined())
-            {
-                Some("undefined")
-            } else if entity.array_shape == Some(typefacts::ArrayShape::Array)
+                if primitive.may_be_null() {
+                    recipes.push(serde_json::Value::String("null".to_owned()));
+                }
+                if primitive.may_be_undefined() {
+                    recipes.push(serde_json::Value::String("undefined".to_owned()));
+                }
+            }
+            if entity.array_shape == Some(typefacts::ArrayShape::Array)
                 && entity.tuple_shape.is_none()
             {
-                Some("empty-array")
-            } else {
-                entity.library_types.as_deref().and_then(|types| {
-                    if types.iter().any(|name| name.as_ref() == "Map") {
-                        Some("empty-map")
-                    } else if types.iter().any(|name| name.as_ref() == "Set") {
-                        Some("empty-set")
-                    } else {
-                        None
-                    }
-                })
-            };
-            if let Some(recipe) = recipe {
-                parameters.insert(index, recipe.to_owned());
+                recipes.push(serde_json::Value::String("empty-array".to_owned()));
+            }
+            if let Some(types) = entity.library_types.as_deref() {
+                if types.iter().any(|name| name.as_ref() == "Map") {
+                    recipes.push(serde_json::Value::String("empty-map".to_owned()));
+                }
+                if types.iter().any(|name| name.as_ref() == "Set") {
+                    recipes.push(serde_json::Value::String("empty-set".to_owned()));
+                }
+            }
+            if let Some(candidates) = entity.primitive_literal_candidates.as_deref() {
+                for candidate in candidates.iter().take(8) {
+                    let value = match candidate.kind {
+                        typefacts::PrimitiveLiteralKind::String => {
+                            serde_json::Value::String(candidate.string.to_string())
+                        }
+                        typefacts::PrimitiveLiteralKind::Number => {
+                            serde_json::Number::from_f64(candidate.number)
+                                .map(serde_json::Value::Number)
+                                .ok_or("Type Facts returned a non-finite primitive literal")?
+                        }
+                        typefacts::PrimitiveLiteralKind::Boolean => {
+                            serde_json::Value::Bool(candidate.boolean)
+                        }
+                    };
+                    recipes.push(serde_json::json!({ "kind": "literal", "value": value }));
+                }
+            }
+            if !recipes.is_empty() {
+                parameters.insert(index, recipes);
             }
         }
         if !parameters.is_empty() {
@@ -2072,7 +2091,7 @@ fn emit_probe_plan(
         }
     }
     let fragment = ProbePlanFragment {
-        schema_version: 1,
+        schema_version: 2,
         source: "typescript-value-domain",
         exports,
     };

@@ -33,6 +33,7 @@ import {
   EXECUTION_UNATTRIBUTABLE,
   PROBE_MODES,
   applyConstructionPlan,
+  applyConstructionPlans,
   applyProbeEvidence,
   attemptedModes,
   buildProbePlan,
@@ -157,7 +158,7 @@ test("argument synthesis fills only the slots the contract's own vocabulary name
     "undefined",
     "empty-object"
   ]);
-  assert.equal(
+  assert.deepEqual(
     descriptors.every(descriptor => ARGUMENT_SYNTHESIS.includes(descriptor)),
     true,
     "the vocabulary is closed: a slot is filled from it or left undefined"
@@ -686,6 +687,98 @@ test("TypeFacts construction recipes fill only otherwise-undefined slots", () =>
     ),
     ["null", "probe-callback", "empty-object", "empty-set"]
   );
+  assert.deepEqual(
+    applyConstructionPlans(
+      ["undefined", "undefined", "probe-callback"],
+      {
+        0: ["null", "undefined"],
+        1: ["empty-array", "empty-map"],
+        2: ["empty-set"],
+        9: [{ kind: "literal", value: "ignored" }]
+      }
+    ),
+    [
+      ["null", "empty-array", "probe-callback"],
+      ["undefined", "empty-array", "probe-callback"],
+      ["null", "empty-map", "probe-callback"],
+      ["undefined", "empty-map", "probe-callback"]
+    ]
+  );
+});
+
+test("every type-directed attempt is visible and any contradiction fails the claim", () => {
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-1"] = {
+    kind: "function",
+    callbacks: [{ parameter: 0, execution: "inline" }]
+  };
+  document.entrypoints["."].exports = { "function-1": ["choose"] };
+  const plan = buildProbePlan(expandContract(document), {
+    modes: [PROBE_MODES[0]],
+    discovery: false,
+    constructionPlan: {
+      entrypoints: { ".": { choose: { 1: [{ kind: "literal", value: "open" }, { kind: "literal", value: "closed" }] } } }
+    }
+  });
+  const probes = plan.sessions[0].probes.filter(probe => probe.type === "callback");
+  assert.deepEqual(
+    probes.map(probe => probe.arguments),
+    [
+      ["probe-callback"]
+    ],
+    "a recipe cannot extend beyond a contract-proven argument slot"
+  );
+
+  document.summaries["function-1"].callbacks.push({ parameter: 2, execution: "inline" });
+  const expanded = expandContract(document);
+  const driven = buildProbePlan(expanded, {
+    modes: [PROBE_MODES[0]],
+    discovery: false,
+    constructionPlan: {
+      entrypoints: { ".": { choose: { 1: [{ kind: "literal", value: "open" }, { kind: "literal", value: "closed" }] } } }
+    }
+  });
+  const attempts = driven.sessions[0].probes.filter(
+    probe => probe.type === "callback" && probe.parameter === 0
+  );
+  assert.deepEqual(attempts.map(probe => probe.arguments), [
+    ["probe-callback", { kind: "literal", value: "open" }, "noop-callback"],
+    ["probe-callback", { kind: "literal", value: "closed" }, "noop-callback"]
+  ]);
+  const observations = attempts.map((probe, index) => ({
+    id: probe.id,
+    outcome: "observed",
+    runtime: { reruns: true },
+    calls: 1,
+    observation: index === 0
+      ? {
+          ranDuringCall: true,
+          runsBeforeWrite: 1,
+          runsAfterControl: 1,
+          runsAfterWrite: 1,
+          siteRunsBeforeWrite: 1,
+          siteRunsAfterWrite: 1
+        }
+      : {
+          ranDuringCall: true,
+          runsBeforeWrite: 1,
+          runsAfterControl: 1,
+          runsAfterWrite: 2,
+          siteRunsBeforeWrite: 1,
+          siteRunsAfterWrite: 1
+        }
+  }));
+  interpretSession({
+    claims: driven.claims,
+    index: driven.index,
+    mode: "client",
+    results: observations
+  });
+  settleClaims(driven.claims);
+  assert.equal(
+    driven.claims.find(claim => claim.claim === "callbacks[0]=inline").status,
+    "failed"
+  );
 });
 
 test("probe construction plans are bound to exact contract bytes", () => {
@@ -698,16 +791,18 @@ test("probe construction plans are bound to exact contract bytes", () => {
   writeFileSync(
     path,
     `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       contract: hash,
       source: "typescript-value-domain",
       package: { name: "x", version: "1" },
-      entrypoints: { ".": { f: { 0: "null" } } }
+      entrypoints: {
+        ".": { f: { 0: ["null", "undefined", { kind: "literal", value: "open" }] } }
+      }
     })}\n`
   );
-  assert.equal(
+  assert.deepEqual(
     readProbeConstructionPlan(contractFile, hash, { name: "x", version: "1" }).entrypoints["."].f[0],
-    "null"
+    ["null", "undefined", { kind: "literal", value: "open" }]
   );
   assert.throws(
     () => readProbeConstructionPlan(contractFile, "sha256:stale", { name: "x", version: "1" }),

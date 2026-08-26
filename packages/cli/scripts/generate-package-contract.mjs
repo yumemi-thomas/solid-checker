@@ -2693,7 +2693,7 @@ async function generatePackageContractInternal(arguments_, context) {
       constructionPlanPath,
       `${JSON.stringify(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           contract: sha256Artifact(output),
           source: "typescript-value-domain",
           package: { name: manifest.name, version: manifest.version },

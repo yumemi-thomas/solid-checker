@@ -3891,6 +3891,7 @@ mod tests {
             constructability: None,
             runtime_value_domain: None,
             primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
+            primitive_literal_candidates: None,
             call_result_domain: None,
             constant_value: None,
             array_shape: None,

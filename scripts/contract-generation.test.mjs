@@ -131,7 +131,7 @@ if (probePlanPath) {
   writeFileSync(
     probePlanPath,
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       source: "typescript-value-domain",
       exports: {}
     })

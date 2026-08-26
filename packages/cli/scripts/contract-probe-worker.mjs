@@ -513,6 +513,7 @@ function drivesItself(namespace) {
 /// decides which descriptor each slot gets; this only builds them.
 function buildArguments(descriptors, probeCallback, probeValue) {
   return (descriptors ?? []).map(descriptor => {
+    if (descriptor?.kind === "literal") return descriptor.value;
     if (descriptor === "probe-callback") return probeCallback;
     if (descriptor === "probe-value") return probeValue;
     if (descriptor === "noop-callback") return () => undefined;

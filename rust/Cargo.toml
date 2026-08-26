@@ -120,7 +120,7 @@ solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = 
 # `Callability::UntypedCallable` is positive runtime-function evidence without
 # claiming a readable signature; the kind proof and keyed-control discovery
 # consume it beside `Callable`. `Constructability` remains unchanged.
-typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "19671a889b273da135024722c5957b8979e43fbb" }
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "cf03c94da8208b85b20747f47bdf80401a9e12ed" }
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"
 oxc_ast = "0.118"

@@ -186,12 +186,11 @@ function rows(value) {
 ///                   names, because the export reads a member of it
 ///   undefined       every other slot
 ///
-/// There is deliberately no ladder of retries. Trying `{}`, then `[]`, then `0`
-/// until something completes would make drivability depend on which shape
-/// happened to survive, and a call that completes for the wrong reason observes
-/// the wrong thing. A slot the vocabulary cannot fill is `undefined`, and if the
-/// export refuses it the claim is undriven with the throw as its reason -- which
-/// is the measurement RFC 0002's unresolved question 1 asks for.
+/// A Type Facts construction plan may now name several proven inhabitants for
+/// one slot. This is not a guess-and-survive ladder: every candidate is derived
+/// from the package's declarations, every attempt remains visible in the probe
+/// report, and a contradiction from any attempt fails the claim. A slot the
+/// vocabulary cannot fill stays `undefined`.
 export const ARGUMENT_SYNTHESIS = [
   "probe-callback",
   "probe-value",
@@ -204,16 +203,88 @@ export const ARGUMENT_SYNTHESIS = [
   "undefined"
 ];
 
-export function applyConstructionPlan(descriptors, recipes) {
-  const next = [...descriptors];
-  if (!recipes || typeof recipes !== "object") return next;
-  for (const [rawIndex, recipe] of Object.entries(recipes)) {
-    const index = Number(rawIndex);
-    if (!Number.isInteger(index) || index < 0 || index >= next.length) continue;
-    if (next[index] !== "undefined" || !ARGUMENT_SYNTHESIS.includes(recipe)) continue;
-    next[index] = recipe;
+/// Multiple type-directed candidates improve reach, but the product of several
+/// union parameters must not turn one claim into an unbounded probe session.
+export const MAX_CONSTRUCTION_ATTEMPTS = 8;
+
+export function isArgumentRecipe(recipe) {
+  if (ARGUMENT_SYNTHESIS.includes(recipe)) return true;
+  if (!recipe || typeof recipe !== "object" || Array.isArray(recipe)) return false;
+  if (recipe.kind !== "literal" || Object.keys(recipe).sort().join(",") !== "kind,value") {
+    return false;
   }
-  return next;
+  return (
+    typeof recipe.value === "string" ||
+    typeof recipe.value === "boolean" ||
+    (typeof recipe.value === "number" && Number.isFinite(recipe.value))
+  );
+}
+
+export function applyConstructionPlan(descriptors, recipes) {
+  return applyConstructionPlans(descriptors, recipes, 1)[0];
+}
+
+export function applyConstructionPlans(
+  descriptors,
+  recipes,
+  limit = MAX_CONSTRUCTION_ATTEMPTS
+) {
+  const baseline = [...descriptors];
+  if (!recipes || typeof recipes !== "object" || limit <= 0) return [baseline];
+  const slots = [];
+  for (const [rawIndex, rawCandidates] of Object.entries(recipes).sort(
+    ([left], [right]) => Number(left) - Number(right)
+  )) {
+    const index = Number(rawIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= baseline.length) continue;
+    if (baseline[index] !== "undefined") continue;
+    const candidates = (Array.isArray(rawCandidates) ? rawCandidates : [rawCandidates])
+      .filter(isArgumentRecipe)
+      .filter((recipe, index, all) =>
+        all.findIndex(candidate => JSON.stringify(candidate) === JSON.stringify(recipe)) === index
+      );
+    if (!candidates.length) continue;
+    baseline[index] = candidates[0];
+    slots.push({ index, candidates });
+  }
+  const plans = [baseline];
+  const seen = new Set([JSON.stringify(baseline)]);
+  const add = candidate => {
+    const key = JSON.stringify(candidate);
+    if (seen.has(key) || plans.length >= limit) return;
+    seen.add(key);
+    plans.push(candidate);
+  };
+
+  // First expose every alternate independently. If the budget permits, add
+  // combinations in deterministic Cartesian order. This avoids hiding a later
+  // parameter's second candidate merely because an earlier union was wide.
+  for (let offset = 1; plans.length < limit; offset += 1) {
+    let found = false;
+    for (const { index, candidates } of slots) {
+      if (offset >= candidates.length) continue;
+      found = true;
+      const candidate = [...baseline];
+      candidate[index] = candidates[offset];
+      add(candidate);
+    }
+    if (!found) break;
+  }
+  const combine = (slotIndex, candidate, changed) => {
+    if (plans.length >= limit) return;
+    if (slotIndex === slots.length) {
+      if (changed >= 2) add(candidate);
+      return;
+    }
+    const { index, candidates } = slots[slotIndex];
+    for (let choice = 0; choice < candidates.length && plans.length < limit; choice += 1) {
+      const next = [...candidate];
+      next[index] = candidates[choice];
+      combine(slotIndex + 1, next, changed + Number(choice > 0));
+    }
+  };
+  combine(0, baseline, 0);
+  return plans;
 }
 
 export function synthesizeArguments(summary, probedParameter) {
@@ -413,10 +484,16 @@ export function buildProbePlan(
     const applicable = modes.filter(mode => modeApplies(entry, mode));
     for (const [exportName, summary] of Object.entries(entry.exports ?? {})) {
       const construct = descriptors =>
-        applyConstructionPlan(
+        applyConstructionPlans(
           descriptors,
           constructionPlan?.entrypoints?.[entrypoint]?.[exportName]
         );
+      const recordAttempts = (record, descriptors) => {
+        const attempts = construct(descriptors);
+        record.arguments = attempts[0];
+        if (attempts.length > 1) record.argumentAttempts = attempts;
+        return attempts;
+      };
       // Undrivable records are per claim, not per mode: the reason a claim has
       // no probe form does not change with the environment. The family comes
       // from `UNDRIVABLE_FAMILY`, so a row the generator proves statically is
@@ -449,24 +526,28 @@ export function buildProbePlan(
             const claim = `callbacks[${callback.parameter}]=${callback.execution}`;
             const record = claimRecord(entrypoint, exportName, claim, "B");
             record.modesAttempted.push(mode.name);
-            record.arguments = construct(synthesizeArguments(selected, callback.parameter));
-            request(
-              mode,
-              { entrypoint, export: exportName, claim },
-              {
-                type: "callback",
-                entrypoint,
-                specifier,
-                export: exportName,
-                parameter: callback.parameter,
-                arguments: record.arguments,
-                // A lazily-computed export (a memo) never runs its callback
-                // until the accessor it returned is read, and the contract is
-                // what says an accessor was returned. Reading it is therefore
-                // contract-led, not a guess about the return value.
-                callAccessor: selected.returns?.kind === "accessor"
-              }
-            );
+            for (const arguments_ of recordAttempts(
+              record,
+              synthesizeArguments(selected, callback.parameter)
+            )) {
+              request(
+                mode,
+                { entrypoint, export: exportName, claim },
+                {
+                  type: "callback",
+                  entrypoint,
+                  specifier,
+                  export: exportName,
+                  parameter: callback.parameter,
+                  arguments: arguments_,
+                  // A lazily-computed export (a memo) never runs its callback
+                  // until the accessor it returned is read, and the contract is
+                  // what says an accessor was returned. Reading it is therefore
+                  // contract-led, not a guess about the return value.
+                  callAccessor: selected.returns?.kind === "accessor"
+                }
+              );
+            }
           }
         }
 
@@ -482,39 +563,47 @@ export function buildProbePlan(
                   "no plantable reactive source: proving the returned value is an accessor needs a signal read inside a callback the contract states, and this export states none";
               } else {
                 record.modesAttempted.push(mode.name);
-                record.arguments = construct(synthesizeArguments(selected, plant));
-                request(
-                  mode,
-                  { entrypoint, export: exportName, claim },
-                  {
-                    type: "returns-accessor",
-                    entrypoint,
-                    specifier,
-                    export: exportName,
-                    parameter: plant,
-                    arguments: record.arguments,
-                    returnPath: path
-                  }
-                );
+                for (const arguments_ of recordAttempts(
+                  record,
+                  synthesizeArguments(selected, plant)
+                )) {
+                  request(
+                    mode,
+                    { entrypoint, export: exportName, claim },
+                    {
+                      type: "returns-accessor",
+                      entrypoint,
+                      specifier,
+                      export: exportName,
+                      parameter: plant,
+                      arguments: arguments_,
+                      returnPath: path
+                    }
+                  );
+                }
               }
             } else if (
               ["argument", "callback-result", "callback-result-function"].includes(returned.kind)
             ) {
               record.modesAttempted.push(mode.name);
-              record.arguments = construct(synthesizeReturnArguments(selected, returned));
-              request(
-                mode,
-                { entrypoint, export: exportName, claim },
-                {
-                  type: `returns-${returned.kind}`,
-                  entrypoint,
-                  specifier,
-                  export: exportName,
-                  parameter: returned.parameter,
-                  arguments: record.arguments,
-                  returnPath: path
-                }
-              );
+              for (const arguments_ of recordAttempts(
+                record,
+                synthesizeReturnArguments(selected, returned)
+              )) {
+                request(
+                  mode,
+                  { entrypoint, export: exportName, claim },
+                  {
+                    type: `returns-${returned.kind}`,
+                    entrypoint,
+                    specifier,
+                    export: exportName,
+                    parameter: returned.parameter,
+                    arguments: arguments_,
+                    returnPath: path
+                  }
+                );
+              }
             } else {
               record.family = "C";
               record.reason =
@@ -540,19 +629,21 @@ export function buildProbePlan(
           const stated = new Set(rows(selected.callbacks).map(callback => callback.parameter));
           for (const parameter of DISCOVERY_PARAMETERS) {
             if (stated.has(parameter)) continue;
-            request(
-              mode,
-              { entrypoint, export: exportName, discovery: true, parameter },
-              {
-                type: "discovery",
-                entrypoint,
-                specifier,
-                export: exportName,
-                parameter,
-                arguments: construct(synthesizeArguments(selected, parameter)),
-                callAccessor: selected.returns?.kind === "accessor"
-              }
-            );
+            for (const arguments_ of construct(synthesizeArguments(selected, parameter))) {
+              request(
+                mode,
+                { entrypoint, export: exportName, discovery: true, parameter },
+                {
+                  type: "discovery",
+                  entrypoint,
+                  specifier,
+                  export: exportName,
+                  parameter,
+                  arguments: arguments_,
+                  callAccessor: selected.returns?.kind === "accessor"
+                }
+              );
+            }
           }
         }
       }
@@ -1345,6 +1436,7 @@ export function buildProbeReport({
         family: claim.family,
         status: claim.status,
         ...(claim.arguments ? { arguments: claim.arguments } : {}),
+        ...(claim.argumentAttempts ? { argumentAttempts: claim.argumentAttempts } : {}),
         modes: { attempted: [...new Set(claim.modesAttempted)].sort(), passed: [...new Set(claim.modesPassed)].sort() },
         ...(claim.calls ? { calls: claim.calls } : {}),
         ...(claim.reason ? { reason: claim.reason } : {}),

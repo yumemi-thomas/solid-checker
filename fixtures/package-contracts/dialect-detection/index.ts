@@ -83,6 +83,20 @@ export function identityResult<T>(value: T): T {
   return value;
 }
 
+export function constructionCandidates(
+  absent: null | undefined,
+  items: unknown[],
+  map: Map<unknown, unknown>,
+  set: Set<unknown>,
+  mode: "open" | "closed" | 0 | 1 | false | true
+): void {
+  void absent;
+  void items;
+  void map;
+  void set;
+  void mode;
+}
+
 // One identity-looking branch is not an identity contract. The generic probe
 // supplies a fresh object here and observes `false` on the other path; package
 // generation must therefore omit `returns` instead of claiming `argument[0]`.
