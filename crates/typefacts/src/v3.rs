@@ -31,7 +31,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V14: u64 = 14;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:c945c363159a33a46014a449641ea13844ae353b161c25d7535bbb51d021c91d";
+    "sha256:50e37e2bfc1396b7d4f7becc366751adb25b27c44b7a8cc033afc54b85635aec";
 /// 2 because the lifecycle operation set widened: `Operation::Modules` is an
 /// operation a peer must know about to be paired at all, where every earlier
 /// vocabulary change added a fact to an existing operation and moved the schema
@@ -104,6 +104,8 @@ pub struct EntityDemand {
     pub runtime_value_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_value_domain: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_literal_candidates: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub call_result_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -328,6 +330,7 @@ pub const DEMAND_FLAG_TUPLE_SHAPE: u64 = 1 << 13;
 pub const DEMAND_FLAG_LIBRARY_TYPES: u64 = 1 << 14;
 pub const DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN: u64 = 1 << 15;
 pub const DEMAND_FLAG_CONSTRUCTABILITY: u64 = 1 << 16;
+pub const DEMAND_FLAG_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 17;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -1536,6 +1539,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         }
         if demand.primitive_value_domain {
             flags |= DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN;
+        }
+        if demand.primitive_literal_candidates {
+            flags |= DEMAND_FLAG_PRIMITIVE_LITERAL_CANDIDATES;
         }
         if demand.constructability {
             flags |= DEMAND_FLAG_CONSTRUCTABILITY;

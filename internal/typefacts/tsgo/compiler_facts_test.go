@@ -642,15 +642,15 @@ enumValue;
 			t.Fatalf("%q not found", name)
 		}
 		demands = append(demands, typefacts.EntityDemand{
-			Location:             typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(name)},
-			PrimitiveValueDomain: true,
+			Location:                   typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(name)},
+			PrimitiveLiteralCandidates: true,
 		})
 	}
 	// The earlier constrained parameter, not the unconstrained one selected by LastIndex.
 	constrainedStart := strings.Index(source, "value: T")
 	demands = append(demands, typefacts.EntityDemand{
-		Location:             typefacts.Location{Path: sourcePath, StartByte: constrainedStart, EndByte: constrainedStart + len("value")},
-		PrimitiveValueDomain: true,
+		Location:                   typefacts.Location{Path: sourcePath, StartByte: constrainedStart, EndByte: constrainedStart + len("value")},
+		PrimitiveLiteralCandidates: true,
 	})
 	entities, err := semantic.SemanticEntities(context.Background(), demands)
 	if err != nil {

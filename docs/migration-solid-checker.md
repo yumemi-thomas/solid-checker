@@ -55,7 +55,7 @@ new facts:
   For policies that accept only finite numbers, require `numbersAreFinite`
   whenever `mayBeNumber` is set; do not infer finiteness from a number literal's
   rendered type text.
-  The same demand may return `primitiveLiteralCandidates`: a bounded list of
+  Demand `primitiveLiteralCandidates` separately when construction needs a bounded list of
   exact string, finite-number, and boolean literal inhabitants. Every member is
   safe as a type-directed construction input, but the list is deliberately not
   exhaustive—broad primitives, branded intersections, enum literals, recovery

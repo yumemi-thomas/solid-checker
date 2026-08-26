@@ -14,8 +14,8 @@ guess a representative.
 
 ## Decision
 
-Wire table schema v16 adds `primitiveLiteralCandidates` to entity rows answered
-for an existing `primitiveValueDomain` demand. The producer reads exact compiler
+Wire table schema v16 adds `primitiveLiteralCandidates` as an explicit entity
+demand and response. The producer reads exact compiler
 literal types and returns at most 32 deterministic, deduplicated string, finite
 number, and boolean values.
 

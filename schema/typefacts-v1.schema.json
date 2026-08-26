@@ -47,6 +47,7 @@
         "constructability": { "type": "boolean" },
         "runtimeValueDomain": { "type": "boolean" },
         "primitiveValueDomain": { "type": "boolean" },
+        "primitiveLiteralCandidates": { "type": "boolean" },
         "callResultDomain": { "type": "boolean" },
         "constantValue": { "type": "boolean" },
         "arrayShape": { "type": "boolean" },
@@ -168,7 +169,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["groups", "strings"],
-      "description": "Demand snapshot with one string dictionary per frame; index 0 is the empty string. Each group is [pathIndex, packedRows] where packedRows holds unsigned LEB128 (flags << 1 | hasQuery, startDelta, length) triples, each optionally followed by (queryPath, queryStart, queryLength). Bit 9 requests runtimeValueDomain, bit 10 requests callResultDomain, bit 11 requests constantValue, bit 12 requests arrayShape, bit 13 requests tupleShape, bit 14 requests libraryTypes, bit 15 requests primitiveValueDomain, and bit 16 requests constructability.",
+      "description": "Demand snapshot with one string dictionary per frame; index 0 is the empty string. Each group is [pathIndex, packedRows] where packedRows holds unsigned LEB128 (flags << 1 | hasQuery, startDelta, length) triples, each optionally followed by (queryPath, queryStart, queryLength). Bit 9 requests runtimeValueDomain, bit 10 requests callResultDomain, bit 11 requests constantValue, bit 12 requests arrayShape, bit 13 requests tupleShape, bit 14 requests libraryTypes, bit 15 requests primitiveValueDomain, bit 16 requests constructability, and bit 17 requests primitiveLiteralCandidates.",
       "properties": {
         "groups": {
           "type": "array",

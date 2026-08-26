@@ -274,6 +274,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.Constructability &&
 				!demand.RuntimeValueDomain &&
 				!demand.PrimitiveValueDomain &&
+				!demand.PrimitiveLiteralCandidates &&
 				!demand.CallResultDomain &&
 				!demand.ConstantValue &&
 				!demand.ArrayShape &&
@@ -353,15 +354,18 @@ func (p *project) SemanticDemandRuns(
 					entity.RuntimeValueDomain = &domain
 				}
 			}
-			if demand.PrimitiveValueDomain {
+			if demand.PrimitiveValueDomain || demand.PrimitiveLiteralCandidates {
 				if primitiveNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); primitiveNode != nil {
 					primitiveType := queryType
 					if !queryTypeLoaded || primitiveNode != queryNode {
 						primitiveType = p.checker.GetTypeAtLocation(primitiveNode)
 					}
-					domain := primitiveValueDomainOfType(p.checker, primitiveType)
-					entity.PrimitiveValueDomain = domain
-					entity.PrimitiveLiteralCandidates = primitiveLiteralCandidatesOfType(p.checker, primitiveType)
+					if demand.PrimitiveValueDomain {
+						entity.PrimitiveValueDomain = primitiveValueDomainOfType(p.checker, primitiveType)
+					}
+					if demand.PrimitiveLiteralCandidates {
+						entity.PrimitiveLiteralCandidates = primitiveLiteralCandidatesOfType(p.checker, primitiveType)
+					}
 				}
 			}
 			if demand.CallResultDomain {
