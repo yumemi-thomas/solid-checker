@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -602,6 +603,84 @@ voidResult;
 	}
 	if entities[len(cases)].PrimitiveValueDomain.IsPresent() {
 		t.Fatal("non-exact primitive-domain demand unexpectedly answered")
+	}
+}
+
+func TestPrimitiveLiteralCandidatesAreExactCompilerInhabitants(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare const literalUnion: "alpha" | "beta" | -1 | 2 | false | true;
+declare const broadUnion: string | 3;
+declare const branded: "tag" & { readonly brand: unique symbol };
+declare enum Choice { A = "a", B = 2 }
+declare const enumValue: Choice;
+function constrained<T extends "left" | "right">(value: T) { value; }
+function generic<T>(value: T) { value; }
+literalUnion;
+broadUnion;
+branded;
+enumValue;
+`
+	sourcePath := filepath.Join(dir, "literal-candidates.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+	names := []string{"literalUnion", "broadUnion", "branded", "enumValue", "value"}
+	demands := make([]typefacts.EntityDemand, 0, len(names)+1)
+	for _, name := range names {
+		start := strings.LastIndex(source, name+";")
+		if start < 0 {
+			t.Fatalf("%q not found", name)
+		}
+		demands = append(demands, typefacts.EntityDemand{
+			Location:             typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(name)},
+			PrimitiveValueDomain: true,
+		})
+	}
+	// The earlier constrained parameter, not the unconstrained one selected by LastIndex.
+	constrainedStart := strings.Index(source, "value: T")
+	demands = append(demands, typefacts.EntityDemand{
+		Location:             typefacts.Location{Path: sourcePath, StartByte: constrainedStart, EndByte: constrainedStart + len("value")},
+		PrimitiveValueDomain: true,
+	})
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	literal := func(kind typefacts.PrimitiveLiteralKind, text string, number float64, boolean bool) typefacts.PrimitiveLiteralCandidate {
+		return typefacts.PrimitiveLiteralCandidate{Kind: kind, String: text, Number: number, Boolean: boolean}
+	}
+	if got, want := entities[0].PrimitiveLiteralCandidates, []typefacts.PrimitiveLiteralCandidate{
+		literal(typefacts.PrimitiveLiteralBoolean, "", 0, false),
+		literal(typefacts.PrimitiveLiteralBoolean, "", 0, true),
+		literal(typefacts.PrimitiveLiteralNumber, "", -1, false),
+		literal(typefacts.PrimitiveLiteralNumber, "", 2, false),
+		literal(typefacts.PrimitiveLiteralString, "alpha", 0, false),
+		literal(typefacts.PrimitiveLiteralString, "beta", 0, false),
+	}; !slices.Equal(got, want) {
+		t.Fatalf("literalUnion candidates = %#v, want %#v", got, want)
+	}
+	if got, want := entities[1].PrimitiveLiteralCandidates, []typefacts.PrimitiveLiteralCandidate{
+		literal(typefacts.PrimitiveLiteralNumber, "", 3, false),
+	}; !slices.Equal(got, want) {
+		t.Fatalf("broadUnion candidates = %#v, want %#v", got, want)
+	}
+	for index, name := range []string{"branded", "enumValue", "generic"} {
+		if len(entities[index+2].PrimitiveLiteralCandidates) != 0 {
+			t.Fatalf("%s unexpectedly has candidates %#v", name, entities[index+2].PrimitiveLiteralCandidates)
+		}
+	}
+	if got := entities[5].PrimitiveLiteralCandidates; len(got) != 2 || got[0].String != "left" || got[1].String != "right" {
+		t.Fatalf("constrained candidates = %#v", got)
 	}
 }
 

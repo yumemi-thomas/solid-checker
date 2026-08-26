@@ -224,6 +224,24 @@ func (d PrimitiveValueDomain) Union(other PrimitiveValueDomain) PrimitiveValueDo
 	return PrimitiveValueDomain{bits: bits}
 }
 
+type PrimitiveLiteralKind string
+
+const (
+	PrimitiveLiteralString  PrimitiveLiteralKind = "string"
+	PrimitiveLiteralNumber  PrimitiveLiteralKind = "number"
+	PrimitiveLiteralBoolean PrimitiveLiteralKind = "boolean"
+)
+
+// PrimitiveLiteralCandidate is one exact, compiler-proven inhabitant of a
+// demanded type. The list is a bounded source of valid construction inputs,
+// not an exhaustive domain: broad primitive constituents contribute no value.
+type PrimitiveLiteralCandidate struct {
+	Kind    PrimitiveLiteralKind `cbor:"kind" json:"kind"`
+	String  string               `cbor:"string,omitempty" json:"string,omitempty"`
+	Number  float64              `cbor:"number,omitempty" json:"number,omitempty"`
+	Boolean bool                 `cbor:"boolean,omitempty" json:"boolean,omitempty"`
+}
+
 // ConstantValue is a compiler-proven, span-exact primitive value. Kind selects
 // the populated payload; an empty string and numeric zero are real values.
 type ConstantValue struct {

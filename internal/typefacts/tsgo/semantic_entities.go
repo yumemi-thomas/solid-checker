@@ -1,8 +1,11 @@
 package tsgo
 
 import (
+	"cmp"
 	"context"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
@@ -246,6 +249,76 @@ func unknownPrimitiveValueDomain() typefacts.PrimitiveValueDomain {
 // compiler-known types are objects/functions.
 func primitiveValueDomainOfType(typeChecker *checker.Checker, value *checker.Type) typefacts.PrimitiveValueDomain {
 	return primitiveValueDomainOfTypeSeen(typeChecker, value, make(map[*checker.Type]struct{}))
+}
+
+const maxPrimitiveLiteralCandidates = 32
+
+func primitiveLiteralCandidatesOfType(typeChecker *checker.Checker, value *checker.Type) []typefacts.PrimitiveLiteralCandidate {
+	seen := make(map[*checker.Type]struct{})
+	candidates := make([]typefacts.PrimitiveLiteralCandidate, 0, 4)
+	var collect func(*checker.Type)
+	collect = func(current *checker.Type) {
+		if current == nil || len(candidates) >= maxPrimitiveLiteralCandidates {
+			return
+		}
+		flags := current.Flags()
+		if flags&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
+			return
+		}
+		if _, cycling := seen[current]; cycling {
+			return
+		}
+		seen[current] = struct{}{}
+		defer delete(seen, current)
+		if flags&checker.TypeFlagsInstantiable != 0 {
+			var constraint *checker.Type
+			if flags&checker.TypeFlagsTypeParameter != 0 {
+				constraint = typeChecker.GetConstraintOfTypeParameter(current)
+			} else {
+				constraint = checker.Checker_getBaseConstraintOfType(typeChecker, current)
+			}
+			if constraint != nil && constraint != current {
+				collect(constraint)
+			}
+			return
+		}
+		if flags&checker.TypeFlagsUnion != 0 {
+			for _, constituent := range current.Types() {
+				collect(constituent)
+			}
+			return
+		}
+		if text, ok := checker.PrimitiveStringLiteral(current); ok {
+			candidates = append(candidates, typefacts.PrimitiveLiteralCandidate{Kind: typefacts.PrimitiveLiteralString, String: text})
+		} else if number, ok := checker.PrimitiveNumberLiteral(current); ok {
+			candidates = append(candidates, typefacts.PrimitiveLiteralCandidate{Kind: typefacts.PrimitiveLiteralNumber, Number: number})
+		} else if boolean, ok := checker.PrimitiveBooleanLiteral(current); ok {
+			candidates = append(candidates, typefacts.PrimitiveLiteralCandidate{Kind: typefacts.PrimitiveLiteralBoolean, Boolean: boolean})
+		}
+	}
+	collect(value)
+	slices.SortFunc(candidates, func(left, right typefacts.PrimitiveLiteralCandidate) int {
+		if byKind := strings.Compare(string(left.Kind), string(right.Kind)); byKind != 0 {
+			return byKind
+		}
+		switch left.Kind {
+		case typefacts.PrimitiveLiteralString:
+			return strings.Compare(left.String, right.String)
+		case typefacts.PrimitiveLiteralNumber:
+			return cmp.Compare(left.Number, right.Number)
+		case typefacts.PrimitiveLiteralBoolean:
+			if left.Boolean == right.Boolean {
+				return 0
+			}
+			if !left.Boolean {
+				return -1
+			}
+			return 1
+		default:
+			return 0
+		}
+	})
+	return slices.Compact(candidates)
 }
 
 func primitiveValueDomainOfTypeSeen(

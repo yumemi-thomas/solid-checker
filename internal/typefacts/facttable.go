@@ -34,4 +34,5 @@ const TypeFactsTableSchemaVersionV14 uint64 = 14
 // the tags in front of it come from. Emission at v14 or earlier degrades the
 // new value to unknown so those frozen schemas stay exactly decodable.
 const TypeFactsTableSchemaVersionV15 uint64 = 15
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV15
+const TypeFactsTableSchemaVersionV16 uint64 = 16
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV16

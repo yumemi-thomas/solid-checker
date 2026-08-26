@@ -141,6 +141,9 @@ const TypeFlagsNull = checker.TypeFlagsNull
 const TypeFlagsStringLike = checker.TypeFlagsStringLike
 const TypeFlagsNumberLike = checker.TypeFlagsNumberLike
 const TypeFlagsNumberLiteral = checker.TypeFlagsNumberLiteral
+const TypeFlagsStringLiteral = checker.TypeFlagsStringLiteral
+const TypeFlagsBooleanLiteral = checker.TypeFlagsBooleanLiteral
+const TypeFlagsEnumLiteral = checker.TypeFlagsEnumLiteral
 const TypeFlagsBooleanLike = checker.TypeFlagsBooleanLike
 const TypeFlagsBigIntLike = checker.TypeFlagsBigIntLike
 const TypeFlagsESSymbolLike = checker.TypeFlagsESSymbolLike
@@ -162,4 +165,29 @@ func NumberLiteralIsFinite(value *checker.Type) bool {
 	}
 	number, ok := value.AsLiteralType().Value().(jsnum.Number)
 	return ok && !math.IsInf(float64(number), 0) && !math.IsNaN(float64(number))
+}
+
+func PrimitiveStringLiteral(value *checker.Type) (string, bool) {
+	if value == nil || value.Flags()&(checker.TypeFlagsStringLiteral|checker.TypeFlagsEnumLiteral) != checker.TypeFlagsStringLiteral {
+		return "", false
+	}
+	text, ok := value.AsLiteralType().Value().(string)
+	return text, ok
+}
+
+func PrimitiveNumberLiteral(value *checker.Type) (float64, bool) {
+	if value == nil || value.Flags()&(checker.TypeFlagsNumberLiteral|checker.TypeFlagsEnumLiteral) != checker.TypeFlagsNumberLiteral {
+		return 0, false
+	}
+	number, ok := value.AsLiteralType().Value().(jsnum.Number)
+	converted := float64(number)
+	return converted, ok && !math.IsInf(converted, 0) && !math.IsNaN(converted)
+}
+
+func PrimitiveBooleanLiteral(value *checker.Type) (bool, bool) {
+	if value == nil || value.Flags()&checker.TypeFlagsBooleanLiteral == 0 {
+		return false, false
+	}
+	boolean, ok := value.AsLiteralType().Value().(bool)
+	return boolean, ok
 }

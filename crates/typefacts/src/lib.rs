@@ -462,6 +462,28 @@ pub struct ConstantValue {
 // The producer rejects NaN, so equality remains reflexive.
 impl Eq for ConstantValue {}
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrimitiveLiteralKind {
+    String,
+    Number,
+    Boolean,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PrimitiveLiteralCandidate {
+    pub kind: PrimitiveLiteralKind,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub string: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_zero_f64")]
+    pub number: f64,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub boolean: bool,
+}
+
+impl Eq for PrimitiveLiteralCandidate {}
+
 /// The checker's array/tuple classification for exactly the demanded expression
 /// span, derived from its own `isArrayOrTupleType` predicate over the real union
 /// constituents. Rendered type text never participates, so an aliased tuple
@@ -851,6 +873,8 @@ pub struct EntityFact {
     pub runtime_value_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "primitive_value_domain_is_absent")]
     pub primitive_value_domain: PrimitiveValueDomain,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primitive_literal_candidates: Option<Arc<Vec<PrimitiveLiteralCandidate>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_result_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1591,11 +1615,13 @@ mod tests {
     // `library_types` is the opposite call and shows the rule working: as an
     // `Arc<[Arc<str>]>` it cost 16 bytes on every row to carry an absence, because
     // a slice pointer is fat. Behind a thin `Arc`, like `resolved_call` and
-    // `type_descriptor` before it, it costs 8.
+    // `type_descriptor` before it, it costs 8. Primitive literal candidates
+    // use the same thin-Arc representation; the one new pointer raises the
+    // deliberate retained-row ceiling by exactly 8 bytes.
     #[test]
     fn retained_entity_rows_keep_optional_evidence_bounded() {
         assert!(
-            std::mem::size_of::<EntityFact>() <= 144,
+            std::mem::size_of::<EntityFact>() <= 152,
             "EntityFact is {} bytes; optional evidence exceeded the bounded row budget",
             std::mem::size_of::<EntityFact>()
         );

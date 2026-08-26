@@ -56,14 +56,15 @@ type SemanticDemandRunResult struct {
 // EntityFact is one legal location-keyed entity in the finite fact universe.
 // Location ranges are ordered from outermost to innermost during encoding.
 type EntityFact struct {
-	Location             Location             `cbor:"location" json:"location"`
-	Symbol               SymbolID             `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	SymbolUnresolved     bool                 `cbor:"symbolUnresolved,omitempty" json:"symbolUnresolved,omitempty"`
-	TypeDescriptor       *TypeDescriptor      `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
-	ResolvedCall         *Call                `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
-	Callability          Callability          `cbor:"callability,omitempty" json:"callability,omitempty"`
-	RuntimeValueDomain   *RuntimeValueDomain  `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
-	PrimitiveValueDomain PrimitiveValueDomain `cbor:"-" json:"-"`
+	Location                   Location                    `cbor:"location" json:"location"`
+	Symbol                     SymbolID                    `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	SymbolUnresolved           bool                        `cbor:"symbolUnresolved,omitempty" json:"symbolUnresolved,omitempty"`
+	TypeDescriptor             *TypeDescriptor             `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
+	ResolvedCall               *Call                       `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Callability                Callability                 `cbor:"callability,omitempty" json:"callability,omitempty"`
+	RuntimeValueDomain         *RuntimeValueDomain         `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
+	PrimitiveValueDomain       PrimitiveValueDomain        `cbor:"-" json:"-"`
+	PrimitiveLiteralCandidates []PrimitiveLiteralCandidate `cbor:"-" json:"-"`
 	// Constructability sits here, away from Callability which it answers
 	// beside, because these two bytes are padding either way: as a string it
 	// would cost every retained row 16 bytes to carry an absence.

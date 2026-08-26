@@ -361,6 +361,7 @@ func (p *project) SemanticDemandRuns(
 					}
 					domain := primitiveValueDomainOfType(p.checker, primitiveType)
 					entity.PrimitiveValueDomain = domain
+					entity.PrimitiveLiteralCandidates = primitiveLiteralCandidatesOfType(p.checker, primitiveType)
 				}
 			}
 			if demand.CallResultDomain {

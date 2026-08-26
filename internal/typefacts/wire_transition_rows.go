@@ -26,6 +26,7 @@ const (
 	wireTransitionEntityHasLibraryTypes
 	wireTransitionEntityHasPrimitiveValueDomain
 	wireTransitionEntityHasConstructability
+	wireTransitionEntityHasPrimitiveLiteralCandidates
 )
 
 const (
@@ -211,6 +212,9 @@ func writeWireTransitionEntityRun(
 		if tableSchema >= TypeFactsTableSchemaVersionV14 && entity.Constructability.IsPresent() {
 			flags |= wireTransitionEntityHasConstructability
 		}
+		if tableSchema >= TypeFactsTableSchemaVersionV16 && len(entity.PrimitiveLiteralCandidates) != 0 {
+			flags |= wireTransitionEntityHasPrimitiveLiteralCandidates
+		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
 		}
@@ -282,6 +286,31 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV14 && entity.Constructability.IsPresent() {
 			w.u64(constructability)
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV16 && len(entity.PrimitiveLiteralCandidates) != 0 {
+			w.u64(uint64(len(entity.PrimitiveLiteralCandidates)))
+			for _, candidate := range entity.PrimitiveLiteralCandidates {
+				switch candidate.Kind {
+				case PrimitiveLiteralString:
+					w.u64(0)
+					w.text(candidate.String)
+				case PrimitiveLiteralNumber:
+					if math.IsNaN(candidate.Number) || math.IsInf(candidate.Number, 0) {
+						return fmt.Errorf("entity %d has non-finite primitive literal candidate", index)
+					}
+					w.u64(1)
+					w.u64(math.Float64bits(candidate.Number))
+				case PrimitiveLiteralBoolean:
+					w.u64(2)
+					if candidate.Boolean {
+						w.u64(1)
+					} else {
+						w.u64(0)
+					}
+				default:
+					return fmt.Errorf("entity %d has unknown primitive literal kind %q", index, candidate.Kind)
+				}
+			}
 		}
 		previousStart = start
 	}

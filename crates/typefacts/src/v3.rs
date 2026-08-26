@@ -7,9 +7,9 @@ use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Constructability,
     Declaration, DeclarationOwner, EntityFact, FileFact, Location, ModuleFact, ModuleImportFact,
-    ParameterFact, PrimitiveValueDomain, ReferenceSpace, ResolvedCall, ResolvedCallValidity,
-    ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash,
-    SymbolFact, TupleShape, TypeDescriptor,
+    ParameterFact, PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain,
+    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain,
+    SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -29,8 +29,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V14: u64 = 14;
 /// that, because a flag set cannot: a v14 payload never holds tag 4 (the
 /// producer degrades it to `unknown` there), and a v14 decoder refuses it.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:ed2954fdd8ea18506556cd6232664851e03d088bd0d46873e829dd0c2afe6041";
+    "sha256:c945c363159a33a46014a449641ea13844ae353b161c25d7535bbb51d021c91d";
 /// 2 because the lifecycle operation set widened: `Operation::Modules` is an
 /// operation a peer must know about to be paired at all, where every earlier
 /// vocabulary change added a fact to an existing operation and moved the schema
@@ -775,6 +776,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V16 => 32767,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -902,6 +904,52 @@ fn decode_entity_run(
         } else {
             None
         };
+        let primitive_literal_candidates = if flags & 16384 != 0 {
+            let count = cursor.u64()?;
+            if count > 32 {
+                return Err(format!(
+                    "packed primitive literal candidate count {count} exceeds 32"
+                ));
+            }
+            let mut candidates = Vec::with_capacity(usize::try_from(count).unwrap_or_default());
+            for _ in 0..count {
+                let candidate = match cursor.u64()? {
+                    0 => PrimitiveLiteralCandidate {
+                        kind: PrimitiveLiteralKind::String,
+                        string: cursor.string_index(strings, "primitive literal string")?,
+                        number: 0.0,
+                        boolean: false,
+                    },
+                    1 => {
+                        let number = f64::from_bits(cursor.u64()?);
+                        if !number.is_finite() {
+                            return Err("packed primitive literal number is not finite".into());
+                        }
+                        PrimitiveLiteralCandidate {
+                            kind: PrimitiveLiteralKind::Number,
+                            string: Arc::from(""),
+                            number,
+                            boolean: false,
+                        }
+                    }
+                    2 => PrimitiveLiteralCandidate {
+                        kind: PrimitiveLiteralKind::Boolean,
+                        string: Arc::from(""),
+                        number: 0.0,
+                        boolean: match cursor.u64()? {
+                            0 => false,
+                            1 => true,
+                            value => return Err(format!("packed primitive boolean is {value}")),
+                        },
+                    },
+                    tag => return Err(format!("unknown primitive literal tag {tag}")),
+                };
+                candidates.push(candidate);
+            }
+            Some(Arc::new(candidates))
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -925,6 +973,7 @@ fn decode_entity_run(
             tuple_shape,
             library_types,
             primitive_value_domain,
+            primitive_literal_candidates,
             reference_space,
             runtime_identity,
         });
@@ -1190,6 +1239,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V13
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V14
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V15
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V16
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1522,18 +1572,20 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use sha2::{Digest, Sha256};
 
     use crate::{
         ArgumentMappingReason, ArgumentMappingStatus, CallKind, Callability, Constructability,
-        ReferenceSpace, ResolvedCallValidity,
+        PrimitiveLiteralCandidate, PrimitiveLiteralKind, ReferenceSpace, ResolvedCallValidity,
     };
 
     use super::{
         SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
-        TYPE_FACTS_TABLE_SCHEMA_V15, TransitionMode, decode_table_transition,
-        parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
-        parse_callability, parse_constructability, parse_reference_space,
+        TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TransitionMode,
+        decode_table_transition, parse_argument_mapping_reason, parse_argument_mapping_status,
+        parse_call_kind, parse_callability, parse_constructability, parse_reference_space,
         parse_resolved_call_validity, push_uvarint,
     };
 
@@ -1572,6 +1624,25 @@ mod tests {
         }
         // One entity: start 0, length 1, no symbol, value-domain field.
         for value in [1, 0, 1, 0, 32, domain_bits, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
+    fn primitive_literal_candidates_transition(table_schema: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        push_test_string(&mut frame, "alpha");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity with string "alpha", number 2, and boolean true.
+        for value in [1, 0, 1, 0, 16384, 3, 0, 3, 1, 2.0_f64.to_bits(), 2, 1, 0] {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -2078,6 +2149,44 @@ mod tests {
         assert!(decode_table_transition(&callability_transition(14, 4)).is_err());
         assert!(decode_table_transition(&callability_transition(13, 4)).is_err());
         assert!(decode_table_transition(&callability_transition(15, 5)).is_err());
+    }
+
+    #[test]
+    fn wire_table_v16_decodes_primitive_literal_candidates_and_v15_stays_frozen() {
+        let transition =
+            decode_table_transition(&primitive_literal_candidates_transition(16)).unwrap();
+        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            entities[0]
+                .primitive_literal_candidates
+                .as_deref()
+                .unwrap()
+                .as_slice(),
+            [
+                PrimitiveLiteralCandidate {
+                    kind: PrimitiveLiteralKind::String,
+                    string: Arc::from("alpha"),
+                    number: 0.0,
+                    boolean: false,
+                },
+                PrimitiveLiteralCandidate {
+                    kind: PrimitiveLiteralKind::Number,
+                    string: Arc::from(""),
+                    number: 2.0,
+                    boolean: false,
+                },
+                PrimitiveLiteralCandidate {
+                    kind: PrimitiveLiteralKind::Boolean,
+                    string: Arc::from(""),
+                    number: 0.0,
+                    boolean: true,
+                },
+            ]
+        );
+        assert!(decode_table_transition(&primitive_literal_candidates_transition(15)).is_err());
+        assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V16, 16);
     }
 
     #[test]
