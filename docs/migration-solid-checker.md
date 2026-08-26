@@ -55,6 +55,12 @@ new facts:
   For policies that accept only finite numbers, require `numbersAreFinite`
   whenever `mayBeNumber` is set; do not infer finiteness from a number literal's
   rendered type text.
+  Demand `primitiveLiteralCandidates` separately when construction needs a bounded list of
+  exact string, finite-number, and boolean literal inhabitants. Every member is
+  safe as a type-directed construction input, but the list is deliberately not
+  exhaustive—broad primitives, branded intersections, enum literals, recovery
+  types, and unconstrained generics contribute no candidate. Never treat the
+  list's absence or truncation as proof that another value is impossible.
 - Whether an exported binding is a runtime *function*: demand `callability`
   **and** `constructability` at the export-specifier span, and treat
   `callable`, `untypedCallable`, or `constructable` as a function. Neither

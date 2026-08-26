@@ -168,6 +168,9 @@ func prepareRetainedContribution(
 		if entity.PrimitiveValueDomain.IsPresent() {
 			target.PrimitiveValueDomain = entity.PrimitiveValueDomain
 		}
+		if len(entity.PrimitiveLiteralCandidates) != 0 {
+			target.PrimitiveLiteralCandidates = entity.PrimitiveLiteralCandidates
+		}
 		if entity.CallResultDomain != nil {
 			target.CallResultDomain = entity.CallResultDomain
 		}
