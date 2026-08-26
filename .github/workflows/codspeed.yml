@@ -13,6 +13,14 @@ permissions:
   contents: read
   id-token: write
 
+# A measurement is only wanted for the tip of a branch, and these jobs hold a
+# runner for minutes: a re-push supersedes the run it replaces rather than
+# queueing behind it. Never on main, whose runs are the baseline every pull
+# request is reported against.
+concurrency:
+  group: codspeed-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   benchmarks:
     name: Wall-time benchmarks
