@@ -1,0 +1,154 @@
+package typefacts
+
+import (
+	"path/filepath"
+	"sort"
+)
+
+func retainedSymbolCandidates(table *FactTable, changedPaths map[string]struct{}) map[SymbolID]struct{} {
+	candidates := make(map[SymbolID]struct{})
+	if table == nil {
+		return candidates
+	}
+	for path := range changedPaths {
+		collectPathSymbols(table, filepath.Clean(path), candidates)
+	}
+	queue := make([]SymbolID, 0, len(candidates))
+	for id := range candidates {
+		queue = append(queue, id)
+	}
+	for index := 0; index < len(queue); index++ {
+		fact, ok := table.canonicalSymbol(queue[index])
+		if !ok || fact.AliasTarget == "" {
+			continue
+		}
+		if _, seen := candidates[fact.AliasTarget]; !seen {
+			candidates[fact.AliasTarget] = struct{}{}
+			queue = append(queue, fact.AliasTarget)
+		}
+	}
+	return candidates
+}
+
+// transportManifest records the exact rows which may differ from the
+// immediately preceding semantic-demand table. It is private implementation
+// metadata: the frozen wire schema remains unchanged.
+func transportManifest(previous, next *FactTable, builder *closureBuilder, changedPaths map[string]struct{}) *factTableTransportChanges {
+	if previous == nil || builder == nil || !builder.referenceChangesExact {
+		return nil
+	}
+	manifest := &factTableTransportChanges{
+		baseGeneration: previous.Generation,
+		baseStateID:    previous.stateID,
+		sourcePaths:    make(map[string]struct{}, len(changedPaths)),
+		entityPaths:    make(map[string]struct{}, len(changedPaths)),
+		filePaths:      make(map[string]struct{}, len(changedPaths)),
+		symbolIDs:      make(map[SymbolID]struct{}, builder.changedSymbols.len()),
+		exact:          true,
+	}
+	for path := range changedPaths {
+		path = filepath.Clean(path)
+		manifest.sourcePaths[path] = struct{}{}
+		manifest.entityPaths[path] = struct{}{}
+		manifest.filePaths[path] = struct{}{}
+		collectPathSymbols(previous, path, manifest.symbolIDs)
+		collectPathSymbols(next, path, manifest.symbolIDs)
+	}
+	for _, id := range builder.changedSymbols.ids {
+		manifest.symbolIDs[id] = struct{}{}
+	}
+
+	// Symbol closure follows only alias edges. Expanding old and new targets
+	// from every changed seed therefore captures additions, removals, and
+	// full-tier reference changes without walking unrelated symbol rows.
+	queue := make([]SymbolID, 0, len(manifest.symbolIDs))
+	for id := range manifest.symbolIDs {
+		queue = append(queue, id)
+	}
+	for index := 0; index < len(queue); index++ {
+		id := queue[index]
+		for _, table := range []*FactTable{previous, next} {
+			if fact, ok := table.canonicalSymbol(id); ok && fact.AliasTarget != "" {
+				if _, seen := manifest.symbolIDs[fact.AliasTarget]; !seen {
+					manifest.symbolIDs[fact.AliasTarget] = struct{}{}
+					queue = append(queue, fact.AliasTarget)
+				}
+			}
+		}
+	}
+	return manifest
+}
+
+// rustOwnedTransportManifest names only path rows. The active protocol hands
+// symbol closure ownership to the Rust client, so Go emits no second symbol
+// delta or retained symbol table.
+func rustOwnedTransportManifest(
+	previous *FactTable,
+	changedPaths map[string]struct{},
+) *factTableTransportChanges {
+	if previous == nil || changedPaths == nil {
+		return nil
+	}
+	manifest := &factTableTransportChanges{
+		baseGeneration: previous.Generation,
+		baseStateID:    previous.stateID,
+		sourcePaths:    make(map[string]struct{}, len(changedPaths)),
+		entityPaths:    make(map[string]struct{}, len(changedPaths)),
+		filePaths:      make(map[string]struct{}, len(changedPaths)),
+		exact:          true,
+	}
+	for path := range changedPaths {
+		path = filepath.Clean(path)
+		manifest.sourcePaths[path] = struct{}{}
+		manifest.entityPaths[path] = struct{}{}
+		manifest.filePaths[path] = struct{}{}
+	}
+	return manifest
+}
+
+func collectPathSymbols(table *FactTable, path string, symbols map[SymbolID]struct{}) {
+	if table.pathSymbols != nil {
+		for _, symbol := range table.pathSymbols[path] {
+			symbols[symbol] = struct{}{}
+		}
+		return
+	}
+	start := sort.Search(len(table.Entities), func(index int) bool {
+		return table.Entities[index].Location.Path >= path
+	})
+	for index := start; index < len(table.Entities) && table.Entities[index].Location.Path == path; index++ {
+		entity := table.Entities[index]
+		if entity.Symbol != "" {
+			symbols[entity.Symbol] = struct{}{}
+		}
+		if entity.ResolvedCall != nil && entity.ResolvedCall.Target != "" {
+			symbols[entity.ResolvedCall.Target] = struct{}{}
+		}
+	}
+	if file, ok := canonicalFileFact(table.Files, path); ok {
+		for _, function := range file.AsyncFunctions {
+			if function.Symbol != "" {
+				symbols[function.Symbol] = struct{}{}
+			}
+			if function.Target != "" {
+				symbols[function.Target] = struct{}{}
+			}
+		}
+	}
+}
+
+func canonicalSymbolFact(facts []SymbolFact, id SymbolID) (SymbolFact, bool) {
+	index := sort.Search(len(facts), func(index int) bool { return facts[index].ID >= id })
+	if index == len(facts) || facts[index].ID != id {
+		return SymbolFact{}, false
+	}
+	return facts[index], true
+}
+
+func canonicalFileFact(facts []FileFact, path string) (FileFact, bool) {
+	index := sort.Search(len(facts), func(index int) bool { return facts[index].Path >= path })
+	if index == len(facts) || facts[index].Path != path {
+		return FileFact{}, false
+	}
+	return facts[index], true
+}
