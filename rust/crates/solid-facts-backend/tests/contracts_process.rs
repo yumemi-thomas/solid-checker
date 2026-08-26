@@ -916,6 +916,7 @@ fn cli_emits_and_revalidates_package_contracts() {
     let producer = root.join("fixtures/reactive-ir/package-return-producer/tsconfig.json");
     let result = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .env("SOLID_CHECKER_TIMINGS", "1")
         .args(["--project"])
         .arg(producer)
         .args(["--emit-contract"])
@@ -935,6 +936,22 @@ fn cli_emits_and_revalidates_package_contracts() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
+    let timing = String::from_utf8_lossy(&result.stderr)
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find(|timing| timing["typeFactsNs"].is_number())
+        .unwrap_or_else(|| {
+            panic!(
+                "contract emission produced no timing JSON: {}",
+                String::from_utf8_lossy(&result.stderr)
+            )
+        });
+    assert!(timing["typeFactsNs"].is_number(), "{timing}");
+    assert!(timing["sourceAnalysisNs"].is_number(), "{timing}");
+    assert!(timing["irNs"].is_number(), "{timing}");
+    assert!(timing["contractEmissionNs"].is_number(), "{timing}");
+    assert!(timing["probePlanEmissionNs"].is_number(), "{timing}");
+    assert!(timing["moduleInventoryNs"].is_number(), "{timing}");
     let contract = expanded_contract(&output);
     for name in [
         "createCount",
@@ -2128,9 +2145,30 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
     )
     .unwrap();
     assert_eq!(probe_plan["source"], "typescript-value-domain");
+    assert_eq!(probe_plan["schemaVersion"], 2);
+    assert!(
+        probe_plan["entrypoints"]["."]
+            .get("identityResult")
+            .is_none(),
+        "an unconstrained generic is not proof that null inhabits the parameter"
+    );
     assert_eq!(
-        probe_plan["entrypoints"]["."]["identityResult"]["0"],
-        "null"
+        probe_plan["entrypoints"]["."]["constructionCandidates"],
+        serde_json::json!({
+            "0": ["null", "undefined"],
+            "1": ["empty-array"],
+            "2": ["empty-map"],
+            "3": ["empty-set"],
+            "4": [
+                { "kind": "literal", "value": false },
+                { "kind": "literal", "value": true },
+                { "kind": "literal", "value": 0 },
+                { "kind": "literal", "value": 1 },
+                { "kind": "literal", "value": "closed" },
+                { "kind": "literal", "value": "open" }
+            ],
+            "5": ["dom-element"]
+        })
     );
     assert_eq!(
         contract["entrypoints"]["."]["exports"]["memoThroughConditionalAdapter"]["callbacks"],
@@ -2606,7 +2644,7 @@ fn package_generator_emits_parameter_member_reads_without_promoting_local_member
     let contract = expanded_contract(&output);
     assert_eq!(
         without_claim_evidence(&contract["entrypoints"]["."]["exports"]["drop"]["reactiveReads"]),
-        serde_json::json!([{ "kind": "parameter-member", "parameter": 0 }])
+        serde_json::json!([{ "kind": "parameter-member", "parameter": 0, "member": "slice" }])
     );
     for name in ["readModuleLocal", "readBodyLocal"] {
         assert!(
@@ -3213,7 +3251,7 @@ fn declaration_bound_imports_join_their_exact_runtime_target_before_attribution(
         without_claim_evidence(
             &contract["entrypoints"]["./direct"]["exports"]["channelFor"]["reactiveReads"]
         ),
-        serde_json::json!([{"kind": "parameter-member", "parameter": 0}]),
+        serde_json::json!([{"kind": "parameter-member", "parameter": 0, "member": "getThing"}]),
         "the direct-entrypoint control must remain exact: {contract:#}"
     );
 

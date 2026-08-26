@@ -37,7 +37,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -57,6 +57,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const MANIFEST = join(ROOT, "scripts/ecosystem-benchmark/manifest.json");
 const CLI = join(ROOT, "packages/cli/bin/solid-checker.mjs");
 const REPORT_DIR = join(ROOT, "benchmarks/ecosystem");
+
+export function defaultCorpusConcurrency(available) {
+  return Math.max(1, Math.min(3, Math.trunc(available)));
+}
 
 const DEFAULTS = {
   installTimeoutMs: 240_000,
@@ -79,7 +83,7 @@ const DEFAULTS = {
   probeBudgetPerClaimMs: 500,
   probeBudgetCapMs: 900_000,
   verifyTimeoutMs: 90_000,
-  concurrency: 6
+  concurrency: defaultCorpusConcurrency(availableParallelism())
 };
 
 /// The packages that *are* the Solid runtime, and are therefore pinned by the
@@ -96,6 +100,54 @@ const RUNTIME_PACKAGES = new Set(["solid-js", "@solidjs/web", "@solidjs/signals"
 /// verify sidecars *replace* a trailing `.json`, they do not append to it.
 export function siblingPath(output, suffix) {
   return output.toLowerCase().endsWith(".json") ? `${output.slice(0, -5)}${suffix}` : `${output}${suffix}`;
+}
+
+/// Bound nested work so row-level concurrency does not multiply each row's
+/// internal target/worker pools past the host's available parallelism.
+export function innerConcurrencyFor({ available, rows, cap }) {
+  const rowCount = Math.max(1, Math.trunc(rows));
+  return Math.max(1, Math.min(cap, Math.floor(available / rowCount)));
+}
+
+export function probeConcurrencyForClaims(claims) {
+  return Number.isInteger(claims) && claims >= 400 ? 8 : 4;
+}
+
+export function createConcurrencyLeasePool(capacity) {
+  const limit = Math.max(1, Math.trunc(capacity));
+  const queue = [];
+  let inUse = 0;
+  const pump = () => {
+    while (queue.length && inUse + queue[0].lanes <= limit) {
+      const request = queue.shift();
+      inUse += request.lanes;
+      let released = false;
+      request.resolve({
+        lanes: request.lanes,
+        release() {
+          if (released) return;
+          released = true;
+          inUse -= request.lanes;
+          pump();
+        }
+      });
+    }
+  };
+  return {
+    get capacity() {
+      return limit;
+    },
+    get inUse() {
+      return inUse;
+    },
+    acquire(requested) {
+      const lanes = Math.max(1, Math.min(limit, Math.trunc(requested) || 1));
+      return new Promise(resolvePromise => {
+        queue.push({ lanes, resolve: resolvePromise });
+        pump();
+      });
+    }
+  };
 }
 
 /// The Solid runtime a row is a measurement of, completed.
@@ -312,6 +364,8 @@ export function undrivenBucket(reason) {
   if (text.startsWith("asyncBehavior has no")) return "no probe form: asyncBehavior";
   if (text.startsWith("no generic store-path observation")) return "no probe form: store path";
   if (text.startsWith("no plantable reactive source")) return "no plantable reactive source";
+  if (text.startsWith("the completed call did not invoke the named parameter member"))
+    return "parameter member was not invoked";
   if (text.startsWith("the synthesized call completed without invoking the callback"))
     return "synthesized call did not invoke the callback";
   // The ways a driven callback observation names no execution mode, plus the one
@@ -610,6 +664,9 @@ async function runRow({ row, probe }, context) {
     buildProbePlan,
     manifest,
     environmentShim,
+    phasePool,
+    generationConcurrency,
+    probeConcurrency,
     peerInstall = true
   } = context;
   const started = Date.now();
@@ -736,12 +793,34 @@ async function runRow({ row, probe }, context) {
     // mistaken for package content by the package's own tooling.
     const contractFile = join(outputDir, "solid-reactivity.json");
 
+    const generationLease = await phasePool.acquire(generationConcurrency);
     const generateStart = Date.now();
-    const generateResult = await run(
-      process.execPath,
-      [CLI, "contract", "generate", "--package-root", packageRoot, "--output", contractFile],
-      { timeoutMs: budgets.generateTimeoutMs, env: cliEnv }
-    );
+    let generateResult;
+    try {
+      generateResult = await run(
+        process.execPath,
+        [
+          CLI,
+          "contract",
+          "generate",
+          "--package-root",
+          packageRoot,
+          "--output",
+          contractFile,
+          ...(probe.entrypoints ?? []).flatMap(entrypoint => ["--entrypoint", entrypoint])
+        ],
+        {
+          timeoutMs: budgets.generateTimeoutMs,
+          env: {
+            ...cliEnv,
+            SOLID_CHECKER_GENERATION_CONCURRENCY: String(generationLease.lanes)
+          }
+        }
+      );
+    } finally {
+      generationLease.release();
+    }
+    record.generationConcurrency = generationLease.lanes;
     record.generateMs = Date.now() - generateStart;
     const generateClass = classifyResult({
       status: generateResult.status,
@@ -792,27 +871,39 @@ async function runRow({ row, probe }, context) {
     record.plannedClaims = plannedClaims;
     record.probeWallBudgetMs = probeWallBudgetMs;
 
+    const desiredProbeConcurrency =
+      probeConcurrency ?? probeConcurrencyForClaims(plannedClaims);
+    const probeLease = await phasePool.acquire(desiredProbeConcurrency);
     const probeStart = Date.now();
-    const probeResult = await run(
-      process.execPath,
-      [
-        CLI,
-        "contract",
-        "probe",
-        contractFile,
-        "--package-root",
-        packageRoot,
-        // Discovery -- planting a callback where the contract states none -- is
-        // never disabled: it is the only automated check that can contradict a
-        // negative claim, and `contract verify` refuses a report produced
-        // without it outright.
-        "--write",
-        ...(environmentShim ? [] : ["--no-environment-shim"]),
-        "--timeout",
-        String(budgets.probeModeTimeoutMs)
-      ],
-      { timeoutMs: probeWallBudgetMs, env: cliEnv }
-    );
+    let probeResult;
+    try {
+      probeResult = await run(
+        process.execPath,
+        [
+          CLI,
+          "contract",
+          "probe",
+          contractFile,
+          "--package-root",
+          packageRoot,
+          // Discovery -- planting a callback where the contract states none -- is
+          // never disabled: it is the only automated check that can contradict a
+          // negative claim, and `contract verify` refuses a report produced
+          // without it outright.
+          "--write",
+          ...(environmentShim ? [] : ["--no-environment-shim"]),
+          "--timeout",
+          String(budgets.probeModeTimeoutMs)
+        ],
+        {
+          timeoutMs: probeWallBudgetMs,
+          env: { ...cliEnv, SOLID_CHECKER_PROBE_CONCURRENCY: String(probeLease.lanes) }
+        }
+      );
+    } finally {
+      probeLease.release();
+    }
+    record.probeConcurrency = probeLease.lanes;
     record.probeMs = Date.now() - probeStart;
     record.probeExit = probeResult.status;
     record.probeTimedOut = probeResult.timedOut;
@@ -2143,10 +2234,24 @@ async function main(argv = process.argv.slice(2)) {
       `solid-checker-verify-corpus: ${tasks.length} rows selected, ${done.size} journaled, ${pending.length} to run\n`
     );
 
+    const available = availableParallelism();
+    const generationConcurrency = Math.min(
+      4,
+      Math.max(1, Number(process.env.SOLID_CHECKER_GENERATION_CONCURRENCY ?? 4) || 4)
+    );
+    const probeConcurrency = process.env.SOLID_CHECKER_PROBE_CONCURRENCY
+      ? Math.min(8, Math.max(1, Number(process.env.SOLID_CHECKER_PROBE_CONCURRENCY) || 4))
+      : null;
     const context = {
       workDir,
       budgets,
-      cliEnv: { SOLID_CHECKER_NATIVE_BIN: nativeBin, SOLID_TYPEFACTS_BIN: typeFactsBin },
+      cliEnv: {
+        SOLID_CHECKER_NATIVE_BIN: nativeBin,
+        SOLID_TYPEFACTS_BIN: typeFactsBin
+      },
+      phasePool: createConcurrencyLeasePool(Math.max(1, available - 2)),
+      generationConcurrency,
+      probeConcurrency,
       expandContract,
       buildProbePlan,
       manifest,

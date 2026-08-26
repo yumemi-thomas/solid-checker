@@ -6,8 +6,10 @@ analysis keeps the obligation explicit. Contract emission may discharge it,
 because `contract_export_function` serializes the same provenance as a
 `parameter-member` reactive read and a consumer resolves that row against the
 argument it actually passes — that is the discharge, and `./direct` is it:
-`channelFor` publishes `reactiveReads: [{ parameter-member, parameter 0 }]` and
-carries no unknown claim.
+`channelFor` publishes
+`reactiveReads: [{ parameter-member, parameter 0, member: "getThing" }]` and
+carries no unknown claim. The exact static member also gives the generic probe
+a property it can instrument without guessing.
 
 Emission used to discharge the obligation for *every* export by comparing
 `analysis_context` to a string, before asking who the obligation belonged to.

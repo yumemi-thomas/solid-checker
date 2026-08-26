@@ -207,6 +207,7 @@
                     "properties": {
                       "kind": { "const": "parameter-member" },
                       "parameter": { "type": "integer", "minimum": 0 },
+                      "member": { "type": "string", "minLength": 1 },
                       "evidence": { "$ref": "#/$defs/claimEvidence" }
                     }
                   }

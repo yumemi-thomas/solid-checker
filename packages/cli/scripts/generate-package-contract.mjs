@@ -11,12 +11,12 @@ import {
   statSync,
   writeFileSync
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { runNative } from "../bin/launcher.mjs";
+import { runNative, runNativeAsync } from "../bin/launcher.mjs";
 import { expandContract, normalizeContract } from "./contract-document.mjs";
 import {
   collectReviewItems,
@@ -47,6 +47,100 @@ function generatorIdentity() {
   );
   generatorIdentityCache = `${manifest.name}@${manifest.version}`;
   return generatorIdentityCache;
+}
+
+const generationPhaseNames = [
+  "runtimeClosureWalkAndHashNs",
+  "temporaryProjectNs",
+  "typeFactsAndDemandNs",
+  "syntaxAndSourceFactsNs",
+  "reactiveIrAndContractInferenceNs",
+  "moduleInventoryAndRuntimeReconciliationNs",
+  "dependencyContractGenerationNs",
+  "reviewPlanAndArtifactWritingNs"
+];
+
+function freshGenerationTiming(packageName, packageVersion) {
+  return {
+    schemaVersion: 1,
+    package: packageName,
+    version: packageVersion,
+    startedNs: process.hrtime.bigint(),
+    phases: Object.fromEntries(generationPhaseNames.map(name => [name, 0])),
+    targets: []
+  };
+}
+
+function elapsedNs(started) {
+  return Number(process.hrtime.bigint() - started);
+}
+
+function addPhase(timing, phase, duration) {
+  if (timing) timing.phases[phase] += duration;
+}
+
+function generationConcurrency(value = process.env.SOLID_CHECKER_GENERATION_CONCURRENCY) {
+  const fallback = Math.min(4, availableParallelism());
+  const parsed = Number(value ?? fallback);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 4) : fallback;
+}
+
+function effectiveRuntimeConditions(conditions, selectedConditions) {
+  return [...new Set([...conditions, ...selectedConditions, "import"])].sort();
+}
+
+function targetAnalysisKey({ target, excludedTargets, conditions, selectedConditions }) {
+  return JSON.stringify([
+    target,
+    excludedTargets,
+    effectiveRuntimeConditions(conditions, selectedConditions)
+  ]);
+}
+
+async function mapConcurrentOrdered(values, concurrency, operation) {
+  const limit = Math.max(1, Math.min(values.length || 1, concurrency));
+  const results = new Array(values.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      for (;;) {
+        const index = next++;
+        if (index >= values.length) return;
+        results[index] = await operation(values[index], index);
+      }
+    })
+  );
+  return results;
+}
+
+function nativeGenerationTiming(stderr) {
+  const records = String(stderr ?? "")
+    .split(/\r?\n/)
+    .flatMap(line => {
+      try {
+        return [JSON.parse(line)];
+      } catch {
+        return [];
+      }
+    });
+  return records.find(
+    record =>
+      Number.isFinite(record?.sourceAnalysisNs) &&
+      Number.isFinite(record?.typeFactsNs) &&
+      Number.isFinite(record?.irNs) &&
+      Number.isFinite(record?.solveAndSnapshotNs)
+  );
+}
+
+function publicGenerationTiming(timing) {
+  return {
+    schemaVersion: timing.schemaVersion,
+    package: timing.package,
+    version: timing.version,
+    totalNs: elapsedNs(timing.startedNs),
+    phases: timing.phases,
+    targets: timing.targets
+  };
 }
 
 export const packageContractHelp = `Usage:
@@ -1137,7 +1231,8 @@ function generationClosures(
   entrypoints,
   legacyRoot,
   inventories,
-  targetExportNames
+  targetExportNames,
+  timing
 ) {
   const directory = dirname(output);
   const realRoot = realpathOrSelf(packageRoot);
@@ -1164,6 +1259,7 @@ function generationClosures(
           excluded.add(packageLocalTarget(packageRoot, sibling));
         }
         const entryFile = packageLocalTarget(packageRoot, target);
+        const walkStarted = process.hrtime.bigint();
         const walked = closureOf(packageRoot, resolver, entryFile, excluded);
         const dynamicProblems = walked.problems.filter(problem => problem.kind === "dynamic-import");
         const analyzedExportNames = targetExportNames.get(target);
@@ -1179,6 +1275,8 @@ function generationClosures(
         const openDynamicAttribution = Array.isArray(openDynamicCandidate?.affectedExports)
           ? openDynamicCandidate
           : undefined;
+        addPhase(timing, "runtimeClosureWalkAndHashNs", elapsedNs(walkStarted));
+        const reconciliationStarted = process.hrtime.bigint();
         const reconciled = attestedClosure({
           packageRoot,
           realRoot,
@@ -1187,6 +1285,11 @@ function generationClosures(
           inventory: inventories.for(target, excludedTargets),
           openDynamicAttribution
         });
+        addPhase(
+          timing,
+          "moduleInventoryAndRuntimeReconciliationNs",
+          elapsedNs(reconciliationStarted)
+        );
         files = reconciled.files;
         // Each note already names the exact module the specifier was read from,
         // which is more precise than the target that reached it.
@@ -1203,7 +1306,9 @@ function generationClosures(
         const path = relative(directory, file).replaceAll(sep, "/");
         if (modules.some(module => module.path === path)) continue;
         try {
+          const hashStarted = process.hrtime.bigint();
           modules.push({ path, hash: sha256Artifact(file) });
+          addPhase(timing, "runtimeClosureWalkAndHashNs", elapsedNs(hashStarted));
         } catch (error) {
           // An unreadable module is left out rather than recorded with a hash
           // of nothing; the note is what keeps the omission visible.
@@ -1681,6 +1786,23 @@ function runChecked(args, options = {}) {
   // The attribution notes ride a *successful* run's stderr: they explain the
   // unknown claims the run just wrote into the contract.
   result.attributions = unknownClaimAttributions(result.stderr);
+  result.generationTiming = nativeGenerationTiming(result.stderr);
+  return result;
+}
+
+async function runCheckedAsync(args, options = {}) {
+  const result = await runNativeAsync("solid-checker", args, options);
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    const output = [result.stderr, result.stdout].filter(Boolean).join("\n");
+    const module = unresolvedDependencyModule(output);
+    const message = withoutMarkers(output).trim() || `native solid-checker exited ${result.status}`;
+    const error = nativeRefusalPattern.test(message) ? refuse(message) : new Error(message);
+    if (module) error.unresolvedDependencyModule = module;
+    throw error;
+  }
+  result.attributions = unknownClaimAttributions(result.stderr);
+  result.generationTiming = nativeGenerationTiming(result.stderr);
   return result;
 }
 
@@ -1804,7 +1926,8 @@ async function ensureGeneratedDependencyContract({
   module,
   packageRoot,
   conditions,
-  generationContext
+  generationContext,
+  timing
 }) {
   const packageName = dependencyPackageName(module);
   if (!packageName) return undefined;
@@ -1812,7 +1935,7 @@ async function ensureGeneratedDependencyContract({
   if (!dependencyRoot || dependencyRoot === packageRoot) return undefined;
   const key = JSON.stringify([dependencyRoot, [...new Set(conditions)].sort()]);
   if (generationContext.contractCache.has(key)) {
-    return generationContext.contractCache.get(key);
+    return await generationContext.contractCache.get(key);
   }
   if (generationContext.active.has(key)) {
     throw refuse(
@@ -1823,20 +1946,133 @@ async function ensureGeneratedDependencyContract({
     generationContext.cacheDirectory,
     `${generationContext.contractCache.size}-${randomUUID()}.json`
   );
-  await generatePackageContractInternal(
-    [
-      "--package-root",
-      dependencyRoot,
-      "--output",
-      output,
-      ...(conditions.length ? ["--conditions", [...new Set(conditions)].sort().join(",")] : []),
-      ...generationContext.explicitContracts.flatMap(contract => ["--contract", contract])
-    ],
-    { ...generationContext, quiet: true, ownsCacheDirectory: false }
+  const generation = (async () => {
+    const started = process.hrtime.bigint();
+    try {
+      await generatePackageContractInternal(
+        [
+          "--package-root",
+          dependencyRoot,
+          "--output",
+          output,
+          ...(conditions.length ? ["--conditions", [...new Set(conditions)].sort().join(",")] : []),
+          ...generationContext.explicitContracts.flatMap(contract => ["--contract", contract])
+        ],
+        { ...generationContext, quiet: true, ownsCacheDirectory: false }
+      );
+      generationContext.generatedContracts.add(resolve(output));
+      return output;
+    } finally {
+      addPhase(timing, "dependencyContractGenerationNs", elapsedNs(started));
+    }
+  })();
+  generationContext.contractCache.set(key, generation);
+  try {
+    const generated = await generation;
+    generationContext.contractCache.set(key, generated);
+    return generated;
+  } catch (error) {
+    if (generationContext.contractCache.get(key) === generation) {
+      generationContext.contractCache.delete(key);
+    }
+    throw error;
+  }
+}
+
+function mergeProbePlanFragments(base, extra) {
+  const exports = structuredClone(base?.exports ?? {});
+  for (const [exportName, parameters] of Object.entries(extra?.exports ?? {})) {
+    const target = (exports[exportName] ??= {});
+    for (const [index, rawRecipes] of Object.entries(parameters ?? {})) {
+      const recipes = Array.isArray(rawRecipes) ? rawRecipes : [rawRecipes];
+      const current = Array.isArray(target[index]) ? target[index] : target[index] === undefined ? [] : [target[index]];
+      for (const recipe of recipes) {
+        if (!current.some(existing => JSON.stringify(existing) === JSON.stringify(recipe))) {
+          current.push(recipe);
+        }
+      }
+      target[index] = current;
+    }
+  }
+  return {
+    schemaVersion: 2,
+    source: "typescript-value-domain",
+    exports
+  };
+}
+
+function probeRecipeIdentity(value) {
+  if (Array.isArray(value)) return `[${value.map(probeRecipeIdentity).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${probeRecipeIdentity(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function intersectProbePlanExports(left, right) {
+  const intersection = {};
+  for (const [exportName, leftParameters] of Object.entries(left ?? {})) {
+    const rightParameters = right?.[exportName];
+    if (!rightParameters) continue;
+    for (const [index, leftRecipes] of Object.entries(leftParameters ?? {})) {
+      const rightIdentities = new Set(
+        (Array.isArray(rightParameters[index]) ? rightParameters[index] : []).map(
+          probeRecipeIdentity
+        )
+      );
+      const common = (Array.isArray(leftRecipes) ? leftRecipes : []).filter(recipe =>
+        rightIdentities.has(probeRecipeIdentity(recipe))
+      );
+      if (common.length) ((intersection[exportName] ??= {})[index] = common);
+    }
+  }
+  return intersection;
+}
+
+function includeReturnedArity(returned, current) {
+  if (!returned || typeof returned !== "object") return current;
+  if (Number.isInteger(returned.parameter)) current = Math.max(current, returned.parameter + 1);
+  for (const element of returned.elements ?? []) current = includeReturnedArity(element, current);
+  for (const property of Object.values(returned.properties ?? {})) {
+    current = includeReturnedArity(property, current);
+  }
+  return current;
+}
+
+function probeSummaryArity(summary) {
+  let arity = 0;
+  if (Array.isArray(summary?.callbacks)) {
+    for (const callback of summary.callbacks) {
+      if (Number.isInteger(callback.parameter)) arity = Math.max(arity, callback.parameter + 1);
+      if (Array.isArray(callback.arguments)) arity = Math.max(arity, callback.arguments.length);
+    }
+  }
+  if (Array.isArray(summary?.reactiveReads)) {
+    for (const read of summary.reactiveReads) {
+      if (Number.isInteger(read.parameter)) arity = Math.max(arity, read.parameter + 1);
+    }
+  }
+  arity = includeReturnedArity(summary?.returns, arity);
+  for (const variant of summary?.variants ?? []) {
+    arity = Math.max(arity, probeSummaryArity(variant.summary));
+  }
+  return arity;
+}
+
+function summaryNeedsDeclarationConstruction(summary) {
+  return (
+    (Array.isArray(summary?.callbacks) && summary.callbacks.length > 0) ||
+    (Array.isArray(summary?.reactiveReads) &&
+      summary.reactiveReads.some(
+        read => read.kind === "parameter-member" && Number.isInteger(read.parameter)
+      )) ||
+    (summary?.variants ?? []).some(variant =>
+      summaryNeedsDeclarationConstruction(variant.summary)
+    )
   );
-  generationContext.contractCache.set(key, output);
-  generationContext.generatedContracts.add(resolve(output));
-  return output;
 }
 
 async function analyzeTarget({
@@ -1851,19 +2087,54 @@ async function analyzeTarget({
   identifier,
   excludedTargets,
   resolver,
-  generationContext
+  generationContext,
+  timing,
+  timingIndex
 }) {
+  // Parallel conditional-target analyses may discover different dependency
+  // obligations. Keep each native argv local; generated dependency documents
+  // are shared only through generationContext's exact condition-keyed cache.
+  contracts = [...contracts];
+  const targetTiming = {
+    target,
+    conditions: [...conditions],
+    selectedConditions: [...selectedConditions],
+    excludedTargets: [...excludedTargets],
+    runtimeFiles: 0,
+    runtimeBytes: 0,
+    declarationConstruction: {
+      demanded: false,
+      arityExports: 0,
+      recipeExports: 0,
+      elapsedNs: 0
+    }
+  };
+  const closureStarted = process.hrtime.bigint();
   const entryFile = packageLocalTarget(packageRoot, target);
   const excludedFiles = new Set(
     excludedTargets.map(target => packageLocalTarget(packageRoot, target))
   );
   const runtimeClosure = closureOf(packageRoot, resolver, entryFile, excludedFiles);
   const implementationFiles = runtimeClosure.files;
+  targetTiming.runtimeFiles = implementationFiles.length;
+  targetTiming.runtimeBytes = implementationFiles.reduce((total, file) => {
+    try {
+      return total + statSync(file).size;
+    } catch {
+      return total;
+    }
+  }, 0);
+  addPhase(timing, "runtimeClosureWalkAndHashNs", elapsedNs(closureStarted));
   const project = join(temporaryDirectory, `${identifier}-tsconfig.json`);
   const output = join(temporaryDirectory, `${identifier}.json`);
   const inventoryPath = join(temporaryDirectory, `${identifier}-inventory.json`);
   const probePlanPath = join(temporaryDirectory, `${identifier}-probe-plan.json`);
+  const declarationSourcePath = join(temporaryDirectory, `${identifier}-declarations.ts`);
+  const declarationProjectPath = join(temporaryDirectory, `${identifier}-declarations-tsconfig.json`);
+  const declarationRequestPath = join(temporaryDirectory, `${identifier}-declarations-request.json`);
+  const declarationPlanPath = join(temporaryDirectory, `${identifier}-declarations-probe-plan.json`);
   const runtimeResolutionPath = join(temporaryDirectory, `${identifier}-runtime-resolutions.json`);
+  const projectStarted = process.hrtime.bigint();
   writeFileSync(
     project,
     `${JSON.stringify(
@@ -1899,6 +2170,7 @@ async function analyzeTarget({
       2
     )}\n`
   );
+  addPhase(timing, "temporaryProjectNs", elapsedNs(projectStarted));
   try {
     const args = [
       "--project",
@@ -1968,7 +2240,7 @@ async function analyzeTarget({
     // regressed three Solid 1.x packages that had generated cleanly before.
     // Naming `import` keeps the selection a superset of what the empty case
     // already allowed, so this can only add resolution, never remove it.
-    const runtimeConditions = [...new Set([...conditions, ...selectedConditions, "import"])].sort();
+    const runtimeConditions = effectiveRuntimeConditions(conditions, selectedConditions);
     args.push("--runtime-conditions", runtimeConditions.join(","));
     // A contract this run generated from the dependency's own sources had its
     // `kind` decided by this exact rule, so the emitter may carry it across
@@ -1989,7 +2261,41 @@ async function analyzeTarget({
     let attributions = [];
     while (true) {
       try {
-        attributions = runChecked(args, { cwd: packageRoot }).attributions;
+        const checked = await runCheckedAsync(args, { cwd: packageRoot });
+        attributions = checked.attributions;
+        const native = checked.generationTiming;
+        if (native) {
+          targetTiming.native = native;
+          // `factsTotalNs` covers the complete facts build after source setup;
+          // the producer's `typeFactsNs` is only its semantic-demand slice.
+          // Attribute the whole program-build boundary here, subtracting the
+          // separately reported syntax/source analysis and adding the setup
+          // that starts and feeds the retained producer session.
+          addPhase(
+            timing,
+            "typeFactsAndDemandNs",
+            (native.sourceSetupNs ?? 0) +
+              Math.max(
+                native.typeFactsNs,
+                (native.factsTotalNs ?? native.typeFactsNs + native.sourceAnalysisNs) -
+                  native.sourceAnalysisNs
+              )
+          );
+          addPhase(timing, "syntaxAndSourceFactsNs", native.sourceAnalysisNs);
+          addPhase(
+            timing,
+            "reactiveIrAndContractInferenceNs",
+            native.irNs +
+              native.solveAndSnapshotNs +
+              (native.contractEmissionNs ?? 0) +
+              (native.probePlanEmissionNs ?? 0)
+          );
+          addPhase(
+            timing,
+            "moduleInventoryAndRuntimeReconciliationNs",
+            native.moduleInventoryNs ?? 0
+          );
+        }
         break;
       } catch (error) {
         if (error.message.includes("has no runtime ESM exports")) {
@@ -2006,7 +2312,8 @@ async function analyzeTarget({
           module,
           packageRoot,
           conditions: runtimeConditions,
-          generationContext
+          generationContext,
+          timing
         });
         if (!contract) throw error;
         contracts.push(contract);
@@ -2014,13 +2321,93 @@ async function analyzeTarget({
         args.push(contractFlag(generated), generated);
       }
     }
-    return {
-      exports: expandContract(JSON.parse(readFileSync(output, "utf8"))).entrypoints["."].exports,
+    const inventoryStarted = process.hrtime.bigint();
+    const expandedExports = expandContract(JSON.parse(readFileSync(output, "utf8"))).entrypoints["."].exports;
+    const declarationDemanded = Object.values(expandedExports).some(summary =>
+      summaryNeedsDeclarationConstruction(summary)
+    );
+    const declarationExports = declarationDemanded
+      ? Object.fromEntries(
+          Object.entries(expandedExports)
+            .map(([name, summary]) => [name, probeSummaryArity(summary)])
+            .filter(([, arity]) => arity > 0)
+        )
+      : {};
+    let declarationPlan = {
+      schemaVersion: 2,
+      source: "typescript-value-domain",
+      exports: {}
+    };
+    if (Object.keys(declarationExports).length > 0) {
+      const declarationStarted = process.hrtime.bigint();
+      writeFileSync(declarationSourcePath, "export {};\n");
+      writeFileSync(
+        declarationProjectPath,
+        `${JSON.stringify(
+          {
+            compilerOptions: {
+              jsx: "preserve",
+              module: "ESNext",
+              moduleResolution: "Bundler",
+              skipLibCheck: true,
+              strict: true,
+              target: "ES2022"
+            },
+            files: [declarationSourcePath]
+          },
+          null,
+          2
+        )}\n`
+      );
+      writeFileSync(
+        declarationRequestPath,
+        `${JSON.stringify(
+          {
+            sourcePath: declarationSourcePath,
+            target: entryFile,
+            output: declarationPlanPath,
+            exports: declarationExports
+          },
+          null,
+          2
+        )}\n`
+      );
+      await runCheckedAsync(
+        [
+          "--project",
+          declarationProjectPath,
+          "--declaration-probe-plan",
+          declarationRequestPath
+        ],
+        {
+          cwd: packageRoot,
+          // This command mutates its synthetic source and writes a probe-only
+          // sidecar; the retained diagnostics daemon answers neither contract.
+          // Keep the helper one-shot even when the release binary enables the
+          // daemon by default.
+          env: { SOLID_CHECKER_DAEMON: "0" }
+        }
+      );
+      declarationPlan = JSON.parse(readFileSync(declarationPlanPath, "utf8"));
+      const declarationElapsed = elapsedNs(declarationStarted);
+      addPhase(timing, "typeFactsAndDemandNs", declarationElapsed);
+      targetTiming.declarationConstruction = {
+        demanded: true,
+        arityExports: Object.keys(declarationExports).length,
+        recipeExports: Object.keys(declarationPlan.exports ?? {}).length,
+        elapsedNs: declarationElapsed
+      };
+    }
+    const result = {
+      exports: expandedExports,
       // Read from the run that just succeeded, and read here rather than left to
       // the caller: the file lives in this generation's temporary directory and
       // is removed with the project below.
       inventory: readModuleInventory(inventoryPath),
-      probePlan: JSON.parse(readFileSync(probePlanPath, "utf8")),
+      probePlan: mergeProbePlanFragments(
+        JSON.parse(readFileSync(probePlanPath, "utf8")),
+        declarationPlan
+      ),
       // Relative to the package root so the plan describes the published
       // package rather than the temporary directory this run analyzed it in.
       attributions: attributions.map(note => ({
@@ -2028,11 +2415,22 @@ async function analyzeTarget({
         path: packageLocalPath(packageRoot, note.path)
       }))
     };
+    addPhase(
+      timing,
+      "moduleInventoryAndRuntimeReconciliationNs",
+      elapsedNs(inventoryStarted)
+    );
+    return result;
   } finally {
     rmSync(project, { force: true });
     rmSync(inventoryPath, { force: true });
     rmSync(probePlanPath, { force: true });
+    rmSync(declarationSourcePath, { force: true });
+    rmSync(declarationProjectPath, { force: true });
+    rmSync(declarationRequestPath, { force: true });
+    rmSync(declarationPlanPath, { force: true });
     rmSync(runtimeResolutionPath, { force: true });
+    if (timing && timingIndex !== undefined) timing.targets[timingIndex] = targetTiming;
   }
 }
 
@@ -2191,6 +2589,7 @@ async function generatePackageContractInternal(arguments_, context) {
       `${manifestPath} must declare name and version for package contract generation`
     );
   }
+  const packageTiming = freshGenerationTiming(manifest.name, manifest.version);
   const legacyProvenance = legacyRootProvenance(manifest);
   // One resolver for the whole generation: the `imports` map and the condition
   // selection are properties of this package and this run, and a walker that
@@ -2252,8 +2651,11 @@ async function generatePackageContractInternal(arguments_, context) {
     cacheDirectory: mkdtempSync(join(tmpdir(), "solid-checker-dependency-contracts-")),
     explicitContracts: options.contracts.map(contract => resolve(contract)),
     quiet: false,
-    ownsCacheDirectory: true
+    ownsCacheDirectory: true,
+    timings: []
   };
+  generationContext.timings ??= [];
+  generationContext.timings.push(packageTiming);
   const generationKey = JSON.stringify([
     packageRoot,
     [...new Set(options.conditions)].sort()
@@ -2316,9 +2718,79 @@ async function generatePackageContractInternal(arguments_, context) {
   const inventories = moduleInventories();
   try {
     let ordinal = 0;
-    for (const [entrypoint, variants] of [...selected].sort(([left], [right]) =>
+    const sortedEntrypoints = [...selected].sort(([left], [right]) =>
       left.localeCompare(right)
-    )) {
+    );
+
+    // Analyze every exact target identity through one package-wide pool.
+    // Previously the entrypoint loop awaited its own (usually one- or
+    // two-target) pool before even discovering the next entrypoint, leaving a
+    // four-lane generator half idle on wide export maps such as Kobalte's.
+    // The key already contains the target, excluded siblings, and effective
+    // conditions; only the scheduling boundary moves. Public projection,
+    // conditional merging, and refusal remain in the entrypoint loop below.
+    const packageAnalyses = [];
+    const packageAnalysisKeys = new Set();
+    for (const [, variants] of sortedEntrypoints) {
+      const targets = new Set(variants.map(variant => variant.target));
+      for (const variant of variants) {
+        const excludedTargets = [...targets]
+          .filter(candidate => candidate !== variant.target)
+          .sort();
+        const analysisConditions = [...variant.conditions].sort();
+        const analysisKey = targetAnalysisKey({
+          target: variant.target,
+          excludedTargets,
+          conditions: analysisConditions,
+          selectedConditions: options.conditions
+        });
+        if (packageAnalysisKeys.has(analysisKey)) continue;
+        packageAnalysisKeys.add(analysisKey);
+        packageAnalyses.push({
+          analysisKey,
+          target: variant.target,
+          excludedTargets,
+          analysisConditions,
+          identifier: `${ordinal++}-${randomUUID()}`
+        });
+      }
+    }
+    const timingBase = packageTiming.targets.length;
+    packageTiming.targets.push(...Array(packageAnalyses.length).fill(null));
+    const completedPackageAnalyses = await mapConcurrentOrdered(
+      packageAnalyses,
+      generationConcurrency(),
+      async (analysis, pendingIndex) => {
+        try {
+          return {
+            analysisKey: analysis.analysisKey,
+            observed: await analyzeTarget({
+              packageRoot,
+              packageName: manifest.name,
+              packageVersion: manifest.version,
+              target: analysis.target,
+              conditions: analysis.analysisConditions,
+              selectedConditions: options.conditions,
+              contracts,
+              temporaryDirectory,
+              identifier: analysis.identifier,
+              excludedTargets: analysis.excludedTargets,
+              resolver: moduleResolver,
+              generationContext,
+              timing: packageTiming,
+              timingIndex: timingBase + pendingIndex
+            })
+          };
+        } catch (error) {
+          return { analysisKey: analysis.analysisKey, error };
+        }
+      }
+    );
+    for (const completed of completedPackageAnalyses) {
+      targetAnalyses.set(completed.analysisKey, completed);
+    }
+
+    for (const [entrypoint, variants] of sortedEntrypoints) {
       try {
         const exports = {};
         const conditionalSummaries = new Map();
@@ -2357,6 +2829,63 @@ async function generatePackageContractInternal(arguments_, context) {
           targets.add(variant.target);
         }
         targetsByEntrypoint.set(entrypoint, targets);
+        const pendingAnalyses = [];
+        const pendingKeys = new Set();
+        for (const variant of variants) {
+          const excludedTargets = [...targets]
+            .filter(candidate => candidate !== variant.target)
+            .sort();
+          const analysisConditions = [...variant.conditions].sort();
+          const analysisKey = targetAnalysisKey({
+            target: variant.target,
+            excludedTargets,
+            conditions: analysisConditions,
+            selectedConditions: options.conditions
+          });
+          if (targetAnalyses.has(analysisKey) || pendingKeys.has(analysisKey)) continue;
+          pendingKeys.add(analysisKey);
+          pendingAnalyses.push({
+            analysisKey,
+            target: variant.target,
+            excludedTargets,
+            analysisConditions,
+            identifier: `${ordinal++}-${randomUUID()}`
+          });
+        }
+        const timingBase = packageTiming.targets.length;
+        packageTiming.targets.push(...Array(pendingAnalyses.length).fill(null));
+        const completedAnalyses = await mapConcurrentOrdered(
+          pendingAnalyses,
+          generationConcurrency(),
+          async (analysis, pendingIndex) => {
+            try {
+              return {
+                analysisKey: analysis.analysisKey,
+                observed: await analyzeTarget({
+                  packageRoot,
+                  packageName: manifest.name,
+                  packageVersion: manifest.version,
+                  target: analysis.target,
+                  conditions: analysis.analysisConditions,
+                  selectedConditions: options.conditions,
+                  contracts,
+                  temporaryDirectory,
+                  identifier: analysis.identifier,
+                  excludedTargets: analysis.excludedTargets,
+                  resolver: moduleResolver,
+                  generationContext,
+                  timing: packageTiming,
+                  timingIndex: timingBase + pendingIndex
+                })
+              };
+            } catch (error) {
+              return { analysisKey: analysis.analysisKey, error };
+            }
+          }
+        );
+        for (const completed of completedAnalyses) {
+          targetAnalyses.set(completed.analysisKey, completed);
+        }
         for (const variant of variants) {
           const target = variant.target;
           const excludedTargets = [...targets]
@@ -2368,26 +2897,20 @@ async function generatePackageContractInternal(arguments_, context) {
           // contract variants, and reusing the first analysis for the second
           // would silently attribute one environment's summary to the other.
           const analysisConditions = [...variant.conditions].sort();
-          const analysisKey = JSON.stringify([target, excludedTargets, analysisConditions]);
-          let observed = targetAnalyses.get(analysisKey);
-          if (!observed) {
-            observed = await analyzeTarget({
-              packageRoot,
-              packageName: manifest.name,
-              packageVersion: manifest.version,
-              target,
-              conditions: analysisConditions,
-              selectedConditions: options.conditions,
-              contracts,
-              temporaryDirectory,
-              identifier: `${ordinal++}-${randomUUID()}`,
-              excludedTargets,
-              resolver: moduleResolver,
-              generationContext
-            });
-            targetAnalyses.set(analysisKey, observed);
-          }
-          if (variants.length === 1) singleProbePlan = observed.probePlan?.exports ?? {};
+          const analysisKey = targetAnalysisKey({
+            target,
+            excludedTargets,
+            conditions: analysisConditions,
+            selectedConditions: options.conditions
+          });
+          const completed = targetAnalyses.get(analysisKey);
+          if (completed?.error) throw completed.error;
+          const observed = completed?.observed;
+          if (!observed) throw new Error(`missing completed target analysis ${analysisKey}`);
+          singleProbePlan =
+            singleProbePlan === undefined
+              ? observed.probePlan?.exports ?? {}
+              : intersectProbePlanExports(singleProbePlan, observed.probePlan?.exports ?? {});
           // Recorded on every variant, not only on a fresh analysis, so a target
           // reached under two condition sets is checked for inventory agreement
           // rather than silently taking the first one's answer.
@@ -2578,7 +3101,8 @@ async function generatePackageContractInternal(arguments_, context) {
       entrypoints,
       legacyProvenance,
       inventories,
-      targetExportNames
+      targetExportNames,
+      packageTiming
     );
     // A scoped open-load obligation withdraws exactly the exports whose
     // functions can reach it. Missing exports are the schema-v1 fail-closed
@@ -2610,6 +3134,7 @@ async function generatePackageContractInternal(arguments_, context) {
     if (Object.keys(entrypoints).length === 0) {
       throw refuse(`${manifest.name} has no certifiable runtime entrypoint after open-load attribution`);
     }
+    const artifactsStarted = process.hrtime.bigint();
     const binding = contractArtifacts(
       output,
       packageRoot,
@@ -2686,6 +3211,11 @@ async function generatePackageContractInternal(arguments_, context) {
         2
       )}\n`
     );
+    addPhase(
+      packageTiming,
+      "reviewPlanAndArtifactWritingNs",
+      elapsedNs(artifactsStarted)
+    );
     const constructionPlanPath = output.toLowerCase().endsWith(".json")
       ? `${output.slice(0, -5)}.probe-plan.json`
       : `${output}.probe-plan.json`;
@@ -2693,7 +3223,7 @@ async function generatePackageContractInternal(arguments_, context) {
       constructionPlanPath,
       `${JSON.stringify(
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           contract: sha256Artifact(output),
           source: "typescript-value-domain",
           package: { name: manifest.name, version: manifest.version },
@@ -2761,11 +3291,22 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     cacheDirectory,
     explicitContracts: options.contracts.map(contract => resolve(contract)),
     quiet,
-    ownsCacheDirectory: true
+    ownsCacheDirectory: true,
+    timings: []
   };
   try {
     return await generatePackageContractInternal(arguments_, generationContext);
   } finally {
+    if (process.env.SOLID_CHECKER_TIMINGS && generationContext.timings[0]) {
+      process.stderr.write(
+        `${JSON.stringify({
+          contractGenerationTiming: publicGenerationTiming(generationContext.timings[0]),
+          dependencyGenerationTimings: generationContext.timings
+            .slice(1)
+            .map(publicGenerationTiming)
+        })}\n`
+      );
+    }
     rmSync(cacheDirectory, { recursive: true, force: true });
   }
 }

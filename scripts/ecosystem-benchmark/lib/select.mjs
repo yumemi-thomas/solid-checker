@@ -242,6 +242,19 @@ function computeChannel(env) {
 // worth measuring.
 const SOLID2_FLOOR = "2.0.0-rc.0";
 
+// Multi-framework umbrella packages are rows because they publish a Solid
+// adapter, but their foreign adapters are not part of the Solid corpus. Keep
+// the allowlist here, at manifest construction, so every discovery refresh
+// reproduces the scope rather than relying on a hand-edited manifest.
+const PACKAGE_ENTRYPOINTS = new Map([
+  ["@tanstack/charts", ["./solid"]],
+  ["@tanstack/devtools-utils", ["./solid", "./solid/class"]],
+  [
+    "@tanstack/devtools-a11y",
+    ["./core", "./core/production", "./solid", "./solid/production"]
+  ]
+]);
+
 /**
  * The floor release for one runtime package on one Solid target.
  *
@@ -323,15 +336,22 @@ function buildProbes(packageName, version, solidTarget, compatibleSolidVersions,
   // still fails, which is the package's own graph talking.
   const floorEnv = coherentFloor(independentFloor, compatibleSolidVersions, catalog) ?? headEnv;
   const sameEverywhere = Object.keys(floorEnv).every(pkg => floorEnv[pkg] === headEnv[pkg]);
+  let probes;
   if (sameEverywhere) {
-    return [
+    probes = [
       { id: `${packageName}@${version}|${solidTarget}|only`, kind: "only", channel: computeChannel(floorEnv), solid: floorEnv }
     ];
+  } else {
+    probes = [
+      { id: `${packageName}@${version}|${solidTarget}|floor`, kind: "floor", channel: computeChannel(floorEnv), solid: floorEnv },
+      { id: `${packageName}@${version}|${solidTarget}|head`, kind: "head", channel: computeChannel(headEnv), solid: headEnv }
+    ];
   }
-  return [
-    { id: `${packageName}@${version}|${solidTarget}|floor`, kind: "floor", channel: computeChannel(floorEnv), solid: floorEnv },
-    { id: `${packageName}@${version}|${solidTarget}|head`, kind: "head", channel: computeChannel(headEnv), solid: headEnv }
-  ];
+  const entrypoints = PACKAGE_ENTRYPOINTS.get(packageName);
+  if (entrypoints) {
+    for (const probe of probes) probe.entrypoints = [...entrypoints];
+  }
+  return probes;
 }
 
 function buildRow({ packageName, familyId, status, solidTarget, version, versionDoc, packument, compatibleSolidVersions, unparsedRanges, catalog }) {

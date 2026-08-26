@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, parse, resolve } from "node:path";
@@ -110,6 +110,32 @@ export function runNative(command, args, options = {}) {
     env: { ...env, ...options.env },
     stdio: options.stdio ?? "inherit",
     encoding: options.encoding
+  });
+}
+
+export function runNativeAsync(command, args, options = {}) {
+  const { executable, env } = nativeInvocation(command);
+  return new Promise(resolvePromise => {
+    const child = spawn(executable, args, {
+      cwd: options.cwd ?? process.cwd(),
+      env: { ...env, ...options.env },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    let error;
+    child.stdout.on("data", chunk => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", chunk => {
+      stderr += chunk;
+    });
+    child.on("error", cause => {
+      error = cause;
+    });
+    child.on("close", (status, signal) => {
+      resolvePromise({ status, signal, error, stdout, stderr });
+    });
   });
 }
 

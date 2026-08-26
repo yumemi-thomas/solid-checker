@@ -186,12 +186,11 @@ function rows(value) {
 ///                   names, because the export reads a member of it
 ///   undefined       every other slot
 ///
-/// There is deliberately no ladder of retries. Trying `{}`, then `[]`, then `0`
-/// until something completes would make drivability depend on which shape
-/// happened to survive, and a call that completes for the wrong reason observes
-/// the wrong thing. A slot the vocabulary cannot fill is `undefined`, and if the
-/// export refuses it the claim is undriven with the throw as its reason -- which
-/// is the measurement RFC 0002's unresolved question 1 asks for.
+/// A Type Facts construction plan may now name several proven inhabitants for
+/// one slot. This is not a guess-and-survive ladder: every candidate is derived
+/// from the package's declarations, every attempt remains visible in the probe
+/// report, and a contradiction from any attempt fails the claim. A slot the
+/// vocabulary cannot fill stays `undefined`.
 export const ARGUMENT_SYNTHESIS = [
   "probe-callback",
   "probe-value",
@@ -201,19 +200,123 @@ export const ARGUMENT_SYNTHESIS = [
   "empty-array",
   "empty-map",
   "empty-set",
+  "dom-element",
   "undefined"
 ];
 
-export function applyConstructionPlan(descriptors, recipes) {
-  const next = [...descriptors];
-  if (!recipes || typeof recipes !== "object") return next;
-  for (const [rawIndex, recipe] of Object.entries(recipes)) {
-    const index = Number(rawIndex);
-    if (!Number.isInteger(index) || index < 0 || index >= next.length) continue;
-    if (next[index] !== "undefined" || !ARGUMENT_SYNTHESIS.includes(recipe)) continue;
-    next[index] = recipe;
+/// Multiple type-directed candidates improve reach, but the product of several
+/// union parameters must not turn one claim into an unbounded probe session.
+export const MAX_CONSTRUCTION_ATTEMPTS = 8;
+
+export function isArgumentRecipe(recipe, depth = 0) {
+  if (depth > 4) return false;
+  if (ARGUMENT_SYNTHESIS.includes(recipe)) return true;
+  if (!recipe || typeof recipe !== "object" || Array.isArray(recipe)) return false;
+  if (recipe.kind === "object") {
+    if (Object.keys(recipe).sort().join(",") !== "kind,properties") return false;
+    if (!recipe.properties || typeof recipe.properties !== "object" || Array.isArray(recipe.properties)) {
+      return false;
+    }
+    const properties = Object.entries(recipe.properties);
+    return (
+      properties.length <= 64 &&
+      properties.every(
+        ([name, value]) =>
+          typeof name === "string" &&
+          ["empty-array", "empty-object"].includes(value)
+      )
+    );
   }
-  return next;
+  if (recipe.kind === "factory") {
+    if (Object.keys(recipe).sort().join(",") !== "arguments,export,kind") return false;
+    return (
+      typeof recipe.export === "string" &&
+      recipe.export.length > 0 &&
+      Array.isArray(recipe.arguments) &&
+      recipe.arguments.length <= 16 &&
+      recipe.arguments.every(argument => isArgumentRecipe(argument, depth + 1))
+    );
+  }
+  if (recipe.kind !== "literal" || Object.keys(recipe).sort().join(",") !== "kind,value") {
+    return false;
+  }
+  return (
+    typeof recipe.value === "string" ||
+    typeof recipe.value === "boolean" ||
+    (typeof recipe.value === "number" && Number.isFinite(recipe.value))
+  );
+}
+
+export function applyConstructionPlan(descriptors, recipes) {
+  return applyConstructionPlans(descriptors, recipes, 1)[0];
+}
+
+export function applyConstructionPlans(
+  descriptors,
+  recipes,
+  limit = MAX_CONSTRUCTION_ATTEMPTS
+) {
+  const baseline = [...descriptors];
+  if (!recipes || typeof recipes !== "object" || limit <= 0) return [baseline];
+  const slots = [];
+  for (const [rawIndex, rawCandidates] of Object.entries(recipes).sort(
+    ([left], [right]) => Number(left) - Number(right)
+  )) {
+    const index = Number(rawIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= baseline.length) continue;
+    let candidates = (Array.isArray(rawCandidates) ? rawCandidates : [rawCandidates])
+      .filter(isArgumentRecipe)
+      .filter((recipe, index, all) =>
+        all.findIndex(candidate => JSON.stringify(candidate) === JSON.stringify(recipe)) === index
+      );
+    if (baseline[index] !== "undefined") {
+      if (baseline[index] !== "empty-object") continue;
+      candidates = candidates.filter(
+        recipe => recipe?.kind === "object" || recipe?.kind === "factory"
+      );
+    }
+    if (!candidates.length) continue;
+    baseline[index] = candidates[0];
+    slots.push({ index, candidates });
+  }
+  const plans = [baseline];
+  const seen = new Set([JSON.stringify(baseline)]);
+  const add = candidate => {
+    const key = JSON.stringify(candidate);
+    if (seen.has(key) || plans.length >= limit) return;
+    seen.add(key);
+    plans.push(candidate);
+  };
+
+  // First expose every alternate independently. If the budget permits, add
+  // combinations in deterministic Cartesian order. This avoids hiding a later
+  // parameter's second candidate merely because an earlier union was wide.
+  for (let offset = 1; plans.length < limit; offset += 1) {
+    let found = false;
+    for (const { index, candidates } of slots) {
+      if (offset >= candidates.length) continue;
+      found = true;
+      const candidate = [...baseline];
+      candidate[index] = candidates[offset];
+      add(candidate);
+    }
+    if (!found) break;
+  }
+  const combine = (slotIndex, candidate, changed) => {
+    if (plans.length >= limit) return;
+    if (slotIndex === slots.length) {
+      if (changed >= 2) add(candidate);
+      return;
+    }
+    const { index, candidates } = slots[slotIndex];
+    for (let choice = 0; choice < candidates.length && plans.length < limit; choice += 1) {
+      const next = [...candidate];
+      next[index] = candidates[choice];
+      combine(slotIndex + 1, next, changed + Number(choice > 0));
+    }
+  };
+  combine(0, baseline, 0);
+  return plans;
 }
 
 export function synthesizeArguments(summary, probedParameter) {
@@ -233,6 +336,25 @@ export function synthesizeArguments(summary, probedParameter) {
     else if (memberParameters.includes(index)) descriptors.push("empty-object");
     else descriptors.push("undefined");
   }
+  return descriptors;
+}
+
+function reactiveReadClaim(read, index) {
+  if (
+    read?.kind !== "parameter-member" ||
+    !Number.isInteger(read.parameter) ||
+    typeof read.member !== "string" ||
+    !read.member
+  ) {
+    return undefined;
+  }
+  return `reactiveReads[${index}]=parameter-member[${read.parameter}].member[${JSON.stringify(read.member)}]`;
+}
+
+function synthesizeReactiveReadArguments(summary, read) {
+  const descriptors = synthesizeArguments(summary);
+  while (descriptors.length <= read.parameter) descriptors.push("undefined");
+  descriptors[read.parameter] = { kind: "probe-member", member: read.member };
   return descriptors;
 }
 
@@ -413,10 +535,16 @@ export function buildProbePlan(
     const applicable = modes.filter(mode => modeApplies(entry, mode));
     for (const [exportName, summary] of Object.entries(entry.exports ?? {})) {
       const construct = descriptors =>
-        applyConstructionPlan(
+        applyConstructionPlans(
           descriptors,
           constructionPlan?.entrypoints?.[entrypoint]?.[exportName]
         );
+      const recordAttempts = (record, descriptors) => {
+        const attempts = construct(descriptors);
+        record.arguments = attempts[0];
+        if (attempts.length > 1) record.argumentAttempts = attempts;
+        return attempts;
+      };
       // Undrivable records are per claim, not per mode: the reason a claim has
       // no probe form does not change with the environment. The family comes
       // from `UNDRIVABLE_FAMILY`, so a row the generator proves statically is
@@ -449,24 +577,59 @@ export function buildProbePlan(
             const claim = `callbacks[${callback.parameter}]=${callback.execution}`;
             const record = claimRecord(entrypoint, exportName, claim, "B");
             record.modesAttempted.push(mode.name);
-            record.arguments = construct(synthesizeArguments(selected, callback.parameter));
-            request(
-              mode,
-              { entrypoint, export: exportName, claim },
-              {
-                type: "callback",
-                entrypoint,
-                specifier,
-                export: exportName,
-                parameter: callback.parameter,
-                arguments: record.arguments,
-                // A lazily-computed export (a memo) never runs its callback
-                // until the accessor it returned is read, and the contract is
-                // what says an accessor was returned. Reading it is therefore
-                // contract-led, not a guess about the return value.
-                callAccessor: selected.returns?.kind === "accessor"
-              }
-            );
+            for (const arguments_ of recordAttempts(
+              record,
+              synthesizeArguments(selected, callback.parameter)
+            )) {
+              request(
+                mode,
+                { entrypoint, export: exportName, claim },
+                {
+                  type: "callback",
+                  entrypoint,
+                  specifier,
+                  export: exportName,
+                  parameter: callback.parameter,
+                  arguments: arguments_,
+                  // A lazily-computed export (a memo) never runs its callback
+                  // until the accessor it returned is read, and the contract is
+                  // what says an accessor was returned. Reading it is therefore
+                  // contract-led, not a guess about the return value.
+                  callAccessor: selected.returns?.kind === "accessor"
+                }
+              );
+            }
+          }
+        }
+
+        if (!isUnknown(selected.reactiveReads)) {
+          for (const [readIndex, read] of rows(selected.reactiveReads).entries()) {
+            const claim = reactiveReadClaim(read, readIndex);
+            if (!claim) continue;
+            // The static compiler proof remains sufficient family-(A)
+            // evidence. The runtime probe is an additional falsifier and can
+            // attach corroborating evidence, but an unexercised call does not
+            // erase the exact static proof.
+            const record = claimRecord(entrypoint, exportName, claim, "A");
+            record.modesAttempted.push(mode.name);
+            for (const arguments_ of recordAttempts(
+              record,
+              synthesizeReactiveReadArguments(selected, read)
+            )) {
+              request(
+                mode,
+                { entrypoint, export: exportName, claim },
+                {
+                  type: "reactive-read",
+                  entrypoint,
+                  specifier,
+                  export: exportName,
+                  parameter: read.parameter,
+                  member: read.member,
+                  arguments: arguments_
+                }
+              );
+            }
           }
         }
 
@@ -482,39 +645,47 @@ export function buildProbePlan(
                   "no plantable reactive source: proving the returned value is an accessor needs a signal read inside a callback the contract states, and this export states none";
               } else {
                 record.modesAttempted.push(mode.name);
-                record.arguments = construct(synthesizeArguments(selected, plant));
-                request(
-                  mode,
-                  { entrypoint, export: exportName, claim },
-                  {
-                    type: "returns-accessor",
-                    entrypoint,
-                    specifier,
-                    export: exportName,
-                    parameter: plant,
-                    arguments: record.arguments,
-                    returnPath: path
-                  }
-                );
+                for (const arguments_ of recordAttempts(
+                  record,
+                  synthesizeArguments(selected, plant)
+                )) {
+                  request(
+                    mode,
+                    { entrypoint, export: exportName, claim },
+                    {
+                      type: "returns-accessor",
+                      entrypoint,
+                      specifier,
+                      export: exportName,
+                      parameter: plant,
+                      arguments: arguments_,
+                      returnPath: path
+                    }
+                  );
+                }
               }
             } else if (
               ["argument", "callback-result", "callback-result-function"].includes(returned.kind)
             ) {
               record.modesAttempted.push(mode.name);
-              record.arguments = construct(synthesizeReturnArguments(selected, returned));
-              request(
-                mode,
-                { entrypoint, export: exportName, claim },
-                {
-                  type: `returns-${returned.kind}`,
-                  entrypoint,
-                  specifier,
-                  export: exportName,
-                  parameter: returned.parameter,
-                  arguments: record.arguments,
-                  returnPath: path
-                }
-              );
+              for (const arguments_ of recordAttempts(
+                record,
+                synthesizeReturnArguments(selected, returned)
+              )) {
+                request(
+                  mode,
+                  { entrypoint, export: exportName, claim },
+                  {
+                    type: `returns-${returned.kind}`,
+                    entrypoint,
+                    specifier,
+                    export: exportName,
+                    parameter: returned.parameter,
+                    arguments: arguments_,
+                    returnPath: path
+                  }
+                );
+              }
             } else {
               record.family = "C";
               record.reason =
@@ -540,19 +711,21 @@ export function buildProbePlan(
           const stated = new Set(rows(selected.callbacks).map(callback => callback.parameter));
           for (const parameter of DISCOVERY_PARAMETERS) {
             if (stated.has(parameter)) continue;
-            request(
-              mode,
-              { entrypoint, export: exportName, discovery: true, parameter },
-              {
-                type: "discovery",
-                entrypoint,
-                specifier,
-                export: exportName,
-                parameter,
-                arguments: construct(synthesizeArguments(selected, parameter)),
-                callAccessor: selected.returns?.kind === "accessor"
-              }
-            );
+            for (const arguments_ of construct(synthesizeArguments(selected, parameter))) {
+              request(
+                mode,
+                { entrypoint, export: exportName, discovery: true, parameter },
+                {
+                  type: "discovery",
+                  entrypoint,
+                  specifier,
+                  export: exportName,
+                  parameter,
+                  arguments: arguments_,
+                  callAccessor: selected.returns?.kind === "accessor"
+                }
+              );
+            }
           }
         }
       }
@@ -597,8 +770,10 @@ function recordUndrivable(summary, push, prefix = "") {
       record(at(`callbacks[${index}].arguments`), "callbackArguments");
     }
   }
-  for (const [index] of rows(summary.reactiveReads).entries()) {
-    record(at(`reactiveReads[${index}]`), "reactiveRead");
+  for (const [index, read] of rows(summary.reactiveReads).entries()) {
+    if (!reactiveReadClaim(read, index)) {
+      record(at(`reactiveReads[${index}]`), "reactiveRead");
+    }
   }
   for (const [index] of rows(summary.ownerRequirements).entries()) {
     record(at(`ownerRequirements[${index}]`), "ownerRequirement");
@@ -843,7 +1018,10 @@ export function interpretSession({ claims, index, mode, results }) {
     // keeps its verdict because it already requires a re-read to pass, and
     // because `the call returned an object` is a real observation an inert
     // runtime can still make.
-    if (claim.startsWith("callbacks[") && !runtimeReran(result)) {
+    if (
+      (claim.startsWith("callbacks[") || claim.startsWith("reactiveReads[")) &&
+      !runtimeReran(result)
+    ) {
       observation.status = "undriven";
       observation.reason = EXECUTION_UNATTRIBUTABLE.runtimeInert;
       record.observations.push(observation);
@@ -960,6 +1138,25 @@ function verdictFor(claim, observation) {
       };
     }
     return { status: "passed", observed: "accessor" };
+  }
+  if (claim.startsWith("reactiveReads[")) {
+    if (!(observation.memberCallsBeforeWrite > 0)) {
+      return {
+        status: "undriven",
+        reason: "the completed call did not invoke the named parameter member, so the claim was not exercised"
+      };
+    }
+    const siteDelta = observation.siteRunsAfterWrite - observation.siteRunsBeforeWrite;
+    const memberDelta = observation.memberCallsAfterWrite - observation.memberCallsBeforeWrite;
+    if (siteDelta > 0 && memberDelta > 0) {
+      return { status: "passed", observed: "reactive parameter member" };
+    }
+    return {
+      status: "failed",
+      observed: "member invoked without a reactive re-read",
+      reason:
+        "the named parameter member read the planted source, but writing that source did not re-invoke the export and member"
+    };
   }
   const expected = claim.slice(claim.indexOf("=") + 1);
   const { execution: observed, reason } = classifyExecutionResult(observation);
@@ -1117,11 +1314,17 @@ export function writeProbeEvidence(
   const returnClaimNames = returnLeaves(summary.returns).map(({ returned, path }) =>
     returnClaim(returned, path)
   );
-  const exportClaims = [...callbackClaims, ...returnClaimNames];
-  const exportResults = exportClaims.map(claim => claimResults(claim)).flat();
+  const reactiveReadClaims = rows(summary.reactiveReads)
+    .map((read, index) => reactiveReadClaim(read, index))
+    .filter(Boolean);
+  const exportClaims = [...callbackClaims, ...returnClaimNames, ...reactiveReadClaims];
+  const resultsByExportClaim = exportClaims.map(claim => claimResults(claim));
+  const exportResults = resultsByExportClaim.flat();
   const summaryMarker = settleMarker(
     summary.evidence,
-    probeEvidence(exportResults),
+    resultsByExportClaim.every(results => results.length > 0)
+      ? probeEvidence(exportResults)
+      : undefined,
     // The summary marker covers every claim the export states, so it is
     // superseded as soon as any of them was re-driven.
     exportClaims.find(claim => drivenHere(claim)) ?? exportClaims[0] ?? "",
@@ -1183,6 +1386,23 @@ export function writeProbeEvidence(
       return leaf;
     };
     next.returns = visit(summary.returns);
+  }
+  if (Array.isArray(summary.reactiveReads)) {
+    next.reactiveReads = summary.reactiveReads.map((read, index) => {
+      const claim = reactiveReadClaim(read, index);
+      if (!claim) return read;
+      const marker = settleMarker(
+        read.evidence,
+        probeEvidence(claimResults(claim)),
+        claim,
+        field(`reactiveReads[${index}]`)
+      );
+      if (marker === read.evidence) return read;
+      const row = { ...read };
+      if (marker) row.evidence = marker;
+      else delete row.evidence;
+      return row;
+    });
   }
   if (summary.variants?.length) {
     next.variants = summary.variants.map((variant, index) => ({
@@ -1254,6 +1474,25 @@ export function buildProbeReport({
 }) {
   const counted = kind => claims.filter(claim => claim.status === kind).length;
   const perMode = environment ?? {};
+  const restartCauses = Object.fromEntries(
+    [...new Set((sessions ?? []).flatMap(entry => Object.keys(entry.restartCauses ?? {})))]
+      .sort()
+      .map(cause => [
+        cause,
+        (sessions ?? []).reduce(
+          (total, entry) => total + (entry.restartCauses?.[cause] ?? 0),
+          0
+        )
+      ])
+  );
+  const sessionTiming = Object.fromEntries(
+    [...new Set((sessions ?? []).flatMap(entry => Object.keys(entry.timing ?? {})))]
+      .sort()
+      .map(phase => [
+        phase,
+        (sessions ?? []).reduce((total, entry) => total + (entry.timing?.[phase] ?? 0), 0)
+      ])
+  );
   return {
     schemaVersion: PROBE_REPORT_SCHEMA_VERSION,
     package: {
@@ -1298,8 +1537,8 @@ export function buildProbeReport({
         ])
       )
     },
-    // How many worker processes each mode cost, and how many of those were
-    // restarts after a probe threw. A restart is not a failure -- it is the
+    // How many worker processes and independent chains each mode cost, and how
+    // many processes were restarts after a probe threw. A restart is not a failure -- it is the
     // only way to un-halt a Solid 2.0 development runtime -- but a mode that
     // needed dozens of them is the shape behind a slow or timed-out row, and
     // nothing recorded it before.
@@ -1314,14 +1553,20 @@ export function buildProbeReport({
     // `solid-js`: "not measured" is not "measured, and nothing re-ran".
     sessions: {
       started: (sessions ?? []).reduce((total, entry) => total + (entry.started ?? 0), 0),
+      chains: (sessions ?? []).reduce((total, entry) => total + (entry.chains ?? 0), 0),
       restarts: (sessions ?? []).reduce((total, entry) => total + (entry.restarts ?? 0), 0),
+      ...(Object.keys(restartCauses).length ? { restartCauses } : {}),
+      ...(Object.keys(sessionTiming).length ? { timing: sessionTiming } : {}),
       failed: (sessions ?? []).reduce((total, entry) => total + (entry.failed ?? 0), 0),
       byMode: Object.fromEntries(
         (sessions ?? []).map(entry => [
           entry.mode,
           {
             started: entry.started ?? 0,
+            chains: entry.chains ?? 0,
             restarts: entry.restarts ?? 0,
+            ...(entry.restartCauses ? { restartCauses: entry.restartCauses } : {}),
+            ...(entry.timing ? { timing: entry.timing } : {}),
             failed: entry.failed ?? 0,
             completed: Boolean(entry.completed),
             runtime: entry.runtime ?? null
@@ -1345,6 +1590,7 @@ export function buildProbeReport({
         family: claim.family,
         status: claim.status,
         ...(claim.arguments ? { arguments: claim.arguments } : {}),
+        ...(claim.argumentAttempts ? { argumentAttempts: claim.argumentAttempts } : {}),
         modes: { attempted: [...new Set(claim.modesAttempted)].sort(), passed: [...new Set(claim.modesPassed)].sort() },
         ...(claim.calls ? { calls: claim.calls } : {}),
         ...(claim.reason ? { reason: claim.reason } : {}),

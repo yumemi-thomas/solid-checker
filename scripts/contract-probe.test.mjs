@@ -33,6 +33,7 @@ import {
   EXECUTION_UNATTRIBUTABLE,
   PROBE_MODES,
   applyConstructionPlan,
+  applyConstructionPlans,
   applyProbeEvidence,
   attemptedModes,
   buildProbePlan,
@@ -53,6 +54,9 @@ import {
   readProbeConstructionPlan,
   probeReportPath,
   resolveProbeRuntime,
+  runIsolatedProbePool,
+  runIsolatedProbePools,
+  splitSessionProbes,
   runSessionBySpecifier,
   runSessionWithRestarts
 } from "../packages/cli/scripts/probe-contract.mjs";
@@ -65,6 +69,270 @@ const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 // environment. The checked-in bin/ binary lags rust/ source, which is why the
 // debug build is the default here.
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? join(root, "rust/target/debug/solid-checker-rust");
+
+test("non-invoking probes share one import while call-capable probes enter fresh restart chains", () => {
+  const session = {
+    mode: "client",
+    probes: [
+      { id: "a-kind", specifier: "pkg/a", type: "kind" },
+      { id: "a-call-1", specifier: "pkg/a", type: "callback" },
+      { id: "b-kind", specifier: "pkg/b", type: "kind" },
+      { id: "a-call-2", specifier: "pkg/a", type: "returns-accessor" }
+    ]
+  };
+  const split = splitSessionProbes(session);
+  assert.deepEqual(
+    split.nonInvoking.map(task => task.probes.map(probe => probe.id)),
+    [["a-kind"], ["b-kind"]]
+  );
+  assert.deepEqual(
+    split.invoking.map(task => task.probes.map(probe => probe.id)),
+    [["a-call-1"], ["a-call-2"]]
+  );
+});
+
+test("the isolated worker pool is bounded and returns deterministic probe order", async () => {
+  const session = {
+    mode: "client",
+    probes: [
+      { id: "kind", specifier: "pkg", type: "kind" },
+      { id: "slow", specifier: "pkg", type: "callback" },
+      { id: "fast", specifier: "pkg", type: "returns-accessor" },
+      { id: "middle", specifier: "pkg", type: "reactive-read" }
+    ]
+  };
+  let active = 0;
+  let maximum = 0;
+  const delays = { kind: 1, slow: 25, fast: 1, middle: 10 };
+  const result = await runIsolatedProbePool({
+    session,
+    concurrency: 2,
+    spawn: async probes => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      const probe = probes[0];
+      await new Promise(resolvePromise => setTimeout(resolvePromise, delays[probe.id]));
+      active -= 1;
+      return {
+        completed: true,
+        environment: { kind: "none", shimmed: [], present: [] },
+        runtime: { reruns: true },
+        results: probes.map(candidate => ({ id: candidate.id, outcome: "observed" }))
+      };
+    }
+  });
+  assert.equal(maximum, 2);
+  assert.deepEqual(result.results.map(entry => entry.id), session.probes.map(probe => probe.id));
+  assert.equal(result.accounting.started, 2);
+  assert.equal(result.accounting.chains, 2);
+  assert.equal(result.accounting.restarts, 0);
+});
+
+test("condition modes share one bounded row-global worker pool", async () => {
+  const sessions = ["client", "server"].map(mode => ({
+    mode,
+    probes: [
+      { id: `${mode}-kind`, specifier: "pkg", type: "kind" },
+      { id: `${mode}-slow`, specifier: "pkg", type: "callback" },
+      { id: `${mode}-fast`, specifier: "pkg", type: "callback" }
+    ]
+  }));
+  let active = 0;
+  let maximum = 0;
+  const completed = await runIsolatedProbePools({
+    sessions,
+    concurrency: 2,
+    spawn: async ({ probes }) => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      await new Promise(resolvePromise =>
+        setTimeout(resolvePromise, probes[0].id.endsWith("slow") ? 20 : 1)
+      );
+      active -= 1;
+      return {
+        completed: true,
+        results: probes.map(probe => ({ id: probe.id, outcome: "observed" }))
+      };
+    }
+  });
+  assert.equal(maximum, 2);
+  assert.deepEqual(completed.map(result => result.mode), ["client", "server"]);
+  assert.deepEqual(
+    completed.map(result => result.results.map(observation => observation.id)),
+    sessions.map(session => session.probes.map(probe => probe.id))
+  );
+});
+
+test("independent specifiers provide pool parallelism without multiplying every restart chain", async () => {
+  const session = {
+    mode: "client",
+    probes: ["a", "b", "c"].flatMap(specifier => [
+      { id: `${specifier}-first`, specifier: `pkg/${specifier}`, type: "callback" },
+      { id: `${specifier}-second`, specifier: `pkg/${specifier}`, type: "callback" }
+    ])
+  };
+  let active = 0;
+  let maximum = 0;
+  const result = await runIsolatedProbePool({
+    session,
+    concurrency: 2,
+    spawn: async probes => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      await new Promise(resolvePromise => setTimeout(resolvePromise, 5));
+      active -= 1;
+      return {
+        completed: true,
+        results: probes.map(probe => ({ id: probe.id, outcome: "observed" }))
+      };
+    }
+  });
+  assert.equal(maximum, 2);
+  assert.equal(result.accounting.chains, 3);
+  assert.equal(result.accounting.started, 3);
+  assert.deepEqual(result.results.map(entry => entry.id), session.probes.map(probe => probe.id));
+});
+
+test("kind observations precede a risky call in the same fresh import chain", async () => {
+  const session = {
+    mode: "client",
+    probes: [
+      { id: "kind-a", specifier: "pkg/a", type: "kind" },
+      { id: "kind-b", specifier: "pkg/a", type: "kind" },
+      { id: "risky", specifier: "pkg/a", type: "callback" }
+    ]
+  };
+  const requests = [];
+  const result = await runIsolatedProbePool({
+    session,
+    concurrency: 1,
+    spawn: async probes => {
+      requests.push(probes.map(probe => probe.id));
+      return {
+        completed: false,
+        results: [
+          { id: "kind-a", outcome: "observed" },
+          { id: "kind-b", outcome: "observed" },
+          { id: "risky", outcome: "threw", error: "boom" }
+        ]
+      };
+    }
+  });
+  assert.deepEqual(requests, [["kind-a", "kind-b", "risky"]]);
+  assert.equal(result.accounting.chains, 1);
+  assert.equal(result.accounting.started, 1);
+  assert.deepEqual(result.results.map(entry => entry.id), session.probes.map(probe => probe.id));
+});
+
+test("an unreadable combined worker retries only the non-invoking kind prefix", async () => {
+  const session = {
+    mode: "client",
+    probes: [
+      { id: "kind", specifier: "pkg", type: "kind" },
+      { id: "risky", specifier: "pkg", type: "callback" }
+    ]
+  };
+  const requests = [];
+  const result = await runIsolatedProbePool({
+    session,
+    concurrency: 1,
+    spawn: async probes => {
+      requests.push(probes.map(probe => probe.id));
+      if (requests.length === 1) return { failed: "worker crashed", results: [] };
+      return {
+        completed: true,
+        results: probes.map(probe => ({ id: probe.id, outcome: "observed" }))
+      };
+    }
+  });
+  assert.deepEqual(requests, [["kind", "risky"], ["kind"]]);
+  assert.equal(result.results.find(entry => entry.id === "kind").outcome, "observed");
+  assert.equal(result.results.find(entry => entry.id === "risky").outcome, "session-failed");
+  assert.equal(result.accounting.started, 2);
+  assert.equal(result.accounting.failed, 1);
+});
+
+test("worker timing is summed across isolated restart processes", async () => {
+  const session = {
+    mode: "client",
+    probes: [
+      { id: "throws", specifier: "pkg", type: "callback" },
+      { id: "later", specifier: "pkg", type: "callback" }
+    ]
+  };
+  let attempt = 0;
+  const result = await runIsolatedProbePool({
+    session,
+    concurrency: 1,
+    spawn: async probes => {
+      attempt += 1;
+      return attempt === 1
+        ? {
+            completed: false,
+            timing: { totalNs: 10, runtimeCapabilityNs: 4 },
+            results: [{ id: probes[0].id, outcome: "threw", error: "boom" }]
+          }
+        : {
+            completed: true,
+            timing: { totalNs: 20, runtimeCapabilityNs: 5 },
+            results: probes.map(probe => ({ id: probe.id, outcome: "observed" }))
+          };
+    }
+  });
+  assert.deepEqual(result.accounting.timing, { runtimeCapabilityNs: 9, totalNs: 30 });
+});
+
+test("a throw or asynchronous abort can never contaminate a later probe worker", async () => {
+  const session = {
+    mode: "development",
+    probes: [
+      { id: "kind", specifier: "pkg", type: "kind" },
+      { id: "throws", specifier: "pkg", type: "callback" },
+      { id: "aborts", specifier: "pkg", type: "callback" },
+      { id: "later", specifier: "pkg", type: "callback" },
+      { id: "after-abort", specifier: "pkg", type: "callback" }
+    ]
+  };
+  const workers = [];
+  const result = await runIsolatedProbePool({
+    session,
+    concurrency: 2,
+    spawn: async probes => {
+      const worker = Symbol(probes[0].id);
+      workers.push({ worker, ids: probes.map(probe => probe.id) });
+      const prefix = probes
+        .filter(probe => probe.type === "kind")
+        .map(probe => ({ id: probe.id, outcome: "observed" }));
+      const firstRisky = probes.find(probe => probe.type !== "kind");
+      if (firstRisky?.id === "throws") {
+        return {
+          completed: false,
+          results: [...prefix, { id: "throws", outcome: "threw", error: "boom" }]
+        };
+      }
+      if (firstRisky?.id === "aborts") {
+        return {
+          completed: false,
+          aborted: "unhandledRejection: boom",
+          results: [...prefix, { id: "aborts", outcome: "observed" }]
+        };
+      }
+      return { completed: true, results: probes.map(probe => ({ id: probe.id, outcome: "observed" })) };
+    }
+  });
+  assert.equal(new Set(workers.map(entry => entry.worker)).size, workers.length);
+  assert.ok(workers.some(entry => entry.ids.includes("throws") && entry.ids.includes("later")));
+  assert.ok(workers.some(entry => entry.ids.length === 1 && entry.ids[0] === "later"));
+  assert.ok(workers.some(entry => entry.ids.includes("aborts") && entry.ids.includes("after-abort")));
+  assert.ok(workers.some(entry => entry.ids.length === 1 && entry.ids[0] === "after-abort"));
+  assert.equal(result.results.find(entry => entry.id === "throws").outcome, "threw");
+  assert.equal(result.results.find(entry => entry.id === "later").outcome, "observed");
+  assert.equal(result.results.find(entry => entry.id === "after-abort").outcome, "observed");
+  assert.deepEqual(result.accounting.restartCauses, {
+    asynchronousAbort: 1,
+    synchronousThrow: 1
+  });
+});
 let validatorDirectory;
 if (existsSync(native)) {
   process.env.SOLID_CHECKER_NATIVE_BIN = native;
@@ -157,7 +425,7 @@ test("argument synthesis fills only the slots the contract's own vocabulary name
     "undefined",
     "empty-object"
   ]);
-  assert.equal(
+  assert.deepEqual(
     descriptors.every(descriptor => ARGUMENT_SYNTHESIS.includes(descriptor)),
     true,
     "the vocabulary is closed: a slot is filled from it or left undefined"
@@ -541,6 +809,67 @@ test("the plan drives family (B) and records a reason for every undrivable claim
   );
 });
 
+test("an exact parameter member is runtime-probed and contradictory non-reactivity fails", () => {
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-4"] = {
+    kind: "function",
+    reactiveReads: [{ kind: "parameter-member", parameter: 0, member: "value" }]
+  };
+  document.entrypoints["."].exports = { "function-4": ["readsMember"] };
+  const makePlan = () =>
+    buildProbePlan(expandContract(document), {
+      modes: [PROBE_MODES[0]],
+      discovery: false
+    });
+  const passing = makePlan();
+  const probe = passing.sessions[0].probes.find(candidate => candidate.type === "reactive-read");
+  assert.deepEqual(probe.arguments, [{ kind: "probe-member", member: "value" }]);
+  assert.equal(
+    passing.claims.find(claim => claim.claim.startsWith("reactiveReads[")).claim,
+    'reactiveReads[0]=parameter-member[0].member["value"]'
+  );
+  const passed = drive(passing, candidate =>
+    candidate.type === "kind"
+      ? { outcome: "observed", observation: { typeofValue: "function" } }
+      : {
+          outcome: "observed",
+          calls: 2,
+          observation: {
+            memberCallsBeforeWrite: 1,
+            memberCallsAfterWrite: 2,
+            siteRunsBeforeWrite: 1,
+            siteRunsAfterWrite: 2
+          }
+        }
+  );
+  const read = passed.claims.find(claim => claim.claim.startsWith("reactiveReads["));
+  assert.equal(read.status, "passed");
+  const written = applyProbeEvidence(expandContract(document), passed.evidence, passed.claims);
+  assert.deepEqual(
+    written.contract.entrypoints["."].exports.readsMember.reactiveReads[0].evidence,
+    { kind: "probed", modes: ["client"], calls: 2 }
+  );
+
+  const contradicted = drive(makePlan(), candidate =>
+    candidate.type === "kind"
+      ? { outcome: "observed", observation: { typeofValue: "function" } }
+      : {
+          outcome: "observed",
+          calls: 1,
+          observation: {
+            memberCallsBeforeWrite: 1,
+            memberCallsAfterWrite: 1,
+            siteRunsBeforeWrite: 1,
+            siteRunsAfterWrite: 1
+          }
+        }
+  );
+  assert.equal(
+    contradicted.claims.find(claim => claim.claim.startsWith("reactiveReads[")).status,
+    "failed"
+  );
+});
+
 test("returns=accessor is undrivable without a callback to plant a signal read in", () => {
   const document = structuredClone(CONTRACT);
   document.summaries["function-1"] = {
@@ -686,6 +1015,130 @@ test("TypeFacts construction recipes fill only otherwise-undefined slots", () =>
     ),
     ["null", "probe-callback", "empty-object", "empty-set"]
   );
+  assert.deepEqual(
+    applyConstructionPlans(
+      ["undefined", "undefined", "probe-callback"],
+      {
+        0: ["null", "undefined"],
+        1: ["empty-array", "empty-map"],
+        2: ["empty-set"],
+        9: [{ kind: "literal", value: "ignored" }]
+      }
+    ),
+    [
+      ["null", "empty-array", "probe-callback"],
+      ["undefined", "empty-array", "probe-callback"],
+      ["null", "empty-map", "probe-callback"],
+      ["undefined", "empty-map", "probe-callback"]
+    ]
+  );
+});
+
+test("TypeFacts construction recipes carry validated object and factory witnesses", () => {
+  const object = {
+    kind: "object",
+    properties: {
+      columns: "empty-array",
+      data: "empty-array",
+      features: "empty-object"
+    }
+  };
+  const table = {
+    kind: "factory",
+    export: "createTable",
+    arguments: [object]
+  };
+  assert.deepEqual(
+    applyConstructionPlan(["undefined", "probe-callback"], { 0: table }),
+    [table, "probe-callback"]
+  );
+  assert.deepEqual(
+    applyConstructionPlan(["empty-object", "probe-callback"], { 0: table }),
+    [table, "probe-callback"],
+    "a compiler-validated inhabitant replaces only the generic object placeholder"
+  );
+  assert.deepEqual(
+    applyConstructionPlan(["undefined"], {
+      0: { kind: "factory", export: "createTable", arguments: [{ kind: "object", properties: { unsafe: "undefined" } }] }
+    }),
+    ["undefined"],
+    "nested recipes must stay inside the declaration-proven vocabulary"
+  );
+});
+
+test("every type-directed attempt is visible and any contradiction fails the claim", () => {
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-1"] = {
+    kind: "function",
+    callbacks: [{ parameter: 0, execution: "inline" }]
+  };
+  document.entrypoints["."].exports = { "function-1": ["choose"] };
+  const plan = buildProbePlan(expandContract(document), {
+    modes: [PROBE_MODES[0]],
+    discovery: false,
+    constructionPlan: {
+      entrypoints: { ".": { choose: { 1: [{ kind: "literal", value: "open" }, { kind: "literal", value: "closed" }] } } }
+    }
+  });
+  const probes = plan.sessions[0].probes.filter(probe => probe.type === "callback");
+  assert.deepEqual(
+    probes.map(probe => probe.arguments),
+    [
+      ["probe-callback"]
+    ],
+    "a recipe cannot extend beyond a contract-proven argument slot"
+  );
+
+  document.summaries["function-1"].callbacks.push({ parameter: 2, execution: "inline" });
+  const expanded = expandContract(document);
+  const driven = buildProbePlan(expanded, {
+    modes: [PROBE_MODES[0]],
+    discovery: false,
+    constructionPlan: {
+      entrypoints: { ".": { choose: { 1: [{ kind: "literal", value: "open" }, { kind: "literal", value: "closed" }] } } }
+    }
+  });
+  const attempts = driven.sessions[0].probes.filter(
+    probe => probe.type === "callback" && probe.parameter === 0
+  );
+  assert.deepEqual(attempts.map(probe => probe.arguments), [
+    ["probe-callback", { kind: "literal", value: "open" }, "noop-callback"],
+    ["probe-callback", { kind: "literal", value: "closed" }, "noop-callback"]
+  ]);
+  const observations = attempts.map((probe, index) => ({
+    id: probe.id,
+    outcome: "observed",
+    runtime: { reruns: true },
+    calls: 1,
+    observation: index === 0
+      ? {
+          ranDuringCall: true,
+          runsBeforeWrite: 1,
+          runsAfterControl: 1,
+          runsAfterWrite: 1,
+          siteRunsBeforeWrite: 1,
+          siteRunsAfterWrite: 1
+        }
+      : {
+          ranDuringCall: true,
+          runsBeforeWrite: 1,
+          runsAfterControl: 1,
+          runsAfterWrite: 2,
+          siteRunsBeforeWrite: 1,
+          siteRunsAfterWrite: 1
+        }
+  }));
+  interpretSession({
+    claims: driven.claims,
+    index: driven.index,
+    mode: "client",
+    results: observations
+  });
+  settleClaims(driven.claims);
+  assert.equal(
+    driven.claims.find(claim => claim.claim === "callbacks[0]=inline").status,
+    "failed"
+  );
 });
 
 test("probe construction plans are bound to exact contract bytes", () => {
@@ -698,16 +1151,18 @@ test("probe construction plans are bound to exact contract bytes", () => {
   writeFileSync(
     path,
     `${JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       contract: hash,
       source: "typescript-value-domain",
       package: { name: "x", version: "1" },
-      entrypoints: { ".": { f: { 0: "null" } } }
+      entrypoints: {
+        ".": { f: { 0: ["null", "undefined", { kind: "literal", value: "open" }] } }
+      }
     })}\n`
   );
-  assert.equal(
+  assert.deepEqual(
     readProbeConstructionPlan(contractFile, hash, { name: "x", version: "1" }).entrypoints["."].f[0],
-    "null"
+    ["null", "undefined", { kind: "literal", value: "open" }]
   );
   assert.throws(
     () => readProbeConstructionPlan(contractFile, "sha256:stale", { name: "x", version: "1" }),
@@ -1726,7 +2181,7 @@ test("the CLI dispatches contract probe", () => {
 /// directory, builds a one-export package around `createMemo`, and drives the
 /// tracked-callback claim end to end through the real worker. It skips when the
 /// install cannot happen -- offline, or no Bun.
-test("drives a real tracked-callback claim against an installed Solid release", async t => {
+test("drives a real tracked-callback claim against an installed Solid release", async () => {
   const directory = workspace("solid-checker-probe-install-");
   writeFileSync(
     join(directory, "package.json"),
@@ -1734,7 +2189,11 @@ test("drives a real tracked-callback claim against an installed Solid release", 
   );
   const install = installAuditedSolid(directory);
   if (!install.ok) {
-    t.skip(`could not install solid-js@1.9.14: ${install.message ?? "the cached runtime was unavailable"}`);
+    console.info(
+      `skipped real Solid probe: could not install solid-js@1.9.14: ${
+        install.message ?? "the cached runtime was unavailable"
+      }`
+    );
     return;
   }
   const packageRoot = join(directory, "node_modules", "probe-fixture");
@@ -1848,7 +2307,7 @@ test("drives a real tracked-callback claim against an installed Solid release", 
     calls: 1
   });
   assert.equal(written.evidence.kind, "inferred", "Stage 1 promotes nothing");
-});
+}, 60_000);
 
 // ---------------------------------------------------------------------------
 // The import environment
@@ -1898,6 +2357,8 @@ function runWorker({
   mode = "client",
   probeCount = 1,
   probes,
+  installSolid = true,
+  transport = "file",
   solid = "export const createSignal = () => [];\n",
   packages = {}
 }) {
@@ -1916,7 +2377,7 @@ function runWorker({
   // runtime" and tests nothing about the environment. The default stub only has
   // to exist -- the environment tests drive no reactive claim -- and a test
   // about the runtime capability supplies a runtime of its own.
-  install("solid-js", solid, "1.9.14");
+  if (installSolid) install("solid-js", solid, "1.9.14");
   if (body !== undefined) install("env-fixture", body);
   for (const [name, source] of Object.entries(packages)) install(name, source);
   const worker = join(modules, "contract-probe-worker.mjs");
@@ -1941,13 +2402,42 @@ function runWorker({
         }))
     })
   );
-  const child = spawnSync(process.execPath, [worker, requestFile], {
+  const child = spawnSync(process.execPath, [worker, transport === "stdin" ? "-" : requestFile], {
     cwd: directory,
-    encoding: "utf8"
+    encoding: "utf8",
+    ...(transport === "stdin" ? { input: readFileSync(requestFile) } : {})
   });
   assert.equal(child.status, 0, child.stderr);
   return JSON.parse(child.stdout);
 }
+
+test("the worker accepts a request over stdin without a per-process request file", () => {
+  const answer = runWorker({
+    transport: "stdin",
+    installSolid: false,
+    body: "export const report = 1;\n",
+    environment: { kind: "none", globals: [] }
+  });
+  assert.equal(answer.results[0].outcome, "observed");
+});
+
+test("a compiler-proven DOM recipe constructs a labeled browser witness", () => {
+  const answer = runWorker({
+    solid: REACTIVE_RUNTIME,
+    body:
+      "export const needsContainer = (container, callback) => { if (container?.nodeType !== 1) throw new Error('not an element'); return callback(); };\n",
+    environment: environmentForMode(PROBE_MODES[0]),
+    probes: [
+      {
+        ...callbackProbe("p1", "env-fixture", "needsContainer"),
+        parameter: 1,
+        arguments: ["dom-element", "probe-callback"]
+      }
+    ]
+  });
+  assert.equal(answer.results[0].outcome, "observed");
+  assert.equal(answer.environment.kind, "browser-globals");
+});
 
 test("the worker establishes all three relational returns with a fresh identity sentinel", () => {
   const solid = [
@@ -2001,6 +2491,17 @@ test("the worker establishes all three relational returns with a fresh identity 
   );
   assert.equal(answer.results[2].observation.returnedFunctionCalls, 1);
   assert.equal(answer.results[3].observation.callbackCalls, 1);
+});
+
+test("a kind-only worker imports no Solid runtime", () => {
+  const answer = runWorker({
+    body: "export function report() {}",
+    environment: { kind: "none", globals: [] },
+    installSolid: false
+  });
+  assert.equal(answer.results[0].outcome, "observed");
+  assert.equal(answer.results[0].observation.typeofValue, "function");
+  assert.equal(answer.runtime, null);
 });
 
 test("the worker defines the requested globals before it imports anything", () => {
@@ -2204,12 +2705,13 @@ test("the probe report records the environment, the accounting and which modes w
       {
         mode: "client",
         started: 3,
+        chains: 1,
         restarts: 2,
         failed: 0,
         completed: true,
         runtime: { reruns: true }
       },
-      { mode: "server", started: 1, restarts: 0, failed: 1, completed: false }
+      { mode: "server", started: 1, chains: 1, restarts: 0, failed: 1, completed: false }
     ],
     claims: [],
     incompleteness: []
@@ -2223,11 +2725,12 @@ test("the probe report records the environment, the accounting and which modes w
   // that far records `null` rather than an inert answer nobody measured.
   assert.deepEqual(report.sessions, {
     started: 4,
+    chains: 2,
     restarts: 2,
     failed: 1,
     byMode: {
-      client: { started: 3, restarts: 2, failed: 0, completed: true, runtime: { reruns: true } },
-      server: { started: 1, restarts: 0, failed: 1, completed: false, runtime: null }
+      client: { started: 3, chains: 1, restarts: 2, failed: 0, completed: true, runtime: { reruns: true } },
+      server: { started: 1, chains: 1, restarts: 0, failed: 1, completed: false, runtime: null }
     }
   });
 });
@@ -2250,7 +2753,7 @@ test("a report with no shimmed mode says so rather than omitting the block", () 
     incompleteness: []
   });
   assert.equal(report.environment.shimmedAnyMode, false);
-  assert.deepEqual(report.sessions, { started: 0, restarts: 0, failed: 0, byMode: {} });
+  assert.deepEqual(report.sessions, { started: 0, chains: 0, restarts: 0, failed: 0, byMode: {} });
 });
 
 test("an asynchronous throw from package code costs the process, not the mode", () => {
@@ -2413,6 +2916,12 @@ test("the worker asks its runtime whether anything re-runs, and stamps every obs
   assert.equal(seen.runsAfterControl, 1);
   assert.equal(seen.runsAfterWrite, 2);
   assert.equal(classifyExecution(seen), "tracked");
+  assert.ok(reactive.timing.totalNs > 0);
+  assert.ok(reactive.timing.runtimeImportNs > 0);
+  assert.ok(reactive.timing.runtimeCapabilityNs > 0);
+  assert.ok(reactive.timing.packageImportNs > 0);
+  assert.ok(reactive.timing.observationNs > 0);
+  assert.ok(reactive.timing.callbackObservationNs > 0);
 
   const inert = runWorker({ solid: INERT_RUNTIME, probes, environment: { kind: "none", globals: [] } });
   assert.deepEqual(inert.runtime, { reruns: false });

@@ -38,6 +38,7 @@ fn plan_file(
     let mut type_descriptor_spans = HashSet::new();
     let mut runtime_value_domain_spans = HashSet::new();
     let mut primitive_value_domain_spans = HashSet::new();
+    let mut primitive_literal_candidate_spans = HashSet::new();
     let mut constant_value_spans = HashSet::new();
     let mut array_shape_spans = HashSet::new();
     let mut tuple_shape_spans = HashSet::new();
@@ -107,6 +108,7 @@ fn plan_file(
                 type_descriptor_spans.insert(name.span);
                 runtime_value_domain_spans.insert(name.span);
                 primitive_value_domain_spans.insert(name.span);
+                primitive_literal_candidate_spans.insert(name.span);
                 array_shape_spans.insert(name.span);
                 library_type_spans.insert(name.span);
             }
@@ -563,6 +565,7 @@ fn plan_file(
         planned.constructability = planned.callability;
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
         planned.primitive_value_domain = primitive_value_domain_spans.contains(&span);
+        planned.primitive_literal_candidates = primitive_literal_candidate_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
         planned.tuple_shape = tuple_shape_spans.contains(&span);
@@ -637,6 +640,8 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         constructability: false,
         runtime_value_domain: false,
         primitive_value_domain: false,
+        primitive_literal_candidates: false,
+        parameter_object_shape: false,
         call_result_domain: false,
         constant_value: false,
         array_shape: false,
@@ -701,6 +706,8 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.constructability |= demand.constructability;
             current.runtime_value_domain |= demand.runtime_value_domain;
             current.primitive_value_domain |= demand.primitive_value_domain;
+            current.primitive_literal_candidates |= demand.primitive_literal_candidates;
+            current.parameter_object_shape |= demand.parameter_object_shape;
             current.call_result_domain |= demand.call_result_domain;
             current.constant_value |= demand.constant_value;
             current.array_shape |= demand.array_shape;

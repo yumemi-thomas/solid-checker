@@ -458,7 +458,12 @@ async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
     const generationStart = now();
     let genResult;
     try {
-      genResult = await hooks.generateContract({ packageRoot, outputPath, timeoutMs });
+      genResult = await hooks.generateContract({
+        packageRoot,
+        outputPath,
+        timeoutMs,
+        entrypoints: probe.entrypoints ?? []
+      });
     } catch (error) {
       genResult = { status: 1, stdout: "", stderr: error?.stack ?? String(error), timedOut: false };
     }
@@ -689,11 +694,20 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
       return { ...result, installedVersions, integrity };
     },
 
-    generateContract: ({ packageRoot, outputPath, timeoutMs }) =>
+    generateContract: ({ packageRoot, outputPath, timeoutMs, entrypoints = [] }) =>
       new Promise(resolvePromise => {
         const child = spawn(
           process.execPath,
-          [cliPath, "contract", "generate", "--package-root", packageRoot, "--output", outputPath],
+          [
+            cliPath,
+            "contract",
+            "generate",
+            "--package-root",
+            packageRoot,
+            "--output",
+            outputPath,
+            ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
+          ],
           {
             env: { ...process.env, SOLID_CHECKER_NATIVE_BIN: nativeBin, SOLID_TYPEFACTS_BIN: typeFactsBin },
             stdio: ["ignore", "pipe", "pipe"]
