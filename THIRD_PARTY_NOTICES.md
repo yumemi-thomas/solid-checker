@@ -3,17 +3,18 @@
 `solid-checker` is MIT licensed. It contains and depends on third-party software
 whose original notices remain applicable.
 
-## DOM Expressions
+## Solid 2 compiler
 
-- Upstream: https://github.com/ryansolid/dom-expressions
-- Consumed fork: https://github.com/yumemi-thomas/dom-expressions
-- Pinned revision: `26e744fb4feb973a3652bfc45a8c3938ece667f0`
+- Upstream: https://github.com/solidjs/solid
+- Upstream base: `a10cf1a1`
+- Consumed semantic-only fork: https://github.com/yumemi-thomas/solid
+- Pinned revision: `1d81e67fd393d12c74b13aa7d3fb492f3d85353b`
 - License: MIT
 
-The `dom-expressions-compiler` crate is consumed as a pinned Cargo git
-dependency, built without its Node-API feature. It is not forked or copied into
-this repository; the semantic trace that `solid-checker` reads is maintained
-upstream in that fork.
+The `solidjs-compiler` crate under `packages/compiler` is consumed as a pinned
+Cargo git dependency, built without its Node-API feature. The fork adds only
+output-neutral semantic trace code, validation, and facts tests. It is maintained
+without an upstream pull request and carries no compiler behavior fixes.
 
 ## Solid 1.x compiler (dom-expressions fork)
 

@@ -13,4 +13,4 @@ solid-facts = { path = "../../../crates/solid-facts" }
 [dev-dependencies]
 # The 2.0 compiler, for the test that pins the two compilers apart: one
 # source, two lowerings, two different execution maps.
-dom-expressions-compiler.workspace = true
+solidjs-compiler.workspace = true

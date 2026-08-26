@@ -173,27 +173,6 @@ dependencies = [
 
 [[package]]
 name = "dom-expressions-compiler"
-version = "0.0.0"
-source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=26e744fb4feb973a3652bfc45a8c3938ece667f0#26e744fb4feb973a3652bfc45a8c3938ece667f0"
-dependencies = [
- "html5ever",
- "htmlize",
- "markup5ever_rcdom",
- "napi-build",
- "oxc_allocator 0.144.0",
- "oxc_ast 0.144.0",
- "oxc_ast_visit 0.144.0",
- "oxc_codegen 0.144.0",
- "oxc_parser 0.144.0",
- "oxc_semantic 0.144.0",
- "oxc_span 0.144.0",
- "oxc_str 0.144.0",
- "oxc_syntax 0.144.0",
- "serde",
-]
-
-[[package]]
-name = "dom-expressions-compiler"
 version = "0.1.0"
 source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=ca3bbfae7d1e00e28ef73f9af58bdb46e248b512#ca3bbfae7d1e00e28ef73f9af58bdb46e248b512"
 dependencies = [
@@ -1505,9 +1484,9 @@ dependencies = [
 name = "solid-v1-compiler"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler 0.0.0",
- "dom-expressions-compiler 0.1.0",
+ "dom-expressions-compiler",
  "solid-facts",
+ "solidjs-compiler",
 ]
 
 [[package]]
@@ -1521,8 +1500,8 @@ dependencies = [
 name = "solid-v2-compiler"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler 0.0.0",
  "solid-facts",
+ "solidjs-compiler",
 ]
 
 [[package]]
@@ -1531,6 +1510,27 @@ version = "0.1.0"
 dependencies = [
  "serde_json",
  "solid-reactive-ir",
+]
+
+[[package]]
+name = "solidjs-compiler"
+version = "0.0.0"
+source = "git+https://github.com/yumemi-thomas/solid?rev=1d81e67fd393d12c74b13aa7d3fb492f3d85353b#1d81e67fd393d12c74b13aa7d3fb492f3d85353b"
+dependencies = [
+ "html5ever",
+ "htmlize",
+ "markup5ever_rcdom",
+ "napi-build",
+ "oxc_allocator 0.144.0",
+ "oxc_ast 0.144.0",
+ "oxc_ast_visit 0.144.0",
+ "oxc_codegen 0.144.0",
+ "oxc_parser 0.144.0",
+ "oxc_semantic 0.144.0",
+ "oxc_span 0.144.0",
+ "oxc_str 0.144.0",
+ "oxc_syntax 0.144.0",
+ "serde",
 ]
 
 [[package]]

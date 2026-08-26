@@ -1,12 +1,13 @@
 # Compiler facts
 
 Solid compiler facts describe original-source JSX execution semantics. The
-production Rust checker loads the controlled `dom-expressions-compiler`
+production Rust checker loads the controlled `solidjs-compiler`
 implementation in-process, so facts come from the same transform branches as
-compilation. Solid 2.0 and Solid 1.x use separate pinned Cargo git dependencies
-from [`dom-expressions`](https://github.com/yumemi-thomas/dom-expressions) and
-[`solid-1x-compiler`](https://github.com/yumemi-thomas/solid-1x-compiler), both
-built without their Node-API feature. The revisions are pinned in
+compilation. Solid 2.0 uses the semantic-only
+[`solid`](https://github.com/yumemi-thomas/solid) fork based on the official
+compiler under `packages/compiler`; Solid 1.x remains on the separate
+[`solid-1x-compiler`](https://github.com/yumemi-thomas/solid-1x-compiler) fork.
+Both are built without their Node-API feature. The revisions are pinned in
 `rust/Cargo.toml` and recorded in `THIRD_PARTY_NOTICES.md`.
 
 ## The semantic trace
@@ -261,7 +262,8 @@ protocol versions fail closed.
 
 ## Moving the pin
 
-Compiler conformance — checking the Rust transform against the reference
-implementation — belongs to the dom-expressions repository and runs there. To
-adopt new compiler work, update the appropriate compiler `rev` in
-`rust/Cargo.toml`, refresh `THIRD_PARTY_NOTICES.md`, and run `make verify`.
+Solid 2 compiler conformance lives on the semantic-only fork branch and compares
+its output with the exact `solidjs/solid` base. Solid 1.x conformance remains in
+its dedicated compiler fork. To adopt new compiler work, update the appropriate
+compiler `rev` in `rust/Cargo.toml`, refresh `THIRD_PARTY_NOTICES.md`, regenerate
+the compiler-bootstrap conformance report, and run `make verify`.

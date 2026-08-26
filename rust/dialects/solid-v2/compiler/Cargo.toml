@@ -7,5 +7,5 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-dom-expressions-compiler.workspace = true
+solidjs-compiler.workspace = true
 solid-facts = { path = "../../../crates/solid-facts" }

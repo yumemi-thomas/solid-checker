@@ -7,9 +7,9 @@ function ReadInsideVoidElementChild() {
   return <br>{count()}</br>;
 }
 
-// Ryan's next transform keeps its own textContent/children semantics. At the
-// current pin body() has no execution census, while SC8003 independently owns
-// the visible children-and-textContent conflict.
+// Current Solid gives source children precedence over textContent. body() is a
+// positively tracked insert; SC8003 independently owns the visible
+// children-and-textContent authoring conflict.
 function TextContentChildNowCertified() {
   const [label] = createSignal("l");
   const [body] = createSignal("b");

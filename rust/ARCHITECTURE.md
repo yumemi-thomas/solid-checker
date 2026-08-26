@@ -26,7 +26,7 @@ rust/
     └── solid-v2/                # everything Solid 2.0-specific
         ├── dialect.json         # contract/rule assembly manifest
         ├── rules/               # solid-v2-rules: rule catalog + solve()
-        └── compiler/            # solid-v2-compiler: dom-expressions adapter
+        └── compiler/            # solid-v2-compiler: Solid compiler adapter
 ```
 
 ## Version ownership at a glance
@@ -67,7 +67,7 @@ engine per branch.
 **Compiler.** `solid_facts::compiler::CompilerFactsProvider` is the checker's
 whole view of a Solid JSX compiler: `AnalysisRequest` in, validated
 `ExecutionMap` out. `solid-v2-compiler` implements it over the pinned
-`dom-expressions-compiler` semantic trace, and `solid-v1-compiler` over the
+`solidjs-compiler` semantic trace, and `solid-v1-compiler` over the
 same crate name from the pinned `solid-1x-compiler` fork; no other crate
 speaks a compiler's own types. The analysis pipeline in `solid-facts-backend`
 is generic over the trait. Callers obtain the selected adapter from the
@@ -154,7 +154,7 @@ now the shipped layout, and the plan's items resolved as follows:
    boundary tags that used to be hardcoded 2.0 knowledge are now questions
    the engine asks of the dialect it was handed.
 5. **Wire-format coupling** — still open. `CompilerOptions` in
-   `solid_facts::compiler` remains shaped around dom-expressions options
+   `solid_facts::compiler` remains shaped around JSX compiler options
    (`effect_wrapper`, `hydratable`, `static_marker`). It is part of the
    CLI/wasm request schema, so generalizing it (for example into per-dialect
    opaque options) is a protocol change to make deliberately.

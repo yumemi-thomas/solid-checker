@@ -27,52 +27,15 @@ publish = false
 rust-version = "1.97"
 
 [workspace.dependencies]
-# The JSX compiler lives in its own repository now and is pinned by revision:
-# reproducible builds matter more here than picking up upstream
-# automatically.
-# Pinned to the tested head of fork PR #4, based on upstream `next` at
-# `e109692b9b50e20511091d9ce324ebc660b4ca32` (0.50.0-next.44). The PR ports
-# the reactive-ownership prerequisite and the three compiler-contract fixes
-# that had landed on `main`, preserving `next`'s newer Oxc and server-component
-# work. It stops constant-folded `on*`/`ref`/`children` attributes from leaving
-# mismatched census sites and failing the whole file.
-# This rev carries `SEMANTIC_TRACE_VERSION = 2`: the trace gained the additive
-# wrapper vocabulary (`owner_establishments`, `component_render_sites`,
-# `deferred_callback_sites`) and a `version` field the consumer must check.
-# 2.0 deliberately keeps emitting the legacy `ownership_sites` field, so
-# rust/dialects/solid-v2/compiler still reads it; the 1.x fork dropped it.
-# Bumping this rev to a producer with a different schema version fails the
-# build: each adapter holds `READS_TRACE_VERSION` — its own literal, never the
-# producer's constant — equal to `SEMANTIC_TRACE_VERSION` in a const assert.
-# That is deliberate. Fix the projection for the new schema, then move both the
-# rev and the literal.
-# The merged `next` head keeps Ryan's transform semantics and carries the
-# output-neutral semantic-trace fixes. Standard void and `<noscript>` child
-# differences are closed at this pin; uncensused source expressions use the
-# checker's ordinary fail-closed census-gap path.
-# It also includes fork PR #3 (`fix/nested-children-attribute-promotion`),
-# resolving divergence 4: a `children` attribute on a nested
-# native element with no source children now promotes to a real child insert,
-# the way a template-root `children` attribute always has, instead of naming a
-# `jsx-child` census site nested lowering never resolved (a hard
-# reconciliation failure -- `solid-checker-rust` exited 2 and the file was
-# never analyzed). The fix also corrects a latent dedup bug in
-# `children_attribute_container` (name-first selection, matching Babel's own
-# attribute dedup, so a trailing literal `children` duplicate blocks
-# promotion instead of falling through to an earlier non-literal one) present
-# in the template-root path too. This revision additionally resolves divergence
-# 5's template-root `children`/dynamic-`textContent` slot order and divergence
-# 2's nested dynamic-`textContent` child-list gate. The exact revision also
-# carries the remaining reviewed alignment work and output-neutral trace wiring;
-# the checker revalidates the former divergence mitigations at this exact pin.
-# The only `next`-specific trace adaptation is a DOM-mode dynamic
-# intrinsic `$key`: lowering strips the server-component identity attribute,
-# so the trace now resolves its value as `Elided` instead of leaving the census
-# open. It also retains the outer `Elided` decision for a JSX-valued `children`
-# attribute shadowed at a template root while retracting the deleted nested
-# sites, closing that file-level reconciliation refusal. These are trace-only;
-# `SEMANTIC_TRACE_VERSION` remains 2 and generated JavaScript is unchanged.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "26e744fb4feb973a3652bfc45a8c3938ece667f0", default-features = false }
+# Solid 2 compiler facts come from the semantic-only fork of the compiler now
+# owned by solidjs/solid. This exact fork commit is based on upstream `next` at
+# `a10cf1a1` and adds only trace models, output-neutral recording hooks,
+# validation/serialization, and fact tests. Its 358-entry generated-output
+# baseline is byte-identical to that exact upstream base. No upstream PR is
+# opened for this fork; compiler behavior fixes remain outside this branch.
+# The producer carries `SEMANTIC_TRACE_VERSION = 2`; the adapter has an
+# independent literal and const assertion so an incompatible pin cannot build.
+solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "1d81e67fd393d12c74b13aa7d3fb492f3d85353b", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on

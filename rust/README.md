@@ -24,8 +24,8 @@ Fact ownership is deliberately split:
   IR and the dialect-neutral `Finding` model;
 - `dialects/solid-v2/rules` and `dialects/solid-v1/rules`: each version's
   rule catalog and finding construction (32 rules for 2.0, 22 for 1.x);
-- `dialects/solid-v2/compiler` and `dialects/solid-v1/compiler`: the
-  dom-expressions compiler and its Solid 1.x fork, each adapted to the
+- `dialects/solid-v2/compiler` and `dialects/solid-v1/compiler`: the Solid
+  compiler's semantic-only fork and the separate Solid 1.x compiler fork, each adapted to the
   `CompilerFactsProvider` seam.
 
 The AST package contains no regular expressions. TypeScript facts contain no
@@ -34,7 +34,7 @@ structure and TypeScript-Go owns checker semantics.
 
 The production Rust path has one live seam: Rust to the `solid-typefacts`
 producer. Oxc AST facts and Solid compiler facts run in-process, the latter via
-the `dom-expressions-compiler` crate's semantic trace.
+the `solidjs-compiler` crate's semantic trace.
 
 The producer and its Rust client both live in the `solid-ts-facts` repository.
 `TypeFactsSession` is the checker-side adapter over `typefacts::Session`, which

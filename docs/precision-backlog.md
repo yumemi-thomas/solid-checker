@@ -7491,3 +7491,23 @@ incompleteness findings remain. Official Solid is 14/21 verified; Solid
 Primitives is 236/291 verified, with 44 refusals and 11 generation failures.
 Those are the next concrete closure sets; RC.3 tuple construction is no longer
 one of them.
+
+## 2026-08-27 — Solid 2 compiler facts moved to the Solid compiler
+
+The Solid 2 compiler-facts producer moved from
+`yumemi-thomas/dom-expressions@26e744fb` to the semantic-only Solid fork at
+`yumemi-thomas/solid@1d81e67fd393d12c74b13aa7d3fb492f3d85353b`, based exactly
+on `solidjs/solid#next@a10cf1a1`. The fork carries trace code and facts tests
+only and will not be proposed upstream. Its 358-entry transform baseline is
+byte-identical to an independently generated baseline from the exact upstream
+base; trace on/off is also identical for JavaScript, source maps, and
+diagnostics across that corpus.
+
+The migration removes one stale uncertifiable SC1001 from
+`jsx-census-gap-solid-2`: current Solid positively lowers `body()` beside a
+dynamic `textContent` attribute as a tracked child insert, whereas the former
+producer omitted that site. The SC8003 children/`textContent` authoring
+violation remains. The other 557 baseline findings are unchanged. No
+compatibility shim was added because throwing away the new positive compiler
+fact would reduce precision and contradict the pinned compiler's actual
+lowering.

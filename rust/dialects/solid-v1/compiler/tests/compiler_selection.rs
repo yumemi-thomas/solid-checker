@@ -10,7 +10,7 @@
 //!
 //! What this deliberately does not test is the *wiring* — it drives the two
 //! upstream crates directly, not either dialect's `NativeCompilerFacts`. The
-//! wiring is pinned structurally instead: `dom-expressions-compiler` is only
+//! wiring is pinned structurally instead: `solidjs-compiler` is only
 //! a dev-dependency of this crate, so `solid-v1-compiler`'s library cannot
 //! reach the 2.0 compiler at all, and the dialect end-to-end fixtures assert
 //! per-dialect findings that only the right lowering produces.
@@ -40,12 +40,12 @@ fn the_dialect_compilers_lower_the_same_source_differently() {
     let solid1_output =
         solid1::compile(SOURCE, &solid1_options).expect("the 1.x compiler accepts the source");
 
-    let solid2_options = dom_expressions_compiler::CompileOptions {
+    let solid2_options = solidjs_compiler::CompileOptions {
         filename: Some("Counter.tsx".into()),
         semantic_trace: true,
-        ..dom_expressions_compiler::CompileOptions::default()
+        ..solidjs_compiler::CompileOptions::default()
     };
-    let solid2_output = dom_expressions_compiler::compile(SOURCE, &solid2_options)
+    let solid2_output = solidjs_compiler::compile(SOURCE, &solid2_options)
         .expect("the 2.0 compiler accepts the source");
 
     assert_ne!(

@@ -38,7 +38,10 @@ pub fn setup() {
     // Their optional Node adapter is the only source of the registration
     // symbol, so a feature-disabled WASI build must not request that export.
     if target_os == "wasi"
-        && env::var("CARGO_PKG_NAME").as_deref() == Ok("dom-expressions-compiler")
+        && matches!(
+            env::var("CARGO_PKG_NAME").as_deref(),
+            Ok("dom-expressions-compiler" | "solidjs-compiler")
+        )
         && env::var_os("CARGO_FEATURE_NODE").is_none()
     {
         return;

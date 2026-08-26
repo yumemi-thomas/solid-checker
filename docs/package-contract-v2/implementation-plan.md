@@ -65,6 +65,14 @@ C17. Run compiler, adapter, process, coverage, ownership, and full finding-
      parity gates before adding a new fact.
 C18. Record a port ledger ruling for every historical trace or compiler change.
 
+**Status 2026-08-27:** C1-C18 are complete at
+`yumemi-thomas/solid@1d81e67fd393d12c74b13aa7d3fb492f3d85353b`; see the
+[port ledger](compiler-bootstrap/2026-08-27-port-ledger.md) and
+[conformance report](compiler-bootstrap/2026-08-27-conformance.md). No upstream
+Solid PR was opened. Finding parity had one reviewed precision improvement:
+the current compiler supplies a positive tracked fact where the former producer
+was silent; the other 557 findings are unchanged.
+
 ### Type Facts repatriation
 
 T1. Freeze `solid-ts-facts@92c53392388518d69ef27220729f5c061479deed` as the

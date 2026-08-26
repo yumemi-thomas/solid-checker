@@ -465,7 +465,7 @@ export function buildBaseline({ loadIterations = 300, queryIterations = 200_000 
       status: git("status", "--short").split("\n").filter(Boolean)
     },
     pins: {
-      solid2Compiler: pinFromCargo("dom-expressions-compiler", cargo),
+      solid2Compiler: pinFromCargo("solidjs-compiler", cargo),
       solid1Compiler: pinFromCargo("solid1-dom-expressions-compiler", cargo),
       typeFacts: pinFromCargo("typefacts", cargo),
       typeFactsBuildInfo: read("bin/solid-typefacts.buildinfo").toString().trim(),
