@@ -7,7 +7,7 @@
 // stage would ever catch.
 
 import { parseVersion } from "./semver.mjs";
-import { FAMILIES, classifyPackage, familyById, familyOrder } from "./families.mjs";
+import { AUDITED_SOLID_2, FAMILIES, classifyPackage, familyById, familyOrder } from "./families.mjs";
 
 export const MANIFEST_SCHEMA_VERSION = 1;
 
@@ -19,6 +19,7 @@ const MANIFEST_KEYS = [
   "generatedAt",
   "registry",
   "auditedSolid1",
+  "auditedSolid2",
   "solidReleases",
   "rows",
   "exclusions",
@@ -260,6 +261,9 @@ export function validateManifest(manifest, { families = FAMILIES } = {}) {
 
   if (manifest.schemaVersion !== MANIFEST_SCHEMA_VERSION) {
     problems.push(`schemaVersion must be ${MANIFEST_SCHEMA_VERSION}, got ${JSON.stringify(manifest.schemaVersion)}`);
+  }
+  if (manifest.auditedSolid2 !== AUDITED_SOLID_2) {
+    problems.push(`auditedSolid2 must be ${AUDITED_SOLID_2}, got ${JSON.stringify(manifest.auditedSolid2)}`);
   }
 
   const rows = Array.isArray(manifest.rows) ? manifest.rows : [];

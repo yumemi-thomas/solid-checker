@@ -56,7 +56,7 @@ totals. `tanstack` additionally requires a declared Solid dependency, because
 most of TanStack is not Solid-specific — a React, Vue, Svelte, or
 framework-neutral TanStack package must never enter the corpus.
 
-## Solid targets: the 1.x audited pin and the 2.x floor/head model
+## Solid targets: audited pins with a 2.x compatibility floor
 
 Solid 1.x has one target: `solid-js@1.9.14`, the exact version this
 repository audits its bundled 1.x contract against (see
@@ -65,11 +65,12 @@ repository audits its bundled 1.x contract against (see
 there is no floor/head split because there is only one pinned version to
 probe.
 
-Solid 2.x has no single audited release yet — it is still moving through
-prereleases — so the benchmark probes a *range* instead of a pin: for each
-compatible package version, it selects the floor (`minSatisfying`) and head
-(`maxSatisfying`) published Solid 2.x releases the package's declared range
-accepts, across `solid-js`, `@solidjs/web`, and `@solidjs/signals` together.
+Solid 2.x is audited at the exact RC.3 runtime tuple: `solid-js@2.0.0-rc.3`,
+`@solidjs/web@2.0.0-rc.3`, and `@solidjs/signals@2.0.0-rc.3`. That pin is the
+authority ceiling, so a later registry refresh cannot silently advance the
+benchmark to RC.4. For each compatible package version, selection still keeps
+the oldest supported compatibility floor and the newest accepted release at
+or below RC.3, across all three runtime packages together.
 When floor and head land on the same release for every runtime package, that
 is a single `kind: "only"` probe rather than two identical ones — this is how
 a beta-only package's exact compatibility window is preserved rather than
@@ -217,8 +218,16 @@ a multi-framework umbrella. `@tanstack/charts` is scoped to `./solid`;
 `./solid` pair. Their React, Preact, Svelte, Vue, Angular, Lit, and Octane
 adapters are not Solid contract surface. Discovery owns these allowlists, so a
 manifest refresh reproduces them automatically, and both generation runners
-pass them through as exact `--entrypoint` arguments. Current release-mode
-probes complete well below the ceiling; it is a guardrail, not expected runtime.
+pass them through as exact `--entrypoint` arguments. The scopes live in
+`scripts/ecosystem-benchmark/lib/framework-scopes.mjs`. Each
+record pins the exact package version, selected subpaths, the complement's
+exclusion reason, and a SHA-256 of the complete published `exports` object.
+Discovery fetches that exact version manifest and refuses a version or export
+map drift before writing the benchmark manifest. `foreign-framework-adapter`
+is used only where every omitted runtime subpath is a foreign adapter; charts'
+broader Solid-only scope is recorded separately rather than mislabeling its
+framework-neutral exports. Current release-mode probes complete well below the
+ceiling; it is a guardrail, not expected runtime.
 
 Within one row, conditional-target generation and call-capable observations use
 bounded pools. A standalone CLI run may use up to four generation analyses and
@@ -292,6 +301,8 @@ Every contract-generation invocation is classified into exactly one of:
 | `dependency-contract-obligation` | Demand-driven recursive generation could not produce the exact dependency contract needed by an export-all barrel or unresolved subpath. |
 | `package-contract-environment-dependent` | A dependency's contract (typically Solid's own) has environment-dependent variants and no runtime condition was selected, so applying one would be a guess. |
 | `package-contract-export-missing` | A dependency's contract has no entry for an export the package imports. |
+| `export-kind-unresolved` | The exact export was resolved, but Type Facts could not close whether its runtime value is callable. Legacy schema v1 cannot retain an unknown kind, so generation refuses it. |
+| `export-kind-conflict` | The proposal assigned function-only behavior to an export whose resolved runtime kind is value; this is an internal generator/model contradiction. |
 | `type-facts-failure` | The native Solid compiler facts / Type Facts session reported an error. |
 | `checker-crash` | The checker process died by signal or panicked. |
 | `timeout` | The per-probe generation invocation exceeded its timeout. |
@@ -2313,10 +2324,13 @@ tail.
   something it declares nowhere still fails to import, and that is a fact about
   the package rather than about this harness.
 - **A timeout is never a verification result**, and neither is a row with no
-  honestly-choosable Solid runtime. The two `@solidjs/signals` rows are recorded
-  `no-runtime`: the manifest pins no `solid-js` beside them, `@solidjs/signals`
-  *is* the reactive core, and pairing one in would be this harness auditing a
-  combination the corpus deliberately did not.
+  honestly-choosable Solid runtime. Official Solid 2 runtime rows are now an
+  exception to the old single-package treatment: `solid-js`, `@solidjs/web`,
+  and `@solidjs/signals` share the audited RC.3 release identity and are probed
+  as that exact three-package tuple. Other rows still receive only a runtime
+  justified by their manifest selection; the remaining `no-runtime` row is
+  `@solidjs/diagnostics`, which declares only `@solidjs/signals` and is not one
+  of the tuple-defining runtime packages.
 - **Per probe row, not per package**, exactly as everywhere else in this
   document.
 - **A `verified` row may now describe less than its package's export map.** Since
@@ -2377,6 +2391,65 @@ Raw generation and install classes are environment-sensitive. This run traded
 three prior install failures for two additional generation failures and produced
 one more contract overall; no no-contention substitution was made. The reports
 therefore preserve 297/97/17/3/2 rather than presenting a corrected composite.
+
+## 2026-08-26 authority run: audited Solid 2 RC.3 tuple and framework scopes
+
+Discovery now caps the Solid 2 release catalog at `2.0.0-rc.3`. The three
+official runtime packages select that exact release and one exact environment:
+`solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and
+`@solidjs/signals@2.0.0-rc.3`. Missing any member refuses selection. Ecosystem
+packages retain their declared compatible floor/head probes; the exact-tuple
+rule applies only to the official runtime that defines the audit target.
+
+The same manifest refresh enforces reviewed export scopes for the mixed-framework
+TanStack packages. `@tanstack/charts` contributes only `./solid`,
+`@tanstack/devtools-utils` contributes `./solid` and `./solid/class`, and
+`@tanstack/devtools-a11y` contributes its neutral `./core` pair plus its
+`./solid` pair. Exact package version and a canonical hash of the complete
+`exports` object bind each allowlist; drift fails discovery closed.
+
+Live discovery produced 307 package/target rows and 418 probes, two more than
+the preceding 416-probe corpus (`@solidjs/diagnostics` and
+`@solid-primitives/animation`). The uncached Phase 0 generation benchmark
+produced 388 complete contracts, 11 partial contracts, and 19 failures. One of
+those failures was a 600-second install timeout for
+`@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|head`; the independent
+verification run retried that row successfully and classified it as refused,
+so its authority totals retain 18 generation failures. The fresh end-to-end
+verification authority used checker SHA-256
+`b48a808ce65864dfc77cb8dd2a37b77deceed4bfcc4408c42645dc3a7edf7399`
+and Type Facts SHA-256
+`7d8d2ffbc472049660b8b9666da1990edaf86890fd834f45c7e642589abc645b`:
+
+| Outcome | Fresh RC.3 authority |
+| --- | ---: |
+| Verified | **309 / 418** |
+| Refused | **90 / 418** |
+| Generation failure | **18 / 418** |
+| Install failure | **0 / 418** |
+| No runtime | **1 / 418** |
+
+All 7,122 driven claims passed; none failed. There are 10,814 total claims,
+3,692 undriven claims, and 503 incompleteness findings. The broad fail-closed
+buckets are 868 claims with no plantable reactive source, 634 reactive reads
+with no probe form, 452 owner requirements, 80 async claims, 47 store paths,
+and 9 callback-argument descriptors. Runtime execution additionally leaves 588
+entrypoint import throws, 541 synthesized-call throws, 286 calls that did not
+invoke the callback, and 49 parameters whose named member was not invoked.
+
+The official RC.3 runtime rows all reached verification. `@solidjs/signals`
+verified with 68/75 claims driven and `@solidjs/web` with 557/761; every driven
+claim passed. `solid-js` reached `contract verify` with 91/123 driven claims and
+no failed claim, but remains refused because 15 incompleteness findings prevent
+the evidence write. This removes the old artificial mixed-RC/no-runtime blocker;
+it does not claim the remaining Solid surface is certified.
+
+By family, Official Solid is 14 verified, 6 refused, and 1 no-runtime across 21
+probes. Solid Primitives is 236 verified, 44 refused, and 11 generation failures
+across 291 probes. Its remaining generation failures are classified as
+unresolved or conflicting export kinds and unsupported ESM runtime targets;
+its refusals remain machine-visible semantic blockers, not silently accepted
+contracts.
 
 ## Exit-code contract
 

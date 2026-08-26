@@ -8,7 +8,8 @@
 
 import { flattenRanges, solidRanges } from "./registry.mjs";
 import { compareVersions, parseRange, satisfies, sortVersions } from "./semver.mjs";
-import { SOLID_RUNTIME_PACKAGES } from "./families.mjs";
+import { AUDITED_SOLID_2, SOLID_RUNTIME_PACKAGES } from "./families.mjs";
+import { scopedEntrypoints } from "./framework-scopes.mjs";
 
 /**
  * Every published release of each SOLID_RUNTIME_PACKAGE, split by Solid
@@ -16,7 +17,7 @@ import { SOLID_RUNTIME_PACKAGES } from "./families.mjs";
  * scope) — that package's catalog is simply empty, which correctly makes
  * every range against it unsatisfiable rather than throwing.
  */
-export function solidReleaseCatalog(packuments) {
+export function solidReleaseCatalog(packuments, auditedSolid2 = AUDITED_SOLID_2) {
   const catalog = {};
   for (const name of SOLID_RUNTIME_PACKAGES) {
     const packument = packuments.get(name);
@@ -26,7 +27,7 @@ export function solidReleaseCatalog(packuments) {
     for (const version of versions) {
       const major = parseVersionMajor(version);
       if (major === 1) v1.push(version);
-      else if (major === 2) v2.push(version);
+      else if (major === 2 && compareVersions(version, auditedSolid2) <= 0) v2.push(version);
     }
     // What each release of this runtime package requires of its *siblings*.
     // `@solidjs/web@2.0.0-rc.1` peering `solid-js ^2.0.0-rc.1` is the fact
@@ -242,19 +243,6 @@ function computeChannel(env) {
 // worth measuring.
 const SOLID2_FLOOR = "2.0.0-rc.0";
 
-// Multi-framework umbrella packages are rows because they publish a Solid
-// adapter, but their foreign adapters are not part of the Solid corpus. Keep
-// the allowlist here, at manifest construction, so every discovery refresh
-// reproduces the scope rather than relying on a hand-edited manifest.
-const PACKAGE_ENTRYPOINTS = new Map([
-  ["@tanstack/charts", ["./solid"]],
-  ["@tanstack/devtools-utils", ["./solid", "./solid/class"]],
-  [
-    "@tanstack/devtools-a11y",
-    ["./core", "./core/production", "./solid", "./solid/production"]
-  ]
-]);
-
 /**
  * The floor release for one runtime package on one Solid target.
  *
@@ -347,7 +335,7 @@ function buildProbes(packageName, version, solidTarget, compatibleSolidVersions,
       { id: `${packageName}@${version}|${solidTarget}|head`, kind: "head", channel: computeChannel(headEnv), solid: headEnv }
     ];
   }
-  const entrypoints = PACKAGE_ENTRYPOINTS.get(packageName);
+  const entrypoints = scopedEntrypoints(packageName, version);
   if (entrypoints) {
     for (const probe of probes) probe.entrypoints = [...entrypoints];
   }
@@ -427,7 +415,16 @@ function currentReleaseDeclaresSolid(packageName, packument) {
   return Object.keys(ranges).length > 0;
 }
 
-export function selectRow({ packageName, packument, family, status, solidTarget, catalog, auditedSolid1 }) {
+export function selectRow({
+  packageName,
+  packument,
+  family,
+  status,
+  solidTarget,
+  catalog,
+  auditedSolid1,
+  auditedSolid2 = AUDITED_SOLID_2
+}) {
   const familyId = resolveFamily(family).id;
 
   if (!packument || !packument.versions || Object.keys(packument.versions).length === 0) {
@@ -472,6 +469,65 @@ export function selectRow({ packageName, packument, family, status, solidTarget,
         versionDoc,
         packument,
         compatibleSolidVersions: { "solid-js": [auditedSolid1] },
+        unparsedRanges: [],
+        catalog
+      })
+    };
+  }
+
+  // The official Solid 2 runtime packages define the audited tuple itself.
+  // Their row version and probe environment are therefore exact, like
+  // solid-js on solid1. This is intentionally different from ecosystem rows:
+  // an older floor there measures a package's declared compatibility window,
+  // while mixing generations inside the official runtime would measure a
+  // tuple Solid never released. Including the complete tuple also gives the
+  // @solidjs/signals row a real solid-js runtime against which observations
+  // can be settled instead of producing a synthetic `no-runtime` outcome.
+  if (SOLID_RUNTIME_PACKAGES.includes(packageName) && solidTarget === "solid2") {
+    const versionDoc = packument.versions[auditedSolid2];
+    if (!versionDoc) {
+      return {
+        kind: "exclusion",
+        exclusion: exclusion(
+          familyId,
+          status,
+          packageName,
+          solidTarget,
+          "not-published",
+          `${packageName}@${auditedSolid2} is not published`
+        )
+      };
+    }
+    const missingRuntime = SOLID_RUNTIME_PACKAGES.find(
+      runtimePackage => !(catalog[runtimePackage]?.v2 ?? []).includes(auditedSolid2)
+    );
+    if (missingRuntime) {
+      return {
+        kind: "exclusion",
+        exclusion: exclusion(
+          familyId,
+          status,
+          packageName,
+          solidTarget,
+          "no-compatible-release",
+          `${missingRuntime}@${auditedSolid2} is missing from the audited Solid 2 runtime tuple`
+        )
+      };
+    }
+    const auditedTuple = Object.fromEntries(
+      SOLID_RUNTIME_PACKAGES.map(runtimePackage => [runtimePackage, [auditedSolid2]])
+    );
+    return {
+      kind: "row",
+      row: buildRow({
+        packageName,
+        familyId,
+        status,
+        solidTarget,
+        version: auditedSolid2,
+        versionDoc,
+        packument,
+        compatibleSolidVersions: auditedTuple,
         unparsedRanges: [],
         catalog
       })

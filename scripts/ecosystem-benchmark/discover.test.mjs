@@ -66,21 +66,24 @@ const PACKUMENTS = {
       "1.9.14": versionDoc({ integrity: sha("solid-js@1.9.14") }),
       "2.0.0-beta.10": versionDoc({ integrity: sha("solid-js@2.0.0-beta.10") }),
       "2.0.0-beta.17": versionDoc({ integrity: sha("solid-js@2.0.0-beta.17") }),
-      "2.0.0-rc.1": versionDoc({ integrity: sha("solid-js@2.0.0-rc.1") })
+      "2.0.0-rc.1": versionDoc({ integrity: sha("solid-js@2.0.0-rc.1") }),
+      "2.0.0-rc.3": versionDoc({ integrity: sha("solid-js@2.0.0-rc.3") })
     }
   },
   "@solidjs/web": {
     "dist-tags": { next: "2.0.0-rc.1" },
     versions: {
       "2.0.0-beta.10": versionDoc({ integrity: sha("@solidjs/web@2.0.0-beta.10") }),
-      "2.0.0-rc.1": versionDoc({ integrity: sha("@solidjs/web@2.0.0-rc.1") })
+      "2.0.0-rc.1": versionDoc({ integrity: sha("@solidjs/web@2.0.0-rc.1") }),
+      "2.0.0-rc.3": versionDoc({ integrity: sha("@solidjs/web@2.0.0-rc.3") })
     }
   },
   "@solidjs/signals": {
     "dist-tags": { next: "2.0.0-rc.1" },
     versions: {
       "2.0.0-beta.10": versionDoc({ integrity: sha("@solidjs/signals@2.0.0-beta.10") }),
-      "2.0.0-rc.1": versionDoc({ integrity: sha("@solidjs/signals@2.0.0-rc.1") })
+      "2.0.0-rc.1": versionDoc({ integrity: sha("@solidjs/signals@2.0.0-rc.1") }),
+      "2.0.0-rc.3": versionDoc({ integrity: sha("@solidjs/signals@2.0.0-rc.3") })
     }
   },
   "@solidjs/router": soloPackument("@solidjs/router", "1.2.0"),

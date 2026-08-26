@@ -20,6 +20,11 @@
 // the ecosystem corpus never silently drifts when a new 1.x patch ships.
 export const AUDITED_SOLID_1 = "1.9.14";
 
+// The Solid 2 release this benchmark treats as its authority ceiling. Older
+// compatible releases may still appear as floor probes, but discovery never
+// silently advances a head beyond this exact reviewed runtime tuple.
+export const AUDITED_SOLID_2 = "2.0.0-rc.3";
+
 // The packages whose own published releases define what "Solid 2" even means
 // for compatibility purposes. Order matters: it is the tie-break order used
 // wherever a probe needs "the first runtime package present" (see

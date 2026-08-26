@@ -45,6 +45,15 @@ export const FAILURE_CLASSES = [
   // covers a fifth of the corpus has earned its own class.
   "package-contract-environment-dependent",
   "package-contract-export-missing",
+  // The runtime target and export are exact, but the selected-signature facts
+  // cannot close whether the value is callable. Schema v1 has no unknown
+  // export-kind form, so generation must refuse rather than publish a false
+  // negative callback claim.
+  "export-kind-unresolved",
+  // The generated summary contains function-only behavior for an export whose
+  // resolved runtime kind is value. This is an internal proposal conflict,
+  // distinct from simply lacking the callability fact above.
+  "export-kind-conflict",
   "type-facts-failure",
   "checker-crash",
   "timeout",
@@ -113,6 +122,14 @@ const MARKERS = [
   { class: "conditional-export-incompatible", pattern: /overlapping conditional-export branches/i },
   { class: "package-contract-environment-dependent", pattern: /PackageContractEnvironmentDependent/ },
   { class: "package-contract-export-missing", pattern: /PackageContractExportMissing/ },
+  {
+    class: "export-kind-unresolved",
+    pattern: /runtime kind no closed type answers/i
+  },
+  {
+    class: "export-kind-conflict",
+    pattern: /package contract value export .* cannot have function effects/i
+  },
   { class: "type-facts-failure", pattern: /native Solid compiler facts error|type facts|typefacts protocol/i },
   { class: "reactive-source-uncaptured", pattern: /ReactiveSourceUncaptured/ },
   {

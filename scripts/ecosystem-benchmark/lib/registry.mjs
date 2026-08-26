@@ -76,6 +76,7 @@ export class Registry {
     this.fetchImpl = fetchImpl;
     this.concurrency = concurrency;
     this.packuments = new Map();
+    this.versionManifests = new Map();
   }
 
   async packument(name) {
@@ -86,6 +87,17 @@ export class Registry {
       allowMissing: true
     });
     this.packuments.set(name, document);
+    return document;
+  }
+
+  async versionManifest(name, version) {
+    const key = `${name}@${version}`;
+    if (this.versionManifests.has(key)) return this.versionManifests.get(key);
+    const document = await requestJson(
+      `${this.registry}/${encodePackageName(name)}/${encodeURIComponent(version)}`,
+      { fetchImpl: this.fetchImpl, allowMissing: true }
+    );
+    this.versionManifests.set(key, document);
     return document;
   }
 
