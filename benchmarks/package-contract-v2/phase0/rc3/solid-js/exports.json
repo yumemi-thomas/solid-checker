@@ -1,0 +1,94 @@
+{
+  ".": {
+    "worker": {
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/server.cjs"
+      }
+    },
+    "browser": {
+      "development": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/dev.cjs"
+        }
+      },
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.js"
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/solid.cjs"
+      }
+    },
+    "deno": {
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/server.cjs"
+      }
+    },
+    "node": {
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/server.js"
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/server.cjs"
+      }
+    },
+    "development": {
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/dev.js"
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/dev.cjs"
+      }
+    },
+    "import": {
+      "types": "./types/index.d.ts",
+      "default": "./dist/solid.js"
+    },
+    "require": {
+      "types": "./types-cjs/index.d.cts",
+      "default": "./dist/solid.cjs"
+    }
+  },
+  "./refresh": {
+    "development": {
+      "import": {
+        "types": "./types/refresh/index.d.ts",
+        "default": "./dist/refresh.dev.js"
+      },
+      "require": {
+        "types": "./types-cjs/refresh/index.d.cts",
+        "default": "./dist/refresh.dev.cjs"
+      }
+    },
+    "import": {
+      "types": "./types/refresh/index.d.ts",
+      "default": "./dist/refresh.js"
+    },
+    "require": {
+      "types": "./types-cjs/refresh/index.d.cts",
+      "default": "./dist/refresh.cjs"
+    }
+  },
+  "./types/*": "./types/*",
+  "./package.json": "./package.json"
+}

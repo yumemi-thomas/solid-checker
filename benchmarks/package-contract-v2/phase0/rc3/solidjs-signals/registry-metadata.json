@@ -1,0 +1,118 @@
+{
+  "bugs": {
+    "url": "https://github.com/solidjs/solid/issues"
+  },
+  "dist": {
+    "shasum": "6cb69036329c998e3e02bca2f30a26f1014a7999",
+    "tarball": "https://registry.npmjs.org/@solidjs/signals/-/signals-2.0.0-rc.3.tgz",
+    "fileCount": 107,
+    "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==",
+    "signatures": [
+      {
+        "sig": "MEQCIDbF9OPlGqI8mXlyOysFVIxcDK7WgB3mizUlqM+A9lisAiAtqTDf0Do1zRw7cn1NEvorL7HNnSvzjwIl75Xv4nzcfA==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fsignals@2.0.0-rc.3",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 1446682
+  },
+  "main": "./dist/node.cjs",
+  "name": "@solidjs/signals",
+  "type": "module",
+  "types": "./dist/types/index.d.ts",
+  "unpkg": "./dist/prod/index.js",
+  "author": {
+    "name": "Ryan Carniato"
+  },
+  "module": "./dist/prod/index.js",
+  "exports": {
+    ".": {
+      "import": {
+        "test": "./dist/dev.js",
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/prod/index.js",
+        "development": "./dist/dev.js"
+      },
+      "require": {
+        "types": "./dist/types-cjs/index.d.cts",
+        "default": "./dist/node.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run",
+    "bench": "vitest bench --run",
+    "build": "npm-run-all -nl build:* && pnpm types",
+    "types": "tsc -p tsconfig.build.json && node ../../scripts/sync-dual-types.mjs ./dist/types ./dist/types-cjs",
+    "test:gc": "node --expose-gc ./vitest.js",
+    "build:js": "rollup -c && node ./scripts/mangle-props.mjs dist/prod dist/node.cjs && node ./scripts/check-pure.mjs dist/prod",
+    "coverage": "vitest run --coverage",
+    "test:watch": "vitest watch tests",
+    "build:clean": "rimraf dist/dev dist/prod dist/node dist/dev.js dist/prod.js dist/node.cjs",
+    "test:gc:watch": "node --expose-gc ./vitest.js --watch"
+  },
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:06e09228-284e-49f1-b090-660d782a267c"
+    }
+  },
+  "homepage": "https://solidjs.com",
+  "jsdelivr": "./dist/prod/index.js",
+  "repository": {
+    "url": "git+https://github.com/solidjs/solid.git",
+    "type": "git",
+    "directory": "packages/signals"
+  },
+  "_npmVersion": "11.17.0",
+  "description": "Solid's reactive primitives: signals, memos, effects, stores, and async-aware computations.",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "ryansolid",
+      "email": "ryansolid@gmail.com"
+    },
+    {
+      "name": "davedbase",
+      "email": "dave.dibiase@gmail.com"
+    }
+  ],
+  "sideEffects": false,
+  "_nodeVersion": "24.19.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "_hasShrinkwrap": false,
+  "readmeFilename": "README.md",
+  "devDependencies": {
+    "vite": "^7.0.0",
+    "tslib": "^2.8.1",
+    "rimraf": "^5.0.1",
+    "rollup": "^4.53.4",
+    "terser": "^5.49.0",
+    "vitest": "^4.1.6",
+    "typescript": "^6.0.3",
+    "@types/node": "^25.0.8",
+    "@rollup/plugin-replace": "^6.0.3",
+    "rollup-plugin-prettier": "^4.1.2",
+    "@codspeed/vitest-plugin": "^5.4.0",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@ianvs/prettier-plugin-sort-imports": "^4.1.1"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/signals_2.0.0-rc.3_1787727353981_0.4207454314155987",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "@solidjs/signals@2.0.0-rc.3",
+  "version": "2.0.0-rc.3"
+}

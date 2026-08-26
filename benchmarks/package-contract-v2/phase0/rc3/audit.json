@@ -1,0 +1,2438 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-rc3-published-artifact-audit",
+  "capturedAt": "2026-08-26T17:04:53.257Z",
+  "version": "2.0.0-rc.3",
+  "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+  "packages": [
+    {
+      "name": "solid-js",
+      "version": "2.0.0-rc.3",
+      "registry": {
+        "metadataUrl": "https://registry.npmjs.org/solid-js/2.0.0-rc.3",
+        "tarballUrl": "https://registry.npmjs.org/solid-js/-/solid-js-2.0.0-rc.3.tgz",
+        "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+        "shasum": "6ac639ca2558e283d941230e65fdaabffd745149",
+        "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==",
+        "signatures": [
+          {
+            "sig": "MEUCIH3DXDgFoGHUFCp87JBbgL/SrhshD+dQhKc3LB13TpLlAiEAnz4y4SKD6p0IYAXNFakyjnvbe1/2d+pRlRGCoHziAmk=",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          },
+          {
+            "sig": "MEYCIQC45hnyOHioasYCUFFZXgOUiVXAVy8A824H9IZmWhu8CgIhAJ6c+Uc17snwntEhZNdWQCaTgP49I6vkB+TfgqR/zwQF",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          }
+        ],
+        "attestations": {
+          "url": "https://registry.npmjs.org/-/npm/v1/attestations/solid-js@2.0.0-rc.3",
+          "provenance": {
+            "predicateType": "https://slsa.dev/provenance/v1"
+          }
+        }
+      },
+      "integrity": {
+        "verified": true,
+        "computedSha1": "6ac639ca2558e283d941230e65fdaabffd745149",
+        "computedSri": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ=="
+      },
+      "tarball": {
+        "sha256": "ad0427073f0c0467ae16b3396e53fc397f0cbf2e705de8534ffbe3bd0688d85a",
+        "bytes": 130970
+      },
+      "manifest": {
+        "sha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b",
+        "exportMapSha256": "39b48e73d8e59b8630ab1390da6658169405e2554a1b2d78b8ede0152f36b581"
+      },
+      "files": {
+        "count": 43,
+        "unpackedBytes": 555790,
+        "manifestSha256": "b00731b802f4f2a600191b76319b65a2217bda01cfae7836451fa3fc4ae20adc"
+      },
+      "exportTargets": [
+        {
+          "trace": [
+            ".",
+            "worker",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+        },
+        {
+          "trace": [
+            ".",
+            "worker",
+            "import",
+            "default"
+          ],
+          "target": "./dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "63269da73b61b71fd775ef811f8ab88417c6ea6dda2de1e6f3c10d86b66fc8a8"
+        },
+        {
+          "trace": [
+            ".",
+            "worker",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb"
+        },
+        {
+          "trace": [
+            ".",
+            "worker",
+            "require",
+            "default"
+          ],
+          "target": "./dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "2e2ed5833323d48a43454b89f03de9f31346a3549a9934d8e67b3b9fe4f231a7"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./dist/dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./dist/dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "4ca1b958df30ef4b0fa9cfd17206293073846d33147ad164208805dafde22e51"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "import",
+            "default"
+          ],
+          "target": "./dist/solid.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "14af2d696eb0669c64973874601f691737aa1df359fced6dec55a523f34cfa1b"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "require",
+            "default"
+          ],
+          "target": "./dist/solid.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "d155966bc29d2bf46e3cb32c8839d885933a50b60c28c6d8abd70a7ac1147333"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "import",
+            "default"
+          ],
+          "target": "./dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "63269da73b61b71fd775ef811f8ab88417c6ea6dda2de1e6f3c10d86b66fc8a8"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "require",
+            "default"
+          ],
+          "target": "./dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "2e2ed5833323d48a43454b89f03de9f31346a3549a9934d8e67b3b9fe4f231a7"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "import",
+            "default"
+          ],
+          "target": "./dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "63269da73b61b71fd775ef811f8ab88417c6ea6dda2de1e6f3c10d86b66fc8a8"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "require",
+            "default"
+          ],
+          "target": "./dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "2e2ed5833323d48a43454b89f03de9f31346a3549a9934d8e67b3b9fe4f231a7"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./dist/dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./dist/dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "4ca1b958df30ef4b0fa9cfd17206293073846d33147ad164208805dafde22e51"
+        },
+        {
+          "trace": [
+            ".",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+        },
+        {
+          "trace": [
+            ".",
+            "import",
+            "default"
+          ],
+          "target": "./dist/solid.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "14af2d696eb0669c64973874601f691737aa1df359fced6dec55a523f34cfa1b"
+        },
+        {
+          "trace": [
+            ".",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb"
+        },
+        {
+          "trace": [
+            ".",
+            "require",
+            "default"
+          ],
+          "target": "./dist/solid.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "d155966bc29d2bf46e3cb32c8839d885933a50b60c28c6d8abd70a7ac1147333"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/refresh/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./dist/refresh.dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "15b33e58727ecf3e4c0c0caee4d3e886352d2c1dc71074196acbaa02ba22243b"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/refresh/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0580ed8cc9b482e5c7f8e5c18954c5d290ccb093ad1a42d7f80ec3936af5ecc5"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./dist/refresh.dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "99882b4fc1a9b6771ce80f0652e0146f3f7fb651279d940fdf6fc41efbb1e273"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "import",
+            "types"
+          ],
+          "target": "./types/refresh/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "import",
+            "default"
+          ],
+          "target": "./dist/refresh.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8cafe4135f61bed38399c24e7d6ff62063b3050d30cea03f06b8dcb2989e3b05"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/refresh/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0580ed8cc9b482e5c7f8e5c18954c5d290ccb093ad1a42d7f80ec3936af5ecc5"
+        },
+        {
+          "trace": [
+            "./refresh",
+            "require",
+            "default"
+          ],
+          "target": "./dist/refresh.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "655463556d7e8792bad3796d34f56cb309a2a8d7944ca57cab5e1c76de774887"
+        },
+        {
+          "trace": [
+            "./types/*"
+          ],
+          "target": "./types/*",
+          "kind": "other",
+          "pattern": true,
+          "exists": null,
+          "sha256": null
+        },
+        {
+          "trace": [
+            "./package.json"
+          ],
+          "target": "./package.json",
+          "kind": "other",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+        }
+      ],
+      "source": {
+        "repository": "https://github.com/solidjs/solid.git",
+        "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+        "sourceManifest": "packages/solid/package.json",
+        "manifestByteIdentical": true,
+        "containedByUpstreamNext": true,
+        "upstreamNextAtAudit": "2f01f23e30d2840139dcbfbed79b270c676a09ad",
+        "commit": {
+          "authoredAt": "2026-08-25T23:48:42-07:00",
+          "subject": "Isolate compiler WASI test forcing."
+        }
+      }
+    },
+    {
+      "name": "@solidjs/signals",
+      "version": "2.0.0-rc.3",
+      "registry": {
+        "metadataUrl": "https://registry.npmjs.org/%40solidjs%2Fsignals/2.0.0-rc.3",
+        "tarballUrl": "https://registry.npmjs.org/@solidjs/signals/-/signals-2.0.0-rc.3.tgz",
+        "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+        "shasum": "6cb69036329c998e3e02bca2f30a26f1014a7999",
+        "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==",
+        "signatures": [
+          {
+            "sig": "MEQCIDbF9OPlGqI8mXlyOysFVIxcDK7WgB3mizUlqM+A9lisAiAtqTDf0Do1zRw7cn1NEvorL7HNnSvzjwIl75Xv4nzcfA==",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          }
+        ],
+        "attestations": {
+          "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fsignals@2.0.0-rc.3",
+          "provenance": {
+            "predicateType": "https://slsa.dev/provenance/v1"
+          }
+        }
+      },
+      "integrity": {
+        "verified": true,
+        "computedSha1": "6cb69036329c998e3e02bca2f30a26f1014a7999",
+        "computedSri": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA=="
+      },
+      "tarball": {
+        "sha256": "9951cdd4943e5bbfce86b856c2738c63a452f17bd70bfb147f0f1998053b7075",
+        "bytes": 427929
+      },
+      "manifest": {
+        "sha256": "22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76",
+        "exportMapSha256": "5b3944a38dd7e082c7a5c543ad5b3e38b5a3681ca48d53b382cd3e8477919100"
+      },
+      "files": {
+        "count": 107,
+        "unpackedBytes": 1446682,
+        "manifestSha256": "85164c097c624b2d6f12a5421271ec931f8d5f3f8b254b7ab27bef89f94c8729"
+      },
+      "exportTargets": [
+        {
+          "trace": [
+            ".",
+            "import",
+            "types"
+          ],
+          "target": "./dist/types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e4157c4caba48476db4e7649b5a50827687c2d90c0a09fa091f0e65d0a63cfb4"
+        },
+        {
+          "trace": [
+            ".",
+            "import",
+            "test"
+          ],
+          "target": "./dist/dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79"
+        },
+        {
+          "trace": [
+            ".",
+            "import",
+            "development"
+          ],
+          "target": "./dist/dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79"
+        },
+        {
+          "trace": [
+            ".",
+            "import",
+            "default"
+          ],
+          "target": "./dist/prod/index.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5c0a6384d330cfdf979197f0c6037bbb1db9712e3fe5d4cafb2de886dd509907"
+        },
+        {
+          "trace": [
+            ".",
+            "require",
+            "types"
+          ],
+          "target": "./dist/types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "6097999d2de7943fbd1ae8ebe3a78d66eebcdd0eb41873dbaf09d6e6ec2e60ce"
+        },
+        {
+          "trace": [
+            ".",
+            "require",
+            "default"
+          ],
+          "target": "./dist/node.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "bc0e35d32add395dc1c4dc3d6cd0fb4ea4a19bd582d68de3b44c708bb4b75c1c"
+        },
+        {
+          "trace": [
+            "./package.json"
+          ],
+          "target": "./package.json",
+          "kind": "other",
+          "pattern": false,
+          "exists": true,
+          "sha256": "22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76"
+        }
+      ],
+      "source": {
+        "repository": "https://github.com/solidjs/solid.git",
+        "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+        "sourceManifest": "packages/signals/package.json",
+        "manifestByteIdentical": true,
+        "containedByUpstreamNext": true,
+        "upstreamNextAtAudit": "2f01f23e30d2840139dcbfbed79b270c676a09ad",
+        "commit": {
+          "authoredAt": "2026-08-25T23:48:42-07:00",
+          "subject": "Isolate compiler WASI test forcing."
+        }
+      }
+    },
+    {
+      "name": "@solidjs/web",
+      "version": "2.0.0-rc.3",
+      "registry": {
+        "metadataUrl": "https://registry.npmjs.org/%40solidjs%2Fweb/2.0.0-rc.3",
+        "tarballUrl": "https://registry.npmjs.org/@solidjs/web/-/web-2.0.0-rc.3.tgz",
+        "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+        "shasum": "4ac37e806a3948478955ff753beddec7b3def831",
+        "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+        "signatures": [
+          {
+            "sig": "MEQCIEn+Q4JbzttCtssTLleIPz0yHxw9hc1UlVG3Yy6vJIsDAiAS+uDE6dR+WRbGKLKcbTK5LxVwkxKj2BJfprNx4sWVKg==",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          }
+        ],
+        "attestations": {
+          "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fweb@2.0.0-rc.3",
+          "provenance": {
+            "predicateType": "https://slsa.dev/provenance/v1"
+          }
+        }
+      },
+      "integrity": {
+        "verified": true,
+        "computedSha1": "4ac37e806a3948478955ff753beddec7b3def831",
+        "computedSri": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg=="
+      },
+      "tarball": {
+        "sha256": "eb93aa325ebff6d054f227772b62b76be659b31d7fc19b87d19c7f3fbc26ab22",
+        "bytes": 445356
+      },
+      "manifest": {
+        "sha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e",
+        "exportMapSha256": "4392081d665b41b6019f35d9f0448b314f6e571158272da8201553ce3719d3ee"
+      },
+      "files": {
+        "count": 103,
+        "unpackedBytes": 1958580,
+        "manifestSha256": "08ec383f96620df6cf28b30a9fcff3175ef6b35021d24a8c3a8a25e2798fc64b"
+      },
+      "exportTargets": [
+        {
+          "trace": [
+            ".",
+            "worker",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+        },
+        {
+          "trace": [
+            ".",
+            "worker",
+            "import",
+            "default"
+          ],
+          "target": "./dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "80abb46a98a9d6695b7d2c42725ccfb538f8e941d6aa3a8ec5343d6d002d54b1"
+        },
+        {
+          "trace": [
+            ".",
+            "worker",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8957ea44a0232bd4d69536f56d498d1387b159dab8330cbdd9b2b2dd4ba292f0"
+        },
+        {
+          "trace": [
+            ".",
+            "worker",
+            "require",
+            "default"
+          ],
+          "target": "./dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f63841589bc8ead3784a6d97ce52de557b057b6519380e49807b4e688dc8ea68"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./dist/dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8957ea44a0232bd4d69536f56d498d1387b159dab8330cbdd9b2b2dd4ba292f0"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./dist/dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "825e44a72c66176a44b8c33d36fd924486d03c1450151984aafbd5161c1f93f0"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "import",
+            "default"
+          ],
+          "target": "./dist/web.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "3eccc22880306613c83a658d5889f9b307fad4a114c8842e12b9db5ffe46bf27"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8957ea44a0232bd4d69536f56d498d1387b159dab8330cbdd9b2b2dd4ba292f0"
+        },
+        {
+          "trace": [
+            ".",
+            "browser",
+            "require",
+            "default"
+          ],
+          "target": "./dist/web.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "ad9d9b8b0a23e8dfc2251e44b8b3075513f3cd637d2824bb8623e6f69619dd5b"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "import",
+            "default"
+          ],
+          "target": "./dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "80abb46a98a9d6695b7d2c42725ccfb538f8e941d6aa3a8ec5343d6d002d54b1"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8957ea44a0232bd4d69536f56d498d1387b159dab8330cbdd9b2b2dd4ba292f0"
+        },
+        {
+          "trace": [
+            ".",
+            "deno",
+            "require",
+            "default"
+          ],
+          "target": "./dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f63841589bc8ead3784a6d97ce52de557b057b6519380e49807b4e688dc8ea68"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "import",
+            "default"
+          ],
+          "target": "./dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "80abb46a98a9d6695b7d2c42725ccfb538f8e941d6aa3a8ec5343d6d002d54b1"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8957ea44a0232bd4d69536f56d498d1387b159dab8330cbdd9b2b2dd4ba292f0"
+        },
+        {
+          "trace": [
+            ".",
+            "node",
+            "require",
+            "default"
+          ],
+          "target": "./dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f63841589bc8ead3784a6d97ce52de557b057b6519380e49807b4e688dc8ea68"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./dist/dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8957ea44a0232bd4d69536f56d498d1387b159dab8330cbdd9b2b2dd4ba292f0"
+        },
+        {
+          "trace": [
+            ".",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./dist/dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "825e44a72c66176a44b8c33d36fd924486d03c1450151984aafbd5161c1f93f0"
+        },
+        {
+          "trace": [
+            ".",
+            "import",
+            "types"
+          ],
+          "target": "./types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+        },
+        {
+          "trace": [
+            ".",
+            "import",
+            "default"
+          ],
+          "target": "./dist/web.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "3eccc22880306613c83a658d5889f9b307fad4a114c8842e12b9db5ffe46bf27"
+        },
+        {
+          "trace": [
+            ".",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "8957ea44a0232bd4d69536f56d498d1387b159dab8330cbdd9b2b2dd4ba292f0"
+        },
+        {
+          "trace": [
+            ".",
+            "require",
+            "default"
+          ],
+          "target": "./dist/web.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "ad9d9b8b0a23e8dfc2251e44b8b3075513f3cd637d2824bb8623e6f69619dd5b"
+        },
+        {
+          "trace": [
+            "./jsx-runtime",
+            "import",
+            "types"
+          ],
+          "target": "./types/jsx.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "d9cbb0883adb9907c29273666c23bf852237c320dba8acbb549d8652597f6035"
+        },
+        {
+          "trace": [
+            "./jsx-runtime",
+            "import",
+            "default"
+          ],
+          "target": "./dist/web.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "3eccc22880306613c83a658d5889f9b307fad4a114c8842e12b9db5ffe46bf27"
+        },
+        {
+          "trace": [
+            "./jsx-runtime",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/jsx.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "076900fc7979d49c06686b642933774bafb7cfaaeb8f0194ee568b5ec704e6b5"
+        },
+        {
+          "trace": [
+            "./jsx-runtime",
+            "require",
+            "default"
+          ],
+          "target": "./dist/web.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "ad9d9b8b0a23e8dfc2251e44b8b3075513f3cd637d2824bb8623e6f69619dd5b"
+        },
+        {
+          "trace": [
+            "./jsx-dev-runtime",
+            "import",
+            "types"
+          ],
+          "target": "./types/jsx.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "d9cbb0883adb9907c29273666c23bf852237c320dba8acbb549d8652597f6035"
+        },
+        {
+          "trace": [
+            "./jsx-dev-runtime",
+            "import",
+            "default"
+          ],
+          "target": "./dist/dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851"
+        },
+        {
+          "trace": [
+            "./jsx-dev-runtime",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/jsx.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "076900fc7979d49c06686b642933774bafb7cfaaeb8f0194ee568b5ec704e6b5"
+        },
+        {
+          "trace": [
+            "./jsx-dev-runtime",
+            "require",
+            "default"
+          ],
+          "target": "./dist/dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "825e44a72c66176a44b8c33d36fd924486d03c1450151984aafbd5161c1f93f0"
+        },
+        {
+          "trace": [
+            "./storage",
+            "import",
+            "types"
+          ],
+          "target": "./storage/types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "7a75d296d371d8b0745dacd12210ec617ea17d7997659c022f69ed7662372cff"
+        },
+        {
+          "trace": [
+            "./storage",
+            "import",
+            "default"
+          ],
+          "target": "./storage/dist/storage.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0e5a3da5c0702eb22e2dc32fd4f606ffe105080142d49730c04bd13283223edd"
+        },
+        {
+          "trace": [
+            "./storage",
+            "require",
+            "types"
+          ],
+          "target": "./storage/types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "7a75d296d371d8b0745dacd12210ec617ea17d7997659c022f69ed7662372cff"
+        },
+        {
+          "trace": [
+            "./storage",
+            "require",
+            "default"
+          ],
+          "target": "./storage/dist/storage.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "2d416fae7d9a515eedec3d582f036d06946bfa79c7499e5236350edb19aa55e0"
+        },
+        {
+          "trace": [
+            "./serialization",
+            "import",
+            "types"
+          ],
+          "target": "./serialization/types/index.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "4069480f3a2cabf258d879d824a6f9ce9cbcac5a2c2892ef8a486e4b627d88f6"
+        },
+        {
+          "trace": [
+            "./serialization",
+            "import",
+            "default"
+          ],
+          "target": "./serialization/dist/serialization.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "50599e2e0c88ad9aa90fcb3482a40b818f3a9139c4278dc984ce1cac82ad0135"
+        },
+        {
+          "trace": [
+            "./serialization",
+            "require",
+            "types"
+          ],
+          "target": "./serialization/types-cjs/index.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "db716ef7dddefc59df4a4bdc037625d7d6950982d459c71ea129739ebc17dbc2"
+        },
+        {
+          "trace": [
+            "./serialization",
+            "require",
+            "default"
+          ],
+          "target": "./serialization/dist/serialization.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "044b6ebc572d6b61765e7cd1d5be894eab01a556aa0a9613dddbd44b73d2e91a"
+        },
+        {
+          "trace": [
+            "./serialization/decode",
+            "import",
+            "types"
+          ],
+          "target": "./serialization/types/serializer-decode.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "1fe10f4092ed422c5c503c59f7fc5df46f72aebf81746275650d5212c128a5e9"
+        },
+        {
+          "trace": [
+            "./serialization/decode",
+            "import",
+            "default"
+          ],
+          "target": "./serialization/dist/decode.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "bdbff3c9c7a42c7e39a89e3cc651dd97200c24fb80ff3ca2a4135edbda09b7ef"
+        },
+        {
+          "trace": [
+            "./serialization/decode",
+            "require",
+            "types"
+          ],
+          "target": "./serialization/types-cjs/serializer-decode.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "1fe10f4092ed422c5c503c59f7fc5df46f72aebf81746275650d5212c128a5e9"
+        },
+        {
+          "trace": [
+            "./serialization/decode",
+            "require",
+            "default"
+          ],
+          "target": "./serialization/dist/decode.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "9c1f078ea7a317bc3a3e170cd1dda6c64a1c936cff5effd5321e4c62bd6c137f"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e1fc68d86022e2d26d9e6a24150001c1e69aaeadedf58398f1480304d948040c"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "de41af7be1c36e7e0ba9a9a8665ec09bfa93b0039affbe79417ce3ac0e8456c0"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "9b5fa3af266d0ae563811a4296f58443ebdf0c79186ee89e416a63e561294201"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "worker",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "eebf15ccd3ea0fafbc2b9a0581753a35cead5c0008810a8d8576177845c26bf4"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "browser",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "fdce7ef458dc83b823f883e0af58a4cfa75dd77f1889423d1fa03bd771d17eb6"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "browser",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/client.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f7e754c2119449c94a01b16760efe1cc9fd4bf53f3f17033392a07b4d6bd00a1"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "browser",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f72c11dda6886545371f9dbd6f4c7f0ee29dc60a5ae3870645596fd2c623f1e4"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "browser",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/client.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "15324138596a1b9187443670ae931230f7e4bf0b2df18e126825954371b023ab"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e1fc68d86022e2d26d9e6a24150001c1e69aaeadedf58398f1480304d948040c"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "de41af7be1c36e7e0ba9a9a8665ec09bfa93b0039affbe79417ce3ac0e8456c0"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "9b5fa3af266d0ae563811a4296f58443ebdf0c79186ee89e416a63e561294201"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "deno",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "eebf15ccd3ea0fafbc2b9a0581753a35cead5c0008810a8d8576177845c26bf4"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e1fc68d86022e2d26d9e6a24150001c1e69aaeadedf58398f1480304d948040c"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "de41af7be1c36e7e0ba9a9a8665ec09bfa93b0039affbe79417ce3ac0e8456c0"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "9b5fa3af266d0ae563811a4296f58443ebdf0c79186ee89e416a63e561294201"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "node",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "eebf15ccd3ea0fafbc2b9a0581753a35cead5c0008810a8d8576177845c26bf4"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "fdce7ef458dc83b823f883e0af58a4cfa75dd77f1889423d1fa03bd771d17eb6"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/client.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f7e754c2119449c94a01b16760efe1cc9fd4bf53f3f17033392a07b4d6bd00a1"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f72c11dda6886545371f9dbd6f4c7f0ee29dc60a5ae3870645596fd2c623f1e4"
+        },
+        {
+          "trace": [
+            "./server-functions",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/client.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "15324138596a1b9187443670ae931230f7e4bf0b2df18e126825954371b023ab"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e1fc68d86022e2d26d9e6a24150001c1e69aaeadedf58398f1480304d948040c"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "de41af7be1c36e7e0ba9a9a8665ec09bfa93b0039affbe79417ce3ac0e8456c0"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "9b5fa3af266d0ae563811a4296f58443ebdf0c79186ee89e416a63e561294201"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "67378d60d844b55f6ecdf8fbf13af486629e0a1e79c95752fbe082883fec60f5"
+        },
+        {
+          "trace": [
+            "./server-functions/server",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "eebf15ccd3ea0fafbc2b9a0581753a35cead5c0008810a8d8576177845c26bf4"
+        },
+        {
+          "trace": [
+            "./server-functions/client",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "fdce7ef458dc83b823f883e0af58a4cfa75dd77f1889423d1fa03bd771d17eb6"
+        },
+        {
+          "trace": [
+            "./server-functions/client",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/client.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f7e754c2119449c94a01b16760efe1cc9fd4bf53f3f17033392a07b4d6bd00a1"
+        },
+        {
+          "trace": [
+            "./server-functions/client",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f72c11dda6886545371f9dbd6f4c7f0ee29dc60a5ae3870645596fd2c623f1e4"
+        },
+        {
+          "trace": [
+            "./server-functions/client",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/client.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "15324138596a1b9187443670ae931230f7e4bf0b2df18e126825954371b023ab"
+        },
+        {
+          "trace": [
+            "./server-functions/rich-args",
+            "import",
+            "types"
+          ],
+          "target": "./types/server-functions/rich-args.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "db2d06463ae327d78f77ecb7798be7d793bba7302f30e4d10835944e28670a9e"
+        },
+        {
+          "trace": [
+            "./server-functions/rich-args",
+            "import",
+            "default"
+          ],
+          "target": "./server-functions/dist/rich-args.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e2b312f264c6eb76402675535e34f4f9961e642f93a4d5fa852ffadac067800f"
+        },
+        {
+          "trace": [
+            "./server-functions/rich-args",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/server-functions/rich-args.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "db2d06463ae327d78f77ecb7798be7d793bba7302f30e4d10835944e28670a9e"
+        },
+        {
+          "trace": [
+            "./server-functions/rich-args",
+            "require",
+            "default"
+          ],
+          "target": "./server-functions/dist/rich-args.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b2cc63a656c7f8a933cf9912b7739fd8e4bb301328a3d7cc6ab7523740f5249b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "worker",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "c58fa5f4ec79dfc0707d1f01ddc7b464105710ccb9df60fd7db8a3004fb5a5f6"
+        },
+        {
+          "trace": [
+            "./frames",
+            "worker",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "620ff6ce77756a3151f654b06b0acc9492048ef8ca306289278715117b750717"
+        },
+        {
+          "trace": [
+            "./frames",
+            "worker",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b2683f4f338d20725ae506955c3b1c200cb6173ee3e8ea5815f2e1891d280afd"
+        },
+        {
+          "trace": [
+            "./frames",
+            "worker",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b4733c12c5bb13dbe00f45a43e0a60da68bdbc60e9fbaf94f023f74138d6093b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e83afca019249516e25679192d747a2de2f0f93684ac38d25b091717516df33b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/client.dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "fdd6836e1dee13ac4f04d8c78eae7def8c85d997fdc2bd0b5cdc9419754cfe53"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "1437c1c3251a767bd4f153f3deeabb0a7d511730716c38bd19a487dba9403587"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/client.dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "482c4c9753cd57dc9b18835f0de2604dc8333098e8dc4c61b7dcb4a5c9e80624"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e83afca019249516e25679192d747a2de2f0f93684ac38d25b091717516df33b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/client.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "2e2590acbb2a2fc190e1804c93fb6fbf5f2b686758cdb10c0618399028433a53"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "1437c1c3251a767bd4f153f3deeabb0a7d511730716c38bd19a487dba9403587"
+        },
+        {
+          "trace": [
+            "./frames",
+            "browser",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/client.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f61170d9f9b4871c2a6b16872d9dfa7484664969040b69e51f773037e30266e5"
+        },
+        {
+          "trace": [
+            "./frames",
+            "deno",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "c58fa5f4ec79dfc0707d1f01ddc7b464105710ccb9df60fd7db8a3004fb5a5f6"
+        },
+        {
+          "trace": [
+            "./frames",
+            "deno",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "620ff6ce77756a3151f654b06b0acc9492048ef8ca306289278715117b750717"
+        },
+        {
+          "trace": [
+            "./frames",
+            "deno",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b2683f4f338d20725ae506955c3b1c200cb6173ee3e8ea5815f2e1891d280afd"
+        },
+        {
+          "trace": [
+            "./frames",
+            "deno",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b4733c12c5bb13dbe00f45a43e0a60da68bdbc60e9fbaf94f023f74138d6093b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "node",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "c58fa5f4ec79dfc0707d1f01ddc7b464105710ccb9df60fd7db8a3004fb5a5f6"
+        },
+        {
+          "trace": [
+            "./frames",
+            "node",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "620ff6ce77756a3151f654b06b0acc9492048ef8ca306289278715117b750717"
+        },
+        {
+          "trace": [
+            "./frames",
+            "node",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b2683f4f338d20725ae506955c3b1c200cb6173ee3e8ea5815f2e1891d280afd"
+        },
+        {
+          "trace": [
+            "./frames",
+            "node",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b4733c12c5bb13dbe00f45a43e0a60da68bdbc60e9fbaf94f023f74138d6093b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "development",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e83afca019249516e25679192d747a2de2f0f93684ac38d25b091717516df33b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "development",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/client.dev.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "fdd6836e1dee13ac4f04d8c78eae7def8c85d997fdc2bd0b5cdc9419754cfe53"
+        },
+        {
+          "trace": [
+            "./frames",
+            "development",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "1437c1c3251a767bd4f153f3deeabb0a7d511730716c38bd19a487dba9403587"
+        },
+        {
+          "trace": [
+            "./frames",
+            "development",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/client.dev.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "482c4c9753cd57dc9b18835f0de2604dc8333098e8dc4c61b7dcb4a5c9e80624"
+        },
+        {
+          "trace": [
+            "./frames",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e83afca019249516e25679192d747a2de2f0f93684ac38d25b091717516df33b"
+        },
+        {
+          "trace": [
+            "./frames",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/client.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "2e2590acbb2a2fc190e1804c93fb6fbf5f2b686758cdb10c0618399028433a53"
+        },
+        {
+          "trace": [
+            "./frames",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "1437c1c3251a767bd4f153f3deeabb0a7d511730716c38bd19a487dba9403587"
+        },
+        {
+          "trace": [
+            "./frames",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/client.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f61170d9f9b4871c2a6b16872d9dfa7484664969040b69e51f773037e30266e5"
+        },
+        {
+          "trace": [
+            "./frames/server",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/server.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "c58fa5f4ec79dfc0707d1f01ddc7b464105710ccb9df60fd7db8a3004fb5a5f6"
+        },
+        {
+          "trace": [
+            "./frames/server",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/server.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "620ff6ce77756a3151f654b06b0acc9492048ef8ca306289278715117b750717"
+        },
+        {
+          "trace": [
+            "./frames/server",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/server.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b2683f4f338d20725ae506955c3b1c200cb6173ee3e8ea5815f2e1891d280afd"
+        },
+        {
+          "trace": [
+            "./frames/server",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/server.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "b4733c12c5bb13dbe00f45a43e0a60da68bdbc60e9fbaf94f023f74138d6093b"
+        },
+        {
+          "trace": [
+            "./frames/client",
+            "import",
+            "types"
+          ],
+          "target": "./types/frames/client.d.ts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "e83afca019249516e25679192d747a2de2f0f93684ac38d25b091717516df33b"
+        },
+        {
+          "trace": [
+            "./frames/client",
+            "import",
+            "default"
+          ],
+          "target": "./frames/dist/client.js",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "2e2590acbb2a2fc190e1804c93fb6fbf5f2b686758cdb10c0618399028433a53"
+        },
+        {
+          "trace": [
+            "./frames/client",
+            "require",
+            "types"
+          ],
+          "target": "./types-cjs/frames/client.d.cts",
+          "kind": "declaration",
+          "pattern": false,
+          "exists": true,
+          "sha256": "1437c1c3251a767bd4f153f3deeabb0a7d511730716c38bd19a487dba9403587"
+        },
+        {
+          "trace": [
+            "./frames/client",
+            "require",
+            "default"
+          ],
+          "target": "./frames/dist/client.cjs",
+          "kind": "runtime",
+          "pattern": false,
+          "exists": true,
+          "sha256": "f61170d9f9b4871c2a6b16872d9dfa7484664969040b69e51f773037e30266e5"
+        },
+        {
+          "trace": [
+            "./types/*"
+          ],
+          "target": "./types/*",
+          "kind": "other",
+          "pattern": true,
+          "exists": null,
+          "sha256": null
+        }
+      ],
+      "source": {
+        "repository": "https://github.com/solidjs/solid.git",
+        "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+        "sourceManifest": "packages/web/package.json",
+        "manifestByteIdentical": true,
+        "containedByUpstreamNext": true,
+        "upstreamNextAtAudit": "2f01f23e30d2840139dcbfbed79b270c676a09ad",
+        "commit": {
+          "authoredAt": "2026-08-25T23:48:42-07:00",
+          "subject": "Isolate compiler WASI test forcing."
+        }
+      }
+    }
+  ]
+}

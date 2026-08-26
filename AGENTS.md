@@ -118,8 +118,13 @@ This project certifies behavior; it is not a syntax-pattern collection.
 - External behavior is contract-driven. Unknown packages and callback helpers
   remain uncertifiable unless semantic, type, or exact package-contract facts
   establish the behavior.
-- Keep contract schemaVersion at 1; add only backward-compatible fields and
-  update validation/tests when doing so.
+- The replacement package-contract format uses `schemaVersion: 2` only while
+  every producer, consumer, bundled contract, fixture, proof sidecar, receipt,
+  and gate migrates together. It is then re-emitted atomically as the first
+  stable public `schemaVersion: 1`; never ship both meanings of version 1, add
+  `schemaStatus`, or treat the temporary number as compatibility. After that
+  stable cut, keep version 1 backward-compatible and update validation/tests
+  for every additive field.
 - Preserve exact Solid 1.x and Solid 2.0 behavior. Do not infer an API from its
   name alone or share vocabulary between dialects without an explicit dialect
   owner.
@@ -387,11 +392,27 @@ contracts accidentally. The repository audits Solid 1.x and a specific Solid
 2.0 prerelease; a newer prerelease must be reviewed rather than silently
 substituted.
 
-Upstream compiler and TypeFacts dependencies are pinned by revision. If a pin
-must move, update the corresponding notice and follow docs/monorepo.md; do not
-vendor or float a branch. Reuse the checked-in bin/solid-typefacts when
-present; rebuild it with scripts/build-typefacts.sh only when the TypeFacts
-revision, protocol, build id, or producer-dependent code changed.
+Current builds still consume the Solid 2 compiler and Type Facts as revision-
+pinned dependencies. Until the approved source bootstrap lands, moving either
+pin must update the corresponding notice and follow docs/monorepo.md; do not
+vendor or float a branch. Reuse the checked-in bin/solid-typefacts when present;
+rebuild it with scripts/build-typefacts.sh only when the Type Facts revision,
+protocol, build id, or producer-dependent code changed.
+
+The approved target moves the Type Facts producer/client back into this
+repository and follows the Solid 2 compiler at
+`solidjs/solid/packages/compiler`. Follow
+docs/package-contract-v2/compiler-and-typefacts-bootstrap.md and do not leave a
+mixed local/external producer-client state. The Solid fork is semantic-facts-
+only: trace models, output-neutral recording hooks, validation/serialization,
+and fact tests are allowed; lowering, generated output, diagnostics, runtime
+behavior, compiler features, performance changes, and unrelated refactors are
+forbidden. Unrelated dependency changes are forbidden;
+semantic-fact-specific dependencies are allowed only when the fact interface
+requires them and normal compiler behavior remains unchanged. A compiler defect
+goes upstream separately,
+and the corresponding checker fact stays open until the semantic branch rebases
+onto the upstream fix.
 
 ## Documentation and final report
 

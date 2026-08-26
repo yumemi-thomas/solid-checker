@@ -15,13 +15,13 @@
     "@solidjs/meta@0.29.4|solid1|only",
     "@solidjs/meta@1.0.0-next.2|solid2|floor",
     "@solidjs/router@1.0.0|solid1|only",
-    "@solidjs/router@2.0.0-next.17|solid2|only",
-    "@tanstack/ai-devtools-core@0.5.6|solid1|only",
+    "@solidjs/router@2.0.0-next.18|solid2|only",
+    "@tanstack/ai-devtools-core@0.5.8|solid1|only",
     "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
     "motion-solidjs@0.6.0|solid1|only",
     "motion-solidjs@0.7.0-beta.4|solid2|floor",
     "solid-js@1.9.14|solid1|only",
-    "solid-js@2.0.0-rc.1|solid2|floor",
+    "solid-js@2.0.0-rc.3|solid2|only",
     "solid-recharts@1.0.1|solid1|only",
     "solid-recharts@2.0.0-beta.1|solid2|floor"
   ]

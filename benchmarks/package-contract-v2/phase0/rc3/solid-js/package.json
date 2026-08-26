@@ -1,0 +1,149 @@
+{
+  "name": "solid-js",
+  "description": "Reactive JavaScript library for building user interfaces. Compiles JSX to real DOM with fine-grained signal-based updates — no virtual DOM.",
+  "version": "2.0.0-rc.3",
+  "author": "Ryan Carniato",
+  "license": "MIT",
+  "homepage": "https://solidjs.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solidjs/solid.git",
+    "directory": "packages/solid"
+  },
+  "main": "./dist/server.cjs",
+  "module": "./dist/server.js",
+  "unpkg": "./dist/solid.js",
+  "jsdelivr": "./dist/solid.js",
+  "types": "types/index.d.ts",
+  "sideEffects": false,
+  "type": "module",
+  "files": [
+    "dist",
+    "types",
+    "types-cjs",
+    "package.json",
+    "CHEATSHEET.md",
+    "skills"
+  ],
+  "exports": {
+    ".": {
+      "worker": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "browser": {
+        "development": {
+          "import": {
+            "types": "./types/index.d.ts",
+            "default": "./dist/dev.js"
+          },
+          "require": {
+            "types": "./types-cjs/index.d.cts",
+            "default": "./dist/dev.cjs"
+          }
+        },
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/solid.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/solid.cjs"
+        }
+      },
+      "deno": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "development": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/dev.cjs"
+        }
+      },
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.js"
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/solid.cjs"
+      }
+    },
+    "./refresh": {
+      "development": {
+        "import": {
+          "types": "./types/refresh/index.d.ts",
+          "default": "./dist/refresh.dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/refresh/index.d.cts",
+          "default": "./dist/refresh.dev.cjs"
+        }
+      },
+      "import": {
+        "types": "./types/refresh/index.d.ts",
+        "default": "./dist/refresh.js"
+      },
+      "require": {
+        "types": "./types-cjs/refresh/index.d.cts",
+        "default": "./dist/refresh.cjs"
+      }
+    },
+    "./types/*": "./types/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "npm-run-all -nl build:*",
+    "build:clean": "rimraf dist/ coverage/",
+    "build:js": "rollup -c",
+    "types": "npm-run-all -nl types:clean types:src types:cjs",
+    "types:clean": "rimraf types/ types-cjs/",
+    "types:src": "tsc --project ./tsconfig.build.json",
+    "types:cjs": "node ../../scripts/sync-dual-types.mjs ./types ./types-cjs",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "test-types": "tsc --project tsconfig.test.json && tsc --project tsconfig.no-dom.json"
+  },
+  "keywords": [
+    "solid",
+    "solidjs",
+    "ui",
+    "reactive",
+    "components",
+    "compiler",
+    "performance"
+  ],
+  "dependencies": {
+    "@solidjs/signals": "^2.0.0-rc.3",
+    "csstype": "^3.1.0",
+    "seroval": "~1.5.4",
+    "seroval-plugins": "~1.5.4"
+  }
+}

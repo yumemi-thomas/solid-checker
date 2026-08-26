@@ -33,6 +33,50 @@ _Avoid_: Index helpers, fact-table scan, range-query module
 One of the independent evidence suppliers the checker cross-references: Oxc syntax facts, Solid compiler execution facts, Type Facts, and package contracts. User-facing documentation may call them "sources of evidence"; the canonical term is fact domain.
 _Avoid_: Backends, sidecars, analysis inputs
 
+**Compiler semantic trace**:
+The compiler-owned, transform-local record of semantic decisions made while lowering one source file. It observes existing lowering and is versioned separately from the normalized compiler execution facts consumed by the checker.
+_Avoid_: Execution map, compiler sidecar, instrumented output
+
+**Compiler execution facts**:
+The checker-normalized fact domain projected from a validated compiler semantic trace, binding source sites to actual execution, callback, ownership, and discarded-code decisions. Its protocol version is independent of the producer trace version.
+_Avoid_: Type Facts, compiler predictions, semantic trace (that is the producer form)
+
+**Claim domain**:
+One independently knowable set of package behavior, such as callback invocations, reactive reads, or cleanup operations. Its knowledge may be open or closed without determining any sibling claim domain.
+_Avoid_: Fact domain, section, field group
+
+**Domain closure**:
+Accepted proof that one claim domain enumerates every behavior possible for its exact package, export, artifact case, guard, and resource scope. Closure never transfers implicitly to a parent, child, or sibling claim domain.
+_Avoid_: Complete contract, tested absence, empty result
+
+**Contract proposal**:
+An unaccepted machine description of package behavior together with proof obligations. A proposal cannot certify a project or discharge a proof obligation.
+_Avoid_: Generated contract, inferred contract
+
+**Accepted package contract**:
+A normalized package contract whose closed claims, package identity, artifact cases, and proof inputs are bound by a valid acceptance receipt. Open claims remain usable only as partial knowledge.
+_Avoid_: Verified JSON, trusted contract, reviewed contract
+
+**Artifact case**:
+One exact package-entrypoint resolution outcome, including its resolution trace, runtime artifact, declarations, and dependency closure. Artifact cases are selected exclusively and never merged.
+_Avoid_: Environment, mode, variant
+
+**Operation graph**:
+A causal description of package behavior whose nodes are semantic operations and whose edges express scheduling, data, cleanup, error, or lifetime relationships.
+_Avoid_: Phase list, callback list, execution trace
+
+**Evidence sidecar**:
+A hash-bound artifact containing detailed fact transcripts, probe observations, and proof material for package-contract claims. Ordinary project analysis does not need it after acceptance.
+_Avoid_: Contract evidence field, audit log
+
+**Acceptance receipt**:
+A verifier-issued binding among a contract's wire and semantic identities, exact artifacts, proof material, and verification policy. It is the authority ordinary analysis uses to accept closed claims.
+_Avoid_: Verification report, signature, trust flag
+
+**Semantic digest**:
+A canonical identity of normalized package-contract meaning that excludes wire version, summary names, formatting, and evidence layout.
+_Avoid_: File hash, contract hash
+
 **Rule options**:
 The project-level per-rule configuration document, `.solid-checker/rule-options.json`, discovered beside a project's contracts and carrying the upstream eslint-plugin-solid options the 1.x rules honour. Defaults are upstream's defaults; parsing fails closed. Part of every build and diagnostic identity.
 _Avoid_: Rule config, checker settings, options file

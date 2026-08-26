@@ -8,12 +8,12 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 > ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran
 > under both a per-mode timeout and a whole-phase wall budget.
 
-- Started: 2026-08-26T10:05:01.608Z
-- Finished: 2026-08-26T10:07:09.786Z
-- Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
-- Probe rows run: 416
-- Checker native binary: `a4fd84a499b8f3ce97a3010cfe62da7e3d928c281d2293a63a30c6a6d6e8bbad` (15062544 bytes, mtime 2026-08-26T10:04:47.012Z)
-- Type Facts binary: `983d0b702ace1476ecd7f5633e9e25b33003287b5319404851cdc5141d0d1844` (28446386 bytes, mtime 2026-08-26T08:23:47.354Z)
+- Started: 2026-08-26T17:18:52.845Z
+- Finished: 2026-08-26T17:21:13.846Z
+- Manifest generated at: 2026-08-26T14:21:49.573Z (rows: 307, probes: 418)
+- Probe rows run: 418
+- Checker native binary: `b48a808ce65864dfc77cb8dd2a37b77deceed4bfcc4408c42645dc3a7edf7399` (15109424 bytes, mtime 2026-08-26T17:05:27.241Z)
+- Type Facts binary: `7d8d2ffbc472049660b8b9666da1990edaf86890fd834f45c7e642589abc645b` (28448018 bytes, mtime 2026-08-26T17:05:27.249Z)
 - Budgets: install 240000 ms, generate 120000 ms, probe 20000 ms per condition mode / 90000 ms + 500 ms per planned claim, capped at 900000 ms, whole phase, verify 90000 ms; concurrency 3
 - Import-environment shim: enabled (client, development and production sessions only; server sessions never)
 
@@ -21,31 +21,30 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 
 | Figure | Count |
 | --- | --- |
-| Probe rows run | 416 |
-| Reached a generated contract | 397/416 (95.43%) |
-| **Reached `verified`** | **308/416 (74.04%)** of all rows |
-| Reached `verified`, of rows that produced a contract | 308/397 (77.58%) |
-| Refused by `contract verify` | 88/416 (21.15%) |
+| Probe rows run | 418 |
+| Reached a generated contract | 400/418 (95.69%) |
+| **Reached `verified`** | **309/418 (73.92%)** of all rows |
+| Reached `verified`, of rows that produced a contract | 309/400 (77.25%) |
+| Refused by `contract verify` | 90/418 (21.53%) |
 
 Outcome classes, raw:
 
 | Outcome | Rows |
 | --- | --- |
-| `verified` | 308 |
-| `refused` | 88 |
-| `generate-failure` | 16 |
-| `install-failure` | 3 |
+| `verified` | 309 |
+| `refused` | 90 |
+| `generate-failure` | 18 |
 | `no-runtime` | 1 |
 
 ## Per family
 
 | Family | Rows | Contracts | Verified | Refused | Claims driven | Claims passed | Conversions | Exports certified | Exports unknown |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 20 | 13/23 (56.52%) | 6 | 1063/1616 (65.78%) | 1063/1063 (100.00%) | 118 | 338 | 263 |
+| Official Solid | 21 | 21 | 14/21 (66.67%) | 6 | 1154/1755 (65.75%) | 1154/1154 (100.00%) | 127 | 374 | 297 |
 | Kobalte | 6 | 4 | 1/6 (16.67%) | 3 | 1153/1756 (65.66%) | 1153/1153 (100.00%) | 2 | 7 | 3 |
-| Solid Primitives | 289 | 280 | 236/289 (81.66%) | 44 | 1969/3310 (59.49%) | 1969/1969 (100.00%) | 501 | 619 | 844 |
+| Solid Primitives | 291 | 280 | 236/291 (81.10%) | 44 | 1969/3310 (59.49%) | 1969/1969 (100.00%) | 501 | 619 | 844 |
 | Corvu | 28 | 28 | 18/28 (64.29%) | 10 | 291/460 (63.26%) | 291/291 (100.00%) | 50 | 55 | 65 |
-| TanStack | 52 | 51 | 32/52 (61.54%) | 19 | 1810/2353 (76.92%) | 1810/1810 (100.00%) | 142 | 633 | 451 |
+| TanStack | 54 | 53 | 32/54 (59.26%) | 21 | 1944/2566 (75.76%) | 1944/1944 (100.00%) | 151 | 634 | 457 |
 | Solid Devtools | 12 | 9 | 6/12 (50.00%) | 3 | 157/271 (57.93%) | 157/157 (100.00%) | 20 | 96 | 36 |
 | Solid Recharts | 3 | 3 | 0/3 (0.00%) | 3 | 124/366 (33.88%) | 124/124 (100.00%) | 0 | 0 | 0 |
 | Motion for Solid | 3 | 2 | 2/3 (66.67%) | 0 | 330/330 (100.00%) | 330/330 (100.00%) | 0 | 1 | 329 |
@@ -53,15 +52,15 @@ Outcome classes, raw:
 | Solid target | Rows | Contracts | Verified | Refused |
 | --- | --- | --- | --- | --- |
 | solid1 | 168 | 154 | 118/168 (70.24%) | 36 |
-| solid2 | 248 | 243 | 190/248 (76.61%) | 52 |
+| solid2 | 250 | 246 | 191/250 (76.40%) | 54 |
 
 ## Why verification refuses
 
-88 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
+90 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
 
 | Blocker (RFC 0002 §3) | Rows raising it | Blocker lines |
 | --- | --- | --- |
-| `kind-observed` | 54 | 118 |
+| `kind-observed` | 56 | 124 |
 | `probe-report-includes-evidence-write` | 30 | 30 |
 | `incompleteness` | 30 | 503 |
 | `attested-closure-note` | 4 | 10 |
@@ -71,7 +70,7 @@ Attributed to one root cause per row instead. `probe-report-includes-evidence-wr
 
 | Root cause | Refused rows |
 | --- | --- |
-| `kind-observed` | 54 |
+| `kind-observed` | 56 |
 | `incompleteness` | 30 |
 | `attested-closure-note` | 3 |
 | `closure-note` | 1 |
@@ -80,28 +79,28 @@ Attributed to one root cause per row instead. `probe-report-includes-evidence-wr
 
 | Figure | Count |
 | --- | --- |
-| Claims planned across every probed contract | 10462 |
-| Driven | 6897/10462 (65.92%) |
-| Passed | 6897/10462 (65.92%) |
+| Claims planned across every probed contract | 10814 |
+| Driven | 7122/10814 (65.86%) |
+| Passed | 7122/10814 (65.86%) |
 | Failed | 0 |
-| Undriven | 3565/10462 (34.08%) |
+| Undriven | 3692/10814 (34.14%) |
 | Incompleteness findings | 503 |
 
 Undriven claims by reason:
 
 | Reason | Claims |
 | --- | --- |
-| no plantable reactive source | 851 |
+| no plantable reactive source | 868 |
+| no probe form: reactiveReads | 634 |
 | entrypoint import threw | 588 |
-| no probe form: reactiveReads | 571 |
-| synthesized call threw | 525 |
-| no probe form: ownerRequirements | 447 |
-| synthesized call did not invoke the callback | 283 |
-| no probe form: asyncBehavior | 71 |
+| synthesized call threw | 541 |
+| no probe form: ownerRequirements | 452 |
+| synthesized call did not invoke the callback | 286 |
+| no probe form: asyncBehavior | 80 |
+| parameter member was not invoked | 49 |
 | no probe form: store path | 47 |
-| parameter member was not invoked | 45 |
-| no unambiguous summary for the mode | 32 |
-| runtime re-runs nothing in this mode | 29 |
+| no unambiguous summary for the mode | 40 |
+| runtime re-runs nothing in this mode | 31 |
 | probe session aborted by package code | 25 |
 | callback ran more often than the call site | 25 |
 | probe session wrote no report | 10 |
@@ -115,20 +114,20 @@ Undriven claims by reason:
 
 `kind` is the one claim schema v1 has no unknown sentinel for, so an unobserved one blocks rather than converting — which makes *why* it was unobserved the number the rule's next revision turns on. An **observation of absence** (`export-missing`: the namespace loaded and the binding was not in it) says the export does not exist in that artifact, so there is no consumer claim about that mode to certify. Every other non-observation is a **gap** — an import that threw, a session that died, a mode never attempted, a mode where no unambiguous summary resolves — and a gap must keep blocking. Every number in this section counts gaps only: a mode that was observed and *disagreed* is a failing claim, and it has its own section below rather than a row here, because amendment A9 forbids the two sharing a number.
 
-- Rows with at least one gap in a stated `kind` mode: 71
-- `kind` obligations with at least one gapped stated mode: 2124
+- Rows with at least one gap in a stated `kind` mode: 73
+- `kind` obligations with at least one gapped stated mode: 2258
 
 | Why the mode produced no passing `kind` observation | (claim, mode) pairs |
 | --- | --- |
-| entrypoint import threw | 3873 |
-| no unambiguous summary resolves in the mode (no kind claim exists) | 32 |
-| export-missing in this mode | 23 |
+| entrypoint import threw | 3993 |
+| no unambiguous summary resolves in the mode (no kind claim exists) | 40 |
+| export-missing in this mode | 25 |
 
 | Mode | Gapped `kind` obligations |
 | --- | --- |
-| `server` | 2089 |
-| `development` | 700 |
-| `production` | 584 |
+| `server` | 2215 |
+| `development` | 696 |
+| `production` | 592 |
 | `client` | 555 |
 
 ### `kind` claims the probe contradicted
@@ -149,9 +148,10 @@ An entrypoint whose module cannot be imported yields no observation at all. 33 o
 | ResolveMessage: Cannot find package '@solid-primitives/utils' imported from /private/t | 84 |
 | Error: [solid-devtools]: Debugger hasn't found the exposed Solid Devtools API | 69 |
 | ResolveMessage: Cannot find package 'server-only' imported from <path> | 60 |
-| ResolveMessage: Cannot find package 'solid-start:get-manifest' imported from /private/ | 11 |
 | ResolveMessage: Cannot find package 'esbuild' imported from <path> | 10 |
 | SyntaxError: Export named 'onSettled' not found in module '<path> | 10 |
+| ResolveMessage: Cannot find package 'solid-start:middleware' imported from /private/tm | 8 |
+| ResolveMessage: Cannot find package 'solid-start:get-manifest' imported from /private/ | 3 |
 | ResolveMessage: Cannot find package '@rsbuild/core' imported from <path> | 3 |
 | ResolveMessage: Cannot find package 'vite' imported from <path> | 3 |
 | ResolveMessage: Cannot find package 'solid-start:seroval-plugins' imported from /priva | 2 |
@@ -170,24 +170,24 @@ A module that reads `window` while it is being evaluated throws in a bare Node p
 
 `server` sessions are never shimmed: an import that throws on `window` under `--conditions node` is a truthful observation of that entrypoint in that mode, and faking it there would manufacture a pass the package never earned.
 
-- Rows where at least one session faked at least one global: 393
+- Rows where at least one session faked at least one global: 396
 
 | Faked global | Rows |
 | --- | --- |
-| `IntersectionObserver` | 393 |
-| `MutationObserver` | 393 |
-| `ResizeObserver` | 393 |
-| `cancelAnimationFrame` | 393 |
-| `document` | 393 |
-| `getComputedStyle` | 393 |
-| `history` | 393 |
-| `localStorage` | 393 |
-| `location` | 393 |
-| `matchMedia` | 393 |
-| `requestAnimationFrame` | 393 |
-| `screen` | 393 |
-| `sessionStorage` | 393 |
-| `window` | 393 |
+| `IntersectionObserver` | 396 |
+| `MutationObserver` | 396 |
+| `ResizeObserver` | 396 |
+| `cancelAnimationFrame` | 396 |
+| `document` | 396 |
+| `getComputedStyle` | 396 |
+| `history` | 396 |
+| `localStorage` | 396 |
+| `location` | 396 |
+| `matchMedia` | 396 |
+| `requestAnimationFrame` | 396 |
+| `screen` | 396 |
+| `sessionStorage` | 396 |
+| `window` | 396 |
 
 ### Worker processes
 
@@ -195,9 +195,9 @@ A worker stops at its first throw and the mode is restarted for what is left —
 
 | Figure | Count |
 | --- | --- |
-| Worker processes started | 16662 |
-| Of those, restarts after a throw | 13890 |
-| Sessions that died (crash, timeout, unreadable output) | 71 |
+| Worker processes started | 17022 |
+| Of those, restarts after a throw | 14230 |
+| Sessions that died (crash, timeout, unreadable output) | 78 |
 
 ## The install environment
 
@@ -206,8 +206,8 @@ Each row installs the pinned package, the Solid runtime the manifest row pins, a
 | Figure | Rows |
 | --- | --- |
 | Solid 2 rows given the `@solidjs/web` half of the runtime the row pinned only half of | 53 |
-| Rows with a completed peer install | 34 |
-| Peer packages installed | 49 |
+| Rows with a completed peer install | 35 |
+| Peer packages installed | 50 |
 | Rows whose peer install failed or moved a pin | 0 |
 
 A package that **imports something it declares nowhere** — not a dependency, not a peer — is outside what any install policy can supply, and is reported above as an import throw rather than fixed here. Completing an undeclared import would mean this harness choosing a version the package never named.
@@ -227,17 +227,17 @@ A conversion replaces one export's whole claim domain with the `{"status":"unkno
 
 | Figure | Count |
 | --- | --- |
-| Claim domains converted to unknown | 833 |
-| Exports carrying an unknown in the verified rows, at generation | 1653/4393 (37.63%) |
-| Exports carrying an unknown in the verified rows, after verification | 1991/3740 (53.24%) |
+| Claim domains converted to unknown | 851 |
+| Exports carrying an unknown in the verified rows, at generation | 1691/4482 (37.73%) |
+| Exports carrying an unknown in the verified rows, after verification | 2031/3817 (53.21%) |
 
 How much a verified contract actually certifies from observation:
 
 | Figure | Count |
 | --- | --- |
-| Verified rows carrying at least one probed behavioral row | 21/308 (6.82%) |
-| Probed behavioral row markers kept across the whole corpus | 99 |
-| Inferred row markers dropped by verification | 4610 |
+| Verified rows carrying at least one probed behavioral row | 22/309 (7.12%) |
+| Probed behavioral row markers kept across the whole corpus | 106 |
+| Inferred row markers dropped by verification | 4814 |
 | Probed markers discarded as unwitnessed by this run's report | 174 |
 | Entrypoints verification refused inside a promoted document | 38 |
 | Verified rows carrying at least one such refusal | 10 |
@@ -248,8 +248,8 @@ Converted domains by field:
 
 | Field | Conversions |
 | --- | --- |
-| `callbacks` | 410 |
-| `returns` | 392 |
+| `callbacks` | 417 |
+| `returns` | 403 |
 | `asyncBehavior` | 31 |
 
 ## The composite a consumer feels
@@ -258,10 +258,10 @@ Of every export the corpus's generated contracts describe:
 
 | State | Exports |
 | --- | --- |
-| (a) certified by a verified contract | 1749/7117 (24.57%) |
-| (b) honest unknown inside a verified contract | 1991/7117 (27.98%) |
-| (c) dropped from a verified contract with its refused entrypoint | 653/7117 (9.18%) |
-| (d) inside a contract that never reached `verified` | 2724/7117 (38.27%) |
+| (a) certified by a verified contract | 1786/7288 (24.51%) |
+| (b) honest unknown inside a verified contract | 2031/7288 (27.87%) |
+| (c) dropped from a verified contract with its refused entrypoint | 665/7288 (9.12%) |
+| (d) inside a contract that never reached `verified` | 2806/7288 (38.50%) |
 
 (c) is the cost of amendment A9 stage 1 stated as a consumer-facing number: the row verified, and these exports are absent from the document it promoted, so importing one is an explicit uncertifiable result. They stay in the denominator — a certified *share* that rose because unobservable exports left the population would be measuring nothing. (d) is every export of a contract that was generated and then refused, timed out, or errored before a probe report existed. Rows whose `bun install` or `contract generate` failed describe no exports at all and are in none of the four states.
 
@@ -269,12 +269,12 @@ Of every export the corpus's generated contracts describe:
 
 | Phase | Rows | Median | p90 | Max | Mean |
 | --- | --- | --- | --- | --- | --- |
-| install | 416 | 13 ms | 542 ms | 4511 ms | 125 ms |
-| generate | 413 | 76 ms | 284 ms | 6422 ms | 210 ms |
-| probe | 396 | 110 ms | 494 ms | 24107 ms | 427 ms |
-| verify | 396 | 22 ms | 25 ms | 42 ms | 22 ms |
-| pipelineWithoutInstall | 413 | 221 ms | 897 ms | 27947 ms | 641 ms |
-| total | 416 | 255 ms | 1340 ms | 27976 ms | 866 ms |
+| install | 418 | 13 ms | 463 ms | 3622 ms | 136 ms |
+| generate | 418 | 102 ms | 364 ms | 6263 ms | 242 ms |
+| probe | 399 | 118 ms | 516 ms | 24180 ms | 458 ms |
+| verify | 399 | 21 ms | 26 ms | 62 ms | 22 ms |
+| pipelineWithoutInstall | 418 | 255 ms | 1030 ms | 28196 ms | 700 ms |
+| total | 418 | 294 ms | 1586 ms | 28229 ms | 952 ms |
 
 `install` may run against Bun's warm package cache, so it is a lower bound; `pipelineWithoutInstall` is the number that describes the checker's own cost.
 
@@ -282,22 +282,23 @@ Of every export the corpus's generated contracts describe:
 
 | Stage | Rows |
 | --- | --- |
-| `bun install` failed | 3 |
-| `contract generate` failed | 16 |
+| `bun install` failed | 0 |
+| `contract generate` failed | 18 |
 | `contract probe` errored before writing a report | 0 |
 | no Solid runtime the row could honestly be probed against | 1 |
 | timed out under the harness budget | 0 |
 
 The manifest pins the runtime each row runs against, and for these it pins no `solid-js` — `@solidjs/signals` *is* the reactive core, so there is no second package to settle a probe with. Pairing one in would be this harness auditing a combination the corpus deliberately did not. They are their own class rather than an error:
 
-- `@solidjs/signals@2.0.0-rc.1|solid2|head`
+- `@solidjs/diagnostics@2.0.0-rc.3|solid2|only`
 
 Generation failures by class:
 
 | Class | Rows |
 | --- | --- |
-| `unclassified` | 12 |
-| `no-esm-runtime-target` | 2 |
+| `export-kind-unresolved` | 11 |
+| `no-esm-runtime-target` | 4 |
+| `export-kind-conflict` | 1 |
 | `cjs-only-entrypoint` | 1 |
 | `no-exported-surface` | 1 |
 
@@ -374,31 +375,33 @@ Generation failures by class:
 | `@solid-primitives/virtual@0.2.5|solid1|only` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x2 |
 | `@solid-primitives/virtual@1.0.0-next.4|solid2|floor` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x8 |
 | `@solid-primitives/virtual@1.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 2 | kind-observed | entrypoint import threw x8 |
-| `@solidjs/html@2.0.0-rc.1|solid2|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
+| `@solidjs/html@2.0.0-rc.3|solid2|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
 | `@solidjs/router@1.0.0|solid1|only` | official-solid | `kind-observed` | 2 | kind-observed | entrypoint import threw x38 |
 | `@solidjs/start@2.0.3|solid1|only` | official-solid | `closure-note` | 11 | attested-closure-note, closure-note | entrypoint import threw x312 |
-| `@solidjs/vite-plugin@3.0.0-next.31|solid2|floor` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
-| `@solidjs/vite-plugin@3.0.0-next.31|solid2|head` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
-| `@tanstack/ai-solid-ui@0.7.18|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x36 |
-| `@tanstack/charts@0.14.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
-| `@tanstack/solid-charts@0.14.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
+| `@solidjs/vite-plugin@3.0.0-next.34|solid2|floor` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
+| `@solidjs/vite-plugin@3.0.0-next.34|solid2|head` | official-solid | `attested-closure-note` | 1 | attested-closure-note | — |
+| `@tanstack/ai-solid-ui@0.7.20|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x36 |
+| `@tanstack/charts@0.15.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
+| `@tanstack/solid-charts@0.15.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x1 |
 | `@tanstack/solid-form@2.0.0-alpha.2|solid1|only` | tanstack | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write | — |
 | `@tanstack/solid-pacer-devtools@0.14.0|solid1|only` | tanstack | `kind-observed` | 3 | kind-observed | entrypoint import threw x2 |
 | `@tanstack/solid-router-devtools@1.167.1|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
-| `@tanstack/solid-router-devtools@2.0.0-rc.1|solid2|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x8 |
-| `@tanstack/solid-router-ssr-query@2.0.0-rc.1|solid2|floor` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
-| `@tanstack/solid-router-ssr-query@2.0.0-rc.1|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
-| `@tanstack/solid-router@1.170.29|solid1|only` | tanstack | `kind-observed` | 3 | kind-observed | entrypoint import threw x23 |
-| `@tanstack/solid-router@2.0.0-rc.1|solid2|only` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x120 |
-| `@tanstack/solid-start-client@1.168.28|solid1|only` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x10 |
-| `@tanstack/solid-start-client@2.0.0-rc.1|solid2|floor` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x20 |
-| `@tanstack/solid-start-client@2.0.0-rc.1|solid2|head` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x10 |
+| `@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|floor` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
+| `@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
+| `@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|floor` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
+| `@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
+| `@tanstack/solid-router@1.170.30|solid1|only` | tanstack | `kind-observed` | 3 | kind-observed | entrypoint import threw x23 |
+| `@tanstack/solid-router@2.0.0-rc.2|solid2|floor` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x120 |
+| `@tanstack/solid-router@2.0.0-rc.2|solid2|head` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x120 |
+| `@tanstack/solid-start-client@1.168.29|solid1|only` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x10 |
+| `@tanstack/solid-start-client@2.0.0-rc.2|solid2|floor` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x20 |
+| `@tanstack/solid-start-client@2.0.0-rc.2|solid2|head` | tanstack | `kind-observed` | 4 | kind-observed | entrypoint import threw x10 |
 | `@tanstack/solid-start-config@1.120.20|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x4 |
-| `@tanstack/solid-start-server@1.167.35|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
-| `@tanstack/solid-start-server@2.0.0-rc.1|solid2|floor` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x78 |
-| `@tanstack/solid-start-server@2.0.0-rc.1|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
+| `@tanstack/solid-start-server@1.167.36|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
+| `@tanstack/solid-start-server@2.0.0-rc.2|solid2|floor` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x78 |
+| `@tanstack/solid-start-server@2.0.0-rc.2|solid2|head` | tanstack | `kind-observed` | 2 | kind-observed | entrypoint import threw x39 |
 | `@tanstack/solid-store@0.11.1|solid1|only` | tanstack | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write | — |
-| `solid-js@2.0.0-rc.1|solid2|head` | official-solid | `incompleteness` | 16 | incompleteness, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x1 |
+| `solid-js@2.0.0-rc.3|solid2|only` | official-solid | `incompleteness` | 16 | incompleteness, probe-report-includes-evidence-write | no unambiguous summary resolves in the mode (no kind claim exists) x1 |
 | `solid-recharts@1.0.1|solid1|only` | solid-recharts | `kind-observed` | 2 | kind-observed | no unambiguous summary resolves in the mode (no kind claim exists) x3 |
 | `solid-recharts@2.0.0-beta.1|solid2|floor` | solid-recharts | `kind-observed` | 2 | kind-observed | entrypoint import threw x436 |
 | `solid-recharts@2.0.0-beta.1|solid2|head` | solid-recharts | `kind-observed` | 2 | kind-observed | entrypoint import threw x436 |
@@ -666,20 +669,21 @@ Generation failures by class:
 | `@solid-primitives/workers@0.4.3|solid1|only` | 3 | 3 | 0 | 0 | — |
 | `@solid-primitives/workers@2.0.1-next.1|solid2|floor` | 5 | 3 | 3 | 0 | — |
 | `@solid-primitives/workers@2.0.1-next.1|solid2|head` | 5 | 3 | 3 | 0 | — |
-| `@solidjs/element@2.0.0-rc.1|solid2|only` | 5 | 5 | 1 | 0 | — |
-| `@solidjs/h@2.0.0-rc.1|solid2|only` | 9 | 1 | 0 | 0 | — |
+| `@solidjs/element@2.0.0-rc.3|solid2|only` | 5 | 5 | 1 | 0 | — |
+| `@solidjs/h@2.0.0-rc.3|solid2|only` | 9 | 0 | 0 | 0 | — |
 | `@solidjs/image@0.1.0|solid1|only` | 1 | 0 | 0 | 0 | `.` |
 | `@solidjs/meta@0.29.4|solid1|only` | 9 | 7 | 2 | 0 | — |
 | `@solidjs/meta@1.0.0-next.2|solid2|floor` | 8 | 7 | 0 | 0 | — |
 | `@solidjs/meta@1.0.0-next.2|solid2|head` | 8 | 7 | 0 | 0 | — |
-| `@solidjs/router@2.0.0-next.17|solid2|only` | 30 | 28 | 21 | 3 | — |
-| `@solidjs/start-devtools@1.0.0-next.3|solid2|floor` | 3 | 3 | 0 | 0 | — |
-| `@solidjs/start-devtools@1.0.0-next.3|solid2|head` | 3 | 3 | 0 | 0 | — |
+| `@solidjs/router@2.0.0-next.18|solid2|only` | 31 | 29 | 21 | 3 | — |
+| `@solidjs/signals@2.0.0-rc.3|solid2|only` | 61 | 28 | 6 | 7 | — |
+| `@solidjs/start-devtools@1.0.0-next.4|solid2|floor` | 3 | 3 | 0 | 0 | — |
+| `@solidjs/start-devtools@1.0.0-next.4|solid2|head` | 3 | 0 | 0 | 0 | — |
 | `@solidjs/testing-library@0.8.10|solid1|only` | 83 | 63 | 11 | 0 | — |
-| `@solidjs/universal@2.0.0-rc.1|solid2|only` | 1 | 0 | 0 | 0 | — |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | 321 | 67 | 49 | 7 | `.`, `./frames`, `./server-functions` |
-| `@tanstack/ai-devtools-core@0.5.6|solid1|only` | 2 | 2 | 0 | 0 | — |
-| `@tanstack/ai-solid@0.18.3|solid1|only` | 21 | 21 | 9 | 0 | — |
+| `@solidjs/universal@2.0.0-rc.3|solid2|only` | 1 | 0 | 0 | 0 | — |
+| `@solidjs/web@2.0.0-rc.3|solid2|only` | 329 | 76 | 52 | 7 | `.`, `./frames`, `./server-functions` |
+| `@tanstack/ai-devtools-core@0.5.8|solid1|only` | 2 | 2 | 0 | 0 | — |
+| `@tanstack/ai-solid@0.19.1|solid1|only` | 22 | 22 | 10 | 0 | — |
 | `@tanstack/devtools-a11y@0.2.2|solid1|only` | 6 | 6 | 0 | 0 | — |
 | `@tanstack/devtools-ui@0.7.1|solid1|only` | 8 | 0 | 0 | 0 | `.`, `./icons` |
 | `@tanstack/devtools-utils@0.7.0|solid1|only` | 5 | 2 | 0 | 0 | — |
@@ -687,25 +691,25 @@ Generation failures by class:
 | `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | 1 | 1 | 0 | 0 | — |
 | `@tanstack/pacer-devtools@1.4.0|solid1|only` | 2 | 2 | 0 | 0 | — |
-| `@tanstack/solid-ai-devtools@0.2.70|solid1|only` | 4 | 4 | 0 | 0 | — |
-| `@tanstack/solid-db@0.2.37|solid1|only` | 207 | 123 | 10 | 0 | — |
+| `@tanstack/solid-ai-devtools@0.2.71|solid1|only` | 4 | 4 | 0 | 0 | — |
+| `@tanstack/solid-db@0.2.40|solid1|only` | 212 | 127 | 10 | 0 | — |
 | `@tanstack/solid-devtools@0.8.12|solid1|only` | 1 | 1 | 0 | 0 | — |
 | `@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only` | 1 | 0 | 0 | 0 | — |
 | `@tanstack/solid-hotkeys@0.10.0|solid1|only` | 64 | 13 | 5 | 0 | — |
 | `@tanstack/solid-pacer@0.22.0|solid1|only` | 108 | 36 | 21 | 19 | — |
-| `@tanstack/solid-query-devtools@5.101.4|solid1|only` | 2 | 2 | 0 | 0 | — |
+| `@tanstack/solid-query-devtools@5.102.5|solid1|only` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor` | 2 | 2 | 0 | 0 | — |
 | `@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head` | 2 | 2 | 0 | 0 | — |
-| `@tanstack/solid-query-persist-client@5.101.4|solid1|only` | 8 | 4 | 2 | 0 | — |
+| `@tanstack/solid-query-persist-client@5.102.5|solid1|only` | 8 | 4 | 2 | 0 | — |
 | `@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|floor` | 8 | 4 | 2 | 0 | — |
 | `@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|head` | 8 | 4 | 2 | 0 | — |
-| `@tanstack/solid-query@5.101.4|solid1|only` | 57 | 40 | 24 | 6 | — |
+| `@tanstack/solid-query@5.102.5|solid1|only` | 58 | 41 | 32 | 6 | — |
 | `@tanstack/solid-query@6.0.0-rc.0|solid2|floor` | 57 | 47 | 28 | 6 | — |
 | `@tanstack/solid-query@6.0.0-rc.0|solid2|head` | 57 | 47 | 28 | 6 | — |
 | `@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only` | 1 | 0 | 0 | 0 | — |
-| `@tanstack/solid-start@1.168.46|solid1|only` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
-| `@tanstack/solid-start@2.0.0-rc.1|solid2|floor` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
-| `@tanstack/solid-start@2.0.0-rc.1|solid2|head` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
+| `@tanstack/solid-start@1.168.47|solid1|only` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
+| `@tanstack/solid-start@2.0.0-rc.2|solid2|floor` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
+| `@tanstack/solid-start@2.0.0-rc.2|solid2|head` | 3 | 3 | 0 | 0 | `.`, `./client`, `./hydration`, `./plugin/rsbuild`, `./plugin/vite`, `./server`, `./server-entry` |
 | `@tanstack/solid-table-devtools@9.2.0|solid1|only` | 3 | 1 | 0 | 0 | — |
 | `@tanstack/solid-table@9.1.2|solid1|only` | 408 | 57 | 7 | 3 | — |
 | `@tanstack/solid-virtual@3.13.37|solid1|only` | 17 | 8 | 3 | 1 | — |

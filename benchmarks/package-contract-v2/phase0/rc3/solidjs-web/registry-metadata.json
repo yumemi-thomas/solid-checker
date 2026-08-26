@@ -1,0 +1,441 @@
+{
+  "bugs": {
+    "url": "https://github.com/solidjs/solid/issues"
+  },
+  "dist": {
+    "shasum": "4ac37e806a3948478955ff753beddec7b3def831",
+    "tarball": "https://registry.npmjs.org/@solidjs/web/-/web-2.0.0-rc.3.tgz",
+    "fileCount": 103,
+    "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+    "signatures": [
+      {
+        "sig": "MEQCIEn+Q4JbzttCtssTLleIPz0yHxw9hc1UlVG3Yy6vJIsDAiAS+uDE6dR+WRbGKLKcbTK5LxVwkxKj2BJfprNx4sWVKg==",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/@solidjs%2fweb@2.0.0-rc.3",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 1958580
+  },
+  "main": "./dist/server.cjs",
+  "name": "@solidjs/web",
+  "type": "module",
+  "types": "./types/index.d.ts",
+  "unpkg": "./dist/web.js",
+  "author": {
+    "name": "Ryan Carniato"
+  },
+  "module": "./dist/server.js",
+  "exports": {
+    ".": {
+      "deno": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/web.js"
+      },
+      "worker": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/web.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/web.cjs"
+        },
+        "development": {
+          "import": {
+            "types": "./types/index.d.ts",
+            "default": "./dist/dev.js"
+          },
+          "require": {
+            "types": "./types-cjs/index.d.cts",
+            "default": "./dist/dev.cjs"
+          }
+        }
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/web.cjs"
+      },
+      "development": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/dev.cjs"
+        }
+      }
+    },
+    "./frames": {
+      "deno": {
+        "import": {
+          "types": "./types/frames/server.d.ts",
+          "default": "./frames/dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/frames/server.d.cts",
+          "default": "./frames/dist/server.cjs"
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./types/frames/server.d.ts",
+          "default": "./frames/dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/frames/server.d.cts",
+          "default": "./frames/dist/server.cjs"
+        }
+      },
+      "import": {
+        "types": "./types/frames/client.d.ts",
+        "default": "./frames/dist/client.js"
+      },
+      "worker": {
+        "import": {
+          "types": "./types/frames/server.d.ts",
+          "default": "./frames/dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/frames/server.d.cts",
+          "default": "./frames/dist/server.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./types/frames/client.d.ts",
+          "default": "./frames/dist/client.js"
+        },
+        "require": {
+          "types": "./types-cjs/frames/client.d.cts",
+          "default": "./frames/dist/client.cjs"
+        },
+        "development": {
+          "import": {
+            "types": "./types/frames/client.d.ts",
+            "default": "./frames/dist/client.dev.js"
+          },
+          "require": {
+            "types": "./types-cjs/frames/client.d.cts",
+            "default": "./frames/dist/client.dev.cjs"
+          }
+        }
+      },
+      "require": {
+        "types": "./types-cjs/frames/client.d.cts",
+        "default": "./frames/dist/client.cjs"
+      },
+      "development": {
+        "import": {
+          "types": "./types/frames/client.d.ts",
+          "default": "./frames/dist/client.dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/frames/client.d.cts",
+          "default": "./frames/dist/client.dev.cjs"
+        }
+      }
+    },
+    "./storage": {
+      "import": {
+        "types": "./storage/types/index.d.ts",
+        "default": "./storage/dist/storage.js"
+      },
+      "require": {
+        "types": "./storage/types-cjs/index.d.cts",
+        "default": "./storage/dist/storage.cjs"
+      }
+    },
+    "./types/*": "./types/*",
+    "./jsx-runtime": {
+      "import": {
+        "types": "./types/jsx.d.ts",
+        "default": "./dist/web.js"
+      },
+      "require": {
+        "types": "./types-cjs/jsx.d.cts",
+        "default": "./dist/web.cjs"
+      }
+    },
+    "./frames/client": {
+      "import": {
+        "types": "./types/frames/client.d.ts",
+        "default": "./frames/dist/client.js"
+      },
+      "require": {
+        "types": "./types-cjs/frames/client.d.cts",
+        "default": "./frames/dist/client.cjs"
+      }
+    },
+    "./frames/server": {
+      "import": {
+        "types": "./types/frames/server.d.ts",
+        "default": "./frames/dist/server.js"
+      },
+      "require": {
+        "types": "./types-cjs/frames/server.d.cts",
+        "default": "./frames/dist/server.cjs"
+      }
+    },
+    "./serialization": {
+      "import": {
+        "types": "./serialization/types/index.d.ts",
+        "default": "./serialization/dist/serialization.js"
+      },
+      "require": {
+        "types": "./serialization/types-cjs/index.d.cts",
+        "default": "./serialization/dist/serialization.cjs"
+      }
+    },
+    "./jsx-dev-runtime": {
+      "import": {
+        "types": "./types/jsx.d.ts",
+        "default": "./dist/dev.js"
+      },
+      "require": {
+        "types": "./types-cjs/jsx.d.cts",
+        "default": "./dist/dev.cjs"
+      }
+    },
+    "./server-functions": {
+      "deno": {
+        "import": {
+          "types": "./types/server-functions/server.d.ts",
+          "default": "./server-functions/dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/server-functions/server.d.cts",
+          "default": "./server-functions/dist/server.cjs"
+        },
+        "development": {
+          "import": {
+            "types": "./types/server-functions/server.d.ts",
+            "default": "./server-functions/dist/server.dev.js"
+          },
+          "require": {
+            "types": "./types-cjs/server-functions/server.d.cts",
+            "default": "./server-functions/dist/server.dev.cjs"
+          }
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./types/server-functions/server.d.ts",
+          "default": "./server-functions/dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/server-functions/server.d.cts",
+          "default": "./server-functions/dist/server.cjs"
+        },
+        "development": {
+          "import": {
+            "types": "./types/server-functions/server.d.ts",
+            "default": "./server-functions/dist/server.dev.js"
+          },
+          "require": {
+            "types": "./types-cjs/server-functions/server.d.cts",
+            "default": "./server-functions/dist/server.dev.cjs"
+          }
+        }
+      },
+      "import": {
+        "types": "./types/server-functions/client.d.ts",
+        "default": "./server-functions/dist/client.js"
+      },
+      "worker": {
+        "import": {
+          "types": "./types/server-functions/server.d.ts",
+          "default": "./server-functions/dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/server-functions/server.d.cts",
+          "default": "./server-functions/dist/server.cjs"
+        },
+        "development": {
+          "import": {
+            "types": "./types/server-functions/server.d.ts",
+            "default": "./server-functions/dist/server.dev.js"
+          },
+          "require": {
+            "types": "./types-cjs/server-functions/server.d.cts",
+            "default": "./server-functions/dist/server.dev.cjs"
+          }
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./types/server-functions/client.d.ts",
+          "default": "./server-functions/dist/client.js"
+        },
+        "require": {
+          "types": "./types-cjs/server-functions/client.d.cts",
+          "default": "./server-functions/dist/client.cjs"
+        }
+      },
+      "require": {
+        "types": "./types-cjs/server-functions/client.d.cts",
+        "default": "./server-functions/dist/client.cjs"
+      }
+    },
+    "./serialization/decode": {
+      "import": {
+        "types": "./serialization/types/serializer-decode.d.ts",
+        "default": "./serialization/dist/decode.js"
+      },
+      "require": {
+        "types": "./serialization/types-cjs/serializer-decode.d.cts",
+        "default": "./serialization/dist/decode.cjs"
+      }
+    },
+    "./server-functions/client": {
+      "import": {
+        "types": "./types/server-functions/client.d.ts",
+        "default": "./server-functions/dist/client.js"
+      },
+      "require": {
+        "types": "./types-cjs/server-functions/client.d.cts",
+        "default": "./server-functions/dist/client.cjs"
+      }
+    },
+    "./server-functions/server": {
+      "import": {
+        "types": "./types/server-functions/server.d.ts",
+        "default": "./server-functions/dist/server.js"
+      },
+      "require": {
+        "types": "./types-cjs/server-functions/server.d.cts",
+        "default": "./server-functions/dist/server.cjs"
+      },
+      "development": {
+        "import": {
+          "types": "./types/server-functions/server.d.ts",
+          "default": "./server-functions/dist/server.dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/server-functions/server.d.cts",
+          "default": "./server-functions/dist/server.dev.cjs"
+        }
+      }
+    },
+    "./server-functions/rich-args": {
+      "import": {
+        "types": "./types/server-functions/rich-args.d.ts",
+        "default": "./server-functions/dist/rich-args.js"
+      },
+      "require": {
+        "types": "./types-cjs/server-functions/rich-args.d.cts",
+        "default": "./server-functions/dist/rich-args.cjs"
+      }
+    }
+  },
+  "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+  "license": "MIT",
+  "scripts": {
+    "link": "symlink-dir . node_modules/@solidjs/web",
+    "test": "vitest run && vitest run --config vite.config.server.mjs && vitest run --config vite.config.hydrate.mjs",
+    "bench": "vitest bench --run",
+    "build": "npm-run-all -nl build:clean types:copy-jsx build:js",
+    "types": "npm-run-all -nl types:clean types:copy-jsx types:web types:copy-web types:web-storage types:cjs",
+    "build:js": "rollup -c",
+    "coverage": "vitest run --coverage",
+    "jsx-sync": "node ./scripts/jsx-sync.mjs --compile --element \"SolidElement | Node | ArrayElement\" --import \"import type { Element as SolidElement } from \\\"solid-js\\\";\"",
+    "types:cjs": "node ../../scripts/sync-dual-types.mjs ./types ./types-cjs ./storage/types ./storage/types-cjs ./serialization/types ./serialization/types-cjs",
+    "types:web": "tsc --project ./tsconfig.build.json",
+    "test-types": "tsc --project tsconfig.test.json",
+    "build:clean": "rimraf dist/",
+    "test:server": "vitest run --config vite.config.server.mjs",
+    "types:clean": "rimraf types/ types-cjs/ storage/types/ storage/types-cjs/ serialization/types/ serialization/types-cjs/ frames/types/ .types-build/",
+    "bench:server": "vitest bench --run --config vite.config.server-bench.mjs",
+    "types:copy-jsx": "pnpm run jsx-sync",
+    "types:copy-web": "node ./scripts/copy-types.mjs",
+    "types:web-storage": "tsc --project ./storage/tsconfig.build.json"
+  },
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:058edd57-bd4a-4973-a7a9-69a6e7aba33d"
+    }
+  },
+  "homepage": "https://solidjs.com",
+  "jsdelivr": "./dist/web.js",
+  "repository": {
+    "url": "git+https://github.com/solidjs/solid.git",
+    "type": "git",
+    "directory": "packages/web"
+  },
+  "_npmVersion": "11.17.0",
+  "description": "Solid's web runtime: client rendering, hydration, SSR, and DOM-specific control flow (Portal, Dynamic).",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "ryansolid",
+      "email": "ryansolid@gmail.com"
+    },
+    {
+      "name": "davedbase",
+      "email": "dave.dibiase@gmail.com"
+    }
+  ],
+  "sideEffects": false,
+  "_nodeVersion": "24.19.0",
+  "dependencies": {
+    "seroval": "~1.5.4",
+    "seroval-plugins": "~1.5.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "_hasShrinkwrap": false,
+  "readmeFilename": "README.md",
+  "devDependencies": {
+    "solid-js": "workspace:*",
+    "@solidjs/signals": "workspace:*",
+    "@codspeed/vitest-plugin": "^5.4.0"
+  },
+  "peerDependencies": {
+    "solid-js": "^2.0.0-rc.3"
+  },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/web_2.0.0-rc.3_1787727383096_0.4678118467881909",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "@solidjs/web@2.0.0-rc.3",
+  "version": "2.0.0-rc.3"
+}

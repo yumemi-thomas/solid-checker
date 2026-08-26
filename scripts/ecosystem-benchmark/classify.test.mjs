@@ -18,6 +18,10 @@ const SUCCESS_LINE =
 // NOT describe.
 const PARTIAL_SUCCESS_LINE =
   "generated @kobalte/core@0.13.13 contract with 28 entrypoints at /tmp/out/kobalte.json; 16 entrypoint(s) refused and omitted; review plan /tmp/out/kobalte.review.md (91 checklist items)";
+const EXPORT_KIND_UNRESOLVED_LINE =
+  'solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "isApple", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify it invokes no caller-supplied callback';
+const EXPORT_KIND_CONFLICT_LINE =
+  "solid-checker: package contract value export .:createGeolocation cannot have function effects";
 
 // Real captured lines from live `contract generate` runs against
 // @tanstack/solid-query, corvu, @solidjs/meta, and @solid-primitives/map (see
@@ -51,6 +55,8 @@ test("FAILURE_CLASSES matches the documented exact id list, in order", () => {
     "dependency-contract-obligation",
     "package-contract-environment-dependent",
     "package-contract-export-missing",
+    "export-kind-unresolved",
+    "export-kind-conflict",
     "type-facts-failure",
     "checker-crash",
     "timeout",
@@ -158,6 +164,24 @@ test("every failure class is reachable and each documented stderr shape maps to 
         stdout: "",
         stderr:
           'emit package contract: cannot statically expand external export-all "./sub" from /tmp/x/node_modules/pkg/index.js; generate and pass its dependency contract with --contract',
+        phase: "generate"
+      })
+    },
+    {
+      class: "export-kind-unresolved",
+      result: classifyResult({
+        status: 2,
+        stdout: "",
+        stderr: EXPORT_KIND_UNRESOLVED_LINE,
+        phase: "generate"
+      })
+    },
+    {
+      class: "export-kind-conflict",
+      result: classifyResult({
+        status: 2,
+        stdout: "",
+        stderr: EXPORT_KIND_CONFLICT_LINE,
         phase: "generate"
       })
     },

@@ -7464,3 +7464,30 @@ The exact `solid-recharts@1.0.1|solid1|only` row remained refused with 140
 claims (124 passed, 16 undriven) and took 13.245s: 46ms install, 6.639s
 generation, 3.523s probe, 22ms verify. Table verified in 29.362s with its exact
 567 / 431 / 0 / 136 claim accounting and 2,338 sessions / 2,322 restarts.
+
+## 2026-08-26 — Solid 2 RC.3 is one audited runtime tuple
+
+The Solid 2 audit ceiling is now exact `2.0.0-rc.3`. Official runtime rows no
+longer combine their RC.3 artifact with an independently selected RC.0 floor:
+`solid-js`, `@solidjs/web`, and `@solidjs/signals` each receive one probe with
+all three runtime packages pinned to RC.3. Selection fails closed when any tuple
+member is absent from the audited catalog. This is deliberately narrower than
+ecosystem compatibility selection, which continues to measure package-declared
+floor/head environments.
+
+The practical closure is that `@solidjs/signals` now has an honestly selected
+`solid-js` above it and verifies instead of ending as `no-runtime`; all three
+official runtime rows install and reach verification. `@solidjs/signals` and
+`@solidjs/web` verify. `solid-js` remains refused on 15 incompleteness findings
+after 91 of 123 claims were driven and passed, so the tuple fix removes an
+environment-construction blocker without misreporting semantic completion.
+
+Live discovery also added `@solidjs/diagnostics` and
+`@solid-primitives/animation`, moving the corpus from 305 rows / 416 probes to
+307 rows / 418 probes. The fresh full authority records 309 verified, 90
+refused, 18 generation failures, no install failures, and one no-runtime. All
+7,122 driven claims passed with zero failed; 3,692 remain undriven and 503
+incompleteness findings remain. Official Solid is 14/21 verified; Solid
+Primitives is 236/291 verified, with 44 refusals and 11 generation failures.
+Those are the next concrete closure sets; RC.3 tuple construction is no longer
+one of them.

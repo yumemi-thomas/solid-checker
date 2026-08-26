@@ -18,8 +18,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Registry } from "./lib/registry.mjs";
-import { FAMILIES, SOLID_RUNTIME_PACKAGES, AUDITED_SOLID_1, classifyPackage, familyById, familyOrder } from "./lib/families.mjs";
+import { FAMILIES, SOLID_RUNTIME_PACKAGES, AUDITED_SOLID_1, AUDITED_SOLID_2, classifyPackage, familyById, familyOrder } from "./lib/families.mjs";
 import { solidReleaseCatalog, selectRow } from "./lib/select.mjs";
+import { auditFrameworkScope, frameworkScopePolicy } from "./lib/framework-scopes.mjs";
 import { MANIFEST_SCHEMA_VERSION, validateManifest, serializeManifest, sortRows, diffManifests } from "./lib/manifest.mjs";
 
 const SOLID_TARGETS = ["solid1", "solid2"];
@@ -142,7 +143,16 @@ export async function discover({ registry, families = FAMILIES, now, limitations
     const packument = packuments.get(name) ?? null;
 
     for (const solidTarget of SOLID_TARGETS) {
-      const result = selectRow({ packageName: name, packument, family, status, solidTarget, catalog, auditedSolid1: AUDITED_SOLID_1 });
+      const result = selectRow({
+        packageName: name,
+        packument,
+        family,
+        status,
+        solidTarget,
+        catalog,
+        auditedSolid1: AUDITED_SOLID_1,
+        auditedSolid2: AUDITED_SOLID_2
+      });
       if (result.kind === "row") {
         recordUnparsed(name, solidTarget, result.row.unparsedRanges);
         // status decides the bucket, never the family: a fork can be a
@@ -157,11 +167,26 @@ export async function discover({ registry, families = FAMILIES, now, limitations
     }
   }
 
+  // A scoped package is trusted only at the reviewed version and exact
+  // published exports map. The abbreviated packument intentionally omits
+  // exports, so fetch the selected exact-version manifest and fail discovery
+  // before it can write a silently widened or narrowed corpus.
+  const scopedReleases = new Map();
+  for (const row of [...rows, ...supplemental]) {
+    if (!frameworkScopePolicy(row.package, row.version)) continue;
+    scopedReleases.set(`${row.package}@${row.version}`, { packageName: row.package, version: row.version });
+  }
+  await registry.mapConcurrent([...scopedReleases.values()], async ({ packageName, version }) => {
+    const versionManifest = await registry.versionManifest(packageName, version);
+    auditFrameworkScope(packageName, version, versionManifest);
+  });
+
   return {
     schemaVersion: MANIFEST_SCHEMA_VERSION,
     generatedAt: now,
     registry: registry.registry,
     auditedSolid1: AUDITED_SOLID_1,
+    auditedSolid2: AUDITED_SOLID_2,
     solidReleases: catalog,
     rows: sortRows(rows),
     exclusions: sortExclusions(exclusions),
@@ -273,6 +298,7 @@ function mergeManifest(previous, partial, restrictedFamilyIds, { restricted } = 
     generatedAt: partial.generatedAt,
     registry: partial.registry,
     auditedSolid1: partial.auditedSolid1,
+    auditedSolid2: partial.auditedSolid2,
     // Always fresh: the release catalog is refetched on every invocation
     // regardless of --family, so it is never a stale carry-over.
     solidReleases: partial.solidReleases,

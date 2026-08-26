@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
 
-import { AUDITED_SOLID_1, familyById } from "./lib/families.mjs";
+import { AUDITED_SOLID_1, AUDITED_SOLID_2, familyById } from "./lib/families.mjs";
 import { distTagsFor, prereleaseChannel, selectRow, solidReleaseCatalog } from "./lib/select.mjs";
 import { maxSatisfying, minSatisfying } from "./lib/semver.mjs";
 
@@ -48,7 +48,9 @@ function solidJsPackument() {
       "2.0.0-beta.17": {},
       "2.0.0-beta.34": {},
       "2.0.0-rc.0": {},
-      "2.0.0-rc.1": {}
+      "2.0.0-rc.1": {},
+      "2.0.0-rc.3": {},
+      "2.0.0-rc.4": {}
     },
     { latest: "1.9.15", next: "2.0.0-rc.1", beta: "1.10.0-beta.0" }
   );
@@ -65,7 +67,8 @@ test("solidReleaseCatalog splits every runtime package's releases by Solid major
     "2.0.0-beta.34",
     "2.0.0-experimental.0",
     "2.0.0-rc.0",
-    "2.0.0-rc.1"
+    "2.0.0-rc.1",
+    "2.0.0-rc.3"
   ]);
   assert.deepEqual(catalog["solid-js"].distTags, { latest: "1.9.15", next: "2.0.0-rc.1", beta: "1.10.0-beta.0" });
   // Runtime packages missing from the map (or unpublished) get an empty,
@@ -74,6 +77,62 @@ test("solidReleaseCatalog splits every runtime package's releases by Solid major
   // absent packument contributes no releases and therefore no peer facts.
   assert.deepEqual(catalog["@solidjs/web"], { v1: [], v2: [], distTags: {}, peers: {} });
   assert.deepEqual(catalog["@solidjs/signals"], { v1: [], v2: [], distTags: {}, peers: {} });
+});
+
+test("Solid 2 catalog and official runtime rows are capped at audited RC.3", () => {
+  const solidJs = solidJsPackument();
+  const web = packument({ [AUDITED_SOLID_2]: { peerDependencies: { "solid-js": `^${AUDITED_SOLID_2}` } } });
+  const signals = packument({ [AUDITED_SOLID_2]: {} });
+  const catalog = solidReleaseCatalog(runtimePackuments({ solidJs, web, signals }));
+  assert.equal(catalog["solid-js"].v2.at(-1), AUDITED_SOLID_2);
+  assert.equal(catalog["solid-js"].v2.includes("2.0.0-rc.4"), false);
+
+  const result = selectRow({
+    packageName: "solid-js",
+    packument: solidJs,
+    family: OFFICIAL_SOLID,
+    status: "official",
+    solidTarget: "solid2",
+    catalog,
+    auditedSolid1: AUDITED_SOLID_1,
+    auditedSolid2: AUDITED_SOLID_2
+  });
+  assert.equal(result.kind, "row");
+  assert.equal(result.row.version, AUDITED_SOLID_2);
+  assert.deepEqual(result.row.compatibleSolidVersions, {
+    "@solidjs/signals": [AUDITED_SOLID_2],
+    "@solidjs/web": [AUDITED_SOLID_2],
+    "solid-js": [AUDITED_SOLID_2]
+  });
+  assert.deepEqual(result.row.probes, [
+    {
+      id: `solid-js@${AUDITED_SOLID_2}|solid2|only`,
+      kind: "only",
+      channel: "rc",
+      solid: {
+        "@solidjs/signals": AUDITED_SOLID_2,
+        "@solidjs/web": AUDITED_SOLID_2,
+        "solid-js": AUDITED_SOLID_2
+      }
+    }
+  ]);
+});
+
+test("Solid 2 official runtime rows fail closed when the audited tuple is incomplete", () => {
+  const solidJs = solidJsPackument();
+  const catalog = solidReleaseCatalog(runtimePackuments({ solidJs }));
+  const result = selectRow({
+    packageName: "solid-js",
+    packument: solidJs,
+    family: OFFICIAL_SOLID,
+    status: "official",
+    solidTarget: "solid2",
+    catalog,
+    auditedSolid1: AUDITED_SOLID_1,
+    auditedSolid2: AUDITED_SOLID_2
+  });
+  assert.equal(result.kind, "exclusion");
+  assert.match(result.exclusion.detail, /@solidjs\/web@2\.0\.0-rc\.3 is missing/);
 });
 
 test("prereleaseChannel reads the prerelease identifier, never a string prefix trick", () => {
@@ -127,18 +186,19 @@ test("solid1: solid-js not published at the audited version is excluded not-publ
 });
 
 test.each([
-  ["@tanstack/charts", ["./solid"]],
-  ["@tanstack/devtools-utils", ["./solid", "./solid/class"]],
+  ["@tanstack/charts", "0.15.0", ["./solid"]],
+  ["@tanstack/devtools-utils", "0.7.0", ["./solid", "./solid/class"]],
   [
     "@tanstack/devtools-a11y",
+    "0.2.2",
     ["./core", "./core/production", "./solid", "./solid/production"]
   ]
-])("%s excludes its foreign framework adapters", (packageName, entrypoints) => {
+])("%s excludes its reviewed non-Solid entrypoints", (packageName, version, entrypoints) => {
   const catalog = solidReleaseCatalog(runtimePackuments({ solidJs: solidJsPackument() }));
   const result = selectRow({
     packageName,
     packument: packument({
-      "0.14.0": { peerDependencies: { "solid-js": ">=1.8" } }
+      [version]: { peerDependencies: { "solid-js": ">=1.8" } }
     }),
     family: TANSTACK,
     status: "official",
@@ -148,6 +208,23 @@ test.each([
   });
   assert.equal(result.kind, "row");
   assert.deepEqual(result.row.probes[0].entrypoints, entrypoints);
+});
+
+test("a scoped package release change fails closed until its export scope is reviewed", () => {
+  const catalog = solidReleaseCatalog(runtimePackuments({ solidJs: solidJsPackument() }));
+  assert.throws(
+    () =>
+      selectRow({
+        packageName: "@tanstack/devtools-utils",
+        packument: packument({ "0.8.0": { peerDependencies: { "solid-js": ">=1.8" } } }),
+        family: TANSTACK,
+        status: "official",
+        solidTarget: "solid1",
+        catalog,
+        auditedSolid1: AUDITED_SOLID_1
+      }),
+    /reviewed at 0\.7\.0, but discovery selected 0\.8\.0/
+  );
 });
 
 test("solid1: ^1.6.12 accepts the audited 1.9.14 release, package version selected newest-first", () => {
@@ -208,7 +285,14 @@ test("solid2: caret prerelease range accepts same-tuple prereleases up to rc but
   // unequal prerelease identifiers by ASCII ("beta" < "experimental" < "rc"),
   // not by real release-lifecycle order, so it lands inside the range too.
   assert.deepEqual(result.row.compatibleSolidVersions, {
-    "solid-js": ["2.0.0-beta.17", "2.0.0-beta.34", "2.0.0-experimental.0", "2.0.0-rc.0", "2.0.0-rc.1"]
+    "solid-js": [
+      "2.0.0-beta.17",
+      "2.0.0-beta.34",
+      "2.0.0-experimental.0",
+      "2.0.0-rc.0",
+      "2.0.0-rc.1",
+      "2.0.0-rc.3"
+    ]
   });
   assert.equal(result.row.probes.length, 2);
   assert.deepEqual(result.row.probes.map(probe => probe.kind), ["floor", "head"]);
@@ -218,7 +302,7 @@ test("solid2: caret prerelease range accepts same-tuple prereleases up to rc but
   // supported window. `compatibleSolidVersions` above still records the full
   // accepted set, so the range fact is not lost -- only the probe moves.
   assert.equal(result.row.probes[0].solid["solid-js"], "2.0.0-rc.0");
-  assert.equal(result.row.probes[1].solid["solid-js"], "2.0.0-rc.1");
+  assert.equal(result.row.probes[1].solid["solid-js"], "2.0.0-rc.3");
   assert.equal(result.row.probes[0].channel, "rc");
   assert.equal(result.row.probes[1].channel, "rc");
 });
@@ -251,13 +335,13 @@ test("solid2: floor/head for ^2.0.0-beta.17 are minSatisfying/maxSatisfying dire
   // primitive level rather than observed through selectRow's probes: the
   // experimental release satisfies the range (it is semver-greater than
   // beta.17 within the 2.0.0 tuple) but it is never the floor or the head,
-  // since beta.17 stays the minimum and rc.1 stays the maximum of the
+  // since beta.17 stays the minimum and audited rc.3 stays the maximum of the
   // accepted set.
   const catalog = solidReleaseCatalog(runtimePackuments({ solidJs: solidJsPackument() }));
   const pool = catalog["solid-js"].v2;
   const range = "^2.0.0-beta.17";
   assert.equal(minSatisfying(pool, range), "2.0.0-beta.17");
-  assert.equal(maxSatisfying(pool, range), "2.0.0-rc.1");
+  assert.equal(maxSatisfying(pool, range), "2.0.0-rc.3");
 });
 
 test("solid2: >=2.0.0 does not accept a 2.0.0-rc.1-only catalog (npm's stable-range/prerelease rule)", () => {
@@ -570,7 +654,8 @@ test("solid2: the floor tuple is raised until the runtime packages accept each o
         "2.0.0-rc.0": { peerDependencies: { "solid-js": "^2.0.0-rc.0" } },
         "2.0.0-rc.1": { peerDependencies: { "solid-js": "^2.0.0-rc.1" } }
       })
-    })
+    }),
+    "2.0.0-rc.1"
   );
   const pkg = packument({
     "3.0.0": {
@@ -608,7 +693,8 @@ test("solid2: a floor is only ever raised, never moved outside the compatible se
         "2.0.0-rc.0": { peerDependencies: { "solid-js": "^2.0.0-rc.0" } },
         "2.0.0-rc.1": { peerDependencies: { "solid-js": "^2.0.0-rc.1" } }
       })
-    })
+    }),
+    "2.0.0-rc.1"
   );
   const pkg = packument({
     "3.0.0": {
