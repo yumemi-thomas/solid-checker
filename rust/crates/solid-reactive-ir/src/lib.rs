@@ -54,7 +54,9 @@ use contracts::{
     ContractAnalysis, ContractGraph, ContractSemantics, contract_export_summaries,
     contract_export_summaries_incremental,
 };
-pub use contracts::{ExportKindProof, export_kind_proof, raised_function_export};
+pub use contracts::{
+    ExportKindProof, export_kind_proof, export_kind_proof_from_entity, raised_function_export,
+};
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
     named_callback_roles, semantic_execution_role,
@@ -1330,6 +1332,12 @@ pub struct ContractReactiveRead {
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameter: Option<usize>,
+    /// Exact invoked property for a `parameter-member` read when every path
+    /// contributing to the row names the same static member. Older contracts
+    /// omit it and remain valid, but only a named member can be runtime-probed
+    /// without guessing which property to instrument.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<ContractClaimEvidence>,
 }
@@ -1667,8 +1675,14 @@ impl PackageContract {
         }
         for read in summary.reactive_reads.known().into_iter().flatten() {
             let valid = match read.kind.as_str() {
-                "accessor" | "store-path" => !read.label.is_empty() && read.parameter.is_none(),
-                "parameter-member" => read.label.is_empty() && read.parameter.is_some(),
+                "accessor" | "store-path" => {
+                    !read.label.is_empty() && read.parameter.is_none() && read.member.is_none()
+                }
+                "parameter-member" => {
+                    read.label.is_empty()
+                        && read.parameter.is_some()
+                        && read.member.as_ref().is_none_or(|member| !member.is_empty())
+                }
                 _ => false,
             };
             if !valid {

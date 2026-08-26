@@ -138,6 +138,14 @@ test("the contract output path passed to generateContract is never inside a node
   }
 });
 
+test("probe entrypoint scopes reach contract generation", async () => {
+  const manifest = fourProbeManifest();
+  manifest.rows[0].probes[0].entrypoints = ["./solid"];
+  const generateCalls = [];
+  await runBenchmark({ manifest, hooks: successHooks({ generateCalls }) });
+  assert.deepEqual(generateCalls[0].entrypoints, ["./solid"]);
+});
+
 test("a timeout during generation produces a timeout result and the run continues", async () => {
   const manifest = fourProbeManifest();
   const cleanupCalls = [];

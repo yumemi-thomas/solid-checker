@@ -207,11 +207,70 @@ The default is 300s, which the pinned sentinel set relies on: it deliberately
 keeps a `timeout`-class probe so that classification path stays exercised, and
 that probe would stop timing out under a longer budget.
 
-The full corpus runs with `--timeout 600` instead. It analyzes every discovered
-entrypoint (`@tanstack/charts` alone declares 113), so the larger ceiling keeps
-a future wide release or a temporarily contended scheduled runner from being
-misclassified as unsupported. Current release-mode probes complete well below
-that ceiling; it is a guardrail, not expected runtime.
+The full corpus runs with `--timeout 600` instead. It normally analyzes every
+discovered entrypoint, so the larger ceiling keeps a future wide release or a
+temporarily contended scheduled runner from being misclassified as unsupported.
+A probe may carry an explicit `entrypoints` list when the published package is
+a multi-framework umbrella. `@tanstack/charts` is scoped to `./solid`;
+`@tanstack/devtools-utils` to `./solid` and `./solid/class`; and
+`@tanstack/devtools-a11y` to its framework-neutral `./core` pair and Solid
+`./solid` pair. Their React, Preact, Svelte, Vue, Angular, Lit, and Octane
+adapters are not Solid contract surface. Discovery owns these allowlists, so a
+manifest refresh reproduces them automatically, and both generation runners
+pass them through as exact `--entrypoint` arguments. Current release-mode
+probes complete well below the ceiling; it is a guardrail, not expected runtime.
+
+Within one row, conditional-target generation and call-capable observations use
+bounded pools. A standalone CLI run may use up to four generation analyses and
+eight probe chains. All condition modes share one row-global probe pool: each
+chain still has its exact mode and process, but a short server queue no longer
+leaves capacity idle while another mode has restarts remaining. The corpus
+runner already schedules several rows, so generation and probe phases borrow
+exact lane counts from one host-wide FIFO lease instead of multiplying fixed
+per-row limits. An ordinary probe asks for four lanes, a plan with at least 400
+claims asks for eight, and generation asks for four; the 14-core authority host
+reserves two CPUs and leases the other twelve. Explicit caller values still win
+within the same host cap. The probe
+limit does not permit a worker to continue after a package throw or abort; it
+only bounds how many independent restart chains may have a child process live
+at once. Reports remain ordered by probe ID rather than child completion time.
+
+On the 2026-08-26 performance authority run, all 416 probes completed in
+2m34.5s at the standard row concurrency of six, versus 9m55.6s in the preceding
+checked-in report. The exact `solid-recharts@1.0.1|solid1|only` row completed in
+19.217s while the other rows were active, retained all 140 claims, and remained
+refused for the same three server-mode `kind` leaves. The performance report is
+kept outside the checked-in semantic report because overlapping schema and
+scope changes alter corpus outcome counts independently of this timing slice.
+
+A second measured scheduler comparison on the same 14-core host changed the
+default outer concurrency from six to three (bounded down on smaller hosts),
+leaving four inner lanes per row. On a deterministic 42-row mixed slice, wall
+time was 50.08s at six/two, 38.70s at four/three, and 33.03s at three/four,
+with identical outcomes. With the final row-global mode pool, the two prior
+tail rows completed in 33.82s (`@kobalte/core`) and 35.33s
+(`@tanstack/solid-table`), versus 50.72s and 58.46s at six/two. The explicit
+`--concurrency` flag remains available for different machines.
+
+The subsequent complete 416-probe run took 153.305s. The next package-wide
+target pool and phase-lease authority completed in 128.178s on the same host: a
+further 16.4% corpus-wall reduction. Median / p90 / maximum row time is
+255 / 1,340 / 27,976ms, so no row remains above 30 seconds. Outcome counts are
+unchanged (308 verified, 88 refused, 16 generation failures, 3 install
+failures, 1 no-runtime) and no claim failed. The three claim-accounting changes
+are conservative: two Solid Focus rows and one Promise row each retain one
+additional undriven claim after a package asynchronous abort; no failed or
+unknown claim became passed.
+
+The Type Facts object-witness follow-up completed all 416 rows in 126.658s with
+the same outcomes and claim totals. Median / p90 / maximum row time is 275 /
+1,374 / 29,362ms. This is not claimed as a further generator speedup: summed
+generation work increased from 86.922s to 105.206s while summed install work
+fell from 52.039s to 20.430s, so the 1.52s wall movement is cache/host noise.
+The useful retained change is precision for constructable Table inputs; an
+attempt to reuse the runtime Type Facts session for those queries caused wide
+rows to reach the 120s generation ceiling and was removed. The isolated helper
+is explicitly one-shot and ineligible for the release diagnostics daemon.
 
 ## Failure classes
 

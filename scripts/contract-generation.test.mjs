@@ -80,6 +80,20 @@ const plan = JSON.parse(process.env.STUB_NATIVE_PLAN ?? "{}");
 // several packages whose entry files share a basename.
 const action = plan[value("--package-name")] ?? plan[basename(entryFile)] ?? "ok";
 
+if (process.env.STUB_CONCURRENCY_LOG) {
+  appendFileSync(
+    process.env.STUB_CONCURRENCY_LOG,
+    \`\${JSON.stringify({ event: "start", pid: process.pid, entryFile, at: Date.now() })}\\n\`
+  );
+  await new Promise(resolvePromise =>
+    setTimeout(resolvePromise, Number(process.env.STUB_DELAY_MS ?? 0))
+  );
+  appendFileSync(
+    process.env.STUB_CONCURRENCY_LOG,
+    \`\${JSON.stringify({ event: "finish", pid: process.pid, entryFile, at: Date.now() })}\\n\`
+  );
+}
+
 if (action === "refuse") {
   process.stderr.write(
     \`solid-checker-rust: emit package contract: entry file \${entryFile} is not part of the TypeScript project\\n\`
@@ -114,17 +128,52 @@ if (action === "needs-dependency" && !carriesDependencyContract) {
   process.exit(2);
 }
 
+const declarationProbe = value("--declaration-probe-plan");
+if (declarationProbe) {
+  if (process.env.SOLID_CHECKER_DAEMON !== "0") {
+    process.stderr.write("declaration probe must disable the diagnostics daemon\\n");
+    process.exit(2);
+  }
+  const request = JSON.parse(readFileSync(declarationProbe, "utf8"));
+  const plans = JSON.parse(process.env.STUB_DECLARATION_PROBE_PLANS ?? "{}");
+  writeFileSync(
+    request.output,
+    plans[basename(request.target)] ??
+      process.env.STUB_DECLARATION_PROBE_PLAN ??
+      JSON.stringify({
+        schemaVersion: 2,
+        source: "typescript-value-domain",
+        exports: {}
+      })
+  );
+  process.exit(0);
+}
+
 writeFileSync(
   value("--emit-contract"),
   JSON.stringify({
     schemaVersion: 1,
     package: { name: value("--package-name"), version: value("--package-version") },
     compilerFactsProtocol: 1,
-    summaries: { value: { kind: "value" } },
+    summaries: {
+      value: JSON.parse(process.env.STUB_CONTRACT_SUMMARY ?? '{"kind":"value"}')
+    },
     entrypoints: { ".": { exports: { value: ["thing"] } } },
     evidence: { kind: "inferred" }
   })
 );
+
+if (process.env.SOLID_CHECKER_TIMINGS) {
+  process.stderr.write(
+    JSON.stringify({
+      sourceAnalysisNs: 11,
+      typeFactsNs: 13,
+      irNs: 17,
+      solveAndSnapshotNs: 19,
+      totalNs: 23
+    }) + "\\n"
+  );
+}
 
 const probePlanPath = value("--emit-probe-plan");
 if (probePlanPath) {
@@ -135,6 +184,21 @@ if (probePlanPath) {
       source: "typescript-value-domain",
       exports: {}
     })
+  );
+}
+
+const emittedDeclarationProbe = value("--emit-declaration-probe-plan");
+if (emittedDeclarationProbe) {
+  const plans = JSON.parse(process.env.STUB_DECLARATION_PROBE_PLANS ?? "{}");
+  writeFileSync(
+    emittedDeclarationProbe,
+    plans[basename(entryFile)] ??
+      process.env.STUB_DECLARATION_PROBE_PLAN ??
+      JSON.stringify({
+        schemaVersion: 2,
+        source: "typescript-value-domain",
+        exports: {}
+      })
   );
 }
 
@@ -160,7 +224,9 @@ if (inventoryPath && !process.env.STUB_INVENTORY_ABSENT) {
   const extra = JSON.parse(process.env.STUB_INVENTORY_EXTRA_MODULES ?? "[]");
   const declared = JSON.parse(process.env.STUB_MODULE_IMPORTS ?? "[]");
   const modules = [
-    ...(project.files ?? []).map(file => ({ path: realpathSync(file) })),
+    ...(project.files ?? [])
+      .filter(file => file !== value("--declaration-probe-source"))
+      .map(file => ({ path: realpathSync(file) })),
     ...extra.map(entry =>
       typeof entry === "string"
         ? { path: resolve(packageRoot, entry) }
@@ -204,7 +270,13 @@ function makeWorkspace(exports_, { dependency, files } = {}) {
       2
     )}\n`
   );
-  for (const target of new Set(Object.values(exports_))) {
+  const stringTargets = value =>
+    typeof value === "string"
+      ? [value]
+      : value && typeof value === "object"
+        ? Object.values(value).flatMap(stringTargets)
+        : [];
+  for (const target of new Set(stringTargets(exports_))) {
     writeFileSync(join(packageRoot, target.replace("./", "")), "export const thing = 1;\n");
   }
   // Extra or replacement runtime files, for the shapes a flat "one file per
@@ -245,7 +317,8 @@ function generate({
   args = [],
   dependencyModule,
   argvLog,
-  inventory = {}
+  inventory = {},
+  env = {}
 }) {
   return spawnSync(process.execPath, [cli, "contract", "generate", ...args], {
     cwd: packageRoot,
@@ -253,6 +326,7 @@ function generate({
       ...process.env,
       SOLID_CHECKER_NATIVE_BIN: stub,
       STUB_NATIVE_PLAN: JSON.stringify(plan),
+      ...env,
       ...(dependencyModule ? { STUB_DEPENDENCY_MODULE: dependencyModule } : {}),
       ...(argvLog ? { STUB_ARGV_LOG: argvLog } : {}),
       // What the analyzing program attests it opened, for the shapes a stub
@@ -271,6 +345,224 @@ function generate({
   });
 }
 
+test("SOLID_CHECKER_TIMINGS attributes package generation to structured phases", () => {
+  const { directory, packageRoot, stub } = makeWorkspace({
+    ".": {
+      browser: "./browser.mjs",
+      node: "./server.mjs"
+    }
+  });
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      env: { SOLID_CHECKER_TIMINGS: "1" }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const records = result.stderr
+      .split("\n")
+      .filter(Boolean)
+      .flatMap(line => {
+        try {
+          return [JSON.parse(line)];
+        } catch {
+          return [];
+        }
+      });
+    const timing = records.find(record => record.contractGenerationTiming)?.contractGenerationTiming;
+    assert.ok(timing, result.stderr);
+    assert.deepEqual(
+      timing.targets.map(target => target.conditions),
+      [["browser"], ["node"]]
+    );
+    assert.equal(timing.targets.length, 2);
+    for (const phase of [
+      "runtimeClosureWalkAndHashNs",
+      "temporaryProjectNs",
+      "typeFactsAndDemandNs",
+      "syntaxAndSourceFactsNs",
+      "reactiveIrAndContractInferenceNs",
+      "moduleInventoryAndRuntimeReconciliationNs",
+      "dependencyContractGenerationNs",
+      "reviewPlanAndArtifactWritingNs"
+    ]) {
+      assert.equal(typeof timing.phases[phase], "number", phase);
+    }
+    assert.equal(timing.phases.typeFactsAndDemandNs, 26);
+    assert.equal(timing.phases.syntaxAndSourceFactsNs, 22);
+    assert.equal(timing.phases.reactiveIrAndContractInferenceNs, 72);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("declaration construction uses an isolated Type Facts project and merges its recipes", () => {
+  const { directory, packageRoot, stub } = makeWorkspace({ ".": "./index.mjs" });
+  const argvLog = join(directory, "native-argv.jsonl");
+  const recipe = {
+    kind: "object",
+    properties: { columns: "empty-array", data: "empty-array" }
+  };
+  try {
+    const ordinary = generate({ packageRoot, stub, argvLog });
+    assert.equal(ordinary.status, 0, ordinary.stderr);
+    assert.equal(
+      nativeInvocations(argvLog).filter(args => args.includes("--declaration-probe-plan")).length,
+      0
+    );
+    assert.equal(
+      nativeInvocations(argvLog).filter(args =>
+        args.includes("--emit-declaration-probe-plan")
+      ).length,
+      0
+    );
+
+    writeFileSync(argvLog, "");
+    const demanded = generate({
+      packageRoot,
+      stub,
+      argvLog,
+      env: {
+        STUB_CONTRACT_SUMMARY: JSON.stringify({
+          kind: "function",
+          reactiveReads: [{ kind: "parameter-member", parameter: 0 }]
+        }),
+        STUB_DECLARATION_PROBE_PLAN: JSON.stringify({
+          schemaVersion: 2,
+          source: "typescript-value-domain",
+          exports: { value: { 0: [recipe] } }
+        })
+      }
+    });
+    assert.equal(demanded.status, 0, demanded.stderr);
+    assert.equal(
+      nativeInvocations(argvLog).filter(args => args.includes("--declaration-probe-plan")).length,
+      1
+    );
+    assert.equal(
+      nativeInvocations(argvLog).filter(args =>
+        args.includes("--emit-declaration-probe-plan")
+      ).length,
+      0
+    );
+    const plan = JSON.parse(
+      readFileSync(join(packageRoot, "solid-reactivity.probe-plan.json"), "utf8")
+    );
+    assert.deepEqual(plan.entrypoints["."].value[0], [recipe]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("conditional targets retain only independently identical construction recipes", () => {
+  const { directory, packageRoot, stub } = makeWorkspace({
+    ".": { browser: "./browser.mjs", node: "./server.mjs" }
+  });
+  const common = { kind: "object", properties: { rows: "empty-array" } };
+  const browserOnly = { kind: "object", properties: { browser: "empty-object" } };
+  const serverOnly = { kind: "object", properties: { server: "empty-object" } };
+  const fragment = recipes =>
+    JSON.stringify({
+      schemaVersion: 2,
+      source: "typescript-value-domain",
+      exports: { value: { 0: recipes } }
+    });
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      env: {
+        STUB_CONTRACT_SUMMARY: JSON.stringify({
+          kind: "function",
+          callbacks: [{ parameter: 0, execution: "inline" }]
+        }),
+        STUB_DECLARATION_PROBE_PLANS: JSON.stringify({
+          "browser.mjs": fragment([common, browserOnly]),
+          "server.mjs": fragment([common, serverOnly])
+        })
+      }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const plan = JSON.parse(
+      readFileSync(join(packageRoot, "solid-reactivity.probe-plan.json"), "utf8")
+    );
+    assert.deepEqual(plan.entrypoints["."].value[0], [common]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("conditional targets run with bounded generation concurrency", () => {
+  const { directory, packageRoot, stub } = makeWorkspace({
+    ".": {
+      browser: "./browser.mjs",
+      node: "./server.mjs",
+      default: "./default.mjs"
+    }
+  });
+  const concurrencyLog = join(directory, "concurrency.jsonl");
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      env: {
+        SOLID_CHECKER_GENERATION_CONCURRENCY: "2",
+        STUB_CONCURRENCY_LOG: concurrencyLog,
+        STUB_DELAY_MS: "100"
+      }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const events = readFileSync(concurrencyLog, "utf8").trim().split("\n").map(JSON.parse);
+    const active = new Set();
+    let maximum = 0;
+    for (const event of events) {
+      if (event.event === "start") active.add(event.pid);
+      else active.delete(event.pid);
+      maximum = Math.max(maximum, active.size);
+      assert.ok(active.size <= 2, JSON.stringify(events));
+    }
+    assert.equal(maximum, 2, JSON.stringify(events));
+    assert.equal(active.size, 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("independent entrypoints share one bounded target-analysis pool", () => {
+  const { directory, packageRoot, stub } = makeWorkspace({
+    ".": "./index.mjs",
+    "./one": "./one.mjs",
+    "./two": "./two.mjs",
+    "./three": "./three.mjs"
+  });
+  const concurrencyLog = join(directory, "entrypoint-concurrency.jsonl");
+  try {
+    const result = generate({
+      packageRoot,
+      stub,
+      env: {
+        SOLID_CHECKER_GENERATION_CONCURRENCY: "2",
+        STUB_CONCURRENCY_LOG: concurrencyLog,
+        STUB_DELAY_MS: "100"
+      }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const events = readFileSync(concurrencyLog, "utf8").trim().split("\n").map(JSON.parse);
+    const active = new Set();
+    let maximum = 0;
+    for (const event of events) {
+      if (event.event === "start") active.add(event.pid);
+      else active.delete(event.pid);
+      maximum = Math.max(maximum, active.size);
+      assert.ok(active.size <= 2, JSON.stringify(events));
+    }
+    assert.equal(maximum, 2, JSON.stringify(events));
+    assert.equal(active.size, 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 // Each native invocation's argv, in order, from a run given `argvLog`.
 function nativeInvocations(argvLog) {
   return readFileSync(argvLog, "utf8")
@@ -278,6 +570,34 @@ function nativeInvocations(argvLog) {
     .filter(line => line.length)
     .map(line => JSON.parse(line));
 }
+
+test("conditional variants reuse only identical effective native inputs", () => {
+  const { directory, packageRoot, stub } = makeWorkspace({
+    ".": {
+      browser: "./shared.mjs",
+      import: "./shared.mjs",
+      default: "./shared.mjs"
+    }
+  });
+  const argvLog = join(directory, "native-argv.jsonl");
+  try {
+    const result = generate({ packageRoot, stub, argvLog });
+    assert.equal(result.status, 0, result.stderr);
+    const invocations = nativeInvocations(argvLog).filter(args =>
+      args.includes("--contract-entry-file")
+    );
+    const inputIdentities = invocations.map(args => {
+      const value = flag => args[args.indexOf(flag) + 1];
+      return [value("--contract-entry-file").split("/").at(-1), value("--runtime-conditions")];
+    }).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    assert.deepEqual(inputIdentities, [
+      ["shared.mjs", "browser,import"],
+      ["shared.mjs", "import"]
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test("a deliberate refusal omits one entrypoint and generation continues", () => {
   const { directory, packageRoot, stub } = makeWorkspace({

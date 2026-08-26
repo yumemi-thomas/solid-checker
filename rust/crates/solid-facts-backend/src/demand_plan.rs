@@ -641,6 +641,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         runtime_value_domain: false,
         primitive_value_domain: false,
         primitive_literal_candidates: false,
+        parameter_object_shape: false,
         call_result_domain: false,
         constant_value: false,
         array_shape: false,
@@ -706,6 +707,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.runtime_value_domain |= demand.runtime_value_domain;
             current.primitive_value_domain |= demand.primitive_value_domain;
             current.primitive_literal_candidates |= demand.primitive_literal_candidates;
+            current.parameter_object_shape |= demand.parameter_object_shape;
             current.call_result_domain |= demand.call_result_domain;
             current.constant_value |= demand.constant_value;
             current.array_shape |= demand.array_shape;

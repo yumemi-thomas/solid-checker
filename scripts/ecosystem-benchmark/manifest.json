@@ -10574,7 +10574,10 @@
           "channel": "stable",
           "solid": {
             "solid-js": "1.9.14"
-          }
+          },
+          "entrypoints": [
+            "./solid"
+          ]
         }
       ]
     },
@@ -10642,7 +10645,13 @@
           "channel": "stable",
           "solid": {
             "solid-js": "1.9.14"
-          }
+          },
+          "entrypoints": [
+            "./core",
+            "./core/production",
+            "./solid",
+            "./solid/production"
+          ]
         }
       ]
     },
@@ -10710,7 +10719,11 @@
           "channel": "stable",
           "solid": {
             "solid-js": "1.9.14"
-          }
+          },
+          "entrypoints": [
+            "./solid",
+            "./solid/class"
+          ]
         }
       ]
     },

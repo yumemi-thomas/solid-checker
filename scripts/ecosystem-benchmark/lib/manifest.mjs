@@ -41,7 +41,7 @@ const ROW_KEYS = [
   "unparsedRanges",
   "probes"
 ];
-const PROBE_KEYS = ["id", "kind", "channel", "solid"];
+const PROBE_KEYS = ["id", "kind", "channel", "solid", "entrypoints"];
 const EXCLUSION_KEYS = ["family", "status", "package", "solidTarget", "reason", "detail"];
 const SOLID_RELEASE_KEYS = ["distTags", "v1", "v2"];
 
@@ -154,6 +154,16 @@ function validateRowShapedEntries(entries, label, families, problems) {
             `${where}: probe ${JSON.stringify(probe?.id)} solid version ${runtimePackage}@${version} is not in ` +
               "compatibleSolidVersions"
           );
+        }
+      }
+      if (probe?.entrypoints !== undefined) {
+        if (
+          !Array.isArray(probe.entrypoints) ||
+          probe.entrypoints.length === 0 ||
+          probe.entrypoints.some(entrypoint => typeof entrypoint !== "string" || !entrypoint.startsWith(".")) ||
+          new Set(probe.entrypoints).size !== probe.entrypoints.length
+        ) {
+          problems.push(`${where}: probe ${JSON.stringify(probe?.id)} entrypoints must be unique package subpaths`);
         }
       }
     }

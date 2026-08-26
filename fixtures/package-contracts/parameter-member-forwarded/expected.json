@@ -18,6 +18,7 @@
         {
           "kind": "parameter-member",
           "parameter": 0,
+          "member": "getThing",
           "evidence": {
             "kind": "inferred"
           }

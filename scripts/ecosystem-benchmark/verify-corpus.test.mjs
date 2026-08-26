@@ -15,11 +15,15 @@ import {
   ROOT_CAUSE_ORDER,
   blockerClass,
   buildVerificationReport,
+  createConcurrencyLeasePool,
   classifyExports,
+  defaultCorpusConcurrency,
   kindGapsFor,
+  innerConcurrencyFor,
   notVerifiedLines,
   peerSpecsFor,
   percentile,
+  probeConcurrencyForClaims,
   probeBudgetFor,
   probeErrorBucket,
   probeFailureShape,
@@ -32,6 +36,48 @@ import {
 } from "./verify-corpus.mjs";
 
 const ALL_MODE_NAMES = PROBE_MODES.map(mode => mode.name);
+
+test("innerConcurrencyFor divides the host budget across concurrent rows", () => {
+  assert.equal(innerConcurrencyFor({ available: 14, rows: 6, cap: 8 }), 2);
+  assert.equal(innerConcurrencyFor({ available: 4, rows: 6, cap: 8 }), 1);
+  assert.equal(innerConcurrencyFor({ available: 64, rows: 6, cap: 4 }), 4);
+  assert.equal(innerConcurrencyFor({ available: 8, rows: 0, cap: 4 }), 4);
+});
+
+test("defaultCorpusConcurrency leaves enough host budget for wide-row inner pools", () => {
+  assert.equal(defaultCorpusConcurrency(14), 3);
+  assert.equal(defaultCorpusConcurrency(2), 2);
+  assert.equal(defaultCorpusConcurrency(1), 1);
+});
+
+test("wide claim plans request eight lanes while ordinary rows retain four", () => {
+  assert.equal(probeConcurrencyForClaims(878), 8);
+  assert.equal(probeConcurrencyForClaims(567), 8);
+  assert.equal(probeConcurrencyForClaims(140), 4);
+  assert.equal(probeConcurrencyForClaims(null), 4);
+});
+
+test("the phase lease never oversubscribes and wakes a queued wide row after release", async () => {
+  const pool = createConcurrencyLeasePool(12);
+  const first = await pool.acquire(6);
+  const second = await pool.acquire(6);
+  let wideGranted = false;
+  const widePromise = pool.acquire(8).then(lease => {
+    wideGranted = true;
+    return lease;
+  });
+  await Promise.resolve();
+  assert.equal(wideGranted, false);
+  first.release();
+  await Promise.resolve();
+  assert.equal(wideGranted, false, "the request waits for its complete bounded lane set");
+  second.release();
+  const wide = await widePromise;
+  assert.equal(wide.lanes, 8);
+  assert.equal(pool.inUse, 8);
+  wide.release();
+  assert.equal(pool.inUse, 0);
+});
 
 // Real captured refusal lines from `contract verify` against the pinned
 // corpus. They matter verbatim: they are what the refusal sidecar's
@@ -178,6 +224,10 @@ test("undrivenBucket separates a missing probe form from a failed observation", 
   assert.equal(
     undrivenBucket("the synthesized call completed without invoking the callback, so the claim was not exercised"),
     "synthesized call did not invoke the callback"
+  );
+  assert.equal(
+    undrivenBucket("the completed call did not invoke the named parameter member, so the claim was not exercised"),
+    "parameter member was not invoked"
   );
   assert.equal(
     undrivenBucket("import of @solidjs/router threw: ReferenceError: window is not defined"),

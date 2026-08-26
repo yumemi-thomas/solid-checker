@@ -7224,3 +7224,243 @@ failed claim and no contradicted kind claim. Remaining gaps include 1,079
 reactive-read proofs with no runtime probe form, 463 owner requirements, 98
 async claims, 51 store paths, 9 callback-argument descriptors, 601 import
 throws, 368 synthesized throws, and 286 calls that did not reach the callback.
+
+## 2026-08-26 — exact parameter-member reactive-read probes
+
+`parameter-member` rows now retain the exact static property when every path
+contributing to the row invokes the same member. The optional field is
+backward-compatible: an older parameter-only row, a computed property, or
+several distinct members remains valid and keeps its static family-(A) proof,
+but gets no runtime probe.
+
+For a path-qualified row the generic worker supplies an object whose named
+method reads a fresh signal, invokes the export inside a memo, writes the
+signal, and requires both the export and method to run again. A call that never
+reaches the method is undriven rather than negative evidence. If the method ran
+and the write produced no re-read, the observation contradicts the contract and
+blocks verification. Passing modes can attach `probed` evidence to the exact
+row; the compiler proof remains sufficient when a package-specific argument
+shape prevents the probe from exercising it.
+
+The focused `parameter-member-read` and `parameter-member-forwarded` fixtures
+pin `slice` and `getThing` respectively. The fresh uninterrupted 416-row run
+used checker SHA-256
+`4fe1381a3f30f4f44efe8904b2a0adb5a8ac704e12840c28030b2c4fe67cf31b`
+and Type Facts SHA-256
+`983d0b702ace1476ecd7f5633e9e25b33003287b5319404851cdc5141d0d1844`.
+It also corrects the corpus scope for multi-framework packages.
+`@tanstack/charts` generates only `./solid`; `@tanstack/devtools-utils`
+generates `./solid` and `./solid/class`; and `@tanstack/devtools-a11y`
+generates its framework-neutral `./core` pair plus its `./solid` pair. Their
+React, Preact, Svelte, Vue, Angular, Lit, and Octane adapters are no longer
+presented as evidence about Solid contracts. Discovery owns these allowlists,
+so a manifest refresh reproduces the scope automatically.
+
+Against the preceding checked-in report:
+
+| Figure | Before | After |
+| --- | ---: | ---: |
+| Verified / refused | 297 / 97 | **295 / 100** |
+| Generate / install / no-runtime | 17 / 3 / 2 | **17 / 3 / 1** |
+| Claims total | 11,744 | **10,274** |
+| Driven / passed / failed | 7,734 / 7,734 / 0 | **6,719 / 6,719 / 0** |
+| Undriven / incompleteness | 4,010 / 518 | **3,555 / 503** |
+| Reactive reads with no probe form | 1,079 | **537** |
+| Conversions (callback / return / async) | 802 (372 / 399 / 31) | **745 (346 / 377 / 22)** |
+| Probed rows kept / rows with evidence | 97 / 21 | **90 / 20** |
+
+The outcome and total-claim deltas are not attributable solely to the new
+probe: registry/install outcomes moved between runs, and the three corrected
+TanStack scopes deliberately remove 118 non-Solid entrypoints. The direct
+coverage result is that the old broad `reactiveReads` no-probe bucket shrank by
+542 claims; 45 exact-member attempts are now named separately because the
+completed call did not reach the member. The remaining exact attempts either
+pass or retain another explicit fail-closed reason. No claim failed, and the
+kind-contradiction count is zero.
+
+The two additional umbrella scopes remove nine foreign entrypoints and 19
+claims from the preceding Solid-only-charts measurement. Their combined rows
+move from 30 planned / 15 passed / 15 undriven claims to 11 planned and all 11
+passed: `@tanstack/devtools-a11y` now emits four entrypoints and 6 claims;
+`@tanstack/devtools-utils` emits two entrypoints and 5 claims. Fourteen foreign
+adapter import-throw claims and one foreign member-not-invoked claim disappear;
+the other four removed claims had passed but described foreign adapters.
+Svelte, Vue, Preact, and Angular import failures fall to zero. The remaining
+239 missing-React observations belong to Solid-facing entrypoints or ports and
+are not treated as foreign adapters.
+
+The larger 159-claim corpus delta also includes `solid-recharts@1.0.1` moving
+from a 140-claim refused probe to a generation timeout in this raw run. That is
+an environment-sensitive outcome, not a gain attributed to entrypoint scoping;
+the checked-in report preserves the uninterrupted authority run as observed.
+
+The current broad gaps are 537 unqualified reactive reads, 447 owner
+requirements, 71 async claims, 47 store paths, and 9 callback-argument
+descriptors. Published runtime behavior still leaves 588 entrypoint import
+throws, 504 synthesized-call throws, 282 calls that did not invoke a callback,
+and 45 calls that did not invoke the named parameter member. All remain
+undriven rather than being accepted as negative evidence.
+
+## 2026-08-26 — wide-package contract timing and isolated restart pools
+
+The focused `solid-recharts@1.0.1|solid1|only` harness reconstructs the exact
+audited artifact from Bun's local content cache, including its non-Solid D3
+dependencies, and performs no registry install. It requires 109 expanded
+exports, 140 claims, distinct browser/server closures (246/239 JavaScript
+files in the current artifact), four modes, bounded initial chains plus many
+restarts, no failed claim, and the existing refused verification with
+server `kind` blockers for `Dot`, `LabelList`, and `Pie`.
+
+Structured native timings identified probe-plan construction as the avoidable
+generation hotspot: it repeatedly scanned every function and the full Type
+Facts entity table for every public export. One exact-location entity index and
+one canonical-symbol function index reduce that step from about 25.5 seconds
+to about 0.3 seconds on the captured package. These indexes live only for the
+immutable facts of one target analysis; no browser fact, closure, or condition
+identity is reused as a server fact.
+
+The probe experiment also rejected one-worker-per-observation: it increased
+the row from 177 process sessions to 762 and made probing slower. The retained
+model groups non-invoking `kind` reads once per exact specifier and runs
+call-capable observations in a bounded pool of restart chains. A chain is discarded
+after a synchronous throw, asynchronous abort, timeout, or unreadable result.
+Stable output order is reconstructed by probe ID. A standalone row defaults to
+eight call-capable lanes; the ecosystem runner divides host parallelism across
+its concurrent rows (two lanes for this row on the 14-core authority host). With
+one non-invoking import chain per mode, the full run used
+182 processes across 12 chains (170 actual restarts) for this row while
+preserving 124 passed and 16 explicitly undriven claims; no failed claim became
+passed.
+
+Three focused after samples on the same release binaries were 18,304 ms,
+18,352 ms, and 18,652 ms (median 18,352 ms): generation median 12,720 ms,
+probe median 5,581 ms, and verify median 41 ms. The exact full-corpus row was
+19,217 ms (221 install, 10,551 generation, 8,423 probe, 20 verify), down from
+the captured 84,262 ms authority row while retaining its 109 exports, 140
+claims, and refusal attribution.
+
+The full 416-probe corpus took 154,534 ms at row concurrency six, compared with
+595,629 ms for the preceding checked-in report: 3.85x less wall time. Median
+row time fell from 1,265 to 546 ms; generation p90 from 1,612 to 482 ms; and
+probe p90 from 3,879 to 1,211 ms. The fresh report remains under `/tmp` rather
+than replacing the checked-in semantic authority because concurrent schema and
+entrypoint-scope work intentionally changed its outcome counts. It recorded
+10,462 claims, 6,898 passed, no failed claim, and 3,564 explicitly undriven.
+
+The follow-up slice canonicalizes a target analysis by the exact effective
+native inputs rather than the export-map label that produced them. For
+`solid-recharts`, `import` and fallback both select the browser artifact with
+effective runtime conditions `{import}`, so the fourth native analysis was a
+duplicate; the `{browser, import}` and `{node, import}` analyses remain
+distinct. Three focused samples after removing it and sharing one bounded
+probe queue across all four modes were 7,483, 7,503, and 7,502 ms (median
+7,502 ms): about 5.03s generation, 2.46s probe, and 19ms verification. Claim
+accounting and the `Dot`/`LabelList`/`Pie` refusal were unchanged.
+
+Corpus scheduling now defaults to three outer rows on hosts with at least three
+available CPUs. A deterministic 42-row slice improved from 50.08s at the old
+six-row/two-lane allocation to 33.03s at three rows/four lanes with identical
+verdict counts. The final two-tail check recorded 33.82s for
+`@kobalte/core@0.13.13` and 35.33s for `@tanstack/solid-table@9.1.2`, down from
+50.72s and 58.46s.
+
+The final complete 416-probe authority took 153,305ms, compared with 154,534ms
+for the preceding optimized six-row run and 595,629ms for the original
+authority. Median / p90 / maximum row times moved from 546 / 2,274 / 61,296ms
+to 332 / 1,540 / 37,592ms. Outcome counts were identical: 308 verified, 88
+refused, 16 generation failures, 3 install failures, and 1 no-runtime. It
+recorded 10,462 claims, 6,900 passed, zero failed, and 3,562 undriven. The two
+additional passed observations are one claim in each Solid Focus 2.0 row that
+an independent worker answered before another chain's asynchronous abort; the
+aborted chain's unanswered claim remains undriven.
+
+The retained follow-up moves all exact target analyses into one package-wide
+four-lane pool. The analysis identity remains the runtime target, excluded
+sibling targets, and effective native conditions; browser/server projects and
+closure attestations are never equated. On the same debug binary,
+`@kobalte/core@0.13.13` generation fell from 18.145s to 9.439s and emitted a
+byte-identical contract. Its full authority row is now 18.192s, while
+`@tanstack/solid-table@9.1.2` is the maximum row at 27.976s.
+
+Probe orchestration now allocates the minimum restart chains needed to saturate
+the row pool across exact mode/specifier groups, prefixes the first risky chain
+with its non-invoking kind reads, sends requests over stdin, and records restart
+causes plus worker/process subphase timings. It never reuses a process after a
+throw or abort. Table retains 567 claims, 431 passed, zero failed, and 136
+undriven with 2,342 sessions / 16 chains / 2,326 restarts; all restarts are
+synchronous throws. Kobalte v1 retains 878 claims, 612 passed, zero failed, 266
+undriven, and 21 incompleteness findings, while probe wall falls from 27.132s to
+12.158s in the full run.
+
+Three interleaved focused `solid-recharts@1.0.1` samples were 7,393, 7,375, and
+7,448ms (median 7,393ms): generation 4,970 / 4,938 / 5,009ms, probe 2,403 /
+2,417 / 2,419ms, and verify 20ms each. All retained 109 exports, 140 claims,
+124 passed, zero failed, 16 undriven, 178 sessions / 8 chains / 170 restarts,
+and the same `Dot`, `LabelList`, and `Pie` server-kind refusal. This is 11.4x
+faster than the captured 84,262ms authority row.
+
+The fresh full 416-row authority at standard outer concurrency three completed
+in 128.178s wall versus 153.305s previously. Summed row work is 360.248s;
+median / p90 / maximum row time is 255 / 1,340 / 27,976ms, with no row above
+30 seconds. Outcomes remain 308 verified, 88 refused, 16 generation failures,
+3 install failures, and 1 no-runtime. It records 10,462 claims, 6,897 passed,
+zero failed, and 3,565 undriven. The three fewer passes are conservative
+asynchronous-abort attribution in the two Solid Focus 2.0 rows and Solid
+Promise 1.x; no failed or undriven claim became passed.
+
+The required-object fact was added on 2026-08-26 (`solid-ts-facts` `cadb247b`,
+ADR 0022, wire table schema 17) and is now consumed by declaration-only probe
+planning. For `@tanstack/solid-table@9.1.2`, it proves
+`{ columns: [], data: [], features: {} }` for `createTable`; the completed call
+is checked before the recipe is emitted. The focused row keeps 567 claims,
+zero failures and zero incompleteness findings, with the same 431 passed and
+136 undriven. It reduces sessions only from 2,342/2,326 restarts to
+2,338/2,322 and does not materially move the roughly 21.5s probe wall. The
+final focused run was 4.15s generation and 21.50s probe wall; declaration
+construction accounted for about 1.11s of
+the generation phase across the root and recursively generated dependency
+targets. Value-only and kind-only targets skip that query.
+
+Conditional entrypoints no longer discard all construction facts merely for
+having more than one target. Each target keeps its own Type Facts identity and
+the published probe plan receives only the exact structural intersection of
+their recipes. A missing or different browser/server recipe is therefore a
+miss, while the `solid` and `import` Table branches retain `createTable` only
+because both independently proved the same object.
+
+A factory experiment supplied the root `createTable` result to exact
+`./static-functions` parameters through a conditional-type assignability gate.
+It reduced sessions to 1,993 and restarts to 1,977, but Table construction cost
+offset the saved processes: aggregate process wall moved only 111.8s to 111.2s,
+worker time increased 84.4s to 87.3s, and generation added about 1.1s. That
+extension was not retained; even the same-entrypoint form admitted an
+unconstrained generic in the armed process fixture and was removed rather than
+weaken that boundary. The remaining tail is dominated by probes that
+must plant a callback/member in the very Table/Row/Column slot, plus Row,
+Column, Cell and stateful-table witnesses that the new leaf-only fact correctly
+leaves unknown. Guessing those graphs or reusing a mutable Table instance across
+observations remains unsound.
+
+The subsequent retained-session experiment was also rejected. Reserving an
+empty root in the runtime project and updating it after contract and inventory
+emission produced the same sound Table recipes, but the update invalidated too
+much of wide TypeScript programs under corpus concurrency: `@solidjs/meta` and
+`@kobalte/core` reached the 120s generation ceiling. The retained design keeps
+the strict declaration query in its own one-shot project. A release-only bug
+found during that experiment is fixed independently: declaration-plan requests
+are now ineligible for the diagnostics daemon, and the generator explicitly
+sets `SOLID_CHECKER_DAEMON=0`, so success without the requested sidecar is no
+longer possible.
+
+The corrected full 416-row authority completed in 126.658s at standard outer
+concurrency three. Outcomes and claim accounting are unchanged from the
+128.178s authority: 308 verified, 88 refused, 16 generation failures, 3 install
+failures, 1 no-runtime; 10,462 claims, 6,897 passed, zero failed, 3,565
+undriven. Median / p90 / maximum row time is 275 / 1,374 / 29,362ms, with no
+row above 30 seconds. The 1.52s corpus-wall movement is not attributed as a
+generator win: summed generation rose from 86.922s to 105.206s while summed
+install time fell from 52.039s to 20.430s, so host/cache variation dominates.
+The exact `solid-recharts@1.0.1|solid1|only` row remained refused with 140
+claims (124 passed, 16 undriven) and took 13.245s: 46ms install, 6.639s
+generation, 3.523s probe, 22ms verify. Table verified in 29.362s with its exact
+567 / 431 / 0 / 136 claim accounting and 2,338 sessions / 2,322 restarts.

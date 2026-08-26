@@ -95,6 +95,7 @@ fn enabled_from(setting: Option<&OsStr>, production_default: bool) -> bool {
 pub fn eligible(request: &Request) -> bool {
     request.sources.is_empty()
         && request.emit_contract.is_empty()
+        && request.declaration_probe_plan.is_empty()
         && !request.check_contracts
         && retained_format(&request.format)
 }

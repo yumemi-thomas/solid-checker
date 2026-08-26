@@ -18,6 +18,7 @@
         {
           "kind": "parameter-member",
           "parameter": 0,
+          "member": "map",
           "evidence": {
             "kind": "inferred"
           }

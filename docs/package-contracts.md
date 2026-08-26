@@ -106,6 +106,16 @@ reason to omit that mode or silently weaken the contract. The probe runner
 records successful modes and call counts as row evidence only for claims that
 already exist; it never writes newly observed behavior into a contract.
 
+Generated `parameter-member` reactive reads may also carry an exact `member`
+name. It is emitted only when every contributing path for that parameter invokes
+the same static property; multiple or computed members keep the older
+parameter-only row. The generic probe instruments that exact property with a
+signal-reading method, calls the export in a tracked scope, writes the signal,
+and requires both the export and member to run again. This is an additional
+runtime falsifier for the compiler-proven row: a call that does not reach the
+member remains undriven, while an invoked member that does not establish the
+claimed reactive read is a contradiction.
+
 Use `--entrypoint ./state` to generate only one subpath while investigating a
 failure, or `--conditions browser,import` to resolve the export map for a
 specific environment. With no condition selector, every materialized supported
@@ -115,6 +125,56 @@ package with no materialized runtime target still fails. Compatible facts are
 unioned; callability is retained only when it is valid in every selected
 runtime target, and genuinely incompatible return or async summaries stop
 generation.
+
+Generation is not limited to files whose package is itself Solid-specific.
+The runtime closure includes every JavaScript module the selected entrypoint
+can load, and an imported non-Solid package is analyzed or supplied by an exact
+dependency contract whenever its behavior reaches a contract proof obligation.
+Package or export names never grant trust. The focused `solid-recharts`
+performance fixture therefore includes the exact D3 artifacts from the audited
+install even though D3 is not a Solid package.
+
+For wide barrels, the native emitter retains exact indexes over the immutable
+facts of that one analysis: Type Facts entities by canonical source location
+and functions by canonical compiler symbol. Contract and probe-plan lookup can
+reuse those indexes, but the facts themselves are never shared between
+conditional targets. Browser and server targets still build distinct projects
+and retain distinct runtime-closure attestations.
+
+Every unique target identity across all public entrypoints enters one
+package-wide bounded pool. The row-local
+`SOLID_CHECKER_GENERATION_CONCURRENCY` limit defaults to the smaller of four and
+the host's available parallelism, and is capped at four. This overlaps complete
+native analyses; it does not merge their projects or summaries, and public
+projection, conditional merging, and refusal remain entrypoint-local. Dependency
+generation is promise-memoized by exact installed root and condition set, and
+each target keeps a private contract argv, so concurrent discovery cannot make
+one target inherit another target's condition-specific dependency input.
+Within one generation invocation, two export-map variants reuse a completed
+analysis only when the runtime target, excluded sibling targets, and the
+effective native runtime-condition set are identical. `import` and a fallback
+branch that both resolve to the same file therefore share work because both
+native calls would receive exactly `import`; `browser` and `node` remain
+different identities even when they resolve to byte-identical files. Variant
+labels are still emitted separately from this analysis identity.
+
+Probe construction can use a DOM element only when Type Facts resolves the
+parameter to an exact default-library identity that a `div` inhabits
+(`EventTarget`, `Node`, `Element`, `HTMLElement`, or `HTMLDivElement`). Browser
+modes construct it with `document.createElement("div")`; server modes with no
+document remain undriven. This is reachability input, never behavioral proof,
+and the environment record continues to label a shimmed DOM observation as
+weaker than a real-browser observation. Type Facts can also describe a required
+object surface when every required property has a proven empty-array or
+empty-object inhabitant. Generation validates the completed call through the
+ordinary resolved-call path before emitting that object recipe.
+
+`SOLID_CHECKER_TIMINGS=1` emits one structured `contractGenerationTiming`
+record. It separates closure walking and hashing, temporary project creation,
+the Type Facts program and semantic demand, syntax/source facts, Reactive IR
+and contract inference, module-inventory reconciliation, dependency-contract
+generation, and review/artifact writes. Per-target native timings remain nested
+under the same record; the channel adds no unstructured debug logging.
 
 An application developer can generate a project-owned contract without
 modifying `node_modules`:
@@ -479,8 +539,8 @@ identifier never threw. For those modules the shim *redirects* rather than
 rescues: a package that took its server path in every earlier run now takes its
 browser path. That is the sharpest reason the shimmed list is data.
 
-**A worker stops at its first throw and the mode is restarted for what is
-left.** That is a correctness requirement, not a performance one: Solid 2.0's
+**A worker stops at its first throw and the restart chain continues in a fresh
+process.** That is a correctness requirement, not a performance one: Solid 2.0's
 development build halts the reactive system permanently on an uncaught error —
 *"No further updates will be processed"* — so every probe after a throw in the
 same process observes a runtime where nothing ever re-runs, and a genuinely
@@ -488,7 +548,23 @@ tracked callback reads as inline. Restarting is the only way to un-halt it; each
 restart answers at least the probe that stopped the previous one, so the loop is
 bounded. A whole-process failure — a crash, a timeout, unreadable output — names
 no particular probe, so the rest of that mode is recorded undriven rather than
-retried.
+retried. A non-invoking `kind` prefix is read before the first risky chain for
+the same exact specifier, avoiding a second import while ensuring it is already
+answered if the later invocation throws. An unreadable combined worker retries
+only that non-invoking prefix in a fresh process. Call-capable observations are
+distributed over the minimum bounded set of fresh restart
+chains; chains may retain only a process whose preceding calls completed, and
+discard it immediately after a synchronous throw or asynchronous abort. The
+row-local limit is `SOLID_CHECKER_PROBE_CONCURRENCY` (the smaller of eight and
+the host's available parallelism by default, maximum 8), and results are
+restored to probe-ID order after concurrent completion.
+
+Requests travel over the child process's stdin instead of accumulating one
+temporary JSON file per restart. Reports attribute runtime import, runtime
+capability, package import, observation category, thrown-observation, and full
+process wall time as structured timing fields. Restart causes are counted as
+synchronous throw, asynchronous abort, import failure, stopped worker, or
+unreadable result; none of these timing or accounting fields changes evidence.
 
 **Different entrypoint specifiers have different worker lifetimes.** A failed
 ESM evaluation can leave arbitrary module and reactive-runtime state behind, so
@@ -531,11 +607,36 @@ Generation also writes `<contract>.probe-plan.json`, a probe-only construction
 sidecar derived from Type Facts. It is bound to the exact contract SHA-256 and
 package release; probing refuses a stale or mismatched sidecar. A recipe is
 emitted only when the exact public symbol and parameter facts prove a concrete
-inhabitant: `null`, `undefined`, an empty array, `Map`, or `Set`. Recipes fill
-only slots the ordinary planner would otherwise leave `undefined`; they never
-replace a callback, sentinel, or contract-derived object and never extend the
-call arity. The sidecar is reachability help, not evidence. A call that
-completes with it still has to pass the same behavioral observation.
+inhabitant: `null`, `undefined`, an empty array, `Map`, `Set`, or a required
+object whose leaves are proven empty arrays/objects. A fully constructed export
+is not reused as a factory for another call: generic assignability and mutable
+package state make that a separate proof obligation. Recipes fill slots the
+ordinary planner would otherwise leave `undefined`; the stronger object proof
+may replace only the generic `empty-object` placeholder. They never replace a
+callback, planted reactive
+member, or sentinel, and never extend the call arity. The declaration-only
+query is a separate Type Facts project, so its synthetic calls cannot enter
+contract inference or module-closure attestation. The sidecar is reachability
+help, not evidence. A call that completes with it still has to pass the same
+behavioral observation.
+
+The producer rejects a root type parameter before describing an object shape.
+In particular, a completed call that infers `T = {}` is not retroactive proof
+that `{}` was a declaration-derived inhabitant of an unconstrained `T`.
+
+The declaration helper always runs one-shot. Release diagnostics normally use
+the retained project daemon, but that daemon emits diagnostics rather than this
+probe-only sidecar; both the generator environment and daemon eligibility gate
+exclude declaration-plan requests so a successful process cannot omit the
+requested artifact.
+
+For a conditional entrypoint, a construction recipe survives only when every
+analyzed target independently emits the structurally identical recipe. The
+generator intersects the target-local plans; a missing recipe, changed leaf,
+different condition resolution, or different target type removes it from the
+entrypoint-wide sidecar. Value-only and kind-only targets do not open the
+declaration project at all: the query runs only when a callback or
+`parameter-member` observation could use construction input.
 
 Claims with no honest generic probe form are recorded undriven with a standing reason:
 callback `owner` rows (no observation distinguishes inherited from created
@@ -804,7 +905,8 @@ package's contract a machine can reach.
 
 Generation writes probe-plan schema v2 when Type Facts proves safe inhabitants
 for a parameter. Exact string, finite-number, boolean, `null`, and `undefined`
-members and empty Array, Map, and Set shapes are retained in deterministic order. The
+members, empty Array/Map/Set shapes, and required object shapes are retained in
+deterministic order. The
 driver exposes each alternate independently, then bounded combinations, with a
 hard limit of eight attempts per claim. A pass from any attempt can drive the
 claim, while a contradiction from any attempt fails it; construction recipes

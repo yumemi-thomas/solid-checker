@@ -23,7 +23,7 @@
 // once a review has recorded anything. See `rebindReviewPlan`.
 
 import { randomUUID } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -34,7 +34,7 @@ import {
   statSync,
   writeFileSync
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -288,57 +288,75 @@ function installedIntegrity(packageRoot, packageName) {
 /// The worker is staged inside the project's `node_modules` so its bare imports
 /// resolve to the project's installs, and the child's working directory is a
 /// scratch temporary directory so a package that writes on import writes there.
-function spawnSession({ probes, session, worker, stagingDirectory, dialect, timeout }) {
-  const requestFile = join(stagingDirectory, `request-${session.mode}-${probes[0].id}.json`);
-  writeFileSync(
-    requestFile,
-    JSON.stringify({ mode: session.mode, dialect, environment: session.environment, probes })
-  );
+function spawnSessionAsync({ probes, session, worker, dialect, timeout }) {
+  const processWallStarted = process.hrtime.bigint();
+  const request = JSON.stringify({ mode: session.mode, dialect, environment: session.environment, probes });
   const scratch = mkdtempSync(join(tmpdir(), "solid-checker-probe-cwd-"));
-  try {
-    const child = spawnSync(
+  return new Promise(resolvePromise => {
+    const resolve = answer =>
+      resolvePromise({
+        ...answer,
+        timing: {
+          ...(answer.timing ?? {}),
+          processWallNs: Number(process.hrtime.bigint() - processWallStarted)
+        }
+      });
+    const child = spawn(
       process.execPath,
-      [
-        ...session.conditions.flatMap(condition => ["--conditions", condition]),
-        worker,
-        requestFile
-      ],
-      { cwd: scratch, encoding: "utf8", timeout, maxBuffer: 64 * 1024 * 1024 }
+      [...session.conditions.flatMap(condition => ["--conditions", condition]), worker, "-"],
+      { cwd: scratch, stdio: ["pipe", "pipe", "pipe"] }
     );
-    if (child.error || child.status !== 0 || !child.stdout) {
-      const detail =
-        child.error?.message ??
-        (child.signal
-          ? `the probe process was killed by ${child.signal}${child.signal === "SIGTERM" ? ` (timeout ${timeout}ms)` : ""}`
-          : `the probe process exited ${child.status}`);
-      return { failed: `${detail}${child.stderr ? `: ${child.stderr.trim()}` : ""}`, results: [] };
-    }
-    try {
-      const answer = JSON.parse(child.stdout);
-      return {
-        completed: answer.completed !== false,
-        environment: answer.environment,
-        // The capability the worker measured for the runtime that drove this
-        // mode's ordinary packages, or `null` when the process died before it
-        // could measure one. Per-claim attribution does not use it -- that is
-        // decided from the stamp on each observation, because one session holds
-        // more than one runtime -- but without it nothing in the report says a
-        // mode's withdrawals were measured rather than assumed.
-        runtime: answer.runtime ?? null,
-        // Set when package code threw asynchronously -- a deferred callback, a
-        // rejected promise -- somewhere outside every `try` the worker has.
-        aborted: answer.aborted,
-        results: answer.results ?? []
-      };
-    } catch (error) {
-      return {
-        failed: `the probe process wrote no readable report: ${error.message}`,
-        results: []
-      };
-    }
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
+    child.stdin.end(request);
+    let stdout = "";
+    let stderr = "";
+    let spawnError;
+    let timedOut = false;
+    let forcedKill;
+    child.stdout.on("data", chunk => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", chunk => {
+      stderr += chunk;
+    });
+    child.on("error", error => {
+      spawnError = error;
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      forcedKill = setTimeout(() => child.kill("SIGKILL"), 1_000);
+    }, timeout);
+    child.on("close", (status, signal) => {
+      clearTimeout(timer);
+      clearTimeout(forcedKill);
+      rmSync(scratch, { recursive: true, force: true });
+      if (spawnError || status !== 0 || !stdout) {
+        const detail =
+          spawnError?.message ??
+          (signal
+            ? `the probe process was killed by ${signal}${timedOut ? ` (timeout ${timeout}ms)` : ""}`
+            : `the probe process exited ${status}`);
+        resolve({ failed: `${detail}${stderr ? `: ${stderr.trim()}` : ""}`, results: [] });
+        return;
+      }
+      try {
+        const answer = JSON.parse(stdout);
+        resolve({
+          completed: answer.completed !== false,
+          environment: answer.environment,
+          runtime: answer.runtime ?? null,
+          timing: answer.timing,
+          aborted: answer.aborted,
+          results: answer.results ?? []
+        });
+      } catch (error) {
+        resolve({
+          failed: `the probe process wrote no readable report: ${error.message}`,
+          results: []
+        });
+      }
+    });
+  });
 }
 
 /// Runs one mode to completion, restarting the worker after every probe that
@@ -462,6 +480,301 @@ export function runSessionBySpecifier({ session, spawn }) {
   };
 }
 
+/// Separates observations that only inspect an imported namespace from those
+/// that invoke package code.
+///
+/// A `kind` probe is safe to share one import lifetime with every other kind
+/// probe for the same exact specifier: it performs only `typeof`. Every other
+/// probe is call-capable and enters a restart chain that is discarded before
+/// any remaining work continues after a throw or asynchronous abort.
+export function splitSessionProbes(session) {
+  const kindsBySpecifier = new Map();
+  const invoking = [];
+  for (const probe of session.probes) {
+    if (probe.type === "kind") {
+      const probes = kindsBySpecifier.get(probe.specifier) ?? [];
+      probes.push(probe);
+      kindsBySpecifier.set(probe.specifier, probes);
+    } else {
+      invoking.push({ ...session, probes: [probe] });
+    }
+  }
+  return {
+    nonInvoking: [...kindsBySpecifier.values()].map(probes => ({ ...session, probes })),
+    invoking
+  };
+}
+
+export async function mapConcurrentOrdered(values, concurrency, operation) {
+  const limit = Math.max(1, Math.min(values.length || 1, Number(concurrency) || 1));
+  const results = new Array(values.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      for (;;) {
+        const index = next++;
+        if (index >= values.length) return;
+        results[index] = await operation(values[index], index);
+      }
+    })
+  );
+  return results;
+}
+
+function invocationTasks(split, concurrency) {
+  const groups = split.flatMap(({ session, invoking }) => {
+    const bySpecifier = new Map();
+    for (const task of invoking) {
+      const probe = task.probes[0];
+      const probes = bySpecifier.get(probe.specifier) ?? [];
+      probes.push(probe);
+      bySpecifier.set(probe.specifier, probes);
+    }
+    return [...bySpecifier.values()].map(probes => ({ session, probes, lanes: 1 }));
+  });
+  const target = Math.min(
+    Math.max(1, Number(concurrency) || 1),
+    groups.reduce((total, group) => total + group.probes.length, 0)
+  );
+  let lanes = groups.length;
+  while (lanes < target) {
+    let selected;
+    for (const group of groups) {
+      if (group.lanes >= group.probes.length) continue;
+      if (
+        !selected ||
+        group.probes.length / group.lanes > selected.probes.length / selected.lanes
+      ) {
+        selected = group;
+      }
+    }
+    if (!selected) break;
+    selected.lanes += 1;
+    lanes += 1;
+  }
+  return groups.flatMap(group => {
+    const chains = Array.from({ length: group.lanes }, () => []);
+    group.probes.forEach((probe, index) => chains[index % chains.length].push(probe));
+    return chains.map(probes => ({ session: group.session, probes }));
+  });
+}
+
+async function runFreshProbeChain({ probes, spawn }) {
+  const results = [];
+  let pending = probes;
+  let started = 0;
+  let failed = 0;
+  const restartCauses = {};
+  const timing = {};
+  const addTiming = source => {
+    for (const [phase, duration] of Object.entries(source ?? {})) {
+      if (Number.isFinite(duration)) timing[phase] = (timing[phase] ?? 0) + duration;
+    }
+  };
+  const addRestartCause = cause => {
+    restartCauses[cause] = (restartCauses[cause] ?? 0) + 1;
+  };
+  let environment;
+  let runtime;
+  while (pending.length) {
+    const answer = await spawn(pending);
+    started += 1;
+    addTiming(answer.timing);
+    environment ??= answer.environment;
+    runtime ??= answer.runtime ?? null;
+    const answeredResults = answer.results ?? [];
+    results.push(...answeredResults);
+    const answered = new Set(answeredResults.map(result => result.id));
+    const remaining = pending.filter(probe => !answered.has(probe.id));
+    if (answer.failed) {
+      failed += 1;
+      const kinds = remaining.filter(probe => probe.type === "kind");
+      if (kinds.length > 0 && kinds.length < remaining.length) {
+        addRestartCause("unreadableResult");
+        const recovered = await runFreshProbeChain({ probes: kinds, spawn });
+        results.push(...recovered.results);
+        started += recovered.started;
+        failed += recovered.failed;
+        addTiming(recovered.timing);
+        for (const [cause, count] of Object.entries(recovered.restartCauses)) {
+          restartCauses[cause] = (restartCauses[cause] ?? 0) + count;
+        }
+        environment ??= recovered.environment;
+        runtime ??= recovered.runtime ?? null;
+        const risky = remaining.filter(probe => probe.type !== "kind");
+        results.push(...sessionFailure(risky, answer.failed));
+        return {
+          results,
+          started,
+          failed,
+          completed: false,
+          environment,
+          runtime,
+          restartCauses,
+          timing
+        };
+      }
+      results.push(...sessionFailure(remaining, answer.failed));
+      return {
+        results,
+        started,
+        failed,
+        completed: false,
+        environment,
+        runtime,
+        restartCauses,
+        timing
+      };
+    }
+    if (remaining.length === 0) {
+      return {
+        results,
+        started,
+        failed,
+        completed: true,
+        environment,
+        runtime,
+        restartCauses,
+        timing
+      };
+    }
+    if (answered.size === 0 || answer.completed) {
+      if (answer.aborted) failed += 1;
+      results.push(
+        ...sessionFailure(
+          remaining,
+          answer.aborted
+            ? `the probe process was aborted by package code running outside a probe: ${answer.aborted}`
+            : "the probe process stopped before reaching this claim"
+        )
+      );
+      return {
+        results,
+        started,
+        failed,
+        completed: false,
+        environment,
+        runtime,
+        restartCauses,
+        timing
+      };
+    }
+    // The worker stopped after a package throw or asynchronous abort. Continue
+    // only in a newly spawned process; the stopped runtime is never reused.
+    addRestartCause(
+      answer.aborted
+        ? "asynchronousAbort"
+        : answeredResults.some(result => result.outcome === "threw")
+          ? "synchronousThrow"
+          : answeredResults.some(result => result.outcome === "import-failed")
+            ? "importFailure"
+            : "stopped"
+    );
+    pending = remaining;
+  }
+  return {
+    results,
+    started,
+    failed,
+    completed: true,
+    environment,
+    runtime,
+    restartCauses,
+    timing
+  };
+}
+
+/// Runs kind-only imports first, then call-capable probes in fresh restart chains.
+///
+/// The pool bounds process fan-out. A chain may retain a process only while its
+/// package calls complete; a stopped process is replaced before any remaining
+/// probe runs. Completion order is discarded and results are restored to the
+/// plan's stable probe order.
+export async function runIsolatedProbePool({ session, spawn, concurrency = 4 }) {
+  const [result] = await runIsolatedProbePools({
+    sessions: [session],
+    concurrency,
+    spawn: ({ probes }) => spawn(probes)
+  });
+  return {
+    results: result.results,
+    accounting: result.accounting,
+    environment: result.environment
+  };
+}
+
+function summarizeSessionRuns(session, runs) {
+  const order = new Map(session.probes.map((probe, index) => [probe.id, index]));
+  const results = runs
+    .flatMap(result => result.results)
+    .sort((left, right) => (order.get(left.id) ?? Infinity) - (order.get(right.id) ?? Infinity));
+  const started = runs.reduce((total, result) => total + result.started, 0);
+  const restartCauses = {};
+  const timing = {};
+  for (const run of runs) {
+    for (const [cause, count] of Object.entries(run.restartCauses)) {
+      restartCauses[cause] = (restartCauses[cause] ?? 0) + count;
+    }
+    for (const [phase, duration] of Object.entries(run.timing)) {
+      timing[phase] = (timing[phase] ?? 0) + duration;
+    }
+  }
+  return {
+    mode: session.mode,
+    results,
+    accounting: {
+      mode: session.mode,
+      started,
+      chains: runs.length,
+      restarts: Math.max(0, started - runs.length),
+      ...(Object.keys(restartCauses).length ? { restartCauses } : {}),
+      ...(Object.keys(timing).length ? { timing } : {}),
+      failed: runs.reduce((total, result) => total + result.failed, 0),
+      completed: runs.every(result => result.completed),
+      runtime: runs.find(result => result.runtime)?.runtime ?? null
+    },
+    environment: runs.find(result => result.environment)?.environment
+  };
+}
+
+/// Runs every condition mode through one row-global bounded pool.
+///
+/// Each task still carries one exact mode and every stopped chain still gets a
+/// new process. Sharing the scheduler only prevents a short mode from leaving
+/// capacity idle while another mode has restart work remaining.
+export async function runIsolatedProbePools({ sessions, spawn, concurrency = 4 }) {
+  const runsBySession = new Map(sessions.map(session => [session, []]));
+  const split = sessions.map(session => ({ session, ...splitSessionProbes(session) }));
+  const invokingTasks = invocationTasks(split, concurrency);
+  const firstInvocationBySession = new Map();
+  for (const task of invokingTasks) {
+    const bySpecifier = firstInvocationBySession.get(task.session) ?? new Map();
+    bySpecifier.set(task.probes[0].specifier, bySpecifier.get(task.probes[0].specifier) ?? task);
+    firstInvocationBySession.set(task.session, bySpecifier);
+  }
+  const nonInvokingTasks = [];
+  for (const { session, nonInvoking } of split) {
+    for (const task of nonInvoking) {
+      const invocation = firstInvocationBySession.get(session)?.get(task.probes[0].specifier);
+      if (invocation) invocation.probes = [...task.probes, ...invocation.probes];
+      else nonInvokingTasks.push({ session, probes: task.probes });
+    }
+  }
+  const runTask = async task => ({
+    session: task.session,
+    run: await runFreshProbeChain({
+      probes: task.probes,
+      spawn: probes => spawn({ session: task.session, probes })
+    })
+  });
+  const nonInvoking = await mapConcurrentOrdered(nonInvokingTasks, concurrency, runTask);
+  const invoking = await mapConcurrentOrdered(invokingTasks, concurrency, runTask);
+  for (const completed of [...nonInvoking, ...invoking]) {
+    runsBySession.get(completed.session).push(completed.run);
+  }
+  return sessions.map(session => summarizeSessionRuns(session, runsBySession.get(session)));
+}
+
 function sessionFailure(probes, error) {
   return probes.map(probe => ({
     id: probe.id,
@@ -557,21 +870,29 @@ function probeDriverIdentity() {
 
 /// The default session runner. Tests inject their own to exercise every
 /// judgement of the driver without an install.
-function defaultRunSessions({ sessions, dialect, projectRoot, timeout }) {
+function probeConcurrency(value = process.env.SOLID_CHECKER_PROBE_CONCURRENCY) {
+  const fallback = Math.min(8, availableParallelism());
+  const parsed = Number(value ?? fallback);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, 8) : fallback;
+}
+
+async function defaultRunSessions({ sessions, dialect, projectRoot, timeout }) {
   const stagingDirectory = mkdtempSync(
     join(projectRoot, "node_modules", ".solid-checker-probe-")
   );
   try {
     const worker = join(stagingDirectory, "contract-probe-worker.mjs");
     copyFileSync(fileURLToPath(new URL("./contract-probe-worker.mjs", import.meta.url)), worker);
-    return sessions.map(session => {
-      const run = runSessionBySpecifier({
-        session,
-        spawn: probes =>
-          spawnSession({ probes, session, worker, stagingDirectory, dialect, timeout })
-      });
+    const runs = await runIsolatedProbePools({
+      sessions,
+      concurrency: probeConcurrency(),
+      spawn: ({ session, probes }) =>
+        spawnSessionAsync({ probes, session, worker, dialect, timeout })
+    });
+    return runs.map((run, index) => {
+      const session = sessions[index];
       return {
-        mode: session.mode,
+        mode: run.mode,
         results: run.results,
         accounting: run.accounting,
         // What the session *asked for* is the fallback: a mode whose every

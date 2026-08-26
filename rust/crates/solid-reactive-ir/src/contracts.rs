@@ -796,18 +796,28 @@ fn contract_export_function(
                     ),
                 evidence: None,
                 parameter: None,
+                member: None,
             };
             seen_reactive_reads
                 .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
                 .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
-    for (parameter, _) in invoked_parameter_members {
+    let mut members_by_parameter = BTreeMap::<usize, HashSet<&str>>::new();
+    for (parameter, member) in invoked_parameter_members {
+        members_by_parameter
+            .entry(*parameter)
+            .or_default()
+            .insert(member.as_str());
+    }
+    for (parameter, members) in members_by_parameter {
         if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string())) {
             reactive_reads.push(ContractReactiveRead {
                 kind: "parameter-member".into(),
                 label: String::new(),
-                parameter: Some(*parameter),
+                parameter: Some(parameter),
+                member: (members.len() == 1)
+                    .then(|| members.into_iter().next().unwrap().to_owned()),
                 evidence: None,
             });
         }
@@ -1615,10 +1625,23 @@ pub enum ExportKindProof {
 /// `export default class {}`, whose recorded span is the class node — the
 /// demanded span is not the export's *value*.
 pub fn export_kind_proof(facts: &ProjectFacts, target: &Location) -> ExportKindProof {
+    export_kind_proof_from_entity(facts, target, entity_at(facts, target))
+}
+
+/// Decides an export's runtime kind using an already indexed exact entity.
+///
+/// Contract generation asks this question for every public name in wide
+/// barrels. Accepting the entity separately lets that caller retain one exact
+/// location index without changing the proof rule or bypassing the class-name
+/// addressing correction.
+pub fn export_kind_proof_from_entity(
+    facts: &ProjectFacts,
+    target: &Location,
+    entity: Option<&typefacts::EntityFact>,
+) -> ExportKindProof {
     if class_declaration_name(facts, target) {
         return ExportKindProof::Callable;
     }
-    let entity = entity_at(facts, target);
     let callability = entity.and_then(|entity| entity.callability);
     let constructability = entity.and_then(|entity| entity.constructability);
     match (callability, constructability) {

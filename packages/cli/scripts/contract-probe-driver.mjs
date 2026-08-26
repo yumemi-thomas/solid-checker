@@ -200,6 +200,7 @@ export const ARGUMENT_SYNTHESIS = [
   "empty-array",
   "empty-map",
   "empty-set",
+  "dom-element",
   "undefined"
 ];
 
@@ -207,9 +208,35 @@ export const ARGUMENT_SYNTHESIS = [
 /// union parameters must not turn one claim into an unbounded probe session.
 export const MAX_CONSTRUCTION_ATTEMPTS = 8;
 
-export function isArgumentRecipe(recipe) {
+export function isArgumentRecipe(recipe, depth = 0) {
+  if (depth > 4) return false;
   if (ARGUMENT_SYNTHESIS.includes(recipe)) return true;
   if (!recipe || typeof recipe !== "object" || Array.isArray(recipe)) return false;
+  if (recipe.kind === "object") {
+    if (Object.keys(recipe).sort().join(",") !== "kind,properties") return false;
+    if (!recipe.properties || typeof recipe.properties !== "object" || Array.isArray(recipe.properties)) {
+      return false;
+    }
+    const properties = Object.entries(recipe.properties);
+    return (
+      properties.length <= 64 &&
+      properties.every(
+        ([name, value]) =>
+          typeof name === "string" &&
+          ["empty-array", "empty-object"].includes(value)
+      )
+    );
+  }
+  if (recipe.kind === "factory") {
+    if (Object.keys(recipe).sort().join(",") !== "arguments,export,kind") return false;
+    return (
+      typeof recipe.export === "string" &&
+      recipe.export.length > 0 &&
+      Array.isArray(recipe.arguments) &&
+      recipe.arguments.length <= 16 &&
+      recipe.arguments.every(argument => isArgumentRecipe(argument, depth + 1))
+    );
+  }
   if (recipe.kind !== "literal" || Object.keys(recipe).sort().join(",") !== "kind,value") {
     return false;
   }
@@ -237,12 +264,17 @@ export function applyConstructionPlans(
   )) {
     const index = Number(rawIndex);
     if (!Number.isInteger(index) || index < 0 || index >= baseline.length) continue;
-    if (baseline[index] !== "undefined") continue;
-    const candidates = (Array.isArray(rawCandidates) ? rawCandidates : [rawCandidates])
+    let candidates = (Array.isArray(rawCandidates) ? rawCandidates : [rawCandidates])
       .filter(isArgumentRecipe)
       .filter((recipe, index, all) =>
         all.findIndex(candidate => JSON.stringify(candidate) === JSON.stringify(recipe)) === index
       );
+    if (baseline[index] !== "undefined") {
+      if (baseline[index] !== "empty-object") continue;
+      candidates = candidates.filter(
+        recipe => recipe?.kind === "object" || recipe?.kind === "factory"
+      );
+    }
     if (!candidates.length) continue;
     baseline[index] = candidates[0];
     slots.push({ index, candidates });
@@ -304,6 +336,25 @@ export function synthesizeArguments(summary, probedParameter) {
     else if (memberParameters.includes(index)) descriptors.push("empty-object");
     else descriptors.push("undefined");
   }
+  return descriptors;
+}
+
+function reactiveReadClaim(read, index) {
+  if (
+    read?.kind !== "parameter-member" ||
+    !Number.isInteger(read.parameter) ||
+    typeof read.member !== "string" ||
+    !read.member
+  ) {
+    return undefined;
+  }
+  return `reactiveReads[${index}]=parameter-member[${read.parameter}].member[${JSON.stringify(read.member)}]`;
+}
+
+function synthesizeReactiveReadArguments(summary, read) {
+  const descriptors = synthesizeArguments(summary);
+  while (descriptors.length <= read.parameter) descriptors.push("undefined");
+  descriptors[read.parameter] = { kind: "probe-member", member: read.member };
   return descriptors;
 }
 
@@ -551,6 +602,37 @@ export function buildProbePlan(
           }
         }
 
+        if (!isUnknown(selected.reactiveReads)) {
+          for (const [readIndex, read] of rows(selected.reactiveReads).entries()) {
+            const claim = reactiveReadClaim(read, readIndex);
+            if (!claim) continue;
+            // The static compiler proof remains sufficient family-(A)
+            // evidence. The runtime probe is an additional falsifier and can
+            // attach corroborating evidence, but an unexercised call does not
+            // erase the exact static proof.
+            const record = claimRecord(entrypoint, exportName, claim, "A");
+            record.modesAttempted.push(mode.name);
+            for (const arguments_ of recordAttempts(
+              record,
+              synthesizeReactiveReadArguments(selected, read)
+            )) {
+              request(
+                mode,
+                { entrypoint, export: exportName, claim },
+                {
+                  type: "reactive-read",
+                  entrypoint,
+                  specifier,
+                  export: exportName,
+                  parameter: read.parameter,
+                  member: read.member,
+                  arguments: arguments_
+                }
+              );
+            }
+          }
+        }
+
         if (selected.returns && !isUnknown(selected.returns)) {
           for (const { returned, path } of returnLeaves(selected.returns)) {
             const claim = returnClaim(returned, path);
@@ -688,8 +770,10 @@ function recordUndrivable(summary, push, prefix = "") {
       record(at(`callbacks[${index}].arguments`), "callbackArguments");
     }
   }
-  for (const [index] of rows(summary.reactiveReads).entries()) {
-    record(at(`reactiveReads[${index}]`), "reactiveRead");
+  for (const [index, read] of rows(summary.reactiveReads).entries()) {
+    if (!reactiveReadClaim(read, index)) {
+      record(at(`reactiveReads[${index}]`), "reactiveRead");
+    }
   }
   for (const [index] of rows(summary.ownerRequirements).entries()) {
     record(at(`ownerRequirements[${index}]`), "ownerRequirement");
@@ -934,7 +1018,10 @@ export function interpretSession({ claims, index, mode, results }) {
     // keeps its verdict because it already requires a re-read to pass, and
     // because `the call returned an object` is a real observation an inert
     // runtime can still make.
-    if (claim.startsWith("callbacks[") && !runtimeReran(result)) {
+    if (
+      (claim.startsWith("callbacks[") || claim.startsWith("reactiveReads[")) &&
+      !runtimeReran(result)
+    ) {
       observation.status = "undriven";
       observation.reason = EXECUTION_UNATTRIBUTABLE.runtimeInert;
       record.observations.push(observation);
@@ -1051,6 +1138,25 @@ function verdictFor(claim, observation) {
       };
     }
     return { status: "passed", observed: "accessor" };
+  }
+  if (claim.startsWith("reactiveReads[")) {
+    if (!(observation.memberCallsBeforeWrite > 0)) {
+      return {
+        status: "undriven",
+        reason: "the completed call did not invoke the named parameter member, so the claim was not exercised"
+      };
+    }
+    const siteDelta = observation.siteRunsAfterWrite - observation.siteRunsBeforeWrite;
+    const memberDelta = observation.memberCallsAfterWrite - observation.memberCallsBeforeWrite;
+    if (siteDelta > 0 && memberDelta > 0) {
+      return { status: "passed", observed: "reactive parameter member" };
+    }
+    return {
+      status: "failed",
+      observed: "member invoked without a reactive re-read",
+      reason:
+        "the named parameter member read the planted source, but writing that source did not re-invoke the export and member"
+    };
   }
   const expected = claim.slice(claim.indexOf("=") + 1);
   const { execution: observed, reason } = classifyExecutionResult(observation);
@@ -1208,11 +1314,17 @@ export function writeProbeEvidence(
   const returnClaimNames = returnLeaves(summary.returns).map(({ returned, path }) =>
     returnClaim(returned, path)
   );
-  const exportClaims = [...callbackClaims, ...returnClaimNames];
-  const exportResults = exportClaims.map(claim => claimResults(claim)).flat();
+  const reactiveReadClaims = rows(summary.reactiveReads)
+    .map((read, index) => reactiveReadClaim(read, index))
+    .filter(Boolean);
+  const exportClaims = [...callbackClaims, ...returnClaimNames, ...reactiveReadClaims];
+  const resultsByExportClaim = exportClaims.map(claim => claimResults(claim));
+  const exportResults = resultsByExportClaim.flat();
   const summaryMarker = settleMarker(
     summary.evidence,
-    probeEvidence(exportResults),
+    resultsByExportClaim.every(results => results.length > 0)
+      ? probeEvidence(exportResults)
+      : undefined,
     // The summary marker covers every claim the export states, so it is
     // superseded as soon as any of them was re-driven.
     exportClaims.find(claim => drivenHere(claim)) ?? exportClaims[0] ?? "",
@@ -1274,6 +1386,23 @@ export function writeProbeEvidence(
       return leaf;
     };
     next.returns = visit(summary.returns);
+  }
+  if (Array.isArray(summary.reactiveReads)) {
+    next.reactiveReads = summary.reactiveReads.map((read, index) => {
+      const claim = reactiveReadClaim(read, index);
+      if (!claim) return read;
+      const marker = settleMarker(
+        read.evidence,
+        probeEvidence(claimResults(claim)),
+        claim,
+        field(`reactiveReads[${index}]`)
+      );
+      if (marker === read.evidence) return read;
+      const row = { ...read };
+      if (marker) row.evidence = marker;
+      else delete row.evidence;
+      return row;
+    });
   }
   if (summary.variants?.length) {
     next.variants = summary.variants.map((variant, index) => ({
@@ -1345,6 +1474,25 @@ export function buildProbeReport({
 }) {
   const counted = kind => claims.filter(claim => claim.status === kind).length;
   const perMode = environment ?? {};
+  const restartCauses = Object.fromEntries(
+    [...new Set((sessions ?? []).flatMap(entry => Object.keys(entry.restartCauses ?? {})))]
+      .sort()
+      .map(cause => [
+        cause,
+        (sessions ?? []).reduce(
+          (total, entry) => total + (entry.restartCauses?.[cause] ?? 0),
+          0
+        )
+      ])
+  );
+  const sessionTiming = Object.fromEntries(
+    [...new Set((sessions ?? []).flatMap(entry => Object.keys(entry.timing ?? {})))]
+      .sort()
+      .map(phase => [
+        phase,
+        (sessions ?? []).reduce((total, entry) => total + (entry.timing?.[phase] ?? 0), 0)
+      ])
+  );
   return {
     schemaVersion: PROBE_REPORT_SCHEMA_VERSION,
     package: {
@@ -1389,8 +1537,8 @@ export function buildProbeReport({
         ])
       )
     },
-    // How many worker processes each mode cost, and how many of those were
-    // restarts after a probe threw. A restart is not a failure -- it is the
+    // How many worker processes and independent chains each mode cost, and how
+    // many processes were restarts after a probe threw. A restart is not a failure -- it is the
     // only way to un-halt a Solid 2.0 development runtime -- but a mode that
     // needed dozens of them is the shape behind a slow or timed-out row, and
     // nothing recorded it before.
@@ -1405,14 +1553,20 @@ export function buildProbeReport({
     // `solid-js`: "not measured" is not "measured, and nothing re-ran".
     sessions: {
       started: (sessions ?? []).reduce((total, entry) => total + (entry.started ?? 0), 0),
+      chains: (sessions ?? []).reduce((total, entry) => total + (entry.chains ?? 0), 0),
       restarts: (sessions ?? []).reduce((total, entry) => total + (entry.restarts ?? 0), 0),
+      ...(Object.keys(restartCauses).length ? { restartCauses } : {}),
+      ...(Object.keys(sessionTiming).length ? { timing: sessionTiming } : {}),
       failed: (sessions ?? []).reduce((total, entry) => total + (entry.failed ?? 0), 0),
       byMode: Object.fromEntries(
         (sessions ?? []).map(entry => [
           entry.mode,
           {
             started: entry.started ?? 0,
+            chains: entry.chains ?? 0,
             restarts: entry.restarts ?? 0,
+            ...(entry.restartCauses ? { restartCauses: entry.restartCauses } : {}),
+            ...(entry.timing ? { timing: entry.timing } : {}),
             failed: entry.failed ?? 0,
             completed: Boolean(entry.completed),
             runtime: entry.runtime ?? null

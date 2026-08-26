@@ -13,14 +13,30 @@
 // judgements are unit-testable without an install and a package cannot make the
 // verdict by making the observation.
 //
-// Protocol: argv[2] is a JSON request file; the response is one JSON document on
-// stdout. The write is synchronous and the exit immediate because probing leaves
+// Protocol: argv[2] is `-` for a JSON request on stdin (a file path remains
+// accepted for hermetic fixtures); the response is one JSON document on stdout.
+// The write is synchronous and the exit immediate because probing leaves
 // timers and pending work behind and the parent waits on the process, not the
 // stream.
 
 import { readFileSync, writeSync } from "node:fs";
 
-const request = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const workerStarted = process.hrtime.bigint();
+const request = JSON.parse(readFileSync(process.argv[2] === "-" ? 0 : process.argv[2], "utf8"));
+const timing = {
+  runtimeImportNs: 0,
+  runtimeCapabilityNs: 0,
+  packageImportNs: 0,
+  observationNs: 0
+};
+
+function observationTimingKey(type) {
+  if (type === "discovery") return "discoveryObservationNs";
+  if (type === "reactive-read") return "reactiveReadObservationNs";
+  if (type.startsWith("returns-")) return "returnsObservationNs";
+  return "callbackObservationNs";
+}
+const elapsedNs = started => Number(process.hrtime.bigint() - started);
 
 /// The marker every faked value carries, and the record of the whole shim.
 ///
@@ -511,9 +527,23 @@ function drivesItself(namespace) {
 
 /// The synthesis vocabulary, resolved to values. `contract-probe-driver.mjs`
 /// decides which descriptor each slot gets; this only builds them.
-function buildArguments(descriptors, probeCallback, probeValue) {
-  return (descriptors ?? []).map(descriptor => {
+function buildArguments(descriptors, probeCallback, probeValue, probeMember, context) {
+  const build = descriptor => {
     if (descriptor?.kind === "literal") return descriptor.value;
+    if (descriptor?.kind === "probe-member") return probeMember;
+    if (descriptor?.kind === "object") {
+      return Object.fromEntries(
+        Object.entries(descriptor.properties ?? {}).map(([name, value]) => [name, build(value)])
+      );
+    }
+    if (descriptor?.kind === "factory") {
+      const namespace = context?.defaultNamespace;
+      const factory = namespace?.[descriptor.export];
+      if (typeof factory !== "function") {
+        throw new TypeError(`construction factory ${JSON.stringify(descriptor.export)} is not a function`);
+      }
+      return factory(...(descriptor.arguments ?? []).map(build));
+    }
     if (descriptor === "probe-callback") return probeCallback;
     if (descriptor === "probe-value") return probeValue;
     if (descriptor === "noop-callback") return () => undefined;
@@ -522,8 +552,44 @@ function buildArguments(descriptors, probeCallback, probeValue) {
     if (descriptor === "empty-array") return [];
     if (descriptor === "empty-map") return new Map();
     if (descriptor === "empty-set") return new Set();
+    if (descriptor === "dom-element") return globalThis.document?.createElement?.("div");
     return undefined;
+  };
+  return (descriptors ?? []).map(build);
+}
+
+async function reactiveReadObservation(runtime, target, probe, namespace) {
+  const [source, setSource] = runtime.createSignal(0);
+  let memberCalls = 0;
+  let siteRuns = 0;
+  let targetCalls = 0;
+  const receiver = {
+    [probe.member]: () => {
+      memberCalls += 1;
+      return source();
+    }
+  };
+  const args = buildArguments(probe.arguments, undefined, undefined, receiver, namespace);
+  const site = runtime.createMemo(() => {
+    siteRuns += 1;
+    targetCalls += 1;
+    return target(...args);
   });
+  site();
+  await runtime.settle();
+  site();
+  const memberCallsBeforeWrite = memberCalls;
+  const siteRunsBeforeWrite = siteRuns;
+  runtime.write(setSource, 1);
+  await runtime.settle();
+  site();
+  return {
+    memberCallsBeforeWrite,
+    memberCallsAfterWrite: memberCalls,
+    siteRunsBeforeWrite,
+    siteRunsAfterWrite: siteRuns,
+    calls: targetCalls
+  };
 }
 
 /// Observes one of schema v1's three relational return claims with strict
@@ -535,7 +601,7 @@ function buildArguments(descriptors, probeCallback, probeValue) {
 /// function form invokes exactly the function the export returned; a throw is
 /// caught by the session loop and remains undriven, because the schema does not
 /// describe arguments that the returned function might require.
-function relationalReturnObservation(target, probe) {
+function relationalReturnObservation(target, probe, namespace) {
   const sentinel = Object.freeze({});
   let callbackCalls = 0;
   const callback = () => {
@@ -543,7 +609,7 @@ function relationalReturnObservation(target, probe) {
     return sentinel;
   };
   const returned = selectReturnValue(
-    target(...buildArguments(probe.arguments, callback, sentinel)),
+    target(...buildArguments(probe.arguments, callback, sentinel, undefined, namespace)),
     probe.returnPath
   );
   if (probe.type === "returns-callback-result-function") {
@@ -592,7 +658,7 @@ function describeValue(value) {
 /// Which of the two re-ran is the whole observation, and it is what makes
 /// `inline`, `deferred` and `tracked` distinguishable without knowing anything
 /// about the export.
-async function callbackObservation(runtime, target, probe) {
+async function callbackObservation(runtime, target, probe, namespace) {
   const [source, setSource] = runtime.createSignal(0);
   let runs = 0;
   let siteRuns = 0;
@@ -608,7 +674,7 @@ async function callbackObservation(runtime, target, probe) {
     if (inCall) ranDuringCall = true;
     return source();
   };
-  const args = buildArguments(probe.arguments, probeCallback);
+  const args = buildArguments(probe.arguments, probeCallback, undefined, undefined, namespace);
   let forcedByAccessorRead = false;
   const site = runtime.createMemo(() => {
     siteRuns += 1;
@@ -716,7 +782,7 @@ async function callbackObservation(runtime, target, probe) {
 ///
 /// It classifies neither: `contract-probe-driver.mjs` decides what the counters
 /// mean, as everywhere else in this file.
-async function returnsObservation(runtime, target, probe) {
+async function returnsObservation(runtime, target, probe, namespace) {
   const [source, setSource] = runtime.createSignal(0);
   let plantedRuns = 0;
   const planted = () => {
@@ -724,7 +790,7 @@ async function returnsObservation(runtime, target, probe) {
     return source();
   };
   const returned = selectReturnValue(
-    target(...buildArguments(probe.arguments, planted)),
+    target(...buildArguments(probe.arguments, planted, undefined, undefined, namespace)),
     probe.returnPath
   );
   if (typeof returned !== "function") {
@@ -814,6 +880,7 @@ function respond({ completed, aborted }) {
       // a reader never has to infer "no shim" from a missing field.
       environment,
       runtime: sessionRuntime,
+      timing: { ...timing, totalNs: elapsedNs(workerStarted) },
       completed,
       ...(aborted ? { aborted } : {}),
       results
@@ -833,10 +900,16 @@ async function main() {
   let halted = false;
   let projectRuntime;
   let runtimeError;
-  try {
-    projectRuntime = buildRuntime(await import("solid-js"));
-  } catch (error) {
-    runtimeError = String(error);
+  const kindOnly = request.probes.every(probe => probe.type === "kind");
+  if (!kindOnly) {
+    const runtimeImportStarted = process.hrtime.bigint();
+    try {
+      projectRuntime = buildRuntime(await import("solid-js"));
+    } catch (error) {
+      runtimeError = String(error);
+    } finally {
+      timing.runtimeImportNs += elapsedNs(runtimeImportStarted);
+    }
   }
   // Measured once, eagerly, so the session envelope always carries the
   // capability of the runtime that drives every ordinary package in it -- and so
@@ -844,14 +917,21 @@ async function main() {
   // the probe count. Outside the `try` above because a self-check that could not
   // run is not a session without a probe runtime: `measureReruns` answers rather
   // than throwing, and that answer is `reruns: false`.
-  if (projectRuntime) sessionRuntime = await runtimeCapability(projectRuntime);
+  if (projectRuntime) {
+    const capabilityStarted = process.hrtime.bigint();
+    sessionRuntime = await runtimeCapability(projectRuntime);
+    timing.runtimeCapabilityNs += elapsedNs(capabilityStarted);
+  }
   const namespaces = new Map();
   const importNamespace = async specifier => {
     if (!namespaces.has(specifier)) {
+      const importStarted = process.hrtime.bigint();
       try {
         namespaces.set(specifier, { namespace: await import(specifier) });
       } catch (error) {
         namespaces.set(specifier, { error: String(error) });
+      } finally {
+        timing.packageImportNs += elapsedNs(importStarted);
       }
     }
     return namespaces.get(specifier);
@@ -908,15 +988,30 @@ async function main() {
     // produced it, because a differential measurement made in a runtime that
     // re-runs nothing names no execution mode -- and the answer is per runtime,
     // not per session.
+    const capabilityStarted = process.hrtime.bigint();
     const capability = await runtimeCapability(runtime);
+    timing.runtimeCapabilityNs += elapsedNs(capabilityStarted);
+    const observationStarted = process.hrtime.bigint();
     try {
+      const argumentContext = {
+        defaultNamespace: resolved.namespace
+      };
       const observation = await runtime.root(() => {
-        if (probe.type === "returns-accessor") return returnsObservation(runtime, value, probe);
-        if (probe.type.startsWith("returns-") && probe.type !== "returns-accessor") {
-          return relationalReturnObservation(value, probe);
+        if (probe.type === "reactive-read") {
+          return reactiveReadObservation(runtime, value, probe, argumentContext);
         }
-        return callbackObservation(runtime, value, probe);
+        if (probe.type === "returns-accessor") {
+          return returnsObservation(runtime, value, probe, argumentContext);
+        }
+        if (probe.type.startsWith("returns-") && probe.type !== "returns-accessor") {
+          return relationalReturnObservation(value, probe, argumentContext);
+        }
+        return callbackObservation(runtime, value, probe, argumentContext);
       });
+      const observationElapsed = elapsedNs(observationStarted);
+      timing.observationNs += observationElapsed;
+      const observationKey = observationTimingKey(probe.type);
+      timing[observationKey] = (timing[observationKey] ?? 0) + observationElapsed;
       record({
         ...base,
         outcome: "observed",
@@ -925,6 +1020,14 @@ async function main() {
         runtime: capability
       });
     } catch (error) {
+      // The observation boundary includes a throwing package call. It is the
+      // dominant restart shape on wide packages and must not disappear from
+      // the timing channel merely because no behavioral result was produced.
+      const observationElapsed = elapsedNs(observationStarted);
+      timing.observationNs += observationElapsed;
+      const observationKey = observationTimingKey(probe.type);
+      timing[observationKey] = (timing[observationKey] ?? 0) + observationElapsed;
+      timing.thrownObservationNs = (timing.thrownObservationNs ?? 0) + observationElapsed;
       record({ ...base, outcome: "threw", error: String(error) });
       halted = true;
     }

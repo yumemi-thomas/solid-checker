@@ -126,6 +126,30 @@ test("solid1: solid-js not published at the audited version is excluded not-publ
   assert.equal(result.exclusion.reason, "not-published");
 });
 
+test.each([
+  ["@tanstack/charts", ["./solid"]],
+  ["@tanstack/devtools-utils", ["./solid", "./solid/class"]],
+  [
+    "@tanstack/devtools-a11y",
+    ["./core", "./core/production", "./solid", "./solid/production"]
+  ]
+])("%s excludes its foreign framework adapters", (packageName, entrypoints) => {
+  const catalog = solidReleaseCatalog(runtimePackuments({ solidJs: solidJsPackument() }));
+  const result = selectRow({
+    packageName,
+    packument: packument({
+      "0.14.0": { peerDependencies: { "solid-js": ">=1.8" } }
+    }),
+    family: TANSTACK,
+    status: "official",
+    solidTarget: "solid1",
+    catalog,
+    auditedSolid1: AUDITED_SOLID_1
+  });
+  assert.equal(result.kind, "row");
+  assert.deepEqual(result.row.probes[0].entrypoints, entrypoints);
+});
+
 test("solid1: ^1.6.12 accepts the audited 1.9.14 release, package version selected newest-first", () => {
   const catalog = solidReleaseCatalog(runtimePackuments({ solidJs: solidJsPackument() }));
   const pkg = packument({

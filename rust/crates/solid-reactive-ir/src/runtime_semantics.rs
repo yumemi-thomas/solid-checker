@@ -409,6 +409,7 @@ mod tests {
                 optional: false,
                 callability,
                 type_descriptor: None,
+                object_shape: None,
             }),
         }
     }

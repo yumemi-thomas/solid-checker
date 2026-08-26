@@ -4,6 +4,7 @@ mod json_output;
 mod snapshot_emission;
 
 use std::{
+    cell::Cell,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
     io::{self, IsTerminal, Read, Write},
@@ -15,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
-    SourceFile, TypeFactsSession, analyze_project_measured_with_enablement,
+    SourceFile, TypeFactsProvider, TypeFactsSession, analyze_project_measured_with_enablement,
     attest_import_identities, build_project_native_measured_with_demands, contract_identity_scope,
     default_typefacts_executable, dialect, encode_package_contract, package_contract_statuses,
     read_package_contract, semantic_demand_options_for_enablement,
@@ -67,6 +68,10 @@ struct Request {
     /// sidecar because constructing an argument is not evidence of behavior.
     #[serde(default)]
     emit_probe_plan: String,
+    /// Generator-owned declaration query used only to derive and validate
+    /// probe construction recipes. It never enters contract inference.
+    #[serde(default)]
+    declaration_probe_plan: String,
     /// Where to write the analyzing program's own module inventory, as JSON.
     ///
     /// The generator's runtime-module closure is a syntax walk in *its*
@@ -202,6 +207,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Err("--serve requires a Unix platform".into());
     }
     let diagnostics = env!("CARGO_BIN_NAME") == "solid-checker-rust";
+    let declaration_probe = if request.declaration_probe_plan.is_empty() {
+        None
+    } else {
+        Some(prepare_declaration_probe(Path::new(
+            &request.declaration_probe_plan,
+        ))?)
+    };
     // `Session::open` spawns the producer, verifies the compatibility
     // handshake, and opens the project. It returns as soon as the process is
     // live, so `sidecarSpawnNs` measures startup plus handshake rather than
@@ -212,6 +224,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         &request.project_id,
         &producer_arguments(&request.typefacts_args),
     )?;
+    if let Some(probe) = declaration_probe {
+        emit_declaration_probe_plan(&mut typescript, &probe)?;
+        return Ok(0);
+    }
     let sidecar_spawn_ns = started.elapsed().as_nanos();
     let mut sources_bytes = 0usize;
     let sources_wire_bytes = 0u64;
@@ -375,40 +391,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             preloaded_bundled,
             requested_enablement,
         )?;
-        if !request.emit_contract.is_empty() {
-            emit_package_contract(dialect, &request, &analysis.program, &facts)?;
-            if !request.emit_probe_plan.is_empty() {
-                emit_probe_plan(&request, &facts)?;
+        let contract_emission_ns = Cell::new(0_u128);
+        let probe_plan_emission_ns = Cell::new(0_u128);
+        let module_inventory_ns = Cell::new(0_u128);
+        let report_timings = || {
+            if std::env::var_os("SOLID_CHECKER_TIMINGS").is_none() {
+                return;
             }
-            // After the contract, not before: a run that cannot emit a
-            // contract has no closure record to attest, and writing the
-            // inventory first would leave an attestation of a generation that
-            // produced nothing.
-            if !request.emit_module_inventory.is_empty() {
-                write_module_inventory(&mut typescript, &request)?;
-            }
-            // Emission normally produces no stdout, and the generator depends
-            // on that. `--format json` is a caller explicitly asking for the
-            // diagnostics of the same analysis, which is otherwise only
-            // obtainable by running the whole project a second time -- and the
-            // second run is the one that cannot see which obligations the
-            // emitter attributed to which export. The default format is
-            // untouched, so the generator's process contract is unchanged.
-            if request.format != "json" {
-                return Ok(0);
-            }
-        }
-        let snapshot = &analysis.snapshot;
-        let emission = snapshot_emission::emit(
-            dialect,
-            &request.format,
-            &request.project_id,
-            snapshot,
-            request.certify,
-            started.elapsed(),
-        )?;
-        io::stdout().write_all(&emission.output)?;
-        if std::env::var_os("SOLID_CHECKER_TIMINGS").is_some() {
             let (source_analysis_ns, type_facts_ns) = native_timings.map_or((0, 0), |timings| {
                 (
                     timings.source_analysis.as_nanos(),
@@ -432,19 +421,58 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     "importIdentityFilesUnknown": import_identity.unknown,
                     "importIdentitySpecifiers": import_identity.specifiers,
                     "importIdentityModules": import_identity.modules,
-                    // How binding actually answered. A refusal is silent in the
-                    // findings by design, but a defect in the span join, the
-                    // scope, or a host's offsets degrades contract coverage
-                    // toward nothing, and these two counts are what make that
-                    // visible rather than merely quiet.
                     "contractBindingsBound": analysis.program.contract_binding.bound,
                     "contractBindingsRefused": analysis.program.contract_binding.refused,
                     "irNs": diagnostic_timings.reactive_ir.as_nanos(),
                     "solveAndSnapshotNs": diagnostic_timings.solve_and_snapshot.as_nanos(),
+                    "contractEmissionNs": contract_emission_ns.get(),
+                    "probePlanEmissionNs": probe_plan_emission_ns.get(),
+                    "moduleInventoryNs": module_inventory_ns.get(),
                     "totalNs": started.elapsed().as_nanos(),
                 })
             );
+        };
+        if !request.emit_contract.is_empty() {
+            let phase_started = Instant::now();
+            emit_package_contract(dialect, &request, &analysis.program, &facts)?;
+            contract_emission_ns.set(phase_started.elapsed().as_nanos());
+            if !request.emit_probe_plan.is_empty() {
+                let phase_started = Instant::now();
+                emit_probe_plan(&request, &facts)?;
+                probe_plan_emission_ns.set(phase_started.elapsed().as_nanos());
+            }
+            // After the contract, not before: a run that cannot emit a
+            // contract has no closure record to attest, and writing the
+            // inventory first would leave an attestation of a generation that
+            // produced nothing.
+            if !request.emit_module_inventory.is_empty() {
+                let phase_started = Instant::now();
+                write_module_inventory(&mut typescript, &request)?;
+                module_inventory_ns.set(phase_started.elapsed().as_nanos());
+            }
+            // Emission normally produces no stdout, and the generator depends
+            // on that. `--format json` is a caller explicitly asking for the
+            // diagnostics of the same analysis, which is otherwise only
+            // obtainable by running the whole project a second time -- and the
+            // second run is the one that cannot see which obligations the
+            // emitter attributed to which export. The default format is
+            // untouched, so the generator's process contract is unchanged.
+            if request.format != "json" {
+                report_timings();
+                return Ok(0);
+            }
         }
+        let snapshot = &analysis.snapshot;
+        let emission = snapshot_emission::emit(
+            dialect,
+            &request.format,
+            &request.project_id,
+            snapshot,
+            request.certify,
+            started.elapsed(),
+        )?;
+        io::stdout().write_all(&emission.output)?;
+        report_timings();
         return Ok(emission.exit_code);
     } else {
         serde_json::to_writer(io::stdout(), &facts)?;
@@ -467,6 +495,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
     let mut emit_probe_plan = String::new();
+    let mut declaration_probe_plan = String::new();
     let mut emit_module_inventory = String::new();
     let mut runtime_module_resolutions = String::new();
     let mut package_name = String::new();
@@ -523,6 +552,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--emit-probe-plan=") {
             emit_probe_plan = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--declaration-probe-plan=") {
+            declaration_probe_plan = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--emit-module-inventory=") {
@@ -616,6 +649,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             }
             "--emit-probe-plan" => {
                 emit_probe_plan = args.next().ok_or("--emit-probe-plan needs a path")?
+            }
+            "--declaration-probe-plan" => {
+                declaration_probe_plan =
+                    args.next().ok_or("--declaration-probe-plan needs a path")?
             }
             "--emit-module-inventory" => {
                 emit_module_inventory = args.next().ok_or("--emit-module-inventory needs a path")?
@@ -712,6 +749,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         validate_contract_paths,
         emit_contract,
         emit_probe_plan,
+        declaration_probe_plan,
         emit_module_inventory,
         runtime_module_resolutions,
         package_name,
@@ -1739,7 +1777,10 @@ fn write_module_inventory(
                 paths_pattern: &import.paths_pattern,
             })
             .collect::<Vec<_>>(),
-        "unknownImportPaths": graph.unknown_import_paths,
+        "unknownImportPaths": graph
+            .unknown_import_paths
+            .iter()
+            .collect::<Vec<_>>(),
     });
     let output = Path::new(&request.emit_module_inventory);
     if let Some(directory) = output.parent()
@@ -1801,6 +1842,11 @@ fn emit_package_contract(
             dependency_contracts.push(contract);
         }
     }
+    let entities_by_location = facts
+        .typescript
+        .entities()
+        .map(|entity| (entity.location.clone(), entity))
+        .collect::<HashMap<_, _>>();
     let mut exports = if request.contract_entry_file.is_empty() {
         (*program.contract_exports).clone()
     } else {
@@ -1809,15 +1855,35 @@ fn emit_package_contract(
             program,
             Path::new(&request.contract_entry_file),
             &dependency_contracts,
+            &entities_by_location,
         )?
+    };
+    let entry_entities_by_name = if request.contract_entry_file.is_empty() {
+        HashMap::new()
+    } else {
+        let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
+        exports
+            .keys()
+            .filter_map(|name| {
+                entry_export_entity_indexed(
+                    facts,
+                    &entities_by_location,
+                    &entry_file,
+                    name,
+                    &mut HashSet::new(),
+                )
+                .map(|entity| (name.clone(), entity))
+            })
+            .collect::<HashMap<_, _>>()
     };
     let exported_names_by_identity = if request.contract_entry_file.is_empty() {
         HashMap::new()
     } else {
-        let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
         let mut names = HashMap::<String, Vec<String>>::new();
         for name in exports.keys() {
-            let Some(identity) = entry_export_entity(facts, &entry_file, name)
+            let Some(identity) = entry_entities_by_name
+                .get(name)
+                .copied()
                 .map(|entity| entity.runtime_identity.as_ref())
                 .filter(|identity| !identity.is_empty())
             else {
@@ -1834,10 +1900,11 @@ fn emit_package_contract(
     let exported_names_by_symbol = if request.contract_entry_file.is_empty() {
         HashMap::new()
     } else {
-        let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
         let mut names = HashMap::<String, Vec<String>>::new();
         for name in exports.keys() {
-            let Some(symbol) = entry_export_entity(facts, &entry_file, name)
+            let Some(symbol) = entry_entities_by_name
+                .get(name)
+                .copied()
                 .map(|entity| canonical_symbol(&entity.symbol, &symbol_aliases))
                 .filter(|symbol| !symbol.is_empty())
             else {
@@ -1959,6 +2026,270 @@ fn emit_package_contract(
     Ok(())
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DeclarationProbeRequest {
+    source_path: String,
+    target: String,
+    output: String,
+    exports: BTreeMap<String, usize>,
+}
+
+#[derive(Clone)]
+struct DeclarationCall {
+    export: String,
+    location: typefacts::Location,
+}
+
+fn append_declaration_call(
+    source: &mut String,
+    path: &str,
+    export: &str,
+    arguments: &[String],
+) -> DeclarationCall {
+    let start = source.len();
+    source.push_str("__solid_checker_package[");
+    source.push_str(&serde_json::to_string(export).expect("a string always serializes"));
+    source.push_str("](");
+    source.push_str(&arguments.join(", "));
+    source.push(')');
+    let end = source.len();
+    source.push_str(";\n");
+    DeclarationCall {
+        export: export.to_owned(),
+        location: typefacts::Location {
+            path: path.to_owned().into(),
+            start_byte: u64::try_from(start).unwrap_or(u64::MAX),
+            end_byte: u64::try_from(end).unwrap_or(u64::MAX),
+        },
+    }
+}
+
+fn declaration_source_prefix(probe: &DeclarationProbeRequest) -> Result<String, serde_json::Error> {
+    let source = format!(
+        "import * as __solid_checker_package from {};\n",
+        serde_json::to_string(&probe.target)?
+    );
+    Ok(source)
+}
+
+fn prepare_declaration_probe(
+    path: &Path,
+) -> Result<DeclarationProbeRequest, Box<dyn std::error::Error>> {
+    let request: DeclarationProbeRequest = serde_json::from_slice(&fs::read(path)?)?;
+    if request.exports.len() > 1024 || request.exports.values().any(|arity| *arity > 16) {
+        return Err("declaration probe plan exceeds its bounded export/arity limit".into());
+    }
+    let mut source = declaration_source_prefix(&request)?;
+    let source_path = Path::new(&request.source_path);
+    for (export, arity) in &request.exports {
+        append_declaration_call(
+            &mut source,
+            &request.source_path,
+            export,
+            &vec!["null as never".to_owned(); *arity],
+        );
+    }
+    fs::write(source_path, source)?;
+    Ok(request)
+}
+
+fn object_recipe(shape: &typefacts::ObjectConstructionShape) -> Option<serde_json::Value> {
+    let mut properties = serde_json::Map::new();
+    for property in shape.required_properties.iter() {
+        let witness = match property.witness {
+            typefacts::ConstructionWitness::EmptyArray => "empty-array",
+            typefacts::ConstructionWitness::EmptyObject => "empty-object",
+            typefacts::ConstructionWitness::Unknown => return None,
+        };
+        properties.insert(
+            property.name.to_string(),
+            serde_json::Value::String(witness.to_owned()),
+        );
+    }
+    Some(serde_json::json!({ "kind": "object", "properties": properties }))
+}
+
+fn recipe_javascript(recipe: &serde_json::Value) -> Option<String> {
+    match recipe {
+        serde_json::Value::String(value) if value == "empty-array" => Some("[]".into()),
+        serde_json::Value::String(value) if value == "empty-object" => Some("{}".into()),
+        serde_json::Value::Object(object) if object.get("kind")?.as_str()? == "object" => {
+            let properties = object.get("properties")?.as_object()?;
+            let mut rendered = Vec::with_capacity(properties.len());
+            for (name, value) in properties {
+                rendered.push(format!(
+                    "{}: {}",
+                    serde_json::to_string(name).ok()?,
+                    recipe_javascript(value)?
+                ));
+            }
+            Some(format!("{{{}}}", rendered.join(", ")))
+        }
+        serde_json::Value::Object(object) if object.get("kind")?.as_str()? == "factory" => {
+            let export = object.get("export")?.as_str()?;
+            let arguments = object.get("arguments")?.as_array()?;
+            let arguments = arguments
+                .iter()
+                .map(recipe_javascript)
+                .collect::<Option<Vec<_>>>()?;
+            Some(format!(
+                "__solid_checker_package[{}]({})",
+                serde_json::to_string(export).ok()?,
+                arguments.join(", ")
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn resolved_calls_by_location(
+    table: &solid_facts::TypeScriptTable,
+) -> HashMap<typefacts::Location, &typefacts::ResolvedCall> {
+    table
+        .entities()
+        .filter_map(|entity| {
+            entity
+                .resolved_call
+                .as_deref()
+                .map(|call| (entity.location.clone(), call))
+        })
+        .collect()
+}
+
+fn query_declaration_calls(
+    typescript: &mut TypeFactsSession,
+    calls: &[DeclarationCall],
+    object_shapes: bool,
+) -> Result<solid_facts::TypeScriptTable, BackendError> {
+    typescript.semantic(
+        calls
+            .iter()
+            .map(|call| typefacts::v3::EntityDemand {
+                location: call.location.clone(),
+                resolved_call: true,
+                parameter_object_shape: object_shapes,
+                ..typefacts::v3::EntityDemand::default()
+            })
+            .collect(),
+    )
+}
+
+fn emit_declaration_probe_plan(
+    typescript: &mut TypeFactsSession,
+    probe: &DeclarationProbeRequest,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if probe.exports.is_empty() {
+        let fragment = ProbePlanFragment {
+            schema_version: 2,
+            source: "typescript-value-domain",
+            exports: BTreeMap::new(),
+        };
+        fs::write(
+            &probe.output,
+            format!("{}\n", serde_json::to_string_pretty(&fragment)?),
+        )?;
+        return Ok(());
+    }
+    let mut discovery_source = declaration_source_prefix(probe)?;
+    let mut discovery_calls = Vec::new();
+    for (export, arity) in &probe.exports {
+        discovery_calls.push(append_declaration_call(
+            &mut discovery_source,
+            &probe.source_path,
+            export,
+            &vec!["null as never".to_owned(); *arity],
+        ));
+    }
+    let discovery = query_declaration_calls(typescript, &discovery_calls, true)?;
+    let discovered = resolved_calls_by_location(&discovery);
+    let mut candidates = Vec::<(String, usize, serde_json::Value)>::new();
+    for call in &discovery_calls {
+        let Some(resolved) = discovered.get(&call.location) else {
+            continue;
+        };
+        for argument in resolved.arguments.iter() {
+            let Some(parameter) = argument.parameter.as_ref() else {
+                continue;
+            };
+            let Some(shape) = parameter.object_shape.as_ref() else {
+                continue;
+            };
+            let Some(recipe) = object_recipe(shape) else {
+                continue;
+            };
+            let Ok(index) = usize::try_from(argument.argument_index) else {
+                continue;
+            };
+            candidates.push((call.export.clone(), index, recipe));
+        }
+    }
+
+    // Validate each completed candidate through the ordinary TypeScript call
+    // validity path. Shape discovery alone is construction input, never proof
+    // that generic inference accepts the completed expression.
+    let mut validation_source = declaration_source_prefix(probe)?;
+    let mut validation_calls = Vec::new();
+    for (export, index, recipe) in &candidates {
+        let Some(arity) = probe.exports.get(export) else {
+            continue;
+        };
+        if index >= arity {
+            continue;
+        }
+        let mut arguments = vec!["null as never".to_owned(); *arity];
+        let Some(rendered) = recipe_javascript(recipe) else {
+            continue;
+        };
+        arguments[*index] = rendered;
+        validation_calls.push(append_declaration_call(
+            &mut validation_source,
+            &probe.source_path,
+            export,
+            &arguments,
+        ));
+    }
+    typescript.update(vec![typefacts::v3::FileChange {
+        path: probe.source_path.clone(),
+        source: validation_source.into_bytes(),
+        deleted: false,
+        version: 1,
+    }])?;
+    let validation = query_declaration_calls(typescript, &validation_calls, false)?;
+    let validated_calls = resolved_calls_by_location(&validation);
+    let mut exports = BTreeMap::<String, BTreeMap<usize, Vec<serde_json::Value>>>::new();
+    for ((export, index, recipe), call) in candidates.iter().zip(&validation_calls) {
+        if validated_calls
+            .get(&call.location)
+            .is_some_and(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+        {
+            exports
+                .entry(export.clone())
+                .or_default()
+                .entry(*index)
+                .or_default()
+                .push(recipe.clone());
+        }
+    }
+
+    for parameters in exports.values_mut() {
+        for recipes in parameters.values_mut() {
+            let mut seen = HashSet::new();
+            recipes.retain(|recipe| seen.insert(recipe.to_string()));
+        }
+    }
+    let fragment = ProbePlanFragment {
+        schema_version: 2,
+        source: "typescript-value-domain",
+        exports,
+    };
+    fs::write(
+        &probe.output,
+        format!("{}\n", serde_json::to_string_pretty(&fragment)?),
+    )?;
+    Ok(())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProbePlanFragment {
@@ -1987,38 +2318,57 @@ fn emit_probe_plan(
         .map(|entry| entry.exports.keys().cloned().collect::<Vec<_>>())
         .unwrap_or_default();
     let aliases = canonical_symbol_aliases(facts);
+    // One exact-location index for the whole plan. The former implementation
+    // searched the complete Type Facts entity table for every exported
+    // function, every candidate declaration, and every parameter. A wide
+    // package made that exports × functions × entities work, even though the
+    // complete fact table was already resident and immutable.
+    let entities_by_location = facts
+        .typescript
+        .entities()
+        .map(|entity| (entity.location.clone(), entity))
+        .collect::<HashMap<_, _>>();
+    let mut functions_by_symbol = HashMap::new();
+    for file in &facts.files {
+        for function in &file.ast.functions {
+            let Some(name) = &function.name else {
+                continue;
+            };
+            let location = typefacts::Location {
+                path: file.path.to_string().into(),
+                start_byte: u64::from(name.span.start),
+                end_byte: u64::from(name.span.end),
+            };
+            let Some(entity) = entities_by_location.get(&location) else {
+                continue;
+            };
+            let symbol = canonical_symbol(&entity.symbol, &aliases);
+            if !symbol.is_empty() {
+                functions_by_symbol
+                    .entry(symbol)
+                    .or_insert_with(Vec::new)
+                    .push((file, function));
+            }
+        }
+    }
     let mut exports = BTreeMap::new();
     for export_name in names {
-        let Some(export_entity) = entry_export_entity(facts, &entry_file, &export_name) else {
+        let Some(export_entity) = entry_export_entity_indexed(
+            facts,
+            &entities_by_location,
+            &entry_file,
+            &export_name,
+            &mut HashSet::new(),
+        ) else {
             continue;
         };
         let export_symbol = canonical_symbol(&export_entity.symbol, &aliases);
         if export_symbol.is_empty() {
             continue;
         }
-        let mut matches = Vec::new();
-        for file in &facts.files {
-            for function in &file.ast.functions {
-                let Some(name) = &function.name else {
-                    continue;
-                };
-                let location = typefacts::Location {
-                    path: file.path.to_string().into(),
-                    start_byte: u64::from(name.span.start),
-                    end_byte: u64::from(name.span.end),
-                };
-                let Some(entity) = facts.typescript.entities().find(|entity| {
-                    entity.location == location
-                        && canonical_symbol(&entity.symbol, &aliases) == export_symbol
-                }) else {
-                    continue;
-                };
-                let _ = entity;
-                matches.push((file, function));
-            }
-        }
         // Ambiguous identity is no construction proof.
-        let [(file, function)] = matches.as_slice() else {
+        let Some([(file, function)]) = functions_by_symbol.get(&export_symbol).map(Vec::as_slice)
+        else {
             continue;
         };
         let mut parameters = BTreeMap::new();
@@ -2031,11 +2381,7 @@ fn emit_probe_plan(
                 start_byte: u64::from(name.span.start),
                 end_byte: u64::from(name.span.end),
             };
-            let Some(entity) = facts
-                .typescript
-                .entities()
-                .find(|entity| entity.location == location)
-            else {
+            let Some(entity) = entities_by_location.get(&location) else {
                 continue;
             };
             let mut recipes = Vec::new();
@@ -2062,6 +2408,18 @@ fn emit_probe_plan(
                 }
                 if types.iter().any(|name| name.as_ref() == "Set") {
                     recipes.push(serde_json::Value::String("empty-set".to_owned()));
+                }
+                // These names are compiler-resolved default-library identities,
+                // not spelling heuristics. A div is a concrete inhabitant of
+                // each type and the probe report already labels the browser
+                // shim as weaker than a real-browser observation.
+                if types.iter().any(|name| {
+                    matches!(
+                        name.as_ref(),
+                        "EventTarget" | "Node" | "Element" | "HTMLElement" | "HTMLDivElement"
+                    )
+                }) {
+                    recipes.push(serde_json::Value::String("dom-element".to_owned()));
                 }
             }
             if let Some(candidates) = entity.primitive_literal_candidates.as_deref() {
@@ -2107,10 +2465,24 @@ fn contract_exports_for_entry_file(
     program: &solid_reactive_ir::Program,
     entry_file: &Path,
     dependency_contracts: &[solid_reactive_ir::PackageContract],
+    entities_by_location: &HashMap<typefacts::Location, &typefacts::EntityFact>,
 ) -> Result<BTreeMap<String, solid_reactive_ir::ContractExport>, Box<dyn std::error::Error>> {
     let entry_file = entry_file.canonicalize()?;
     let mut visiting = HashSet::new();
     let names = exported_names_for_file(facts, &entry_file, dependency_contracts, &mut visiting)?;
+    let entry_entities_by_name = names
+        .iter()
+        .filter_map(|name| {
+            entry_export_entity_indexed(
+                facts,
+                entities_by_location,
+                &entry_file,
+                name,
+                &mut HashSet::new(),
+            )
+            .map(|entity| (name.clone(), entity))
+        })
+        .collect::<HashMap<_, _>>();
     let symbol_aliases = canonical_symbol_aliases(facts);
     let generated_owner_requirements =
         generated_owner_requirements_by_symbol(facts, program, &symbol_aliases);
@@ -2137,18 +2509,26 @@ fn contract_exports_for_entry_file(
                 entry_file.display()
             )
         })?;
-        let summary = promote_entry_callable(facts, &entry_file, &name, summary, trusted_kind)?;
+        let summary = promote_entry_callable(
+            facts,
+            &entry_file,
+            &name,
+            entry_entities_by_name.get(&name).copied(),
+            summary,
+            trusted_kind,
+        )?;
         let summary = attach_generated_owner_requirements(
             facts,
             &symbol_aliases,
             &generated_owner_requirements,
             &entry_file,
             &name,
+            entry_entities_by_name.get(&name).copied(),
             summary,
         );
         exports.insert(name, summary);
     }
-    unify_runtime_alias_summaries(facts, &entry_file, &mut exports);
+    unify_runtime_alias_summaries(&entry_entities_by_name, &mut exports);
     if exports.is_empty() {
         return Err(format!(
             "emit package contract: entry file {} has no runtime ESM exports",
@@ -2305,9 +2685,10 @@ fn attach_generated_owner_requirements(
     generated: &GeneratedOwnerRequirements,
     entry_file: &Path,
     export_name: &str,
+    export_entity: Option<&typefacts::EntityFact>,
     mut summary: solid_reactive_ir::ContractExport,
 ) -> solid_reactive_ir::ContractExport {
-    let operations = entry_export_entity(facts, entry_file, export_name)
+    let operations = export_entity
         .map(|entity| canonical_symbol(&entity.symbol, aliases))
         .filter(|symbol| !symbol.is_empty())
         .and_then(|symbol| generated.by_symbol.get(&symbol))
@@ -2407,13 +2788,14 @@ fn promote_entry_callable(
     facts: &solid_facts::ProjectFacts,
     entry_file: &Path,
     name: &str,
+    export_entity: Option<&typefacts::EntityFact>,
     summary: solid_reactive_ir::ContractExport,
     trusted_kind: bool,
 ) -> Result<solid_reactive_ir::ContractExport, Box<dyn std::error::Error>> {
     if trusted_kind && summary.kind != "value" {
         return Ok(summary);
     }
-    let Some(entity) = entry_export_entity(facts, entry_file, name) else {
+    let Some(entity) = export_entity else {
         return Ok(summary);
     };
     let refuse = |reason: String| -> Result<_, Box<dyn std::error::Error>> {
@@ -2423,7 +2805,7 @@ fn promote_entry_callable(
         )
         .into())
     };
-    match solid_reactive_ir::export_kind_proof(facts, &entity.location) {
+    match solid_reactive_ir::export_kind_proof_from_entity(facts, &entity.location, Some(entity)) {
         // A call signature or a construct signature; either is
         // `typeof === "function"` at runtime, and the type system reads a
         // construct signature as *not* a call signature, so a class arrives
@@ -2475,6 +2857,72 @@ fn entry_export_entity<'a>(
     name: &str,
 ) -> Option<&'a typefacts::EntityFact> {
     entry_export_entity_with_visiting(facts, entry_file, name, &mut HashSet::new())
+}
+
+fn entry_export_entity_indexed<'a>(
+    facts: &'a solid_facts::ProjectFacts,
+    entities_by_location: &HashMap<typefacts::Location, &'a typefacts::EntityFact>,
+    entry_file: &Path,
+    name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> Option<&'a typefacts::EntityFact> {
+    let entry_file = entry_file.canonicalize().ok()?;
+    if !visiting.insert((entry_file.clone(), name.to_owned())) {
+        return None;
+    }
+    let file = facts
+        .files
+        .iter()
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), &entry_file))?;
+    for export in file
+        .ast
+        .module_level_exports()
+        .filter(|export| !export.type_only)
+    {
+        if let Some(specifier) = export
+            .specifiers
+            .iter()
+            .chain(&export.declarations)
+            .find(|specifier| !specifier.type_only && specifier.exported == name)
+        {
+            let span = specifier.local.span;
+            let location = typefacts::Location {
+                path: file.path.to_string().into(),
+                start_byte: u64::from(span.start),
+                end_byte: u64::from(span.end),
+            };
+            if let Some(entity) = entities_by_location.get(&location) {
+                return Some(*entity);
+            }
+            if let Some(module) = export.module.as_deref()
+                && module.starts_with('.')
+            {
+                let target = resolve_relative_export(facts, &entry_file, module).ok()?;
+                let local_name = file.source_text(specifier.local.span).unwrap_or(name);
+                if let Some(entity) = entry_export_entity_indexed(
+                    facts,
+                    entities_by_location,
+                    &target,
+                    local_name,
+                    visiting,
+                ) {
+                    return Some(entity);
+                }
+            }
+        }
+        if export.kind == solid_facts::ast::ExportKind::All
+            && let Some(module) = export.module.as_deref()
+            && module.starts_with('.')
+        {
+            let target = resolve_relative_export(facts, &entry_file, module).ok()?;
+            if let Some(entity) =
+                entry_export_entity_indexed(facts, entities_by_location, &target, name, visiting)
+            {
+                return Some(entity);
+            }
+        }
+    }
+    None
 }
 
 fn entry_export_entity_with_visiting<'a>(
@@ -2546,13 +2994,14 @@ fn entry_export_entity_with_visiting<'a>(
 }
 
 fn unify_runtime_alias_summaries(
-    facts: &solid_facts::ProjectFacts,
-    entry_file: &Path,
+    entry_entities_by_name: &HashMap<String, &typefacts::EntityFact>,
     exports: &mut BTreeMap<String, solid_reactive_ir::ContractExport>,
 ) {
     let mut names_by_identity = BTreeMap::<String, Vec<String>>::new();
     for name in exports.keys() {
-        let Some(identity) = entry_export_entity(facts, entry_file, name)
+        let Some(identity) = entry_entities_by_name
+            .get(name)
+            .copied()
             .map(|entity| entity.runtime_identity.as_ref())
             .filter(|identity| !identity.is_empty())
         else {

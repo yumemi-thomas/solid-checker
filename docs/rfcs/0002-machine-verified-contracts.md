@@ -216,7 +216,7 @@ promotion**, and it is larger than it sounds.
 | `returns` `kind: argument` | B | claim string `returns=argument[N]`; a fresh object sentinel is supplied at parameter N and strict return identity is observed |
 | `returns` `kind: callback-result` | B | claim string `returns=callback-result[N]`; callback N returns a fresh object sentinel and strict return identity is observed |
 | `returns` `kind: callback-result-function` | B | claim string `returns=callback-result-function[N]`; callback N returns a fresh object sentinel and the returned function's result is compared by strict identity |
-| `reactiveReads[]`, including `parameter-member` | A where compiler facts are exact; otherwise C | no probe claim string exists; confirming one means synthesizing a reactive source and observing the subscription |
+| `reactiveReads[]` | A where compiler facts are exact; otherwise C | an exact `parameter-member` row with one static `member` additionally gets a runtime falsifier that plants a signal-reading method and observes the subscription; unqualified rows retain no probe form |
 | `asyncBehavior` | C today | no claim string — **and no evidence slot in the schema**, so a probed async claim could not be recorded even if it were driven |
 | `ownerRequirements[]` | A | compiler symbol identity; the slot exists, nothing writes `probed` into it |
 | `variants[]` and their `conditions` | A | read off the export map; probes select modes through `modeApplies`, they do not discover branches |

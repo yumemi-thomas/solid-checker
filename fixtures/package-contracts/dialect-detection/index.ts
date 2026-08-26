@@ -88,13 +88,15 @@ export function constructionCandidates(
   items: unknown[],
   map: Map<unknown, unknown>,
   set: Set<unknown>,
-  mode: "open" | "closed" | 0 | 1 | false | true
+  mode: "open" | "closed" | 0 | 1 | false | true,
+  container: HTMLElement
 ): void {
   void absent;
   void items;
   void map;
   void set;
   void mode;
+  void container;
 }
 
 // One identity-looking branch is not an identity contract. The generic probe
