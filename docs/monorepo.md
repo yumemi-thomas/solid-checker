@@ -1,71 +1,132 @@
 # Monorepo and upstream policy
 
-This repository is the build and review home for the `solid-checker` analysis
-path: the Rust checker, its schemas, tests, and corpus automation. The JSX
-compiler and the TypeFacts producer are pinned dependencies maintained in their
-own repositories.
+This repository is the build and review home for the complete `solid-checker`
+analysis path. The approved target co-locates the Type Facts producer and client
+with the checker, while Solid compiler source follows its upstream owner through
+a small semantic-only fork.
 
-## Module seams
+The source bootstrap is planned, not yet implemented. Until its parity gates
+pass, `rust/Cargo.toml`'s current DOM Expressions and external Type Facts pins
+remain the build authority. Do not partially apply the target layout or remove
+the current handshake.
 
-Physical colocation does not merge the module interfaces:
+## Target module seams
+
+Physical colocation does not merge module interfaces:
 
 - `rust/crates/solid-facts-backend` orchestrates certification.
-- `rust/crates/solid-facts` owns the fact model, including compiler-fact
-  integration behind the `CompilerFactsProvider` seam.
+- `rust/crates/solid-facts` owns syntax and normalized fact-domain integration.
+- `rust/crates/typefacts` owns the Rust Type Facts process/session interface.
+- `apps/solid-typefacts` and its private packages own TypeScript-Go facts.
 - `rust/crates/solid-dialect` owns the Solid vocabulary seam both language
   versions answer through.
-- `rust/dialects/solid-v2` owns Solid 2.0 specifics: the rule catalog and the
-  dom-expressions compiler adapter.
-- `rust/dialects/solid-v1` owns Solid 1.x specifics: its rule catalog and the
-  adapter over the `solid-1x-compiler` fork.
-- The `typefacts` crate and its `solid-typefacts` producer own TypeScript-Go
-  facts, in their own repository.
-- Each `dom-expressions-compiler` fork owns its JSX execution and
-  compiler-established ownership semantics.
-- `rust/crates/solid-facts-backend` owns package contracts.
+- `rust/dialects/solid-v2` owns Solid 2 vocabulary and the adapter over the
+  pinned `solidjs-compiler` fork.
+- `rust/dialects/solid-v1` owns Solid 1.x vocabulary and the adapter over the
+  separate `solid-1x-compiler` fork.
+- `rust/crates/solid-facts-backend` owns package-contract acquisition and
+  normalization.
+- `rust/crates/solid-reactive-ir` composes facts and owns proof obligations.
 
-Oxc and compiler facts stay in-process.
+Oxc and compiler facts stay in-process. Type Facts stays behind its versioned
+process/session interface. Neither compiler AST nodes nor TypeScript-Go objects
+cross these seams.
 
-## Fork policy
+## Solid 2 compiler policy
 
-The DOM Expressions compiler is consumed as a pinned Cargo git dependency on
-[a fork](https://github.com/yumemi-thomas/dom-expressions), not vendored. Its
-own repository owns compiler development and conformance against the reference
-transform.
+Solid's Oxc compiler moved to
+[`solidjs/solid/packages/compiler`](https://github.com/solidjs/solid/tree/next/packages/compiler).
+The checker will consume package `solidjs-compiler` from an exact revision of
+[`yumemi-thomas/solid`](https://github.com/yumemi-thomas/solid), based on a
+recorded `solidjs/solid#next` commit. It will no longer develop Solid 2 facts in
+the former DOM Expressions repository.
 
-To adopt new compiler work, move the `rev` of `dom-expressions-compiler` in
-`rust/Cargo.toml`, record the new revision in `THIRD_PARTY_NOTICES.md`, and run
-`make verify`. Pin by revision rather than branch so a build is reproducible
-and every upstream move is an explicit, reviewable commit here.
+The fork's patch queue is semantic-only. Allowed patches add semantic trace
+models, output-neutral recorder calls at existing decisions, trace validation
+and serialization, host-independent fact access, and fact-specific tests.
+Forbidden patches change lowering, generated JavaScript, source maps,
+diagnostics, runtime behavior, compiler features, performance, unrelated
+dependencies, or unrelated compiler implementation. A dependency addition is
+allowed only when it is required by the semantic-fact interface and is isolated
+from normal compiler behavior.
 
-The Solid 1.x compiler follows the same policy on its own fork,
-[solid-1x-compiler](https://github.com/yumemi-thomas/solid-1x-compiler) — the
-same crate name from a second repository, kept at differential parity with
-the Babel compiler Solid 1.x ships. Its `rev` moves in `rust/Cargo.toml` and
-`THIRD_PARTY_NOTICES.md` exactly like the dom-expressions pin; upstream's
-2.0-only codegen changes are deliberately not adopted there.
+If fact instrumentation exposes a compiler defect, report or fix it upstream in
+a separate branch and pull request. Until upstream `next` contains the behavior,
+the checker fact remains open. Rebase the semantic branch after the upstream
+change; never carry the compiler fix in the checker semantic branch.
 
-The TypeFacts producer and its Rust client are pinned the same way, on
-[solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts). They must
-move together: the startup handshake compares protocol version, schema digest,
-and build id, so `scripts/build-typefacts.sh` reads the revision straight out
-of `rust/Cargo.toml` rather than keeping a second copy of it.
+Every fork revision is immutable in `rust/Cargo.toml`. A revision move records
+the upstream base and semantic patch head in `THIRD_PARTY_NOTICES.md`, updates
+the trace-version assertion and cache identity, and runs:
 
-That pin is also what makes the producer cacheable. The binary is a function of
-the pinned revision and the build id and nothing else, so the script records
-that pair in `<output>.buildinfo` and returns immediately when it already
-matches — which is why several `make` targets can each depend on
-`build-typefacts` without paying for it more than once. CI keys a cache entry on
-the same pair (`.github/actions/typefacts`), so a job restores the producer
-instead of cloning the repository and running a cold Go build. Set
-`TYPEFACTS_REBUILD=1` to force the rebuild anyway.
+- trace-on versus trace-off output identity;
+- fork versus exact-upstream output identity when facts are ignored;
+- semantic-trace reconciliation and mutation tests;
+- Solid 2 compiler-adapter and process fixtures;
+- checker finding parity, coverage, ownership, and full verification.
 
-A release deliberately gets none of that: its build id is the tag, so every
-published producer is compiled from the pinned revision during that run. The
-same applies when the pin moves — a new revision is a new cache key.
+The detailed transition is in
+[Compiler and Type Facts bootstrap](package-contract-v2/compiler-and-typefacts-bootstrap.md).
 
-Oxc, tsgolint, and TypeScript-Go stay pinned dependencies too. Prefer a pinned
-dependency on a fork's own repository over vendoring sources into this tree.
+## Solid 1.x compiler policy
+
+Solid 1.x remains on
+[`solid-1x-compiler`](https://github.com/yumemi-thomas/solid-1x-compiler), kept
+at differential parity with the Babel compiler Solid 1.x ships. Solid 2
+compiler relocation does not authorize importing next-only lowering into this
+fork. Its exact `rev` and notice move together.
+
+## Type Facts colocation policy
+
+The external
+[`solid-ts-facts`](https://github.com/yumemi-thomas/solid-ts-facts) source will
+be imported at the exact current checker pin, with history, into this
+repository. The target layout is:
+
+```text
+go.mod / go.sum
+apps/solid-typefacts/
+shims/
+rust/crates/typefacts/
+schema/typefacts-*.json
+docs/typefacts/
+benchmarks/typefacts/
+```
+
+The source move is behavior-neutral. Before a new demand or protocol change:
+
+- replay the same request transcripts through external and imported builds;
+- compare encoded and decoded semantic results;
+- run every Go, Rust, retained-session, cancellation, restart, stale-generation,
+  memory, and performance test;
+- prove checker findings are unchanged;
+- replace the git dependency with a path dependency and external clone build in
+  one green change.
+
+After migration, `scripts/build-typefacts.sh` builds local source. Its cache
+stamp is a manifest digest over the producer, client, shims, schemas, dependency
+pins, relevant toolchain identity, and build id. The startup handshake continues
+to compare protocol version, schema digest, build identity, and codec limits.
+
+All later Type Facts changes land atomically with the Rust client, checker
+consumer, proof fixtures, and corpus measurements they affect. After two clean
+CI runs and one release build, the external repository becomes read-only or is
+archived with a pointer to the imported commit; it is no longer an active source
+or pull-request target.
+
+## Current transition rule
+
+Before the bootstrap lands, the existing revision-pinned dependencies and build
+scripts remain authoritative. During implementation, do not mix these states:
+
+- external Type Facts producer with a local client;
+- local producer with a git-pinned client;
+- Solid compiler lowering with DOM Expressions trace fallback;
+- semantic trace versions accepted by assertion from the producer's own
+  constant;
+- a branch name where an exact compiler revision is required.
+
+Each transition is atomic and fails closed on a mismatch.
 
 ## Corpus policy
 

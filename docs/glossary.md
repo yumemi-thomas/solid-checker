@@ -10,6 +10,17 @@ Use these terms in code, diagnostics, contracts, and design discussions.
 | Effect summary | An interprocedural description of a function's reactive behavior. |
 | Proof obligation | A fact that must be established before a project can be certified. |
 | Package contract | A static description of the reactive effects of a package's exported interface. |
+| Claim domain | One independently knowable set of package behavior. A claim domain can remain open while sibling domains are closed. |
+| Domain closure | Accepted proof that one claim domain exhausts the possible behavior for its exact subject and scope. |
+| Contract proposal | Unaccepted machine output containing behavioral candidates and proof obligations. |
+| Accepted package contract | A normalized contract whose closed claims and exact identity are bound by a valid acceptance receipt. |
+| Artifact case | One exact entrypoint-resolution result with its runtime artifact, declarations, and dependency closure. |
+| Operation graph | A causal model of semantic operations and their scheduling, data, cleanup, error, and lifetime relationships. |
+| Evidence sidecar | A hash-bound artifact containing detailed proof inputs and runtime observations, not required during ordinary analysis after acceptance. |
+| Acceptance receipt | A verifier-issued binding between contract meaning, exact artifacts, proof material, and verification policy. |
+| Semantic digest | The canonical identity of normalized contract meaning, independent of wire formatting and compression. |
+| Compiler semantic trace | The compiler-owned transform-local record of semantic decisions made while lowering one source file; it observes rather than changes lowering. |
+| Compiler execution facts | The checker-normalized fact domain projected from a validated compiler semantic trace, with an independent protocol version. |
 | Violation | A proven breach of a Solid reactive rule. |
 | Uncertifiable | An unresolved proof obligation at an explicitly unsupported or unavailable boundary. |
 | Certification snapshot | A deterministic project result containing status, findings, explanations, fixes, package summaries, and metrics. |

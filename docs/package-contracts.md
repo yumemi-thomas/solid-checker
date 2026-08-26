@@ -1,5 +1,10 @@
 # Package contracts
 
+> This page documents the currently implemented legacy contract format. The
+> approved machine-first replacement, which is not yet implemented, is tracked
+> in [Next package-contract design](package-contract-v2/README.md). Do not mix
+> its closure, artifact-case, or receipt semantics into legacy documents.
+
 Milestone 5 introduces `solid-reactivity.json`, a non-executable summary that
 preserves exported reactive reads when a dependency's implementation source is
 not part of the consuming TypeScript project.

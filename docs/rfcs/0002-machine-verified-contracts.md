@@ -1,6 +1,7 @@
 # RFC 0002: Machine-verified contracts
 
-- **Status:** Draft
+- **Status:** Superseded for the replacement format; retained as the legacy
+  generator/probe design record
 - **Authors:** solid-checker maintainers
 - **Date:** 2026-08-22
 - **Affects:** [package-contracts.md](../package-contracts.md),
@@ -11,6 +12,12 @@
   contract means to a consumer
 - **Relates to:** [RFC 0001](0001-contract-registry.md), which distributes
   contracts. This RFC changes how they are produced.
+
+The approved replacement trust model is specified in
+[Next package-contract design](../package-contract-v2/README.md). The current
+implementation and legacy schema still reflect this RFC until that migration
+lands; the replacement does not treat runtime observation as negative proof or
+allow the generator to certify domain closure.
 
 ## Summary
 
