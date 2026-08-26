@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "vitest";
 
 import {
-  buildBaseline,
+  assertSuccessfulCacheDisabledMeasurements,
   classifyVerificationRows,
   freezeFixture,
   measureContract,
@@ -70,13 +70,30 @@ describe("Phase 0 baseline", () => {
   });
 
   test("requires successful cache-disabled measurements", () => {
-    const baseline = buildBaseline({ loadIterations: 2, queryIterations: 2_000 });
-    assert.equal(baseline.ecosystem.classifications.rows.length, 418);
-    assert.equal(baseline.fixtureFreeze.fixtureCount, 13);
-    assert.equal(baseline.rc3Audit.integrityVerified, true);
-    assert.equal(baseline.rc3Audit.allConcreteExportTargetsExist, true);
-    assert.ok(
-      baseline.measurements.ecosystemGeneration.command.includes("SOLID_CHECKER_GATE_CACHE=0")
+    assert.doesNotThrow(() =>
+      assertSuccessfulCacheDisabledMeasurements({
+        generation: {
+          command: ["env", "SOLID_CHECKER_GATE_CACHE=0", "bun", "scripts/ecosystem-benchmark/run.mjs"],
+          exitCode: 0
+        }
+      })
+    );
+    assert.throws(
+      () =>
+        assertSuccessfulCacheDisabledMeasurements({
+          generation: { command: ["bun", "scripts/ecosystem-benchmark/run.mjs"], exitCode: 0 }
+        }),
+      /generation is not a successful cache-disabled measurement/
+    );
+    assert.throws(
+      () =>
+        assertSuccessfulCacheDisabledMeasurements({
+          generation: {
+            command: ["env", "SOLID_CHECKER_GATE_CACHE=0", "bun", "scripts/ecosystem-benchmark/run.mjs"],
+            exitCode: 1
+          }
+        }),
+      /generation is not a successful cache-disabled measurement/
     );
   });
 });

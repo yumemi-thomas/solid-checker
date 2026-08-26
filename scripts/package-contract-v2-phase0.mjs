@@ -419,6 +419,14 @@ function binaryRecord(record) {
   };
 }
 
+export function assertSuccessfulCacheDisabledMeasurements(measurements) {
+  for (const [name, measurement] of Object.entries(measurements)) {
+    if (measurement.exitCode !== 0 || !measurement.command.includes("SOLID_CHECKER_GATE_CACHE=0")) {
+      throw new Error(`${name} is not a successful cache-disabled measurement`);
+    }
+  }
+}
+
 export function buildBaseline({ loadIterations = 300, queryIterations = 200_000 } = {}) {
   const generation = json("benchmarks/ecosystem/report.json");
   const verification = json("benchmarks/ecosystem/verification-report.json");
@@ -429,11 +437,7 @@ export function buildBaseline({ loadIterations = 300, queryIterations = 200_000 
     ecosystemVerification: json("benchmarks/package-contract-v2/phase0/measurements/ecosystem-verification.json"),
     legacyContractCorpus: json("benchmarks/package-contract-v2/phase0/measurements/contract-corpus.json")
   };
-  for (const [name, measurement] of Object.entries(measurements)) {
-    if (measurement.exitCode !== 0 || !measurement.command.includes("SOLID_CHECKER_GATE_CACHE=0")) {
-      throw new Error(`${name} is not a successful cache-disabled measurement`);
-    }
-  }
+  assertSuccessfulCacheDisabledMeasurements(measurements);
   const rows = classifyVerificationRows(verification, generation);
   const fixtures = Object.entries(FROZEN_FIXTURES).map(([name, purpose]) =>
     freezeFixture(name, purpose)
