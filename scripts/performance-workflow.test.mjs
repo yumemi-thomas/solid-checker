@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import { test } from "vitest";
 
 const workflow = readFileSync(".github/workflows/performance.yml", "utf8");
 const configuration = readFileSync("codspeed.yml", "utf8");
@@ -10,14 +10,14 @@ test("performance regressions are compared on pull requests and the default bran
   assert.match(workflow, /\bpull_request:/);
   assert.match(workflow, /CodSpeedHQ\/action@v4/);
   assert.match(workflow, /\bmode: walltime\b/);
-  assert.match(workflow, /node benchmarks\/verify-performance\.mjs/);
+  assert.match(workflow, /bun benchmarks\/verify-performance\.mjs/);
   assert.match(
     workflow,
     /SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE: 225000/,
   );
   assert.match(workflow, /git merge-base HEAD/);
   assert.match(workflow, /git rev-parse HEAD\^/);
-  assert.match(workflow, /node benchmarks\/compare-performance\.mjs/);
+  assert.match(workflow, /bun benchmarks\/compare-performance\.mjs/);
 });
 
 test("fresh, cached, and incremental paths have independent histories", () => {

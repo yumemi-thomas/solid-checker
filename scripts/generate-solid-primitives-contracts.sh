@@ -28,9 +28,9 @@ while [ "$pass" -le 12 ]; do
 
   for package_json in "$root"/packages/*/package.json; do
     package_dir=${package_json%/package.json}
-    name=$(node -e 'process.stdout.write(require(process.argv[1]).name)' "$package_json")
+    name=$(bun -e 'process.stdout.write(require(process.argv[1]).name)' "$package_json")
     output="$package_dir/solid-reactivity.json"
-    if SOLID_CHECKER_NATIVE_BIN="$checker" node \
+    if SOLID_CHECKER_NATIVE_BIN="$checker" bun \
       "$repository_root/packages/cli/bin/solid-checker.mjs" \
       contract generate \
       --package-root "$package_dir" \

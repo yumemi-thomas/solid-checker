@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Deterministic synthetic Solid corpus for solid-checker-session-bench.
 //
 // Generates a chain-import project: mod<i> imports the helper from
@@ -9,7 +9,7 @@
 // TypeFacts response over the 64 MiB frame limit at 5,000 files.
 //
 // Usage:
-//   node benchmarks/generate-bench-corpus.mjs 5000 /tmp/bench-corpus-5k
+//   bun benchmarks/generate-bench-corpus.mjs 5000 /tmp/bench-corpus-5k
 //   rust/target/release/solid-checker-session-bench \
 //     --project /tmp/bench-corpus-5k/tsconfig.json \
 //     --typefacts bin/solid-typefacts \

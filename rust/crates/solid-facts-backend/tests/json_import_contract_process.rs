@@ -24,16 +24,9 @@
 //! producer-internal resolution behavior this fix does not control, so the
 //! two direct unit tests are the honest place to pin it.
 
-// This binary only needs `temporary_directory` from the shared support
-// module; `decode_findings` exists for other integration tests that share
-// the same file via `#[path]`.
-#[allow(dead_code)]
-#[path = "support/process.rs"]
-mod support;
-
 use std::{env, fs, path::PathBuf, process::Command};
 
-use support::temporary_directory;
+use crate::process_support::temporary_directory;
 
 fn expanded_contract(path: &std::path::Path) -> serde_json::Value {
     serde_json::to_value(solid_facts_backend::read_package_contract(path).unwrap()).unwrap()

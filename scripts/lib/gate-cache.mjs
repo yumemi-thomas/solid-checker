@@ -20,7 +20,8 @@
 //       over-approximation on purpose, and an unresolvable dynamic import
 //       widens it to every gate script rather than narrowing the key;
 //   (d) every `SOLID_*` environment variable, name and value;
-//   (e) `process.version`;
+//   (e) the JavaScript runtime identity (`Bun.version` plus its compatible
+//       `process.version`, or Node's `process.version` for legacy callers);
 //   (f) a format-version constant, so a change to what an entry *means*
 //       invalidates every entry rather than being misread;
 //   (g) `options.trees` -- directory trees the gate *executes* but does not
@@ -59,6 +60,11 @@ import process from "node:process";
  * must never be replayed by a correct reader.
  */
 export const CACHE_FORMAT_VERSION = 1;
+
+const bunVersion = globalThis.Bun?.version;
+export const runtimeIdentity = bunVersion
+  ? `bun:${bunVersion}:${process.version}`
+  : `node:${process.version}`;
 
 /**
  * The cache's own controls, excluded from the environment digest.
@@ -148,7 +154,7 @@ export function hashTree(directory, { skip } = {}) {
  * which dialect catalog runs. Roughly half the fixture projects ship no stub and
  * depend on the *absence* of one above them. That absence is an input, and a
  * tree digest of the project directory cannot see it: a stray
- * `npm install solid-js` one directory above the checkout, or in `$HOME`, flips
+ * `bun install solid-js` one directory above the checkout, or in `$HOME`, flips
  * every stub-less project to the v1 catalog while leaving every key untouched.
  * A cold run would fail loudly; a warm one would replay 83 hits and print green.
  *
@@ -294,7 +300,7 @@ export function openGateCache({
   const shared = sha256([
     `format:${CACHE_FORMAT_VERSION}`,
     `gate:${gate}`,
-    `node:${process.version}`,
+    runtimeIdentity,
     ...binaries.map((path) => `binary:${relative(root, path)}:${hashFile(path)}`),
     ...trees.map((path) => `tree:${relative(root, path)}:${hashTree(path)}`),
     ...closure.files.map((path) => `script:${relative(root, path)}:${hashFile(path)}`),

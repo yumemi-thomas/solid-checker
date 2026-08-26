@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Exact @solid-primitives/debounce@1.3.0 callback probes. Both exports create
 // the same timer-backed wrapper; creation requires a Solid owner for cleanup,
 // while the user callback runs later from the platform timer without one.

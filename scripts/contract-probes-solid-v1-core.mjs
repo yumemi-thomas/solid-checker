@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Solid 1.x core probe worker: solid-js and its store/web/jsx-runtime
 // entrypoints. Runs inside the solid-v1 install root, so every bare import
 // resolves to the audited 1.9.14 release.

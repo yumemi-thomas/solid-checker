@@ -2624,17 +2624,19 @@ and a locally patched install all keep the version while replacing the bytes
 the summaries describe. Every bundled contract carries an integrity, so this
 was the strongest available identity fact going unused.
 
-Loading now recovers the installed copy's integrity from the project's npm
-lockfile and refuses a disagreeing contract exactly as it refuses a stale one:
+Loading now recovers the installed copy's integrity from the project's Bun or
+npm lockfile and refuses a disagreeing contract exactly as it refuses a stale one:
 status `stale`, an uncertifiable `SC9005` at the import, the run continues. The
 message and the report `detail` name **both integrities**, because the versions
 agree and naming them would read as a contradiction. Bundled and project-owned
 contracts get their existing, different remedies, reworded for the case where
 the audited version is already the installed one.
 
-The integrity comes from `package-lock.json` or `node_modules/.package-lock.json`
-at `lockfileVersion` 2 or 3, whose `packages` map is keyed by *install path* and
-so names the specific installed copy rather than a package name. Pinned by
+The integrity comes from Bun's `bun.lock` package records, or from
+`package-lock.json` / `node_modules/.package-lock.json` at `lockfileVersion` 2
+or 3. Bun selects the record by its resolved package identifier and installed
+manifest version; npm's `packages` map is keyed by *install path* and so names
+the specific installed copy rather than a package name. Pinned by
 `cli_refuses_a_contract_whose_lockfile_integrity_moved_under_the_same_version`
 (process) and `lockfile_integrity_is_recovered_only_when_it_is_unambiguous`
 (unit).
@@ -2645,14 +2647,15 @@ and a recoverable one on disk — and every way the second half is unavailable
 yields *no fact*, which means the previous behavior (version matching alone),
 never a refusal:
 
-- **No npm lockfile.** pnpm and Yarn keep their own formats, and many projects
-  have no lock at all. Reading them is tractable but each is a separate format
-  with its own store layout and its own path-to-entry question; none of it can
-  be guessed from the npm shape. Owner: one format at a time, each with its own
-  fixture.
-- **`lockfileVersion` 1.** Its tree is keyed by package name, so resolving an
-  entry to *which* installed copy it describes under hoisting would be exactly
-  the guess this must not make.
+- **No recognized Bun or npm lockfile.** pnpm and Yarn keep their own formats,
+  and many projects have no lock at all. Reading them is tractable but each is
+  a separate format with its own store layout and its own path-to-entry
+  question; none of it can be guessed from the Bun or npm shape. Owner: one
+  format at a time, each with its own fixture.
+- **Unsupported lockfile versions.** npm `lockfileVersion` 1 is keyed by
+  package name, so resolving an entry to *which* installed copy it describes
+  under hoisting would be exactly the guess this must not make. Bun versions
+  other than the currently supported v2 record are likewise ignored.
 - **Link, workspace, `file:`, and git entries** have no registry tarball and so
   no integrity. A linked workspace package's bytes are unpinnable by
   construction; closing this needs a content hash of the linked directory,
@@ -7164,3 +7167,60 @@ common nested accessor/store leaves have the same missing observation path.
 Those rows stay family C until the schema fully describes construction and
 mutation. Relational top-level returns remain the only new generic forms in
 this slice because strict sentinel identity proves exactly what they claim.
+
+## 2026-08-26 — contradiction-free generation, recursive return leaves, and proven constructors
+
+Eight runtime contradictions in the preceding authority report are closed at
+their semantic owners. A call initializer no longer inherits its callee's
+function summary when exact export Type Facts prove the exported value is not
+callable (`@kobalte/core`'s namespace helper). Solid 1 `createResource` fetchers
+are described by their observable initial scheduling rather than the dialect's
+deferred attribution. Callback timing no longer crosses a nested helper from a
+lexical role alone, and returned conditional adapters or after-call tracked
+wrappers become `callbacks: unknown` when schema v1 cannot state their mixed
+execution. The focused controls retain exact direct-inline and returned-
+scheduler behavior; withdrawals are per export, not package-wide suppression.
+
+Return tuples and objects are now traversed recursively. Claim identities carry
+the exact property/element path, and relational leaves also retain their exact
+parameter index. The worker selects that leaf before applying the same strict
+accessor or reference-identity observation, evidence is written on that leaf,
+and stale evidence for a sibling cannot corroborate it. Because schema v1 has
+one sentinel for the whole `returns` domain, one unconfirmed leaf still converts
+the domain. Store paths remain undrivable, and an accessor leaf without a
+contract-named callback in which to plant a reactive read is recorded as `no
+plantable reactive source`; neither is accepted on `typeof` alone.
+
+Generation also emits a sibling `.probe-plan.json` bound to the exact contract
+hash and package release. Exact Type Facts may supply only proven inhabitants:
+`null`, `undefined`, an empty array, `Map`, or `Set`. The driver applies them
+only to otherwise-undefined argument slots. Ambiguous public symbols,
+conditional runtime targets, literal subtypes, and other open domains get no
+recipe. The sidecar helps a call reach behavior but is never evidence; probing
+refuses a stale hash.
+
+The fresh 416-row authority run used checker SHA-256
+`c1b606862f4ea98ac719c0d53c1db51d19a0f62e60ffb9f2899bb8b85d0f6cf8`
+and Type Facts SHA-256
+`31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`.
+Against the preceding checked-in raw report:
+
+| Figure | Before | After |
+| --- | ---: | ---: |
+| Verified / refused | 284 / 109 | **297 / 97** |
+| Generate / install / no-runtime | 15 / 6 / 2 | **17 / 3 / 2** |
+| Claims total | 11,969 | **11,744** |
+| Driven / passed / failed | 8,327 / 8,319 / 8 | **7,734 / 7,734 / 0** |
+| Undriven / incompleteness | 3,642 / 589 | **4,010 / 518** |
+| Conversions (callback / return / async) | 819 (424 / 365 / 30) | **802 (372 / 399 / 31)** |
+| Probed rows kept / rows with evidence | 83 / 20 | **97 / 21** |
+
+The lower driven count is not a coverage claim: false callback claims were
+withdrawn, and recursively named accessor leaves that lack a plantable source
+are now counted precisely instead of hidden under one `nested return leaf`
+bucket. That bucket moved from 270 to zero while `no plantable reactive source`
+moved from 235 to 859 and store-path leaves from 23 to 51. The result has no
+failed claim and no contradicted kind claim. Remaining gaps include 1,079
+reactive-read proofs with no runtime probe form, 463 owner requirements, 98
+async claims, 51 store paths, 9 callback-argument descriptors, 601 import
+throws, 368 synthesized throws, and 286 calls that did not reach the callback.

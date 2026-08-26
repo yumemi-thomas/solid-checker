@@ -304,7 +304,7 @@ function classifyInstallLikePhase({ status, stdout, stderr, raw }) {
   }
   return {
     class: "install-failure",
-    signature: normalizeSignature(stderr || stdout || `npm install exited with status ${status}`),
+    signature: normalizeSignature(stderr || stdout || `bun install exited with status ${status}`),
     detail: {},
     raw
   };

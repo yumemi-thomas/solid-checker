@@ -28,7 +28,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");

@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
@@ -873,14 +873,14 @@ pub struct StaleContract {
     /// Whether the refused contract was this checker's own bundled artifact,
     /// which the consumer cannot regenerate.
     pub bundled: bool,
-    /// Set when the refusal is an npm-integrity disagreement rather than a
+    /// Set when the refusal is a package-integrity disagreement rather than a
     /// version one. The two versions *agree* in that case, so a message built
     /// from them alone would read as a contradiction; the integrities are the
     /// facts that disagree.
     pub integrity: Option<IntegrityDisagreement>,
 }
 
-/// A contract's audited npm integrity against the integrity the project's
+/// A contract's audited package integrity against the integrity the project's
 /// lockfile records for the installed copy.
 ///
 /// A version string is not a pin. A republished tarball, an `npm overrides`
@@ -890,7 +890,7 @@ pub struct StaleContract {
 pub struct IntegrityDisagreement {
     /// `package.integrity` as recorded in the contract.
     pub contract: String,
-    /// The integrity recovered from the project's npm lockfile.
+    /// The integrity recovered from the project's package-manager lockfile.
     pub installed: String,
 }
 
@@ -967,7 +967,7 @@ pub fn load_package_contracts_reporting(
         if let Some(bundled) = bundled {
             let installed = installed_package_manifest(project_directory, module)?;
             let manifest = installed.as_ref().map(|(_, manifest)| manifest);
-            // A bundled contract carries the npm integrity of the exact tarball
+            // A bundled contract carries the registry integrity of the exact tarball
             // this checker audited, so it is the tier where the check has the
             // most to say: an installed copy with the audited version but other
             // bytes is precisely what a version comparison cannot see.
@@ -1295,10 +1295,119 @@ struct NpmLockfile {
     packages: HashMap<String, NpmLockfileEntry>,
 }
 
-/// The npm-lockfile integrity for one installed package directory, or `None`
+/// The package records Bun writes to `bun.lock`.
+///
+/// Bun's lockfile is JSON with trailing commas, and its `packages` map is
+/// keyed by package name rather than install path. The installed package's
+/// manifest version is therefore required to select the exact record; if
+/// multiple records still disagree, integrity recovery fails closed.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BunLockfile {
+    #[serde(default)]
+    lockfile_version: u32,
+    #[serde(default)]
+    packages: HashMap<String, Vec<serde_json::Value>>,
+}
+
+fn parse_json_with_trailing_commas<T: DeserializeOwned>(data: &[u8]) -> Option<T> {
+    if let Ok(value) = serde_json::from_slice(data) {
+        return Some(value);
+    }
+
+    let mut normalized = Vec::with_capacity(data.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut index = 0;
+    while index < data.len() {
+        let byte = data[index];
+        if in_string {
+            normalized.push(byte);
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+        if byte == b'"' {
+            in_string = true;
+            normalized.push(byte);
+            index += 1;
+            continue;
+        }
+        if byte == b',' {
+            let mut next = index + 1;
+            while next < data.len() && data[next].is_ascii_whitespace() {
+                next += 1;
+            }
+            if next < data.len() && matches!(data[next], b'}' | b']') {
+                index += 1;
+                continue;
+            }
+        }
+        normalized.push(byte);
+        index += 1;
+    }
+    serde_json::from_slice(&normalized).ok()
+}
+
+fn installed_package_name(package_directory: &Path) -> Option<String> {
+    let package = package_directory.file_name()?.to_str()?;
+    let parent = package_directory.parent()?.file_name()?.to_str()?;
+    if parent.starts_with('@') {
+        Some(format!("{parent}/{package}"))
+    } else {
+        Some(package.to_owned())
+    }
+}
+
+fn bun_package_integrity(package_directory: &Path, data: &[u8]) -> Option<String> {
+    let lockfile = parse_json_with_trailing_commas::<BunLockfile>(data)?;
+    if lockfile.lockfile_version != 2 {
+        return None;
+    }
+    let name = installed_package_name(package_directory)?;
+    let version = serde_json::from_slice::<PackageManifest>(
+        &fs::read(package_directory.join("package.json")).ok()?,
+    )
+    .ok()?
+    .version;
+    if version.is_empty() {
+        return None;
+    }
+    let expected_identifier = format!("{name}@{version}");
+    let mut found = None;
+    for (key, record) in lockfile.packages {
+        let identifier = record.first().and_then(serde_json::Value::as_str);
+        if key != name
+            && key != expected_identifier
+            && identifier != Some(expected_identifier.as_str())
+        {
+            continue;
+        }
+        let Some(integrity) = record.get(3).and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        if integrity.is_empty() {
+            continue;
+        }
+        match &found {
+            None => found = Some(integrity.to_owned()),
+            Some(existing) if existing != integrity => return None,
+            Some(_) => {}
+        }
+    }
+    found
+}
+
+/// The lockfile integrity for one installed package directory, or `None`
 /// when no unambiguous integrity can be recovered.
 ///
-/// The lockfile's `packages` map is keyed by install path relative to the
+/// The npm lockfile's `packages` map is keyed by install path relative to the
 /// lockfile's own directory (`node_modules/foo`,
 /// `node_modules/a/node_modules/foo`, `packages/app/node_modules/foo`), which
 /// is what makes it usable at all: it names the *copy*, so a hoisted and a
@@ -1313,8 +1422,8 @@ struct NpmLockfile {
 ///   is authoritative is exactly the question this cannot answer);
 /// - an entry with no `integrity` (a link, workspace member, `file:`, or git
 ///   dependency has no registry tarball);
-/// - a lockfile this checker cannot parse, or one npm has not written at all
-///   (pnpm and Yarn keep their own formats).
+/// - a lockfile this checker cannot parse, or one the package manager has not
+///   written at all (pnpm and Yarn keep their own formats).
 ///
 /// `None` therefore means "the installed integrity is not a fact this project
 /// makes available", never "the integrities agree".
@@ -1366,6 +1475,20 @@ fn installed_package_integrity(
             match &found {
                 None => found = Some(entry.integrity.clone()),
                 Some(existing) if *existing != entry.integrity => return Ok(None),
+                Some(_) => {}
+            }
+        }
+
+        let bun_candidate = ancestor.join("bun.lock");
+        let data = match fs::read(&bun_candidate) {
+            Ok(data) => data,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if let Some(integrity) = bun_package_integrity(package_directory, &data) {
+            match &found {
+                None => found = Some(integrity),
+                Some(existing) if *existing != integrity => return Ok(None),
                 Some(_) => {}
             }
         }
@@ -1991,6 +2114,7 @@ pub fn semantic_demand_options_for_enablement(
         array_map_receiver_types: metadata.is_some_and(|metadata| {
             options.is_enabled(rule, metadata.default_enabled, metadata.presets)
         }),
+        contract_probe_parameters: false,
     })
 }
 
@@ -2174,6 +2298,30 @@ mod tests {
             installed_package_integrity(&project, &package).unwrap(),
             None
         );
+
+        // Bun's lockfile records package identifiers and integrities in a
+        // JSON-with-trailing-commas document. The installed manifest version
+        // selects the package record.
+        std::fs::write(
+            package.join("package.json"),
+            r#"{ "name": "pkg", "version": "1.0.0" }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            project.join("bun.lock"),
+            r#"{
+              "lockfileVersion": 2,
+              "packages": {
+                "pkg": ["pkg@1.0.0", "", {}, "sha512-bun",],
+              },
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-bun".to_owned())
+        );
+        std::fs::remove_file(project.join("bun.lock")).unwrap();
 
         // The plain lockfile, keyed by install path.
         std::fs::write(

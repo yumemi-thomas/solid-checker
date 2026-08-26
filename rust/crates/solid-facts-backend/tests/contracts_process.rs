@@ -2123,6 +2123,33 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
             .is_none(),
         "a conditional identity return does not prove the implicit fallthrough"
     );
+    let probe_plan: serde_json::Value = serde_json::from_slice(
+        &fs::read(directory.join("solid-reactivity.probe-plan.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(probe_plan["source"], "typescript-value-domain");
+    assert_eq!(
+        probe_plan["entrypoints"]["."]["identityResult"]["0"],
+        "null"
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["memoThroughConditionalAdapter"]["callbacks"],
+        serde_json::json!({ "status": "unknown" })
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["effectThroughMaybeAccessor"]["callbacks"],
+        serde_json::json!({ "status": "unknown" })
+    );
+    assert_eq!(
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["conditionalInlineCallback"]["callbacks"]
+        ),
+        serde_json::json!([{ "parameter": 0, "execution": "inline" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["t"]["kind"], "value",
+        "a call initializer must not inherit its callee's function summary"
+    );
     assert_eq!(
         without_claim_evidence(
             &contract["entrypoints"]["."]["exports"]["contextLocation"]["returns"]

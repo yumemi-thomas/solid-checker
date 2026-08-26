@@ -1,15 +1,12 @@
-#[path = "support/process.rs"]
-mod support;
-
 use std::process::Command;
 use std::{env, fs, path::PathBuf};
 
+use crate::process_support::{decode_findings, temporary_directory};
 use solid_facts::compiler::CompilerOptions;
 use solid_facts_backend::{
     CacheStats, NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession,
     build_project, dialect,
 };
-use support::{decode_findings, temporary_directory};
 
 #[test]
 fn native_incremental_session_reuses_oxc_and_solid_facts() {

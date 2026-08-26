@@ -163,13 +163,13 @@ Discovery fails loudly rather than guessing: an unparsed semver range is
 recorded in `unparsedRanges` and never treated as a match, a package with no
 resolvable release is recorded as an exclusion with a reason, and every
 registry gap is recorded in the manifest's `limitations` array. Review
-`node scripts/ecosystem-benchmark/discover.mjs --print-diff` before trusting
+`bun scripts/ecosystem-benchmark/discover.mjs --print-diff` before trusting
 a refreshed manifest — an add, removal, or integrity change should always be
 inspected in context, especially an integrity change, which discovery always
 surfaces rather than merging in silently.
 
 Execution reads the manifest and never touches the network itself beyond the
-`npm install` invocations it needs per probe:
+Bun install invocations it needs per probe:
 
 ```sh
 make ecosystem-sentinel     # the pinned regression subset
@@ -236,7 +236,7 @@ Every contract-generation invocation is classified into exactly one of:
 | `type-facts-failure` | The native Solid compiler facts / Type Facts session reported an error. |
 | `checker-crash` | The checker process died by signal or panicked. |
 | `timeout` | The per-probe generation invocation exceeded its timeout. |
-| `install-failure` | `npm install` for the probe's exact versions failed. |
+| `install-failure` | `bun install` for the probe's exact versions failed. |
 | `integrity-failure` | The installed versions or lockfile integrity did not match what the manifest recorded. |
 | `unclassified` | The stderr matched none of the known signatures; the full raw output is retained rather than discarded. |
 
@@ -1008,7 +1008,7 @@ now measured, and the answer is in "Drivability" below.
 > each installed package, and its dependencies, in child processes — that is
 > exactly why it is a separate command from `contract generate`, which imports
 > nothing. The harness keeps every install and every execution inside temporary
-> directories under its own state directory, runs `npm install` with
+> directories under its own state directory, runs `bun install` with
 > `--ignore-scripts` so no package lifecycle script ever executes, and bounds
 > every probe with both a per-condition-mode child timeout and a whole-phase
 > wall budget. Run it where you would run those packages' own test suites.
@@ -1032,7 +1032,7 @@ rebuilds the reports from an existing journal.
 
 ```sh
 SOLID_CHECKER_NATIVE_BIN=... SOLID_TYPEFACTS_BIN=... \
-  node scripts/ecosystem-benchmark/verify-corpus.mjs --state-dir /path/to/scratch
+  bun scripts/ecosystem-benchmark/verify-corpus.mjs --state-dir /path/to/scratch
 ```
 
 Reports: `benchmarks/ecosystem/verification-report.json` and
@@ -2196,6 +2196,10 @@ of the same eight documents are now usable.
 
 ### What it costs
 
+The table below is retained from the pre-Bun baseline; its `npm install` labels
+and cache observations are historical. New benchmark runs use Bun and report
+their install phase as `bun install`.
+
 | Phase | Rows | Median | p90 | Max |
 | --- | --- | --- | --- | --- |
 | `npm install` | 416 | 351 ms | 615 ms | 14,336 ms |
@@ -2276,6 +2280,44 @@ tail.
   schedule needs a probe that drives its own scheduling, which does not exist.
 - **This measurement executed package code.** Nothing here is a safety claim
   about any package.
+
+## 2026-08-26 authority run: recursive leaves and contradiction repairs
+
+A fresh, uninterrupted 416-row run used checker SHA-256
+`c1b606862f4ea98ac719c0d53c1db51d19a0f62e60ffb9f2899bb8b85d0f6cf8`
+and Type Facts SHA-256
+`31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`.
+The checked-in [verification report](../benchmarks/ecosystem/verification-report.md)
+is the unmodified result of that run:
+
+| Outcome | Previous checked-in run | Current run |
+| --- | ---: | ---: |
+| Verified | 284 | **297** |
+| Refused | 109 | **97** |
+| Generation failure | 15 | **17** |
+| Install failure | 6 | **3** |
+| No runtime | 2 | **2** |
+
+Of 396 rows that generated contracts, 297 verified (75.00%); across the fixed
+416-row denominator the rate is 71.39%. Solid 1 contributes 115 verified rows
+and Solid 2 contributes 182. All 7,734 driven claims passed. The preceding eight
+runtime contradictions — five callback-timing shapes, two additional instances
+of those shapes, and one exported-kind mismatch — are zero; the report contains
+no failed claim and no contradicted `kind` claim.
+
+The gain is not a claim that every newly named leaf is now observable. Recursive
+return traversal removed the coarse 270-claim `nested return leaf` bucket, but
+most accessor leaves lack a callback in which to plant a reactive source:
+`no plantable reactive source` increased from 235 to 859, and store-path leaves
+from 23 to 51. They remain uncertifiable. Other broad gaps are 1,079 reactive
+reads with no runtime probe form, 463 owner requirements, 98 async claims, 9
+callback-argument descriptors, 601 entrypoint-import throws, 368 synthesized
+throws, and 286 calls that never invoked the planted callback.
+
+Raw generation and install classes are environment-sensitive. This run traded
+three prior install failures for two additional generation failures and produced
+one more contract overall; no no-contention substitution was made. The reports
+therefore preserve 297/97/17/3/2 rather than presenting a corrected composite.
 
 ## Exit-code contract
 

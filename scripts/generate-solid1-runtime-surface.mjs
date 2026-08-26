@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Generates pkg/contracts/bundled/solid-v1/solid-js-runtime-surface.json: which
 // exports solid-js@1.9.14 actually has, under which entrypoints, read from the
 // installed package rather than from a declaration inventory.
@@ -15,7 +15,7 @@
 // suite probes, because 1.x resolves a different build per condition and the
 // contract covers all of them.
 //
-//   node scripts/generate-solid1-runtime-surface.mjs [--check]
+//   bun scripts/generate-solid1-runtime-surface.mjs [--check]
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,6 +45,14 @@ if (!version) fail(`${contract.bundledContract} records no package version`);
 
 const install = join(tmpdir(), `solid-checker-runtime-surface-${PACKAGE}@${version}`);
 mkdirSync(install, { recursive: true });
+writeFileSync(
+  join(install, "package.json"),
+  `${JSON.stringify({
+    name: `solid-checker-runtime-surface-${PACKAGE}`,
+    version: "0.0.0",
+    private: true,
+  }, null, 2)}\n`,
+);
 const directory = join(install, "node_modules", PACKAGE);
 const installedVersion = () =>
   existsSync(join(directory, "package.json"))
@@ -52,9 +60,9 @@ const installedVersion = () =>
     : null;
 if (installedVersion() !== version) {
   const result = spawnSync(
-    "npm",
-    ["install", "--prefix", install, "--no-audit", "--no-fund", "--no-save", `${PACKAGE}@${version}`],
-    { stdio: "inherit" },
+    "bun",
+    ["install", "--ignore-scripts", "--no-progress", "--no-save", `${PACKAGE}@${version}`],
+    { cwd: install, stdio: "inherit" },
   );
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
@@ -63,7 +71,7 @@ const printer = join(root, "scripts/lib/print-package-surface.mjs");
 const entrypoints = new Map();
 for (const conditions of conditionModes) {
   const execution = spawnSync(
-    "node",
+    "bun",
     [...conditions.flatMap(condition => ["--conditions", condition]), printer, PACKAGE, directory],
     { encoding: "utf8" },
   );

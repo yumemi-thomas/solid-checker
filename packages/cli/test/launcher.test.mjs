@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
-import test from "node:test";
+import { test } from "vitest";
 
 test("forwards arguments, output, environment, and the native exit code", () => {
   const directory = mkdtempSync(join(tmpdir(), "solid-checker-cli-"));

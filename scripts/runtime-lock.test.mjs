@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 
 const root = resolveRoot();
 
@@ -32,7 +32,7 @@ test("runtime lock pins the Solid 1.x probe closure", () => {
   );
   // The scheduled overlay is probed against solid-js 1.x, which resolves its own
   // transitive tree. Without these edges the 1.x probes would run against
-  // whatever npm picked for csstype/seroval on the day they ran.
+  // whatever the package manager picked for csstype/seroval on the day they ran.
   const solid1 = lock.packages["solid-js@1.9.14"];
   assert.deepEqual(Object.keys(solid1.dependencies).sort(), [
     "csstype",

@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import test from "node:test";
+import { test } from "vitest";
 
 const targets = [
   "linux-x64",

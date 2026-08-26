@@ -31,6 +31,7 @@ import {
   conditionsMatchMode,
   modeApplies,
   returnClaim,
+  returnLeaves,
   summaryForMode
 } from "./contract-probe-driver.mjs";
 import { isUnknownClaim } from "./contract-review-plan.mjs";
@@ -152,20 +153,23 @@ function callbackRowReason(callback, modes, witness) {
   return "";
 }
 
-function hasReturnLeaf(returned) {
-  return Boolean(returned.elements?.length) || Boolean(Object.keys(returned.properties ?? {}).length);
-}
-
-function returnReason(returned, modes, witness) {
+function returnLeafReason(returned, path, modes, witness) {
   if (returned.evidence?.kind === "inherited-from") {
     return CONVERSION_REASON.inherited(returned.evidence);
   }
-  if (hasReturnLeaf(returned)) return CONVERSION_REASON.nestedReturn;
   if (returned.evidence?.kind !== "probed") return CONVERSION_REASON.unprobed;
   if (!probedCovers(returned.evidence, modes)) return CONVERSION_REASON.modes(modes);
-  const claim = returnClaim(returned);
+  const claim = returnClaim(returned, path);
   if (!witness(claim, returned.evidence)) {
     return CONVERSION_REASON.staleProbe(claim, returned.evidence);
+  }
+  return "";
+}
+
+function returnReason(returned, modes, witness) {
+  for (const leaf of returnLeaves(returned)) {
+    const reason = returnLeafReason(leaf.returned, leaf.path, modes, witness);
+    if (reason) return reason;
   }
   return "";
 }
@@ -238,7 +242,9 @@ export function pruneSummaryProbedMarker(summary) {
   if (summary?.evidence?.kind !== "probed") return false;
   const covered = [
     ...rows(summary.callbacks),
-    ...(summary.returns && !isUnknownClaim(summary.returns) ? [summary.returns] : [])
+    ...(summary.returns && !isUnknownClaim(summary.returns)
+      ? returnLeaves(summary.returns).map(leaf => leaf.returned)
+      : [])
   ];
   if (covered.length && covered.every(row => row.evidence?.kind === "probed")) return false;
   delete summary.evidence;
@@ -361,23 +367,40 @@ export function convertUnconfirmedClaims(contract, report) {
     }
 
     if (summary.returns && !isUnknownClaim(summary.returns)) {
+      const leaves = returnLeaves(summary.returns);
       const reason = returnReason(summary.returns, modes, witness);
-      if (
-        summary.returns.evidence?.kind === "probed" &&
-        !witness(returnClaim(summary.returns), summary.returns.evidence)
-      ) {
-        noteStale("returns", returnClaim(summary.returns), summary.returns.evidence);
+      for (const { returned, path } of leaves) {
+        if (
+          returned.evidence?.kind === "probed" &&
+          !witness(returnClaim(returned, path), returned.evidence)
+        ) {
+          noteStale("returns", returnClaim(returned, path), returned.evidence);
+        }
       }
-      if (reason) convert("returns", [returnClaim(summary.returns)], reason);
-      else {
-        probed.push({
-          entrypoint,
-          export: exportName,
-          field: fieldPath(prefix, "returns"),
-          claim: returnClaim(summary.returns),
-          modes: summary.returns.evidence.modes,
-          calls: summary.returns.evidence.calls
-        });
+      if (reason) {
+        convert(
+          "returns",
+          leaves.map(({ returned, path }) => returnClaim(returned, path)),
+          reason
+        );
+      } else {
+        for (const { returned, path } of leaves) {
+          const suffix = path
+            .map(segment =>
+              typeof segment === "number"
+                ? `.elements[${segment}]`
+                : `.properties[${JSON.stringify(segment)}]`
+            )
+            .join("");
+          probed.push({
+            entrypoint,
+            export: exportName,
+            field: fieldPath(prefix, `returns${suffix}`),
+            claim: returnClaim(returned, path),
+            modes: returned.evidence.modes,
+            calls: returned.evidence.calls
+          });
+        }
       }
     }
 

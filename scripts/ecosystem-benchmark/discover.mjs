@@ -1,8 +1,8 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Network-enabled discovery CLI: the only part of the ecosystem benchmark
 // that is allowed to touch the npm registry on its own account. Everything
 // downstream (run.mjs) reads the manifest this writes and never reaches the
-// network except to `npm install` the exact pinned versions the manifest
+// network except to `bun install` the exact pinned versions the manifest
 // already recorded.
 //
 // The pipeline itself is one injectable async function, `discover`, so it
@@ -194,7 +194,7 @@ function sortExclusions(exclusions) {
 // ---------------------------------------------------------------------------
 
 function helpText() {
-  return `Usage: node discover.mjs [options]
+  return `Usage: bun discover.mjs [options]
 
 Refreshes the ecosystem benchmark manifest from the npm registry. This is the
 only network-enabled entry point under scripts/ecosystem-benchmark/ — run.mjs

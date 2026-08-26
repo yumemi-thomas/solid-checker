@@ -17,7 +17,7 @@ validated=0
 for package_json in "$root"/packages/*/package.json; do
   package_dir=${package_json%/package.json}
   contract="$package_dir/solid-reactivity.json"
-  node -e '
+  bun -e '
     const manifest = require(process.argv[1]);
     if (!manifest.files?.includes("solid-reactivity.json")) process.exit(1);
   ' "$package_json" || {

@@ -1862,6 +1862,7 @@ async function analyzeTarget({
   const project = join(temporaryDirectory, `${identifier}-tsconfig.json`);
   const output = join(temporaryDirectory, `${identifier}.json`);
   const inventoryPath = join(temporaryDirectory, `${identifier}-inventory.json`);
+  const probePlanPath = join(temporaryDirectory, `${identifier}-probe-plan.json`);
   const runtimeResolutionPath = join(temporaryDirectory, `${identifier}-runtime-resolutions.json`);
   writeFileSync(
     project,
@@ -1904,6 +1905,8 @@ async function analyzeTarget({
       project,
       "--emit-contract",
       output,
+      "--emit-probe-plan",
+      probePlanPath,
       // The same run's own answer to "which files did you open". The walk above
       // seeded `files`; this is what the program did with that seed, and it is
       // what the closure record is built from. Asked for only here, on a
@@ -2017,6 +2020,7 @@ async function analyzeTarget({
       // the caller: the file lives in this generation's temporary directory and
       // is removed with the project below.
       inventory: readModuleInventory(inventoryPath),
+      probePlan: JSON.parse(readFileSync(probePlanPath, "utf8")),
       // Relative to the package root so the plan describes the published
       // package rather than the temporary directory this run analyzed it in.
       attributions: attributions.map(note => ({
@@ -2027,6 +2031,7 @@ async function analyzeTarget({
   } finally {
     rmSync(project, { force: true });
     rmSync(inventoryPath, { force: true });
+    rmSync(probePlanPath, { force: true });
     rmSync(runtimeResolutionPath, { force: true });
   }
 }
@@ -2267,6 +2272,7 @@ async function generatePackageContractInternal(arguments_, context) {
   ];
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "solid-checker-contract-"));
   const entrypoints = {};
+  const probePlans = {};
   // Declared alongside `entrypoints` because both outlive the analysis
   // block: the review plan and the stdout summary are written after it.
   const refusedEntrypoints = [];
@@ -2321,6 +2327,7 @@ async function generatePackageContractInternal(arguments_, context) {
         const mergedBranches = new Map();
         const conditions = new Set();
         const targets = new Set();
+        let singleProbePlan;
         // Only a genuinely branching entrypoint carries conditions. For one
         // unconditional target there is no environment to record, and claiming
         // one would mark a summary that holds everywhere as conditional.
@@ -2380,6 +2387,7 @@ async function generatePackageContractInternal(arguments_, context) {
             });
             targetAnalyses.set(analysisKey, observed);
           }
+          if (variants.length === 1) singleProbePlan = observed.probePlan?.exports ?? {};
           // Recorded on every variant, not only on a fresh analysis, so a target
           // reached under two condition sets is checked for inventory agreement
           // rather than silently taking the first one's answer.
@@ -2505,6 +2513,9 @@ async function generatePackageContractInternal(arguments_, context) {
           ),
           ...(conditions.size ? { conditions: [...conditions].sort() } : {})
         };
+        if (singleProbePlan && Object.keys(singleProbePlan).length) {
+          probePlans[entrypoint] = singleProbePlan;
+        }
       } catch (error) {
         // Per-ENTRYPOINT granularity, deliberately not per-target: if any one
         // conditional target of this entrypoint could not be analyzed, we do
@@ -2671,6 +2682,23 @@ async function generatePackageContractInternal(arguments_, context) {
           closures,
           sha256Artifact(output)
         ),
+        null,
+        2
+      )}\n`
+    );
+    const constructionPlanPath = output.toLowerCase().endsWith(".json")
+      ? `${output.slice(0, -5)}.probe-plan.json`
+      : `${output}.probe-plan.json`;
+    writeFileSync(
+      constructionPlanPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          contract: sha256Artifact(output),
+          source: "typescript-value-domain",
+          package: { name: manifest.name, version: manifest.version },
+          entrypoints: probePlans
+        },
         null,
         2
       )}\n`

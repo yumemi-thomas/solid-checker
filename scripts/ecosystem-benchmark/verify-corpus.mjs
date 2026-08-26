@@ -1,11 +1,11 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Machine-verification harness for the pinned ecosystem corpus: how many real
 // packages verify end to end.
 //
 // For every manifest probe row it runs the full RFC 0002 pipeline against a
 // throwaway install:
 //
-//   npm install --ignore-scripts  ->  contract generate
+//   bun install --ignore-scripts  ->  contract generate
 //     ->  contract probe --write  ->  contract verify
 //
 // and writes benchmarks/ecosystem/verification-report.{json,md}.
@@ -15,7 +15,7 @@
 // - **`contract probe` executes package code.** That is the whole reason this
 //   is a separate command from `contract generate`, whose stated design
 //   property is that it imports nothing. Every install and every execution
-//   here happens inside a temporary directory under the state directory, npm
+//   here happens inside a temporary directory under the state directory, Bun
 //   runs with `--ignore-scripts` so no package lifecycle script ever executes,
 //   and every probe runs under both a per-mode child timeout and a whole-phase
 //   wall budget. Run it where you would run those packages' own test suites.
@@ -72,7 +72,7 @@ const DEFAULTS = {
   // dominated by *worker restarts*, not by claim count alone -- a mode restarts
   // after every probe that throws, and a wide-surface package can spend
   // hundreds of processes -- so the per-claim increment has to cover a fresh
-  // node process and its imports, not just one call. A first pass at
+  // Bun process and its imports, not just one call. A first pass at
   // 60s + 150ms/claim still timed out four rows, one of which had not timed out
   // under the old flat budget at all.
   probeBudgetBaseMs: 90_000,
@@ -1300,11 +1300,11 @@ export function buildVerificationReport({ records, manifest, budgets, checker })
       note:
         "`contract probe` imports and runs each installed package's code in child processes. Every " +
         "install and every execution in this run happened inside temporary directories under the " +
-        "harness state directory, npm ran with --ignore-scripts so no package lifecycle script " +
+        "harness state directory, Bun ran with --ignore-scripts so no package lifecycle script " +
         "executed, and each probe process had both a per-mode timeout and a whole-phase wall budget."
     },
     pipeline: [
-      "npm install --ignore-scripts",
+      "bun install --ignore-scripts",
       "contract generate",
       "contract probe --write",
       "contract verify"
@@ -1376,7 +1376,7 @@ export function renderVerificationMarkdown(report) {
   lines.push("");
   lines.push("> **This measurement executes package code.** `contract probe` imports and runs each");
   lines.push("> installed package, and its dependencies, in child processes. Every install and every");
-  lines.push("> execution happened inside temporary directories under the harness state directory, npm");
+  lines.push("> execution happened inside temporary directories under the harness state directory, Bun");
   lines.push("> ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran");
   lines.push("> under both a per-mode timeout and a whole-phase wall budget.");
   lines.push("");
@@ -1635,7 +1635,7 @@ export function renderVerificationMarkdown(report) {
   lines.push(
     "Each row installs the pinned package, the Solid runtime the manifest row pins, and the " +
       "non-optional peers the installed artifact's own `package.json` declares. Peers are installed " +
-      "in a second npm invocation so that no peer range can take part in resolving the pinned " +
+      "in a second Bun invocation so that no peer range can take part in resolving the pinned " +
       "versions; if it moves a pin anyway, the pinned-only tree is restored and the row is recorded " +
       "as such."
   );
@@ -1791,7 +1791,7 @@ export function renderVerificationMarkdown(report) {
       "uncertifiable result. They stay in the denominator — a certified *share* that rose because " +
       "unobservable exports left the population would be measuring nothing. (d) is every export of a " +
       "contract that was generated and then refused, timed out, or errored before a probe report " +
-      "existed. Rows whose `npm install` or `contract generate` failed describe no exports at all " +
+      "existed. Rows whose `bun install` or `contract generate` failed describe no exports at all " +
       "and are in none of the four states."
   );
   lines.push("");
@@ -1807,7 +1807,7 @@ export function renderVerificationMarkdown(report) {
   }
   lines.push("");
   lines.push(
-    "`install` may run against a warm npm cache, so it is a lower bound; `pipelineWithoutInstall` is " +
+    "`install` may run against Bun's warm package cache, so it is a lower bound; `pipelineWithoutInstall` is " +
       "the number that describes the checker's own cost."
   );
   lines.push("");
@@ -1818,7 +1818,7 @@ export function renderVerificationMarkdown(report) {
   lines.push("");
   lines.push("| Stage | Rows |");
   lines.push("| --- | --- |");
-  lines.push(`| \`npm install\` failed | ${installFailures.length} |`);
+  lines.push(`| \`bun install\` failed | ${installFailures.length} |`);
   lines.push(`| \`contract generate\` failed | ${generateFailures.length} |`);
   lines.push(
     `| \`contract probe\` errored before writing a report | ${Object.values(probeErrors).reduce((sum, value) => sum + value, 0)} |`
@@ -1954,7 +1954,7 @@ export function renderVerificationMarkdown(report) {
 // ---------------------------------------------------------------------------
 
 function usage() {
-  return `Usage: node scripts/ecosystem-benchmark/verify-corpus.mjs [options]
+  return `Usage: bun scripts/ecosystem-benchmark/verify-corpus.mjs [options]
 
   --state-dir <DIR>      journal + scratch installs (default: a fresh temp dir;
                          pass an existing one to resume an interrupted run)

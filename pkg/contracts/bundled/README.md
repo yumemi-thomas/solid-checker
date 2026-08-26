@@ -13,11 +13,12 @@ dialect id used by the checker:
   export from `@solidjs/signals@2.0.0-rc.0`; other package exports remain
   explicitly incomplete until their runtime behavior is audited;
 - `runtime-lock.json` pins the resolved dependency closure used by the Solid 2
-  runtime probes, including `@solidjs/signals`, with version and npm integrity.
+  runtime probes, including `@solidjs/signals`, with version and registry
+  integrity.
 
 Every one of these contracts pins its package by version **and** by the
 integrity of the exact tarball it was audited against.
-`node scripts/check-contract-pins.mjs` holds each pin to the registry, so a
+`bun scripts/check-contract-pins.mjs` holds each pin to the registry, so a
 republished release stops matching instead of silently becoming what the
 contract claims to describe. A contract that records no integrity fails that
 check: a pin that cannot be falsified is not a pin. This covers the contracts
@@ -25,7 +26,7 @@ the probe suite below does not install, which is how the scheduled overlay and
 the Solid 1.x core are verified at all.
 
 The per-dialect assembly files at `rust/dialects/<id>/dialect.json` own these
-paths. `node scripts/check-bundled-contracts.mjs` enumerates contracts marked
+paths. `bun scripts/check-bundled-contracts.mjs` enumerates contracts marked
 `probeRuntime`, installs their exact releases, checks their export surfaces and
 integrity, checks every edge in `runtime-lock.json`, and executes every
 declared behavior probe in client, server, development, and production Node
@@ -41,7 +42,7 @@ entrypoints; it is generated from the installed release by
 release. It replaced a census copied from the 1.x branch that answered the same
 question from declarations and was wrong in both directions: 20 names no build
 exports, and two — `innerHTML` and `ssrStyleProperty` on `./web` — that every
-build does. Run `node scripts/dialect-manifests.mjs check-composed-contracts` to
+build does. Run `bun scripts/dialect-manifests.mjs check-composed-contracts` to
 detect drift between the artifact and its inputs. `make contract-conformance`
 runs all of these.
 

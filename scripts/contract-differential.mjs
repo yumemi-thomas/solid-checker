@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 // Differential contract audit:
 //   1. analyze a package implementation as project source;

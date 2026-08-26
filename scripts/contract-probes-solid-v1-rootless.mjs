@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Exact @solid-primitives/rootless@1.5.4 callback timing probes. The package's
 // root wrappers either invoke their callback during the exported call, or
 // return a function whose later invocation creates/enters the root.

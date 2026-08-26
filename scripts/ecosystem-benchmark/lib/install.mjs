@@ -10,9 +10,8 @@
 //   machine. `--ignore-scripts` is therefore not optional and every call site
 //   is expected to keep it.
 // - The lockfile is the only thing that lets `readLockIntegrity` prove what
-//   was actually fetched. `--no-package-lock` would remove that evidence, so
-//   it must never be added even though some npm invocations use it to speed
-//   up throwaway installs.
+//   was actually fetched. Bun's global package cache is intentionally kept
+//   warm between probes; the exact specs and lockfile still pin the artifact.
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -20,14 +19,16 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { packageIntegrity } from "../../lib/package-integrity.mjs";
+
 export function buildInstallArguments({ specs }) {
-  return ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error", ...specs];
+  return ["install", "--ignore-scripts", "--no-progress", ...specs];
 }
 
 export async function createProject({ root, specs }) {
   // The package.json content itself is irrelevant to what gets installed —
-  // `specs` are passed directly as npm's install targets — but `private:
-  // true` keeps npm from ever treating this throwaway probe directory as
+  // `specs` are passed directly as Bun's install targets — but `private:
+  // true` keeps Bun from ever treating this throwaway probe directory as
   // something publishable.
   const pkg = { name: "solid-checker-ecosystem-probe", version: "0.0.0", private: true };
   await writeFile(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
@@ -53,18 +54,7 @@ export function readInstalledVersions(projectDir, names) {
 }
 
 export function readLockIntegrity(projectDir, names) {
-  const result = {};
-  let lock = null;
-  try {
-    lock = JSON.parse(readFileSync(join(projectDir, "package-lock.json"), "utf8"));
-  } catch {
-    lock = null;
-  }
-  for (const name of names) {
-    const entry = lock?.packages?.[`node_modules/${name}`];
-    result[name] = typeof entry?.integrity === "string" ? entry.integrity : null;
-  }
-  return result;
+  return Object.fromEntries(names.map(name => [name, packageIntegrity(projectDir, name)]));
 }
 
 // `expected` is `{ [name]: { version, integrity } }` — the values pinned in
@@ -102,19 +92,19 @@ export function verifyInstall({ expected, versions, integrity }) {
   return { ok: problems.length === 0, problems };
 }
 
-// Real npm invocation, used only when the caller does not inject `spawnImpl`.
+// Real Bun invocation, used only when the caller does not inject `spawnImpl`.
 // Kept isolated behind the injection point in `installPackages` so tests can
 // exercise every install-result path (success, failure, timeout) without
-// ever spawning a real npm process or touching the network.
+// ever spawning a real Bun process or touching the network.
 function defaultSpawn({ cwd, args, timeoutMs }) {
   return new Promise(resolve => {
-    const child = spawn("npm", args, { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("bun", args, { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
     let spawnError = "";
     // A ChildProcess that emits `error` with no listener throws an uncaught
-    // exception, which would take the whole benchmark down when npm is simply
+    // exception, which would take the whole benchmark down when Bun is simply
     // absent from PATH. `close` still fires after a failed spawn, so the
     // listener only has to record why, and the probe becomes one
     // install-failure result instead of a harness crash.

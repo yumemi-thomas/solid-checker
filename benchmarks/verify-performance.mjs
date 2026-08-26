@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

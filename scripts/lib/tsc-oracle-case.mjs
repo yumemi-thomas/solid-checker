@@ -116,7 +116,7 @@ export const ensureDirectoryLink = (link, target) => {
   if (!existsSync(link)) {
     throw new Error(
       `${link} is a dangling link to ${target}: the audited install is not there. ` +
-        `Run: node scripts/tsc-oracle.mjs provision --dialect all`,
+        `Run: bun scripts/tsc-oracle.mjs provision --dialect all`,
     );
   }
   return link;
@@ -227,6 +227,14 @@ const errorsOnly = (diagnostics) => diagnostics.filter((d) => d.category === "er
  * @returns {{perPass: [string, object[]][], checkerPasses: [string, {findings: object[]}][]}}
  */
 export const runCase = (testCase, index, { checker, typefacts }) => {
+  return {
+    ...runOracleCase(testCase, index),
+    ...runCheckerCase(testCase, index, { checker, typefacts }),
+  };
+};
+
+/** TypeScript's half of one case, kept separate so it can survive checker rebuilds. */
+export const runOracleCase = (testCase, index) => {
   const result = runOracle(
     testCase.dialect,
     [{ name: sourceName(testCase, index), code: testCase.code }],
@@ -236,12 +244,16 @@ export const runCase = (testCase, index, { checker, typefacts }) => {
     ["strict", errorsOnly(result.passes.strict)],
     ["loose", errorsOnly(result.passes.loose)],
   ];
-  // The second half of the case: what the *checker* says about the same bytes.
-  // Without it a `silent` case proves only that TypeScript is quiet, which an
-  // over-narrowed rule that reports nothing at all satisfies just as well.
+  return { perPass };
+};
+
+/** The checker's half of one case, invalidated by either executable changing. */
+export const runCheckerCase = (testCase, index, { checker, typefacts }) => {
+  // Without this half a `silent` case proves only that TypeScript is quiet,
+  // which an over-narrowed rule that reports nothing at all also satisfies.
   const checkerPasses = [
     ["strict", runChecker(testCase, index, true, { checker, typefacts })],
     ["loose", runChecker(testCase, index, false, { checker, typefacts })],
   ];
-  return { perPass, checkerPasses };
+  return { checkerPasses };
 };

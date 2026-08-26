@@ -807,7 +807,7 @@ fn spawn_and_connect(
     // the client never connects to — so the value `check` resolved once is
     // passed in and forwarded, never re-derived.
     command.arg("--dialect").arg(dialect.id);
-    command
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -817,7 +817,20 @@ fn spawn_and_connect(
         match UnixStream::connect(socket) {
             Ok(stream) => return Ok(stream),
             Err(error) => {
+                // A daemon can fail before it creates the socket (for
+                // example, when the platform refuses Unix socket creation).
+                // Do not spend the whole startup budget waiting for a child
+                // that has already exited; this path is also the normal
+                // fallback when a release binary cannot retain a session.
+                if let Some(status) = child.try_wait()? {
+                    return Err(format!(
+                        "daemon exited before socket became ready ({status}): {error}"
+                    )
+                    .into());
+                }
                 if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
                     return Err(format!("daemon did not start: {error}").into());
                 }
                 std::thread::sleep(Duration::from_millis(25));

@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import test from "node:test";
+import { test as vitestTest } from "vitest";
 
 import { expandContract } from "../packages/cli/scripts/contract-document.mjs";
 import {
@@ -29,6 +29,13 @@ const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? join(root, "rust/target/debug/solid-checker-rust");
 const typeFacts = process.env.SOLID_TYPEFACTS_BIN ?? join(root, "bin/solid-typefacts");
 const canRun = existsSync(native) && existsSync(typeFacts);
+const reviewShard = globalThis.__SOLID_CHECKER_REVIEW_TEST_SHARD ?? 0;
+const reviewShardCount = 4;
+let reviewTestIndex = 0;
+const test = (...arguments_) => {
+  const index = reviewTestIndex++;
+  if (index % reviewShardCount === reviewShard) vitestTest(...arguments_);
+};
 
 function run(args, { env } = {}) {
   return spawnSync(process.execPath, [cli, ...args], {

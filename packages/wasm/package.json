@@ -18,10 +18,10 @@
     "scripts"
   ],
   "scripts": {
-    "build": "node scripts/build.mjs --release",
-    "build:debug": "node scripts/build.mjs",
-    "prototype:self-contained": "node prototypes/self-contained.mjs",
-    "test": "node --test test/*.test.mjs"
+    "build": "bun ./scripts/build.mjs --release",
+    "build:debug": "bun ./scripts/build.mjs",
+    "prototype:self-contained": "bun ./prototypes/self-contained.mjs",
+    "test": "bun ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs test/*.test.mjs"
   },
   "napi": {
     "binaryName": "solid-checker-wasm",
@@ -38,7 +38,8 @@
   "devDependencies": {
     "@emnapi/core": "^1.7.1",
     "@emnapi/runtime": "^1.7.1",
-    "@napi-rs/cli": "3.7.3"
+    "@napi-rs/cli": "3.7.3",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@napi-rs/wasm-runtime": "^1.1.6"
@@ -46,6 +47,7 @@
   "engines": {
     "node": ">=20"
   },
+  "packageManager": "bun@1.4.0",
   "license": "MIT",
   "repository": {
     "type": "git",

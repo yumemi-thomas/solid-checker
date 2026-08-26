@@ -39,9 +39,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
+          bun-version: 1.4.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -70,7 +70,7 @@ jobs:
           if [[ "${{ matrix.platform }}" == "win32" ]]; then extension=".exe"; fi
           TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
             cargo build --release --manifest-path rust/Cargo.toml --workspace
-          node scripts/package-rust.mjs \
+          bun scripts/package-rust.mjs \
             --output "dist/${{ matrix.platform }}-${{ matrix.arch }}" \
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
@@ -96,11 +96,9 @@ jobs:
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
       - run: rustup target add wasm32-wasip1-threads --toolchain 1.97
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: packages/wasm/package-lock.json
+          bun-version: 1.4.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -109,15 +107,15 @@ jobs:
           # not write.
           shared-key: release-wasm
           save-if: false
-      - run: npm ci
+      - run: bun install --ignore-scripts --no-progress --frozen-lockfile
         working-directory: packages/wasm
       - name: Build WASI package
         working-directory: packages/wasm
         run: |
-          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
-          npm run build
-          npm test
-          npm pack --dry-run
+          bun pm pkg set "version=${GITHUB_REF_NAME#v}"
+          bun run build
+          bun run test
+          bun pm pack --dry-run
       - uses: actions/upload-artifact@v4
         with:
           name: wasm-package
@@ -143,6 +141,9 @@ jobs:
     environment: npm
     steps:
       - uses: actions/checkout@v4
+      # Keep npm only in this publishing job: npm's trusted-publishing flow
+      # consumes GitHub's OIDC token. All builds, installs, tests, and package
+      # assembly above use Bun.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -163,20 +164,20 @@ jobs:
           for target in linux-x64 linux-arm64 darwin-arm64 win32-x64; do
             mv "dist/artifacts/npm-${target}" "dist/artifacts/${target}"
           done
-          node scripts/assemble-npm-package.mjs dist/artifacts dist/packages "$version"
-          for package in dist/packages/*; do npm pack "$package" --dry-run; done
+          bun scripts/assemble-npm-package.mjs dist/artifacts dist/packages "$version"
+          for package in dist/packages/*; do (cd "$package" && bun pm pack --dry-run); done
       - name: Publish native packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for package in dist/packages/binding-*; do
-            name=$(node -p "require('./$package/package.json').name")
-            version=$(node -p "require('./$package/package.json').version")
+            name=$(bun -p "require('./$package/package.json').name")
+            version=$(bun -p "require('./$package/package.json').version")
             case "$version" in
               *-*) dist_tag=${version#*-}; dist_tag=${dist_tag%%.*};;
               *) dist_tag=latest;;
             esac
-            if npm view "$name@$version" version >/dev/null 2>&1; then
+            if bun info "$name@$version" version --json >/dev/null 2>&1; then
               echo "$name@$version is already published"
             else
               npm publish "$package" --tag "$dist_tag"
@@ -186,13 +187,13 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          name=$(node -p "require('./dist/wasm/package.json').name")
-          version=$(node -p "require('./dist/wasm/package.json').version")
+          name=$(bun -p "require('./dist/wasm/package.json').name")
+          version=$(bun -p "require('./dist/wasm/package.json').version")
           case "$version" in
             *-*) dist_tag=${version#*-}; dist_tag=${dist_tag%%.*};;
             *) dist_tag=latest;;
           esac
-          if npm view "$name@$version" version >/dev/null 2>&1; then
+          if bun info "$name@$version" version --json >/dev/null 2>&1; then
             echo "$name@$version is already published"
           else
             npm publish ./dist/wasm --tag "$dist_tag"
@@ -202,13 +203,13 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           package=./dist/packages/solid-checker
-          name=$(node -p "require('$package/package.json').name")
-          version=$(node -p "require('$package/package.json').version")
+          name=$(bun -p "require('$package/package.json').name")
+          version=$(bun -p "require('$package/package.json').version")
           case "$version" in
             *-*) dist_tag=${version#*-}; dist_tag=${dist_tag%%.*};;
             *) dist_tag=latest;;
           esac
-          if npm view "$name@$version" version >/dev/null 2>&1; then
+          if bun info "$name@$version" version --json >/dev/null 2>&1; then
             echo "$name@$version is already published"
           else
             npm publish "$package" --tag "$dist_tag"

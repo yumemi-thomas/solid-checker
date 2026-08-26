@@ -10,9 +10,9 @@
 // cannot silently outlive it, and -- the half this gate was missing -- a
 // narrowing cannot quietly turn a rule into a no-op.
 //
-//   node scripts/tsc-oracle-gate.mjs           enforce every case
-//   node scripts/tsc-oracle-gate.mjs --json    machine-readable result
-//   node scripts/tsc-oracle-gate.mjs --report  print both sides per case (for
+//   bun scripts/tsc-oracle-gate.mjs           enforce every case
+//   bun scripts/tsc-oracle-gate.mjs --json    machine-readable result
+//   bun scripts/tsc-oracle-gate.mjs --report  print both sides per case (for
 //                                              writing a ledger entry, not for
 //                                              gating)
 //
@@ -38,21 +38,24 @@
 // loudly, the same way `SOLID_TYPEFACTS_BIN`'s canary does.
 //
 // The 161 cases run concurrently, and the structure of this file is what keeps
-// that honest. Execution -- two TypeScript programs and two checker processes
-// per case -- happens in worker threads (`scripts/lib/tsc-oracle-case.mjs`),
-// which is where the whole cost is. Every *verdict* is drawn here, in one pass
-// over the cases in ledger order, so the failure list a run prints does not
-// depend on which case finished first.
+// that honest. On a cache miss, two TypeScript programs and two checker
+// processes per case execute in worker threads
+// (`scripts/lib/tsc-oracle-case.mjs`). Their raw observations are cached on
+// separate input envelopes; every *verdict* is still drawn here, in one pass
+// over the cases in ledger order, so expectations are fresh and the failure
+// list does not depend on which case finished first.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { openGateCache } from "./lib/gate-cache.mjs";
 import { createWorkerPool, gateConcurrency, mapPool } from "./lib/pool.mjs";
 import {
   canonicalRule,
   catalogEntries,
   prepareDialectBases,
 } from "./lib/tsc-oracle-case.mjs";
+import { oracleProject } from "./tsc-oracle.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LEDGER = join(ROOT, "fixtures/tsc-oracle/rule-cases.json");
@@ -307,8 +310,23 @@ const runnable = ledger.cases
 
 prepareDialectBases();
 
-// Phase 2: execution, concurrent and order-independent.
+// Phase 2: execution, concurrent and order-independent. TypeScript's answer is
+// cached independently from the checker: rebuilding Rust cannot change what
+// the same published .d.ts files report, and invalidating 322 TypeScript
+// programs for that unrelated event was the dominant warm-gate cost.
 const concurrency = gateConcurrency();
+const oracleRoots = [oracleProject("v1").root, oracleProject("v2").root];
+const typescriptCache = openGateCache({
+  gate: "tsc-oracle-typescript",
+  scriptPath: fileURLToPath(import.meta.url),
+  trees: [...oracleRoots, join(ROOT, "packages/cli/node_modules/typescript")],
+});
+const checkerCache = openGateCache({
+  gate: "tsc-oracle-checker",
+  scriptPath: fileURLToPath(import.meta.url),
+  binaries: [CHECKER, TYPEFACTS, join(ROOT, "bin/solid-typefacts.buildinfo")],
+  trees: oracleRoots,
+});
 const pool = createWorkerPool({
   workerPath: WORKER,
   size: Math.min(concurrency, Math.max(1, runnable.length)),
@@ -316,10 +334,26 @@ const pool = createWorkerPool({
 });
 const executed = new Map();
 try {
-  const observed = await mapPool(runnable, ({ testCase, index }) => pool.run({ testCase, index }), {
-    concurrency,
-  });
-  for (const [position, { index }] of runnable.entries()) executed.set(index, observed[position]);
+  const tasks = runnable.flatMap(({ testCase, index }) => [
+    { side: "typescript", testCase, index },
+    { side: "checker", testCase, index },
+  ]);
+  const observed = await mapPool(
+    tasks,
+    async ({ side, testCase, index }) => {
+      const cache = side === "typescript" ? typescriptCache : checkerCache;
+      const cached = await cache.run(
+        [JSON.stringify({ index, testCase })],
+        () => pool.run({ side, testCase, index }),
+      );
+      return { side, index, value: cached.value };
+    },
+    { concurrency },
+  );
+  for (const { side, index, value } of observed) {
+    const current = executed.get(index) ?? {};
+    executed.set(index, { ...current, ...value });
+  }
 } finally {
   await pool.close();
 }
@@ -461,7 +495,7 @@ if (json) {
   console.log(
     `tsc oracle gate: ${ledger.cases.length} case(s) hold on both sides` +
       ` (TypeScript and the checker); ${keystones} rule(s) carry a silent-tsc/reporting-rule keystone` +
-      ` [concurrency ${concurrency}]`,
+      ` [concurrency ${concurrency}; ${typescriptCache.summary()}; checker ${checkerCache.summary()}]`,
   );
 }
 

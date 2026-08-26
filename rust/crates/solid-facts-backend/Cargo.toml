@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
 autobins = false
+autotests = false
 
 [features]
 default = ["dialect-v1", "dialect-v2"]
@@ -47,3 +48,23 @@ path = "src/bin/solid-checker-cold-start-bench.rs"
 [[bin]]
 name = "solid-contract-gen"
 path = "src/bin/solid-contract-gen.rs"
+
+# Keep the two focused process boundaries addressable by the verification
+# matrix, but link the remaining integration modules once. Each root-level
+# tests/*.rs file used to become a separate 45-55 MiB executable even when the
+# module contained only a handful of tests.
+[[test]]
+name = "diagnostics_process"
+path = "tests/diagnostics_process.rs"
+
+[[test]]
+name = "contracts_process"
+path = "tests/contracts_process.rs"
+
+[[test]]
+name = "dialects_process"
+path = "tests/dialects_process.rs"
+
+[[test]]
+name = "backend_process"
+path = "tests/backend_process.rs"

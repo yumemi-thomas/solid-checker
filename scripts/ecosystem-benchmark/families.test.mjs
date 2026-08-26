@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { AUDITED_SOLID_1, FAMILIES, SOLID_RUNTIME_PACKAGES, classifyPackage, familyById, familyOrder } from "./lib/families.mjs";

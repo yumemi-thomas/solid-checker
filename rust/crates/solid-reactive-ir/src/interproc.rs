@@ -710,6 +710,51 @@ fn push_unaccounted_parameter_escapes(
         retained.insert(file.ast.peel_ts_sugar_span(assignment.value_span));
         retained.insert(assignment.value_span);
     }
+    // A returned conditional can expose the same caller-supplied callable in
+    // two incompatible forms: `fn.length ? () => fn(value) : fn`. The nested
+    // branch contains an invocation, while the sibling branch returns `fn`
+    // itself. Treating the nested call as the helper's own callback timing is
+    // unsound; which callable escapes is chosen only when the helper runs.
+    //
+    // Keep this deliberately narrower than "a returned function closes over a
+    // parameter". Returned schedulers such as `() => setTimeout(fn)` have an
+    // exact deferred summary, and a plain `return fn` is a relational return,
+    // not evidence that the exporting function invokes `fn`.
+    for returned in file.ast.returns.iter().chain(
+        file.ast
+            .functions
+            .iter()
+            .filter_map(|function| function.expression_return.as_ref()),
+    ) {
+        if let Some(argument) = returned.argument {
+            let nested = if file.ast.call_at(argument).is_none() {
+                file.ast.functions_within(argument).collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            for identifier in file.ast.identifiers.iter().filter(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && nested
+                        .iter()
+                        .any(|function| function.span.contains(identifier.span))
+            }) {
+                let Some(declaration) = file.ast.reference_declaration(identifier.span) else {
+                    continue;
+                };
+                let also_returned_directly = file.ast.identifiers.iter().any(|candidate| {
+                    candidate.role == solid_facts::ast::IdentifierRole::Reference
+                        && argument.contains(candidate.span)
+                        && !nested
+                            .iter()
+                            .any(|function| function.span.contains(candidate.span))
+                        && file.ast.reference_declaration(candidate.span) == Some(declaration)
+                });
+                if also_returned_directly {
+                    retained.insert(identifier.span);
+                }
+            }
+        }
+    }
     for member in file.ast.members.iter().filter(|member| {
         file.ast
             .computed_members
@@ -1175,7 +1220,14 @@ fn discover_interprocedural_graph(
                 (Some(execution), _) => Some(execution),
                 (None, Some(composed)) => composed,
                 (None, None) => contract_callback_execution(semantic)
-                    .filter(|execution| *execution != "inline" || call_in_owner_body)
+                    // A lexical role is an answer about where this call is
+                    // written, not whether an intervening nested helper runs
+                    // with that role relative to the exported call. This was
+                    // already enforced for `inline`; real package probes show
+                    // the same false implication for `tracked` (a nested
+                    // request starter under mapArray). Only an explicit
+                    // wrapper chain may cross the function boundary.
+                    .filter(|_| call_in_owner_body)
                     .or_else(|| {
                         function_escapes_through_return(
                             file,
@@ -1210,6 +1262,14 @@ fn discover_interprocedural_graph(
                     },
                 ));
             } else {
+                // The invocation is real, but its execution relative to the
+                // exported call is not classifiable. An omitted callbacks row
+                // would be the false negative "never invokes this parameter";
+                // open the per-export callbacks sentinel as well as recording
+                // the attribution obligation below.
+                contribution
+                    .escaped_parameters
+                    .push((nodes[callback_owner].span, parameter));
                 contribution.contract_generation_obligations.push((
                     nodes[callback_owner].span,
                     unknown_callback_obligation(
@@ -1368,6 +1428,9 @@ fn discover_interprocedural_graph(
                 // tracked wrapper above a clearing one, and never a wrong
                 // claim.
                 if ambient == ForwardedAmbientExecution::Unknown {
+                    contribution
+                        .escaped_parameters
+                        .push((nodes[callback_owner].span, parameter));
                     contribution.contract_generation_obligations.push((
                         nodes[callback_owner].span,
                         unknown_callback_obligation(
@@ -2294,6 +2357,30 @@ fn enclosing_callback_chain(
             })
             .collect::<Vec<_>>();
         if enclosing.is_empty() {
+            // An inline function expression can be one branch of the callee
+            // itself: `(condition ? value => fn(value) : fn)(arg)`. It is not
+            // a call argument, so the ordinary callback-position walk above
+            // cannot see it, but selecting that branch invokes the function
+            // synchronously and transparently. Continue from the direct call
+            // so outer wrappers (for example createRoot/runWithOwner) are
+            // still composed instead of misclassifying the nested `fn()` as
+            // an escaped/deferred callback.
+            let direct_branch_call = file
+                .ast
+                .functions_body_containing(span)
+                .min_by_key(|function| function.body.end - function.body.start)
+                .and_then(|function| {
+                    file.ast
+                        .calls
+                        .iter()
+                        .filter(|call| call.callee.contains(function.span))
+                        .min_by_key(|call| call.callee.end - call.callee.start)
+                });
+            if let Some(call) = direct_branch_call {
+                wrappers.push(CallbackWrapper::Transparent);
+                span = call.span;
+                continue;
+            }
             break;
         }
         // Shortest argument span first: `f(g(() => x))` answers both calls for
@@ -2438,6 +2525,21 @@ fn forwarded_callback_ambient_execution(
         Some(chain) => chain.wrappers,
         None => Vec::new(),
     };
+    // A local helper invoked from a tracked computation that starts after the
+    // wrapping call is not enough to restate the helper's `inline` row as a
+    // tracked export callback. Solid 1's first createEffect run can execute
+    // the maybe-accessor through the caller's still-active computation (the
+    // generic probe observes the caller re-run), while later runs belong to
+    // the effect. Schema v1 has one word for the parameter and cannot express
+    // that split, so keep it unknown. A callback passed directly to the Solid
+    // primitive does not use this forwarding seam and retains its dialect row.
+    if matches!(own, None | Some(CallbackWrapper::Transparent))
+        && above.iter().any(|wrapper| {
+            *wrapper == CallbackWrapper::Tracked(Some(TrackedCallbackTiming::AfterCall))
+        })
+    {
+        return ForwardedAmbientExecution::Unknown;
+    }
     if own.is_none() && above.is_empty() {
         return ForwardedAmbientExecution::Callee;
     }
@@ -2493,10 +2595,18 @@ fn primitive_callback_execution(
     ) {
         return dialect
             .callback_execution_at(primitive, parameter, argument_count)
-            .map(|execution| match execution {
-                solid_dialect::Execution::Tracked => "tracked",
-                solid_dialect::Execution::Deferred => "deferred",
-                solid_dialect::Execution::Inline => "inline",
+            .map(|execution| match (primitive, execution) {
+                // The dialect's `Deferred` row for Solid 1 createResource's
+                // fetcher is an attribution fact: it runs outside the source
+                // computation. The package-contract word is observable
+                // scheduling, and both sourced and unsourced overloads invoke
+                // their initial fetcher before createResource returns. Keeping
+                // `deferred` here falsified wrappers such as
+                // @solid-primitives/pagination's createInfiniteScroll.
+                (P::CreateResource, solid_dialect::Execution::Deferred) => "inline",
+                (_, solid_dialect::Execution::Tracked) => "tracked",
+                (_, solid_dialect::Execution::Deferred) => "deferred",
+                (_, solid_dialect::Execution::Inline) => "inline",
             });
     }
     match (primitive, parameter) {
@@ -5997,6 +6107,11 @@ mod tests {
         );
         assert_eq!(
             primitive_callback_execution(Some(Primitive::CreateRoot), 0, 1, &dialect),
+            Some("inline")
+        );
+        let solid1x = solid_dialect::Solid1x;
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateResource), 1, 2, &solid1x),
             Some("inline")
         );
         assert_eq!(

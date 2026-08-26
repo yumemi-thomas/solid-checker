@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import test from "node:test";
+import { test as vitestTest } from "vitest";
 
 import {
   createModuleResolver,
@@ -28,11 +28,18 @@ import {
 
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");
+const generationShard = globalThis.__SOLID_CHECKER_GENERATION_TEST_SHARD ?? 0;
+const generationShardCount = 2;
+let generationTestIndex = 0;
+const test = (...arguments_) => {
+  const index = generationTestIndex++;
+  if (index % generationShardCount === generationShard) vitestTest(...arguments_);
+};
 
 // One stub per behavior, keyed by the entry file the generator hands it:
 // "ok" writes a minimal normalized contract document, "refuse" reproduces a
 // native fail-closed contract-emission refusal, "crash" reproduces a panic.
-const STUB_NATIVE = `#!/usr/bin/env node
+const STUB_NATIVE = `#!/usr/bin/env bun
 import { appendFileSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
@@ -118,6 +125,18 @@ writeFileSync(
     evidence: { kind: "inferred" }
   })
 );
+
+const probePlanPath = value("--emit-probe-plan");
+if (probePlanPath) {
+  writeFileSync(
+    probePlanPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      source: "typescript-value-domain",
+      exports: {}
+    })
+  );
+}
 
 // The module inventory \`--emit-module-inventory\` writes, in the shape
 // \`write_module_inventory\` writes it (rust/crates/solid-facts-backend/src/

@@ -2,15 +2,40 @@
 set -eu
 
 rust_manifest=rust/Cargo.toml
+cargo_profile=verify
+checker_bin="$PWD/rust/target/$cargo_profile/solid-checker-rust"
+rust_test_runner="${SOLID_CHECKER_RUST_TEST_RUNNER:-test}"
+case "$rust_test_runner" in
+  auto)
+    if command -v cargo-nextest >/dev/null 2>&1; then
+      rust_test_runner=nextest
+    else
+      rust_test_runner=test
+    fi
+    ;;
+  nextest|test) ;;
+  *)
+    echo "make verify: SOLID_CHECKER_RUST_TEST_RUNNER must be auto, nextest, or test" >&2
+    exit 2
+    ;;
+esac
 
-# `node` is now required before the first cargo step, not only by the Node gates
-# further down: the timing clock below is a `node -e`, and under `set -e` a
+run_rust_tests() {
+  if [ "$rust_test_runner" = nextest ]; then
+    cargo +1.97 nextest run --cargo-profile "$cargo_profile" "$@"
+  else
+    cargo +1.97 test --profile "$cargo_profile" "$@"
+  fi
+}
+
+# `bun` is now required before the first cargo step, not only by the Bun gates
+# further down: the timing clock below is a `bun -e`, and under `set -e` a
 # failed command substitution in an assignment aborts the script with a bare
-# "node: command not found" that says nothing about what wanted it. Fail fast
+# "bun: command not found" that says nothing about what wanted it. Fail fast
 # with a sentence instead.
-if ! command -v node >/dev/null 2>&1; then
-  echo "make verify: node is required (the per-step clock, the coverage/oracle/contract gates," >&2
-  echo "  and the npm steps all run under it). Install Node and re-run." >&2
+if ! command -v bun >/dev/null 2>&1; then
+  echo "make verify: bun is required (the per-step clock, the coverage/oracle/contract gates," >&2
+  echo "  and the Bun steps all run under it). Install Bun and re-run." >&2
   exit 127
 fi
 
@@ -24,7 +49,7 @@ fi
 # fail-fast: nothing is wrapped, nothing is subshelled, `set -eu` still aborts
 # the script on the first failure.
 #
-# The clock is a single `node -e` per boundary (node is already required by
+# The clock is a single `bun -e` per boundary (bun is already required by
 # steps below), so one read serves as the previous step's end and the next
 # step's start: 22 reads for 21 steps. `date` is not used because POSIX `date`
 # has no sub-second field and several steps finish in tens of milliseconds.
@@ -35,7 +60,7 @@ fi
 # fan-out of min(cores, 8).
 # ---------------------------------------------------------------------------
 
-epoch_ms() { node -e 'process.stdout.write(String(Date.now()))'; }
+epoch_ms() { bun -e 'process.stdout.write(String(Date.now()))'; }
 
 timings=""
 step_name=""
@@ -82,22 +107,27 @@ step fmt-check
 cargo +1.97 fmt --manifest-path "$rust_manifest" --all -- --check
 
 step clippy
-cargo +1.97 clippy --manifest-path "$rust_manifest" --workspace --all-targets
+cargo +1.97 clippy --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" --workspace --all-targets
 
 step check-backend-v1
-cargo +1.97 check --manifest-path "$rust_manifest" -p solid-facts-backend \
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-facts-backend \
   --all-targets --no-default-features --features dialect-v1
 
 step check-backend-v2
-cargo +1.97 check --manifest-path "$rust_manifest" -p solid-facts-backend \
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-facts-backend \
   --all-targets --no-default-features --features dialect-v2
 
 step check-wasm-v1
-cargo +1.97 check --manifest-path "$rust_manifest" -p solid-checker-wasm \
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-checker-wasm \
   --all-targets --no-default-features --features dialect-v1
 
 step check-wasm-v2
-cargo +1.97 check --manifest-path "$rust_manifest" -p solid-checker-wasm \
+cargo +1.97 check --profile "$cargo_profile" \
+  --manifest-path "$rust_manifest" -p solid-checker-wasm \
   --all-targets --no-default-features --features dialect-v2
 
 step build-typefacts
@@ -105,23 +135,24 @@ scripts/build-typefacts.sh
 
 step test-workspace
 SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
-  cargo +1.97 test --manifest-path "$rust_manifest" --workspace
+  run_rust_tests --manifest-path "$rust_manifest" --workspace
 
-step build-debug
-cargo +1.97 build --manifest-path "$rust_manifest" --workspace
+step build-checker
+cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
+  -p solid-facts-backend --bin solid-checker-rust
 
 step coverage
-SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
+SOLID_CHECKER_BIN="$checker_bin" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
 
 # The product-owned corpus carries exact checker expectations and per-finding
 # TypeScript ownership for every retained former parity case.
 step oracle-provision
-node scripts/tsc-oracle.mjs provision --dialect all
+bun scripts/tsc-oracle.mjs provision --dialect all
 
 step ownership-gate
-SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/ownership-gate.mjs \
+SOLID_CHECKER_BIN="$checker_bin" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/ownership-gate.mjs \
   --require-retained --require-complete
 
 step build-session-bench
@@ -132,30 +163,32 @@ cargo +1.97 build --release --manifest-path "$rust_manifest" \
 # it is deliberately the one place nothing else is scheduled alongside.
 step verify-performance
 SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
-  node benchmarks/verify-performance.mjs
+  bun benchmarks/verify-performance.mjs
 
-step npm-ci
-npm ci --ignore-scripts --prefix packages/cli
+step bun-install
+bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 
-step npm-test
-npm test --prefix packages/cli
+step bun-test
+bun run --cwd packages/cli test
 
 # AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
 # `tsc` error against the real published Solid typings. Provisioning installs
 # the audited package versions and verifies them, so a drifted install fails
 # here rather than changing the answer silently. The gate runs the checker over
-# every case as well, so it takes the same fresh debug build as coverage and
-# ownership -- the packaged binary may lag rust/ source.
+# every case as well, so it takes the same fresh verification build as coverage
+# and ownership -- the packaged binary may lag rust/ source.
 step tsc-oracle-test
 # The whole glob, exactly as CI's contracts job runs it: naming individual
 # files here once let a contract-generation regression reach CI that every
 # local handoff had missed, because verify gated 5 of the 17 test files.
-SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node --test scripts/*.test.mjs
+SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
+  bun packages/cli/node_modules/vitest/vitest.mjs run \
+  --config packages/cli/vitest.config.mjs scripts/*.test.mjs
 
 step tsc-oracle-gate
-SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
+SOLID_CHECKER_BIN="$checker_bin" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/tsc-oracle-gate.mjs
 
 # The other half: an *unreported* finding is a claim too. This supplies the
 # evidence each obligation says is missing and asks whether the answer changes,
@@ -163,8 +196,8 @@ SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
 # provisioned installs for the same reason -- a loosened stub would invent the
 # obligation it is meant to test.
 step obligation-audit
-SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/obligation-audit.mjs
+SOLID_CHECKER_BIN="$checker_bin" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/obligation-audit.mjs
 
 step lint-misc
 sh -n scripts/*.sh
@@ -172,13 +205,13 @@ jq empty schema/*.json
 jq empty fixtures/tsc-oracle/*.json
 jq empty fixtures/obligation-cases/*.json
 find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
-node scripts/dialect-manifests.mjs validate
+bun scripts/dialect-manifests.mjs validate
 
 step conformance
-node scripts/check-bundled-contracts.mjs
-node scripts/check-contract-pins.mjs
-node scripts/generate-solid1-runtime-surface.mjs --check
-node scripts/dialect-manifests.mjs check-composed-contracts
+bun scripts/check-bundled-contracts.mjs
+bun scripts/check-contract-pins.mjs
+bun scripts/generate-solid1-runtime-surface.mjs --check
+bun scripts/dialect-manifests.mjs check-composed-contracts
 
 step ""
 summarize

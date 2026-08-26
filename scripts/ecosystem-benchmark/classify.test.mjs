@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { FAILURE_CLASSES, classifyResult, normalizeSignature } from "./lib/classify.mjs";
 

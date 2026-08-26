@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Isolated @solidjs/web subpath probes. Importing the JSX and frames runtimes
 // installs renderer-wide trace hooks, so these must not share the core Solid
 // worker whose claims require the root server renderer's untouched state.

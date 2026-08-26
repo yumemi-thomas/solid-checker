@@ -14,7 +14,7 @@ make ecosystem-benchmark   # no registry metadata: run every row's every probe
 
 `ecosystem-discover` is the only one of these that touches the network on its
 own account; `ecosystem-sentinel` and `ecosystem-benchmark` read
-`manifest.json` and only reach the network to `npm install` each probe's exact
+`manifest.json` and only reach the network to `bun install` each probe's exact
 pinned versions.
 
 ## Required environment
@@ -70,7 +70,7 @@ the numbers mean and do not mean.
 ## Tests
 
 ```sh
-make ecosystem-benchmark-test    # node --test over every *.test.mjs here
+make ecosystem-benchmark-test    # Vitest over every *.test.mjs here
 ```
 
 Hermetic — no network, no registry, no checker binary.
@@ -83,7 +83,7 @@ AGENTS.md's "Contracts and dependency pins").
 ## Refreshing the manifest
 
 ```sh
-node discover.mjs --print-diff
+bun discover.mjs --print-diff
 ```
 
 first, to review exactly what would change — additions, removals, and any

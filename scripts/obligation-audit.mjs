@@ -21,8 +21,8 @@
 // too: that is a real change in behaviour and it should be recorded, not
 // absorbed.
 //
-//   node scripts/obligation-audit.mjs           enforce every case
-//   node scripts/obligation-audit.mjs --json    machine-readable result
+//   bun scripts/obligation-audit.mjs           enforce every case
+//   bun scripts/obligation-audit.mjs --json    machine-readable result
 //
 // Cases run against the *audited published typings*, in the oracle's own
 // provisioned installs, for the reason AGENTS.md gives: a fixture stub that is

@@ -8,7 +8,7 @@ targets append a slash and package slug, for example `solid-v3/solid-js`.
 The checked-in `rust/dialects/<id>/dialect.json` file is the assembly manifest.
 Contract generation, drift checks, runtime conformance, and the shipped ESLint
 catalog discovery all key off these manifests or the artifacts they name. Run
-`node scripts/dialect-manifests.mjs validate` early: a missing or duplicate
+`bun scripts/dialect-manifests.mjs validate` early: a missing or duplicate
 artifact is then a hard failure instead of a dialect that silently does not
 ship.
 
@@ -64,10 +64,10 @@ ship.
 Run these narrow checks while assembling the dialect:
 
 ```sh
-node scripts/dialect-manifests.mjs validate
+bun scripts/dialect-manifests.mjs validate
 make contracts-check
 make contract-conformance
-npm test --prefix packages/cli
+bun run --cwd packages/cli test
 ```
 
 Finish with `make verify`. The full workflow checks Rust formatting and lint,

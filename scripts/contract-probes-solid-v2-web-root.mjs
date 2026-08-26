@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Root @solidjs/web probes that mutate renderer-wide server context are kept
 // out of the core Solid worker and the JSX/frames worker.
 import * as solid from "solid-js";

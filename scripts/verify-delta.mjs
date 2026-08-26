@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // `make verify-delta`: AGENTS.md's "which check to run" table, mechanized.
 //
 // The table tells a reader which narrow check a change needs and which
@@ -8,8 +8,8 @@
 // it matched for every path, and runs exactly those checks plus the universal
 // handoff set the table always appends.
 //
-//   node scripts/verify-delta.mjs             plan and run
-//   node scripts/verify-delta.mjs --dry-run   print the plan, run nothing
+//   bun scripts/verify-delta.mjs             plan and run
+//   bun scripts/verify-delta.mjs --dry-run   print the plan, run nothing
 //
 // **`make verify` remains the handoff authority.** This is the fast loop, and
 // it is only ever as good as the mapping below; a full run is what a claim of
@@ -67,7 +67,10 @@ export const CHECKS = {
   },
   "build-debug": {
     why: "coverage and the ownership gate must run a fresh debug binary, not a packaged one that can lag rust/ source",
-    command: ["cargo", TOOLCHAIN, "build", "--manifest-path", MANIFEST, "--workspace"],
+    command: [
+      "cargo", TOOLCHAIN, "build", "--manifest-path", MANIFEST,
+      "-p", "solid-facts-backend", "--bin", "solid-checker-rust",
+    ],
   },
   "facts-lib": {
     command: ["cargo", TOOLCHAIN, "test", "--manifest-path", MANIFEST, "-p", "solid-facts", "--lib"],
@@ -92,14 +95,14 @@ export const CHECKS = {
     env: { SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS) },
   },
   coverage: {
-    command: ["node", "scripts/coverage.mjs"],
+    command: ["bun", "scripts/coverage.mjs"],
     env: {
       SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
     },
   },
   "ownership-gate": {
-    command: ["node", "scripts/ownership-gate.mjs", "--require-retained", "--require-complete"],
+    command: ["bun", "scripts/ownership-gate.mjs", "--require-retained", "--require-complete"],
     env: {
       SOLID_CHECKER_BIN: join(ROOT, DEBUG_CHECKER),
       SOLID_TYPEFACTS_BIN: join(ROOT, TYPEFACTS),
@@ -107,21 +110,21 @@ export const CHECKS = {
   },
   conformance: {
     commands: [
-      ["node", "scripts/check-bundled-contracts.mjs"],
-      ["node", "scripts/check-contract-pins.mjs"],
-      ["node", "scripts/generate-solid1-runtime-surface.mjs", "--check"],
-      ["node", "scripts/dialect-manifests.mjs", "check-composed-contracts"],
+      ["bun", "scripts/check-bundled-contracts.mjs"],
+      ["bun", "scripts/check-contract-pins.mjs"],
+      ["bun", "scripts/generate-solid1-runtime-surface.mjs", "--check"],
+      ["bun", "scripts/dialect-manifests.mjs", "check-composed-contracts"],
     ],
   },
-  "npm-test-cli": { command: ["npm", "test", "--prefix", "packages/cli"] },
-  "npm-test-wasm": { command: ["npm", "test", "--prefix", "packages/wasm"] },
+  "bun-test-cli": { command: ["bun", "run", "--cwd", "packages/cli", "test"] },
+  "bun-test-wasm": { command: ["bun", "run", "--cwd", "packages/wasm", "test"] },
   // The universal handoff set, appended to every plan.
   "fmt-check": {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
   },
   "whitespace-check": { command: ["git", "diff", "--check"] },
   "schema-json": { command: ["jq", "empty", "schema/solid-reactivity.schema.json"] },
-  "dialect-manifests": { command: ["node", "scripts/dialect-manifests.mjs", "validate"] },
+  "dialect-manifests": { command: ["bun", "scripts/dialect-manifests.mjs", "validate"] },
   clippy: {
     command: [
       "cargo", TOOLCHAIN, "clippy", "--manifest-path", MANIFEST, "--workspace", "--all-targets",
@@ -187,8 +190,8 @@ export const ROWS = [
     owner: "fixtures or expected findings",
     checks: ["coverage", "ownership-gate"],
   },
-  { prefix: "packages/cli/", owner: "packages/cli", checks: ["npm-test-cli"] },
-  { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["npm-test-wasm"] },
+  { prefix: "packages/cli/", owner: "packages/cli", checks: ["bun-test-cli"] },
+  { prefix: "packages/wasm/", owner: "packages/wasm", checks: ["bun-test-wasm"] },
 ].sort((a, b) => b.prefix.length - a.prefix.length);
 
 /** The table row a path belongs to, or `null` when nothing claims it. */
@@ -229,7 +232,7 @@ export function planFor(paths) {
     ...(needsChecker ? ["build-debug"] : []),
     ...["facts-lib", "ir-lib", "backend-process", "contract-process"].filter((id) => selected.has(id)),
     ...["coverage", "ownership-gate", "conformance"].filter((id) => selected.has(id)),
-    ...["npm-test-cli", "npm-test-wasm"].filter((id) => selected.has(id)),
+    ...["bun-test-cli", "bun-test-wasm"].filter((id) => selected.has(id)),
     ...UNIVERSAL,
   ];
   return { full: false, unmapped, decisions, checks: ordered };

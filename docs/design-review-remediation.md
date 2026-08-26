@@ -9,8 +9,8 @@ to "lego we assemble" is assembly ergonomics, not structure.
 
 Every item below must land under the standard gates
 (`SOLID_TYPEFACTS_BIN=$PWD/bin/solid-typefacts`; rebuild `bin/` first):
-`cargo +1.97 test --workspace`, `node scripts/coverage.mjs`,
-`node scripts/parity.mjs`. House bar: every commit individually green.
+`cargo +1.97 test --workspace`, `bun scripts/coverage.mjs`,
+`bun scripts/parity.mjs`. House bar: every commit individually green.
 Known trap: the dialect seam (vocabulary + engine + both catalogs) moves as
 one piece when `CallbackSemantics` or the defect/violation projection
 changes; new fixtures need their `node_modules/solid-js/package.json`

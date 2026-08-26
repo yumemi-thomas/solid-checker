@@ -517,6 +517,10 @@ function buildArguments(descriptors, probeCallback, probeValue) {
     if (descriptor === "probe-value") return probeValue;
     if (descriptor === "noop-callback") return () => undefined;
     if (descriptor === "empty-object") return {};
+    if (descriptor === "null") return null;
+    if (descriptor === "empty-array") return [];
+    if (descriptor === "empty-map") return new Map();
+    if (descriptor === "empty-set") return new Set();
     return undefined;
   });
 }
@@ -537,7 +541,10 @@ function relationalReturnObservation(target, probe) {
     callbackCalls += 1;
     return sentinel;
   };
-  const returned = target(...buildArguments(probe.arguments, callback, sentinel));
+  const returned = selectReturnValue(
+    target(...buildArguments(probe.arguments, callback, sentinel)),
+    probe.returnPath
+  );
   if (probe.type === "returns-callback-result-function") {
     if (typeof returned !== "function") {
       return {
@@ -563,6 +570,11 @@ function relationalReturnObservation(target, probe) {
     identityMatched: returned === sentinel,
     calls: 1
   };
+}
+
+function selectReturnValue(value, path = []) {
+  for (const segment of path) value = value?.[segment];
+  return value;
 }
 
 function describeValue(value) {
@@ -710,7 +722,10 @@ async function returnsObservation(runtime, target, probe) {
     plantedRuns += 1;
     return source();
   };
-  const returned = target(...buildArguments(probe.arguments, planted));
+  const returned = selectReturnValue(
+    target(...buildArguments(probe.arguments, planted)),
+    probe.returnPath
+  );
   if (typeof returned !== "function") {
     return { typeofValue: describeValue(returned), reactive: false, calls: 1 };
   }

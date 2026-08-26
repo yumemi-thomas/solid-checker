@@ -15,12 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 11.1.1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
+          bun-version: 1.4.0
       # Same debug workspace as CI's engine job; read that job's dependency
       # cache rather than rebuild the graph on a weekly schedule.
       - uses: Swatinem/rust-cache@v2

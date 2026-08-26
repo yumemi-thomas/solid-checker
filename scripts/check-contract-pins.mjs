@@ -1,9 +1,9 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Verifies that every bundled contract names a package release that exists in
 // the registry, with the exact tarball the contract was audited against.
 //
 // `scripts/check-bundled-contracts.mjs` already proves this for contracts it
-// probes: it installs them and reads npm's hidden lockfile. That leaves the
+// probes: it installs them and reads Bun's lockfile. That leaves the
 // contracts it does not probe -- a hand-authored overlay, or a dialect whose
 // runtime is not probed at all -- pinned by a version string nothing checks.
 // A version string alone is not a pin: republished or mutated contents keep
@@ -18,7 +18,13 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadDialectManifests, root } from "./dialect-manifests.mjs";
-import { cacheEnabled, hashFile, scriptClosure, writeJsonAtomic } from "./lib/gate-cache.mjs";
+import {
+  cacheEnabled,
+  hashFile,
+  runtimeIdentity,
+  scriptClosure,
+  writeJsonAtomic,
+} from "./lib/gate-cache.mjs";
 
 let failures = 0;
 const fail = message => {
@@ -28,11 +34,12 @@ const fail = message => {
 
 /** The registry's integrity for one exact release, or an explained failure. */
 function registryIntegrity(name, version) {
-  const result = spawnSync("npm", ["view", `${name}@${version}`, "dist.integrity", "--json"], {
+  const result = spawnSync("bun", ["info", `${name}@${version}`, "dist.integrity", "--json"], {
+    cwd: join(root, "packages/cli"),
     encoding: "utf8",
   });
   if (result.error) {
-    return { error: `cannot run npm view: ${result.error.message}` };
+    return { error: `cannot run bun info: ${result.error.message}` };
   }
   if (result.status !== 0) {
     const detail = result.stderr.trim().split("\n").at(-1) ?? `exit ${result.status}`;
@@ -46,7 +53,7 @@ function registryIntegrity(name, version) {
   try {
     parsed = JSON.parse(output);
   } catch (error) {
-    return { error: `unreadable npm view output: ${error.message}` };
+    return { error: `unreadable bun info output: ${error.message}` };
   }
   // A range or tag would yield an array; an exact version must not.
   if (typeof parsed !== "string") {
@@ -66,9 +73,9 @@ function registryIntegrity(name, version) {
 //
 //   * **A format version and an input digest.** An entry is readable only by a
 //     reader whose inputs produced it: the memo schema, this script's own
-//     closure (so changing `registryIntegrity` -- a different npm field, a
+//     closure (so changing `registryIntegrity` -- a different Bun field, a
 //     different invocation, a bug fix -- misses instead of replaying answers
-//     the new logic never asked for), the Node version, and the *effective
+//     the new logic never asked for), the Bun runtime version, and the *effective
 //     registry*, resolved the way npm resolves it for this invocation. Warm the
 //     memo against a mirror, switch back to npmjs, and every entry misses.
 //   * **Strict shape validation on read.** Anything that is not exactly the
@@ -109,22 +116,20 @@ const MEMO_KEY = /^(?:@[^@/\s]+\/)?[^@/\s]+@[^@\s]+$/;
 const MEMO_INTEGRITY = /^sha\d{3}-[A-Za-z0-9+/]+={0,2}$/;
 
 /**
- * The registry `npm view` would actually talk to for this invocation.
+ * The registry Bun would actually talk to for this invocation.
  *
- * Resolved by asking npm rather than by reading `.npmrc` here, because npm's
- * own precedence (env, project, user, global config, scope overrides) is the
- * thing that decides which registry answered -- and an answer from a mirror is
- * a different answer.
- *
- * `null` when it cannot be resolved, which disables the memo entirely: an
- * unknown registry means an unknown provenance for every stored entry.
+ * Bun accepts the npm-compatible registry environment variables. Its CLI has
+ * no config-get equivalent, so an explicitly configured registry is honored;
+ * otherwise use Bun's documented default. Keeping this value in the memo key
+ * prevents a mirror's answer from serving a later npmjs.org run.
  */
-export function effectiveRegistry(run = spawnSync) {
-  const result = run("npm", ["config", "get", "registry"], { encoding: "utf8" });
-  if (result.error || result.status !== 0) return null;
-  const value = (result.stdout ?? "").trim();
-  if (value === "" || value === "undefined" || value === "null") return null;
-  return value;
+export function effectiveRegistry(env = process.env) {
+  return (
+    env.BUN_CONFIG_REGISTRY ??
+    env.NPM_CONFIG_REGISTRY ??
+    env.npm_config_registry ??
+    "https://registry.npmjs.org/"
+  );
 }
 
 /** The digest binding a stored entry to the inputs that could have produced it. */
@@ -134,7 +139,7 @@ export function memoInputDigest({ registry, scriptPath = fileURLToPath(import.me
   for (const part of [
     `memo-format:${MEMO_FORMAT_VERSION}`,
     `memo-fields:${MEMO_FIELDS.join(",")}`,
-    `node:${process.version}`,
+    runtimeIdentity,
     `registry:${registry}`,
     ...closure.files.map((path) => `script:${relative(root, path)}:${hashFile(path)}`),
     `script-closure-uncertain:${closure.uncertain}`,
@@ -255,7 +260,7 @@ export function verifyPin({ label, file, expectedName, document }, lookup = regi
   if (typeof pin.integrity !== "string" || pin.integrity === "") {
     return (
       `${label}: ${file} pins ${pin.name}@${pin.version} by version alone. Record the release's ` +
-      `integrity (npm view ${pin.name}@${pin.version} dist.integrity) so the pin can be falsified.`
+      `integrity (bun info ${pin.name}@${pin.version} dist.integrity) so the pin can be falsified.`
     );
   }
   const observed = lookup(pin.name, pin.version, pin.integrity);

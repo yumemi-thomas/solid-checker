@@ -11,7 +11,7 @@ use std::{
     time::Instant,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
@@ -63,6 +63,10 @@ struct Request {
     validate_contract_paths: Vec<String>,
     #[serde(default)]
     emit_contract: String,
+    /// Private, non-contract input recipes for the runtime probe. This is a
+    /// sidecar because constructing an argument is not evidence of behavior.
+    #[serde(default)]
+    emit_probe_plan: String,
     /// Where to write the analyzing program's own module inventory, as JSON.
     ///
     /// The generator's runtime-module closure is a syntax walk in *its*
@@ -147,6 +151,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if !request.emit_module_inventory.is_empty() && request.emit_contract.is_empty() {
         return Err("--emit-module-inventory requires --emit-contract".into());
     }
+    if !request.emit_probe_plan.is_empty() && request.emit_contract.is_empty() {
+        return Err("--emit-probe-plan requires --emit-contract".into());
+    }
     if !request.runtime_module_resolutions.is_empty() && request.emit_contract.is_empty() {
         return Err("--runtime-module-resolutions requires --emit-contract".into());
     }
@@ -225,7 +232,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         rules: &request.enable_rules,
         runtime: request.runtime.clone(),
     };
-    let semantic_demand_options = if diagnostics {
+    let mut semantic_demand_options = if diagnostics {
         semantic_demand_options_for_enablement(
             dialect,
             Path::new(&request.project_id),
@@ -234,6 +241,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     } else {
         SemanticDemandOptions::NONE
     };
+    semantic_demand_options.contract_probe_parameters = !request.emit_contract.is_empty();
     let (mut facts, native_timings) = {
         let (facts, timings) = build_project_native_measured_with_demands(
             dialect,
@@ -369,6 +377,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         )?;
         if !request.emit_contract.is_empty() {
             emit_package_contract(dialect, &request, &analysis.program, &facts)?;
+            if !request.emit_probe_plan.is_empty() {
+                emit_probe_plan(&request, &facts)?;
+            }
             // After the contract, not before: a run that cannot emit a
             // contract has no closure record to attest, and writing the
             // inventory first would leave an attestation of a generation that
@@ -455,6 +466,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut check_contracts = false;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
+    let mut emit_probe_plan = String::new();
     let mut emit_module_inventory = String::new();
     let mut runtime_module_resolutions = String::new();
     let mut package_name = String::new();
@@ -507,6 +519,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--emit-contract=") {
             emit_contract = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--emit-probe-plan=") {
+            emit_probe_plan = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--emit-module-inventory=") {
@@ -597,6 +613,9 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             }
             "--emit-contract" => {
                 emit_contract = args.next().ok_or("--emit-contract needs a path")?
+            }
+            "--emit-probe-plan" => {
+                emit_probe_plan = args.next().ok_or("--emit-probe-plan needs a path")?
             }
             "--emit-module-inventory" => {
                 emit_module_inventory = args.next().ok_or("--emit-module-inventory needs a path")?
@@ -692,6 +711,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         check_contracts,
         validate_contract_paths,
         emit_contract,
+        emit_probe_plan,
         emit_module_inventory,
         runtime_module_resolutions,
         package_name,
@@ -1939,6 +1959,130 @@ fn emit_package_contract(
     Ok(())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbePlanFragment {
+    schema_version: u32,
+    source: &'static str,
+    exports: BTreeMap<String, BTreeMap<usize, String>>,
+}
+
+/// Writes probe-only argument recipes proven by Type Facts.
+///
+/// This file is deliberately not part of the package-contract schema. A valid
+/// input helps a probe reach package behavior; it is never evidence that the
+/// behavior is correct. Recipes are emitted only for literal inhabitants the
+/// compiler's closed value-domain facts name directly. Everything else stays
+/// absent and the driver keeps its existing fail-closed synthesis.
+fn emit_probe_plan(
+    request: &Request,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
+    let contract = read_package_contract(Path::new(&request.emit_contract))?;
+    let names = contract
+        .entrypoints
+        .get(".")
+        .map(|entry| entry.exports.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let aliases = canonical_symbol_aliases(facts);
+    let mut exports = BTreeMap::new();
+    for export_name in names {
+        let Some(export_entity) = entry_export_entity(facts, &entry_file, &export_name) else {
+            continue;
+        };
+        let export_symbol = canonical_symbol(&export_entity.symbol, &aliases);
+        if export_symbol.is_empty() {
+            continue;
+        }
+        let mut matches = Vec::new();
+        for file in &facts.files {
+            for function in &file.ast.functions {
+                let Some(name) = &function.name else {
+                    continue;
+                };
+                let location = typefacts::Location {
+                    path: file.path.to_string().into(),
+                    start_byte: u64::from(name.span.start),
+                    end_byte: u64::from(name.span.end),
+                };
+                let Some(entity) = facts.typescript.entities().find(|entity| {
+                    entity.location == location
+                        && canonical_symbol(&entity.symbol, &aliases) == export_symbol
+                }) else {
+                    continue;
+                };
+                let _ = entity;
+                matches.push((file, function));
+            }
+        }
+        // Ambiguous identity is no construction proof.
+        let [(file, function)] = matches.as_slice() else {
+            continue;
+        };
+        let mut parameters = BTreeMap::new();
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            let [name] = parameter.names.as_slice() else {
+                continue;
+            };
+            let location = typefacts::Location {
+                path: file.path.to_string().into(),
+                start_byte: u64::from(name.span.start),
+                end_byte: u64::from(name.span.end),
+            };
+            let Some(entity) = facts
+                .typescript
+                .entities()
+                .find(|entity| entity.location == location)
+            else {
+                continue;
+            };
+            let primitive = entity.primitive_value_domain;
+            let recipe = if primitive
+                .present()
+                .is_some_and(|domain| domain.may_be_null())
+            {
+                Some("null")
+            } else if primitive
+                .present()
+                .is_some_and(|domain| domain.may_be_undefined())
+            {
+                Some("undefined")
+            } else if entity.array_shape == Some(typefacts::ArrayShape::Array)
+                && entity.tuple_shape.is_none()
+            {
+                Some("empty-array")
+            } else {
+                entity.library_types.as_deref().and_then(|types| {
+                    if types.iter().any(|name| name.as_ref() == "Map") {
+                        Some("empty-map")
+                    } else if types.iter().any(|name| name.as_ref() == "Set") {
+                        Some("empty-set")
+                    } else {
+                        None
+                    }
+                })
+            };
+            if let Some(recipe) = recipe {
+                parameters.insert(index, recipe.to_owned());
+            }
+        }
+        if !parameters.is_empty() {
+            exports.insert(export_name, parameters);
+        }
+    }
+    let fragment = ProbePlanFragment {
+        schema_version: 1,
+        source: "typescript-value-domain",
+        exports,
+    };
+    fs::write(
+        &request.emit_probe_plan,
+        format!("{}\n", serde_json::to_string_pretty(&fragment)?),
+    )?;
+    Ok(())
+}
+
 fn contract_exports_for_entry_file(
     facts: &solid_facts::ProjectFacts,
     program: &solid_reactive_ir::Program,
@@ -2247,7 +2391,7 @@ fn promote_entry_callable(
     summary: solid_reactive_ir::ContractExport,
     trusted_kind: bool,
 ) -> Result<solid_reactive_ir::ContractExport, Box<dyn std::error::Error>> {
-    if summary.kind != "value" {
+    if trusted_kind && summary.kind != "value" {
         return Ok(summary);
     }
     let Some(entity) = entry_export_entity(facts, entry_file, name) else {
@@ -2268,8 +2412,21 @@ fn promote_entry_callable(
         // unknown for both: a summary still saying `value` here is one whose
         // body was never analyzed, so its silence about callbacks is not a
         // claim either. See `solid_reactive_ir::raised_function_export`.
-        solid_reactive_ir::ExportKindProof::Callable => {
+        solid_reactive_ir::ExportKindProof::Callable if summary.kind == "value" => {
             Ok(solid_reactive_ir::raised_function_export(summary))
+        }
+        solid_reactive_ir::ExportKindProof::Callable => Ok(summary),
+        // The exact exported specifier has closed negative callability and
+        // constructability facts. That proof outranks an inferred function
+        // summary reached through an initializer expression: a call such as a
+        // bundler's `__exportAll({...})` has the callee's symbol inside it, but
+        // exports the call result. Keeping the callee summary here certified a
+        // namespace object as callable (`@kobalte/core`'s `./menubar:t`).
+        solid_reactive_ir::ExportKindProof::NonCallable if summary.kind == "function" => {
+            Ok(solid_reactive_ir::ContractExport {
+                kind: "value".into(),
+                ..solid_reactive_ir::ContractExport::default()
+            })
         }
         solid_reactive_ir::ExportKindProof::Unresolvable(callability, constructability)
             if !trusted_kind =>

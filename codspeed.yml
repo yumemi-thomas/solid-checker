@@ -8,10 +8,10 @@ options:
 benchmarks:
   - id: fresh-analysis-1000
     name: Fresh analysis — 1,000 sources
-    exec: node benchmarks/run-codspeed-case.mjs fresh
+    exec: bun benchmarks/run-codspeed-case.mjs fresh
   - id: cached-analysis-1000
     name: Cached analysis throughput — 1,000 sources
-    exec: node benchmarks/run-codspeed-case.mjs cached
+    exec: bun benchmarks/run-codspeed-case.mjs cached
   - id: incremental-analysis-1000
     name: Same-span one-file edit — 1,000 sources
-    exec: node benchmarks/run-codspeed-case.mjs incremental
+    exec: bun benchmarks/run-codspeed-case.mjs incremental

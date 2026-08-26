@@ -1,8 +1,13 @@
 RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
+BUN ?= bun
+# nextest is an optional local accelerator. Keep the built-in runner as the
+# default because clean CI images do not necessarily have nextest installed;
+# compare with `make CARGO_TEST_RUNNER='nextest run' test-rust` when available.
+CARGO_TEST_RUNNER ?= test
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -31,16 +36,16 @@ build-checker-release:
 
 package: build-typefacts
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" node scripts/package-rust.mjs --output dist/solid-checker
+	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) scripts/package-rust.mjs --output dist/solid-checker
 
 test: test-rust test-cli
 
 test-rust: build-typefacts
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) test --manifest-path $(RUST_MANIFEST) --workspace
+	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
 
 test-cli:
-	npm ci --ignore-scripts --prefix packages/cli
-	npm test --prefix packages/cli
+	$(BUN) install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
+	$(BUN) run --cwd packages/cli test
 
 verify:
 	scripts/verify.sh
@@ -51,19 +56,19 @@ verify:
 # `verify` above -- which remains the handoff authority regardless. Add
 # `--dry-run` to see the plan without running it.
 verify-delta:
-	node scripts/verify-delta.mjs
+	$(BUN) scripts/verify-delta.mjs
 
 # "Does TypeScript already report this?", as a checkable claim. Provisioning
 # installs the audited Solid versions into rust/target/tsc-oracle and refuses
 # to run on a version mismatch.
 tsc-oracle-provision:
-	node scripts/tsc-oracle.mjs provision --dialect all
+	$(BUN) scripts/tsc-oracle.mjs provision --dialect all
 
 # Needs the checker as well as the compiler: each case declares what TypeScript
 # says *and* what this checker says about the same bytes.
 tsc-oracle: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
-	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/tsc-oracle-gate.mjs
 
 # The other half of the precision contract. The oracle holds a *reported*
 # finding to being this checker's claim; this holds an *unreported* one to
@@ -71,7 +76,7 @@ tsc-oracle: tsc-oracle-provision build-checker-debug
 # evidence and asking what changed.
 obligation-audit: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
-	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/obligation-audit.mjs
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/obligation-audit.mjs
 
 # Compatibility target. Product ownership moved to ownership-gate after every
 # retained upstream case was migrated into the product-owned manifest.
@@ -81,36 +86,36 @@ tsc-ownership: ownership-gate
 # carries its TypeScript-ownership disposition and exact source-relative span.
 ownership-gate: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
-	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/ownership-gate.mjs \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/ownership-gate.mjs \
 	  --require-retained --require-complete
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
 coverage: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/coverage.mjs
+	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs
 
 coverage-update: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/coverage.mjs --update
+	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/coverage.mjs --update
 
 verify-performance: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node benchmarks/verify-performance.mjs
+	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) benchmarks/verify-performance.mjs
 
 corpus: build-rust
 	scripts/run-solid-primitives-corpus.sh
 
 contract-corpus: build-rust
-	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/bin/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/contract-corpus.mjs
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/bin/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/contract-corpus.mjs
 
 # Source-vs-contract parity requires the exact audited Solid typings used by
 # the consumer side of the probe; provisioning is intentionally explicit.
 contract-differential: build-checker-debug tsc-oracle-provision
-	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/contract-differential.mjs
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" $(BUN) scripts/contract-differential.mjs
 
 contract-conformance:
-	node scripts/check-bundled-contracts.mjs
-	node scripts/check-contract-pins.mjs
-	node scripts/generate-solid1-runtime-surface.mjs --check
-	node scripts/dialect-manifests.mjs check-composed-contracts
+	$(BUN) scripts/check-bundled-contracts.mjs
+	$(BUN) scripts/check-contract-pins.mjs
+	$(BUN) scripts/generate-solid1-runtime-surface.mjs --check
+	$(BUN) scripts/dialect-manifests.mjs check-composed-contracts
 
 # `contracts` and `contracts-check` read real installed packages: the exact
 # versions the checked-in artifacts were generated against (solid-js 1.9.14
@@ -120,13 +125,18 @@ contract-conformance:
 # rust-engine job installs them into a scratch directory and runs
 # `contracts-check` on every push and PR.
 contracts:
-	node scripts/dialect-manifests.mjs generate-contracts
+	$(BUN) scripts/dialect-manifests.mjs generate-contracts
 
 contracts-check:
-	node scripts/dialect-manifests.mjs check-contracts
+	$(BUN) scripts/dialect-manifests.mjs check-contracts
 
 clean:
 	rm -rf bin dist rust/target .typefacts
+
+# Reclaim the large handoff test/link artifacts without discarding release
+# binaries, audited TypeScript installs, or content-addressed gate results.
+clean-verify:
+	cargo +$(RUST_TOOLCHAIN) clean --manifest-path $(RUST_MANIFEST) --profile verify
 
 # Ecosystem benchmark: discovery, an offline pinned sentinel run, and the
 # full-corpus run. See docs/ecosystem-benchmark.md for what these measure and
@@ -137,10 +147,11 @@ clean:
 # a refreshed manifest, and never run this to silence a benchmark failure
 # without reading what changed.
 ecosystem-discover:
-	node scripts/ecosystem-benchmark/discover.mjs
+	$(BUN) scripts/ecosystem-benchmark/discover.mjs
 
 ecosystem-benchmark-test:
-	node --test scripts/ecosystem-benchmark/*.test.mjs
+	$(BUN) packages/cli/node_modules/vitest/vitest.mjs run \
+	  --config packages/cli/vitest.config.mjs scripts/ecosystem-benchmark/*.test.mjs
 
 # The pinned offline regression subset. Deliberately builds nothing: unlike
 # tsc-oracle and ownership-gate below, this target trusts a debug binary
@@ -154,7 +165,7 @@ ecosystem-benchmark-test:
 ecosystem-sentinel:
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  node scripts/ecosystem-benchmark/run.mjs --sentinel
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --sentinel
 
 # The full discovered corpus is also the product-speed measurement, so it uses
 # a fresh optimized binary. run.mjs chooses min(available CPUs, 8) workers;
@@ -162,6 +173,6 @@ ecosystem-sentinel:
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  node scripts/ecosystem-benchmark/run.mjs --timeout 600
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600
 
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark

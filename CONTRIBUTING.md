@@ -10,7 +10,7 @@ facts.
 
 - Go 1.26 or newer (to build the TypeFacts producer from its pinned revision)
 - Rust 1.97 with `rustfmt` and `clippy`
-- Node.js 24 and pnpm 11
+- Bun 1.4.0 (published packages remain compatible with Node.js)
 - `jq`
 
 ## Common commands
@@ -24,6 +24,10 @@ make package     # native npm package layout
 
 Run `make verify` before proposing a change. Compiler execution semantics are
 conformance-tested in the `dom-expressions` repository, not here.
+
+Full verification keeps its Rust artifacts in `rust/target/verify` with debug
+symbols and incremental object caches disabled. This bounds the disk cost of
+the feature matrix without changing ordinary development and test profiles.
 
 ## Performance regressions
 

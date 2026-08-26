@@ -29,9 +29,9 @@
     "scripts"
   ],
   "scripts": {
-    "prepack": "node scripts/validate-package.mjs",
-    "test": "node --test test/*.test.mjs && npm run test:types",
-    "test:types": "tsc -p test/types/tsconfig.json"
+    "prepack": "bun ./scripts/validate-package.mjs",
+    "test": "bun ./node_modules/vitest/vitest.mjs run --config vitest.config.mjs test/*.test.mjs && bun ./node_modules/typescript/bin/tsc -p test/types/tsconfig.json",
+    "test:types": "bun ./node_modules/typescript/bin/tsc -p test/types/tsconfig.json"
   },
   "engines": {
     "node": ">=20"
@@ -46,8 +46,10 @@
   },
   "devDependencies": {
     "eslint": "10.8.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "^4.1.11"
   },
+  "packageManager": "bun@1.4.0",
   "license": "MIT",
   "repository": {
     "type": "git",

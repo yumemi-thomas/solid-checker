@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import {
   buildInstallArguments,
@@ -13,14 +13,13 @@ import {
   withTemporaryProject
 } from "./lib/install.mjs";
 
-test("buildInstallArguments always disables lifecycle scripts, audit, and fund", () => {
+test("buildInstallArguments always disables lifecycle scripts and progress noise", () => {
   const args = buildInstallArguments({ specs: ["solid-js@1.9.14"] });
   assert.ok(args.includes("--ignore-scripts"), "must include --ignore-scripts (never run lifecycle scripts)");
-  assert.ok(args.includes("--no-audit"), "must include --no-audit");
-  assert.ok(args.includes("--no-fund"), "must include --no-fund");
+  assert.ok(args.includes("--no-progress"), "must include --no-progress");
 });
 
-test("buildInstallArguments never disables the lockfile, since integrity verification depends on it", () => {
+test("buildInstallArguments does not disable the lockfile, since integrity verification depends on it", () => {
   const args = buildInstallArguments({ specs: ["solid-js@1.9.14"] });
   assert.ok(!args.includes("--no-package-lock"), "must NOT include --no-package-lock");
 });
@@ -58,18 +57,20 @@ test("readInstalledVersions reads version from an installed package's package.js
   });
 });
 
-test("readLockIntegrity reads packages[node_modules/<name>].integrity from a written package-lock.json", async () => {
+test("readLockIntegrity reads Bun package records, including scoped packages", async () => {
   await withTemporaryProject(async dir => {
     const lock = {
-      name: "probe",
-      lockfileVersion: 3,
+      lockfileVersion: 2,
       packages: {
-        "": { name: "probe" },
-        "node_modules/solid-js": { version: "1.9.14", integrity: "sha512-AAAA==" },
-        "node_modules/@solidjs/router": { version: "0.13.0", integrity: "sha512-BBBB==" }
+        "solid-js": ["solid-js@1.9.14", "", {}, "sha512-AAAA=="],
+        "@solidjs/router": ["@solidjs/router@0.13.0", "", {}, "sha512-BBBB=="]
       }
     };
-    writeFileSync(join(dir, "package-lock.json"), JSON.stringify(lock));
+    mkdirSync(join(dir, "node_modules", "@solidjs", "router"), { recursive: true });
+    mkdirSync(join(dir, "node_modules", "solid-js"), { recursive: true });
+    writeFileSync(join(dir, "node_modules", "@solidjs", "router", "package.json"), JSON.stringify({ version: "0.13.0" }));
+    writeFileSync(join(dir, "node_modules", "solid-js", "package.json"), JSON.stringify({ version: "1.9.14" }));
+    writeFileSync(join(dir, "bun.lock"), `${JSON.stringify(lock, null, 2).replace(/([}\]])$/, ",\n$1")}\n`);
 
     const integrity = readLockIntegrity(dir, ["solid-js", "@solidjs/router", "missing-pkg"]);
     assert.equal(integrity["solid-js"], "sha512-AAAA==");
@@ -156,7 +157,7 @@ test("withTemporaryProject removes its directory even when the callback throws",
   assert.ok(!existsSync(capturedDir), "temporary directory must still be removed after a throw");
 });
 
-test("installPackages never spawns a real npm process: it calls the injected spawnImpl with the built arguments", async () => {
+test("installPackages never spawns a real Bun process: it calls the injected spawnImpl with the built arguments", async () => {
   const calls = [];
   const fakeSpawn = async ({ cwd, args, timeoutMs }) => {
     calls.push({ cwd, args, timeoutMs });
