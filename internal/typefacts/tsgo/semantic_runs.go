@@ -275,6 +275,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.RuntimeValueDomain &&
 				!demand.PrimitiveValueDomain &&
 				!demand.PrimitiveLiteralCandidates &&
+				!demand.ParameterObjectShape &&
 				!demand.CallResultDomain &&
 				!demand.ConstantValue &&
 				!demand.ArrayShape &&
@@ -411,6 +412,7 @@ func (p *project) SemanticDemandRuns(
 					entityIndex:   demandIndex,
 					node:          node,
 					argumentCount: argumentCount,
+					objectShape:   demand.ParameterObjectShape,
 				})
 			}
 		}

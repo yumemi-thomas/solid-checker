@@ -24,6 +24,7 @@ type resolvedDeclarationCacheKey struct {
 type resolvedParameterCacheKey struct {
 	signature     *checker.Signature
 	argumentIndex int
+	objectShape   bool
 }
 
 // resolvedCallDemand is the private seam between semantic location lookup and
@@ -33,6 +34,7 @@ type resolvedCallDemand struct {
 	entityIndex   int
 	node          *ast.Node
 	argumentCount int
+	objectShape   bool
 }
 
 // semanticEvidence is built alongside facts so retained-state ownership does
@@ -364,7 +366,7 @@ func (p *project) resolveCallRunLocked(
 		declaration := p.currentSignatureDeclaration(signature, target)
 		call.Declaration = p.resolvedDeclaration(signature, declaration, target)
 		evidence.declaration(call.Declaration)
-		p.fillArgumentMappingsLocked(call.Arguments, node, signature, declaration, evidence)
+		p.fillArgumentMappingsLocked(call.Arguments, node, signature, declaration, demand.objectShape, evidence)
 	}
 	return nil
 }
@@ -598,6 +600,7 @@ func (p *project) fillArgumentMappingsLocked(
 	call *ast.Node,
 	signature *checker.Signature,
 	signatureDeclaration *ast.Node,
+	objectShape bool,
 	evidence *semanticEvidence,
 ) {
 	arguments := call.Arguments()
@@ -617,6 +620,7 @@ func (p *project) fillArgumentMappingsLocked(
 		if cached := p.resolvedParameters[resolvedParameterCacheKey{
 			signature:     signature,
 			argumentIndex: argumentIndex,
+			objectShape:   objectShape,
 		}]; cached != nil {
 			mapping.Status = typefacts.ArgumentMappingResolved
 			mapping.Parameter = cached
@@ -661,6 +665,22 @@ func (p *project) fillArgumentMappingsLocked(
 		}
 		if parameterType != nil {
 			fact.TypeDescriptor = p.typeDescriptorFor(parameterType)
+			if objectShape {
+				shapeType := parameterType
+				// Construction precedes generic inference. Read the selected
+				// declaration signature when it exists so a bottom-typed probe
+				// argument does not collapse every type parameter to never. The
+				// completed candidate call is still validated against the inferred
+				// instantiated signature by ordinary resolvedCall validity.
+				if signatureDeclaration != nil {
+					if declared := p.checker.GetSignatureFromDeclaration(signatureDeclaration); declared != nil {
+						if value := checker.Checker_getTypeAtPosition(p.checker, declared, argumentIndex); value != nil {
+							shapeType = value
+						}
+					}
+				}
+				fact.ObjectShape = p.objectConstructionShape(shapeType, evidence)
+			}
 		}
 		if p.resolvedParameters == nil {
 			p.resolvedParameters = make(map[resolvedParameterCacheKey]*typefacts.ParameterFact)
@@ -668,6 +688,7 @@ func (p *project) fillArgumentMappingsLocked(
 		p.resolvedParameters[resolvedParameterCacheKey{
 			signature:     signature,
 			argumentIndex: argumentIndex,
+			objectShape:   objectShape,
 		}] = fact
 		mapping.Status = typefacts.ArgumentMappingResolved
 		mapping.Parameter = fact

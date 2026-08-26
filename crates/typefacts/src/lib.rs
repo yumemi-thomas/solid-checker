@@ -789,6 +789,30 @@ pub struct ParameterFact {
     pub callability: Callability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_descriptor: Option<TypeDescriptor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub object_shape: Option<ObjectConstructionShape>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConstructionWitness {
+    Unknown,
+    EmptyArray,
+    EmptyObject,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ObjectConstructionProperty {
+    pub name: Arc<str>,
+    pub witness: ConstructionWitness,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ObjectConstructionShape {
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub required_properties: Arc<[ObjectConstructionProperty]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1660,6 +1684,7 @@ mod tests {
                 runtime_value_domain: false,
                 primitive_value_domain: false,
                 primitive_literal_candidates: false,
+                parameter_object_shape: false,
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,
@@ -1710,6 +1735,7 @@ mod tests {
                 runtime_value_domain: false,
                 primitive_value_domain: false,
                 primitive_literal_candidates: false,
+                parameter_object_shape: false,
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,
@@ -1732,6 +1758,7 @@ mod tests {
                 runtime_value_domain: true,
                 primitive_value_domain: true,
                 primitive_literal_candidates: true,
+                parameter_object_shape: false,
                 call_result_domain: true,
                 constant_value: true,
                 array_shape: true,
@@ -1754,6 +1781,7 @@ mod tests {
                 runtime_value_domain: false,
                 primitive_value_domain: false,
                 primitive_literal_candidates: false,
+                parameter_object_shape: false,
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,

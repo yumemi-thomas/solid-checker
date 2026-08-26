@@ -83,6 +83,7 @@ func parameterFactEqual(left, right *ParameterFact) bool {
 		left.Rest != right.Rest ||
 		left.Optional != right.Optional ||
 		left.Callability != right.Callability ||
+		!objectConstructionShapeEqual(left.ObjectShape, right.ObjectShape) ||
 		!typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) {
 		return false
 	}
@@ -90,6 +91,13 @@ func parameterFactEqual(left, right *ParameterFact) bool {
 		return left.Declaration == right.Declaration
 	}
 	return *left.Declaration == *right.Declaration
+}
+
+func objectConstructionShapeEqual(left, right *ObjectConstructionShape) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return slices.Equal(left.RequiredProperties, right.RequiredProperties)
 }
 
 func argumentMappingEqual(left, right ArgumentMapping) bool {

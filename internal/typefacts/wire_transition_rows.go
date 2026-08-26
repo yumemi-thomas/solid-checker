@@ -34,6 +34,7 @@ const (
 	wireTransitionParameterIsRest
 	wireTransitionParameterIsOptional
 	wireTransitionParameterHasTypeDescriptor
+	wireTransitionParameterHasObjectShape
 )
 
 func writeWireTransitionPathOp(w *packedWriter, operation *wireTransitionPathOp, tableSchema uint64) error {
@@ -426,6 +427,9 @@ func writeWireTransitionParameter(
 	if parameter.TypeDescriptor != nil {
 		flags |= wireTransitionParameterHasTypeDescriptor
 	}
+	if tableSchema >= TypeFactsTableSchemaVersionV17 && parameter.ObjectShape != nil {
+		flags |= wireTransitionParameterHasObjectShape
+	}
 	w.u64(flags)
 	if parameter.Declaration != nil {
 		w.text(wireSymbolName(parameter.Declaration.Name))
@@ -437,7 +441,31 @@ func writeWireTransitionParameter(
 	if parameter.TypeDescriptor != nil {
 		w.internalTypeDescriptor(parameter.TypeDescriptor)
 	}
+	if tableSchema >= TypeFactsTableSchemaVersionV17 && parameter.ObjectShape != nil {
+		w.u64(uint64(len(parameter.ObjectShape.RequiredProperties)))
+		for _, property := range parameter.ObjectShape.RequiredProperties {
+			w.text(property.Name)
+			code, err := wireTransitionConstructionWitnessCode(property.Witness)
+			if err != nil {
+				return fmt.Errorf("argument mapping %d parameter property %q: %w", mappingIndex, property.Name, err)
+			}
+			w.u64(code)
+		}
+	}
 	return nil
+}
+
+func wireTransitionConstructionWitnessCode(value ConstructionWitness) (uint64, error) {
+	switch value {
+	case ConstructionWitnessUnknown:
+		return 0, nil
+	case ConstructionWitnessEmptyArray:
+		return 1, nil
+	case ConstructionWitnessEmptyObject:
+		return 2, nil
+	default:
+		return 0, fmt.Errorf("unknown construction witness %q", value)
+	}
 }
 
 func writeWireTransitionFileBody(w *packedWriter, file FileFact) {

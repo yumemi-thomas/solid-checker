@@ -723,6 +723,33 @@ type ParameterFact struct {
 	Optional       bool
 	Callability    Callability
 	TypeDescriptor *TypeDescriptor
+	ObjectShape    *ObjectConstructionShape
+}
+
+// ConstructionWitness is a bounded, side-effect-free JavaScript candidate
+// derived from a selected declaration parameter and its compiler constraints.
+// It becomes a proven inhabitant only when a completed synthetic call resolves
+// validly. Unknown means the producer found no candidate; it is never
+// permission to guess one.
+type ConstructionWitness string
+
+const (
+	ConstructionWitnessUnknown     ConstructionWitness = "unknown"
+	ConstructionWitnessEmptyArray  ConstructionWitness = "emptyArray"
+	ConstructionWitnessEmptyObject ConstructionWitness = "emptyObject"
+)
+
+// ObjectConstructionProperty is one required property of a selected call
+// parameter. Name comes from the compiler symbol table, not rendered type text.
+type ObjectConstructionProperty struct {
+	Name    string
+	Witness ConstructionWitness
+}
+
+// ObjectConstructionShape is the finite set of required properties common to
+// every inhabited constituent of a selected call parameter's object type.
+type ObjectConstructionShape struct {
+	RequiredProperties []ObjectConstructionProperty
 }
 
 // ArgumentMapping relates one supplied argument to its exact formal parameter,
