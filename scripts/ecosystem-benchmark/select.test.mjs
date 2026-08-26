@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 import { AUDITED_SOLID_1, familyById } from "./lib/families.mjs";

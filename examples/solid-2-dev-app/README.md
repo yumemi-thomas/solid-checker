@@ -9,14 +9,14 @@ to the user.
 
 ```sh
 cd examples/solid-2-dev-app
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 `src/App.tsx` is the clean, runnable application. Verify it with:
 
 ```sh
-npm run lint:clean
+bun run lint:clean
 ```
 
 ## Paired rule examples
@@ -43,13 +43,13 @@ There are 51 example components arranged into bad/good comparisons. Type-check
 their source shapes with:
 
 ```sh
-npx tsc --noEmit --skipLibCheck --lib ESNext,DOM
+bunx --bun --no-install tsc --noEmit --skipLibCheck --lib ESNext,DOM
 ```
 
 Run all semantic examples with:
 
 ```sh
-npm run lint:examples
+bun run lint:examples
 ```
 
 That command is expected to exit non-zero because every file deliberately
@@ -64,17 +64,17 @@ demonstrations; `src/cases` focuses on small side-by-side rules.
 Display these expected proof-backed failures with:
 
 ```sh
-npm run lint:failing
+bun run lint:failing
 ```
 
 Apply the safe fix for its simple parameter destructure with:
 
 ```sh
-npm run lint:fix -- src/BadCard.tsx
+bun run lint:fix -- src/BadCard.tsx
 ```
 
-The equivalent generic npm form is `npm run lint -- --fix src/BadCard.tsx`.
-`npm run lint --fix` does not forward `--fix`; npm treats it as an npm option.
+The equivalent generic Bun form is `bun run lint -- --fix src/BadCard.tsx`.
+`bun run lint --fix` does not forward `--fix`; Bun treats it as a Bun option.
 Aliases, defaults, rest patterns, writes, and references outside
 compiler-recorded JSX expression containers remain diagnostic-only.
 

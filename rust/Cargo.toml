@@ -137,3 +137,12 @@ napi-derive = "3"
 oxc_miette = { package = "oxc-miette", version = "2.7" }
 sha2 = "0.10"
 thiserror = "2"
+
+# Full verification exercises several dialect/target combinations and does not
+# need debugger symbols or per-crate incremental object caches. Keeping those
+# artifacts in a dedicated profile prevents handoff checks from multiplying the
+# normal edit-loop target tree; ordinary dev/test builds retain Cargo's defaults.
+[profile.verify]
+inherits = "dev"
+debug = 0
+incremental = false

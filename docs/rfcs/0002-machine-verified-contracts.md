@@ -93,7 +93,8 @@ Generation reachability is not the problem. The checked-in ecosystem report
 generator describing the corpus well. Every one of those contracts is
 `inferred`, and each one costs a human a full plan review before it does
 anything at all. The cost is per *artifact*, not per package — a contract binds
-to one version, and to one npm integrity when the project's lockfile can supply
+to one version, and to one registry integrity when the project's Bun or npm
+lockfile can supply
 it — so it recurs on every upstream release. `--transfer-from` reduces an
 upgrade to a review of the diff, but only for entrypoints whose runtime-module
 closure is byte-identical, and only where the previous review exists to
@@ -159,13 +160,13 @@ than misreading the omission.
 This is the core of the proposal, and it must be grounded in what the machinery
 actually does rather than in what a claim family sounds like.
 
-The probe suite's claim vocabulary is **two strings**. In
-`scripts/check-bundled-contracts.mjs` a claim is built as either
-`callbacks[<parameter>]=<execution>` or `returns=<kind>`. There is no probe form
-for a reactive read, an owner requirement, an async behavior, a callback
-argument descriptor, or a nested return leaf. And `writeProbeEvidence` writes
-`probed` row evidence onto exactly four places: the export summary, each
-`callbacks[]` row, the top-level `returns` node, and recursively each
+The generic probe suite names runtime kind, callback execution, and exact return
+leaves. A return claim carries both its structural path and, for relational
+kinds, its parameter: for example `returns.elements[0]=accessor` and
+`returns.properties["value"]=argument[1]`. There is no probe form for a reactive
+read, an owner requirement, an async behavior, or a callback argument descriptor.
+`writeProbeEvidence` writes `probed` row evidence onto the export summary, each
+`callbacks[]` row, each exact return leaf, and recursively each
 `variants[].summary` — never into `reactiveReads[]` or `ownerRequirements[]`
 even though `schema/solid-reactivity.schema.json` gives both an evidence slot,
 and never into `asyncBehavior`, which is a bare enum with no evidence slot at
@@ -191,8 +192,8 @@ the export map; and the reactive-read rows the compiler facts make exact.
 **(B) Runtime-confirmable.** Positive behavioral claims a probe can *observe*
 by executing the claim against the installed release, in every applicable
 condition mode, with initial and subsequent calls. Today this family is:
-callback execution mode (`inline`/`deferred`/`tracked`), top-level reactive
-return kind (`accessor`/`store-path`), and the export's runtime `kind`
+callback execution mode (`inline`/`deferred`/`tracked`), observable accessor and
+relational return leaves, and the export's runtime `kind`
 (function versus value), which `describePackages` in
 `scripts/lib/contract-probe-harness.mjs` already reads generically for any
 package by importing each materialized entrypoint leaf and taking
@@ -210,9 +211,11 @@ promotion**, and it is larger than it sounds.
 | `callbacks[].execution` | B | claim string `callbacks[N]=<execution>`; probe bodies exist for all three modes |
 | `callbacks[].owner` | **C, permanently** | the generator never emits one — owner rows go on the review checklist rather than being guessed — and no probe claim family covers owner |
 | `callbacks[].arguments[]` descriptors | C today | no claim string, no probe shape; consumers are already demand-sensitive on every shape but an inline literal carrying `accessor` descriptors |
-| `returns` (top-level `accessor` / `store-path`) | B | claim string `returns=<kind>` |
-| `returns` nested `elements` / `properties` leaves | C today | `writeProbeEvidence` does not descend into leaves and no claim string names one |
-| `returns` `kind: argument` | C today | an identity claim; observable in principle, no probe form |
+| `returns` accessor leaves, top-level or nested | B when the summary names a callback in which to plant a reactive source; otherwise C | path-bound claim string such as `returns.elements[0]=accessor` |
+| `returns` `store-path` leaves | C today | the contract does not name the setter/mutation needed to observe the path |
+| `returns` `kind: argument` | B | claim string `returns=argument[N]`; a fresh object sentinel is supplied at parameter N and strict return identity is observed |
+| `returns` `kind: callback-result` | B | claim string `returns=callback-result[N]`; callback N returns a fresh object sentinel and strict return identity is observed |
+| `returns` `kind: callback-result-function` | B | claim string `returns=callback-result-function[N]`; callback N returns a fresh object sentinel and the returned function's result is compared by strict identity |
 | `reactiveReads[]`, including `parameter-member` | A where compiler facts are exact; otherwise C | no probe claim string exists; confirming one means synthesizing a reactive source and observing the subscription |
 | `asyncBehavior` | C today | no claim string — **and no evidence slot in the schema**, so a probed async claim could not be recorded even if it were driven |
 | `ownerRequirements[]` | A | compiler symbol identity; the slot exists, nothing writes `probed` into it |
@@ -284,17 +287,18 @@ that `mapArray` takes a *signal of an array* as parameter 0. It also requires
 knowing that a 2.0 development build rejects writes made from a parent-owned
 test root, which is why `writeOutsideOwner` exists.
 
-There is therefore **no generic probe driver in this repository**, and building
-one is the substance of Stage 1 rather than an extension of what exists. A
-generic driver must answer, for an arbitrary export:
+Stage 1 added the generic driver. Its lasting boundary is the same set of
+questions, answered conservatively for an arbitrary export:
 
 - **Argument synthesis.** What to pass in the non-callback positions so the
   call reaches the callback at all. A contract records a callback's
   *parameter index*, so the driver knows which slot is the callback; it records
-  nothing about the other slots. The only sound synthesis is from the package's
-  own declarations, which this generator never resolves (it analyzes runtime
-  targets and never resolves the `types` condition — which is also why
-  `artifacts.declaration` is never emitted).
+  nothing about the other slots. Generation emits a separate, contract-hash-
+  bound construction sidecar for the small subset Type Facts can prove has a
+  concrete inhabitant (`null`, `undefined`, empty array, `Map`, or `Set`). It
+  fills only otherwise-undefined slots and is never evidence. Literal subtypes,
+  unions without a proven inhabitant, ambiguous exports, and conditional targets
+  remain absent rather than guessed.
 - **Callback identification.** Solved: `callbacks[].parameter` is exact.
 - **Runtime settling, per dialect.** 2.0 settles with `flush()`; 1.x has no
   such function. The driver must settle the dialect the *consumer's project*
@@ -374,7 +378,8 @@ one clear line each, contract untouched — unless **all** of the following hold
    plan's `generation.entrypoints` block means the runtime-module closure could
    not be fully enumerated — a relative or `#` specifier that names no runtime
    module, a conditional `imports` branch generation cannot choose between, a
-   non-literal dynamic `import()`, unreadable bytes. A note is an omission, and
+   dynamic `import()` not bounded to a finite literal set, unreadable bytes. A
+   note is an omission, and
    an entrypoint carrying one already transfers nothing. It must block
    auto-verification outright: the summaries were derived from a file set the
    generator itself declines to claim it enumerated, and no probe covers the
@@ -384,13 +389,20 @@ one clear line each, contract untouched — unless **all** of the following hold
    sentence, for the cases where the record still cannot be established. A
    second field, `runtimeNotes`, carries the other half: the record *is* the
    analyzing program's own file list and complete for what it read, and what
-   remains unproven is that the runtime loads nothing else — which a non-literal
+   remains unproven is that the runtime loads nothing else — which an unbounded
    dynamic `import()`, and an unselected conditional `imports` branch whose
    targets are real modules on disk, both make unprovable by any module graph.
    Both fields block, under two blocker kinds (`closure-note` and
    `attested-closure-note`) so a corpus measurement can attribute them. Only
    `notes` blocks a review transfer, because two generations with identical
    attested records do describe the same bytes.
+
+   A proven export-scoped open load is narrower. The generation record carries
+   a `runtimeObligations` item naming the exact exports that can reach it, and
+   schema v1 represents their unknown semantics by omitting those exports from
+   the contract. Retained exports remain eligible for verification. If lexical
+   containment, symbol identity, export binding, or reachability is ambiguous,
+   the generator emits the entrypoint-wide `runtimeNotes` blocker instead.
 5. **Artifact binding is recorded where schema v1 can carry it.** That means:
    the contract's emitted entrypoints resolve to exactly one runtime artifact
    inside the contract's own directory. Where they do not, the review plan's
@@ -412,9 +424,9 @@ project-owned contracts under `.solid-checker/contracts/<package>/`, which sit
 outside the package by construction, so their artifact path could only be
 spelled with `..`, which the loader rejects. Every contract on the mainstream
 adoption path is therefore *unbindable*, and condition 5 is satisfied
-vacuously. Such a contract binds to a version string, plus npm integrity when
-the project has a `lockfileVersion` 2 or 3 npm lockfile — and on pnpm or Yarn,
-to nothing but a version string. Probing narrows this a little in a way hashing
+vacuously. Such a contract binds to a version string, plus registry integrity
+when the project has a supported Bun lockfile or a `lockfileVersion` 2 or 3 npm
+lockfile — and on pnpm or Yarn, to nothing but a version string. Probing narrows this a little in a way hashing
 cannot: a `probed` row is an observation of *the bytes that were installed at
 probe time*. It does not say which bytes those were. This is a real hole and it
 is not one this RFC closes.
@@ -848,7 +860,7 @@ witnessed none of them.
   verification-side check above is what stops that reaching the verified tier.
 
 A related residue, from the same reading: a summary-level `probed` marker is
-computed from the `callbacks[]` rows and the top-level `returns`, so it must be
+computed from the `callbacks[]` rows and every exact return leaf, so it must be
 recomputed whenever those claims are converted (here) or deleted (by a review
 that certified them absent). Both paths do that now.
 
@@ -867,8 +879,9 @@ what the promotion did.
 why no probe covers them rather than implying one should. Family (A) therefore
 includes claims that are *undrivable and certified anyway*, which is what the
 generator's fail-closed construction earns them. Callback `owner` rows,
-callback argument descriptors, nested return leaves, `store-path` and
-`argument` returns, and `asyncBehavior` remain (C).
+callback argument descriptors, `store-path` leaves, undrivable accessor leaves,
+and `asyncBehavior` remain (C). Accessor and relational leaves for which the
+generic driver has a complete construction and observation are (B).
 
 ### A4. Discovery is a precondition of certification, not an optimization
 

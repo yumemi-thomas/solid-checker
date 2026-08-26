@@ -8,9 +8,9 @@
     "build": "vite build",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "lint:clean": "npm run lint -- src/App.tsx src/main.tsx",
-    "lint:examples": "npm run lint -- src/cases/*.tsx",
-    "lint:failing": "npm run lint -- src/cases/*.tsx src/showcase/*.tsx src/BadAsync.tsx"
+    "lint:clean": "bun run lint -- src/App.tsx src/main.tsx",
+    "lint:examples": "bun run lint -- src/cases/*.tsx",
+    "lint:failing": "bun run lint -- src/cases/*.tsx src/showcase/*.tsx src/BadAsync.tsx"
   },
   "dependencies": {
     "@solidjs/web": "2.0.0-rc.0",
@@ -23,5 +23,5 @@
     "vite": "8.1.5",
     "vite-plugin-solid": "3.0.0-next.27"
   },
-  "packageManager": "npm@12.0.1"
+  "packageManager": "bun@1.4.0"
 }

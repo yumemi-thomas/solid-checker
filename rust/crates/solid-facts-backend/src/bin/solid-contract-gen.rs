@@ -214,7 +214,10 @@ static SOLID_2: ContractTarget = ContractTarget {
             "mapArray",
             both(&[Callback(1, "tracked")], "accessor", "mapped array"),
         ),
-        ("repeat", cb(&[Callback(1, "tracked")])),
+        (
+            "repeat",
+            cb(&[Callback(0, "tracked"), Callback(1, "inline")]),
+        ),
         ("createReaction", cb(&[Callback(0, "deferred")])),
         // Both own the scope their body runs in and return an accessor. The
         // fallback argument is a callback too, invoked only when the boundary
@@ -222,7 +225,7 @@ static SOLID_2: ContractTarget = ContractTarget {
         (
             "createErrorBoundary",
             both(
-                &[Callback(0, "tracked"), Callback(1, "deferred")],
+                &[Callback(0, "tracked"), Callback(1, "tracked")],
                 "accessor",
                 "guarded value or error fallback",
             ),
@@ -230,7 +233,7 @@ static SOLID_2: ContractTarget = ContractTarget {
         (
             "createLoadingBoundary",
             both(
-                &[Callback(0, "tracked"), Callback(1, "deferred")],
+                &[Callback(0, "tracked"), Callback(1, "tracked")],
                 "accessor",
                 "guarded value or loading fallback",
             ),
@@ -358,9 +361,21 @@ static SOLID_1X: ContractTarget = ContractTarget {
             "catchError",
             cb(&[Callback(0, "inline"), Callback(1, "deferred")]),
         ),
-        ("createResource", cb(&[Callback(1, "deferred")])),
+        // `createResource(source, fetcher)` tracks parameter 0 and invokes
+        // parameter 1 outside the caller, while `createResource(fetcher)`
+        // treats parameter 0 as that fetcher. Schema v1 cannot select a
+        // callback map by overload, so a finite row set would certify the
+        // other call shape incorrectly.
+        ("createResource", unknown_callbacks()),
         ("startTransition", cb(&[Callback(0, "inline")])),
         ("lazy", cb(&[Callback(0, "deferred")])),
+        ("createComponent", cb(&[Callback(0, "inline")])),
+        // Every function-valued source is memoized. The parameter domain is
+        // variadic, so schema v1 cannot state the complete callback set.
+        ("mergeProps", unknown_callbacks()),
+        ("requestCallback", cb(&[Callback(0, "deferred")])),
+        ("getNextElement", cb(&[Callback(0, "inline")])),
+        ("use", cb(&[Callback(0, "inline")])),
         // Returns the store itself -- a single value the contract can describe,
         // unlike createStore's tuple.
         ("createMutable", ret("store-path", "mutable store")),

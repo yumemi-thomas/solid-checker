@@ -2624,17 +2624,19 @@ and a locally patched install all keep the version while replacing the bytes
 the summaries describe. Every bundled contract carries an integrity, so this
 was the strongest available identity fact going unused.
 
-Loading now recovers the installed copy's integrity from the project's npm
-lockfile and refuses a disagreeing contract exactly as it refuses a stale one:
+Loading now recovers the installed copy's integrity from the project's Bun or
+npm lockfile and refuses a disagreeing contract exactly as it refuses a stale one:
 status `stale`, an uncertifiable `SC9005` at the import, the run continues. The
 message and the report `detail` name **both integrities**, because the versions
 agree and naming them would read as a contradiction. Bundled and project-owned
 contracts get their existing, different remedies, reworded for the case where
 the audited version is already the installed one.
 
-The integrity comes from `package-lock.json` or `node_modules/.package-lock.json`
-at `lockfileVersion` 2 or 3, whose `packages` map is keyed by *install path* and
-so names the specific installed copy rather than a package name. Pinned by
+The integrity comes from Bun's `bun.lock` package records, or from
+`package-lock.json` / `node_modules/.package-lock.json` at `lockfileVersion` 2
+or 3. Bun selects the record by its resolved package identifier and installed
+manifest version; npm's `packages` map is keyed by *install path* and so names
+the specific installed copy rather than a package name. Pinned by
 `cli_refuses_a_contract_whose_lockfile_integrity_moved_under_the_same_version`
 (process) and `lockfile_integrity_is_recovered_only_when_it_is_unambiguous`
 (unit).
@@ -2645,14 +2647,15 @@ and a recoverable one on disk — and every way the second half is unavailable
 yields *no fact*, which means the previous behavior (version matching alone),
 never a refusal:
 
-- **No npm lockfile.** pnpm and Yarn keep their own formats, and many projects
-  have no lock at all. Reading them is tractable but each is a separate format
-  with its own store layout and its own path-to-entry question; none of it can
-  be guessed from the npm shape. Owner: one format at a time, each with its own
-  fixture.
-- **`lockfileVersion` 1.** Its tree is keyed by package name, so resolving an
-  entry to *which* installed copy it describes under hoisting would be exactly
-  the guess this must not make.
+- **No recognized Bun or npm lockfile.** pnpm and Yarn keep their own formats,
+  and many projects have no lock at all. Reading them is tractable but each is
+  a separate format with its own store layout and its own path-to-entry
+  question; none of it can be guessed from the Bun or npm shape. Owner: one
+  format at a time, each with its own fixture.
+- **Unsupported lockfile versions.** npm `lockfileVersion` 1 is keyed by
+  package name, so resolving an entry to *which* installed copy it describes
+  under hoisting would be exactly the guess this must not make. Bun versions
+  other than the currently supported v2 record are likewise ignored.
 - **Link, workspace, `file:`, and git entries** have no registry tarball and so
   no integrity. A linked workspace package's bytes are unpinnable by
   construction; closing this needs a content hash of the linked directory,
@@ -3469,42 +3472,73 @@ reactive read passed as its callback reaches the untracked component call,
 while the same call in compiler-tracked JSX stays clean. TypeScript accepts
 both against the published signature.
 
-### Still open
+### Resolved for `solid-v1/solid-js` and `@solid-primitives/debounce` (2026-08-25)
 
-- **`solid-v1/solid-js`.** 13 rows: `createComponent 0=inline` and
-  `createResource 0=tracked` under `.`, `./jsx-runtime` and
-  `./jsx-dev-runtime`; `mergeProps 0=tracked, 1=tracked` under `.` and
-  `./web`; and `getNextElement 0=inline`, `use 0=inline` under `./web`.
-- **`requestCallback` (1.x) cannot be measured by discovery at all.** Its probe
-  schedules a task whose callback is not a function, and 1.x's `workLoop`
-  throws from a `MessagePort` handler *after* the worker has answered, killing
-  the process. `runSessionWithRestarts` treats a whole-process failure as a
-  mode-wide fact and records the remaining claims undriven rather than
-  retrying, so one export truncates the whole run: the 1.x worklist above had
-  to be rebuilt by probing the contract in eight-export chunks. It is a
-  callback taker by construction (`workLoop` invokes `task.fn`) and its
-  negative is wrong, but no automated observation of it exists.
-- **`scripts/check-bundled-contracts.mjs --write` cannot be used on the
-  composed 1.x contract.** The row evidence it writes is not something
-  `scripts/generate-bundled-solid1-contract.mjs` reproduces from its inputs, so
-  the write immediately makes `check-composed-contracts` report the artifact
-  stale. Recording probed evidence for 1.x needs the composer to carry it.
-- **The review contract's tables disagree with the runtime in two places.**
-  `rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs` states
-  `repeat` `Callback(1, "tracked")` and the boundary fallbacks as `deferred`;
-  the runtime observations above make the first `inline` and the second
-  `tracked` on the browser. Those tables feed
-  `every_callback_taking_export_is_modelled_or_excluded` and the dialect
-  vocabulary rather than any consumer, so nothing certifies from them today,
-  but they are the same claim written twice and only one of the two was
-  audited.
+The exact `solid-js@1.9.14` audit now closes the 1.x certified-negative callback
+gap. `createComponent`, `requestCallback`, `getNextElement` and `use` have their
+missing rows. `requestCallback` has a dedicated valid-function probe, so generic
+discovery no longer schedules a non-function and later crashes the worker from
+the `MessagePort` loop. The no-environment-shim probe now reports **374 claims,
+322 passed, 52 undriven, 0 failed and 0 incompleteness**.
 
-## Closed 2026-08-23: a declaration sibling no longer certifies what it hid
+Two exports deliberately remain unknown rather than being forced into false
+finite rows:
 
-The `.d.ts` residual recorded under *Closed 2026-08-23: under-marking in the
-attribution ladder* was a certified negative, and it fired on the shape almost
-every published package has. It is closed in the only direction the facts
-allow: the enumeration now reports itself incomplete, and emission widens.
+- `createResource` overloads parameter 0 as either a tracked source or the
+  deferred fetcher, which schema v1 cannot select by overload.
+- `mergeProps` is variadic and memoizes every function-valued source, so any
+  finite callback list would certify the first omitted parameter incorrectly.
+
+The 1.x composer now preserves unknown callback sentinels and the probe gate's
+evidence shape. `scripts/check-bundled-contracts.mjs` also treats an unknown
+return as the absence of a positive return-kind claim rather than generating
+the meaningless string `returns=undefined`.
+
+`@solid-primitives/debounce@1.3.0` is the next exact Solid 1.x package contract.
+Both its named and default exports defer callback parameter 0 without an owner,
+and creation requires a cleanup-capable caller owner. Those facts are fully
+representable in schema v1 and are probed in all four runtime modes without DOM
+shims. The consumer fixture uses the published signatures, is accepted by
+TypeScript, and is fully certified with no findings.
+
+### Resolved in the follow-up
+
+- **Generic callback-result returns are now representable in schema v1.** A
+  backward-compatible `callback-result` return names the callback parameter
+  whose exact invocation result is returned. The consumer instantiates only an
+  exact local callback result and fails closed otherwise. The reviewed
+  `@solid-primitives/rootless@1.5.4` contract and its exact runtime dependency
+  closure are now bundled; the consumer fixture proves that a memo returned
+  through `createSubRoot` remains a reactive source.
+- **Returned callback-result functions are now representable without a generic
+  callable guess.** `callback-result-function` states only that invoking the
+  returned function yields the named factory callback's result. The consumer
+  follows an exact same-file binding to the contracted factory call and fails
+  closed for aliases, assignments, cross-file values, and callbacks without a
+  local body. The singleton-root and root-pool exports now preserve memos
+  returned by their factories.
+- **Solid 2 callback timing now has one condition-aware owner.** The browser
+  fallback tables match the observed `repeat` and boundary behavior. For an
+  exact installed Solid release, its selected package-contract variant may
+  overlay callback timing on native vocabulary, while ownership, returns,
+  async behavior, and all other primitive facts remain native. Node/server
+  behavior therefore no longer has to be flattened into the browser table.
+
+The honest residue is now the flat callback list: it cannot state Solid 1.x
+`createResource`'s overload-dependent slots or `mergeProps`'s variadic callback
+tail. The native Solid 1.x dialect remains call-shape exact for both, so this
+is contract portability/audit duplication rather than a consumer correctness
+gap.
+
+## Closed 2026-08-26: declaration-bound imports join their exact runtime target
+
+The `.d.ts` residual first closed fail-closed on 2026-08-23: when TypeScript
+bound an import through a declaration sibling while the package runtime loaded
+the adjacent implementation, the generator could no longer certify a negative
+from the disconnected call graph. That safe repair widened the whole
+entrypoint. The exact generator-owned runtime edge now restores the missing
+identity join, so only exports proven to reach the implementation obligation
+are made unknown.
 
 **Mechanism.** `index.js` writes `import { channelFor } from "./channel.js"`.
 TypeScript resolves that specifier to `channel.d.ts` whenever one exists beside
@@ -3533,24 +3567,27 @@ the same direction, all downstream of that one split:
   degradation, and (before this) a zero-export review-plan note as the only
   trace.
 
-**Why not an exact fix.** Nothing pairs a declaration file with the runtime
-module it describes, and the resolved module graph that closed *package
-contracts are bound to an installed package* does not close this. That graph
-answers where a specifier resolved and which installed package owns the file;
-the producer states outright that a shipped `channel.d.ts` beside a
-`channel.js` answers *no* pairing field, because resolution selected the
-declaration and never opened the implementation, and that reconstructing the
-edge from the two file names is the substitution the fact exists to avoid
-(`ModuleImportFact.IncludedPath` is populated only for a configured project
-reference's declaration output). So the two files remain separate modules that
-happen to share a name on disk. The generator's own runtime resolver *does* know
-the pairing (`closureOf` resolved `./channel.js` to the runtime file), so an
-exact fix exists in principle: join a declaration-bound import to the runtime
-module's export by module identity plus ESM export name, using the generator's
-resolution rather than the compiler's. That is new data across the backend/IR
-seam for all four tiers and is not attempted here.
+**The exact seam.** The TypeFacts module graph still answers the declaration
+binding; it must not guess that two similarly named files describe one runtime
+module. The package generator already has the other exact answer: its static
+runtime resolver selected `channel.js` for the literal `./channel.js` edge, and
+that same closure seeded the analyzing program. It now passes those successful
+`importer` / `specifier` / runtime-`target` triples to the native generator.
+The backend accepts a redirect only when all of the following hold:
 
-**The fix (fail closed).** `module_surface_is_unaccounted`
+- TypeFacts confirms that exact importer/specifier edge resolved through a
+  declaration file, without a configured-project `includedPath`;
+- importer and runtime target canonicalize inside the installed package root;
+- the exact import is a runtime-referenced named or default binding; and
+- both the local binding and the same named export of the exact runtime target
+  join to compiler entities.
+
+A missing join changes nothing. Conflicting targets remove the redirect. An
+incomplete TypeFacts module graph rejects the whole map. There is no adjacent
+filename pairing, name-only matching, namespace substitution, or guessed
+member dispatch.
+
+**The safety net remains.** `module_surface_is_unaccounted`
 (rust/crates/solid-facts-backend/src/main.rs) gates the reachability rung. A
 reaching function that is *decided: not an export of this entrypoint*, is
 published by its own module's export surface, and has no reference anywhere
@@ -3569,23 +3606,29 @@ this is what keeps `unreached-private-obligation`'s zero-export answer).
 **Before/after**, `fixtures/package-contracts/parameter-member-forwarded` with
 a `channel.d.ts` added:
 
-| | before | after |
+| | fail-closed intermediate | exact join |
 | --- | --- | --- |
-| mechanism | `reachability` | `fallback-all` |
-| `.:forwarded` | certified | `reactiveReads`, `returns` unknown |
-| `.:Isolated` | certified | `reactiveReads`, `returns` unknown |
+| mechanism | `fallback-all` | `reachability` |
+| `.:forwarded` | `reactiveReads`, `returns` unknown | `reactiveReads`, `returns` unknown |
+| `.:Isolated` | `reactiveReads`, `returns` unknown | independently proven |
 | `./direct:channelFor` | exact `parameter-member` row | unchanged |
 
-**The over-marking cost, honestly.** `Isolated` reaches nothing and is marked
-anyway; the widening is to *every* export of the entrypoint, because that is
-what `fallback-all` means. For a package that ships a `.d.ts` beside every
-runtime module — the normal published shape — every internal-module obligation
-now widens this way, so a generated contract's unknown surface grows by roughly
-the number of exports per affected entrypoint. Those exports were previously
-published as certified negatives about behavior the analyzer had not seen, so
-the trade is real precision lost for real soundness gained, not noise for
-nothing. Recovering the precision needs the exact fix above, not a narrower
-heuristic.
+`Isolated` reaches nothing and is no longer charged for `channelFor`; the
+redirect also restores the call graph for other exact consumers of the same
+symbol. If any proof above is absent, the 2026-08-23 safety gate still falls to
+`fallback-all`, so precision recovery never substitutes for refusal.
+
+The full 416-row authority comparison found 393 rows with claim summaries in
+both runs and 19 structural changes: claims **+47**, driven **+2**, passed
+**+2**, undriven **+45**, failed **unchanged at 8**, and incompleteness
+**unchanged at 589**. Generated unknown-bearing exports increased by 55 and
+promoted unknown-bearing exports by 53 because restored call edges exposed
+obligations the declaration split had hidden. This is mostly a soundness gain;
+the exact narrowing is still visible where the graph supports it—for example,
+`@solid-primitives/range@0.2.5` gained one driven passing claim and lost two
+generated unknown-bearing exports. No common row's verified/refused outcome
+changed. The raw headline moved from 286/110 to 284/109 only because three
+previously measured TanStack rows failed npm installation in the later run.
 
 Pinned by `fixtures/package-contracts/declaration-sibling-reach` (the split,
 including the `./direct` control that must stay exact) and
@@ -3593,11 +3636,11 @@ including the `./direct` control that must stay exact) and
 identity intact, which must keep its three-way answer). Both are in
 `scripts/contract-corpus.mjs`; the corpus is 24 packages.
 
-**Not closed by this.** A declaration sibling still costs the whole entrypoint
-its claims rather than just the reaching exports, and every other consumer of
-the split identity — anything that resolves a call through
-`functions_by_symbol` — still silently sees no edge. The gate protects the
-attribution ladder's answer; it does not restore the call graph.
+**Still fail closed.** Open dynamic imports, unresolved or namespace bindings,
+ambiguous runtime exports, incomplete module facts, package-external targets,
+and conflicting declaration roots receive no redirect. They retain the
+existing unknown or whole-entrypoint refusal. The bridge covers only static
+runtime edges the generator actually used to seed this package analysis.
 
 ## Closed 2026-08-23: `contract verify` certified what no run had observed
 
@@ -7002,3 +7045,182 @@ still reach `missing_jsx_census` and remain explicitly uncertifiable. Those are
 fact-coverage gaps, not known transform disagreements. The ecosystem corpus was
 not rerun for this trace-only closure; the preceding 416-row measurement remains
 the latest ecosystem result until a new run is recorded.
+
+## 2026-08-25 — generic relational probes, entrypoint isolation, and finite dynamic imports
+
+Three schema-v1 relational return claims now have honest generic probes:
+`argument[N]`, `callback-result[N]`, and `callback-result-function[N]`. Each
+claim identity includes its parameter index. The worker plants a fresh frozen
+object and requires strict reference equality; the returned-function form also
+requires a callable result and invokes it with no arguments. A completed
+mismatch is a failure. A throw, including a returned function that needs
+arguments the schema cannot describe, remains undriven.
+
+The probes exposed false generator claims rather than evidence to relax. A
+relational return is now emitted only when every return fact proves the same
+relation, with no conditional/control-test path. Returned expressions are
+peeled through transparent TypeScript wrappers but must then be an exact
+identifier reference before compiler symbol identity can connect them to a
+parameter. Predicates, conditional identities, and guarded fallthroughs remain
+without a relational contract; the direct generic identity control remains
+`argument[0]`.
+
+The remaining `@solidjs/web` failures exposed a second ownership bug in the
+Node generator. Two public entrypoints sharing one runtime target were treated
+as semantic aliases, so the root entrypoint's server-only `ssrGroup` identity
+variant was merged into `./jsx-runtime` and `./jsx-dev-runtime`, which always
+select the void web/dev bodies. Cross-entrypoint merging is removed. Target
+analysis is still cached by exact target, excluded siblings, and conditions,
+but each public entrypoint retains only its own projection. The focused
+`entrypoint-condition-isolation` fixture pins the same-name identity/void pair.
+
+Finally, the closure seeder can close two finite dynamic-import forms without a
+package-specific oracle: nested conditional expressions whose leaves are all
+string literals, and inline (optionally `Object.freeze`d) literal tables indexed
+by a finite literal selector. Both enumerate every target into the seed and the
+attested module record. An identifier, template substitution, arbitrary lookup
+key, or one open conditional branch keeps the existing fail-closed runtime
+note. The note now says the specifier is not statically bounded to a finite
+literal set, which is the actual missing proof.
+
+### Full-corpus measurement
+
+The final fresh run used stable checker SHA-256
+`da63bebcad37215615392ca8f7ae03cefccc70ee2d9fb185470d62d3c85648e5`
+and Type Facts SHA-256
+`31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`
+over all 416 probe rows. Raw counts moved as follows:
+
+| Figure | Before | After |
+| --- | ---: | ---: |
+| Claims total | 12,470 | **11,941** |
+| Driven / passed / failed | 7,827 / 7,815 / 12 | **7,959 / 7,951 / 8** |
+| Undriven | 4,643 | **3,982** |
+| Parameter identity without a probe | 400 | **0** |
+| Conversions (return conversions) | 829 (450) | **699 (320)** |
+| Probed rows kept / rows with evidence | 3 / 3 | **69 / 18** |
+
+The raw outcome table is 281 verified, 115 refused, 15 generation failures, 3
+install failures, and 2 rows with no runtime. Two no-contention reruns establish
+the environment qualification: `@tanstack/ai-devtools-core` verified after its
+full-run generation exceeded 120 seconds, and `@tanstack/solid-table` verified
+after its full-run client children exceeded the 20-second per-mode timeout.
+Replacing only those timing outcomes yields the semantic comparison: **283
+verified, 114 refused, and 14 generation failures**, versus 282/115/14 before.
+
+Finite dynamic imports change no ecosystem outcome or note count. The five rows
+carrying all 17 such notes still use specifiers outside the accepted finite
+syntax. This deliberately does not claim that `@solidjs/web` is unblocked: its
+runtime `entryUrl` remains open.
+
+### Remaining fail-closed surface
+
+Generic probes still do not name nested return leaves, store paths, callback
+arguments, reactive reads, owner requirements, or most async behavior. The raw
+final report records 254, 23, 13, 1,107, 465, and 92 undriven claims in those
+classes respectively. It also records 585 entrypoint-import throws, 379
+synthesized throws, and 386 session aborts caused by package code. Those remain
+uncertifiable; none was converted into negative evidence by this slice.
+
+### Export-scoped open loads and entrypoint worker isolation
+
+The former `@solidjs/web` qualification is now closed without pretending its
+runtime `entryUrl` is finite. For flat entry modules, an open `import()` is
+attributed to its exact containing named function and propagated through exact
+local function references to explicit export bindings. Affected exports are
+omitted; a top-level load, affected-function escape, duplicate/missing binding,
+or cross-module attribution stays entrypoint-wide. The focused
+`open-dynamic-import-attribution` fixture omits two transitively affected
+loaders while retaining an independently proved `identity` summary.
+
+On published `@solidjs/web@2.0.0-rc.1`, the only reachable public export is
+`hydrate` in the web and development targets. The root, `./jsx-runtime`, and
+`./jsx-dev-runtime` contracts omit that export and retain `ssrGroup`. Targeted
+floor/head benchmark rows both moved from refused to verified. This is a
+withdrawal, not invented evidence: callers of the omitted `hydrate` remain
+uncertifiable.
+
+Probe workers are also isolated by exact entrypoint specifier. The
+`@solidjs/start@2.0.3` control remains refused with the same 5 passed and 90
+undriven claims, but its four modes now finish all specifier batches instead of
+ending with an entrypoint's partial module state: 60 worker starts, 12 restarts,
+all four modes complete, versus 52 starts, 48 restarts, and four incomplete
+modes before. Its `.jsx`, `solid-start:`, and missing `server-only` imports are
+real published-runtime failures and stay undriven.
+
+The fresh 416-row authority run moves from 281 verified / 115 refused / 15
+generation failures to **286 / 110 / 15**. Claims move from 11,941 total,
+7,959 driven, 7,951 passed, and 3,982 undriven to **11,935 total, 8,333 driven,
+8,325 passed, and 3,602 undriven**. The eight failed claims are unchanged. One
+raw generation timeout verified in a no-contention rerun, so the
+environment-controlled interpretation is 287 verified / 109 refused / 14
+generation failures; the checked-in report preserves the unmodified raw run.
+The remaining broad static gaps are 254 nested return leaves, 23 store paths,
+13 callback arguments, 1,107 reactive reads, 465 owner requirements, and 92
+async claims. Published-runtime behavior still leaves 601 import throws and 41
+session-abort withdrawals; those are not converted into negative evidence.
+
+No callback-argument or nested-return probe was added merely on the strength of
+`typeof`. The generated callback descriptors are reactive accessors, but schema
+v1 names neither a source nor a mutation that a generic probe could drive;
+common nested accessor/store leaves have the same missing observation path.
+Those rows stay family C until the schema fully describes construction and
+mutation. Relational top-level returns remain the only new generic forms in
+this slice because strict sentinel identity proves exactly what they claim.
+
+## 2026-08-26 — contradiction-free generation, recursive return leaves, and proven constructors
+
+Eight runtime contradictions in the preceding authority report are closed at
+their semantic owners. A call initializer no longer inherits its callee's
+function summary when exact export Type Facts prove the exported value is not
+callable (`@kobalte/core`'s namespace helper). Solid 1 `createResource` fetchers
+are described by their observable initial scheduling rather than the dialect's
+deferred attribution. Callback timing no longer crosses a nested helper from a
+lexical role alone, and returned conditional adapters or after-call tracked
+wrappers become `callbacks: unknown` when schema v1 cannot state their mixed
+execution. The focused controls retain exact direct-inline and returned-
+scheduler behavior; withdrawals are per export, not package-wide suppression.
+
+Return tuples and objects are now traversed recursively. Claim identities carry
+the exact property/element path, and relational leaves also retain their exact
+parameter index. The worker selects that leaf before applying the same strict
+accessor or reference-identity observation, evidence is written on that leaf,
+and stale evidence for a sibling cannot corroborate it. Because schema v1 has
+one sentinel for the whole `returns` domain, one unconfirmed leaf still converts
+the domain. Store paths remain undrivable, and an accessor leaf without a
+contract-named callback in which to plant a reactive read is recorded as `no
+plantable reactive source`; neither is accepted on `typeof` alone.
+
+Generation also emits a sibling `.probe-plan.json` bound to the exact contract
+hash and package release. Exact Type Facts may supply only proven inhabitants:
+`null`, `undefined`, an empty array, `Map`, or `Set`. The driver applies them
+only to otherwise-undefined argument slots. Ambiguous public symbols,
+conditional runtime targets, literal subtypes, and other open domains get no
+recipe. The sidecar helps a call reach behavior but is never evidence; probing
+refuses a stale hash.
+
+The fresh 416-row authority run used checker SHA-256
+`c1b606862f4ea98ac719c0d53c1db51d19a0f62e60ffb9f2899bb8b85d0f6cf8`
+and Type Facts SHA-256
+`31d6cc0daeb91d22d5ca16cfa8d28d4bb62157ccdf73b87cd4fddc533e37d889`.
+Against the preceding checked-in raw report:
+
+| Figure | Before | After |
+| --- | ---: | ---: |
+| Verified / refused | 284 / 109 | **297 / 97** |
+| Generate / install / no-runtime | 15 / 6 / 2 | **17 / 3 / 2** |
+| Claims total | 11,969 | **11,744** |
+| Driven / passed / failed | 8,327 / 8,319 / 8 | **7,734 / 7,734 / 0** |
+| Undriven / incompleteness | 3,642 / 589 | **4,010 / 518** |
+| Conversions (callback / return / async) | 819 (424 / 365 / 30) | **802 (372 / 399 / 31)** |
+| Probed rows kept / rows with evidence | 83 / 20 | **97 / 21** |
+
+The lower driven count is not a coverage claim: false callback claims were
+withdrawn, and recursively named accessor leaves that lack a plantable source
+are now counted precisely instead of hidden under one `nested return leaf`
+bucket. That bucket moved from 270 to zero while `no plantable reactive source`
+moved from 235 to 859 and store-path leaves from 23 to 51. The result has no
+failed claim and no contradicted kind claim. Remaining gaps include 1,079
+reactive-read proofs with no runtime probe form, 463 owner requirements, 98
+async claims, 51 store paths, 9 callback-argument descriptors, 601 import
+throws, 368 synthesized throws, and 286 calls that did not reach the callback.

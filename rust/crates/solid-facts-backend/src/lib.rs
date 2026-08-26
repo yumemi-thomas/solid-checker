@@ -57,15 +57,20 @@ pub fn default_typefacts_executable() -> String {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SemanticDemandOptions {
     pub array_map_receiver_types: bool,
+    /// Package generation only: retain exact parameter value domains for the
+    /// hash-bound runtime probe construction sidecar.
+    pub contract_probe_parameters: bool,
 }
 
 impl SemanticDemandOptions {
     pub const NONE: Self = Self {
         array_map_receiver_types: false,
+        contract_probe_parameters: false,
     };
 
     pub const PREFERENCES: Self = Self {
         array_map_receiver_types: true,
+        contract_probe_parameters: false,
     };
 }
 

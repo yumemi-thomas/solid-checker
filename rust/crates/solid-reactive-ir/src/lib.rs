@@ -945,13 +945,13 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
                 validate_contract_return(property)?;
             }
         }
-        "argument" => {
+        "argument" | "callback-result" | "callback-result-function" => {
             if returned.parameter.is_none()
                 || !returned.label.is_empty()
                 || !returned.elements.is_empty()
                 || !returned.properties.is_empty()
             {
-                return Err("an argument return requires a parameter only");
+                return Err("a relational return requires a parameter only");
             }
         }
         _ => return Err("the return kind is unsupported"),
@@ -3510,6 +3510,20 @@ mod tests {
         };
         assert!(validate_contract_return(&argument).is_ok());
 
+        let callback_result = ContractReturn {
+            kind: "callback-result".into(),
+            parameter: Some(0),
+            ..ContractReturn::default()
+        };
+        assert!(validate_contract_return(&callback_result).is_ok());
+
+        let callback_result_function = ContractReturn {
+            kind: "callback-result-function".into(),
+            parameter: Some(0),
+            ..ContractReturn::default()
+        };
+        assert!(validate_contract_return(&callback_result_function).is_ok());
+
         let mixed = ContractReturn {
             kind: "object".into(),
             label: "invalid".into(),
@@ -3588,6 +3602,7 @@ mod tests {
             ),
             typescript_changes: None,
             resolved_imports: None,
+            runtime_symbol_redirects: HashMap::new(),
         }
     }
 
@@ -3625,7 +3640,7 @@ mod tests {
             Vec::new(),
         );
         let interner = SymbolInterner::from_table(&table);
-        let (aliases, _) = alias_roots_and_source_declarations(&table, &interner);
+        let (aliases, _) = alias_roots_and_source_declarations(&table, &interner, &HashMap::new());
         let roots = symbols_by_root(&table, &aliases, &interner);
         let source = SymbolId::from("root");
         let projected = references_for_sources(&table, &roots, std::iter::once(&source));
@@ -3638,6 +3653,43 @@ mod tests {
             vec![10, 30]
         );
         assert_eq!(projected.len(), 1);
+    }
+
+    #[test]
+    fn exact_runtime_redirects_replace_declaration_alias_roots() {
+        let table = typescript_table(
+            1,
+            Vec::new(),
+            Vec::new(),
+            vec![
+                SymbolFact {
+                    id: "import-alias".into(),
+                    alias_target: "declaration".into(),
+                    declarations: Vec::new().into(),
+                    references: Vec::new().into(),
+                },
+                SymbolFact {
+                    id: "declaration".into(),
+                    alias_target: "".into(),
+                    declarations: Vec::new().into(),
+                    references: Vec::new().into(),
+                },
+                SymbolFact {
+                    id: "runtime".into(),
+                    alias_target: "".into(),
+                    declarations: Vec::new().into(),
+                    references: Vec::new().into(),
+                },
+            ],
+            Vec::new(),
+        );
+        let interner = SymbolInterner::from_table(&table);
+        let redirects = HashMap::from([("declaration".into(), "runtime".into())]);
+        let (aliases, _) = alias_roots_and_source_declarations(&table, &interner, &redirects);
+
+        assert_eq!(aliases["import-alias"].as_str(), "runtime");
+        assert_eq!(aliases["declaration"].as_str(), "runtime");
+        assert_eq!(aliases["runtime"].as_str(), "runtime");
     }
 
     #[test]
@@ -3695,7 +3747,8 @@ mod tests {
 
     fn typescript_index_cache(table: &TypeScriptTable) -> CachedTypeScriptIndexes {
         let interner = SymbolInterner::from_table(table);
-        let (aliases, source_declarations) = alias_roots_and_source_declarations(table, &interner);
+        let (aliases, source_declarations) =
+            alias_roots_and_source_declarations(table, &interner, &HashMap::new());
         CachedTypeScriptIndexes {
             symbol_alias_targets: symbol_alias_targets(table, &interner),
             symbols_by_root: symbols_by_root(table, &aliases, &interner),
@@ -3809,7 +3862,8 @@ mod tests {
         );
 
         let interner = SymbolInterner::from_table(&table);
-        let (_, declarations) = alias_roots_and_source_declarations(&table, &interner);
+        let (_, declarations) =
+            alias_roots_and_source_declarations(&table, &interner, &HashMap::new());
 
         assert_eq!(declarations["root"].name, ("sourceAccessor").into());
         assert_eq!(declarations["root"].location.path, ("source.ts").into());

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Offline benchmark runner: installs each manifest probe's exact package and
 // Solid runtime versions in an isolated temporary project, runs the real
 // `contract generate` CLI against it, classifies the outcome, and reports.
@@ -41,7 +41,7 @@ import { classifyResult, normalizeSignature } from "./lib/classify.mjs";
 import { readContractContent } from "./lib/contract-content.mjs";
 import {
   createProject,
-  installPackages as npmInstall,
+  installPackages as bunInstall,
   readInstalledVersions,
   readLockIntegrity,
   verifyInstall
@@ -55,7 +55,7 @@ const DEFAULT_SENTINEL = join(ROOT, "scripts/ecosystem-benchmark/sentinel.json")
 const DEFAULT_CLI = join(ROOT, "packages/cli/bin/solid-checker.mjs");
 const DEFAULT_TIMEOUT_SECONDS = 300;
 
-// Each probe launches npm and the native checker, so unconstrained fan-out
+// Each probe launches Bun and the native checker, so unconstrained fan-out
 // can exhaust memory on large hosts. Eight kept all cores busy on the measured
 // corpus without multiplying the checker process tree beyond a safe bound;
 // smaller machines follow their actual CPU availability instead of inheriting
@@ -548,7 +548,7 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
 // ---------------------------------------------------------------------------
 
 function usage() {
-  return `Usage: node scripts/ecosystem-benchmark/run.mjs [options]
+  return `Usage: bun scripts/ecosystem-benchmark/run.mjs [options]
 
   --manifest <FILE>      default scripts/ecosystem-benchmark/manifest.json
   --sentinel             run only the pinned sentinel subset
@@ -682,7 +682,7 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
 
     installPackages: async ({ projectDir, specs, expected, timeoutMs }) => {
       await createProject({ root: projectDir, specs });
-      const result = await npmInstall({ projectDir, specs, timeoutMs });
+      const result = await bunInstall({ projectDir, specs, timeoutMs });
       const names = Object.keys(expected);
       const installedVersions = readInstalledVersions(projectDir, names);
       const integrity = readLockIntegrity(projectDir, names);
@@ -746,7 +746,7 @@ async function main(argv = process.argv.slice(2)) {
     return;
   }
 
-  // Checked first and unconditionally: no manifest read, no npm install, no
+  // Checked first and unconditionally: no manifest read, no bun install, no
   // subprocess spawn is worth attempting against binaries we have not
   // confirmed exist. See the file header for why there is no fallback.
   const binaries = checkRequiredBinaries(process.env);

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Solid 1.x contract probe worker. Runs inside the solid-v1 install directory,
 // so `solid-js` resolves to the audited 1.9.14 release rather than the 2.0
 // prerelease the other dialect pins. Shared machinery lives in

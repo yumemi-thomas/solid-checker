@@ -8,6 +8,12 @@
   "summaries": {
     "function-1": {
       "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
       "reactiveReads": [
         {
           "kind": "parameter-member",
@@ -21,7 +27,7 @@
         "kind": "inferred"
       }
     },
-    "function-2": {
+    "function-3": {
       "kind": "function",
       "reactiveReads": {
         "status": "unknown"
@@ -37,15 +43,17 @@
   "entrypoints": {
     ".": {
       "exports": {
-        "function-2": [
-          "forwarded",
+        "function-3": [
+          "forwarded"
+        ],
+        "function-1": [
           "Isolated"
         ]
       }
     },
     "./direct": {
       "exports": {
-        "function-1": [
+        "function-2": [
           "channelFor"
         ]
       }

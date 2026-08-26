@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
 import { verifyPin } from "./check-contract-pins.mjs";
 
@@ -22,7 +22,7 @@ test("a version-only pin fails, because it cannot be falsified", () => {
   const document = { package: { name: "example", version: "1.0.0" } };
   const failure = verifyPin(contract({ document }), serving(audited));
   assert.match(failure, /by version alone/);
-  assert.match(failure, /npm view example@1\.0\.0 dist\.integrity/);
+  assert.match(failure, /bun info example@1\.0\.0 dist\.integrity/);
 });
 
 test("a republished release fails even though the version still matches", () => {

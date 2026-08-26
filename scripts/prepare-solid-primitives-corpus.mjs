@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.argv[2];
-if (!root) throw new Error("usage: node prepare-solid-primitives-corpus.mjs <solid-primitives-root>");
+if (!root) throw new Error("usage: bun prepare-solid-primitives-corpus.mjs <solid-primitives-root>");
 
 const packages = path.join(root, "packages");
 for (const entry of fs.readdirSync(packages, { withFileTypes: true })) {

@@ -511,13 +511,70 @@ function drivesItself(namespace) {
 
 /// The synthesis vocabulary, resolved to values. `contract-probe-driver.mjs`
 /// decides which descriptor each slot gets; this only builds them.
-function buildArguments(descriptors, probeCallback) {
+function buildArguments(descriptors, probeCallback, probeValue) {
   return (descriptors ?? []).map(descriptor => {
     if (descriptor === "probe-callback") return probeCallback;
+    if (descriptor === "probe-value") return probeValue;
     if (descriptor === "noop-callback") return () => undefined;
     if (descriptor === "empty-object") return {};
+    if (descriptor === "null") return null;
+    if (descriptor === "empty-array") return [];
+    if (descriptor === "empty-map") return new Map();
+    if (descriptor === "empty-set") return new Set();
     return undefined;
   });
+}
+
+/// Observes one of schema v1's three relational return claims with strict
+/// identity. The sentinel is a fresh object held only inside this probe body,
+/// so a package cannot accidentally manufacture an equal value.
+///
+/// For callback relations the planted callback returns that sentinel. For an
+/// argument relation it is supplied directly in the named slot. The returned
+/// function form invokes exactly the function the export returned; a throw is
+/// caught by the session loop and remains undriven, because the schema does not
+/// describe arguments that the returned function might require.
+function relationalReturnObservation(target, probe) {
+  const sentinel = Object.freeze({});
+  let callbackCalls = 0;
+  const callback = () => {
+    callbackCalls += 1;
+    return sentinel;
+  };
+  const returned = selectReturnValue(
+    target(...buildArguments(probe.arguments, callback, sentinel)),
+    probe.returnPath
+  );
+  if (probe.type === "returns-callback-result-function") {
+    if (typeof returned !== "function") {
+      return {
+        returnedType: describeValue(returned),
+        callbackCalls,
+        identityMatched: false,
+        calls: 1
+      };
+    }
+    const invocationResult = returned();
+    return {
+      returnedType: "function",
+      invocationResultType: describeValue(invocationResult),
+      callbackCalls,
+      identityMatched: invocationResult === sentinel,
+      calls: 1,
+      returnedFunctionCalls: 1
+    };
+  }
+  return {
+    returnedType: describeValue(returned),
+    callbackCalls,
+    identityMatched: returned === sentinel,
+    calls: 1
+  };
+}
+
+function selectReturnValue(value, path = []) {
+  for (const segment of path) value = value?.[segment];
+  return value;
 }
 
 function describeValue(value) {
@@ -665,7 +722,10 @@ async function returnsObservation(runtime, target, probe) {
     plantedRuns += 1;
     return source();
   };
-  const returned = target(...buildArguments(probe.arguments, planted));
+  const returned = selectReturnValue(
+    target(...buildArguments(probe.arguments, planted)),
+    probe.returnPath
+  );
   if (typeof returned !== "function") {
     return { typeofValue: describeValue(returned), reactive: false, calls: 1 };
   }
@@ -849,11 +909,13 @@ async function main() {
     // not per session.
     const capability = await runtimeCapability(runtime);
     try {
-      const observation = await runtime.root(() =>
-        probe.type === "returns-accessor"
-          ? returnsObservation(runtime, value, probe)
-          : callbackObservation(runtime, value, probe)
-      );
+      const observation = await runtime.root(() => {
+        if (probe.type === "returns-accessor") return returnsObservation(runtime, value, probe);
+        if (probe.type.startsWith("returns-") && probe.type !== "returns-accessor") {
+          return relationalReturnObservation(value, probe);
+        }
+        return callbackObservation(runtime, value, probe);
+      });
       record({
         ...base,
         outcome: "observed",

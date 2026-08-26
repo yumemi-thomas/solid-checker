@@ -103,6 +103,13 @@ fn plan_file(
             .flat_map(|parameter| &parameter.names)
         {
             add_symbol(name.span, true);
+            if options.contract_probe_parameters {
+                type_descriptor_spans.insert(name.span);
+                runtime_value_domain_spans.insert(name.span);
+                primitive_value_domain_spans.insert(name.span);
+                array_shape_spans.insert(name.span);
+                library_type_spans.insert(name.span);
+            }
         }
     }
     // Object properties have no lexical binding. Demand each static key so

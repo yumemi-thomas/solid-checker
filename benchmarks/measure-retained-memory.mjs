@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Measure the retained actor after one materialized analysis. On macOS,
 // --vmmap-all reports the reclaimability-aware physical footprint; pair it
 // with --max-physical-mib=<MiB> for a regression gate.

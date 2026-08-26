@@ -9,7 +9,7 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { Linter } from "eslint";
 
 const require = createRequire(import.meta.url);

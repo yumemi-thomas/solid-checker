@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Relative performance gate: base commit vs head, interleaved on one machine.
 //
 // The absolute invariants in verify-performance.mjs need shared-runner
@@ -8,7 +8,7 @@
 // binary and the head's, alternating base/head rounds so scheduler drift
 // hits both sides equally, and gates on the ratio of medians.
 //
-//   node benchmarks/compare-performance.mjs \
+//   bun benchmarks/compare-performance.mjs \
 //     --base-bench <path> --base-typefacts <path> \
 //     --head-bench <path> --head-typefacts <path> \
 //     [--rounds 5]

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
+import { test } from "vitest";
 
 import { buildInstallArguments } from "./lib/install.mjs";
 import {
@@ -113,15 +113,15 @@ function successHooks({ mkProjectCalls = [], installCalls = [], generateCalls = 
   };
 }
 
-test("install arguments used by the real hook always disable lifecycle scripts, audit, and fund", () => {
+test("install arguments used by the real hook are Bun-safe and quiet", () => {
   // This pins the exact same contract lib/install.mjs already guarantees,
   // but at the seam run.mjs actually calls through, so a future refactor
   // that stops routing installs through buildInstallArguments would fail
   // here even if install.mjs's own tests still passed in isolation.
   const args = buildInstallArguments({ specs: ["solid-js@1.9.14", "left-pad@1.0.0"] });
   assert.ok(args.includes("--ignore-scripts"), "must include --ignore-scripts");
-  assert.ok(args.includes("--no-audit"), "must include --no-audit");
-  assert.ok(args.includes("--no-fund"), "must include --no-fund");
+  assert.ok(args.includes("--no-progress"), "must include --no-progress");
+  assert.ok(!args.includes("--no-package-lock"), "must retain Bun's lockfile evidence");
 });
 
 test("the contract output path passed to generateContract is never inside a node_modules directory", async () => {

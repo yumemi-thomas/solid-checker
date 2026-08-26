@@ -28,9 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
+          bun-version: 1.4.0
       # This job builds the same debug workspace the CI engine job does, on the
       # same image and toolchain, so it restores that job's dependency cache
       # instead of compiling the dependency graph from nothing. CI's engine job

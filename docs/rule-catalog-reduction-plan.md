@@ -1571,15 +1571,15 @@ default is already enabled.
 | --- | --- | --- |
 | Preferences absent by default | `contract-process` | No preset, no rule-options → no SC8013/SC8014/SC8015 finding; `--certify` passes on a project whose only issues are preferences |
 | Explicit enable in rule-options | `ir-lib` + `contract-process` | `{"v1/prefer-show": {"enabled": true}}` alone emits the finding, with no preset |
-| ESLint preset reaches the native checker | `npm test --prefix packages/cli` | `preferences-v1` produces SC8015 findings, asserted against the spawned argv containing `--preset preferences`, not only the reported output |
+| ESLint preset reaches the native checker | `bun run --cwd packages/cli test` | `preferences-v1` produces SC8015 findings, asserted against the spawned argv containing `--preset preferences`, not only the reported output |
 | Explicit disable beats the preset | `contract-process` | `--preset preferences` plus `{"v1/prefer-show": {"enabled": false}}` emits nothing |
 | Preset participates in cache identity | `contract-process` | Two analyses of one project differing only in `--preset` do not share a retained result |
-| One run shared | `npm test --prefix packages/cli` | Two enabled rules in one config cause exactly one spawn; changing the preset list causes a second |
-| `preferences-v2` does not force v1 | `npm test --prefix packages/cli` | Linting a v2 project with `preferences-v2` spawns exactly one analysis, with no `--dialect solid-v1` |
-| WASM limitation is honest | `npm test --prefix packages/wasm` | A `CheckRequest` produces no preference findings, and the documented limitation is asserted rather than silently assumed |
-| Explicit ESLint rule is an opt-in | `npm test --prefix packages/cli` | Enabling only `solid-checker/prefer-show` emits SC8015 and the shared spawn receives `--enable-rule prefer-show` without a separate adapter option |
-| Dialect configs preserve the default | `npm test --prefix packages/cli` | The generated `v1` / `v2` configs omit every `defaultEnabled: false` entry; composing the matching preference config adds only that dialect's preference keys |
-| ESLint recommendation metadata follows the catalog | `npm test --prefix packages/cli` | All three preferences expose `meta.docs.recommended: false`; proof-backed default-enabled rules remain recommended unless uncertifiable |
+| One run shared | `bun run --cwd packages/cli test` | Two enabled rules in one config cause exactly one spawn; changing the preset list causes a second |
+| `preferences-v2` does not force v1 | `bun run --cwd packages/cli test` | Linting a v2 project with `preferences-v2` spawns exactly one analysis, with no `--dialect solid-v1` |
+| WASM limitation is honest | `bun run --cwd packages/wasm test` | A `CheckRequest` produces no preference findings, and the documented limitation is asserted rather than silently assumed |
+| Explicit ESLint rule is an opt-in | `bun run --cwd packages/cli test` | Enabling only `solid-checker/prefer-show` emits SC8015 and the shared spawn receives `--enable-rule prefer-show` without a separate adapter option |
+| Dialect configs preserve the default | `bun run --cwd packages/cli test` | The generated `v1` / `v2` configs omit every `defaultEnabled: false` entry; composing the matching preference config adds only that dialect's preference keys |
+| ESLint recommendation metadata follows the catalog | `bun run --cwd packages/cli test` | All three preferences expose `meta.docs.recommended: false`; proof-backed default-enabled rules remain recommended unless uncertifiable |
 | Manifest metadata stays generated | `contract-process` + manifest validation | `defaultEnabled` and `presets` in both shipped manifests equal the owning Rust catalog metadata; no adapter-maintained preference-name list exists |
 
 ### 7.6 Release-note consequence
@@ -1991,9 +1991,9 @@ Every coverage or gate run needs both
 | 15 | SC7005 → `uncertifiable` | snapshots, page, release-note line | `ir-lib`, `contract-process`, coverage compare |
 | 16 | Two double-report suppressions: SC5001 suppresses SC1001; SC1004 owns its condition read | snapshots | coverage compare, non-updating run first |
 | 17 | The five merges (§5.1), **one commit each**, largest first (`missing-owner` is 4→1 in v2) | per merge: its `RULE_ALIASES` entries (7 + 6) or `RETIRED_RULES` declared break (3 + 2 + 1) — **19 identities total**, snapshots with new `rule` **and** `code`, regenerated manifests, one merged page, retired pages deleted, flipped cases + ledger rows, release-note lines | `ir-lib`, `contract-process`, coverage compare, `SOLID_RULES_UPDATE=1` regen |
-| 18 | Name unification (SC1003, SC1004) + the three renames (§6.1), **one commit each** | per change: its `RULE_ALIASES` entry (**6 total**), its `DEPRECATED_RULE_KEYS` delegating entry, regenerated manifests, page moves, flipped cases + ledger rows, release-note lines | `contract-process`, `node scripts/dialect-manifests.mjs validate`, `npm test --prefix packages/cli` |
+| 18 | Name unification (SC1003, SC1004) + the three renames (§6.1), **one commit each** | per change: its `RULE_ALIASES` entry (**6 total**), its `DEPRECATED_RULE_KEYS` delegating entry, regenerated manifests, page moves, flipped cases + ledger rows, release-note lines | `contract-process`, `bun scripts/dialect-manifests.mjs validate`, `bun run --cwd packages/cli test` |
 | 19 | The three ports (§4.6): `prefer-for`, `prefer-show`, SC8003's content arm | new v2 fixtures, manifests, pages, new ownership cases | `add-fixture` each; `make tsc-oracle`; coverage compare; `make ownership-gate` |
-| 20 | Preference preset (§7): tri-state `RuleOverride`; `default_enabled` + `presets` on `RuleMetadata` and generated `defaultEnabled` + `presets` manifest fields; `Dialect::rule_metadata` function-pointer row; the `diagnostics.rs:394` filter rewrite; presets merged into `RuleOptions` **before** `DiagnosticIdentity`; `--preset` / `--enable-rule` on CLI and daemon requests; **`CachedAnswer` + `snapshot_if_current` keyed on normalized presets/enableRules**; adapter options + **snapshot cache-key change**; active default-disabled ESLint rules forwarded as `--enable-rule`; ordinary dialect configs filtered by `defaultEnabled`; `meta.docs.recommended` derived from catalog metadata; `preferences-v1` and `preferences-v2` configs; `packages/wasm/README.md` limitation note; three pages | manifests, the twelve §7.5 tests, the five §7.2.2 daemon tests, the §7.1 unknown-identity regression test | `ir-lib`, `contract-process`, `npm test --prefix packages/cli`, `npm test --prefix packages/wasm` |
+| 20 | Preference preset (§7): tri-state `RuleOverride`; `default_enabled` + `presets` on `RuleMetadata` and generated `defaultEnabled` + `presets` manifest fields; `Dialect::rule_metadata` function-pointer row; the `diagnostics.rs:394` filter rewrite; presets merged into `RuleOptions` **before** `DiagnosticIdentity`; `--preset` / `--enable-rule` on CLI and daemon requests; **`CachedAnswer` + `snapshot_if_current` keyed on normalized presets/enableRules**; adapter options + **snapshot cache-key change**; active default-disabled ESLint rules forwarded as `--enable-rule`; ordinary dialect configs filtered by `defaultEnabled`; `meta.docs.recommended` derived from catalog metadata; `preferences-v1` and `preferences-v2` configs; `packages/wasm/README.md` limitation note; three pages | manifests, the twelve §7.5 tests, the five §7.2.2 daemon tests, the §7.1 unknown-identity regression test | `ir-lib`, `contract-process`, `bun run --cwd packages/cli test`, `bun run --cwd packages/wasm test` |
 | 21 | Delete `upstream-cases.json` and `deviations.json` | ledger asserted complete | `make ownership-gate` with the **zero-pending** stage enabled: 465 rows, none `pending`, every `migrated`/`dropped` row carrying valid completion metadata |
 | 22 | Documentation sweep: README rule tables and counts, the migration note (old → new keys, codes, the six declared breaks, the preset change), `docs/precision-backlog.md` entries with probe transcripts and `tsc` output | — | rule-page tests |
 | 23 | Handoff | — | `make verify` |
@@ -2042,7 +2042,7 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test \
 
 # coverage compare (non-updating first, always)
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
+SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
 
 # the replacement gate
 make ownership-gate
@@ -2056,9 +2056,9 @@ commit from step 1 onward, and does, because it is the only gate left after step
 3.
 
 **Handoff (step 23) asserts all of:** `make verify`; `make ownership-gate` green
-with the ledger at 465 rows; `node scripts/dialect-manifests.mjs validate`;
+with the ledger at 465 rows; `bun scripts/dialect-manifests.mjs validate`;
 `jq empty schema/solid-reactivity.schema.json` **unchanged** from the base commit;
-`npm test --prefix packages/cli` including the twelve §7.5 enablement tests; and no
+`bun run --cwd packages/cli test` including the twelve §7.5 enablement tests; and no
 `v1/`-prefixed key removed without a `RETIRED_RULES` or `RULE_ALIASES` entry.
 
 ### Per-step rules

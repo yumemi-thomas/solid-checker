@@ -55,7 +55,7 @@ export async function describePackages(request) {
         leaf.conditions.forEach(condition => conditions.add(condition));
         const module = await import(pathToFileURL(path));
         for (const [name, value] of Object.entries(module)) {
-          if (name === "default") continue;
+          if (name === "default" && !item.includeDefault) continue;
           const kind = typeof value === "function" ? "function" : "value";
           if (kinds[name] && kinds[name] !== kind) {
             throw new Error(

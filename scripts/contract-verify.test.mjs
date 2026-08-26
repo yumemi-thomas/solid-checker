@@ -15,8 +15,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 
+import { installAuditedSolid } from "./lib/audited-solid-runtime.mjs";
 import { expandContract } from "../packages/cli/scripts/contract-document.mjs";
 import { PROBE_MODES } from "../packages/cli/scripts/contract-probe-driver.mjs";
 import {
@@ -835,7 +836,8 @@ test("a runtimeNotes-only record blocks too, under its own named class", () => {
           runtimeNotes: [
             "index.js: the module record is attested -- it names every file the analyzing program " +
               "opened under this package -- and complete except for what a dynamic import() whose " +
-              "specifier is not a string literal may load at runtime, which no module graph can " +
+              "specifier is not statically bounded to a finite set of string literals may load " +
+              "at runtime, which no module graph can " +
               "enumerate"
           ]
         }
@@ -848,6 +850,27 @@ test("a runtimeNotes-only record blocks too, under its own named class", () => {
   assert.match(blockers[0], /nothing establishes that the runtime loads no other one/);
   assert.equal(blockerClass(blockers[0]), "attested-closure-note");
   assert.equal(BLOCKERS.includes("attested-closure-note"), true);
+});
+
+test("an export-scoped open-load obligation does not contaminate retained exports", () => {
+  const fixture = draft({
+    generation: {
+      generator: "solid-checker@test",
+      entrypoints: {
+        ".": {
+          modules: [{ path: "index.js", hash: "sha256:00" }],
+          runtimeObligations: [
+            {
+              target: "./index.js",
+              note: "index.js: open runtime module load",
+              exports: ["omittedLoader"]
+            }
+          ]
+        }
+      }
+    }
+  });
+  assert.deepEqual(blockersFor(fixture), []);
 });
 
 test("an unattested record blocks as a closure note, not as a runtime claim", () => {
@@ -968,6 +991,71 @@ test("a probed row survives and an unprobed one converts its whole domain", () =
   );
 });
 
+test("relational return evidence corroborates only the exact parameter-indexed claim", () => {
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-1"].returns = {
+    kind: "callback-result-function",
+    parameter: 0,
+    evidence: probedIn()
+  };
+  const exactReport = probeReport({});
+  const returned = exactReport.claims.find(
+    claim => claim.export === "wrapMemo" && claim.claim === "returns=accessor"
+  );
+  returned.claim = "returns=callback-result-function[0]";
+
+  const exact = convertUnconfirmedClaims(expanded(document), exactReport);
+  assert.equal(
+    exact.contract.entrypoints["."].exports.wrapMemo.returns.kind,
+    "callback-result-function"
+  );
+  assert.equal(exact.contract.entrypoints["."].exports.wrapMemo.returns.parameter, 0);
+
+  const staleDocument = structuredClone(document);
+  staleDocument.summaries["function-1"].returns.parameter = 1;
+  const stale = convertUnconfirmedClaims(expanded(staleDocument), exactReport);
+  assert.deepEqual(stale.contract.entrypoints["."].exports.wrapMemo.returns, {
+    status: "unknown"
+  });
+  assert.match(
+    stale.conversions.find(conversion => conversion.field === "returns").claims[0].reason,
+    /does not witness/
+  );
+});
+
+test("nested return leaves verify independently with path-bound evidence", () => {
+  const document = structuredClone(CONTRACT);
+  document.summaries["function-1"].returns = {
+    kind: "tuple",
+    elements: [
+      { kind: "argument", parameter: 0, evidence: probedIn() },
+      { kind: "argument", parameter: 1, evidence: probedIn() }
+    ]
+  };
+  const report = probeReport({});
+  const template = report.claims.find(
+    claim => claim.export === "wrapMemo" && claim.claim === "returns=accessor"
+  );
+  template.claim = "returns.elements[0]=argument[0]";
+  report.claims.push({ ...structuredClone(template), claim: "returns.elements[1]=argument[1]" });
+
+  const exact = convertUnconfirmedClaims(expanded(document), report);
+  assert.equal(exact.contract.entrypoints["."].exports.wrapMemo.returns.kind, "tuple");
+  assert.equal(exact.probed.filter(row => row.claim.startsWith("returns.elements")).length, 2);
+
+  report.claims.pop();
+  const stale = convertUnconfirmedClaims(expanded(document), report);
+  assert.deepEqual(stale.contract.entrypoints["."].exports.wrapMemo.returns, {
+    status: "unknown"
+  });
+  assert.equal(
+    stale.conversions.find(conversion => conversion.field === "returns").claims.some(
+      claim => claim.claim === "returns.elements[1]=argument[1]"
+    ),
+    true
+  );
+});
+
 test("a conversion records the claim identity, the value the machine held, and the reason", () => {
   const fixture = draft();
   const { conversions } = convertUnconfirmedClaims(expanded(CONTRACT), fixture.report);
@@ -1034,7 +1122,7 @@ test("the same evidence covers an entrypoint whose conditions state fewer modes"
   assert.equal(contract.entrypoints["."].exports.wrapMemo.callbacks[0].evidence.kind, "probed");
 });
 
-test("an owner row, a callback argument descriptor, and a return leaf each convert", () => {
+test("an owner row, a callback argument descriptor, and an undrivable return leaf each convert", () => {
   const document = structuredClone(CONTRACT);
   document.summaries["function-1"].callbacks[0].owner = "created";
   const owned = convertUnconfirmedClaims(expanded(document), probeReport({}));
@@ -1056,16 +1144,14 @@ test("an owner row, a callback argument descriptor, and a return leaf each conve
 
   const nested = structuredClone(CONTRACT);
   nested.summaries["function-1"].returns = {
-    kind: "accessor",
-    label: "memo result",
-    evidence: probedIn(),
-    properties: { inner: { kind: "accessor", label: "inner" } }
+    kind: "object",
+    properties: { inner: { kind: "store-path", label: "inner" } }
   };
   assert.match(
     convertUnconfirmedClaims(expanded(nested), probeReport({})).conversions.find(
       conversion => conversion.field === "returns"
     ).claims[0].reason,
-    /return leaves have no probe form/
+    /no probed row evidence/
   );
 });
 
@@ -1681,7 +1767,7 @@ test("the CLI dispatches contract verify", () => {
 
 /// generate -> probe --write -> verify, against a real installed Solid release.
 ///
-/// It skips when the install cannot happen -- offline, or no npm -- and when the
+/// It skips when the install cannot happen -- offline, or no Bun -- and when the
 /// native checker is absent, since the promotion validates before it installs.
 test("the pipeline runs end to end against an installed Solid release", async t => {
   if (!canWrite) {
@@ -1693,14 +1779,10 @@ test("the pipeline runs end to end against an installed Solid release", async t 
     join(directory, "package.json"),
     JSON.stringify({ name: "verify-integration", version: "1.0.0", private: true })
   );
-  const install = spawnSync(
-    "npm",
-    ["install", "--prefix", directory, "--no-audit", "--no-fund", "--no-save", "solid-js@1.9.14"],
-    { encoding: "utf8", timeout: 300_000 }
-  );
-  if (install.status !== 0) {
+  const install = installAuditedSolid(directory);
+  if (!install.ok) {
     t.skip(
-      `could not install solid-js@1.9.14: ${(install.stderr ?? install.error?.message ?? "").trim()}`
+      `could not install solid-js@1.9.14: ${install.message ?? "the cached runtime was unavailable"}`
     );
     return;
   }
@@ -1815,7 +1897,7 @@ test("the pipeline runs end to end against an installed Solid release", async t 
   assert.equal(validated.status, 0, validated.stdout + validated.stderr);
 
   if (!existsSync(typeFacts)) {
-    t.diagnostic(`skipped the consumer assertions: no TypeFacts service at ${typeFacts}`);
+    console.info(`skipped the consumer assertions: no TypeFacts service at ${typeFacts}`);
     return;
   }
   // What the verified contract is actually worth to a project. The probed row

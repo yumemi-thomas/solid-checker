@@ -1,12 +1,17 @@
 import {
   createComponent,
   createContext,
+  createEffect,
   createMemo,
   createResource,
   on,
+  createRoot,
+  runWithOwner,
+  type Owner,
   useContext
 } from "solid-js";
 import { createStore } from "solid-js/store";
+import { minifiedExportObject as exportObject } from "./namespace-helper";
 
 export function observe(source: () => unknown): () => unknown {
   return on(source, value => value);
@@ -77,6 +82,55 @@ export function projectedTupleResult() {
 export function identityResult<T>(value: T): T {
   return value;
 }
+
+// One identity-looking branch is not an identity contract. The generic probe
+// supplies a fresh object here and observes `false` on the other path; package
+// generation must therefore omit `returns` instead of claiming `argument[0]`.
+export function conditionalIdentity<T>(value: T, keep: boolean): T | false {
+  if (keep) return value;
+  return false;
+}
+
+export function isObject(value: unknown): boolean {
+  return typeof value === "object";
+}
+
+export function guardedIdentity<T>(value: T, keep: boolean): T | undefined {
+  if (keep) return value;
+}
+
+const conditionalCallbackAdapter = (fn: (value?: number) => unknown): (() => unknown) =>
+  fn.length ? () => fn(1) : fn;
+
+export function memoThroughConditionalAdapter(
+  fn: (value?: number) => unknown
+): () => unknown {
+  return createMemo(conditionalCallbackAdapter(fn));
+}
+
+export function conditionalInlineCallback(
+  fn: (done: () => void) => void,
+  owner?: Owner
+): void {
+  createRoot(() => {
+    (owner ? done => runWithOwner(owner, () => fn(done)) : fn)(() => {});
+  });
+}
+
+const accessMaybe = (value: number | (() => number)): number =>
+  typeof value === "function" ? value() : value;
+
+export function effectThroughMaybeAccessor(value: number | (() => number)): void {
+  createEffect(() => accessMaybe(value));
+}
+
+function minifiedFunctionAlias(): void {}
+
+// Bundlers commonly spell namespace exports as a call whose callee has a
+// short/minified name. The call result is the exported value; its span must
+// never inherit the callee's function summary.
+const namespaceExport = exportObject({ member: minifiedFunctionAlias });
+export { namespaceExport as t };
 
 type RouterState = {
   location: { pathname: () => string };

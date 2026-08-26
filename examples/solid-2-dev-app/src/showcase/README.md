@@ -1,8 +1,8 @@
 # solid-checker showcase
 
 Each file here is intentionally written to demonstrate one capability of
-`solid-checker`. None are imported by the running app, so `npm run dev` and
-`npm run build` are unaffected. They are analyzed because `tsconfig.json`
+`solid-checker`. None are imported by the running app, so `bun run dev` and
+`bun run build` are unaffected. They are analyzed because `tsconfig.json`
 includes the whole `src` directory.
 
 Run the checker over the project to see every diagnostic:

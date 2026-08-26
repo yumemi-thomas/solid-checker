@@ -69,7 +69,7 @@
         },
         {
           "parameter": 1,
-          "execution": "deferred"
+          "execution": "tracked"
         }
       ]
     },
@@ -86,7 +86,7 @@
         },
         {
           "parameter": 1,
-          "execution": "deferred"
+          "execution": "tracked"
         }
       ]
     },
@@ -365,8 +365,12 @@
       "kind": "function",
       "callbacks": [
         {
-          "parameter": 1,
+          "parameter": 0,
           "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "inline"
         }
       ]
     },

@@ -172,7 +172,7 @@ that same check; do not fan out into unrelated full-suite commands.
 | solid-facts-backend process/diagnostics | `backend-process` | coverage compare, universal set |
 | dialects, contracts at the process boundary | `contract-process` | contract conformance, universal set |
 | fixtures or expected findings | coverage compare (fresh debug binary) | ownership gate, universal set |
-| packages/cli or packages/wasm | `npm test --prefix packages/cli` (or `packages/wasm`) | universal set |
+| packages/cli or packages/wasm | `bun run --cwd packages/cli test` (or `packages/wasm`) | universal set |
 | release or broad architectural work | — | `make verify` |
 
 `make verify-delta` mechanizes this table: it reads the changed paths (the
@@ -185,7 +185,7 @@ can change any answer here. Note what that does *not* include:
 `rust/crates/solid-dialect/` has no row, deliberately — the crate owns the
 shared `Dialect` interface that the IR and both dialect crates consume, so a
 change there escalates rather than being answered with a narrower check.
-`node scripts/verify-delta.mjs --dry-run` prints the plan without running it.
+`bun scripts/verify-delta.mjs --dry-run` prints the plan without running it.
 **`make verify` remains the handoff authority**; `verify-delta` is the fast
 loop, and it is only ever as good as its mapping.
 
@@ -221,6 +221,12 @@ and the contract corpus, and `SOLID_CHECKER_GATE_CACHE=0` disables the
 content-addressed result caches (see "Known traps" below) for both reading and
 writing.
 
+Its non-performance Cargo steps use the dedicated `verify` profile under
+`rust/target/verify`: no debugger symbols and no incremental object cache. A
+full feature-matrix run therefore does not multiply the normal `debug` tree.
+Focused development commands intentionally keep Cargo's ordinary dev/test
+profiles; use those when a debugger or incremental recompilation matters.
+
 The named checks:
 
 ~~~sh
@@ -238,13 +244,13 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" cargo +1.97 test --manifest-path 
 
 # coverage compare (after Rust source changes, point at the fresh debug binary)
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
+SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
 
 # universal handoff set
 cargo +1.97 fmt --manifest-path rust/Cargo.toml --all -- --check
 git diff --check
 jq empty schema/solid-reactivity.schema.json
-node scripts/dialect-manifests.mjs validate
+bun scripts/dialect-manifests.mjs validate
 cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 ~~~
 
@@ -269,7 +275,7 @@ proportionality rules and the report format.
   change. The Node CLI launcher override is `SOLID_CHECKER_NATIVE_BIN`, not
   `SOLID_CHECKER_BIN`. The checked-in bin/solid-checker-rust currently speaks
   compiler-facts protocol 1 and *refuses the pinned producer outright*, so a
-  manual `node scripts/contract-corpus.mjs` (whose default is that binary)
+  manual `bun scripts/contract-corpus.mjs` (whose default is that binary)
   fails on the handshake instead of testing anything. Point it at the fresh
   build with `SOLID_CHECKER_NATIVE_BIN="$PWD/rust/target/debug/solid-checker-rust"`;
   `make contract-corpus` is unaffected because it depends on `build-rust`,
@@ -305,8 +311,9 @@ proportionality rules and the report format.
   rust/target/debug first, then run coverage/ownership with
   `SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust"`. “No finding
   moved” from a run that used the previous binary is meaningless there too.
-- **The gate result caches key on inputs, not on verdicts.** coverage and the
-  contract corpus store each unit’s *computed result* under
+- **The gate result caches key on inputs, not on verdicts.** coverage, the
+  contract corpus, the ownership gate, and the TypeScript/checker halves of the
+  tsc oracle store each unit’s *computed result* under
   rust/target/gate-cache/, keyed by a digest over the fixture tree as it sits on
   disk (untracked files included), the dialect-selection chain *above* that tree
   (every ancestor’s `node_modules/solid-js/package.json`, to the filesystem
@@ -315,7 +322,7 @@ proportionality rules and the report format.
   the producer’s `.buildinfo`, the gate script and every local module it can
   reach plus all of scripts/lib/**, any tree the gate *executes* but does not own
   (`packages/cli`, for the contract corpus’s generator), every `SOLID_*`
-  variable, the Node version, and a format constant — see
+  variable, the Bun/Node runtime identity, and a format constant — see
   scripts/lib/gate-cache.mjs, whose header is the authoritative list. Snapshots
   and `expected.json` are deliberately *not* in the key: comparison always runs
   fresh, so editing an expectation needs no cache awareness and a mismatch still
@@ -326,9 +333,13 @@ proportionality rules and the report format.
   failure mode that matters, so widen the key rather than narrowing it, bump
   `CACHE_FORMAT_VERSION` when an entry’s meaning changes, and reach for
   `SOLID_CHECKER_GATE_CACHE=0` whenever a result looks impossible. `make clean`
-  wipes the cache with the rest of rust/target. Entries are never evicted — one
-  file per (shared digest × unit), and every checker rebuild writes a fresh set —
-  so `make clean` is also the only thing that reclaims the space.
+  wipes the cache with the rest of rust/target; `cargo clean --profile verify`
+  reclaims the large verification binaries without removing these entries or
+  the audited TypeScript installs. Oracle TypeScript observations are separate
+  from checker observations so a Rust rebuild does not invalidate diagnostics
+  that depend only on the same snippet and published typings. Entries are never
+  evicted — one file per (shared digest × unit), and checker rebuilds write a
+  fresh checker-side set — so a full clean remains the complete reclamation path.
 - **The registry memo stores the falsifier, so it is bound to its inputs.**
   scripts/check-contract-pins.mjs memoizes registry integrity by `name@version`
   under the same `SOLID_CHECKER_GATE_CACHE` switch, in

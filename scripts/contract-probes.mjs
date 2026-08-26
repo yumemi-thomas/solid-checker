@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Solid 2.0 contract probe worker. Runs inside the solid-v2 install directory,
 // so `solid-js` and `@solidjs/web` resolve to that dialect's audited releases.
 // Shared machinery lives in scripts/lib/contract-probe-harness.mjs.

@@ -40,18 +40,18 @@ The prose half of the ledger — every rule, its classification, and the actual
 
 ~~~sh
 # install the audited typings (writes to rust/target/tsc-oracle, a build dir)
-node scripts/tsc-oracle.mjs provision --dialect all
+bun scripts/tsc-oracle.mjs provision --dialect all
 
 # is this snippet already a type error?
-node scripts/tsc-oracle.mjs check --dialect v2 --code 'import { createEffect } from "solid-js"; createEffect(() => 1, () => 2);'
+bun scripts/tsc-oracle.mjs check --dialect v2 --code 'import { createEffect } from "solid-js"; createEffect(() => 1, () => 2);'
 
 # enforce every declared case (also runs inside scripts/verify.sh, and as `make tsc-oracle`)
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/tsc-oracle-gate.mjs
 
 # what both sides actually say, per case -- for writing a ledger entry
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs --report
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/tsc-oracle-gate.mjs --report
 ~~~
 
 The gate runs the checker as well as the compiler, so it needs both binaries;

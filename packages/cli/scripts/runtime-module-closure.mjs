@@ -158,6 +158,11 @@ export function tokenize(source) {
       if (character === "$" && source[index + 1] === "{") {
         template.substituted = true;
         stack.push("template-sub");
+        // Keep delimiter depth balanced for consumers that attribute tokens to
+        // lexical function bodies. The closing `}` was always emitted below;
+        // omitting this opening token made every template substitution shift
+        // all later top-level/function depth by one.
+        emit({ kind: "other", value: "{" });
         mode = "code";
         index += 2;
         continue;
@@ -301,6 +306,145 @@ export function moduleSpecifiers(source) {
   }
   const isPunctuation = (token, value) => token?.kind === "other" && token.value === value;
 
+  const matchingDelimiter = (start, open, close, end = tokens.length) => {
+    if (!isPunctuation(tokens[start], open)) return -1;
+    let depth = 0;
+    for (let cursor = start; cursor < end; cursor++) {
+      if (isPunctuation(tokens[cursor], open)) depth += 1;
+      else if (isPunctuation(tokens[cursor], close) && --depth === 0) return cursor;
+    }
+    return -1;
+  };
+
+  const stripParentheses = (start, end) => {
+    while (
+      isPunctuation(tokens[start], "(") &&
+      matchingDelimiter(start, "(", ")", end) === end - 1
+    ) {
+      start += 1;
+      end -= 1;
+    }
+    return [start, end];
+  };
+
+  const topLevel = (start, end, wanted) => {
+    const stack = [];
+    for (let cursor = start; cursor < end; cursor++) {
+      const value = tokens[cursor]?.value;
+      if (tokens[cursor]?.kind !== "other") continue;
+      if ("({[".includes(value)) stack.push(value);
+      else if (")}]".includes(value)) stack.pop();
+      else if (stack.length === 0 && value === wanted) return cursor;
+    }
+    return -1;
+  };
+
+  const finiteTable = (start, end, seen) => {
+    [start, end] = stripParentheses(start, end);
+    // `Object.freeze({ ... })` is the bundler-friendly spelling whose table
+    // cannot be extended between construction and lookup. The lookup's key is
+    // still required to be finite below; freezing an object does not bound an
+    // arbitrary property name by itself.
+    if (
+      tokens[start]?.kind === "word" &&
+      tokens[start].value === "Object" &&
+      isPunctuation(tokens[start + 1], ".") &&
+      tokens[start + 2]?.kind === "word" &&
+      tokens[start + 2].value === "freeze" &&
+      isPunctuation(tokens[start + 3], "(") &&
+      matchingDelimiter(start + 3, "(", ")", end) === end - 1
+    ) {
+      return finiteTable(start + 4, end - 1, seen);
+    }
+    if (!isPunctuation(tokens[start], "{") || matchingDelimiter(start, "{", "}", end) !== end - 1) {
+      return undefined;
+    }
+    const table = new Map();
+    let memberStart = start + 1;
+    while (memberStart < end - 1) {
+      const comma = topLevel(memberStart, end - 1, ",");
+      const memberEnd = comma === -1 ? end - 1 : comma;
+      if (memberStart === memberEnd) {
+        memberStart = memberEnd + 1;
+        continue;
+      }
+      const colon = topLevel(memberStart, memberEnd, ":");
+      const key = tokens[memberStart];
+      if (
+        colon !== memberStart + 1 ||
+        !key ||
+        !["word", "string"].includes(key.kind)
+      ) {
+        return undefined;
+      }
+      const values = finiteValues(colon + 1, memberEnd, seen);
+      if (!values) return undefined;
+      table.set(key.value, values);
+      memberStart = memberEnd + 1;
+    }
+    return table;
+  };
+
+  const finiteValues = (initialStart, initialEnd, seen = new Set()) => {
+    let [start, end] = stripParentheses(initialStart, initialEnd);
+    const identity = `${start}:${end}`;
+    if (seen.has(identity) || start >= end) return undefined;
+    seen = new Set(seen).add(identity);
+    if (end === start + 1 && tokens[start]?.kind === "string") {
+      return new Set([tokens[start].value]);
+    }
+
+    // A conditional expression ranges only over its two result branches. The
+    // condition itself may be arbitrary; it chooses a branch but cannot add a
+    // third specifier. Nested conditionals recurse through the same rule.
+    const question = topLevel(start, end, "?");
+    if (question !== -1) {
+      let nested = 0;
+      let colon = -1;
+      for (let cursor = question + 1; cursor < end; cursor++) {
+        if (isPunctuation(tokens[cursor], "?")) nested += 1;
+        else if (isPunctuation(tokens[cursor], ":")) {
+          if (nested === 0) {
+            colon = cursor;
+            break;
+          }
+          nested -= 1;
+        }
+      }
+      if (colon === -1) return undefined;
+      const left = finiteValues(question + 1, colon, seen);
+      const right = finiteValues(colon + 1, end, seen);
+      return left && right ? new Set([...left, ...right]) : undefined;
+    }
+
+    // An inline static table is finite only when its selector is finite too.
+    // This deliberately refuses `table[userInput]`: even a frozen table does
+    // not prove which inherited/missing property is read. Requiring literal or
+    // conditional literal keys keeps the result an exact syntactic set.
+    let lookup = -1;
+    for (let cursor = start; cursor < end; cursor++) {
+      if (
+        isPunctuation(tokens[cursor], "[") &&
+        matchingDelimiter(cursor, "[", "]", end) === end - 1
+      ) {
+        lookup = cursor;
+        break;
+      }
+    }
+    if (lookup !== -1) {
+      const table = finiteTable(start, lookup, seen);
+      const keys = finiteValues(lookup + 1, end - 1, seen);
+      if (!table || !keys) return undefined;
+      const values = new Set();
+      for (const key of keys) {
+        const selected = table.get(key);
+        if (selected) for (const value of selected) values.add(value);
+      }
+      return values;
+    }
+    return undefined;
+  };
+
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (token.kind !== "word") continue;
@@ -318,10 +462,17 @@ export function moduleSpecifiers(source) {
     if (!next) continue;
     if (token.value === "import" && isPunctuation(next, ".")) continue;
     if (token.value === "import" && isPunctuation(next, "(")) {
-      if (tokens[index + 2]?.kind === "string" && isPunctuation(tokens[index + 3], ")")) {
-        specifiers.push(tokens[index + 2].value);
+      const close = matchingDelimiter(index + 1, "(", ")");
+      const comma = close === -1 ? -1 : topLevel(index + 2, close, ",");
+      const argumentEnd = comma === -1 ? close : comma;
+      const finite = close === -1 ? undefined : finiteValues(index + 2, argumentEnd);
+      if (finite) {
+        specifiers.push(...finite);
       } else {
-        problem("dynamic-import", "a dynamic import() whose specifier is not a string literal");
+        problem(
+          "dynamic-import",
+          "a dynamic import() whose specifier is not statically bounded to a finite set of string literals"
+        );
       }
       continue;
     }
@@ -365,6 +516,219 @@ export function moduleSpecifiers(source) {
       seen.add(key);
       return true;
     })
+  };
+}
+
+/// Attributes an open dynamic import to the public functions that can reach
+/// its exact containing function in one flat ESM module.
+///
+/// This is intentionally a narrow proof, not a JavaScript call-graph guess.
+/// It accepts top-level named function declarations and named arrow-function
+/// bindings, treats every reference from one such function to another as a
+/// reachability edge (calls, assignments and callback forwarding alike), and
+/// resolves the module's explicit export list. A dynamic import outside one of
+/// those functions, a top-level escape of an affected function, or an export
+/// shape the scanner cannot bind returns `undefined`, which tells the caller to
+/// keep refusing the whole entrypoint.
+export function openDynamicImportReachability(source, exportNames) {
+  const ambiguous = reason => ({ ambiguous: reason });
+  const scanned = moduleSpecifiers(source);
+  if (!scanned.problems.some(problem => problem.kind === "dynamic-import")) {
+    return { affectedExports: [] };
+  }
+  const { tokens, unterminated } = tokenize(source);
+  if (unterminated) return ambiguous(`the module has an unterminated ${unterminated}`);
+  const punctuation = (index, value) =>
+    tokens[index]?.kind === "other" && tokens[index].value === value;
+  const matching = (start, open, close) => {
+    let depth = 0;
+    for (let index = start; index < tokens.length; index += 1) {
+      if (punctuation(index, open)) depth += 1;
+      else if (punctuation(index, close) && --depth === 0) return index;
+    }
+    return -1;
+  };
+  const topLevel = [];
+  let braces = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  for (let index = 0; index < tokens.length; index += 1) {
+    topLevel[index] = braces === 0 && parentheses === 0 && brackets === 0;
+    const value = tokens[index]?.value;
+    if (tokens[index]?.kind !== "other") continue;
+    if (value === "{") braces += 1;
+    else if (value === "}") braces -= 1;
+    else if (value === "(") parentheses += 1;
+    else if (value === ")") parentheses -= 1;
+    else if (value === "[") brackets += 1;
+    else if (value === "]") brackets -= 1;
+  }
+
+  const functions = new Map();
+  const declarationNames = new Set();
+  const addFunction = (name, start, end, declarationName) => {
+    if (!name || functions.has(name) || end < start) return false;
+    functions.set(name, { name, start, end });
+    declarationNames.add(declarationName);
+    return true;
+  };
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index]?.kind !== "word") continue;
+    if (tokens[index].value === "function") {
+      const name = tokens[index + 1];
+      if (name?.kind !== "word") return ambiguous("an anonymous top-level function has no exact symbol");
+      let parameters = index + 2;
+      while (parameters < tokens.length && !punctuation(parameters, "(")) parameters += 1;
+      const parametersEnd = matching(parameters, "(", ")");
+      let body = parametersEnd + 1;
+      while (body < tokens.length && !punctuation(body, "{")) body += 1;
+      const end = matching(body, "{", "}");
+      if (
+        parametersEnd === -1 ||
+        end === -1 ||
+        !addFunction(name.value, index, end, index + 1)
+      ) {
+        return ambiguous(`the top-level function ${name.value} has no unique bounded declaration`);
+      }
+      continue;
+    }
+    if (!topLevel[index]) continue;
+    if (!["const", "let", "var"].includes(tokens[index].value)) continue;
+    const name = tokens[index + 1];
+    if (name?.kind !== "word" || !punctuation(index + 2, "=")) continue;
+    let end = index + 3;
+    let nested = 0;
+    let arrow = false;
+    for (; end < tokens.length; end += 1) {
+      const value = tokens[end]?.value;
+      if (tokens[end]?.kind === "other") {
+        if ("({[".includes(value)) nested += 1;
+        else if (")}]".includes(value)) nested -= 1;
+        else if (value === ">" && punctuation(end - 1, "=")) arrow = true;
+        else if (value === ";" && nested === 0) break;
+      }
+    }
+    if (arrow && !addFunction(name.value, index, end, index + 1)) {
+      return ambiguous(`the top-level function ${name.value} has no unique bounded declaration`);
+    }
+  }
+
+  const containingFunction = index => {
+    const candidates = [...functions.values()].filter(
+      candidate => candidate.start < index && index <= candidate.end
+    );
+    return candidates.sort((left, right) =>
+      left.end - left.start - (right.end - right.start)
+    )[0];
+  };
+  // Once one import is open, treating every import() in this module as a seed
+  // is a conservative over-approximation: finite imports may make more exports
+  // withdraw, but can never let an actually affected export survive.
+  const affected = new Set();
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    if (tokens[index]?.kind !== "word" || tokens[index].value !== "import" || !punctuation(index + 1, "(")) {
+      continue;
+    }
+    const owner = containingFunction(index);
+    if (!owner) return ambiguous("a dynamic import executes outside an attributable function");
+    affected.add(owner.name);
+  }
+  if (!affected.size) return ambiguous("no containing function owns the dynamic import");
+
+  const exportBindings = new Map();
+  const exportClauseTokens = new Set();
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (!topLevel[index] || tokens[index]?.kind !== "word" || tokens[index].value !== "export") {
+      continue;
+    }
+    const next = tokens[index + 1];
+    if (next?.kind === "word" && next.value === "function") {
+      const name = tokens[index + 2];
+      if (name?.kind === "word") exportBindings.set(name.value, name.value);
+      continue;
+    }
+    if (next?.kind === "word" && ["const", "let", "var", "class"].includes(next.value)) {
+      const name = tokens[index + 2];
+      if (name?.kind === "word") exportBindings.set(name.value, name.value);
+      continue;
+    }
+    if (!punctuation(index + 1, "{")) continue;
+    const end = matching(index + 1, "{", "}");
+    if (end === -1) return ambiguous("an export clause is unterminated");
+    const clauseBindings = [];
+    for (let cursor = index; cursor <= end; cursor += 1) exportClauseTokens.add(cursor);
+    let cursor = index + 2;
+    while (cursor < end) {
+      if (punctuation(cursor, ",")) {
+        cursor += 1;
+        continue;
+      }
+      const local = tokens[cursor];
+      if (local?.kind !== "word") return ambiguous("an export clause has no exact local binding");
+      let exported = local.value;
+      if (tokens[cursor + 1]?.kind === "word" && tokens[cursor + 1].value === "as") {
+        if (tokens[cursor + 2]?.kind !== "word") {
+          return ambiguous("an export alias has no exact exported name");
+        }
+        exported = tokens[cursor + 2].value;
+        cursor += 3;
+      } else {
+        cursor += 1;
+      }
+      clauseBindings.push([exported, local.value]);
+    }
+    const reexport = tokens[end + 1]?.kind === "word" && tokens[end + 1].value === "from";
+    for (const [exported, local] of clauseBindings) {
+      // A re-exported dependency function has no reference to this module's
+      // private loader unless that loader escaped across the module boundary;
+      // the top-level-reference check below already refuses that escape.
+      exportBindings.set(exported, reexport ? `external:${local}` : local);
+    }
+  }
+  const missingExport = [...exportNames].find(name => !exportBindings.has(name));
+  if (missingExport) return ambiguous(`the exported symbol ${missingExport} has no exact local binding`);
+
+  // Any reference to a function from another function is an edge. A reference
+  // at module scope is an escape whose eventual caller cannot be narrowed by
+  // this proof, except for the declaration and explicit export-list spellings.
+  const edges = new Map();
+  const topLevelReferences = new Set();
+  for (let index = 0; index < tokens.length; index += 1) {
+    const target = tokens[index]?.kind === "word" ? functions.get(tokens[index].value) : undefined;
+    if (!target || declarationNames.has(index) || exportClauseTokens.has(index)) continue;
+    const owner = containingFunction(index);
+    if (!owner) {
+      topLevelReferences.add(target.name);
+      continue;
+    }
+    const targets = edges.get(owner.name) ?? new Set();
+    targets.add(target.name);
+    edges.set(owner.name, targets);
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [owner, targets] of edges) {
+      if (!affected.has(owner) && [...targets].some(target => affected.has(target))) {
+        affected.add(owner);
+        changed = true;
+      }
+    }
+  }
+  const requested = new Set(exportNames);
+  const escaped = [...topLevelReferences].find(name => affected.has(name));
+  if (escaped) return ambiguous(`the affected function ${escaped} escapes at module scope`);
+  if (
+    [...exportBindings].some(
+      ([exported, local]) => affected.has(local) && !requested.has(exported)
+    )
+  ) {
+    return ambiguous("an affected public export is absent from the analyzer's export identities");
+  }
+  return {
+    affectedExports: [...exportNames]
+      .filter(name => affected.has(exportBindings.get(name)))
+      .sort()
   };
 }
 
@@ -578,6 +942,13 @@ export function noteFor(problem) {
 export function runtimeModuleClosure({ packageRoot, entryFile, excludedFiles, resolver }) {
   const files = [];
   const problems = [];
+  // Exact static edges the same walk used to seed the analyzing program.
+  // These are not a second resolver answer: each target is the `file` returned
+  // by `resolver.resolve` for this importer and literal specifier. Contract
+  // generation passes them to the native analysis so a TypeScript import that
+  // binds through an adjacent declaration file can still be joined to the
+  // runtime implementation the published ESM graph actually loads.
+  const resolutions = [];
   const seen = new Set();
   const pending = [entryFile];
   const visited = new Set();
@@ -626,8 +997,16 @@ export function runtimeModuleClosure({ packageRoot, entryFile, excludedFiles, re
         record(file, "specifier", resolved.problem, specifier, resolved.runtimeTargets);
         continue;
       }
-      if (resolved.file && !visited.has(resolved.file)) pending.push(resolved.file);
+      if (resolved.file) {
+        resolutions.push({ importer: file, specifier, target: resolved.file });
+        if (!visited.has(resolved.file)) pending.push(resolved.file);
+      }
     }
   }
-  return { files, problems, notes: [...new Set(problems.map(noteFor))].sort() };
+  resolutions.sort((left, right) =>
+    left.importer.localeCompare(right.importer) ||
+    left.specifier.localeCompare(right.specifier) ||
+    left.target.localeCompare(right.target)
+  );
+  return { files, resolutions, problems, notes: [...new Set(problems.map(noteFor))].sort() };
 }

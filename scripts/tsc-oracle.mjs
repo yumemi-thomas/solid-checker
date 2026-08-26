@@ -10,10 +10,10 @@
 // at the exact versions this repository audits, and refuses to run if the
 // installed version is not the audited one.
 //
-//   node scripts/tsc-oracle.mjs provision [--dialect v1|v2|all]
-//   node scripts/tsc-oracle.mjs check --dialect v2 --file a.tsx [--file b.tsx] [--json]
-//   node scripts/tsc-oracle.mjs check --dialect v1 --code '<snippet>' [--json]
-//   node scripts/tsc-oracle.mjs versions [--json]
+//   bun scripts/tsc-oracle.mjs provision [--dialect v1|v2|all]
+//   bun scripts/tsc-oracle.mjs check --dialect v2 --file a.tsx [--file b.tsx] [--json]
+//   bun scripts/tsc-oracle.mjs check --dialect v1 --code '<snippet>' [--json]
+//   bun scripts/tsc-oracle.mjs versions [--json]
 //
 // Two passes run for every input: `strict` and `loose` (the same options with
 // `strict: false`). Reporting them apart is what distinguishes "TypeScript
@@ -81,7 +81,7 @@ const assertProvisioned = (dialect) => {
     const detail = wrong.map((line) => `  ${line}`).join("\n");
     throw new Error(
       `tsc oracle for ${dialect} is not provisioned at the audited versions:\n${detail}\n` +
-        `run: node scripts/tsc-oracle.mjs provision --dialect ${dialect}`,
+        `run: bun scripts/tsc-oracle.mjs provision --dialect ${dialect}`,
     );
   }
   return root;
@@ -93,7 +93,7 @@ const assertProvisioned = (dialect) => {
  * The short-circuit is the *existing* verification, moved in front of the
  * install instead of behind it. `assertProvisioned` is the only thing that ever
  * decided whether the tree is usable, and it does not care how the tree got
- * there -- so a tree that already passes it needs no `npm install`, and one
+ * there -- so a tree that already passes it needs no `bun install`, and one
  * that does not gets the full install exactly as before. Anything other than a
  * clean pass falls through: a missing package, a drifted version, an
  * unreadable manifest. The check is fail-closed by construction, because
@@ -122,7 +122,7 @@ const provision = (dialect, { force = false } = {}) => {
     join(root, "package.json"),
     `${JSON.stringify({ name: `solid-checker-tsc-oracle-${dialect}`, private: true, version: "0.0.0" }, null, 2)}\n`,
   );
-  execFileSync("npm", ["install", "--no-audit", "--no-fund", "--save-exact", ...spec.install], {
+  execFileSync("bun", ["install", "--ignore-scripts", "--no-progress", ...spec.install], {
     cwd: root,
     stdio: "inherit",
   });
@@ -332,9 +332,9 @@ const usage = () => {
   console.error(
     [
       "usage:",
-      "  node scripts/tsc-oracle.mjs provision [--dialect v1|v2|all] [--force]",
-      "  node scripts/tsc-oracle.mjs check --dialect v1|v2 (--file <path>... | --code <snippet>) [--json]",
-      "  node scripts/tsc-oracle.mjs versions [--json]",
+      "  bun scripts/tsc-oracle.mjs provision [--dialect v1|v2|all] [--force]",
+      "  bun scripts/tsc-oracle.mjs check --dialect v1|v2 (--file <path>... | --code <snippet>) [--json]",
+      "  bun scripts/tsc-oracle.mjs versions [--json]",
     ].join("\n"),
   );
   process.exit(2);

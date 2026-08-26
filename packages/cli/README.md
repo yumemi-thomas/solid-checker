@@ -7,7 +7,7 @@ for supported platforms.
 Install it as a development dependency:
 
 ```sh
-npm install --save-dev solid-checker
+bun add --dev solid-checker
 ```
 
 Then run `solid-checker --certify`.
@@ -141,7 +141,7 @@ import { checkSync } from "solid-checker";
 
 Supported targets are Linux (x64 and arm64), macOS (arm64), and
 Windows (x64). macOS on Intel is not published; build from a checkout with
-`make build-rust` to run there. npm installs only the matching
+`make build-rust` to run there. Bun installs only the matching
 `@solid-checker/binding-<target>` optional dependency; the portable package
 contains the launchers. The launcher forwards arguments, stdio, signals, and
 exit status. While running from this monorepo, it builds missing development

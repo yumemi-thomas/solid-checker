@@ -170,13 +170,71 @@ fn effective_call_return(
     context: &EffectiveReturnContext<'_>,
     depth: usize,
 ) -> Option<ContractReturn> {
-    if returned.kind != "argument" {
+    if !matches!(returned.kind.as_str(), "argument" | "callback-result") {
         return Some(returned.clone());
     }
     if depth == 0 {
         return None;
     }
     let argument = call.arguments.get(returned.parameter?)?;
+    if returned.kind == "callback-result" {
+        let function_span = if context
+            .file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == argument.span)
+        {
+            argument.span
+        } else {
+            let symbol = context
+                .entities
+                .at(context.file.path.as_str(), argument.span)?;
+            context.file.ast.bindings.iter().find_map(|binding| {
+                binding
+                    .names
+                    .iter()
+                    .any(|name| {
+                        context.entities.at(context.file.path.as_str(), name.span) == Some(symbol)
+                    })
+                    .then_some(binding.initializer)
+                    .flatten()
+            })?
+        };
+        let function = context
+            .file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == function_span)?;
+        let returns =
+            function
+                .expression_return
+                .iter()
+                .chain(context.file.ast.returns.iter().filter(|candidate| {
+                    containing_ast_function(&context.file.ast, candidate.span)
+                        .is_some_and(|owner| owner.span == function.span)
+                }));
+        let mut resolved = None::<ContractReturn>;
+        for returned_value in returns {
+            let value = returned_value.argument?;
+            let inner = context.ast_index.call_by_span(value).or_else(|| {
+                context
+                    .file
+                    .ast
+                    .calls
+                    .iter()
+                    .filter(|candidate| value.contains(candidate.span))
+                    .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+            })?;
+            let candidate = effective_inner_call_return(inner, context, depth - 1)?;
+            if resolved.as_ref().is_some_and(|prior| prior != &candidate) {
+                return None;
+            }
+            resolved = Some(candidate);
+        }
+        return resolved;
+    }
     let inner = context.ast_index.call_by_span(argument.span).or_else(|| {
         context
             .file
@@ -186,6 +244,14 @@ fn effective_call_return(
             .filter(|candidate| argument.span.contains(candidate.span))
             .max_by_key(|candidate| candidate.span.end - candidate.span.start)
     })?;
+    effective_inner_call_return(inner, context, depth - 1)
+}
+
+fn effective_inner_call_return(
+    inner: &solid_facts::ast::CallFact,
+    context: &EffectiveReturnContext<'_>,
+    depth: usize,
+) -> Option<ContractReturn> {
     if let Some(contracted) = context
         .entities
         .at(context.file.path.as_str(), inner.callee)
@@ -193,7 +259,7 @@ fn effective_call_return(
         .and_then(|contracted| contracted.summary.returns.known())
         .and_then(Option::as_ref)
     {
-        return effective_call_return(contracted, inner, context, depth - 1);
+        return effective_call_return(contracted, inner, context, depth);
     }
     let primitive = primitive_name(
         context.file.path.as_str(),
@@ -240,6 +306,57 @@ fn effective_call_return(
             label: "wrapped reactive value".into(),
             ..ContractReturn::default()
         })
+}
+
+/// Resolve a call through one exact local binding whose initializer is a
+/// contracted callback-result function factory. The relation's parameter is
+/// scoped to the outer contracted call, not to the returned function's own
+/// arguments. Aliases, assignments, cross-file values, and unresolved
+/// callbacks deliberately yield no fact.
+fn effective_returned_callable_call(
+    call: &solid_facts::ast::CallFact,
+    context: &EffectiveReturnContext<'_>,
+    depth: usize,
+) -> Option<(ContractReturn, String, Location)> {
+    if depth == 0 {
+        return None;
+    }
+    let callee = context
+        .entities
+        .at(context.file.path.as_str(), call.callee)?;
+    let initializer = context.file.ast.bindings.iter().find_map(|binding| {
+        binding
+            .names
+            .iter()
+            .any(|name| context.entities.at(context.file.path.as_str(), name.span) == Some(callee))
+            .then_some(binding.call_initializer)
+            .flatten()
+    })?;
+    let factory_call = context.ast_index.call_by_span(initializer)?;
+    let contracted = context
+        .entities
+        .at(context.file.path.as_str(), factory_call.callee)
+        .and_then(|symbol| context.resolved_contracts.by_symbol.get(symbol))?;
+    let returned = contracted
+        .summary
+        .returns
+        .known()
+        .and_then(Option::as_ref)?;
+    if returned.kind != "callback-result-function" {
+        return None;
+    }
+    let relation = ContractReturn {
+        kind: "callback-result".into(),
+        parameter: returned.parameter,
+        ..ContractReturn::default()
+    };
+    effective_call_return(&relation, factory_call, context, depth - 1).map(|returned| {
+        (
+            returned,
+            contracted.local_name.clone(),
+            contracted.contract_location.clone(),
+        )
+    })
 }
 
 /// The statically-proven rc.0 async/hydration options declared on one
@@ -651,6 +768,31 @@ pub(crate) fn discover_file_sources(
                 }
                 _ => {}
             }
+            continue;
+        }
+        let context = EffectiveReturnContext {
+            file,
+            ast_index,
+            entities,
+            symbol_names,
+            resolved_contracts,
+            bundled_returns,
+            dialect: lookup.dialect,
+        };
+        if let Some((returned, export_name, contract_location)) =
+            effective_returned_callable_call(call, &context, 16)
+            && matches!(returned.kind.as_str(), "accessor" | "store-path")
+            && let Some(name) = binding.names.first()
+            && let Some(symbol) = entities.at(file.path.as_str(), name.span)
+        {
+            push_contracted_return_source(
+                &mut result,
+                symbol,
+                symbol_id(file.source_text(name.span).unwrap_or_default()),
+                &returned,
+                &export_name,
+                &contract_location,
+            );
             continue;
         }
         let primitive = primitive_name(

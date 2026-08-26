@@ -1264,9 +1264,13 @@ mod tests {
     ///   returned adapter's invocation site decides the role (see
     ///   `callback_executions`' comment) — not a package fact the review
     ///   contract should record as `inline`.
+    /// - 1.x `createResource`: parameter 0 is a tracked source in the sourced
+    ///   overload and the deferred fetcher in the unsourced overload. The
+    ///   dialect resolves that overload at the call site; schema v1 has only
+    ///   one flat callback map for the export and records `unknown`.
     fn contract_schema_exemptions(version: Version, name: &str) -> bool {
         match version {
-            Version::V1 => name == "on",
+            Version::V1 => matches!(name, "createResource" | "on"),
             Version::V2 => matches!(
                 name,
                 "createSignal"
@@ -2108,8 +2112,10 @@ mod tests {
         for (primitive, argument, execution) in [
             (Primitive::Action, 0, Execution::Deferred),
             (Primitive::Flush, 0, Execution::Inline),
-            (Primitive::CreateErrorBoundary, 1, Execution::Deferred),
-            (Primitive::CreateLoadingBoundary, 1, Execution::Deferred),
+            (Primitive::CreateErrorBoundary, 1, Execution::Tracked),
+            (Primitive::CreateLoadingBoundary, 1, Execution::Tracked),
+            (Primitive::RepeatMap, 0, Execution::Tracked),
+            (Primitive::RepeatMap, 1, Execution::Inline),
         ] {
             assert_eq!(
                 two.callback_execution_at(primitive, argument, 2),

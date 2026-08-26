@@ -11,7 +11,7 @@ use std::{
     time::Instant,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
@@ -63,6 +63,10 @@ struct Request {
     validate_contract_paths: Vec<String>,
     #[serde(default)]
     emit_contract: String,
+    /// Private, non-contract input recipes for the runtime probe. This is a
+    /// sidecar because constructing an argument is not evidence of behavior.
+    #[serde(default)]
+    emit_probe_plan: String,
     /// Where to write the analyzing program's own module inventory, as JSON.
     ///
     /// The generator's runtime-module closure is a syntax walk in *its*
@@ -76,6 +80,11 @@ struct Request {
     /// consumer for the answer.
     #[serde(default)]
     emit_module_inventory: String,
+    /// Generator-owned JSON containing exact static
+    /// importer/specifier/runtime-target triples for this package analysis.
+    /// Empty outside package-contract generation.
+    #[serde(default)]
+    runtime_module_resolutions: String,
     #[serde(default)]
     package_name: String,
     #[serde(default)]
@@ -141,6 +150,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // nothing to attest, so it is refused rather than silently written.
     if !request.emit_module_inventory.is_empty() && request.emit_contract.is_empty() {
         return Err("--emit-module-inventory requires --emit-contract".into());
+    }
+    if !request.emit_probe_plan.is_empty() && request.emit_contract.is_empty() {
+        return Err("--emit-probe-plan requires --emit-contract".into());
+    }
+    if !request.runtime_module_resolutions.is_empty() && request.emit_contract.is_empty() {
+        return Err("--runtime-module-resolutions requires --emit-contract".into());
+    }
+    if !request.runtime_module_resolutions.is_empty() && request.contract_package_root.is_empty() {
+        return Err("--runtime-module-resolutions requires --contract-package-root".into());
     }
     let dialect = match request.dialect.as_deref() {
         Some(id) => dialect::by_id(id).ok_or_else(|| {
@@ -214,7 +232,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         rules: &request.enable_rules,
         runtime: request.runtime.clone(),
     };
-    let semantic_demand_options = if diagnostics {
+    let mut semantic_demand_options = if diagnostics {
         semantic_demand_options_for_enablement(
             dialect,
             Path::new(&request.project_id),
@@ -223,6 +241,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     } else {
         SemanticDemandOptions::NONE
     };
+    semantic_demand_options.contract_probe_parameters = !request.emit_contract.is_empty();
     let (mut facts, native_timings) = {
         let (facts, timings) = build_project_native_measured_with_demands(
             dialect,
@@ -243,6 +262,14 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             .join("tsconfig.json")
             .to_string_lossy()
             .into_owned();
+    }
+    if !request.runtime_module_resolutions.is_empty() {
+        facts.runtime_symbol_redirects = runtime_symbol_redirects(
+            &facts,
+            &mut typescript,
+            Path::new(&request.contract_package_root),
+            Path::new(&request.runtime_module_resolutions),
+        )?;
     }
     let facts_complete_ns = started.elapsed().as_nanos();
     // Contracts are bound to the installed package an import resolves to, not
@@ -350,6 +377,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         )?;
         if !request.emit_contract.is_empty() {
             emit_package_contract(dialect, &request, &analysis.program, &facts)?;
+            if !request.emit_probe_plan.is_empty() {
+                emit_probe_plan(&request, &facts)?;
+            }
             // After the contract, not before: a run that cannot emit a
             // contract has no closure record to attest, and writing the
             // inventory first would leave an attestation of a generation that
@@ -436,7 +466,9 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut check_contracts = false;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
+    let mut emit_probe_plan = String::new();
     let mut emit_module_inventory = String::new();
+    let mut runtime_module_resolutions = String::new();
     let mut package_name = String::new();
     let mut package_version = String::new();
     let mut declaration_artifact = String::new();
@@ -489,8 +521,16 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             emit_contract = value.into();
             continue;
         }
+        if let Some(value) = argument.strip_prefix("--emit-probe-plan=") {
+            emit_probe_plan = value.into();
+            continue;
+        }
         if let Some(value) = argument.strip_prefix("--emit-module-inventory=") {
             emit_module_inventory = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-module-resolutions=") {
+            runtime_module_resolutions = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--package-name=") {
@@ -574,8 +614,16 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--emit-contract" => {
                 emit_contract = args.next().ok_or("--emit-contract needs a path")?
             }
+            "--emit-probe-plan" => {
+                emit_probe_plan = args.next().ok_or("--emit-probe-plan needs a path")?
+            }
             "--emit-module-inventory" => {
                 emit_module_inventory = args.next().ok_or("--emit-module-inventory needs a path")?
+            }
+            "--runtime-module-resolutions" => {
+                runtime_module_resolutions = args
+                    .next()
+                    .ok_or("--runtime-module-resolutions needs a path")?
             }
             "--package-name" => package_name = args.next().ok_or("--package-name needs a value")?,
             "--package-version" => {
@@ -663,7 +711,9 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         check_contracts,
         validate_contract_paths,
         emit_contract,
+        emit_probe_plan,
         emit_module_inventory,
+        runtime_module_resolutions,
         package_name,
         package_version,
         declaration_artifact,
@@ -757,6 +807,9 @@ fn print_help() {
                                         beside the emitted contract: the files it included\n\
                                         and where each package-local specifier resolved.\n\
                                         Requires --emit-contract\n\
+           --runtime-module-resolutions <PATH>\n\
+                                        Exact package-local ESM resolution map used to seed\n\
+                                        contract analysis. Requires --emit-contract\n\
            --package-name <NAME>        Package name used by --emit-contract\n\
            --package-version <VERSION>  Exact package version used by --emit-contract\n\
            --declaration-artifact <PATH> Hash a declaration artifact into the contract\n\
@@ -1077,6 +1130,20 @@ fn span_of(location: &typefacts::Location) -> solid_facts::core::Span {
     )
 }
 
+/// Canonical TypeScript symbol after applying the package generator's exact
+/// declaration-to-runtime redirects.
+fn runtime_canonical_symbol(index: UnresolvedExportIndex<'_>, symbol: &str) -> String {
+    let mut current = canonical_symbol(symbol, index.aliases);
+    let mut seen = HashSet::new();
+    while seen.insert(current.clone()) {
+        let Some(next) = index.facts.runtime_symbol_redirects.get(&current) else {
+            break;
+        };
+        current = canonical_symbol(next, index.aliases);
+    }
+    current
+}
+
 /// Walks the enclosing-function chain outward from `location` and stops at the
 /// first function that is an export.
 ///
@@ -1212,12 +1279,12 @@ fn module_surface_is_unaccounted(
         return false;
     };
     let identity = declaration.runtime_identity.as_ref();
-    let symbol = canonical_symbol(&declaration.symbol, index.aliases);
+    let symbol = runtime_canonical_symbol(index, &declaration.symbol);
     let referenced_elsewhere = index.facts.typescript.entities().any(|entity| {
         entity.location.path.as_ref() != file.path.as_str()
             && ((!identity.is_empty() && entity.runtime_identity.as_ref() == identity)
                 || (!symbol.is_empty()
-                    && canonical_symbol(&entity.symbol, index.aliases) == symbol))
+                    && runtime_canonical_symbol(index, &entity.symbol) == symbol))
     });
     !referenced_elsewhere
 }
@@ -1244,13 +1311,13 @@ fn attribute_unresolved_obligation(
             && entity.location.start_byte == location.start_byte
             && entity.location.end_byte == location.end_byte
     }) {
-        let seed_symbol = canonical_symbol(&seed.symbol, index.aliases);
+        let seed_symbol = runtime_canonical_symbol(index, &seed.symbol);
         let seed_identity = seed.runtime_identity.as_ref();
         let mut widened = Vec::new();
         for reference in index.facts.typescript.entities().filter(|entity| {
             (!seed_identity.is_empty() && entity.runtime_identity.as_ref() == seed_identity)
                 || (!seed_symbol.is_empty()
-                    && canonical_symbol(&entity.symbol, index.aliases) == seed_symbol)
+                    && runtime_canonical_symbol(index, &entity.symbol) == seed_symbol)
         }) {
             let Some((_, names)) =
                 export_names_along_enclosing_chain(index, &reference.location, exports)
@@ -1440,6 +1507,139 @@ struct InventoryModule<'a> {
     path: &'a str,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     declaration_file: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RuntimeModuleResolutionDocument {
+    schema_version: u64,
+    resolutions: Vec<RuntimeModuleResolution>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RuntimeModuleResolution {
+    importer: String,
+    specifier: String,
+    target: String,
+}
+
+/// Joins declaration-bound import symbols to the exact runtime implementation
+/// selected for the same static ESM edge.
+///
+/// The generator supplies paths only from its resolver's successful `file`
+/// answer. This side still proves both symbol ends: the import binding must be
+/// a runtime-referenced named/default binding in the exact importer, and the
+/// exact target module must export that same name through compiler entities.
+/// A missing join adds nothing; two targets for one declaration root remove the
+/// redirect entirely. There is no filename pairing or name-only fallback.
+fn runtime_symbol_redirects(
+    facts: &solid_facts::ProjectFacts,
+    typescript: &mut TypeFactsSession,
+    package_root: &Path,
+    path: &Path,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    let package_root = package_root.canonicalize()?;
+    let document: RuntimeModuleResolutionDocument = serde_json::from_slice(&fs::read(path)?)?;
+    if document.schema_version != 1 {
+        return Err(format!(
+            "unsupported runtime module resolution schemaVersion {}",
+            document.schema_version
+        )
+        .into());
+    }
+    let import_paths = document
+        .resolutions
+        .iter()
+        .map(|resolution| resolution.importer.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let graph = typescript
+        .module_graph(&typefacts::ModuleGraphDemand::default().import_paths(import_paths))?;
+    if !graph.is_complete() {
+        return Ok(HashMap::new());
+    }
+    let aliases = canonical_symbol_aliases(facts);
+    let entity_at = |file: &solid_facts::FileFacts, span: solid_facts::core::Span| {
+        facts.typescript.entities().find(|entity| {
+            entity.location.path.as_ref() == file.path.as_str()
+                && entity.location.start_byte == u64::from(span.start)
+                && entity.location.end_byte == u64::from(span.end)
+        })
+    };
+    let mut redirects = HashMap::<String, String>::new();
+    let mut ambiguous = HashSet::new();
+    for resolution in document.resolutions {
+        let importer_path = Path::new(&resolution.importer).canonicalize()?;
+        let target_path = Path::new(&resolution.target).canonicalize()?;
+        if !importer_path.starts_with(&package_root) || !target_path.starts_with(&package_root) {
+            continue;
+        }
+        let declaration_redirect = graph.imports.iter().any(|import| {
+            import.text.as_ref() == resolution.specifier
+                && same_canonical_path(Path::new(import.specifier.path.as_ref()), &importer_path)
+                && import.included_path.is_empty()
+                && (import.resolved_path.ends_with(".d.ts")
+                    || import.resolved_path.ends_with(".d.mts")
+                    || import.resolved_path.ends_with(".d.cts"))
+        });
+        if !declaration_redirect {
+            continue;
+        }
+        let Some(importer) = facts
+            .files
+            .iter()
+            .find(|file| same_canonical_path(Path::new(file.path.as_str()), &importer_path))
+        else {
+            continue;
+        };
+        let imports =
+            importer.ast.imports.iter().filter(|import| {
+                !import.type_only && import.module.as_str() == resolution.specifier
+            });
+        for import in imports {
+            let bindings = import.bindings.iter().filter(|binding| {
+                binding.runtime_referenced
+                    && !binding.type_only
+                    && matches!(
+                        binding.kind,
+                        solid_facts::ast::ImportKind::Named | solid_facts::ast::ImportKind::Default
+                    )
+            });
+            for binding in bindings {
+                let exported = match binding.kind {
+                    solid_facts::ast::ImportKind::Named => binding.imported.as_deref(),
+                    solid_facts::ast::ImportKind::Default => Some("default"),
+                    _ => None,
+                };
+                let Some(exported) = exported else {
+                    continue;
+                };
+                let Some(source) = entity_at(importer, binding.local.span) else {
+                    continue;
+                };
+                let Some(target) = entry_export_entity(facts, &target_path, exported) else {
+                    continue;
+                };
+                let source = canonical_symbol(&source.symbol, &aliases);
+                let target = canonical_symbol(&target.symbol, &aliases);
+                if source.is_empty() || target.is_empty() || source == target {
+                    continue;
+                }
+                if redirects
+                    .get(&source)
+                    .is_some_and(|existing| existing != &target)
+                {
+                    redirects.remove(&source);
+                    ambiguous.insert(source);
+                } else if !ambiguous.contains(&source) {
+                    redirects.insert(source, target);
+                }
+            }
+        }
+    }
+    Ok(redirects)
 }
 
 /// Writes the analyzing program's own module inventory beside the contract.
@@ -1759,6 +1959,130 @@ fn emit_package_contract(
     Ok(())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbePlanFragment {
+    schema_version: u32,
+    source: &'static str,
+    exports: BTreeMap<String, BTreeMap<usize, String>>,
+}
+
+/// Writes probe-only argument recipes proven by Type Facts.
+///
+/// This file is deliberately not part of the package-contract schema. A valid
+/// input helps a probe reach package behavior; it is never evidence that the
+/// behavior is correct. Recipes are emitted only for literal inhabitants the
+/// compiler's closed value-domain facts name directly. Everything else stays
+/// absent and the driver keeps its existing fail-closed synthesis.
+fn emit_probe_plan(
+    request: &Request,
+    facts: &solid_facts::ProjectFacts,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
+    let contract = read_package_contract(Path::new(&request.emit_contract))?;
+    let names = contract
+        .entrypoints
+        .get(".")
+        .map(|entry| entry.exports.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let aliases = canonical_symbol_aliases(facts);
+    let mut exports = BTreeMap::new();
+    for export_name in names {
+        let Some(export_entity) = entry_export_entity(facts, &entry_file, &export_name) else {
+            continue;
+        };
+        let export_symbol = canonical_symbol(&export_entity.symbol, &aliases);
+        if export_symbol.is_empty() {
+            continue;
+        }
+        let mut matches = Vec::new();
+        for file in &facts.files {
+            for function in &file.ast.functions {
+                let Some(name) = &function.name else {
+                    continue;
+                };
+                let location = typefacts::Location {
+                    path: file.path.to_string().into(),
+                    start_byte: u64::from(name.span.start),
+                    end_byte: u64::from(name.span.end),
+                };
+                let Some(entity) = facts.typescript.entities().find(|entity| {
+                    entity.location == location
+                        && canonical_symbol(&entity.symbol, &aliases) == export_symbol
+                }) else {
+                    continue;
+                };
+                let _ = entity;
+                matches.push((file, function));
+            }
+        }
+        // Ambiguous identity is no construction proof.
+        let [(file, function)] = matches.as_slice() else {
+            continue;
+        };
+        let mut parameters = BTreeMap::new();
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            let [name] = parameter.names.as_slice() else {
+                continue;
+            };
+            let location = typefacts::Location {
+                path: file.path.to_string().into(),
+                start_byte: u64::from(name.span.start),
+                end_byte: u64::from(name.span.end),
+            };
+            let Some(entity) = facts
+                .typescript
+                .entities()
+                .find(|entity| entity.location == location)
+            else {
+                continue;
+            };
+            let primitive = entity.primitive_value_domain;
+            let recipe = if primitive
+                .present()
+                .is_some_and(|domain| domain.may_be_null())
+            {
+                Some("null")
+            } else if primitive
+                .present()
+                .is_some_and(|domain| domain.may_be_undefined())
+            {
+                Some("undefined")
+            } else if entity.array_shape == Some(typefacts::ArrayShape::Array)
+                && entity.tuple_shape.is_none()
+            {
+                Some("empty-array")
+            } else {
+                entity.library_types.as_deref().and_then(|types| {
+                    if types.iter().any(|name| name.as_ref() == "Map") {
+                        Some("empty-map")
+                    } else if types.iter().any(|name| name.as_ref() == "Set") {
+                        Some("empty-set")
+                    } else {
+                        None
+                    }
+                })
+            };
+            if let Some(recipe) = recipe {
+                parameters.insert(index, recipe.to_owned());
+            }
+        }
+        if !parameters.is_empty() {
+            exports.insert(export_name, parameters);
+        }
+    }
+    let fragment = ProbePlanFragment {
+        schema_version: 1,
+        source: "typescript-value-domain",
+        exports,
+    };
+    fs::write(
+        &request.emit_probe_plan,
+        format!("{}\n", serde_json::to_string_pretty(&fragment)?),
+    )?;
+    Ok(())
+}
+
 fn contract_exports_for_entry_file(
     facts: &solid_facts::ProjectFacts,
     program: &solid_reactive_ir::Program,
@@ -2067,7 +2391,7 @@ fn promote_entry_callable(
     summary: solid_reactive_ir::ContractExport,
     trusted_kind: bool,
 ) -> Result<solid_reactive_ir::ContractExport, Box<dyn std::error::Error>> {
-    if summary.kind != "value" {
+    if trusted_kind && summary.kind != "value" {
         return Ok(summary);
     }
     let Some(entity) = entry_export_entity(facts, entry_file, name) else {
@@ -2088,8 +2412,21 @@ fn promote_entry_callable(
         // unknown for both: a summary still saying `value` here is one whose
         // body was never analyzed, so its silence about callbacks is not a
         // claim either. See `solid_reactive_ir::raised_function_export`.
-        solid_reactive_ir::ExportKindProof::Callable => {
+        solid_reactive_ir::ExportKindProof::Callable if summary.kind == "value" => {
             Ok(solid_reactive_ir::raised_function_export(summary))
+        }
+        solid_reactive_ir::ExportKindProof::Callable => Ok(summary),
+        // The exact exported specifier has closed negative callability and
+        // constructability facts. That proof outranks an inferred function
+        // summary reached through an initializer expression: a call such as a
+        // bundler's `__exportAll({...})` has the callee's symbol inside it, but
+        // exports the call result. Keeping the callee summary here certified a
+        // namespace object as callable (`@kobalte/core`'s `./menubar:t`).
+        solid_reactive_ir::ExportKindProof::NonCallable if summary.kind == "function" => {
+            Ok(solid_reactive_ir::ContractExport {
+                kind: "value".into(),
+                ..solid_reactive_ir::ContractExport::default()
+            })
         }
         solid_reactive_ir::ExportKindProof::Unresolvable(callability, constructability)
             if !trusted_kind =>

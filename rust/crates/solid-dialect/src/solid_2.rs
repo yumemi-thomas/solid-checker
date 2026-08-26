@@ -540,9 +540,10 @@ impl Dialect for Solid2 {
                 &[(0, Execution::Tracked), (1, Execution::Deferred)]
             }
             Primitive::CreateErrorBoundary | Primitive::CreateLoadingBoundary => {
-                &[(0, Execution::Tracked), (1, Execution::Deferred)]
+                &[(0, Execution::Tracked), (1, Execution::Tracked)]
             }
-            Primitive::MapArray | Primitive::RepeatMap => &[(1, Execution::Tracked)],
+            Primitive::MapArray => &[(1, Execution::Tracked)],
+            Primitive::RepeatMap => &[(0, Execution::Tracked), (1, Execution::Inline)],
             Primitive::CreateReaction
             | Primitive::OnSettled
             | Primitive::Resolve

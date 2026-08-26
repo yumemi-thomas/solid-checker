@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import {
   cpSync,
@@ -38,7 +38,7 @@ cpSync(join(root, "packages", "cli"), output, {
   recursive: true,
   filter(source) {
     const name = basename(source);
-    return !["node_modules", "native", "test", "package-lock.json"].includes(name);
+    return !["node_modules", "native", "test", "package-lock.json", "bun.lock"].includes(name);
   }
 });
 if (version) {

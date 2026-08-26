@@ -15,6 +15,7 @@ import {
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { openGateCache } from "./lib/gate-cache.mjs";
 import { oracleCompilerOptions, oracleProject, runOracle } from "./tsc-oracle.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -87,6 +88,21 @@ const locate = (variable, ...candidates) => {
 };
 const CHECKER = locate("SOLID_CHECKER_BIN", join(ROOT, "rust/target/debug/solid-checker-rust"));
 const TYPEFACTS = locate("SOLID_TYPEFACTS_BIN", join(ROOT, "bin/solid-typefacts"));
+const ownershipCache = openGateCache({
+  gate: "ownership",
+  scriptPath: fileURLToPath(import.meta.url),
+  binaries: [CHECKER, TYPEFACTS, join(ROOT, "bin/solid-typefacts.buildinfo")],
+  trees: [oracleProject("v1").root, oracleProject("v2").root],
+});
+const ownershipOracleCache = openGateCache({
+  gate: "ownership-safe-fix-oracle",
+  scriptPath: fileURLToPath(import.meta.url),
+  trees: [
+    oracleProject("v1").root,
+    oracleProject("v2").root,
+    join(ROOT, "packages/cli/node_modules/typescript"),
+  ],
+});
 
 const manifest = JSON.parse(readFileSync(CASES_PATH, "utf8"));
 const ledger = JSON.parse(readFileSync(LEDGER_PATH, "utf8"));
@@ -224,51 +240,67 @@ for (const { config, members } of groups.values()) {
   const short = dialectShort(config.dialect);
   const { root } = oracleProject(short);
   const directory = join(WORK_ROOT, `group-${groupIndex++}`);
-  mkdirSync(join(directory, "cases"), { recursive: true });
-  symlinkSync(join(root, "node_modules"), join(directory, "node_modules"), "dir");
-  const fileNames = [];
-  const oracleInputs = [];
-  for (const member of members) {
-    const source = `${member.testCase.source.prelude}${member.testCase.source.text}`;
-    writeFileSync(join(directory, member.path), source);
-    fileNames.push(member.path);
-    oracleInputs.push({ name: member.path, code: source });
-  }
-  writeFileSync(join(directory, "tsconfig.json"), `${JSON.stringify({ compilerOptions: oracleCompilerOptions(short, true), files: fileNames }, null, 2)}\n`);
-  if (Object.keys(config.ruleOptions).length) {
-    mkdirSync(join(directory, ".solid-checker"), { recursive: true });
-    writeFileSync(join(directory, ".solid-checker/rule-options.json"), `${JSON.stringify({ schemaVersion: 1, rules: config.ruleOptions }, null, 2)}\n`);
-  }
-  const args = ["--format", "json", "--project", join(directory, "tsconfig.json")];
-  for (const preset of config.presets) args.push("--preset", preset);
-  for (const rule of config.enableRules) args.push("--enable-rule", rule);
-  const output = execFileSync(CHECKER, args, { encoding: "utf8", maxBuffer: 1 << 28, env: { ...process.env, SOLID_TYPEFACTS_BIN: TYPEFACTS } });
-  for (const finding of JSON.parse(output).findings ?? []) {
-    const name = finding.primaryLocation.path.split(/[\\/]/).slice(-2).join("/");
-    const member = members.find((candidate) => candidate.path === name);
-    if (!member) continue;
-    if (!checkerByCase.has(member.testCase.id)) checkerByCase.set(member.testCase.id, []);
-    checkerByCase.get(member.testCase.id).push(finding);
-  }
-  const oracle = runOracle(short, oracleInputs);
-  for (const member of members) {
-    const diagnostics = [];
-    const sourceName = member.path.split("/").at(-1);
-    for (const pass of ["strict", "loose"]) {
-      for (const diagnostic of oracle.passes[pass]) {
-        if (diagnostic.category !== "error" || diagnostic.file !== sourceName) continue;
-        diagnostics.push({
-          pass,
-          code: `TS${diagnostic.code}`,
-          start: diagnostic.startByte,
-          end: diagnostic.endByte,
-          subjectStart: diagnostic.subjectStartByte,
-          subjectEnd: diagnostic.subjectEndByte,
-        });
-      }
+  const unit = JSON.stringify({
+    config,
+    members: members.map(member => ({
+      id: member.testCase.id,
+      path: member.path,
+      source: `${member.testCase.source.prelude}${member.testCase.source.text}`,
+    })),
+  });
+  const cached = await ownershipCache.run([unit], () => {
+    mkdirSync(join(directory, "cases"), { recursive: true });
+    symlinkSync(join(root, "node_modules"), join(directory, "node_modules"), "dir");
+    const fileNames = [];
+    const oracleInputs = [];
+    for (const member of members) {
+      const source = `${member.testCase.source.prelude}${member.testCase.source.text}`;
+      writeFileSync(join(directory, member.path), source);
+      fileNames.push(member.path);
+      oracleInputs.push({ name: member.path, code: source });
     }
-    oracleByCase.set(member.testCase.id, diagnostics);
+    writeFileSync(join(directory, "tsconfig.json"), `${JSON.stringify({ compilerOptions: oracleCompilerOptions(short, true), files: fileNames }, null, 2)}\n`);
+    if (Object.keys(config.ruleOptions).length) {
+      mkdirSync(join(directory, ".solid-checker"), { recursive: true });
+      writeFileSync(join(directory, ".solid-checker/rule-options.json"), `${JSON.stringify({ schemaVersion: 1, rules: config.ruleOptions }, null, 2)}\n`);
+    }
+    const args = ["--format", "json", "--project", join(directory, "tsconfig.json")];
+    for (const preset of config.presets) args.push("--preset", preset);
+    for (const rule of config.enableRules) args.push("--enable-rule", rule);
+    const output = execFileSync(CHECKER, args, { encoding: "utf8", maxBuffer: 1 << 28, env: { ...process.env, SOLID_TYPEFACTS_BIN: TYPEFACTS } });
+    const checkerRows = [];
+    for (const finding of JSON.parse(output).findings ?? []) {
+      const name = finding.primaryLocation.path.split(/[\\/]/).slice(-2).join("/");
+      const member = members.find((candidate) => candidate.path === name);
+      if (member) checkerRows.push([member.testCase.id, finding]);
+    }
+    const oracle = runOracle(short, oracleInputs);
+    const oracleRows = [];
+    for (const member of members) {
+      const diagnostics = [];
+      const sourceName = member.path.split("/").at(-1);
+      for (const pass of ["strict", "loose"]) {
+        for (const diagnostic of oracle.passes[pass]) {
+          if (diagnostic.category !== "error" || diagnostic.file !== sourceName) continue;
+          diagnostics.push({
+            pass,
+            code: `TS${diagnostic.code}`,
+            start: diagnostic.startByte,
+            end: diagnostic.endByte,
+            subjectStart: diagnostic.subjectStartByte,
+            subjectEnd: diagnostic.subjectEndByte,
+          });
+        }
+      }
+      oracleRows.push([member.testCase.id, diagnostics]);
+    }
+    return { checkerRows, oracleRows };
+  });
+  for (const [id, finding] of cached.value.checkerRows) {
+    if (!checkerByCase.has(id)) checkerByCase.set(id, []);
+    checkerByCase.get(id).push(finding);
   }
+  for (const [id, diagnostics] of cached.value.oracleRows) oracleByCase.set(id, diagnostics);
 }
 
 const results = [];
@@ -338,7 +370,10 @@ for (const value of resolved.values()) {
 
 for (const [short, inputs] of safeFixInputs) {
   if (!inputs.length) continue;
-  const oracle = runOracle(short, inputs);
+  const oracle = (await ownershipOracleCache.run(
+    [JSON.stringify({ short, inputs: inputs.map(({ name, code }) => ({ name, code })) })],
+    () => runOracle(short, inputs),
+  )).value;
   for (const pass of ["strict", "loose"]) {
     for (const input of inputs) {
       const observed = new Map();
@@ -374,4 +409,4 @@ if (failures.length) {
   console.error(`ownership gate: ${failures.length} problem(s)\n${failures.map((item) => `  - ${item}`).join("\n")}`);
   process.exit(1);
 }
-console.log(`ownership gate: ${results.length} cases passed; ledger ${ledger.cases.length} rows (${ledger.cases.filter((row) => row.disposition === "pending").length} pending)`);
+console.log(`ownership gate: ${results.length} cases passed; ledger ${ledger.cases.length} rows (${ledger.cases.filter((row) => row.disposition === "pending").length} pending); ${ownershipCache.summary()}; safe-fix ${ownershipOracleCache.summary()}`);

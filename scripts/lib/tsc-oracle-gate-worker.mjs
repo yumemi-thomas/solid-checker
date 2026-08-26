@@ -10,7 +10,7 @@
 import process from "node:process";
 import { parentPort, workerData } from "node:worker_threads";
 
-import { runCase } from "./tsc-oracle-case.mjs";
+import { runCheckerCase, runOracleCase } from "./tsc-oracle-case.mjs";
 
 if (!parentPort) throw new Error("tsc-oracle-gate-worker.mjs must be run as a worker thread");
 
@@ -24,7 +24,9 @@ let current = null;
 parentPort.on("message", ({ id, payload }) => {
   current = id;
   try {
-    const value = runCase(payload.testCase, payload.index, workerData);
+    const value = payload.side === "typescript"
+      ? runOracleCase(payload.testCase, payload.index)
+      : runCheckerCase(payload.testCase, payload.index, workerData);
     current = null;
     parentPort.postMessage({ id, ok: true, value });
   } catch (error) {

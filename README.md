@@ -59,8 +59,8 @@ and ownership, async boundaries, directives, and API shapes. See the
 ## Quick start
 
 ```sh
-npm install --save-dev solid-checker
-npx solid-checker --project tsconfig.json
+bun add --dev solid-checker
+bunx --bun --no-install solid-checker --project tsconfig.json
 ```
 
 Diagnostics print as framed source excerpts with severity markers, evidence
@@ -68,10 +68,10 @@ labels, and a fix hint. In CI, add `--certify` to fail the build unless the
 project is fully certified:
 
 ```sh
-npx solid-checker --project tsconfig.json --certify
+bunx --bun --no-install solid-checker --project tsconfig.json --certify
 ```
 
-Linux (x64, arm64), macOS (arm64), and Windows (x64) are supported; npm
+Linux (x64, arm64), macOS (arm64), and Windows (x64) are supported; Bun
 downloads only the binary matching your platform.
 
 ## Solid compatibility

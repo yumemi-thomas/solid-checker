@@ -54,9 +54,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
+          bun-version: 1.4.0
       # This job builds the same debug workspace the CI engine job does, on
       # the same image and toolchain, so it restores that job's dependency
       # cache instead of compiling the dependency graph from nothing. CI's
@@ -69,9 +69,9 @@ jobs:
       - uses: ./.github/actions/typefacts
       - name: Build the debug checker binary
         run: cargo build --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
-      - run: npm ci --ignore-scripts --prefix packages/cli
+      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       - name: Run the ecosystem-benchmark unit tests
-        run: node --test scripts/ecosystem-benchmark/*.test.mjs
+        run: packages/cli/node_modules/.bin/vitest run --config packages/cli/vitest.config.mjs scripts/ecosystem-benchmark/*.test.mjs
       # SOLID_CHECKER_NATIVE_BIN points at the just-built debug binary, not
       # the checked-in bin/solid-checker-rust, so this measures the engine at
       # this commit rather than whatever a stale packaged binary happens to
@@ -82,7 +82,7 @@ jobs:
         env:
           SOLID_CHECKER_NATIVE_BIN: ${{ github.workspace }}/rust/target/debug/solid-checker-rust
           SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
-        run: node scripts/ecosystem-benchmark/run.mjs --sentinel
+        run: bun scripts/ecosystem-benchmark/run.mjs --sentinel
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -103,9 +103,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
+          bun-version: 1.4.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -114,7 +114,7 @@ jobs:
       - uses: ./.github/actions/typefacts
       - name: Build the release checker binary
         run: cargo build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
-      - run: npm ci --ignore-scripts --prefix packages/cli
+      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       # discover.mjs is the only network-enabled entry point in this module;
       # --check refuses to write and exits 1 when the checked-in manifest has
       # drifted from what the registry would produce today, so a stale
@@ -122,7 +122,7 @@ jobs:
       # packages the manifest no longer describes. This step needs network
       # access to npm's registry.
       - name: Check the discovered manifest for drift
-        run: node scripts/ecosystem-benchmark/discover.mjs --check
+        run: bun scripts/ecosystem-benchmark/discover.mjs --check
       # Per-probe installs against the live registry; the runner itself exits
       # 0 on package-level failures by design (a package failing analysis is
       # the thing being measured, not an infrastructure fault), so only a
@@ -146,7 +146,7 @@ jobs:
           # corpus analyzes every entrypoint; @tanstack/charts alone declares
           # 113. The default remains 300s so the debug sentinel preserves its
           # deliberately pinned timeout-class probe.
-          node scripts/ecosystem-benchmark/run.mjs --timeout 600 "${args[@]}"
+          bun scripts/ecosystem-benchmark/run.mjs --timeout 600 "${args[@]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

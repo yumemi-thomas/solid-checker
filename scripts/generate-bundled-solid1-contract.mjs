@@ -17,7 +17,7 @@
 //    the callback/return summaries. Exports present in the surface but absent
 //    from this map fall back to the plain "function" / "value" summary.
 //
-// Run from anywhere: node scripts/generate-bundled-solid1-contract.mjs
+// Run from anywhere: bun scripts/generate-bundled-solid1-contract.mjs
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -52,11 +52,19 @@ function canonicalSummary(entry) {
   if (entry.returns !== undefined) {
     summary.returns = { kind: entry.returns.kind, label: entry.returns.label };
   }
-  if (entry.callbacks !== undefined && entry.callbacks.length > 0) {
-    summary.callbacks = entry.callbacks.map(({ parameter, execution }) => ({
-      parameter,
-      execution,
-    }));
+  if (entry.callbacks !== undefined) {
+    if (Array.isArray(entry.callbacks)) {
+      if (entry.callbacks.length > 0) {
+        summary.callbacks = entry.callbacks.map(({ parameter, execution }) => ({
+          parameter,
+          execution,
+        }));
+      }
+    } else if (entry.callbacks?.status === "unknown") {
+      summary.callbacks = { status: "unknown" };
+    } else {
+      fail(`unsupported callbacks value ${JSON.stringify(entry.callbacks)}`);
+    }
   }
   return summary;
 }
@@ -229,7 +237,7 @@ if (process.argv.includes("--check")) {
   const current = readFileSync(outputPath, "utf8");
   if (current !== encoded) {
     fail(
-      `${outputPath} is stale relative to its inputs; re-run node scripts/generate-bundled-solid1-contract.mjs`,
+      `${outputPath} is stale relative to its inputs; re-run bun scripts/generate-bundled-solid1-contract.mjs`,
     );
   }
   console.log(`ok   ${outputPath} matches its inputs`);

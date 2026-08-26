@@ -25,9 +25,9 @@ fi
 
 git -C "$root" fetch origin next
 git -C "$root" checkout --detach "$revision"
-pnpm --dir "$root" install --frozen-lockfile
-pnpm --dir "$root" build
-node scripts/prepare-solid-primitives-corpus.mjs "$root"
+bun install --cwd "$root" --frozen-lockfile
+bun run --cwd "$root" build
+bun scripts/prepare-solid-primitives-corpus.mjs "$root"
 
 SOLID_CHECKER_BIN=$(pwd)/bin/solid-checker-rust \
   scripts/generate-solid-primitives-contracts.sh "$root"

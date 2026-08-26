@@ -48,6 +48,7 @@ import {
   reviewStatePath
 } from "./contract-review-plan.mjs";
 import {
+  ARGUMENT_SYNTHESIS,
   PROBE_MODES,
   applyProbeEvidence,
   buildProbePlan,
@@ -56,6 +57,7 @@ import {
   settleClaims,
   sha256Bytes
 } from "./contract-probe-driver.mjs";
+import { packageIntegrity } from "../../../scripts/lib/package-integrity.mjs";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -163,6 +165,39 @@ function contractPath(argument) {
     : target;
 }
 
+export function probeConstructionPlanPath(contractFile) {
+  return contractFile.toLowerCase().endsWith(".json")
+    ? `${contractFile.slice(0, -5)}.probe-plan.json`
+    : `${contractFile}.probe-plan.json`;
+}
+
+export function readProbeConstructionPlan(contractFile, contractHash, package_) {
+  const path = probeConstructionPlanPath(contractFile);
+  if (!existsSync(path)) return undefined;
+  const plan = JSON.parse(readFileSync(path, "utf8"));
+  if (plan.schemaVersion !== 1 || plan.source !== "typescript-value-domain") {
+    throw new Error(`${path} is not a supported TypeFacts probe construction plan`);
+  }
+  if (plan.contract !== contractHash) {
+    throw new Error(
+      `${path} is bound to ${plan.contract ?? "no contract"}, but ${contractFile} hashes to ${contractHash}; regenerate before probing`
+    );
+  }
+  if (plan.package?.name !== package_?.name || plan.package?.version !== package_?.version) {
+    throw new Error(`${path} describes a different package artifact than ${contractFile}`);
+  }
+  for (const entry of Object.values(plan.entrypoints ?? {})) {
+    for (const recipes of Object.values(entry ?? {})) {
+      for (const recipe of Object.values(recipes ?? {})) {
+        if (!ARGUMENT_SYNTHESIS.includes(recipe)) {
+          throw new Error(`${path} contains unsupported argument recipe ${JSON.stringify(recipe)}`);
+        }
+      }
+    }
+  }
+  return plan;
+}
+
 function readManifest(directory) {
   const path = join(directory, "package.json");
   return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
@@ -231,26 +266,14 @@ export function resolveProbeRuntime(packageRoot) {
   );
 }
 
-/// npm's hidden lockfile records the integrity of what is actually on disk. Its
-/// key shape varies with how the temp path resolved, hence the suffix match --
-/// the same accommodation `scripts/check-bundled-contracts.mjs` makes.
+/// The package manager lockfile records the integrity of what is actually on
+/// disk. The package may be nested under node_modules or passed directly with
+/// --package-root, so first locate the project directory that owns the lock.
 function installedIntegrity(packageRoot, packageName) {
-  // The lockfile that describes an installed package is the one beside it, in
-  // the same `node_modules` tree -- not necessarily the tree the Solid runtime
-  // resolved from, which a nested install can make a different directory.
   const marker = `${sep}node_modules${sep}`;
   const index = packageRoot.lastIndexOf(marker);
-  if (index < 0) return undefined;
-  const path = join(packageRoot.slice(0, index), "node_modules", ".package-lock.json");
-  if (!existsSync(path)) return undefined;
-  try {
-    const lock = JSON.parse(readFileSync(path, "utf8"));
-    return Object.entries(lock.packages ?? {}).find(
-      ([key]) => key === `node_modules/${packageName}` || key.endsWith(`/node_modules/${packageName}`)
-    )?.[1]?.integrity;
-  } catch {
-    return undefined;
-  }
+  const projectDirectory = index < 0 ? dirname(packageRoot) : packageRoot.slice(0, index);
+  return packageIntegrity(projectDirectory, packageName) ?? undefined;
 }
 
 /// Runs one condition mode in a child process.
@@ -365,6 +388,16 @@ export function runSessionWithRestarts({ session, spawn }) {
       results.push(...sessionFailure(remaining, answer.failed));
       return finish();
     }
+    // A worker deliberately stops after an import or invocation failure to
+    // protect later observations from partially initialized runtime state. If
+    // that stopping probe was the last one in this isolated specifier batch,
+    // every requested claim still received an answer; `completed` describes
+    // coverage, not whether the worker chose to keep its process alive.
+    if (remaining.length === 0) {
+      accounting.completed = true;
+      pending = [];
+      break;
+    }
     if (answer.completed || remaining.length === pending.length) {
       // A process that answered nothing made no progress, so the loop stops
       // here rather than restarting into the same abort. When an asynchronous
@@ -386,6 +419,40 @@ export function runSessionWithRestarts({ session, spawn }) {
     )
   );
   return finish();
+}
+
+/// Runs one mode with a separate worker lifetime for each exact entrypoint
+/// specifier.
+///
+/// Importing an ESM entrypoint necessarily evaluates that entrypoint's whole
+/// module, so there is no sound way to recover one named export when that
+/// evaluation throws. It is equally unsound to let that throw suppress a
+/// *different* entrypoint, though: the package export map already proves the
+/// two specifiers are separate runtime loads. Isolating them in separate child
+/// processes preserves the real published runtime and the no-shim server
+/// environment while containing partial initialization to its exact specifier.
+export function runSessionBySpecifier({ session, spawn }) {
+  const groups = new Map();
+  for (const probe of session.probes) {
+    const probes = groups.get(probe.specifier) ?? [];
+    probes.push(probe);
+    groups.set(probe.specifier, probes);
+  }
+  const runs = [...groups.values()].map(probes =>
+    runSessionWithRestarts({ session: { ...session, probes }, spawn })
+  );
+  return {
+    results: runs.flatMap(run => run.results),
+    accounting: {
+      mode: session.mode,
+      started: runs.reduce((total, run) => total + run.accounting.started, 0),
+      restarts: runs.reduce((total, run) => total + run.accounting.restarts, 0),
+      failed: runs.reduce((total, run) => total + run.accounting.failed, 0),
+      completed: runs.every(run => run.accounting.completed),
+      runtime: runs.find(run => run.accounting.runtime)?.accounting.runtime ?? null
+    },
+    environment: runs.find(run => run.environment)?.environment
+  };
 }
 
 function sessionFailure(probes, error) {
@@ -491,7 +558,7 @@ function defaultRunSessions({ sessions, dialect, projectRoot, timeout }) {
     const worker = join(stagingDirectory, "contract-probe-worker.mjs");
     copyFileSync(fileURLToPath(new URL("./contract-probe-worker.mjs", import.meta.url)), worker);
     return sessions.map(session => {
-      const run = runSessionWithRestarts({
+      const run = runSessionBySpecifier({
         session,
         spawn: probes =>
           spawnSession({ probes, session, worker, stagingDirectory, dialect, timeout })
@@ -525,6 +592,11 @@ export async function probeContract(arguments_, { runSessions = defaultRunSessio
   const contract = expandContract(document);
   const packageName = contract.package?.name;
   if (!packageName) throw new Error(`${contractFile} names no package`);
+  const constructionPlan = readProbeConstructionPlan(
+    contractFile,
+    contractHash,
+    contract.package
+  );
 
   const packageRoot = resolvePackageRoot({
     explicit: options.packageRoot,
@@ -545,7 +617,8 @@ export async function probeContract(arguments_, { runSessions = defaultRunSessio
   const plan = buildProbePlan(contract, {
     modes: options.modes,
     discovery: options.discovery,
-    environmentShim: options.environmentShim
+    environmentShim: options.environmentShim,
+    constructionPlan
   });
   const sessions = await runSessions({
     sessions: plan.sessions,

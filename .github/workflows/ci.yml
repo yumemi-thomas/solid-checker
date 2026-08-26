@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
       - uses: dtolnay/rust-toolchain@1.97
         with:
           components: clippy,rustfmt
@@ -45,7 +48,7 @@ jobs:
       # and product-owned semantic/TypeScript ownership over every retained
       # former parity case. Both are meaningless unless something runs them.
       - run: make coverage
-      - run: npm ci --ignore-scripts --prefix packages/cli
+      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       - run: make ownership-gate
       # AGENTS.md's absolute rule, as a gate: no rule's positive case may also
       # be a `tsc` error against the real published Solid typings, and — the
@@ -53,18 +56,18 @@ jobs:
       # silence. Provisioning installs the audited Solid versions and refuses
       # to run on a version mismatch. The harness resolves `typescript` through
       # packages/cli, and the workspace and both binaries are already built by
-      # the steps above, so this is one npm install plus the audited installs.
+      # the steps above, so this is one Bun install plus the audited installs.
       - run: make tsc-oracle
       # The contract drift gate against real installed packages: install the
       # exact pins the checked-in artifacts were generated from, regenerate,
-      # and diff. The workspace is already built, so this is one npm install
+      # and diff. The workspace is already built, so this is one Bun install
       # plus three cargo runs.
       - name: Install the pinned contract packages
         run: |
           mkdir -p /tmp/contract-packages
           cd /tmp/contract-packages
-          npm init -y >/dev/null
-          npm install --ignore-scripts --no-audit --no-fund \
+          bun init -y >/dev/null
+          bun add --exact --ignore-scripts --no-progress \
             solid-js-1x@npm:solid-js@1.9.14 \
             solid-js@2.0.0-rc.0 \
             @solidjs/web@2.0.0-rc.0
@@ -101,10 +104,10 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
+          bun-version: 1.4.0
+      - uses: dtolnay/rust-toolchain@1.97
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -134,7 +137,7 @@ jobs:
           if [[ "${{ matrix.platform }}" == "win32" ]]; then extension=".exe"; fi
           TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
             cargo build --release --manifest-path rust/Cargo.toml --workspace
-          node scripts/package-rust.mjs \
+          bun scripts/package-rust.mjs \
             --output dist/solid-checker \
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
@@ -146,7 +149,7 @@ jobs:
           native="dist/solid-checker/native/${{ matrix.platform }}-${{ matrix.arch }}"
           env -u SOLID_TYPEFACTS_BIN "$native/solid-checker${extension}" \
             --certify --project fixtures/reactive-ir/tracer-corrected/tsconfig.json
-          npm pack ./dist/solid-checker --dry-run
+          (cd dist/solid-checker && bun pm pack --dry-run)
       - uses: actions/upload-artifact@v4
         with:
           name: solid-checker-${{ matrix.platform }}-${{ matrix.arch }}
@@ -163,11 +166,9 @@ jobs:
       # the build resolves its toolchain through rust-toolchain.toml, which
       # needs its own copy of the target's std.
       - run: rustup target add wasm32-wasip1-threads --toolchain 1.97
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: packages/wasm/package-lock.json
+          bun-version: 1.4.0
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
@@ -175,30 +176,28 @@ jobs:
           # explicit key the action includes the different CI/release job names.
           shared-key: release-wasm
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: npm ci
+      - run: bun install --ignore-scripts --no-progress --frozen-lockfile
         working-directory: packages/wasm
-      - run: npm run build
+      - run: bun run build
         working-directory: packages/wasm
-      - run: npm test
+      - run: bun run test
         working-directory: packages/wasm
-      - run: npm pack --dry-run
+      - run: bun pm pack --dry-run
         working-directory: packages/wasm
 
   contracts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: packages/cli/package-lock.json
+          bun-version: 1.4.0
       - run: sh -n scripts/*.sh
       # The script tests import the oracle harness, which resolves `typescript`
       # through packages/cli. `make test-cli` installs it too, but that runs
       # after this step.
-      - run: npm ci --ignore-scripts --prefix packages/cli
-      - run: node --test scripts/*.test.mjs
+      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
+      - run: bun packages/cli/node_modules/vitest/vitest.mjs run --config packages/cli/vitest.config.mjs scripts/*.test.mjs
       - run: jq empty schema/*.json
       - run: find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
       # The bundled contracts ship semantics compiled into the backend, so a

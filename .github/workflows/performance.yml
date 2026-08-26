@@ -21,9 +21,9 @@ jobs:
         with:
           # The relative gate builds the merge base in a worktree.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
+          bun-version: 1.4.0
       - uses: dtolnay/rust-toolchain@1.97
       - uses: Swatinem/rust-cache@v2
         with:
@@ -76,7 +76,7 @@ jobs:
           # same analyzer. Keep this as a gross absolute guard; the interleaved
           # base/head comparison below is the regression gate.
           SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE: 225000
-        run: node benchmarks/verify-performance.mjs
+        run: bun benchmarks/verify-performance.mjs
 
       # The relative gate: race the merge base against the head on this same
       # runner, interleaved so scheduler drift cancels. Pull requests compare
@@ -110,7 +110,7 @@ jobs:
       - name: Compare performance with the merge base
         run: |
           runtime=/tmp/perf-runtime/${{ steps.base.outputs.sha }}
-          node benchmarks/compare-performance.mjs \
+          bun benchmarks/compare-performance.mjs \
             --base-bench "$runtime/bench" \
             --base-typefacts "$runtime/solid-typefacts" \
             --head-bench rust/target/release/solid-checker-session-bench \
@@ -139,7 +139,7 @@ jobs:
 
       - name: Prepare the deterministic corpus
         run: |
-          node benchmarks/generate-bench-corpus.mjs \
+          bun benchmarks/generate-bench-corpus.mjs \
             1000 /tmp/solid-checker-codspeed-corpus
 
       # This analysis spans the Rust process and the Type Facts child process.

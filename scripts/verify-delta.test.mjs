@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 
 import {
   BASIS_CAVEATS,
@@ -48,8 +48,8 @@ test("each table row claims its own owner's paths", () => {
     ],
     ["fixtures/reactive-ir/store-flow/App.tsx", ["coverage", "ownership-gate"]],
     ["fixtures/findings-snapshots/engine__oxlint-conformance.json", ["coverage", "ownership-gate"]],
-    ["packages/cli/lib/rules-solid-v2.json", ["npm-test-cli"]],
-    ["packages/wasm/src/index.ts", ["npm-test-wasm"]],
+    ["packages/cli/lib/rules-solid-v2.json", ["bun-test-cli"]],
+    ["packages/wasm/src/index.ts", ["bun-test-wasm"]],
   ];
   for (const [path, checks] of expected) {
     assert.deepEqual(classify(path)?.checks, checks, path);

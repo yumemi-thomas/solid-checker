@@ -30,7 +30,12 @@ import {
   reviewStatePath,
   verifyReportPath
 } from "./contract-review-plan.mjs";
-import { createModuleResolver, noteFor, runtimeModuleClosure } from "./runtime-module-closure.mjs";
+import {
+  createModuleResolver,
+  noteFor,
+  openDynamicImportReachability,
+  runtimeModuleClosure
+} from "./runtime-module-closure.mjs";
 
 /// Who produced a review plan, so a transfer can refuse to carry a review
 /// across a generator whose enumeration or summarization changed underneath it.
@@ -561,9 +566,17 @@ function moduleInventories() {
 /// claim -- and a module either side names and the other does not is its own
 /// note, in both directions. Those two inventory shapes are **defensive**: see
 /// `readModuleInventory` for why no current producer can reach them.
-function attestedClosure({ packageRoot, realRoot, target, walked, inventory }) {
+function attestedClosure({
+  packageRoot,
+  realRoot,
+  target,
+  walked,
+  inventory,
+  openDynamicAttribution
+}) {
   const notes = [];
   const runtimeNotes = [];
+  const runtimeObligations = [];
   // Two spellings, deliberately. `relativeToRoot` names a path the *producer*
   // answered with, which is canonical, so it is relative to the canonical root
   // -- and it is what a note about a file outside the package has to use. The
@@ -577,7 +590,7 @@ function attestedClosure({ packageRoot, realRoot, target, walked, inventory }) {
         "generator's own syntax walk, which cannot say whether the analyzing program read the " +
         "same files"
     );
-    return { files: walked.files, notes, runtimeNotes };
+    return { files: walked.files, notes, runtimeNotes, runtimeObligations };
   }
   // Every path from either side goes through `realpathOrSelf` before it is
   // compared: see there for why neither process's spelling can be derived from
@@ -623,11 +636,18 @@ function attestedClosure({ packageRoot, realRoot, target, walked, inventory }) {
       continue;
     }
     if (problem.kind === "dynamic-import") {
-      runtimeNotes.push(
+      const note =
         `${problem.spelled}: the module record is attested -- it names every file the analyzing ` +
-          `program opened under this package -- and complete except for what ${problem.reason} ` +
-          "may load at runtime, which no module graph can enumerate"
-      );
+        `program opened under this package -- and complete except for what ${problem.reason} ` +
+        "may load at runtime, which no module graph can enumerate";
+      if (openDynamicAttribution) {
+        runtimeObligations.push({
+          note,
+          exports: openDynamicAttribution.affectedExports
+        });
+      } else {
+        runtimeNotes.push(note);
+      }
       continue;
     }
     if (problem.kind !== "specifier" || !problem.specifier) {
@@ -723,7 +743,12 @@ function attestedClosure({ packageRoot, realRoot, target, walked, inventory }) {
         "inside this package, so the record excludes bytes the summaries were derived from"
     );
   }
-  return { files: local.map(module => module.scope.path), notes, runtimeNotes };
+  return {
+    files: local.map(module => module.scope.path),
+    notes,
+    runtimeNotes,
+    runtimeObligations
+  };
 }
 
 function patternCapture(pattern, candidate) {
@@ -1111,7 +1136,8 @@ function generationClosures(
   targetsByEntrypoint,
   entrypoints,
   legacyRoot,
-  inventories
+  inventories,
+  targetExportNames
 ) {
   const directory = dirname(output);
   const realRoot = realpathOrSelf(packageRoot);
@@ -1124,6 +1150,7 @@ function generationClosures(
     const modules = [];
     const notes = [];
     const runtimeNotes = [];
+    const runtimeObligations = [];
     for (const target of sorted) {
       // Mirrors the analysis exactly: a sibling conditional target of the same
       // entrypoint is excluded there, so it is not part of what this target's
@@ -1138,18 +1165,36 @@ function generationClosures(
         }
         const entryFile = packageLocalTarget(packageRoot, target);
         const walked = closureOf(packageRoot, resolver, entryFile, excluded);
+        const dynamicProblems = walked.problems.filter(problem => problem.kind === "dynamic-import");
+        const analyzedExportNames = targetExportNames.get(target);
+        const openDynamicCandidate =
+          dynamicProblems.length > 0 &&
+          Array.isArray(analyzedExportNames) &&
+          dynamicProblems.every(problem => realpathOrSelf(problem.file) === realpathOrSelf(entryFile))
+            ? openDynamicImportReachability(
+                readFileSync(entryFile, "utf8"),
+                analyzedExportNames
+              )
+            : undefined;
+        const openDynamicAttribution = Array.isArray(openDynamicCandidate?.affectedExports)
+          ? openDynamicCandidate
+          : undefined;
         const reconciled = attestedClosure({
           packageRoot,
           realRoot,
           target,
           walked,
-          inventory: inventories.for(target, excludedTargets)
+          inventory: inventories.for(target, excludedTargets),
+          openDynamicAttribution
         });
         files = reconciled.files;
         // Each note already names the exact module the specifier was read from,
         // which is more precise than the target that reached it.
         for (const note of reconciled.notes) notes.push(note);
         for (const note of reconciled.runtimeNotes) runtimeNotes.push(note);
+        for (const obligation of reconciled.runtimeObligations) {
+          runtimeObligations.push({ target, ...obligation });
+        }
       } catch (error) {
         notes.push(`${target}: closure not recorded (${String(error?.message ?? error)})`);
         continue;
@@ -1177,7 +1222,14 @@ function generationClosures(
       // outside any module graph may still load a module the analysis never
       // read -- so two generations with identical records may transfer, and
       // promotion is still refused.
-      ...(runtimeNotes.length ? { runtimeNotes: [...new Set(runtimeNotes)].sort() } : {})
+      ...(runtimeNotes.length ? { runtimeNotes: [...new Set(runtimeNotes)].sort() } : {}),
+      ...(runtimeObligations.length
+        ? {
+            runtimeObligations: [...new Map(
+              runtimeObligations.map(obligation => [JSON.stringify(obligation), obligation])
+            ).values()].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+          }
+        : {})
     };
   }
   return {
@@ -1805,10 +1857,13 @@ async function analyzeTarget({
   const excludedFiles = new Set(
     excludedTargets.map(target => packageLocalTarget(packageRoot, target))
   );
-  const implementationFiles = closureOf(packageRoot, resolver, entryFile, excludedFiles).files;
+  const runtimeClosure = closureOf(packageRoot, resolver, entryFile, excludedFiles);
+  const implementationFiles = runtimeClosure.files;
   const project = join(temporaryDirectory, `${identifier}-tsconfig.json`);
   const output = join(temporaryDirectory, `${identifier}.json`);
   const inventoryPath = join(temporaryDirectory, `${identifier}-inventory.json`);
+  const probePlanPath = join(temporaryDirectory, `${identifier}-probe-plan.json`);
+  const runtimeResolutionPath = join(temporaryDirectory, `${identifier}-runtime-resolutions.json`);
   writeFileSync(
     project,
     `${JSON.stringify(
@@ -1833,12 +1888,25 @@ async function analyzeTarget({
       2
     )}\n`
   );
+  writeFileSync(
+    runtimeResolutionPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        resolutions: runtimeClosure.resolutions
+      },
+      null,
+      2
+    )}\n`
+  );
   try {
     const args = [
       "--project",
       project,
       "--emit-contract",
       output,
+      "--emit-probe-plan",
+      probePlanPath,
       // The same run's own answer to "which files did you open". The walk above
       // seeded `files`; this is what the program did with that seed, and it is
       // what the closure record is built from. Asked for only here, on a
@@ -1855,6 +1923,14 @@ async function analyzeTarget({
       // than a per-entrypoint refusal, which would exit 0.
       "--emit-module-inventory",
       inventoryPath,
+      // Exact importer/specifier/runtime-target triples from the same closure
+      // walk that seeded `files` above. This is the missing declaration/runtime
+      // identity seam: TypeScript may bind `./impl.js` through `impl.d.ts`, but
+      // the published ESM graph still loads the exact `impl.js` target recorded
+      // here. The native side accepts only bindings and runtime exports it can
+      // join by compiler symbol; a missing or ambiguous join changes nothing.
+      "--runtime-module-resolutions",
+      runtimeResolutionPath,
       "--package-name",
       packageName,
       "--package-version",
@@ -1944,6 +2020,7 @@ async function analyzeTarget({
       // the caller: the file lives in this generation's temporary directory and
       // is removed with the project below.
       inventory: readModuleInventory(inventoryPath),
+      probePlan: JSON.parse(readFileSync(probePlanPath, "utf8")),
       // Relative to the package root so the plan describes the published
       // package rather than the temporary directory this run analyzed it in.
       attributions: attributions.map(note => ({
@@ -1954,6 +2031,8 @@ async function analyzeTarget({
   } finally {
     rmSync(project, { force: true });
     rmSync(inventoryPath, { force: true });
+    rmSync(probePlanPath, { force: true });
+    rmSync(runtimeResolutionPath, { force: true });
   }
 }
 
@@ -2193,9 +2272,11 @@ async function generatePackageContractInternal(arguments_, context) {
   ];
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "solid-checker-contract-"));
   const entrypoints = {};
+  const probePlans = {};
   // Declared alongside `entrypoints` because both outlive the analysis
   // block: the review plan and the stdout summary are written after it.
   const refusedEntrypoints = [];
+  const refusedExports = [];
   // Same reason: the artifact-binding notes are decided once the emitted
   // entrypoint set is final, and the stdout summary recomputes the review
   // plan after the analysis block has been left.
@@ -2226,6 +2307,10 @@ async function generatePackageContractInternal(arguments_, context) {
   // instead of rebuilding TypeScript, Reactive IR, and dependency contracts
   // once per public alias.
   const targetAnalyses = new Map();
+  // Public names are a property of the target module itself. Conditions may
+  // change dependency summaries, but two analyses of one target disagreeing
+  // about its export identities makes open-load attribution ambiguous.
+  const targetExportNames = new Map();
   // What each analyzed target's own program reported it opened. The closure
   // record is built from this, not from the walk that seeded the program.
   const inventories = moduleInventories();
@@ -2242,6 +2327,7 @@ async function generatePackageContractInternal(arguments_, context) {
         const mergedBranches = new Map();
         const conditions = new Set();
         const targets = new Set();
+        let singleProbePlan;
         // Only a genuinely branching entrypoint carries conditions. For one
         // unconditional target there is no environment to record, and claiming
         // one would mark a summary that holds everywhere as conditional.
@@ -2301,10 +2387,17 @@ async function generatePackageContractInternal(arguments_, context) {
             });
             targetAnalyses.set(analysisKey, observed);
           }
+          if (variants.length === 1) singleProbePlan = observed.probePlan?.exports ?? {};
           // Recorded on every variant, not only on a fresh analysis, so a target
           // reached under two condition sets is checked for inventory agreement
           // rather than silently taking the first one's answer.
           inventories.record(target, excludedTargets, observed.inventory);
+          const names = Object.keys(observed.exports).sort();
+          const recordedNames = targetExportNames.get(target);
+          if (recordedNames === undefined) targetExportNames.set(target, names);
+          else if (recordedNames !== null && JSON.stringify(recordedNames) !== JSON.stringify(names)) {
+            targetExportNames.set(target, null);
+          }
           for (const note of observed.attributions) {
             attributionNotes.push({ ...note, entrypoint });
           }
@@ -2420,6 +2513,9 @@ async function generatePackageContractInternal(arguments_, context) {
           ),
           ...(conditions.size ? { conditions: [...conditions].sort() } : {})
         };
+        if (singleProbePlan && Object.keys(singleProbePlan).length) {
+          probePlans[entrypoint] = singleProbePlan;
+        }
       } catch (error) {
         // Per-ENTRYPOINT granularity, deliberately not per-target: if any one
         // conditional target of this entrypoint could not be analyzed, we do
@@ -2457,45 +2553,16 @@ async function generatePackageContractInternal(arguments_, context) {
       }
       throw refuse(`${manifest.name} has no runtime ESM exports`);
     }
-    for (const target of new Set([...targetsByEntrypoint.values()].flatMap(set => [...set]))) {
-      const aliases = [...targetsByEntrypoint]
-        .filter(([, targets]) => targets.has(target))
-        .map(([entrypoint]) => entrypoint)
-        .filter(entrypoint => entrypoints[entrypoint]);
-      if (aliases.length < 2) continue;
-      const names = new Set(
-        aliases.flatMap(entrypoint => Object.keys(entrypoints[entrypoint].exports))
-      );
-      for (const name of names) {
-        const shared = aliases
-          .map(entrypoint => entrypoints[entrypoint].exports[name])
-          .filter(Boolean);
-        if (shared.length < 2) continue;
-        const withName = aliases.filter(entrypoint => entrypoints[entrypoint].exports[name]);
-        let merged = shared[0];
-        const diverged = new Map();
-        for (const summary of shared.slice(1)) {
-          merged = mergeSummaries(merged, summary, (domain, shape) =>
-            diverged.set(domain, shape)
-          );
-          if (!merged) break;
-        }
-        if (!merged) continue;
-        for (const entrypoint of withName) {
-          for (const [domain, shape] of diverged) {
-            mergeDivergences.push({
-              entrypoint,
-              export: name,
-              domain,
-              shape,
-              branches: withName,
-              mechanism: "alias-entrypoint-merge"
-            });
-          }
-          entrypoints[entrypoint].exports[name] = merged;
-        }
-      }
-    }
+    // A shared runtime target is an analysis-cache opportunity, not proof that
+    // two public entrypoints are semantic aliases. One entrypoint can select
+    // that target unconditionally while another selects it only as one branch
+    // alongside condition-specific implementations. Each entrypoint already
+    // merged its own variants above; folding whole summaries across entrypoint
+    // boundaries would leak the second entrypoint's other branches into the
+    // first (for example @solidjs/web's server-only `ssrGroup` identity into
+    // `./jsx-runtime`, which always resolves to the void web implementation).
+    // Keep the summaries scoped here. `targetAnalyses` still shares the exact
+    // target/condition analysis without sharing its public projection.
 
     // Computed before the review items, not after the plan: a specifier the walk
     // could not resolve and the program did is a hole in the artifact binding,
@@ -2510,8 +2577,39 @@ async function generatePackageContractInternal(arguments_, context) {
       targetsByEntrypoint,
       entrypoints,
       legacyProvenance,
-      inventories
+      inventories,
+      targetExportNames
     );
+    // A scoped open-load obligation withdraws exactly the exports whose
+    // functions can reach it. Missing exports are the schema-v1 fail-closed
+    // spelling: a consumer asks for one and receives an explicit
+    // uncertifiable result, while unrelated exports retain their independently
+    // proven summaries. Ambiguous attribution stays in `runtimeNotes` and
+    // continues to refuse the entire entrypoint during verification.
+    for (const [entrypoint, closure] of Object.entries(closures.entrypoints)) {
+      const affected = new Set(
+        (closure.runtimeObligations ?? []).flatMap(obligation => obligation.exports ?? [])
+      );
+      for (const name of affected) {
+        if (!entrypoints[entrypoint]?.exports?.[name]) continue;
+        delete entrypoints[entrypoint].exports[name];
+        refusedExports.push({
+          entrypoint,
+          export: name,
+          reason: "its exact call graph can reach an open runtime module load"
+        });
+      }
+      if (entrypoints[entrypoint] && Object.keys(entrypoints[entrypoint].exports).length === 0) {
+        delete entrypoints[entrypoint];
+        refusedEntrypoints.push({
+          entrypoint,
+          reason: "every export can reach an open runtime module load"
+        });
+      }
+    }
+    if (Object.keys(entrypoints).length === 0) {
+      throw refuse(`${manifest.name} has no certifiable runtime entrypoint after open-load attribution`);
+    }
     const binding = contractArtifacts(
       output,
       packageRoot,
@@ -2588,18 +2686,38 @@ async function generatePackageContractInternal(arguments_, context) {
         2
       )}\n`
     );
+    const constructionPlanPath = output.toLowerCase().endsWith(".json")
+      ? `${output.slice(0, -5)}.probe-plan.json`
+      : `${output}.probe-plan.json`;
+    writeFileSync(
+      constructionPlanPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          contract: sha256Artifact(output),
+          source: "typescript-value-domain",
+          package: { name: manifest.name, version: manifest.version },
+          entrypoints: probePlans
+        },
+        null,
+        2
+      )}\n`
+    );
   } finally {
     rmSync(temporaryDirectory, { recursive: true, force: true });
     generationContext.active.delete(generationKey);
   }
   const reviewOutput = reviewPlanPath(output);
   const planOutput = reviewPlanJsonPath(output);
-  const partial = refusedEntrypoints.length
-    ? `; ${refusedEntrypoints.length} entrypoint(s) refused and omitted`
-    : "";
+  const partial = [
+    refusedEntrypoints.length
+      ? `${refusedEntrypoints.length} entrypoint(s) refused and omitted`
+      : "",
+    refusedExports.length ? `${refusedExports.length} export(s) refused and omitted` : ""
+  ].filter(Boolean);
   if (!generationContext.quiet) {
     process.stdout.write(
-      `generated ${manifest.name}@${manifest.version} contract with ${Object.keys(entrypoints).length} entrypoints at ${output}${partial}; review plan ${reviewOutput} and ${planOutput} (${reviewItems.length} checklist items)\n`
+      `generated ${manifest.name}@${manifest.version} contract with ${Object.keys(entrypoints).length} entrypoints at ${output}${partial.length ? `; ${partial.join("; ")}` : ""}; review plan ${reviewOutput} and ${planOutput} (${reviewItems.length} checklist items)\n`
     );
     if (snapshot?.verified) {
       // No transfer command here, and that is the whole point of the tier: a
@@ -2627,6 +2745,7 @@ async function generatePackageContractInternal(arguments_, context) {
     reviewPlan: planOutput,
     entrypoints: Object.keys(entrypoints).length,
     refusedEntrypoints: refusedEntrypoints.length,
+    refusedExports: refusedExports.length,
     reviewItems: reviewItems.length,
     ...(snapshot ? { previousContract: snapshot.contract } : {})
   };

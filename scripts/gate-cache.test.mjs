@@ -20,7 +20,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 
 import {
   CACHE_CONTROL_VARIABLES,
@@ -483,7 +483,7 @@ test("the key covers the dialect-selection chain above the unit, not just the un
   // walks `start.ancestors()` unbounded, to `/`, taking the nearest
   // `node_modules/solid-js/package.json`. Roughly half the fixture projects
   // ship no stub and depend on the *absence* of one above them, which a digest
-  // of the project directory cannot see: a stray `npm install solid-js` one
+  // of the project directory cannot see: a stray `bun install solid-js` one
   // directory above the checkout flips them all to the v1 catalog while every
   // key stays byte-identical, and a warm cache replays the pre-install answers.
   const outside = mkdtempSync(join(tmpdir(), "solid-checker-ancestor-test-"));
@@ -515,7 +515,7 @@ test("the key covers the dialect-selection chain above the unit, not just the un
 
     const before = key();
 
-    // An install ABOVE the checkout root -- a stray `npm install solid-js` one
+    // An install ABOVE the checkout root -- a stray `bun install solid-js` one
     // directory up, or a `~/node_modules`. Invisible to the project's tree.
     mkdirSync(stub, { recursive: true });
     writeFileSync(join(stub, "package.json"), '{"version":"1.9.14"}\n');

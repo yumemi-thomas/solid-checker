@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Runs the checker over every fixture project and records its findings, so a
 // refactor can be held to "no finding moved" rather than to "the tests I
 // remembered to write still pass".
@@ -7,8 +7,8 @@
 // that stops firing on a file someone remembered to list; they cannot catch a
 // finding that moved somewhere nobody listed. This runner can.
 //
-//   node scripts/coverage.mjs            compare against the snapshots
-//   node scripts/coverage.mjs --update   rewrite them
+//   bun scripts/coverage.mjs            compare against the snapshots
+//   bun scripts/coverage.mjs --update   rewrite them
 //
 // The snapshots live in fixtures/findings-snapshots/, one file per fixture
 // project: the project's status, then every finding sorted by location and
@@ -313,7 +313,7 @@ if (projects.length === 0) {
 // ship no stub and rely on there being none above them -- which is true of the
 // checkout and says nothing about the directory containing it, or about `$HOME`.
 // So the absence of an ancestor stub is an input, and `ancestorChainDigest`
-// puts the whole chain in the key: a stray `npm install solid-js` one directory
+// puts the whole chain in the key: a stray `bun install solid-js` one directory
 // up now misses instead of replaying pre-install findings while `checkDialectStubs`
 // (the thing that catches a substituted dialect) never runs.
 //

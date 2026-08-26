@@ -1,5 +1,5 @@
-#!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+#!/usr/bin/env bun
+import { spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -15,13 +15,15 @@ import {
   normalizeContract,
 } from "../packages/cli/scripts/contract-document.mjs";
 import { loadDialectManifests, root } from "./dialect-manifests.mjs";
+import { packageIntegrity } from "./lib/package-integrity.mjs";
+import { gateConcurrency, mapPool } from "./lib/pool.mjs";
 
 // Probing is grouped by dialect, and each group installs into its own root.
 // One shared install cannot host them: @solid-primitives/scheduled peers on
-// solid-js@^1.6.12 while the 2.0 contracts pin 2.0.0-rc.0, and npm refuses the
+// solid-js@^1.6.12 while the 2.0 contracts pin 2.0.0-rc.0, and Bun refuses the
 // combination outright. A dialect's non-probed packages are installed
 // alongside its probed ones so those peers resolve to the audited release
-// rather than whatever npm would pick.
+// rather than whatever Bun would pick.
 const probeModes = [
   { name: "client", conditions: ["browser"] },
   { name: "server", conditions: ["node"] },
@@ -66,7 +68,12 @@ const manifests = loadDialectManifests({ requireArtifacts: true });
 // import different packages, and a worker's bare imports are what tie it to the
 // install it runs in. Every worker of a dialect runs in every condition mode.
 const probeWorkers = {
-  "solid-v1": ["scripts/contract-probes-solid-v1-core.mjs", "scripts/contract-probes-solid-v1.mjs"],
+  "solid-v1": [
+    "scripts/contract-probes-solid-v1-core.mjs",
+    "scripts/contract-probes-solid-v1.mjs",
+    "scripts/contract-probes-solid-v1-debounce.mjs",
+    "scripts/contract-probes-solid-v1-rootless.mjs",
+  ],
   "solid-v2": [
     "scripts/contract-probes.mjs",
     "scripts/contract-probes-solid-v2-web-root.mjs",
@@ -143,6 +150,19 @@ const callbackRows = summary =>
 const callbacksAreUnknown = summary =>
   Boolean(summary?.callbacks) && !Array.isArray(summary.callbacks);
 
+// This bundled-contract harness consumes package-specific oracle results, whose
+// historical claim vocabulary has no relational-return spellings. The generic
+// `contract probe` driver does establish these relations with parameter-indexed
+// strict-identity probes; omitting them here prevents an unrelated oracle row
+// from being mistaken for that evidence.
+const returnClaim = summary => {
+  const kind = summary?.returns?.kind;
+  return typeof kind === "string" &&
+    !["argument", "callback-result", "callback-result-function"].includes(kind)
+    ? `returns=${kind}`
+    : undefined;
+};
+
 function probeEvidence(resultsForClaim) {
   if (resultsForClaim.length === 0 || resultsForClaim.some(result => !result.ok)) {
     return undefined;
@@ -191,7 +211,7 @@ function writeProbeEvidence(summary, dialect, packageName, entrypoint, name, all
     ...callbackRows(summary).map(callback =>
       claimResults(`callbacks[${callback.parameter}]=${callback.execution}`),
     ),
-    ...(summary.returns ? [claimResults(`returns=${summary.returns.kind}`)] : []),
+    ...(returnClaim(summary) ? [claimResults(returnClaim(summary))] : []),
   ].flat();
   const evidence = probeEvidence(exportResults);
   if (evidence && (!next.evidence || next.evidence.kind === "inferred")) {
@@ -207,8 +227,8 @@ function writeProbeEvidence(summary, dialect, packageName, entrypoint, name, all
         : callback;
     });
   }
-  if (summary.returns) {
-    const returnEvidence = probeEvidence(claimResults(`returns=${summary.returns.kind}`));
+  if (returnClaim(summary)) {
+    const returnEvidence = probeEvidence(claimResults(returnClaim(summary)));
     if (returnEvidence && (!summary.returns.evidence || summary.returns.evidence.kind === "inferred")) {
       next.returns = { ...summary.returns, evidence: returnEvidence };
     }
@@ -238,6 +258,11 @@ const contracts = definitions.map(definition => {
   return { ...definition, path, contract };
 });
 
+const contractDeclaresDefault = contract =>
+  Object.values(contract.entrypoints).some(entrypoint =>
+    Object.hasOwn(entrypoint.exports ?? {}, "default"),
+  );
+
 /** The exact release a declared contract pins, for install specifiers. */
 const pinnedVersion = definition =>
   JSON.parse(readFileSync(join(root, definition.file), "utf8")).package?.version;
@@ -264,6 +289,14 @@ const installations = manifests
     const cacheKey = specifiers.join("_").replace(/[^\w.@-]+/g, "-");
     const directory = join(tmpdir(), `solid-checker-contract-conformance-${cacheKey}`);
     mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "package.json"),
+      `${JSON.stringify({
+        name: `solid-checker-contract-conformance-${manifest.id}`,
+        version: "0.0.0",
+        private: true,
+      }, null, 2)}\n`,
+    );
     return { dialect: manifest.id, probed, specifiers, workers, directory };
   });
 
@@ -272,25 +305,23 @@ const readInstalledManifest = (directory, name) => {
   return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
 };
 
-const observations = [];
+const probeTasks = [];
 for (const installation of installations) {
   const satisfied = installation.probed.every(
     ({ name, contract }) =>
-      readInstalledManifest(installation.directory, name)?.version === contract.package.version,
+      readInstalledManifest(installation.directory, name)?.version === contract.package.version &&
+      packageIntegrity(installation.directory, name),
   );
   if (!satisfied) {
     const result = spawnSync(
-      "npm",
+      "bun",
       [
         "install",
-        "--prefix",
-        installation.directory,
-        "--no-audit",
-        "--no-fund",
-        "--no-save",
+        "--ignore-scripts",
+        "--no-progress",
         ...installation.specifiers,
       ],
-      { stdio: "inherit" },
+      { cwd: installation.directory, stdio: "inherit" },
     );
     if (result.status !== 0) process.exit(result.status ?? 1);
   }
@@ -305,6 +336,9 @@ for (const installation of installations) {
   const packages = installation.probed.map(({ name }) => ({
     name,
     directory: join(installation.directory, "node_modules", ...name.split("/")),
+    includeDefault: contractDeclaresDefault(
+      installation.probed.find(contract => contract.name === name).contract,
+    ),
   }));
   const dialectModes = probeModes.filter(mode =>
     installation.probed.some(contract => contract.modes.includes(mode)),
@@ -313,23 +347,49 @@ for (const installation of installations) {
     const worker = join(installation.directory, source.split("/").at(-1));
     copyFileSync(join(root, source), worker);
     for (const mode of dialectModes) {
-      const execution = spawnSync(
-        "node",
-        [
-          ...mode.conditions.flatMap(condition => ["--conditions", condition]),
-          worker,
-          JSON.stringify({ mode: mode.name, packages }),
-        ],
-        { encoding: "utf8" },
-      );
-      if (execution.status !== 0) {
-        process.stderr.write(execution.stderr);
-        process.exit(execution.status ?? 1);
-      }
-      observations.push({ dialect: installation.dialect, ...JSON.parse(execution.stdout) });
+      probeTasks.push({ installation, worker, mode, packages });
     }
   }
 }
+
+const runProbe = ({ installation, worker, mode, packages }) => new Promise((resolve, reject) => {
+  const child = spawn(
+    "bun",
+    [
+      ...mode.conditions.flatMap(condition => ["--conditions", condition]),
+      worker,
+      JSON.stringify({ mode: mode.name, packages }),
+    ],
+    { encoding: "utf8" },
+  );
+  const stdout = [];
+  const stderr = [];
+  child.stdout.on("data", chunk => stdout.push(chunk));
+  child.stderr.on("data", chunk => stderr.push(chunk));
+  child.once("error", reject);
+  child.once("close", (status, signal) => {
+    const errorOutput = Buffer.concat(stderr).toString("utf8");
+    if (status !== 0) {
+      reject(new Error(errorOutput || `${worker} exited ${status ?? signal}`));
+      return;
+    }
+    try {
+      resolve({
+        dialect: installation.dialect,
+        ...JSON.parse(Buffer.concat(stdout).toString("utf8")),
+      });
+    } catch (error) {
+      reject(new Error(`${worker} returned invalid JSON: ${error.message}\n${errorOutput}`));
+    }
+  });
+});
+
+// Each worker/mode pair is a separate process over a read-only installation.
+// Preserve task order in the observations while avoiding 28 serial Bun
+// startups; the shared gate cap prevents the process tree from oversubscribing.
+const observations = await mapPool(probeTasks, runProbe, {
+  concurrency: gateConcurrency(),
+});
 
 /** The install root for one dialect's probed contracts. */
 const installationOfDialect = dialect =>
@@ -391,22 +451,8 @@ const observed = {
     })),
   ),
 };
-const hiddenLockOf = directory => {
-  const path = join(directory, "node_modules", ".package-lock.json");
-  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
-};
-const hiddenLocks = new Map(
-  installations.map(installation => [installation.directory, hiddenLockOf(installation.directory)]),
-);
-// npm's hidden lockfile keys packages by path, but the path's shape varies:
-// a plain `node_modules/<name>` on Linux, and a relative traversal that ends
-// with `/node_modules/<name>` where the temp directory resolves through a
-// symlink (macOS's /var -> /private/var).
 const installedIntegrityIn = (installation, name) =>
-  Object.entries(hiddenLocks.get(installation?.directory)?.packages ?? {}).find(
-    ([path]) =>
-      path === `node_modules/${name}` || path.endsWith(`/node_modules/${name}`),
-  )?.[1]?.integrity;
+  packageIntegrity(installation?.directory ?? "", name);
 
 function splitPackageVersion(identifier) {
   const separator = identifier.lastIndexOf("@");
@@ -509,12 +555,12 @@ for (const item of contracts) {
     );
   }
   if (!item.contract.package.integrity) {
-    fail(`${item.file} does not pin npm integrity`);
+    fail(`${item.file} does not pin package integrity`);
   } else if (
     item.contract.package.integrity !==
     installedIntegrityIn(installationOfDialect(item.dialect), item.name)
   ) {
-    fail(`${item.file} npm integrity does not match the installed release`);
+    fail(`${item.file} package integrity does not match the installed release`);
   }
   const contractEntrypoints = item.contract.entrypoints ?? {};
   for (const [entrypoint, surface] of Object.entries(runtime.entrypoints)) {
@@ -573,7 +619,7 @@ for (const item of contracts) {
           ...callbackRows(selected).map(
             callback => `callbacks[${callback.parameter}]=${callback.execution}`,
           ),
-          ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
+          ...(returnClaim(selected) ? [returnClaim(selected)] : []),
         ];
         for (const claim of claims) {
           const key = `${item.dialect}:${item.name}:${entrypoint}:${name}:${claim}`;
@@ -612,7 +658,7 @@ for (const observation of observed.discoveredClaims) {
         ...callbackRows(selected).map(
           callback => `callbacks[${callback.parameter}]=${callback.execution}`,
         ),
-        ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
+        ...(returnClaim(selected) ? [returnClaim(selected)] : []),
     ]
     : [];
   if (declared.includes(observation.claim)) continue;

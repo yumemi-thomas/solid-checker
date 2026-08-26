@@ -291,7 +291,8 @@ and the **verifier of that seed**.
 So the walk still fails closed on every static specifier form it recognizes — a
 relative or `#` specifier that names no runtime module inside the package, a
 conditional `imports` branch this generation cannot choose between, a
-non-literal dynamic `import()`, a module whose bytes are unreadable — and each
+  dynamically imported specifier that cannot be bounded to a finite literal set,
+  a module whose bytes are unreadable — and each
 problem is then reconciled against the attestation, never quoted blind:
 
 - **The compiler resolved it.** The analysis read a module the walk did not
@@ -311,9 +312,18 @@ problem is then reconciled against the attestation, never quoted blind:
   is not in question and the runtime's boundedness is, so this rides
   `runtimeNotes` with the reachable branches named. The distinction is a fact
   about files on disk, never a judgement about a file suffix.
-- **A non-literal dynamic `import()`** makes the same claim, on the same field:
+- **An unbounded dynamic `import()`** makes the same claim, on the same field:
   the record names every byte the analysis read, and no module graph can
-  enumerate what the runtime resolves.
+  enumerate what the runtime resolves. Literal conditionals and inline literal
+  lookup tables with finite literal selectors are enumerated exactly and seed
+  every selected runtime module; an open branch, identifier, template
+  substitution, or lookup key stays refused. For a flat entry module, the
+  generator can attribute the open load to its exact containing function,
+  propagate it through exact local references, and bind those functions to the
+  module's explicit exports. The affected exports are omitted from schema-v1;
+  unrelated exports retain their summaries. A top-level load, affected function
+  escape, non-unique binding, or cross-module ambiguity keeps the entrypoint-wide
+  `runtimeNotes` fallback.
 - **A module the program opened that the walk never seeded**, a module the walk
   seeded that the program never opened, or a module the program opened that the
   record's scope excludes, is its own **note**, in all three directions. This is
@@ -480,6 +490,14 @@ bounded. A whole-process failure — a crash, a timeout, unreadable output — n
 no particular probe, so the rest of that mode is recorded undriven rather than
 retried.
 
+**Different entrypoint specifiers have different worker lifetimes.** A failed
+ESM evaluation can leave arbitrary module and reactive-runtime state behind, so
+the worker never continues from one published subpath to another in that same
+process. Each exact package specifier is probed in an isolated child while its
+mode, conditions, and server no-shim policy stay unchanged. A module that throws
+still makes every export of that module undriven; it cannot contaminate a
+separate subpath that imports successfully.
+
 **An asynchronous throw stops the process, not the mode.** Package code the
 probe set running — a deferred callback, a promise left rejected — throws
 outside every `try` the worker has. The process used to die with status 1 and
@@ -499,7 +517,7 @@ certifies exactly them and converts everything else away.
 **What is drivable, and what is not.** A contract records a callback's exact
 parameter index and nothing about the other parameters, so the driver
 synthesizes the rest from the contract's own structured vocabulary and never
-from a type: the probed slot gets the probe callback, a slot another
+from a guessed type: the probed slot gets the probe callback, a slot another
 `callbacks[]` row names gets a no-op function, a slot a `parameter-member`
 reactive read names gets an empty object, and every other slot gets `undefined`.
 There is no ladder of retries — trying `{}`, then `[]`, then `0` until something
@@ -509,12 +527,37 @@ call could not be constructed or did not reach the callback is recorded
 `undriven` with the exact reason. Undriven is never a failure and never
 evidence; it is the measurement of how far the boundary reaches.
 
-Claims with no probe form at all are recorded undriven with a standing reason:
+Generation also writes `<contract>.probe-plan.json`, a probe-only construction
+sidecar derived from Type Facts. It is bound to the exact contract SHA-256 and
+package release; probing refuses a stale or mismatched sidecar. A recipe is
+emitted only when the exact public symbol and parameter facts prove a concrete
+inhabitant: `null`, `undefined`, an empty array, `Map`, or `Set`. Recipes fill
+only slots the ordinary planner would otherwise leave `undefined`; they never
+replace a callback, sentinel, or contract-derived object and never extend the
+call arity. The sidecar is reachability help, not evidence. A call that
+completes with it still has to pass the same behavioral observation.
+
+Claims with no honest generic probe form are recorded undriven with a standing reason:
 callback `owner` rows (no observation distinguishes inherited from created
 ownership — permanently out of reach), callback `arguments` descriptors, reactive
 reads, owner requirements, `asyncBehavior` (which has no evidence slot in the
-schema, so a driven observation could not be recorded), nested return leaves,
-and `returns` of kind `store-path` or `argument`.
+schema, so a driven observation could not be recorded), and `returns` leaves of
+kind `store-path`. Return tuples and objects are traversed recursively. Each leaf
+has a path-bound claim such as `returns.elements[0]=accessor` or
+`returns.properties["value"]=argument[1]`; evidence for one leaf cannot certify a
+sibling. Relational `argument`, `callback-result`,
+and `callback-result-function` returns are driven with a fresh object sentinel
+and strict identity. Their claim strings include the parameter index, so evidence
+for parameter 0 cannot corroborate a later contract that names parameter 1.
+The callback-argument rows the current generator emits describe reactive
+accessors, but the schema does not describe a source or setter with which a
+generic probe could cause and observe an update. A nested accessor leaf is
+drivable only when the enclosing summary names a callback in which the probe can
+plant a signal read; otherwise it is recorded as `no plantable reactive source`.
+Store-path leaves still do not name the mutation that would exercise them.
+Checking only `typeof value === "function"` would be fake evidence, so these
+remain family C until the contract describes a complete construction and
+observation path.
 
 **What a probe observes.** `inline`, `deferred` and `tracked` classify
 attribution, so the export call sits inside a memo, the probe callback reads a
@@ -765,8 +808,12 @@ verification, and undrivable only because no probe claim string names them.
 They used to be reported as **(C)**, the family whose definition is "converted
 to the unknown sentinel before promotion", while verification kept them; the
 report and the code told different stories about the same row. Callback
-`owner` rows, callback argument descriptors, nested return leaves, store-path
-and `argument` returns, and `asyncBehavior` are family (C) and do convert.
+`owner` rows, callback argument descriptors, store-path, and `asyncBehavior` are
+family (C) and do convert. Drivable accessor and relational return leaves are
+family (B). `argument`,
+`callback-result`, and `callback-result-function` returns are family (B): a
+completed strict-identity mismatch is a witnessed failure, while a throw stays
+undriven and writes no evidence.
 
 **`returns=accessor` needs caching, not just reactivity.** The observation
 plants its signal read inside the callback the contract states, so a plain
@@ -855,10 +902,11 @@ Everything else converts, per **domain**:
 | `reactiveReads[]`, `ownerRequirements[]`, `variants[]` | kept |
 | `kind: function` / `value` | kept **only when probed in every stated mode**; otherwise its entrypoint is refused and omitted (see below) |
 | `callbacks[].execution` | kept when probed and witnessed in every stated mode |
-| `returns` (top-level `accessor`) | kept when probed and witnessed in every stated mode |
+| `returns` accessor leaves, top-level or nested | keeps `returns` only when every leaf is probed and witnessed in every stated mode; an accessor with no plantable source converts the domain |
 | `callbacks[].owner` | converts the whole `callbacks` domain — permanently out of a machine's reach |
 | `callbacks[].arguments[]` descriptors | converts the whole `callbacks` domain |
-| `returns` `store-path`, `argument`, or nested `elements`/`properties` leaves | converts `returns` |
+| `returns` `store-path` leaves | converts `returns` |
+| `returns` `argument`, `callback-result`, or `callback-result-function` leaves, top-level or nested | keeps `returns` only with current, path- and parameter-specific probed evidence covering every stated mode; otherwise converts the whole domain because schema v1 has one sentinel for it |
 | `asyncBehavior` | converts, always — no probe claim string, and no evidence slot in schema v1 to record one in |
 | any row carrying `inherited-from` evidence | converts its domain, at the top level **and inside every variant** |
 
@@ -1084,7 +1132,7 @@ covers the local declaration) proves nothing and stays with the refusal.
 
 **A summary-level marker does not outlive its claims.** `writeProbeEvidence`
 computes the export summary's own `probed` marker from the `callbacks[]` rows
-and the top-level `returns`. When those claims are converted here — or deleted
+and every exact return leaf. When those claims are converted here — or deleted
 by a review that certified them absent — the marker would assert an observation
 of claims the document no longer contains, and a row with no evidence of its
 own inherits it. It is recomputed in both paths and survives only when the
@@ -1583,7 +1631,7 @@ replacing the bytes it describes. A contract may therefore also record
 audited against — and every bundled contract does.
 
 When a loaded contract carries `package.integrity` **and** the installed copy's
-integrity is recoverable from the project's npm lockfile, a disagreement
+integrity is recoverable from the project's Bun or npm lockfile, a disagreement
 refuses the contract exactly as a version disagreement does: status `stale`,
 an uncertifiable `SC9005` at the import, the run continues. The message and the
 report `detail` name **both integrities** rather than the versions, because the
@@ -1591,13 +1639,14 @@ versions agree — naming them would read as a contradiction. The remedy is to
 regenerate and re-review a project-owned contract; for a bundled one it is to
 install the exact audited artifact or upgrade `solid-checker`.
 
-The installed integrity is read from `package-lock.json` or
-`node_modules/.package-lock.json` (`lockfileVersion` 2 or 3), whose `packages`
-map is keyed by *install path* and therefore names the specific installed copy
-rather than a package name. Everything else yields **no fact**, and no fact
-means the previous behavior — version matching alone:
+The installed integrity is read from Bun's `bun.lock` package records or from
+`package-lock.json` / `node_modules/.package-lock.json` (`lockfileVersion` 2 or
+3). Bun records the resolved package identifier and integrity; npm's
+`packages` map is keyed by *install path* and therefore names the specific
+installed copy rather than a package name. Everything else yields **no fact**,
+and no fact means the previous behavior — version matching alone:
 
-- no npm lockfile (pnpm, Yarn, or none at all);
+- no Bun or npm lockfile (pnpm, Yarn, or none at all);
 - `lockfileVersion` 1, whose tree is keyed by package name and so cannot say
   which installed copy an entry describes under hoisting;
 - an entry with no `integrity`: a workspace link, a `file:` dependency, a git
@@ -1636,7 +1685,7 @@ It refuses the contract without failing the run — the stale path — on:
 
 - a contract whose `package.version` is not the installed one; and
 - a contract whose `package.integrity` disagrees with the integrity the
-  project's npm lockfile records for the installed copy. See
+  project's Bun or npm lockfile records for the installed copy. See
   [Integrity drift under an unchanged version](#integrity-drift-under-an-unchanged-version)
   for exactly when that fact is available and what happens when it is not.
 
@@ -2188,6 +2237,23 @@ value is returned unchanged; consumers instantiate it at each call, so generic
 identity and invariant wrappers preserve nested tuple/object reactivity without
 inventing a new schema version.
 
+A `callback-result` return instead identifies a callback parameter whose
+*invocation result* is returned. Consumers resolve the exact local callback at
+the call site and preserve its accessor/store/tuple/object result. An external,
+conditional, or otherwise unresolved callback stays unknown; the relation does
+not turn a generic `T` into a guessed reactive kind. This is the shape used by
+`@solid-primitives/rootless`' `createSubRoot` and `createBranch`.
+
+A `callback-result-function` return identifies the narrower factory shape: the
+exported call returns a function, and invoking that returned function yields
+the result of the named callback parameter from the exported call. Consumers
+follow one exact same-file binding back to the contracted factory call, then
+instantiate the callback result as above. An alias, assignment, cross-file
+callable, or callback without an exact local body remains unknown. This is the
+shape used by `@solid-primitives/rootless`' singleton-root and root-pool
+factories; it does not claim that an arbitrary function-typed result is a
+reactive source.
+
 A shorthand property (`{ pathname }`) writes one identifier where a key and a
 value both stand, and TypeScript answers a symbol query at that span with the
 *property's* symbol, never the value binding's. The value is identified instead
@@ -2340,6 +2406,17 @@ rung above the last resolves an exact identity, never a name-text match.
 5. **`fallback-all`** — nothing identified the obligation's containing function
    at all. Every function export of the entrypoint is marked. This rung is
    fail-closed and still reachable; it is not the ordinary case.
+
+Published packages commonly bind `import "./impl.js"` through an adjacent
+`impl.d.ts` while their ESM runtime loads `impl.js`. Contract generation joins
+that split only from the exact static edge already selected by the generator's
+runtime closure: importer, literal specifier, and runtime target. The backend
+then requires TypeFacts to confirm the declaration-bound import and to resolve
+both the runtime-referenced named/default binding and the same exact runtime
+export. This restores the call edge before the ladder runs. Missing,
+package-external, namespace, incomplete, or conflicting joins add no identity;
+the ladder therefore keeps its existing `fallback-all` safety net instead of
+pairing declaration and implementation files by name.
 
 Schema v1's `unknownClaim` carries only `status`, so the rung that answered
 cannot be recorded in the contract. It is recorded instead on the matching
@@ -2542,7 +2619,7 @@ error rather than being ignored: a half-filled entry is someone leaving fields
 out of a generated contract, and that must not pass as a deliberate
 hand-authored one. Such an entry is still declared, because the manifest is the
 inventory of every package a dialect models — see [The manifest is the complete
-inventory](#the-manifest-is-the-complete-inventory). `node scripts/dialect-manifests.mjs validate` — part
+inventory](#the-manifest-is-the-complete-inventory). `bun scripts/dialect-manifests.mjs validate` — part
 of the universal check set — enforces all of that and fails on any declared
 artifact that does not exist, so a half-added package cannot ship as a dialect
 that silently models nothing.
@@ -2555,8 +2632,8 @@ version:
 
 ```sh
 mkdir -p /tmp/contract-packages && cd /tmp/contract-packages
-npm init -y >/dev/null
-npm install --ignore-scripts --no-audit --no-fund \
+bun init -y >/dev/null
+bun install --ignore-scripts --no-progress \
   solid-js-1x@npm:solid-js@1.9.14 solid-js@2.0.0-rc.0 @solidjs/web@2.0.0-rc.0
 ```
 
@@ -2590,7 +2667,7 @@ vocabulary, compiler, catalog, and detection work.
 ### Runtime probes and the lock
 
 Set `probeRuntime` when the contract's claims are checked against an installed
-release. `node scripts/check-bundled-contracts.mjs` then installs the exact
+release. `bun scripts/check-bundled-contracts.mjs` then installs the exact
 pinned release, checks its export surface and npm integrity, verifies every edge
 in `pkg/contracts/bundled/runtime-lock.json`, and executes every declared
 behavior probe in client, server, development, and production condition modes.
@@ -2685,9 +2762,9 @@ a false negative at the first argument past it. A sentinel is the honest answer
 where the runtime's shape has no encoding; it is not a way to skip writing a
 probe for a claim that does have one.
 
-`node scripts/check-contract-pins.mjs`, in the same target, covers what probing
+`bun scripts/check-contract-pins.mjs`, in the same target, covers what probing
 cannot reach. The probe suite proves a package's identity by installing it and
-reading npm's hidden lockfile, so a contract it does not install — a
+reading Bun's lockfile, so a contract it does not install — a
 hand-authored overlay, or a dialect whose runtime is not probed — would be
 pinned by a version string alone. A version string is not a pin: republished or
 mutated contents keep the version, and the contract would still claim to
@@ -2706,7 +2783,7 @@ regenerating.
 
 When a bundled artifact is assembled from checked-in inputs rather than
 generated directly from a package, declare `composeScript` and `composeInputs`.
-`node scripts/dialect-manifests.mjs check-composed-contracts` runs each script
+`bun scripts/dialect-manifests.mjs check-composed-contracts` runs each script
 with `--check`, failing when the checked-in artifact is stale relative to its
 inputs. The Solid 1.x contract works this way: it is composed from a per-subpath
 export census and the reviewed semantics map.

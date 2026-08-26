@@ -17,15 +17,29 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import test from "node:test";
+import { test as vitestTest } from "vitest";
+
+import {
+  createModuleResolver,
+  moduleSpecifiers,
+  openDynamicImportReachability,
+  runtimeModuleClosure
+} from "../packages/cli/scripts/runtime-module-closure.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/cli/bin/solid-checker.mjs");
+const generationShard = globalThis.__SOLID_CHECKER_GENERATION_TEST_SHARD ?? 0;
+const generationShardCount = 2;
+let generationTestIndex = 0;
+const test = (...arguments_) => {
+  const index = generationTestIndex++;
+  if (index % generationShardCount === generationShard) vitestTest(...arguments_);
+};
 
 // One stub per behavior, keyed by the entry file the generator hands it:
 // "ok" writes a minimal normalized contract document, "refuse" reproduces a
 // native fail-closed contract-emission refusal, "crash" reproduces a panic.
-const STUB_NATIVE = `#!/usr/bin/env node
+const STUB_NATIVE = `#!/usr/bin/env bun
 import { appendFileSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
@@ -111,6 +125,18 @@ writeFileSync(
     evidence: { kind: "inferred" }
   })
 );
+
+const probePlanPath = value("--emit-probe-plan");
+if (probePlanPath) {
+  writeFileSync(
+    probePlanPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      source: "typescript-value-domain",
+      exports: {}
+    })
+  );
+}
 
 // The module inventory \`--emit-module-inventory\` writes, in the shape
 // \`write_module_inventory\` writes it (rust/crates/solid-facts-backend/src/
@@ -737,6 +763,136 @@ function closureOf(packageRoot, entrypoint = ".") {
   return plan.generation.entrypoints[entrypoint];
 }
 
+test("finite conditional dynamic imports enumerate every literal branch", () => {
+  assert.deepEqual(
+    moduleSpecifiers(
+      'export const module = import(server ? "./server.js" : nested ? "./dev.js" : "./web.js");\n'
+    ),
+    {
+      specifiers: ["./server.js", "./dev.js", "./web.js"],
+      problems: []
+    }
+  );
+});
+
+test("finite static-table dynamic imports require a finite selector", () => {
+  const table = 'Object.freeze({ server: "./server.js", web: "./web.js" })';
+  assert.deepEqual(moduleSpecifiers(`import(${table}[server ? "server" : "web"]);\n`), {
+    specifiers: ["./server.js", "./web.js"],
+    problems: []
+  });
+  assert.deepEqual(moduleSpecifiers(`import(${table}[runtimeName]);\n`), {
+    specifiers: [],
+    problems: [
+      {
+        kind: "dynamic-import",
+        reason:
+          "a dynamic import() whose specifier is not statically bounded to a finite set of string literals"
+      }
+    ]
+  });
+});
+
+test("an open branch keeps a dynamic import unbounded", () => {
+  assert.deepEqual(moduleSpecifiers('import(server ? "./server.js" : runtimeName);\n'), {
+    specifiers: [],
+    problems: [
+      {
+        kind: "dynamic-import",
+        reason:
+          "a dynamic import() whose specifier is not statically bounded to a finite set of string literals"
+      }
+    ]
+  });
+});
+
+test("finite dynamic imports seed and attest every reachable runtime module", () => {
+  const { directory, packageRoot, stub } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js":
+          'export const loaded = import(server ? "./server.js" : "./web.js");\n',
+        "server.js": "export const mode = 'server';\n",
+        "web.js": "export const mode = 'web';\n"
+      }
+    }
+  );
+  try {
+    const result = generate({ packageRoot, stub });
+    assert.equal(result.status, 0, result.stderr);
+    const closure = closureOf(packageRoot);
+    assert.deepEqual(closure.modules.map(module => module.path).sort(), [
+      "index.js",
+      "server.js",
+      "web.js"
+    ]);
+    assert.equal(closure.notes, undefined);
+    assert.equal(closure.runtimeNotes, undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("the closure exposes the exact static edges used to seed analysis", () => {
+  const { directory, packageRoot } = makeWorkspace(
+    { ".": "./index.js" },
+    {
+      files: {
+        "index.js": 'import { helper } from "./helper.js"; export { helper };\n',
+        "helper.js": "export function helper() {}\n"
+      }
+    }
+  );
+  try {
+    const resolver = createModuleResolver({ packageRoot });
+    const closure = runtimeModuleClosure({
+      packageRoot,
+      entryFile: join(packageRoot, "index.js"),
+      excludedFiles: new Set(),
+      resolver
+    });
+    assert.deepEqual(closure.resolutions, [
+      {
+        importer: join(packageRoot, "index.js"),
+        specifier: "./helper.js",
+        target: join(packageRoot, "helper.js")
+      }
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("an open dynamic import withdraws only exports that reach its containing function", () => {
+  const source = `
+function loadAssets(url) { return import(url); }
+function hydrateImpl() { runtime.load = loadAssets; }
+const hydrate = (...args) => hydrateImpl(...args);
+function ssrGroup(fn, n) { fn.$g = n; return fn; }
+export { hydrate, ssrGroup };
+`;
+  assert.deepEqual(openDynamicImportReachability(source, ["hydrate", "ssrGroup"]), {
+    affectedExports: ["hydrate"]
+  });
+});
+
+test("an open top-level import or escaped loader remains entrypoint-wide", () => {
+  const escaped = openDynamicImportReachability(
+    `const load = url => import(url);\nregistry.load = load;\nexport { load };\n`,
+    ["load"]
+  );
+  assert.match(escaped.ambiguous, /escapes at module scope/);
+  const topLevel = openDynamicImportReachability(
+    `const pending = import(runtimeUrl);\nexport { pending };\n`,
+    ["pending"]
+  );
+  assert.match(
+    topLevel.ambiguous,
+    /outside an attributable function/
+  );
+});
+
 test("a .js specifier that resolves to a TypeScript sibling is recorded", () => {
   // TypeScript resolves an ESM-spelled `./impl.js` against the source that
   // exists, and the analysis reads `impl.ts`. Recording only the entry left the
@@ -912,7 +1068,7 @@ test("a specifier naming nothing drops its note; a non-literal import() keeps on
     assert.equal(closure.runtimeNotes.length, 1);
     assert.match(
       closure.runtimeNotes[0],
-      /the module record is attested .* and complete except for what a dynamic import\(\) whose specifier is not a string literal may load at runtime/
+      /the module record is attested .* and complete except for what a dynamic import\(\) whose specifier is not statically bounded to a finite set of string literals may load at runtime/
     );
 
     // A reviewer sees it in the same section a closure note appears in: the two
