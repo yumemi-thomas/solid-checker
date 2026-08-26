@@ -1,0 +1,194 @@
+{
+  "bugs": {
+    "url": "https://github.com/solidjs/solid/issues"
+  },
+  "dist": {
+    "shasum": "6ac639ca2558e283d941230e65fdaabffd745149",
+    "tarball": "https://registry.npmjs.org/solid-js/-/solid-js-2.0.0-rc.3.tgz",
+    "fileCount": 43,
+    "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==",
+    "signatures": [
+      {
+        "sig": "MEUCIH3DXDgFoGHUFCp87JBbgL/SrhshD+dQhKc3LB13TpLlAiEAnz4y4SKD6p0IYAXNFakyjnvbe1/2d+pRlRGCoHziAmk=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEYCIQC45hnyOHioasYCUFFZXgOUiVXAVy8A824H9IZmWhu8CgIhAJ6c+Uc17snwntEhZNdWQCaTgP49I6vkB+TfgqR/zwQF",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/solid-js@2.0.0-rc.3",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 555790
+  },
+  "main": "./dist/server.cjs",
+  "name": "solid-js",
+  "type": "module",
+  "types": "types/index.d.ts",
+  "unpkg": "./dist/solid.js",
+  "author": {
+    "name": "Ryan Carniato"
+  },
+  "module": "./dist/server.js",
+  "exports": {
+    ".": {
+      "deno": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/solid.js"
+      },
+      "worker": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/server.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/server.cjs"
+        }
+      },
+      "browser": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/solid.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/solid.cjs"
+        },
+        "development": {
+          "import": {
+            "types": "./types/index.d.ts",
+            "default": "./dist/dev.js"
+          },
+          "require": {
+            "types": "./types-cjs/index.d.cts",
+            "default": "./dist/dev.cjs"
+          }
+        }
+      },
+      "require": {
+        "types": "./types-cjs/index.d.cts",
+        "default": "./dist/solid.cjs"
+      },
+      "development": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/index.d.cts",
+          "default": "./dist/dev.cjs"
+        }
+      }
+    },
+    "./refresh": {
+      "import": {
+        "types": "./types/refresh/index.d.ts",
+        "default": "./dist/refresh.js"
+      },
+      "require": {
+        "types": "./types-cjs/refresh/index.d.cts",
+        "default": "./dist/refresh.cjs"
+      },
+      "development": {
+        "import": {
+          "types": "./types/refresh/index.d.ts",
+          "default": "./dist/refresh.dev.js"
+        },
+        "require": {
+          "types": "./types-cjs/refresh/index.d.cts",
+          "default": "./dist/refresh.dev.cjs"
+        }
+      }
+    },
+    "./types/*": "./types/*",
+    "./package.json": "./package.json"
+  },
+  "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run",
+    "build": "npm-run-all -nl build:*",
+    "types": "npm-run-all -nl types:clean types:src types:cjs",
+    "build:js": "rollup -c",
+    "coverage": "vitest run --coverage",
+    "types:cjs": "node ../../scripts/sync-dual-types.mjs ./types ./types-cjs",
+    "types:src": "tsc --project ./tsconfig.build.json",
+    "test-types": "tsc --project tsconfig.test.json && tsc --project tsconfig.no-dom.json",
+    "build:clean": "rimraf dist/ coverage/",
+    "types:clean": "rimraf types/ types-cjs/"
+  },
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:cea8c03b-07aa-4950-bdea-311f9d82215b"
+    }
+  },
+  "homepage": "https://solidjs.com",
+  "jsdelivr": "./dist/solid.js",
+  "keywords": [
+    "solid",
+    "solidjs",
+    "ui",
+    "reactive",
+    "components",
+    "compiler",
+    "performance"
+  ],
+  "repository": {
+    "url": "git+https://github.com/solidjs/solid.git",
+    "type": "git",
+    "directory": "packages/solid"
+  },
+  "_npmVersion": "11.17.0",
+  "description": "Reactive JavaScript library for building user interfaces. Compiles JSX to real DOM with fine-grained signal-based updates — no virtual DOM.",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "ryansolid",
+      "email": "ryansolid@gmail.com"
+    }
+  ],
+  "sideEffects": false,
+  "_nodeVersion": "24.19.0",
+  "dependencies": {
+    "csstype": "^3.1.0",
+    "seroval": "~1.5.4",
+    "seroval-plugins": "~1.5.4",
+    "@solidjs/signals": "^2.0.0-rc.3"
+  },
+  "_hasShrinkwrap": false,
+  "readmeFilename": "README.md",
+  "_npmOperationalInternal": {
+    "tmp": "tmp/solid-js_2.0.0-rc.3_1787727425208_0.7318235893610516",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "solid-js@2.0.0-rc.3",
+  "version": "2.0.0-rc.3"
+}

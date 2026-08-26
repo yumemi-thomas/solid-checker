@@ -1,0 +1,217 @@
+[
+  {
+    "path": "CHEATSHEET.md",
+    "sha256": "d68d8c7648b791656f8b7f0fc5505fb65aa8f97b6892f386d8b4fcc0e3045b87",
+    "bytes": 24908
+  },
+  {
+    "path": "dist/dev.cjs",
+    "sha256": "4ca1b958df30ef4b0fa9cfd17206293073846d33147ad164208805dafde22e51",
+    "bytes": 47276
+  },
+  {
+    "path": "dist/dev.js",
+    "sha256": "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18",
+    "bytes": 42351
+  },
+  {
+    "path": "dist/refresh.cjs",
+    "sha256": "655463556d7e8792bad3796d34f56cb309a2a8d7944ca57cab5e1c76de774887",
+    "bytes": 952
+  },
+  {
+    "path": "dist/refresh.dev.cjs",
+    "sha256": "99882b4fc1a9b6771ce80f0652e0146f3f7fb651279d940fdf6fc41efbb1e273",
+    "bytes": 8058
+  },
+  {
+    "path": "dist/refresh.dev.js",
+    "sha256": "15b33e58727ecf3e4c0c0caee4d3e886352d2c1dc71074196acbaa02ba22243b",
+    "bytes": 7925
+  },
+  {
+    "path": "dist/refresh.js",
+    "sha256": "8cafe4135f61bed38399c24e7d6ff62063b3050d30cea03f06b8dcb2989e3b05",
+    "bytes": 836
+  },
+  {
+    "path": "dist/server.cjs",
+    "sha256": "2e2ed5833323d48a43454b89f03de9f31346a3549a9934d8e67b3b9fe4f231a7",
+    "bytes": 70771
+  },
+  {
+    "path": "dist/server.js",
+    "sha256": "63269da73b61b71fd775ef811f8ab88417c6ea6dda2de1e6f3c10d86b66fc8a8",
+    "bytes": 67887
+  },
+  {
+    "path": "dist/solid.cjs",
+    "sha256": "d155966bc29d2bf46e3cb32c8839d885933a50b60c28c6d8abd70a7ac1147333",
+    "bytes": 45113
+  },
+  {
+    "path": "dist/solid.js",
+    "sha256": "14af2d696eb0669c64973874601f691737aa1df359fced6dec55a523f34cfa1b",
+    "bytes": 40196
+  },
+  {
+    "path": "package.json",
+    "sha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b",
+    "bytes": 3977
+  },
+  {
+    "path": "README.md",
+    "sha256": "5c428a2c5bf90123ad93243fbbabfdd4ae148ee9d0cd6e4d066c00e435da6f26",
+    "bytes": 4439
+  },
+  {
+    "path": "skills/reactivity-diagnostics/SKILL.md",
+    "sha256": "495540e10aafa6c2c3c6b94a482ccf1f00165d0fabee3ace1cdc5905a771fe4a",
+    "bytes": 6974
+  },
+  {
+    "path": "types-cjs/client/component.d.cts",
+    "sha256": "f367cde27a9cb50f37f6e4f9e0feb51fc6723ffbc7f752f9942ea2381c9f8671",
+    "bytes": 5408
+  },
+  {
+    "path": "types-cjs/client/core.d.cts",
+    "sha256": "a092fed24b3ad73323593048e5d6f9905427136a8630b8b0a16463dbd50f25dd",
+    "bytes": 5467
+  },
+  {
+    "path": "types-cjs/client/flow.d.cts",
+    "sha256": "bcece3b4bf0b1c9f8d04ae3a447d642e06e0d7277eb099460712d4b0ced5255f",
+    "bytes": 11189
+  },
+  {
+    "path": "types-cjs/client/hydration.d.cts",
+    "sha256": "f4dffdf7fe9409e64ebdbc422560a674ab772c45cc3a7adc4efb81edaccde2a4",
+    "bytes": 25718
+  },
+  {
+    "path": "types-cjs/index.d.cts",
+    "sha256": "b7f712fd917b30e57d949f38d696f301effd3d10439d1ba85b8228c2826ca8fb",
+    "bytes": 2312
+  },
+  {
+    "path": "types-cjs/package.json",
+    "sha256": "8005a3491db7d92f36ac66369861589f9c47123d3a7c71e643fc2c06168cd45a",
+    "bytes": 25
+  },
+  {
+    "path": "types-cjs/refresh/index.d.cts",
+    "sha256": "0580ed8cc9b482e5c7f8e5c18954c5d290ccb093ad1a42d7f80ec3936af5ecc5",
+    "bytes": 3129
+  },
+  {
+    "path": "types-cjs/server/component.d.cts",
+    "sha256": "59e318011c4eec6833dc23e43b623cdb36a5a2839437a84dff9419c7b8829831",
+    "bytes": 3874
+  },
+  {
+    "path": "types-cjs/server/core.d.cts",
+    "sha256": "1c354d01ab00f247c298f283af63bb01170469fc22b1180e3d719202b3343fdf",
+    "bytes": 2271
+  },
+  {
+    "path": "types-cjs/server/flow.d.cts",
+    "sha256": "9172e0dd5dffd8a2a27e42eba7123e94eecc7abd61ec1a672c0dc803234c9a3f",
+    "bytes": 7276
+  },
+  {
+    "path": "types-cjs/server/hydration.d.cts",
+    "sha256": "aad99133198f1384961afed0b2772bea361a213997f89c78cb88789f04cec0cd",
+    "bytes": 1718
+  },
+  {
+    "path": "types-cjs/server/index.d.cts",
+    "sha256": "ec5798061a6fa6bd315cf9f371ed89abd199c2492c8d043d7204b879a59ac7ef",
+    "bytes": 1873
+  },
+  {
+    "path": "types-cjs/server/shared.d.cts",
+    "sha256": "1e4bb5fb49e536b2397248f1cdf46dbc8db1ed26a7a6fab943b5377501629d40",
+    "bytes": 5538
+  },
+  {
+    "path": "types-cjs/server/signals.d.cts",
+    "sha256": "99a5208c564778404d506129686f84a960baaee083d405e9e6de9cc2b117e2b8",
+    "bytes": 15718
+  },
+  {
+    "path": "types-cjs/types.d.cts",
+    "sha256": "f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec",
+    "bytes": 577
+  },
+  {
+    "path": "types/client/component.d.ts",
+    "sha256": "4712cb95ac618ba381c5478989b0d6a2936f3d177357730db61773a8f597b1ed",
+    "bytes": 5407
+  },
+  {
+    "path": "types/client/core.d.ts",
+    "sha256": "9b80dda7c1a85de944f0f4e75ba964be0e895a5e8abaf01e70e82f9614010068",
+    "bytes": 5465
+  },
+  {
+    "path": "types/client/flow.d.ts",
+    "sha256": "81af6e73951ea01b3c28b2c2ded7537522b0ebe67575e33f23ba10aed2f1148a",
+    "bytes": 11188
+  },
+  {
+    "path": "types/client/hydration.d.ts",
+    "sha256": "b6e3310a19c5328fa1f239197f4e3eadcd325ffe8727f8e69ab7aa38b7cd144d",
+    "bytes": 25717
+  },
+  {
+    "path": "types/index.d.ts",
+    "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740",
+    "bytes": 2306
+  },
+  {
+    "path": "types/refresh/index.d.ts",
+    "sha256": "e8d8e1f30e32dce023a59d3e8f49d47144bef149d9c85e038f9250f8141c44e3",
+    "bytes": 3128
+  },
+  {
+    "path": "types/server/component.d.ts",
+    "sha256": "e9e4930c200b8e17db68da5c404f06fc89ec111785f221044386d4cb29455df6",
+    "bytes": 3873
+  },
+  {
+    "path": "types/server/core.d.ts",
+    "sha256": "6093d11f741209e54b37bea4a89e6f39bc5da1ac72271ad3bc2648ea29370a32",
+    "bytes": 2268
+  },
+  {
+    "path": "types/server/flow.d.ts",
+    "sha256": "10bf4419b5f10d504c857ef22ce4aad9f96fdcf6bcbc9f3adae73eb1f0891993",
+    "bytes": 7274
+  },
+  {
+    "path": "types/server/hydration.d.ts",
+    "sha256": "7f6d88246cf767e4fb74567231b002605df5911097f3a8e7c4706bd43cb22dea",
+    "bytes": 1713
+  },
+  {
+    "path": "types/server/index.d.ts",
+    "sha256": "d43f20737571b1b5f2b93475de8c050728e776f5d764b92dd6e28054cbf4e71f",
+    "bytes": 1864
+  },
+  {
+    "path": "types/server/shared.d.ts",
+    "sha256": "de5232a592defec386d5ec1094540530a60253bbb57568db51dbd3bf62e101af",
+    "bytes": 5537
+  },
+  {
+    "path": "types/server/signals.d.ts",
+    "sha256": "d21d8babd8f83a123d445db058a71168e6041fe9fa84dbd739f3e1b8dfdac654",
+    "bytes": 15717
+  },
+  {
+    "path": "types/types.d.ts",
+    "sha256": "f089b3993cd5a7a6ad626cb06eb9b5cdc3b8540d652fc9431c61e398f33354ec",
+    "bytes": 577
+  }
+]
