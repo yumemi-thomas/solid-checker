@@ -1110,6 +1110,174 @@ notCallable();
 	}
 }
 
+// A package-contract consumer can validate a candidate runtime witness by
+// adding one synthetic call to the configured project and demanding the
+// existing resolvedCall fact. This deliberately exercises contextual generic
+// inference: reconstructing TableOptions from rendered type text would lose
+// both the inferred feature set and the compiler's assignability rules.
+func TestResolvedCallValidatesTableShapedSyntheticWitnesses(t *testing.T) {
+	dir := t.TempDir()
+	source := `type RowData = unknown;
+type FeatureMap = Record<string, { createTable(table: unknown): void }>;
+type ValidateFeatureSlots<TFeatures extends FeatureMap> = "missing" extends keyof TFeatures ? { missing: never } : {};
+interface TableOptions<TFeatures extends FeatureMap, TData extends RowData> {
+	features: TFeatures & ValidateFeatureSlots<TFeatures>;
+	data: TData[];
+	columns: Array<{ accessorKey: keyof TData }>;
+}
+declare function createTable<TFeatures extends FeatureMap, TData extends RowData>(options: TableOptions<TFeatures, TData>): unknown;
+declare const stockFeatures: {
+	core: { createTable(table: unknown): void };
+};
+createTable({ features: stockFeatures, data: [], columns: [] });
+createTable({ features: { core: {} }, data: [], columns: [] });
+createTable({ features: stockFeatures, data: {} });
+createTable(null as never);
+`
+	sourcePath := filepath.Join(dir, "witness.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	cases := []struct {
+		needle string
+		want   typefacts.ResolvedCallValidity
+	}{
+		{`createTable({ features: stockFeatures, data: [], columns: [] })`, typefacts.ResolvedCallValid},
+		{`createTable({ features: { core: {} }, data: [], columns: [] })`, typefacts.ResolvedCallRecovery},
+		{`createTable({ features: stockFeatures, data: {} })`, typefacts.ResolvedCallRecovery},
+	}
+	demands := make([]typefacts.EntityDemand, len(cases))
+	for index, testCase := range cases {
+		start := strings.Index(source, testCase.needle)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.needle)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(testCase.needle)},
+			ResolvedCall: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range cases {
+		call := entities[index].ResolvedCall
+		if call == nil || call.Validity != testCase.want {
+			t.Errorf("%q resolved call = %+v, want validity %q", testCase.needle, call, testCase.want)
+		}
+		if call != nil && call.Validity == typefacts.ResolvedCallValid && call.Arguments[0].Parameter.ObjectShape != nil {
+			t.Errorf("%q returned an undemanded parameter object shape", testCase.needle)
+		}
+	}
+	shapeNeedle := `createTable(null as never)`
+	shapeStart := strings.Index(source, shapeNeedle)
+	shapes, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:             typefacts.Location{Path: sourcePath, StartByte: shapeStart, EndByte: shapeStart + len(shapeNeedle)},
+		ResolvedCall:         true,
+		ParameterObjectShape: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameter := shapes[0].ResolvedCall.Arguments[0].Parameter
+	if parameter == nil || parameter.ObjectShape == nil {
+		t.Fatalf("TableOptions parameter object shape = %+v", parameter)
+	}
+	wantProperties := []typefacts.ObjectConstructionProperty{
+		{Name: "columns", Witness: typefacts.ConstructionWitnessEmptyArray},
+		{Name: "data", Witness: typefacts.ConstructionWitnessEmptyArray},
+		{Name: "features", Witness: typefacts.ConstructionWitnessEmptyObject},
+	}
+	if !slices.Equal(parameter.ObjectShape.RequiredProperties, wantProperties) {
+		t.Fatalf("TableOptions required properties = %+v, want %+v", parameter.ObjectShape.RequiredProperties, wantProperties)
+	}
+}
+
+func TestParameterObjectShapeLeavesUnprovenWitnessesUnknown(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare function unsafe(options: {
+	callback: () => void;
+	tuple: [string];
+	primitive: string;
+	optional?: number;
+}): void;
+unsafe(null as never);
+`
+	sourcePath := filepath.Join(dir, "witness.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	needle := `unsafe(null as never)`
+	start := strings.Index(source, needle)
+	entities, err := opened.(typefacts.SemanticEntityLookup).SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(needle)},
+		ResolvedCall: true, ParameterObjectShape: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	properties := entities[0].ResolvedCall.Arguments[0].Parameter.ObjectShape.RequiredProperties
+	want := []typefacts.ObjectConstructionProperty{
+		{Name: "callback", Witness: typefacts.ConstructionWitnessUnknown},
+		{Name: "primitive", Witness: typefacts.ConstructionWitnessUnknown},
+		{Name: "tuple", Witness: typefacts.ConstructionWitnessUnknown},
+	}
+	if !slices.Equal(properties, want) {
+		t.Fatalf("unsafe required properties = %+v, want %+v", properties, want)
+	}
+}
+
+func TestParameterObjectShapeRejectsUnconstrainedTypeParameter(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare function identity<T>(value: T): T;
+identity(null as never);
+`
+	sourcePath := filepath.Join(dir, "generic.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	needle := `identity(null as never)`
+	start := strings.Index(source, needle)
+	entities, err := opened.(typefacts.SemanticEntityLookup).SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(needle)},
+		ResolvedCall: true, ParameterObjectShape: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameter := entities[0].ResolvedCall.Arguments[0].Parameter
+	if parameter == nil || parameter.ObjectShape != nil {
+		t.Fatalf("unconstrained generic parameter object shape = %+v, want none", parameter)
+	}
+}
+
 func TestResolvedCallIdentifiesSelectedOverloadAndMapsArguments(t *testing.T) {
 	dir := t.TempDir()
 	source := `function select(value: string, callback: (value: string) => void): void;

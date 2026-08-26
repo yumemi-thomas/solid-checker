@@ -350,6 +350,25 @@ does not expose one underlying declaration/parameter identity that the producer
 can safely choose. Intersection overloads are mapped when resolution selects a
 real constituent declaration.
 
+When `parameterObjectShape` is demanded beside `resolvedCall`, each resolved
+parameter may also carry the selected declaration object type's required
+properties. Property names come from `Checker.GetPropertiesOfType`, and each
+property carries only a bounded construction candidate derived from checker
+types and constraints:
+`emptyArray`, `emptyObject`, or `unknown`. Optional properties are omitted.
+An empty array is emitted only for an array or a tuple with no required slot;
+an empty object is emitted only when every distributed constituent is an
+object with no required property and no call or construct signature. Type
+parameters are checked through their compiler-resolved base constraint.
+
+This fact discovers reachability input; it is not runtime evidence. A consumer
+must put the proposed values into a synthetic call and require ordinary
+`resolvedCall.validity == valid` before invoking package code. `unknown` is an
+instruction to enumerate exact candidates or stop, never permission to guess.
+The bottom-typed placeholder `null as never` can select an otherwise
+unambiguous signature while asking for its parameter shape; recovery,
+composite, and unresolved signatures still expose no parameter shape.
+
 `TypeDescriptor.text` and `returnTypeText` are display metadata. They do not
 participate in declaration identity, mapping, validity, or callability.
 
@@ -400,8 +419,9 @@ layouts, and symbols whose type and value declarations share a name.
 `RuntimeSymbolID` is an equality key, not a `SymbolID` lookup handle.
 
 Resolved-call work is demand-driven: the producer resolves and describes only
-requested call locations. Selected declarations and instantiated parameters
-are cached by signature within one analysis generation, while compiler-identical
+requested call locations. Parameter object shapes are derived only when their
+separate demand bit is set. Selected declarations and instantiated parameters
+are cached by signature and shape demand within one analysis generation, while compiler-identical
 instantiated and return types share one descriptor rendering. All checker-owned
 caches are discarded on update. Declaration, owner, and parameter identities
 are embedded facts rather than standalone symbol-closure lookup handles, so

@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Constructability,
-    Declaration, DeclarationOwner, EntityFact, FileFact, Location, ModuleFact, ModuleImportFact,
-    ParameterFact, PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain,
-    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain,
-    SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
+    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, FileFact, Location, ModuleFact,
+    ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape, ParameterFact,
+    PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain, ReferenceSpace,
+    ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain, SourceBinding,
+    SourceCall, SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -30,8 +31,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V14: u64 = 14;
 /// producer degrades it to `unknown` there), and a v14 decoder refuses it.
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:50e37e2bfc1396b7d4f7becc366751adb25b27c44b7a8cc033afc54b85635aec";
+    "sha256:9a217ca6aa3b147f84cd356df069259ecd548328ab0c48c83109832d1cbedeb9";
 /// 2 because the lifecycle operation set widened: `Operation::Modules` is an
 /// operation a peer must know about to be paired at all, where every earlier
 /// vocabulary change added a fact to an existing operation and moved the schema
@@ -106,6 +108,8 @@ pub struct EntityDemand {
     pub primitive_value_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub primitive_literal_candidates: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub parameter_object_shape: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub call_result_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -331,6 +335,7 @@ pub const DEMAND_FLAG_LIBRARY_TYPES: u64 = 1 << 14;
 pub const DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN: u64 = 1 << 15;
 pub const DEMAND_FLAG_CONSTRUCTABILITY: u64 = 1 << 16;
 pub const DEMAND_FLAG_PRIMITIVE_LITERAL_CANDIDATES: u64 = 1 << 17;
+pub const DEMAND_FLAG_PARAMETER_OBJECT_SHAPE: u64 = 1 << 18;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -633,7 +638,12 @@ impl<'a> PackedCursor<'a> {
                 let index = self.u64()?;
                 let symbol = self.string_index(strings, "parameter symbol")?;
                 let flags = self.u64()?;
-                if flags & !15 != 0 {
+                let known_flags = if table_schema >= TYPE_FACTS_TABLE_SCHEMA_V17 {
+                    31
+                } else {
+                    15
+                };
+                if flags & !known_flags != 0 {
                     return Err(format!("packed parameter has unknown flags {flags}"));
                 }
                 let declaration = if flags & 1 != 0 {
@@ -654,6 +664,25 @@ impl<'a> PackedCursor<'a> {
                 } else {
                     None
                 };
+                let object_shape = if flags & 16 != 0 {
+                    let count = self.count("required object properties")?;
+                    let mut properties = Vec::with_capacity(count);
+                    for _ in 0..count {
+                        let name = self.string_index(strings, "required object property")?;
+                        let witness = match self.u64()? {
+                            0 => ConstructionWitness::Unknown,
+                            1 => ConstructionWitness::EmptyArray,
+                            2 => ConstructionWitness::EmptyObject,
+                            tag => return Err(format!("unknown construction-witness tag {tag}")),
+                        };
+                        properties.push(ObjectConstructionProperty { name, witness });
+                    }
+                    Some(ObjectConstructionShape {
+                        required_properties: properties.into(),
+                    })
+                } else {
+                    None
+                };
                 Some(ParameterFact {
                     index,
                     symbol,
@@ -662,6 +691,7 @@ impl<'a> PackedCursor<'a> {
                     optional: flags & 4 != 0,
                     callability,
                     type_descriptor,
+                    object_shape,
                 })
             } else {
                 None
@@ -779,7 +809,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
-            TYPE_FACTS_TABLE_SCHEMA_V16 => 32767,
+            TYPE_FACTS_TABLE_SCHEMA_V16 | TYPE_FACTS_TABLE_SCHEMA_V17 => 32767,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -1243,6 +1273,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V14
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V15
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V16
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V17
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1543,6 +1574,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.primitive_literal_candidates {
             flags |= DEMAND_FLAG_PRIMITIVE_LITERAL_CANDIDATES;
         }
+        if demand.parameter_object_shape {
+            flags |= DEMAND_FLAG_PARAMETER_OBJECT_SHAPE;
+        }
         if demand.constructability {
             flags |= DEMAND_FLAG_CONSTRUCTABILITY;
         }
@@ -1589,10 +1623,10 @@ mod tests {
 
     use super::{
         SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
-        TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TransitionMode,
-        decode_table_transition, parse_argument_mapping_reason, parse_argument_mapping_status,
-        parse_call_kind, parse_callability, parse_constructability, parse_reference_space,
-        parse_resolved_call_validity, push_uvarint,
+        TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17,
+        TransitionMode, decode_table_transition, parse_argument_mapping_reason,
+        parse_argument_mapping_status, parse_call_kind, parse_callability, parse_constructability,
+        parse_reference_space, parse_resolved_call_validity, push_uvarint,
     };
 
     fn push_test_string(frame: &mut Vec<u8>, value: &str) {
@@ -2193,6 +2227,7 @@ mod tests {
         );
         assert!(decode_table_transition(&primitive_literal_candidates_transition(15)).is_err());
         assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V16, 16);
+        assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V17, 17);
     }
 
     #[test]

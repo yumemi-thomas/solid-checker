@@ -18,6 +18,7 @@ type EntityDemand struct {
 	RuntimeValueDomain         bool      `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
 	PrimitiveValueDomain       bool      `cbor:"primitiveValueDomain,omitempty" json:"primitiveValueDomain,omitempty"`
 	PrimitiveLiteralCandidates bool      `cbor:"primitiveLiteralCandidates,omitempty" json:"primitiveLiteralCandidates,omitempty"`
+	ParameterObjectShape       bool      `cbor:"parameterObjectShape,omitempty" json:"parameterObjectShape,omitempty"`
 	CallResultDomain           bool      `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
 	ConstantValue              bool      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
 	ArrayShape                 bool      `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`

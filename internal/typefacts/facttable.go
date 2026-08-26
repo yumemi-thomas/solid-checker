@@ -35,4 +35,5 @@ const TypeFactsTableSchemaVersionV14 uint64 = 14
 // new value to unknown so those frozen schemas stay exactly decodable.
 const TypeFactsTableSchemaVersionV15 uint64 = 15
 const TypeFactsTableSchemaVersionV16 uint64 = 16
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV16
+const TypeFactsTableSchemaVersionV17 uint64 = 17
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV17

@@ -2,11 +2,80 @@ use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
     AnalysisDemand, ArrayShape, CallKind, Callability, ConstantValue, ConstantValueKind,
-    Constructability, DemandGroup, Location, ModuleGraphDemand, ModuleResolution,
-    PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain,
-    Session, SessionError,
+    Constructability, ConstructionWitness, DemandGroup, Location, ModuleGraphDemand,
+    ModuleResolution, PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity,
+    RuntimeValueDomain, Session, SessionError,
     v3::{EntityDemand, FileChange},
 };
+
+#[test]
+fn parameter_object_shape_carries_table_witnesses_end_to_end() {
+    let root = std::env::temp_dir().join(format!(
+        "typefacts-parameter-object-shape-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let path = root.join("source.ts");
+    let source = concat!(
+        "type Features = Record<string, { createTable(): void }>;\n",
+        "interface Options<F extends Features, D> { features: F; data: D[]; columns: Array<keyof D>; optional?: string }\n",
+        "declare function createTable<F extends Features, D>(options: Options<F, D>): unknown;\n",
+        "createTable(null as never);\n",
+    );
+    fs::write(&path, source).unwrap();
+    let needle = "createTable(null as never)";
+    let start = source.find(needle).unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + needle.len()) as u64,
+        },
+        resolved_call: true,
+        parameter_object_shape: true,
+        ..EntityDemand::default()
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let table = session
+        .analyze(&AnalysisDemand {
+            entities: vec![demand],
+        })
+        .unwrap();
+    let parameter = table
+        .entities()
+        .next()
+        .unwrap()
+        .resolved_call
+        .as_ref()
+        .unwrap()
+        .arguments[0]
+        .parameter
+        .as_ref()
+        .unwrap();
+    let properties = &parameter.object_shape.as_ref().unwrap().required_properties;
+    assert_eq!(properties.len(), 3);
+    assert_eq!(properties[0].name.as_ref(), "columns");
+    assert_eq!(properties[0].witness, ConstructionWitness::EmptyArray);
+    assert_eq!(properties[1].name.as_ref(), "data");
+    assert_eq!(properties[1].witness, ConstructionWitness::EmptyArray);
+    assert_eq!(properties[2].name.as_ref(), "features");
+    assert_eq!(properties[2].witness, ConstructionWitness::EmptyObject);
+
+    session.close().unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
 
 /// The fact's reason for existing, end to end: an aliased tuple renders as its
 /// alias, so no text test can see the tuple. The alias also lives in another
