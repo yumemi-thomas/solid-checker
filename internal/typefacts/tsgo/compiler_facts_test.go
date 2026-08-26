@@ -1246,6 +1246,38 @@ unsafe(null as never);
 	}
 }
 
+func TestParameterObjectShapeRejectsUnconstrainedTypeParameter(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare function identity<T>(value: T): T;
+identity(null as never);
+`
+	sourcePath := filepath.Join(dir, "generic.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	needle := `identity(null as never)`
+	start := strings.Index(source, needle)
+	entities, err := opened.(typefacts.SemanticEntityLookup).SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(needle)},
+		ResolvedCall: true, ParameterObjectShape: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parameter := entities[0].ResolvedCall.Arguments[0].Parameter
+	if parameter == nil || parameter.ObjectShape != nil {
+		t.Fatalf("unconstrained generic parameter object shape = %+v, want none", parameter)
+	}
+}
+
 func TestResolvedCallIdentifiesSelectedOverloadAndMapsArguments(t *testing.T) {
 	dir := t.TempDir()
 	source := `function select(value: string, callback: (value: string) => void): void;

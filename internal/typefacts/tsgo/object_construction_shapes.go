@@ -14,7 +14,7 @@ import (
 // consumer validates the completed synthetic call with resolvedCall; unknown
 // witnesses remain explicit so the consumer must enumerate or stop.
 func (p *project) objectConstructionShape(value *checker.Type, evidence *semanticEvidence) *typefacts.ObjectConstructionShape {
-	if value == nil || value.Flags()&openConstructionShapeFlags != 0 {
+	if value == nil || value.Flags()&(openConstructionShapeFlags|checker.TypeFlagsTypeParameter) != 0 {
 		return nil
 	}
 	evidence.descriptor(p.typeDescriptorFor(value))
