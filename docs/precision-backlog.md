@@ -7708,3 +7708,32 @@ recipes and end-to-end worker execution remain open until the Phase 13
 conformance work and Phase 14 cutover. No current analyzer finding, Type Facts
 protocol, compiler-facts protocol, bundled contract, fixture snapshot, or
 public main-schema document changed.
+
+## 2026-08-27 — Only replayed local proof can create accepted closure
+
+Phase 11 adds the sole `AcceptedContract` constructor under
+`solid-reactive-ir::contract_semantics::proof`. Every proposed closure leaf
+must carry all eighteen semantic-model-v1 proof families. Each family is bound
+to the exact semantic claim and artifact/export scope, a bounded raw transcript,
+and a complete enumerated-versus-classified census with no unresolved premise.
+Package artifact acquisition, Type Facts, compiler execution facts, accepted
+dependency contracts, and runtime probes are distinct authorities and cannot
+substitute for one another.
+
+The backend derives candidate closure from the Phase 8 plan and converts Phase
+10 contradiction records. A matching contradiction refuses that exact leaf.
+Successful verification closes only that call, owner-production, resource,
+guard, or recursive value leaf and reruns the semantic normalizer; an open
+sibling is not contaminated. Canonical proof and closed-claim roots plus exact
+artifact, closure, wire, final semantic, verifier-build, and policy identity
+form receipt version 1. Bundled receipt reads and local content-addressed writes
+rehash bytes.
+
+This does not reduce a current finding. Phase 12 still owns receipt validation
+and analyzer consumption, Phase 13 owns published-RC.3 proof corpus execution,
+and Phase 14 owns the public producer/consumer cutover and bundled regeneration.
+Consequently every current contract path remains on its prior authority until
+those phases land. Missing or incomplete Type Facts censuses, unreconciled
+compiler sites, opaque dynamic loading/native/WASM/global/transform frontiers,
+unaccepted dependency edges, probe contradictions, and absent exact RC.3
+transcripts remain local open claims rather than negative proof.

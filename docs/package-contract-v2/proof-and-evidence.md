@@ -66,6 +66,22 @@ Semantic-model version 1 admits these proof rule families:
 Proof rules are small and local. They cite fact IDs and normalized semantic
 subjects rather than generator implementation details.
 
+Phase 11 represents these as eighteen closed-set `ProofFamily` values and
+requires every family for each proposed local closure. A rule replay is bound
+to the normalized semantic digest, semantic claim ID, exact package,
+artifact/declaration/transform/closure identity, and exact runtime/declaration
+export identity. It accepts only a complete census whose enumerated and
+classified site sets are equal and which has no unresolved premise. Raw
+transcript bytes are bounded and hashed by the verifier; callers cannot inject
+a transcript digest or construct the opaque replay result directly.
+
+Authorities are independent. Package/artifact rules require package-acquisition
+authority; signature, binding, reachability, cardinality, recursive-shape,
+guard, and exhaustiveness rules require Type Facts; compiler reconciliation
+requires compiler execution facts; dependency composition requires an already
+accepted dependency contract; and probe consistency requires runtime-probe
+authority. One authority cannot stand in for another.
+
 ## Closure obligations
 
 Before closing one claim domain, the verifier proves:
@@ -216,6 +232,15 @@ The receipt binds both wire bytes and normalized meaning. This allows semantic
 comparison across the temporary `2` to stable `1` renumber, while ensuring the
 final wire document still receives a fresh receipt.
 
+Receipt fields are never caller-selected after proof replay. The verifier
+canonicalizes proof order and census order, computes `artifactsDigest` from
+exact selected artifacts/exports, takes `closureDigest` from the selected
+canonical dependency closure, computes `proofRoot` over family, authority,
+claim, scope, transcript, and census roots, computes `closedClaimsRoot` over
+sorted semantic claim IDs, and recomputes the finalized semantic digest after
+closing only those leaves. A receipt policy below the current local policy is
+rejected.
+
 ## Distribution
 
 - Bundled contracts ship with compiled receipts.
@@ -225,6 +250,12 @@ final wire document still receives a fresh receipt.
 - A package's self-issued receipt is a cache hint unless local policy grants it
   explicit authority.
 - Ordinary analysis is offline and reads no raw sidecar.
+
+The Phase 11 bundled adapter is immutable and rehashes every compiled receipt
+on read. The project-local adapter writes canonical receipt bytes under their
+content hash using an atomic temporary-file rename, verifies the persisted
+bytes, and treats repeated writes as idempotent. Phase 12 remains responsible
+for validating a stored receipt before analyzer exposure.
 
 ## Adversarial requirements
 
