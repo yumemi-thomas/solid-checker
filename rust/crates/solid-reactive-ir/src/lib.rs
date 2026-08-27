@@ -1,6 +1,7 @@
 mod attribution;
 mod cache;
 mod cleanup;
+pub mod contract_semantics;
 mod contracts;
 mod directives;
 mod effect_api;
