@@ -7619,3 +7619,33 @@ bytes and identity, and external dependencies without an accepted contract
 digest remain exact fail-closed frontiers. The standalone resolver also refuses
 missing or ambiguous exports, invalid targets, escaping symlinks, and stale
 hashes; none is interpreted as negative package behavior.
+
+## 2026-08-27 — Replacement generation emits only open Rust proposals
+
+The Phase 8 replacement generator path now constructs semantics inside
+`solid-facts-backend::proposal_generation`. Every analyzed artifact case must
+first match an independently acquired Phase 7 `ResolvedImport`. Construction
+then withdraws every local completeness candidate: complete positives retain
+their items as partial positives, complete negatives become unknown, and the
+exact recursive leaf becomes a proof obligation. A naturally unresolved leaf
+adds its own local obligation without deleting independently provable sibling
+closure candidates.
+
+Positive operations remain in the open proposal with possible versus
+guaranteed strength preserved. Probe planning includes only possible-positive
+witness candidates; it cannot close a domain or establish absence. Proposal
+emission is deterministic, declares `acceptance: "unaccepted"`, and contains
+no accepted `closed` field, receipt, evidence sidecar, or main wire document.
+Repeated analysis plans union monotonically to an order-independent fixed
+point, while plans with different semantic digests are refused.
+
+The matching Node module owns only package discovery, Phase 7 standalone
+artifact acquisition, process-stage ordering, and final byte handoff. Analysis,
+proposal construction, proof planning, and probe planning must return
+Rust-owned products; no variant collapse or mutable summary merge exists on
+this replacement JavaScript path. The legacy public generator still contains
+its schema-v1 merge behavior because Phase 14 owns the atomic producer and
+consumer migration and deletion. Consequently current SC9005/SC9012 findings,
+bundled contracts, and corpus certification are unchanged. Claim IDs, evidence
+sidecars, proof replay, receipts, accepted analyzer consumption, public
+generator cutover, and contract regeneration remain open in Phases 9-14.

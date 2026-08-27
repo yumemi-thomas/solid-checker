@@ -1341,6 +1341,185 @@ pub(super) fn unresolved_claims(export: &ExportSemantics) -> Vec<ClaimPath> {
     claims
 }
 
+pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPath> {
+    let mut candidates = Vec::new();
+    if export.call.claims.callbacks.open_proposed_closure() {
+        candidates.push(ClaimPath::Call(ClaimDomain::Callbacks));
+    }
+    for domain in ClaimDomain::ALL
+        .into_iter()
+        .filter(|domain| *domain != ClaimDomain::Callbacks)
+    {
+        let knowledge = match domain {
+            ClaimDomain::Callbacks => unreachable!("callbacks are opened separately"),
+            ClaimDomain::Reads => &mut export.call.claims.reads,
+            ClaimDomain::Writes => &mut export.call.claims.writes,
+            ClaimDomain::Creates => &mut export.call.claims.creates,
+            ClaimDomain::Invalidates => &mut export.call.claims.invalidates,
+            ClaimDomain::Throws => &mut export.call.claims.throws,
+            ClaimDomain::Returns => &mut export.call.claims.returns,
+            ClaimDomain::Cleanups => &mut export.call.claims.cleanups,
+            ClaimDomain::Disposals => &mut export.call.claims.disposals,
+        };
+        if knowledge.open_proposed_closure() {
+            candidates.push(ClaimPath::Call(domain));
+        }
+    }
+    open_value_closure(
+        &mut export.shape,
+        ValueRoot::Export,
+        ValuePath::default(),
+        &mut candidates,
+    );
+    for operation in &mut export.call.operations {
+        let id = operation.id.clone();
+        if operation.owner.productions.open_proposed_closure() {
+            push_operation(&mut candidates, &id, OperationClaimDomain::OwnerProductions);
+        }
+        for (index, input) in operation.inputs.iter_mut().enumerate() {
+            open_value_closure(
+                input,
+                ValueRoot::OperationInput {
+                    operation: id.clone(),
+                    index: u16::try_from(index).unwrap_or(u16::MAX),
+                },
+                ValuePath::default(),
+                &mut candidates,
+            );
+        }
+        if let Some(output) = &mut operation.output {
+            open_value_closure(
+                output,
+                ValueRoot::OperationOutput {
+                    operation: id.clone(),
+                },
+                ValuePath::default(),
+                &mut candidates,
+            );
+        }
+    }
+    for resource in &mut export.call.resources {
+        if resource.states.open_proposed_closure() {
+            candidates.push(ClaimPath::Resource {
+                resource: resource.id.clone(),
+                domain: ResourceClaimDomain::States,
+            });
+        }
+        if resource.capabilities.open_proposed_closure() {
+            candidates.push(ClaimPath::Resource {
+                resource: resource.id.clone(),
+                domain: ResourceClaimDomain::Capabilities,
+            });
+        }
+    }
+    if export.call.guards.cases.open_proposed_closure() {
+        candidates.push(ClaimPath::GuardPartition);
+    }
+    for guarded in export.call.guards.cases.items_mut() {
+        let operations = match guarded {
+            GuardedCase::When { operations, .. } | GuardedCase::Otherwise { operations } => {
+                operations
+            }
+        };
+        if operations.open_proposed_closure() {
+            candidates.push(ClaimPath::GuardPartition);
+        }
+    }
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+fn open_value_closure(
+    value: &mut ValueShape,
+    root: ValueRoot,
+    path: ValuePath,
+    candidates: &mut Vec<ClaimPath>,
+) {
+    match value {
+        ValueShape::Tuple(items) => {
+            if items.open_proposed_closure() {
+                push_value(
+                    candidates,
+                    root.clone(),
+                    path.clone(),
+                    ValueClaimDomain::TupleItems,
+                );
+            }
+            for (index, item) in items.items_mut().iter_mut().enumerate() {
+                let mut nested = path.clone();
+                nested.0.push(ValuePathSegment::TupleItem(
+                    u32::try_from(index).unwrap_or(u32::MAX),
+                ));
+                open_value_closure(item, root.clone(), nested, candidates);
+            }
+        }
+        ValueShape::Array { element, .. } => {
+            let mut nested = path;
+            nested.0.push(ValuePathSegment::ArrayElement);
+            open_value_closure(element, root, nested, candidates);
+        }
+        ValueShape::Object(properties) => {
+            if properties.open_proposed_closure() {
+                push_value(
+                    candidates,
+                    root.clone(),
+                    path.clone(),
+                    ValueClaimDomain::ObjectProperties,
+                );
+            }
+            for property in properties.items_mut() {
+                let mut nested = path.clone();
+                nested
+                    .0
+                    .push(ValuePathSegment::ObjectProperty(property.name.clone()));
+                open_value_closure(&mut property.value, root.clone(), nested, candidates);
+            }
+        }
+        ValueShape::Choice(alternatives) => {
+            if alternatives.open_proposed_closure() {
+                push_value(
+                    candidates,
+                    root.clone(),
+                    path.clone(),
+                    ValueClaimDomain::ChoiceAlternatives,
+                );
+            }
+            for (index, alternative) in alternatives.items_mut().iter_mut().enumerate() {
+                let mut nested = path.clone();
+                nested.0.push(ValuePathSegment::ChoiceAlternative(
+                    u32::try_from(index).unwrap_or(u32::MAX),
+                ));
+                open_value_closure(alternative, root.clone(), nested, candidates);
+            }
+        }
+        ValueShape::Promise(inner) => {
+            let mut nested = path;
+            nested.0.push(ValuePathSegment::PromiseValue);
+            open_value_closure(inner, root, nested, candidates);
+        }
+        ValueShape::AsyncIterable(inner) => {
+            let mut nested = path;
+            nested.0.push(ValuePathSegment::AsyncIterableElement);
+            open_value_closure(inner, root, nested, candidates);
+        }
+        ValueShape::Reactive { capabilities, .. } | ValueShape::Store { capabilities, .. } => {
+            if capabilities.open_proposed_closure() {
+                push_value(candidates, root, path, ValueClaimDomain::Capabilities);
+            }
+        }
+        ValueShape::Unknown
+        | ValueShape::Plain
+        | ValueShape::Parameter { .. }
+        | ValueShape::Callable
+        | ValueShape::Action { .. }
+        | ValueShape::Component
+        | ValueShape::Cleanup { .. }
+        | ValueShape::RefApplication
+        | ValueShape::ServerFunctionReference { .. } => {}
+    }
+}
+
 fn push_operation(
     claims: &mut Vec<ClaimPath>,
     operation: &OperationId,

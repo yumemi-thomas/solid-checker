@@ -60,6 +60,9 @@ RC.0 bundled examples cannot override those bytes.
   — exact host/Type Facts/standalone resolution, independent runtime/types
   bindings, canonical dependency closure, local opaque frontiers, and strict
   artifact-case selection.
+- [Phase 8 proposal-generator completion](phase8/2026-08-27-proposal-generator-refactor.md)
+  — Rust-owned open proposal construction, local proof/probe planning,
+  deterministic fixed points, and Node-only acquisition/orchestration.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

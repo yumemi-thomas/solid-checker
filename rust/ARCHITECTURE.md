@@ -186,6 +186,24 @@ spellings, extensions, and both owning/resolver package versions, but current
 legacy analyzer consumers remain on their existing contract path until the
 scheduled consumer migration.
 
+`solid-facts-backend::proposal_generation` owns the Phase 8 replacement
+generator seam. Exact Phase 7 resolutions select and bind every analyzed
+artifact case before construction. The module withdraws every locally complete
+knowledge set: positive items remain partial, negative candidates become
+unknown, and each withdrawn leaf is retained as a proof obligation. It then
+derives local unresolved edges, positive-operation candidates, and witness-only
+probe candidates in separate stages and emits a deterministic proposal plan
+whose acceptance is always `unaccepted`. The emission has no main contract
+wire bytes, receipt, evidence sidecar, or accepted `closed` field.
+
+`packages/cli/scripts/contract-proposal-pipeline.mjs` is the matching Node
+orchestration seam. It calls package discovery, Phase 7 standalone resolution,
+Rust analysis, Rust proposal construction, Rust proof planning, Rust probe
+planning, and byte emission as seven explicit stages. It passes exact products
+through by identity and never collapses variants or mutates summaries. The
+legacy public generator remains intact until the scheduled Phase 14 producer
+migration.
+
 ## How the Solid 1.x dialect landed
 
 The sibling-directory shape sketched here before the 1.x dialect existed is
