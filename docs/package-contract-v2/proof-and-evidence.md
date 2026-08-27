@@ -129,6 +129,38 @@ Sidecars contain detailed, claim-addressed material:
 Claim IDs derive from normalized semantic subject paths, not summary names or
 JSON positions. Reformatting or summary renaming must not orphan evidence.
 
+Phase 9 fixes two independent document families at sidecar version 1:
+
+- `solid-checker-proof-evidence` contains claim-local fact-transcript and proof-
+  input identities, coverage limitations, and the producer identities needed
+  for later replay;
+- `solid-checker-runtime-probe-evidence` contains claim-local probe recipe,
+  runtime, conditions, operating system, architecture, explicit sandbox kind
+  and policy, outcome, limitations, and producer identity.
+
+The checked-in structural authority is
+[`solid-reactivity-evidence-sidecars-v1.schema.json`](../../schema/solid-reactivity-evidence-sidecars-v1.schema.json).
+The main contract contains the SHA-256 of each present sidecar. Each sidecar
+contains semantic-model version, semantic digest, exact package/manifest
+identity, and exact artifact/declaration/transform/closure identity for every
+claim. It deliberately binds normalized contract identity rather than the main
+file hash: putting each file's hash inside the other would create an
+unsatisfiable hash cycle. The later acceptance receipt binds the final main
+wire digest and proof root.
+
+Semantic claim IDs use the canonical spelling
+`claim:v1:sha256:<lowercase-hex>`. The hash domain includes claim-ID version,
+semantic-model version, exact package identity, exact artifact-case selection
+and closure identity, exact runtime/declaration export identity, and the typed
+normalized subject path. It excludes summary IDs, JSON positions, formatting,
+sidecar layout, and unrelated claim values.
+
+Evidence validation returns only ordered claim IDs. Raw fact/proof/probe bytes
+are inputs to later verification, never fields of the normalized contract or
+ordinary analyzer interface. A referenced sidecar must be present during
+verification; after receipt issuance it may be deleted without changing
+ordinary analysis.
+
 ## Acceptance receipt
 
 Illustrative receipt:

@@ -38,6 +38,15 @@ stable version 1 after the final renumber. There is no `schemaStatus`.
 The root intentionally excludes generator identity, review status,
 `compilerFactsProtocol`, embedded claim evidence, and trust labels.
 
+`sidecars.proof.sha256` and `sidecars.probes.sha256` are 64-digit wire hashes
+of the complete sidecar bytes. The backend canonicalizes them to normalized
+`sha256:` digests and requires exact content matches during evidence
+validation. A supplied sidecar without the corresponding main-document
+reference is an orphan and is refused. Detailed evidence document shape and
+the reverse semantic binding are defined in
+[Proof, evidence, and acceptance](proof-and-evidence.md); neither sidecar is
+part of normalized contract meaning or the ordinary analysis hot path.
+
 ## Entrypoints
 
 An entrypoint has either one unconditional artifact or an explicit case list.

@@ -204,6 +204,33 @@ through by identity and never collapses variants or mutates summaries. The
 legacy public generator remains intact until the scheduled Phase 14 producer
 migration.
 
+`solid-reactive-ir::contract_semantics` also owns version-1 semantic claim
+identity. A claim ID hashes exact package identity, artifact-case selection and
+closure identity, exact export identity, and one validated normalized claim
+path. It excludes JSON position, summary spelling, formatting, evidence
+layout, and unrelated claim values. Domain claims and positive operation
+existence have distinct typed paths; nonexistent operations, resources, or
+recursive leaves cannot receive an ID.
+
+`solid-facts-backend::evidence_sidecars` owns the Phase 9 evidence seam. It
+derives artifact and claim bindings from the normalized model, then emits
+separate deterministic `solid-checker-proof-evidence` and
+`solid-checker-runtime-probe-evidence` version-1 documents. The proof family
+records fact transcript, proof input, coverage, and tool identity. The probe
+family records recipe, runtime/environment/sandbox, outcome, coverage, and
+tool identity. Both bind semantic/package/artifact/declaration/transform/
+closure identity per claim. The temporary main contract binds their content
+hashes; sidecars bind normalized contract identity, avoiding a circular file-
+hash dependency while still rejecting stale or cross-package evidence.
+
+Sidecar validation refuses missing or unreferenced documents, content-hash
+mismatch, wrong kind/version, stale semantic/package identity, cross-artifact
+material, noncanonical claim IDs, duplicate claims, and claims absent from the
+proposal plan. Its result retains only ordered semantic claim IDs. Raw proof
+and runtime transcripts are neither stored in `AcceptedContract` nor exposed
+to analyzer consumers; Phase 11 may consume them while issuing a receipt, and
+ordinary analysis remains offline after they are deleted.
+
 ## How the Solid 1.x dialect landed
 
 The sibling-directory shape sketched here before the 1.x dialect existed is

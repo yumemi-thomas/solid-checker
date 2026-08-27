@@ -14,6 +14,23 @@ pub(super) fn semantic_digest(
     Digest::from_sha256(writer.finish())
 }
 
+pub(super) fn semantic_claim_id(
+    package: &PackageIdentity,
+    artifact_case: &ArtifactCase,
+    export: &ExportSemantics,
+    path: &SemanticClaimPath,
+) -> SemanticClaimId {
+    let mut writer = CanonicalWriter::new();
+    writer.text("solid-checker:semantic-claim");
+    writer.u16(SEMANTIC_CLAIM_ID_VERSION);
+    writer.u16(SEMANTIC_MODEL_VERSION);
+    writer.package(package);
+    writer.artifact_case_subject_identity(artifact_case);
+    writer.export_identity(&export.identity);
+    writer.semantic_claim_path(path);
+    SemanticClaimId::from_sha256(writer.finish())
+}
+
 struct CanonicalWriter(Sha256);
 
 impl CanonicalWriter {
@@ -108,6 +125,16 @@ impl CanonicalWriter {
     }
 
     fn artifact_case(&mut self, case: &ArtifactCase) {
+        self.artifact_case_subject_identity(case);
+        self.stability(case.stability);
+        self.usize(case.exports.len());
+        for (name, export) in &case.exports {
+            self.text(name);
+            self.export(export);
+        }
+    }
+
+    fn artifact_case_subject_identity(&mut self, case: &ArtifactCase) {
         self.text(&case.id);
         self.text(&case.entrypoint);
         self.sequence(&case.resolution_trace, |writer, step| {
@@ -118,12 +145,6 @@ impl CanonicalWriter {
         self.artifact(&case.declarations);
         self.digest(&case.dependency_closure);
         self.option(case.transform.as_ref(), Self::artifact);
-        self.stability(case.stability);
-        self.usize(case.exports.len());
-        for (name, export) in &case.exports {
-            self.text(name);
-            self.export(export);
-        }
     }
 
     fn export(&mut self, export: &ExportSemantics) {
@@ -138,6 +159,131 @@ impl CanonicalWriter {
         self.text(&identity.public_name);
         self.export_target(&identity.runtime);
         self.export_target(&identity.declarations);
+    }
+
+    fn semantic_claim_path(&mut self, path: &SemanticClaimPath) {
+        match path {
+            SemanticClaimPath::Domain(path) => {
+                self.u8(0);
+                self.claim_path(path);
+            }
+            SemanticClaimPath::Operation(operation) => {
+                self.u8(1);
+                self.operation_id(operation);
+            }
+        }
+    }
+
+    fn claim_path(&mut self, path: &ClaimPath) {
+        match path {
+            ClaimPath::Call(domain) => {
+                self.u8(0);
+                self.claim_domain(*domain);
+            }
+            ClaimPath::Value { root, path, domain } => {
+                self.u8(1);
+                self.value_root(root);
+                self.sequence(&path.0, Self::value_path_segment);
+                self.value_claim_domain(*domain);
+            }
+            ClaimPath::Operation { operation, domain } => {
+                self.u8(2);
+                self.operation_id(operation);
+                self.operation_claim_domain(*domain);
+            }
+            ClaimPath::Resource { resource, domain } => {
+                self.u8(3);
+                self.resource_id(resource);
+                self.resource_claim_domain(*domain);
+            }
+            ClaimPath::GuardPartition => self.u8(4),
+        }
+    }
+
+    fn claim_domain(&mut self, domain: ClaimDomain) {
+        self.u8(match domain {
+            ClaimDomain::Callbacks => 0,
+            ClaimDomain::Reads => 1,
+            ClaimDomain::Writes => 2,
+            ClaimDomain::Creates => 3,
+            ClaimDomain::Invalidates => 4,
+            ClaimDomain::Throws => 5,
+            ClaimDomain::Returns => 6,
+            ClaimDomain::Cleanups => 7,
+            ClaimDomain::Disposals => 8,
+        });
+    }
+
+    fn value_root(&mut self, root: &ValueRoot) {
+        match root {
+            ValueRoot::Export => self.u8(0),
+            ValueRoot::OperationInput { operation, index } => {
+                self.u8(1);
+                self.operation_id(operation);
+                self.u16(*index);
+            }
+            ValueRoot::OperationOutput { operation } => {
+                self.u8(2);
+                self.operation_id(operation);
+            }
+        }
+    }
+
+    fn value_path_segment(&mut self, segment: &ValuePathSegment) {
+        match segment {
+            ValuePathSegment::TupleItem(index) => {
+                self.u8(0);
+                self.u32(*index);
+            }
+            ValuePathSegment::ArrayElement => self.u8(1),
+            ValuePathSegment::ObjectProperty(name) => {
+                self.u8(2);
+                self.text(name);
+            }
+            ValuePathSegment::ChoiceAlternative(index) => {
+                self.u8(3);
+                self.u32(*index);
+            }
+            ValuePathSegment::PromiseValue => self.u8(4),
+            ValuePathSegment::AsyncIterableElement => self.u8(5),
+        }
+    }
+
+    fn value_claim_domain(&mut self, domain: ValueClaimDomain) {
+        self.u8(match domain {
+            ValueClaimDomain::Shape => 0,
+            ValueClaimDomain::TupleItems => 1,
+            ValueClaimDomain::ObjectProperties => 2,
+            ValueClaimDomain::ChoiceAlternatives => 3,
+            ValueClaimDomain::ArrayMinimumLength => 4,
+            ValueClaimDomain::ArrayMaximumLength => 5,
+            ValueClaimDomain::Capabilities => 6,
+        });
+    }
+
+    fn operation_claim_domain(&mut self, domain: OperationClaimDomain) {
+        self.u8(match domain {
+            OperationClaimDomain::Trigger => 0,
+            OperationClaimDomain::ExecutionPoint => 1,
+            OperationClaimDomain::Schedule => 2,
+            OperationClaimDomain::Tracking => 3,
+            OperationClaimDomain::OwnerSource => 4,
+            OperationClaimDomain::OwnerChildCapability => 5,
+            OperationClaimDomain::OwnerCleanupCapability => 6,
+            OperationClaimDomain::OwnerLifetime => 7,
+            OperationClaimDomain::OwnerProductions => 8,
+            OperationClaimDomain::CardinalityScope => 9,
+            OperationClaimDomain::CardinalityMinimum => 10,
+            OperationClaimDomain::CardinalityMaximum => 11,
+        });
+    }
+
+    fn resource_claim_domain(&mut self, domain: ResourceClaimDomain) {
+        self.u8(match domain {
+            ResourceClaimDomain::States => 0,
+            ResourceClaimDomain::Capabilities => 1,
+            ResourceClaimDomain::Lifetime => 2,
+        });
     }
 
     fn export_target(&mut self, target: &ExportTargetIdentity) {

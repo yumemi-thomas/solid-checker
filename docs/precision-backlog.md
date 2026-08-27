@@ -7649,3 +7649,32 @@ consumer migration and deletion. Consequently current SC9005/SC9012 findings,
 bundled contracts, and corpus certification are unchanged. Claim IDs, evidence
 sidecars, proof replay, receipts, accepted analyzer consumption, public
 generator cutover, and contract regeneration remain open in Phases 9-14.
+
+## 2026-08-27 — Evidence is claim-addressed and leaves the analysis hot path
+
+Phase 9 assigns canonical semantic claim IDs inside
+`solid-reactive-ir::contract_semantics`. The ID binds exact package identity,
+artifact-case resolution/runtime/declaration/transform/closure identity, exact
+export identity, and a validated domain, recursive value, operation-axis,
+resource, guard-partition, or positive-operation path. It does not bind wire
+summary names, JSON position, formatting, sidecar layout, or unrelated claim
+values. Summary renaming and reordered formatting therefore retain evidence;
+package, artifact, closure, export, or subject changes do not.
+
+`solid-facts-backend::evidence_sidecars` now emits proof/fact and runtime-probe
+documents as separate versioned families. Every proof row records artifact,
+closure, fact transcript, proof input, limitation, producer, and tool identity;
+every probe row records artifact, closure, recipe, runtime/environment,
+sandbox, outcome, limitation, producer, and tool identity. The main temporary
+contract names each complete sidecar hash, while each sidecar names normalized
+contract/package identity. Validation refuses missing, content-mismatched,
+unreferenced, stale, cross-package, cross-artifact, duplicate, noncanonical, or
+unplanned evidence.
+
+The validated evidence result contains claim IDs only, and contract
+normalization still succeeds using main-document hash references after the raw
+sidecars are removed. This does not accept any claim: semantic event probes
+remain Phase 10, proof replay and receipt issuance remain Phase 11, analyzer
+consumption remains Phase 12, and public producer/consumer cutover remains
+Phase 14. No Type Facts or compiler fact changed, no current finding moved, and
+no open Solid 2 runtime premise became negative proof.

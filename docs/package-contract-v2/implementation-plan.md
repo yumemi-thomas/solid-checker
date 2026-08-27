@@ -362,6 +362,15 @@ migration. See the [Phase 8 completion report](phase8/2026-08-27-proposal-genera
 **Exit:** evidence is auditable and hash-bound but absent from the analysis hot
 path.
 
+Completed on 2026-08-27. The normalized model now assigns versioned claim IDs
+from exact package, artifact-case, export, and validated semantic-path identity
+without using summary names or JSON positions. The backend emits and strictly
+validates separate proof/fact and runtime-probe sidecars, binds their hashes
+from the temporary main document and its normalized identity back from each
+sidecar, rejects stale/cross-package/cross-artifact/orphan material, and
+returns no raw evidence bytes to ordinary analysis. See the
+[Phase 9 completion report](phase9/2026-08-27-claim-ids-evidence-sidecars.md).
+
 ## Phase 10 — Probe redesign
 
 108. Replace timing sleeps with semantic event markers.

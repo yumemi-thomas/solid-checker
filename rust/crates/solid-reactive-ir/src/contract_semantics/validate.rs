@@ -1341,6 +1341,84 @@ pub(super) fn unresolved_claims(export: &ExportSemantics) -> Vec<ClaimPath> {
     claims
 }
 
+pub(super) fn claim_subject_exists(export: &ExportSemantics, subject: &SemanticClaimPath) -> bool {
+    match subject {
+        SemanticClaimPath::Operation(operation) => export.operation(&operation.0).is_some(),
+        SemanticClaimPath::Domain(ClaimPath::Call(_))
+        | SemanticClaimPath::Domain(ClaimPath::GuardPartition) => true,
+        SemanticClaimPath::Domain(ClaimPath::Operation { operation, .. }) => {
+            export.operation(&operation.0).is_some()
+        }
+        SemanticClaimPath::Domain(ClaimPath::Resource { resource, .. }) => export
+            .call
+            .resources
+            .iter()
+            .any(|candidate| candidate.id == *resource),
+        SemanticClaimPath::Domain(ClaimPath::Value { root, path, domain }) => {
+            claim_value_root(export, root)
+                .and_then(|value| claim_value_path(value, &path.0))
+                .is_some_and(|value| value_claim_domain_exists(value, *domain))
+        }
+    }
+}
+
+fn claim_value_root<'a>(export: &'a ExportSemantics, root: &ValueRoot) -> Option<&'a ValueShape> {
+    match root {
+        ValueRoot::Export => Some(&export.shape),
+        ValueRoot::OperationInput { operation, index } => export
+            .operation(&operation.0)?
+            .inputs
+            .get(usize::from(*index)),
+        ValueRoot::OperationOutput { operation } => export.operation(&operation.0)?.output.as_ref(),
+    }
+}
+
+fn claim_value_path<'a>(
+    mut value: &'a ValueShape,
+    path: &[ValuePathSegment],
+) -> Option<&'a ValueShape> {
+    for segment in path {
+        value = match (value, segment) {
+            (ValueShape::Tuple(items), ValuePathSegment::TupleItem(index)) => {
+                items.items().get(usize::try_from(*index).ok()?)?
+            }
+            (ValueShape::Array { element, .. }, ValuePathSegment::ArrayElement) => element,
+            (ValueShape::Object(properties), ValuePathSegment::ObjectProperty(name)) => {
+                &properties
+                    .items()
+                    .iter()
+                    .find(|property| property.name == *name)?
+                    .value
+            }
+            (ValueShape::Choice(alternatives), ValuePathSegment::ChoiceAlternative(index)) => {
+                alternatives.items().get(usize::try_from(*index).ok()?)?
+            }
+            (ValueShape::Promise(inner), ValuePathSegment::PromiseValue)
+            | (ValueShape::AsyncIterable(inner), ValuePathSegment::AsyncIterableElement) => inner,
+            _ => return None,
+        };
+    }
+    Some(value)
+}
+
+fn value_claim_domain_exists(value: &ValueShape, domain: ValueClaimDomain) -> bool {
+    match domain {
+        ValueClaimDomain::Shape => true,
+        ValueClaimDomain::TupleItems => matches!(value, ValueShape::Tuple(_)),
+        ValueClaimDomain::ObjectProperties => matches!(value, ValueShape::Object(_)),
+        ValueClaimDomain::ChoiceAlternatives => matches!(value, ValueShape::Choice(_)),
+        ValueClaimDomain::ArrayMinimumLength | ValueClaimDomain::ArrayMaximumLength => {
+            matches!(value, ValueShape::Array { .. })
+        }
+        ValueClaimDomain::Capabilities => {
+            matches!(
+                value,
+                ValueShape::Reactive { .. } | ValueShape::Store { .. }
+            )
+        }
+    }
+}
+
 pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPath> {
     let mut candidates = Vec::new();
     if export.call.claims.callbacks.open_proposed_closure() {

@@ -11,8 +11,9 @@ use std::collections::BTreeSet;
 
 use serde::Serialize;
 use solid_reactive_ir::contract_semantics::{
-    ArtifactCase, BehaviorStrength, ClaimPath, ContractProposal, Digest, ModelError,
-    NormalizedContract, OperationKind, PackageIdentity,
+    ArtifactCase, BehaviorStrength, ClaimIdentityError, ClaimPath, ContractProposal, Digest,
+    ModelError, NormalizedContract, OperationId, OperationKind, PackageIdentity, SemanticClaimPath,
+    SemanticClaimSubject,
 };
 use thiserror::Error;
 
@@ -46,6 +47,17 @@ pub struct LocalProposalClaim {
     pub claim: ClaimPath,
 }
 
+impl LocalProposalClaim {
+    #[must_use]
+    pub fn semantic_subject(&self) -> SemanticClaimSubject {
+        SemanticClaimSubject {
+            artifact_case: self.artifact_case.clone(),
+            export: self.export.clone(),
+            path: SemanticClaimPath::Domain(self.claim.clone()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct PositiveOperationCandidate {
     pub artifact_case: String,
@@ -53,6 +65,17 @@ pub struct PositiveOperationCandidate {
     pub operation: String,
     pub kind: OperationKind,
     pub strength: BehaviorStrength,
+}
+
+impl PositiveOperationCandidate {
+    #[must_use]
+    pub fn semantic_subject(&self) -> SemanticClaimSubject {
+        SemanticClaimSubject {
+            artifact_case: self.artifact_case.clone(),
+            export: self.export.clone(),
+            path: SemanticClaimPath::Operation(OperationId(self.operation.clone())),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -72,6 +95,16 @@ pub struct ProofObligation {
 pub enum ProposalSubject {
     Claim(LocalProposalClaim),
     Operation(PositiveOperationCandidate),
+}
+
+impl ProposalSubject {
+    #[must_use]
+    pub fn semantic_subject(&self) -> SemanticClaimSubject {
+        match self {
+            Self::Claim(claim) => claim.semantic_subject(),
+            Self::Operation(operation) => operation.semantic_subject(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -227,6 +260,8 @@ pub enum ProposalGenerationError {
     MixedSemanticDigests,
     #[error("proposal emission failed: {0}")]
     Emission(#[from] serde_json::Error),
+    #[error("proposal claim identity is invalid: {0}")]
+    ClaimIdentity(#[from] ClaimIdentityError),
 }
 
 /// Proposal construction stage. Complete-positive knowledge becomes partial;
@@ -375,7 +410,7 @@ pub fn plan_probes(planned: ProofPlannedProposal) -> PlannedProposal {
 /// package-contract document, receipt, evidence sidecar, or accepted closure
 /// field. Phase 14 will switch public generators after proof machinery exists.
 pub fn emit_proposal(proposal: &PlannedProposal) -> Result<Vec<u8>, ProposalGenerationError> {
-    let document = ProposalEmission::from(proposal);
+    let document = ProposalEmission::try_from(proposal)?;
     let mut bytes = serde_json::to_vec_pretty(&document)?;
     bytes.push(b'\n');
     Ok(bytes)
@@ -396,10 +431,12 @@ struct ProposalEmission<'a> {
     probe_plan: Vec<OperationEmission<'a>>,
 }
 
-impl<'a> From<&'a PlannedProposal> for ProposalEmission<'a> {
-    fn from(value: &'a PlannedProposal) -> Self {
+impl<'a> TryFrom<&'a PlannedProposal> for ProposalEmission<'a> {
+    type Error = ClaimIdentityError;
+
+    fn try_from(value: &'a PlannedProposal) -> Result<Self, Self::Error> {
         let plan = value.plan();
-        Self {
+        Ok(Self {
             format: PROPOSAL_FORMAT,
             proposal_version: PROPOSAL_VERSION,
             semantic_model_version: value.contract().semantic_model_version(),
@@ -408,53 +445,62 @@ impl<'a> From<&'a PlannedProposal> for ProposalEmission<'a> {
             closure_candidates: plan
                 .closure_candidates
                 .iter()
-                .map(ClaimEmission::from)
-                .collect(),
+                .map(|claim| ClaimEmission::new(value.contract(), claim))
+                .collect::<Result<_, _>>()?,
             unresolved_edges: plan
                 .unresolved_edges
                 .iter()
-                .map(ClaimEmission::from)
-                .collect(),
+                .map(|claim| ClaimEmission::new(value.contract(), claim))
+                .collect::<Result<_, _>>()?,
             positive_operations: plan
                 .positive_operations
                 .iter()
-                .map(OperationEmission::from)
-                .collect(),
+                .map(|operation| OperationEmission::new(value.contract(), operation))
+                .collect::<Result<_, _>>()?,
             proof_obligations: plan
                 .proof_obligations
                 .iter()
-                .map(ObligationEmission::from)
-                .collect(),
+                .map(|obligation| ObligationEmission::new(value.contract(), obligation))
+                .collect::<Result<_, _>>()?,
             probe_plan: plan
                 .probe_candidates
                 .iter()
-                .map(|probe| OperationEmission::from(&probe.operation))
-                .collect(),
-        }
+                .map(|probe| OperationEmission::new(value.contract(), &probe.operation))
+                .collect::<Result<_, _>>()?,
+        })
     }
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaimEmission<'a> {
+    claim_id: String,
     artifact_case: &'a str,
     export: &'a str,
     claim: String,
 }
 
-impl<'a> From<&'a LocalProposalClaim> for ClaimEmission<'a> {
-    fn from(value: &'a LocalProposalClaim) -> Self {
-        Self {
+impl<'a> ClaimEmission<'a> {
+    fn new(
+        contract: &NormalizedContract,
+        value: &'a LocalProposalClaim,
+    ) -> Result<Self, ClaimIdentityError> {
+        Ok(Self {
+            claim_id: contract
+                .claim_id(&value.semantic_subject())?
+                .as_str()
+                .into(),
             artifact_case: &value.artifact_case,
             export: &value.export,
             claim: format!("{:?}", value.claim),
-        }
+        })
     }
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct OperationEmission<'a> {
+    claim_id: String,
     artifact_case: &'a str,
     export: &'a str,
     operation: &'a str,
@@ -462,15 +508,22 @@ struct OperationEmission<'a> {
     strength: String,
 }
 
-impl<'a> From<&'a PositiveOperationCandidate> for OperationEmission<'a> {
-    fn from(value: &'a PositiveOperationCandidate) -> Self {
-        Self {
+impl<'a> OperationEmission<'a> {
+    fn new(
+        contract: &NormalizedContract,
+        value: &'a PositiveOperationCandidate,
+    ) -> Result<Self, ClaimIdentityError> {
+        Ok(Self {
+            claim_id: contract
+                .claim_id(&value.semantic_subject())?
+                .as_str()
+                .into(),
             artifact_case: &value.artifact_case,
             export: &value.export,
             operation: &value.operation,
             kind: format!("{:?}", value.kind),
             strength: format!("{:?}", value.strength),
-        }
+        })
     }
 }
 
@@ -488,19 +541,22 @@ enum ObligationSubjectEmission<'a> {
     Operation(OperationEmission<'a>),
 }
 
-impl<'a> From<&'a ProofObligation> for ObligationEmission<'a> {
-    fn from(value: &'a ProofObligation) -> Self {
-        Self {
+impl<'a> ObligationEmission<'a> {
+    fn new(
+        contract: &NormalizedContract,
+        value: &'a ProofObligation,
+    ) -> Result<Self, ClaimIdentityError> {
+        Ok(Self {
             kind: format!("{:?}", value.kind),
             subject: match &value.subject {
                 ProposalSubject::Claim(claim) => {
-                    ObligationSubjectEmission::Claim(ClaimEmission::from(claim))
+                    ObligationSubjectEmission::Claim(ClaimEmission::new(contract, claim)?)
                 }
-                ProposalSubject::Operation(operation) => {
-                    ObligationSubjectEmission::Operation(OperationEmission::from(operation))
-                }
+                ProposalSubject::Operation(operation) => ObligationSubjectEmission::Operation(
+                    OperationEmission::new(contract, operation)?,
+                ),
             },
-        }
+        })
     }
 }
 
