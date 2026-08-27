@@ -14,6 +14,7 @@ mod diagnostics;
 pub mod dialect;
 mod evidence_sidecars;
 mod proposal_generation;
+mod runtime_probes;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
@@ -42,15 +43,23 @@ pub use diagnostics::{
 pub use evidence_sidecars::{
     EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,
     EvidenceSidecarError, EvidenceSidecarReferences, FactDomainIdentity, FactTranscriptIdentity,
-    PROBE_EVIDENCE_FORMAT, PROOF_EVIDENCE_FORMAT, ProbeClaimMaterial, ProbeOutcome,
-    ProofClaimMaterial, ProofInputIdentity, SandboxIdentity, SandboxKind, ToolIdentity,
-    ValidatedEvidenceSidecars, emit_evidence_sidecars, validate_evidence_sidecars,
+    PROBE_EVIDENCE_FORMAT, PROOF_EVIDENCE_FORMAT, ProbeClaimMaterial, ProbeObservationMaterial,
+    ProbeOutcome, ProofClaimMaterial, ProofInputIdentity, SandboxIdentity, SandboxKind,
+    ToolIdentity, ValidatedEvidenceSidecars, emit_evidence_sidecars, validate_evidence_sidecars,
 };
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
     ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,
     ProposalGenerationError, ProposalPlan, ProposalSubject, construct_proposal, emit_proposal,
     plan_probes, plan_proofs,
+};
+pub use runtime_probes::{
+    ArtifactModeMatrix, BoundaryPhase, CleanupPhase, DrainStep, IsolationIdentity,
+    PROBE_TRANSCRIPT_FORMAT, PROBE_TRANSCRIPT_VERSION, ProbeAuthority, ProbeContradictionRecord,
+    ProbeEvent, ProbeEventClass, ProbeEventKind, ProbeEventMatch, ProbeMode, ProbePolicy,
+    ProbeRecipe, ProbeRun, ProbeRunOutcome, ProbeScenario, ProbeSessionRequest, ProbeTranscript,
+    ResponseState, RuntimeProbeError, RuntimeProbeEvaluation, RuntimeProbePlan, SettlementState,
+    StreamState, TransitionState, evaluate_runtime_probes,
 };
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,

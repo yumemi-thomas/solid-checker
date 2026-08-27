@@ -414,8 +414,7 @@
         "artifact",
         "producer",
         "recipe",
-        "environment",
-        "outcome",
+        "observations",
         "coverageLimitations"
       ],
       "properties": {
@@ -424,14 +423,29 @@
         "artifact": { "$ref": "#/$defs/claimArtifact" },
         "producer": { "$ref": "#/$defs/tool" },
         "recipe": { "$ref": "#/$defs/sha256" },
-        "environment": { "$ref": "#/$defs/environment" },
-        "outcome": { "$ref": "#/$defs/probeOutcome" },
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16384,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/probeObservation" }
+        },
         "coverageLimitations": {
           "type": "array",
           "maxItems": 16384,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/string" }
         }
+      }
+    },
+    "probeObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "environment", "outcome"],
+      "properties": {
+        "mode": { "$ref": "#/$defs/string" },
+        "environment": { "$ref": "#/$defs/environment" },
+        "outcome": { "$ref": "#/$defs/probeOutcome" }
       }
     },
     "proofDocument": {
