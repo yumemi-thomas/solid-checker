@@ -153,6 +153,13 @@ in the [Phase 1 semantic and policy freeze](phase1/2026-08-27-freeze.md).
 
 **Exit:** callers can be implemented without learning the wire schema.
 
+**Status 2026-08-27:** complete. Items 19-27 and the exit condition are
+recorded in the [Phase 2 interface freeze](phase2/2026-08-27-interfaces.md).
+The loader deliberately returns a typed `NormalizationUnavailable` refusal for
+otherwise valid development-schema documents until Phases 5 and 7 implement
+normalization and the schema. No current producer or consumer moved in this
+phase.
+
 ## Phase 3 — Type Facts specification and local implementation
 
 28. Specify resolved-invocation demands.

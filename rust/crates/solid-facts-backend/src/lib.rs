@@ -6,6 +6,7 @@ compile_error!("solid-facts-backend requires at least one dialect feature");
 
 mod cache;
 mod contract_document;
+mod contract_interface;
 mod demand_plan;
 mod diagnostics;
 pub mod dialect;
@@ -13,6 +14,12 @@ mod wire;
 
 pub use cache::{CacheStats, FactsCache};
 pub use contract_document::encode as encode_package_contract;
+pub use contract_interface::{
+    ArtifactResolutionFailure, ArtifactResolver, BundledEvidenceStore, ContractFailure,
+    EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter, ImportRequest,
+    LocalEvidenceStore, ResolutionAuthority, ResolutionTraceStep, ResolvedFile, ResolvedImport,
+    StandaloneResolutionAdapter, load_accepted_contract,
+};
 #[cfg(feature = "dialect-v2")]
 pub use diagnostics::bundled_solid_js_contract;
 pub use diagnostics::{

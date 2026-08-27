@@ -68,3 +68,7 @@ path = "tests/dialects_process.rs"
 [[test]]
 name = "backend_process"
 path = "tests/backend_process.rs"
+
+[[test]]
+name = "contract_interface"
+path = "tests/contract_interface.rs"
