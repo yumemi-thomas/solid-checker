@@ -289,3 +289,21 @@ and assert semantic queries, selected operations, and unresolved obligations.
 Once this surface is complete, tests that assert private expansion or duplicate
 JavaScript normalization behavior should be deleted rather than layered beneath
 the new interface.
+
+## First-party RC.3 conformance seam
+
+`solid-reactive-ir::contract_semantics::solid2_rc3` owns the internal Solid 2
+RC.3 semantic corpus. It produces ordinary `ContractProposal` values and uses
+only normalized concepts: operations, causal edges, resources, lifetimes,
+ownership relations, cardinality, guards, recursive shapes, artifact cases,
+and local stability. It does not know compact summaries, `closed` arrays,
+aliases, schema versions, receipt JSON, or analyzer discovery.
+
+The checked machine corpus under `benchmarks/package-contract-v2/phase13/`
+binds those models to exact published file and closure identities and records
+the proof/probe and six fixture classes required for every conformance row.
+The replay helper verifies artifact bytes, the complete finite package-instance
+census, exact TypeScript observations, and selected runtime traces. This is a
+certification input, not a second normalizer: Rust remains the sole semantic
+owner, and Phase 14 alone may connect the corpus to public producers, bundles,
+and analysis discovery.

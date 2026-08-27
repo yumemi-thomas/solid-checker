@@ -483,6 +483,23 @@ Phase 14 cut. See the [Phase 12 completion report](phase12/2026-08-28-analyzer-i
 
 **Exit:** the entire conformance matrix passes against exact RC.3 artifacts.
 
+Completed on 2026-08-28. `solid-reactive-ir::contract_semantics::solid2_rc3`
+now carries all sixteen wire-independent RC.3 conformance cases, bound to the
+published manifests, ordered entrypoints, runtime/declaration bytes, and a
+checked finite transitive-closure census. The machine corpus supplies positive,
+negative, partial, refusal, consumer, proof-family, probe, and real-typings
+oracle expectations for every row. Replay verified 33 selected artifact files,
+all closure component file manifests, sixteen TypeScript cases, and exact Node
+traces for split effects, tracked/on-settled cleanup, and flush staging. The
+published server-functions client declaration itself fails `tsc` because two
+re-exported types are not locally imported; that leaf is recorded as
+TypeScript-owned and open while unrelated runtime facts remain modeled. Real
+browser/request-transport observations and unstable frames protocol details
+remain explicitly local open domains. No public schema, generator, probe
+worker, analyzer discovery path, bundle, or legacy decoder moved; those remain
+the atomic Phase 14 cut. See the [Phase 13 completion
+report](phase13/2026-08-28-solid2-rc3-conformance.md).
+
 ## Phase 14 — Producer and consumer migration
 
 159. Switch package generators.

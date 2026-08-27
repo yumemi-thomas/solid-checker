@@ -76,6 +76,10 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 12 analyzer-integration completion](phase12/2026-08-28-analyzer-integration.md)
   — receipt-gated loading, exact import/export identity, demand-shaped guard
   queries, local open-domain diagnostics, native precedence, and cache identity.
+- [Phase 13 Solid 2 RC.3 conformance completion](phase13/2026-08-28-solid2-rc3-conformance.md)
+  — sixteen exact-artifact normalized cases, finite dependency-closure
+  censuses, proof/probe expectations, six-way fixture coverage, and replayed
+  published declarations/runtime bytes without the Phase 14 public cutover.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

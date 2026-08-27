@@ -69,3 +69,14 @@ Each case receives:
 The format cannot reach stable version 1 until all sixteen rows have positive,
 negative, partial, and refusal coverage and their normalized semantic
 expectations pass against RC.3 artifacts.
+
+Phase 13 satisfies this private-model gate. The checked corpus is
+`benchmarks/package-contract-v2/phase13/conformance.json`; its validator and
+exact-artifact replay live in `scripts/package-contract-v2-phase13.mjs`, and
+the normalized Rust cases live in
+`solid-reactive-ir::contract_semantics::solid2_rc3`. Locally open browser,
+request/transport, unstable frames, dynamic, and published-declaration leaves
+are enumerated in the [completion report](phase13/2026-08-28-solid2-rc3-conformance.md).
+They do not block unrelated known facts and are not negative proof. The stable
+public version gate remains closed until Phase 14 performs the atomic producer,
+consumer, receipt, bundle, and legacy-decoder migration.

@@ -7772,3 +7772,31 @@ still owns exact published-RC.3 contract rows and proof corpus execution. A
 missing call-site literal/property/tuple fact, unresolved signature or spread,
 open guard remainder, open claim leaf, artifact conflict, or receipt mismatch
 therefore remains locally uncertifiable and never becomes negative proof.
+
+## 2026-08-28 — RC.3 conformance is explicit without claiming false closure
+
+Phase 13 adds the sixteen-row first-party Solid 2 RC.3 normalized corpus and a
+machine-checkable evidence matrix. Every row has positive, clean negative,
+partial, refusal, consumer, and real-published-typings oracle cases. Exact
+manifest, entrypoint, runtime, declaration, and finite transitive package
+closure identities are part of the semantic input. Runtime observation absence
+is pinned as non-negative evidence, and artifact drift changes the canonical
+semantic digest.
+
+No diagnostic or finding snapshot changed. Fifteen oracle cases type-check
+against the exact RC.3 declarations. The server-functions client declaration
+is itself rejected by TypeScript because `ServerFunctionMetadata` and
+`ServerFunction` are re-exported but used without a local import. The checker
+must not diagnose that declaration defect; the declaration leaf remains
+TypeScript-owned and open while exact runtime/reference facts stay usable.
+
+The remaining uncertifiable leaves are recorded per row rather than widened:
+dynamic effect result/error payloads; unowned `onSettled` cleanup lifetime;
+dynamic keyed/control selection; async rejection/cancellation payloads; opaque
+refresh/action/store targets; dynamic returned ref arrays; real-browser DOM,
+delegation, and hydration observations; request-context and transport
+integration observations; user serialization; all unstable frames protocol
+details; and the incompatible `onMount`/`onCleanup` imports in
+`@formkit/auto-animate@0.10.0`'s exact Solid adapter. Phase 14 still owns public
+schema/tooling/bundle migration, so none of these corpus facts reaches ordinary
+analysis early.
