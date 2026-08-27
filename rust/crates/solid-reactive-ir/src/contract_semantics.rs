@@ -8,6 +8,7 @@
 
 mod canonical;
 mod guards;
+pub mod proof;
 mod validate;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -90,6 +91,15 @@ impl<T> KnowledgeSet<T> {
 }
 
 impl<T: Ord> KnowledgeSet<T> {
+    fn close_verified(&mut self) -> bool {
+        if self.is_closed() {
+            return false;
+        }
+        let items = std::mem::take(self).into_items();
+        *self = Self::Complete(items);
+        true
+    }
+
     fn open_proposed_closure(&mut self) -> bool {
         if !self.is_closed() {
             return false;
@@ -473,9 +483,9 @@ pub struct AcceptanceReceipt {
     pub verifier: VerifierIdentity,
 }
 
-/// Accepted typestate. Phase 5 intentionally exposes no constructor: a
-/// generator proposal and caller-created receipt cannot manufacture accepted
-/// closure before the Phase 11 proof-and-receipt authority exists.
+/// Accepted typestate. It intentionally exposes no constructor: only
+/// [`proof::verify_and_accept`] can manufacture verified local closure and its
+/// receipt.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcceptedContract {
     package: PackageIdentity,
@@ -553,6 +563,10 @@ impl ExportSemantics {
     /// publish any of them as accepted closure.
     pub fn open_proposed_closure(&mut self) -> Vec<ClaimPath> {
         validate::open_proposed_closure(self)
+    }
+
+    fn close_verified_claim(&mut self, claim: &ClaimPath) -> Result<(), ModelError> {
+        validate::close_verified_claim(self, claim)
     }
 
     /// Opens only the named immediate call domains while preserving every

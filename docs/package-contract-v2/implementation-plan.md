@@ -415,6 +415,17 @@ the [Phase 10 completion report](phase10/2026-08-27-authoritative-runtime-probes
 
 **Exit:** no unaccepted closed claim can discharge an analyzer obligation.
 
+Completed on 2026-08-27. `solid-reactive-ir::contract_semantics::proof` is the
+only accepted-typestate constructor. It replays all semantic-model-v1 proof
+families against exact claim/artifact scope, complete classified censuses, and
+separate package, Type Facts, compiler, dependency-contract, and probe
+authorities; consumes claim-local probe contradictions; closes only verified
+recursive leaves; and derives canonical artifact, proof, closed-claim, and
+semantic roots for receipt version 1. The backend derives closure from the
+Phase 8 plan and provides immutable bundled plus content-addressed local
+receipt storage. Every proof family has a false-closure deletion test. See the
+[Phase 11 completion report](phase11/2026-08-27-proof-checker-receipts.md).
+
 ## Phase 12 — Analyzer integration
 
 131. Replace legacy Rust decoding with private v2 wire decoding.

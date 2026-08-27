@@ -13,6 +13,7 @@ mod demand_plan;
 mod diagnostics;
 pub mod dialect;
 mod evidence_sidecars;
+mod proof_checker;
 mod proposal_generation;
 mod runtime_probes;
 mod wire;
@@ -23,10 +24,10 @@ pub use contract_interface::{
     AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure, ArtifactResolver,
     ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole, ClosureHazard,
     ClosureHazardKind, ClosureInput, ClosureManifest, ContractFailure, EvidenceKey, EvidenceStore,
-    EvidenceStoreFailure, HostResolutionAdapter, ImportRequest, LocalEvidenceStore,
+    EvidenceStoreFailure, HostResolutionAdapter, ImportRequest, LocalEvidenceStore, ReceiptStore,
     ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
     ResolvedExportTarget, ResolvedFile, ResolvedImport, StandaloneResolutionAdapter,
-    TypeFactsResolutionAdapter, load_accepted_contract,
+    TypeFactsResolutionAdapter, encode_acceptance_receipt, load_accepted_contract,
 };
 #[cfg(feature = "dialect-v2")]
 pub use diagnostics::bundled_solid_js_contract;
@@ -47,6 +48,7 @@ pub use evidence_sidecars::{
     ProbeOutcome, ProofClaimMaterial, ProofInputIdentity, SandboxIdentity, SandboxKind,
     ToolIdentity, ValidatedEvidenceSidecars, emit_evidence_sidecars, validate_evidence_sidecars,
 };
+pub use proof_checker::{ProposalProofRequest, verify_planned_proposal};
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
     ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,

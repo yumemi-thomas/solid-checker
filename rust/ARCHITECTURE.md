@@ -158,13 +158,14 @@ with a negative.
 
 `ContractProposal::normalize` computes canonical semantic identity but does not
 accept proposed closure. `AcceptedContract` deliberately has no public
-constructor: proof replay and receipt binding remain the later acceptance
-authority. `solid-facts-backend::contract_document_v2` now owns the complete
+constructor outside the Phase 11 proof authority.
+`solid-facts-backend::contract_document_v2` owns the complete
 temporary-schema decoder, summary expansion, local-closure interpretation,
 resource limits, artifact-case identity derivation, and handoff into this
 normalizer. The public loader returns `AcceptanceUnavailable` after successful
-normalization until Phase 11; analyzer findings and bundled legacy contracts
-therefore remain unchanged.
+normalization until the Phase 12 analyzer migration validates proof-issued
+receipts; analyzer findings and bundled legacy contracts therefore remain
+unchanged.
 
 `solid-facts-backend::artifact_resolution` owns the Phase 7 selection seam.
 Host, Type Facts, and standalone acquisition all produce one exact
@@ -226,10 +227,11 @@ hash dependency while still rejecting stale or cross-package evidence.
 Sidecar validation refuses missing or unreferenced documents, content-hash
 mismatch, wrong kind/version, stale semantic/package identity, cross-artifact
 material, noncanonical claim IDs, duplicate claims, and claims absent from the
-proposal plan. Its result retains only ordered semantic claim IDs. Raw proof
-and runtime transcripts are neither stored in `AcceptedContract` nor exposed
-to analyzer consumers; Phase 11 may consume them while issuing a receipt, and
-ordinary analysis remains offline after they are deleted.
+proposal plan. Its ordinary result retains only ordered semantic claim IDs. Raw
+proof and runtime transcripts are neither stored in `AcceptedContract` nor
+exposed to analyzer consumers; the Phase 11 verifier consumes bounded proof
+material while issuing a receipt, and ordinary analysis remains offline after
+those inputs are deleted.
 
 `solid-facts-backend::runtime_probes` owns the Phase 10 semantic probe seam.
 Node will remain responsible for package acquisition, worker process launch,
@@ -256,6 +258,34 @@ nondeterministic event streams remain errors or local refusals. The module has
 no negative, minimum, maximum, exhaustive, closure-acceptance, receipt, or
 `AcceptedContract` output. Phase 11 is the first consumer allowed to replay a
 contradiction record while proving closure.
+
+`solid-reactive-ir::contract_semantics::proof` is the Phase 11 acceptance
+authority and the only code that constructs `AcceptedContract`. Its public
+input is raw, bounded rule material; successful `ReplayedProof` fields and the
+accepted typestate remain private. Each replay binds one semantic claim to the
+open normalized digest and exact package/artifact/declaration/closure/export
+scope, requires a complete enumerated-versus-classified census with no
+unresolved premise, and enforces the fact authority assigned to that proof
+family. Package acquisition, Type Facts, compiler execution facts, accepted
+dependency contracts, and runtime probes cannot substitute for one another.
+
+Acceptance receives closure subjects derived by
+`solid-facts-backend::proof_checker` from the Phase 8 `ProposalPlan`, never a
+generator-authored accepted list. It rejects stale, orphaned, duplicate, or
+missing family replays, policy downgrade, operation existence disguised as
+closure, and every Phase 10 contradiction for a selected claim. It then closes
+only the named call, operation-production, resource, guard, or recursive value
+knowledge leaf and reruns normalization. Unknown siblings stay unknown and
+partial siblings stay partial.
+
+The verifier derives receipt-version-1 semantic, artifact, closure, proof, and
+closed-claim roots with typed length-delimited SHA-256 domains. Proof and
+census input order is irrelevant; transcript bytes, family, authority, claim,
+scope, and policy remain identity. `BundledEvidenceStore` is immutable and
+rehashes compiled receipt bytes. `LocalEvidenceStore` adds atomic,
+content-addressed, idempotent receipt writes. Analyzer exposure through
+`load_accepted_contract` intentionally remains disabled until the Phase 12
+consumer migration validates these proof-issued receipts.
 
 ## How the Solid 1.x dialect landed
 
