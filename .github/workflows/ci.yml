@@ -37,6 +37,9 @@ jobs:
       - uses: ./.github/actions/typefacts
       - run: test -z "$(gofmt -l apps/solid-typefacts shims)"
       - run: go vet ./apps/solid-typefacts/...
+      # The invocation transcript suite cross-checks validity against the
+      # repository-pinned published TypeScript compiler.
+      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       - run: go test -race ./apps/solid-typefacts/...
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
@@ -51,7 +54,6 @@ jobs:
       # and product-owned semantic/TypeScript ownership over every retained
       # former parity case. Both are meaningless unless something runs them.
       - run: make coverage
-      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       - run: make ownership-gate
       # AGENTS.md's absolute rule, as a gate: no rule's positive case may also
       # be a `tsc` error against the real published Solid typings, and — the
