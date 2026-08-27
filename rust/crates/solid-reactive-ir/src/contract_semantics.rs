@@ -7,9 +7,17 @@
 //! uncertainty, and canonical semantic identity stay inside this deep module.
 
 mod canonical;
+mod consumer;
 mod guards;
 pub mod proof;
 mod validate;
+
+pub use consumer::{
+    AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,
+    AcceptedSemanticIdentity, CallSiteFacts, FiniteFact, InstantiatedClaim, InstantiatedExport,
+    OpenDomainDiagnostic, OpenDomainReason, PropertyFact, SemanticQueryError,
+    native_claim_precedence,
+};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -464,7 +472,7 @@ pub struct EvidenceBundle {
     pub probe_observations: Vec<EvidenceReference>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct VerifierIdentity {
     pub build: String,
     pub policy: u32,
@@ -509,9 +517,49 @@ impl AcceptedContract {
         &self.receipt
     }
 
+    /// Complete cache identity for analyzer-visible meaning. Receipt policy
+    /// and verifier build are identity, not ambient configuration, so a policy
+    /// change cannot reuse a program built from an older acceptance decision.
+    #[must_use]
+    pub fn semantic_identity(&self) -> AcceptedSemanticIdentity {
+        AcceptedSemanticIdentity {
+            package: self.package.clone(),
+            artifact_case: self.selected_case.id.clone(),
+            receipt_version: self.receipt.receipt_version,
+            semantic_model_version: self.receipt.semantic_model_version,
+            semantic_digest: self.receipt.semantic_digest.clone(),
+            artifacts_digest: self.receipt.artifacts_digest.clone(),
+            closure_digest: self.receipt.closure_digest.clone(),
+            proof_root: self.receipt.proof_root.clone(),
+            closed_claims_root: self.receipt.closed_claims_root.clone(),
+            verifier: self.receipt.verifier.clone(),
+        }
+    }
+
     #[must_use]
     pub fn export(&self, name: &str) -> Option<&ExportSemantics> {
         self.selected_case.exports.get(name)
+    }
+
+    /// Resolves an effective export only through its exact runtime and
+    /// declaration identity. A public spelling alone is insufficient at this
+    /// trust seam because reexports and conditional artifacts may bind it to a
+    /// different implementation.
+    pub fn resolve_export(
+        &self,
+        identity: &ExportIdentity,
+    ) -> Result<&ExportSemantics, SemanticQueryError> {
+        consumer::resolve_export(self, identity)
+    }
+
+    /// Resolves and instantiates guarded behavior for one exact call site.
+    pub fn instantiate_export<'contract, 'facts>(
+        &'contract self,
+        identity: &ExportIdentity,
+        facts: &'facts CallSiteFacts,
+    ) -> Result<InstantiatedExport<'contract, 'facts>, SemanticQueryError> {
+        let export = self.resolve_export(identity)?;
+        consumer::instantiate_export(&self.selected_case.id, export, facts)
     }
 }
 

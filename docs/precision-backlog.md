@@ -7737,3 +7737,38 @@ those phases land. Missing or incomplete Type Facts censuses, unreconciled
 compiler sites, opaque dynamic loading/native/WASM/global/transform frontiers,
 unaccepted dependency edges, probe contradictions, and absent exact RC.3
 transcripts remain local open claims rather than negative proof.
+
+## 2026-08-28 — Accepted normalized semantics are queryable without global refusal
+
+Phase 12 enables the private replacement analyzer boundary without cutting the
+public schema over early. A temporary-v2 document is normalized, selected and
+rebound against one actual `ResolvedImport`, then compared with its stored
+receipt. Receipt version and proof policy, semantic model and digest, selected
+artifact identity, dependency closure, and the recomputed closed-claim root
+must all agree before `AcceptedContract` is exposed. The proof root remains the
+opaque verifier authority; ordinary analysis does not reload raw evidence.
+
+The normalized consumer resolves imports by exact importer/specifier and
+exports by exact runtime plus declaration identity. Restricted guards consume
+demand-shaped call-site facts. Unknown selection monotonically joins possible
+operations, removes no known positive, creates no guaranteed operation, and
+reports only the exact open guard or claim leaf. Complete empty knowledge still
+proves absence, while empty open knowledge remains unknown. Native dialect
+semantics take precedence only when compatible; proved disagreement refuses
+the claim instead of choosing whichever answer yields more coverage. Cache
+identity includes exact import mappings and every semantic, artifact, closure,
+proof, closed-claim, verifier-build, and receipt-policy component.
+
+This phase adds no diagnostic kind and moves no finding. The executable `tsc`
+oracle already covers every finding kind currently produced from package
+contracts: `strict-read-untracked` (both dialects), `missing-owner`,
+`reactive-dispatch-unresolved` (both dialects), `prefer-for`, and
+`no-destructure`; `package-contract-incomplete` remains explicitly exempt
+because its subject is the presence and authority of an external artifact, not
+a TypeScript expression. Phase 14 still owns public discovery, generator,
+probe, verifier/tooling, CLI/WASM, fixture, bundled-contract, and legacy-decoder
+cutover, so the current stable-schema analyzer path remains unchanged. Phase 13
+still owns exact published-RC.3 contract rows and proof corpus execution. A
+missing call-site literal/property/tuple fact, unresolved signature or spread,
+open guard remainder, open claim leaf, artifact conflict, or receipt mismatch
+therefore remains locally uncertifiable and never becomes negative proof.

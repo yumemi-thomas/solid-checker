@@ -347,6 +347,95 @@ fn policy_downgrades_are_rejected_before_acceptance() {
 }
 
 #[test]
+fn stored_receipt_replay_recomputes_every_available_binding() {
+    let contract = open_contract('b');
+    let subject = reads_subject();
+    let proofs = valid_proofs(&contract, &subject);
+    let issued = verify_and_accept(request(contract, subject, proofs)).unwrap();
+    let finalized = ContractProposal::new(
+        issued.package().clone(),
+        vec![issued.artifact_case().clone()],
+    )
+    .normalize()
+    .unwrap();
+
+    let loaded = validate_receipt_and_accept(
+        finalized.clone(),
+        &issued.artifact_case().id,
+        issued.receipt().clone(),
+    )
+    .unwrap();
+    assert_eq!(loaded, issued);
+
+    for field in [
+        "semanticDigest",
+        "artifactsDigest",
+        "closureDigest",
+        "closedClaimsRoot",
+    ] {
+        let mut receipt = issued.receipt().clone();
+        match field {
+            "semanticDigest" => receipt.semantic_digest = digest('7'),
+            "artifactsDigest" => receipt.artifacts_digest = digest('7'),
+            "closureDigest" => receipt.closure_digest = digest('7'),
+            "closedClaimsRoot" => receipt.closed_claims_root = digest('7'),
+            _ => unreachable!(),
+        }
+        assert_eq!(
+            validate_receipt_and_accept(finalized.clone(), "browser-import", receipt),
+            Err(ReceiptValidationError::Mismatch { field })
+        );
+    }
+}
+
+#[test]
+fn stored_receipt_replay_refuses_policy_drift() {
+    let contract = open_contract('b');
+    let subject = reads_subject();
+    let proofs = valid_proofs(&contract, &subject);
+    let issued = verify_and_accept(request(contract, subject, proofs)).unwrap();
+    let finalized = ContractProposal::new(
+        issued.package().clone(),
+        vec![issued.artifact_case().clone()],
+    )
+    .normalize()
+    .unwrap();
+    let mut receipt = issued.receipt().clone();
+    receipt.verifier.policy += 1;
+    assert_eq!(
+        validate_receipt_and_accept(finalized, "browser-import", receipt),
+        Err(ReceiptValidationError::ProofPolicy {
+            expected: PROOF_POLICY_VERSION,
+            actual: PROOF_POLICY_VERSION + 1,
+        })
+    );
+}
+
+#[test]
+fn stored_receipt_cannot_invent_an_acceptance_with_no_closed_claim() {
+    let contract = open_contract('b');
+    let selected = contract.artifact_cases()[0].clone();
+    let receipt = AcceptanceReceipt {
+        receipt_version: ACCEPTANCE_RECEIPT_VERSION,
+        wire_digest: digest('1'),
+        semantic_model_version: contract.semantic_model_version(),
+        semantic_digest: contract.semantic_digest().clone(),
+        artifacts_digest: artifacts_digest(contract.package(), &selected),
+        closure_digest: selected.dependency_closure.clone(),
+        proof_root: digest('2'),
+        closed_claims_root: closed_claims_root(std::iter::empty()),
+        verifier: VerifierIdentity {
+            build: "phase-12-test".into(),
+            policy: PROOF_POLICY_VERSION,
+        },
+    };
+    assert_eq!(
+        validate_receipt_and_accept(contract, &selected.id, receipt),
+        Err(ReceiptValidationError::NoClosedClaims)
+    );
+}
+
+#[test]
 fn complete_census_order_and_duplicates_normalize_equivalently() {
     let contract = open_contract('b');
     let subject = reads_subject();

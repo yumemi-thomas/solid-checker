@@ -126,6 +126,29 @@ Responsibilities:
 
 Callers query semantic outcomes rather than fact tables or wire fields.
 
+### Accepted analyzer query seam
+
+`AcceptedContractIndex` is the Phase 12 analyzer-facing boundary. Acquisition
+constructs it only from receipt-validated contracts and keys each contract by
+the exact importer/specifier occurrence. An export query additionally requires
+the complete runtime and declaration target identity; a matching public name
+is not sufficient.
+
+`CallSiteFacts` adapts the locally complete parts of the Type Facts invocation
+transcript (selected signature, expanded argument count, and result protocol)
+and exact demanded entity rows. Restricted guard atoms read only their own
+leaf. An unresolved atom joins all still-possible cases and adds a typed local
+reason; it does not open an unrelated claim. Artifact-case guards use the case
+already selected from `ResolvedImport`, not a guessed call-site label.
+
+Queries expose `KnowledgeSet` for possible behavior, cardinality-filtered
+guaranteed operations, complete empty sets for proved absence, and `Unknown`
+for no positive or negative proof. Native dialect knowledge wins when the
+accepted contract is compatible; a proved contradiction is refused. The index
+cache fingerprint binds its exact import mapping, package and manifest,
+selected case, semantic/artifact/closure/proof/closed-claim roots, verifier
+build, and proof policy in canonical sorted order.
+
 ### Proposal generator
 
 Rust owns semantic inference and proposal construction. Node owns package

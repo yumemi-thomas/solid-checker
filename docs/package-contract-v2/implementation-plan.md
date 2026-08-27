@@ -443,6 +443,22 @@ receipt storage. Every proof family has a false-closure deletion test. See the
 
 **Exit:** one open domain does not refuse or weaken unrelated known behavior.
 
+Completed on 2026-08-28. The backend now decodes temporary-v2 documents only
+behind `load_accepted_contract`, selects and rebinds the single case through
+the actual `ResolvedImport`, recomputes every receipt binding available during
+offline analysis, and exposes accepted typestate only after receipt version,
+proof policy, semantic, artifact, closure, and closed-claim roots agree. The
+Reactive IR consumer index is keyed by exact importer/specifier and export
+runtime/declaration identity; guard instantiation uses demand-shaped Type Facts
+without widening an unresolved leaf, returns possible and guaranteed behavior
+separately, preserves complete absence versus unknown, supplies typed local
+open-domain diagnostics, applies native-dialect precedence with contradiction
+refusal, and derives a canonical cache fingerprint including receipt policy.
+The existing `tsc` oracle covers every current contract-driven finding kind;
+this phase adds no finding. Public discovery, generators, fixtures, bundled
+contracts, CLI/WASM surfaces, and legacy-decoder deletion remain the atomic
+Phase 14 cut. See the [Phase 12 completion report](phase12/2026-08-28-analyzer-integration.md).
+
 ## Phase 13 — Solid 2 RC.3 conformance
 
 142. Encode split `createEffect`.
