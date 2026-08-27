@@ -1,0 +1,490 @@
+package typefacts
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"testing"
+)
+
+type sessionTestBackend struct {
+	transportOnlyBackend
+	closeCalls int
+}
+
+func newSessionTestBackend() *sessionTestBackend {
+	return &sessionTestBackend{transportOnlyBackend: transportOnlyBackend{source: SourceFile{
+		Path:   "/project/source.ts",
+		Source: []byte("export const value = 1\n"),
+	}}}
+}
+
+func (b *sessionTestBackend) Close() error {
+	b.closeCalls++
+	return nil
+}
+
+func lifecycleRequest(id uint64, operation LifecycleOperation, generation uint64) LifecycleRequest {
+	return LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV1, RequestID: id,
+		Operation: operation, ProjectID: "/project/tsconfig.json", Generation: generation,
+	}
+}
+
+func BenchmarkSessionDemandPreparation(b *testing.B) {
+	const paths = 1_000
+	initial := make([]EntityDemand, 0, paths)
+	for index := range paths {
+		path := fmt.Sprintf("/project/file-%04d.ts", index)
+		initial = append(initial, EntityDemand{
+			Location: Location{Path: path, StartByte: 1, EndByte: 2},
+			Symbol:   true,
+		})
+	}
+	var retained retainedDemandStore
+	initialTransaction := retained.begin(initial, nil, true)
+	initialTransaction.commit()
+	change := []EntityDemand{{
+		Location: Location{Path: "/project/file-0500.ts", StartByte: 2, EndByte: 3},
+		Symbol:   true,
+	}}
+	b.ReportAllocs()
+	for b.Loop() {
+		transaction := retained.begin(change, nil, false)
+		if len(transaction.groups()) != paths {
+			b.Fatalf("groups = %d, want %d", len(transaction.groups()), paths)
+		}
+		transaction.commit()
+	}
+}
+
+func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
+	t.Parallel()
+	backend := newSessionTestBackend()
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	open := session.Lifecycle(context.Background(), lifecycleRequest(1, LifecycleOpen, 1))
+	if !open.OK || open.Generation != 1 {
+		t.Fatalf("open response = %+v", open)
+	}
+
+	firstRequest := lifecycleRequest(2, LifecycleAnalyze, 1)
+	firstRequest.ResetState = true
+	first := session.Lifecycle(context.Background(), firstRequest)
+	if !first.OK || first.StateToken != "1" || len(first.TableTransition) == 0 {
+		t.Fatalf("initial analyze response = %+v", first)
+	}
+	reuseRequest := lifecycleRequest(3, LifecycleAnalyze, 1)
+	reuseRequest.StateToken = first.StateToken
+	reuse := session.Lifecycle(context.Background(), reuseRequest)
+	if !reuse.OK || len(reuse.TableTransition) != 0 || reuse.StateToken != first.StateToken {
+		t.Fatalf("warm analyze response = %+v", reuse)
+	}
+
+	staleRequest := lifecycleRequest(4, LifecycleAnalyze, 1)
+	staleRequest.StateToken = "stale"
+	stale := session.Lifecycle(context.Background(), staleRequest)
+	if stale.Error == nil || stale.Error.Code != "state-mismatch" {
+		t.Fatalf("stale token response = %+v", stale)
+	}
+
+	// An accepted no-op update still advances exactly one protocol generation.
+	update := session.Lifecycle(context.Background(), lifecycleRequest(5, LifecycleUpdate, 2))
+	if !update.OK || update.Generation != 2 {
+		t.Fatalf("no-op update response = %+v", update)
+	}
+	nextRequest := lifecycleRequest(6, LifecycleAnalyze, 2)
+	nextRequest.StateToken = first.StateToken
+	next := session.Lifecycle(context.Background(), nextRequest)
+	if !next.OK || next.StateToken != "2" || len(next.TableTransition) == 0 {
+		t.Fatalf("post-update analyze response = %+v", next)
+	}
+	// The frame's expansion and application are the Rust side's obligation,
+	// pinned by the delta golden; here the producer's promise is the mode,
+	// the token, and a non-empty frame for the advanced generation.
+	if next.Generation != 2 {
+		t.Fatalf("delta response generation = %d, want 2", next.Generation)
+	}
+}
+
+func TestSessionTransfersExpandedRowsAndKeepsSparseIncrementalProof(t *testing.T) {
+	t.Parallel()
+	projectID := "/project/tsconfig.json"
+	demand := EntityDemand{
+		Location: Location{Path: "/project/source.ts", StartByte: 7, EndByte: 12},
+		Symbol:   true, References: true,
+	}
+	session, err := NewSession(newSessionTestBackend(), projectID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	analyze := func(session *Session) LifecycleResponse {
+		request := LifecycleRequest{
+			Schema: TypeFactsSchemaVersionV1, RequestID: 1, Operation: LifecycleAnalyze,
+			ProjectID: projectID, Generation: 1, ResetState: true,
+			Demands: []EntityDemand{demand},
+		}
+		return session.Lifecycle(context.Background(), request)
+	}
+	cold := analyze(session)
+	if !cold.OK {
+		t.Fatalf("cold response: %+v", cold.Error)
+	}
+	contribution := session.closure.retained.get("/project/source.ts")
+	if contribution == nil || contribution.entities != nil || len(contribution.roots) == 0 {
+		t.Fatalf("retained contribution did not transfer rows: %+v", contribution)
+	}
+	if len(session.closure.table.Entities) != 0 || len(session.closure.table.Files) != 0 ||
+		len(session.closure.table.sourceDigests) != 0 {
+		t.Fatal("retained an expanded transport table after publication")
+	}
+
+	update := LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV1, RequestID: 2, Operation: LifecycleUpdate,
+		ProjectID: projectID, Generation: 2,
+	}
+	if response := session.Lifecycle(context.Background(), update); !response.OK {
+		t.Fatalf("update: %+v", response.Error)
+	}
+	next := LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV1, RequestID: 3, Operation: LifecycleAnalyze,
+		ProjectID: projectID, Generation: 2, StateToken: cold.StateToken,
+	}
+	response := session.Lifecycle(context.Background(), next)
+	if !response.OK || len(response.TableTransition) == 0 {
+		t.Fatalf("sparse successor: %+v", response.Error)
+	}
+	if contribution := session.closure.retained.get("/project/source.ts"); contribution == nil ||
+		contribution.entities != nil {
+		t.Fatal("sparse successor reacquired expanded retained rows")
+	}
+}
+
+func TestLatestSemanticDomainsAreAvailableInV1(t *testing.T) {
+	projectID := "/project/tsconfig.json"
+	demand := EntityDemand{
+		Location:           Location{Path: "/project/source.ts", StartByte: 7, EndByte: 12},
+		Constructability:   true,
+		RuntimeValueDomain: true, PrimitiveValueDomain: true, CallResultDomain: true, ConstantValue: true, ArrayShape: true, TupleShape: true, LibraryTypes: true,
+	}
+	session, err := NewSession(newSessionTestBackend(), projectID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	response := session.Lifecycle(context.Background(), LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV1, RequestID: 1, Operation: LifecycleAnalyze,
+		ProjectID: projectID, Generation: 1, ResetState: true,
+		Demands: []EntityDemand{demand},
+	})
+	if !response.OK {
+		t.Fatalf("v1 rejected semantic domains: %+v", response.Error)
+	}
+	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV17 {
+		t.Fatalf("active Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV17)
+	}
+
+	compact := CompactDemandsV3From([]EntityDemand{demand})
+	compactSession, err := NewSession(newSessionTestBackend(), projectID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer compactSession.Close()
+	response = compactSession.Lifecycle(context.Background(), LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV1, RequestID: 1, Operation: LifecycleAnalyze,
+		ProjectID: projectID, Generation: 1, ResetState: true,
+		CompactDemands: &compact,
+	})
+	if !response.OK {
+		t.Fatalf("v1 rejected compact semantic domains: %+v", response.Error)
+	}
+}
+
+func TestSessionReturnsSourcesThroughOneSharedArena(t *testing.T) {
+	t.Parallel()
+	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	initial := session.Lifecycle(context.Background(), lifecycleRequest(1, LifecycleSources, 1))
+	if !initial.OK || len(initial.Sources) != 1 {
+		t.Fatalf("initial sources response = %+v", initial)
+	}
+	initialArena, err := os.ReadFile(initial.SourceArena)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := initialArena[:initial.SourceLengths[0]]; string(got) != "export const value = 1\n" {
+		t.Fatalf("initial arena source = %q", got)
+	}
+
+	updateRequest := lifecycleRequest(2, LifecycleUpdate, 2)
+	updateRequest.Changes = []FileChangeV3{{
+		Path: "/project/source.ts", Version: 1, Source: []byte("export const value = 2\n"),
+	}}
+	update := session.Lifecycle(context.Background(), updateRequest)
+	if !update.OK {
+		t.Fatalf("update response = %+v", update)
+	}
+	updated := session.Lifecycle(context.Background(), lifecycleRequest(3, LifecycleSources, 2))
+	if !updated.OK || len(updated.Sources) != 1 {
+		t.Fatalf("updated sources response = %+v", updated)
+	}
+	updatedArena, err := os.ReadFile(updated.SourceArena)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := updatedArena[:updated.SourceLengths[0]]; string(got) != "export const value = 1\n" {
+		t.Fatalf("updated arena source = %q", got)
+	}
+}
+
+func TestSessionCancellationDoesNotCommitRetainedState(t *testing.T) {
+	t.Parallel()
+	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	request := lifecycleRequest(1, LifecycleAnalyze, 1)
+	request.ResetState = true
+	response := session.Lifecycle(cancelled, request)
+	if response.Error == nil || response.Error.Code != "analysis-cancelled" {
+		t.Fatalf("cancelled analyze response = %+v", response)
+	}
+
+	retry := session.Lifecycle(context.Background(), request)
+	if !retry.OK || retry.StateToken != "1" || len(retry.TableTransition) == 0 {
+		t.Fatalf("retry response = %+v", retry)
+	}
+}
+
+func TestSessionOwnsProjectClosure(t *testing.T) {
+	t.Parallel()
+	backend := newSessionTestBackend()
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	staleClose := session.Lifecycle(context.Background(), lifecycleRequest(1, LifecycleClose, 2))
+	if staleClose.Error == nil || staleClose.Error.Code != "generation-mismatch" {
+		t.Fatalf("stale close response = %+v", staleClose)
+	}
+	if backend.closeCalls != 0 {
+		t.Fatalf("stale close closed the backend %d times", backend.closeCalls)
+	}
+
+	closeRequest := lifecycleRequest(1, LifecycleClose, 1)
+	first := session.Lifecycle(context.Background(), closeRequest)
+	second := session.Lifecycle(context.Background(), closeRequest)
+	if !first.OK || !second.OK {
+		t.Fatalf("close responses = %+v, %+v", first, second)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if backend.closeCalls != 1 {
+		t.Fatalf("backend Close called %d times, want 1", backend.closeCalls)
+	}
+
+	analyze := session.Lifecycle(context.Background(), lifecycleRequest(2, LifecycleAnalyze, 1))
+	if analyze.Error == nil || analyze.Error.Code != "session-closed" {
+		t.Fatalf("analyze after close = %+v, want session-closed", analyze)
+	}
+}
+
+// twoFileBackend serves two sources so an update to one leaves the other
+// retained, which is the only way the retention counters become meaningful.
+type twoFileBackend struct {
+	transportOnlyBackend
+	second SourceFile
+}
+
+func (b twoFileBackend) SourceFiles(context.Context) ([]SourceFile, error) {
+	return []SourceFile{b.second, b.transportOnlyBackend.source}, nil
+}
+
+// TestSessionAnalysisTraversesTheRetainedPath pins that the in-package doubles
+// drive the branches the producer actually ships. Before the doubles gained the
+// production capability quartet they only satisfied the unscoped surface, so
+// every fast unit test exercised a fallback materializer that no release ever
+// runs — and the retention machinery this asserts on went untested outside one
+// integration test.
+func TestSessionAnalysisTraversesTheRetainedPath(t *testing.T) {
+	t.Parallel()
+	const firstPath = "/project/source.ts"
+	const secondPath = "/project/other.ts"
+	backend := twoFileBackend{
+		transportOnlyBackend: transportOnlyBackend{source: SourceFile{
+			Path: firstPath, Source: []byte("export const value = 1\n"),
+		}},
+		second: SourceFile{Path: secondPath, Source: []byte("export const other = 2\n")},
+	}
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	demands := []EntityDemand{
+		{Location: Location{Path: firstPath, StartByte: 13, EndByte: 18}, Symbol: true, References: true},
+		{Location: Location{Path: secondPath, StartByte: 13, EndByte: 18}, Symbol: true, References: true},
+	}
+
+	cold := lifecycleRequest(1, LifecycleAnalyze, 1)
+	cold.ResetState = true
+	cold.Demands = demands
+	if response := session.Lifecycle(context.Background(), cold); !response.OK || len(response.TableTransition) == 0 {
+		t.Fatalf("cold analyze = %+v", response)
+	}
+	token := "1"
+
+	update := lifecycleRequest(2, LifecycleUpdate, 2)
+	update.Changes = []FileChangeV3{{Path: firstPath, Version: 1, Source: []byte("export const value = 11\n")}}
+	if response := session.Lifecycle(context.Background(), update); !response.OK {
+		t.Fatalf("update = %+v", response)
+	}
+
+	warm := lifecycleRequest(3, LifecycleAnalyze, 2)
+	warm.StateToken = token
+	warmResponse := session.Lifecycle(context.Background(), warm)
+	if !warmResponse.OK {
+		t.Fatalf("warm analyze = %+v", warmResponse)
+	}
+
+	retention := session.closure.Stats().Retention
+	if retention.RetainedFiles == 0 {
+		t.Fatalf("no file was retained across the update; retention = %+v", retention)
+	}
+	// The active V1 session always uses the latest semantic transport path;
+	// retention may legitimately recompute symbol rows when the compiler
+	// invalidates their closure. Retained files are the stable contract here.
+	if len(warmResponse.TableTransition) == 0 {
+		t.Fatalf("warm analyze omitted its generation-advancing transition; retention = %+v", retention)
+	}
+}
+
+// moduleGraphBackend is a transport-only backend that also answers for the
+// resolved module graph, so the session's dispatch can be tested without a
+// compiler.
+type moduleGraphBackend struct {
+	transportOnlyBackend
+	demands   []ModuleInventoryDemand
+	inventory ModuleInventory
+}
+
+func (b *moduleGraphBackend) ModuleGraph(
+	_ context.Context,
+	demand ModuleInventoryDemand,
+) (ModuleInventory, error) {
+	b.demands = append(b.demands, demand)
+	return b.inventory, nil
+}
+
+func TestSessionAnswersTheModuleGraphWithoutTouchingRetainedState(t *testing.T) {
+	t.Parallel()
+	backend := &moduleGraphBackend{
+		transportOnlyBackend: transportOnlyBackend{source: SourceFile{
+			Path:   "/project/source.ts",
+			Source: []byte("export const value = 1\n"),
+		}},
+		inventory: ModuleInventory{
+			Modules: []ModuleFact{
+				{Path: "/project/shape.d.ts", DeclarationFile: true, Format: ModuleFormatESM},
+				{Path: "/project/source.ts", Format: ModuleFormatESM},
+			},
+			Imports: []ModuleImportFact{{
+				Specifier:    Location{Path: "/project/source.ts", StartByte: 20, EndByte: 29},
+				Text:         "./shape",
+				Resolution:   ModuleResolutionRelative,
+				ResolvedPath: "/project/shape.d.ts",
+				Extension:    ".d.ts",
+			}},
+			UnknownImportPaths: []string{"/project/absent.ts"},
+		},
+	}
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	analyzeRequest := lifecycleRequest(1, LifecycleAnalyze, 1)
+	analyzeRequest.ResetState = true
+	analyzeRequest.Demands = []EntityDemand{{
+		Location: Location{Path: "/project/source.ts", StartByte: 13, EndByte: 18},
+		Symbol:   true,
+	}}
+	analyze := session.Lifecycle(context.Background(), analyzeRequest)
+	if !analyze.OK {
+		t.Fatalf("analyze response = %+v", analyze)
+	}
+	token := analyze.StateToken
+
+	modulesRequest := lifecycleRequest(2, LifecycleModules, 1)
+	modulesRequest.ModuleGraph = &ModuleInventoryDemand{
+		Imports:     true,
+		ImportPaths: []string{"/project/source.ts"},
+		Packages:    true,
+	}
+	modules := session.Lifecycle(context.Background(), modulesRequest)
+	if !modules.OK {
+		t.Fatalf("modules response = %+v", modules)
+	}
+	if len(modules.Modules) != 2 || len(modules.ModuleImports) != 1 {
+		t.Fatalf("modules answer = %+v", modules)
+	}
+	if len(modules.UnknownImportPaths) != 1 || modules.UnknownImportPaths[0] != "/project/absent.ts" {
+		t.Errorf("unknownImportPaths = %v, want the one requested path the program lacks", modules.UnknownImportPaths)
+	}
+	if len(backend.demands) != 1 || !backend.demands[0].Imports || !backend.demands[0].Packages {
+		t.Errorf("backend saw demands %+v, want the request's own", backend.demands)
+	}
+	// The read carried no state token and issued none, so the analysis the
+	// session is holding is exactly where it was.
+	if modules.StateToken != "" {
+		t.Errorf("modules issued state token %q, want none", modules.StateToken)
+	}
+	reuse := session.Lifecycle(context.Background(), func() LifecycleRequest {
+		request := lifecycleRequest(3, LifecycleAnalyze, 1)
+		request.StateToken = token
+		return request
+	}())
+	if !reuse.OK || reuse.StateToken != token {
+		t.Fatalf("the retained analysis did not survive a modules read: %+v", reuse)
+	}
+}
+
+// A backend with no compiler resolution cannot answer a partial graph and be
+// believed, so it fails the request instead.
+func TestSessionFailsClosedWhenTheBackendHasNoModuleGraph(t *testing.T) {
+	t.Parallel()
+	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	response := session.Lifecycle(context.Background(), lifecycleRequest(1, LifecycleModules, 1))
+	if response.OK {
+		t.Fatalf("modules answered %+v on a backend with no resolved module graph", response)
+	}
+	if response.Error == nil || response.Error.Code != "modules-failed" {
+		t.Fatalf("error = %+v, want modules-failed", response.Error)
+	}
+	if len(response.Modules) != 0 {
+		t.Errorf("a failed modules response carried %d modules", len(response.Modules))
+	}
+}

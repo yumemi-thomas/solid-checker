@@ -1,0 +1,404 @@
+--- a/rust/solid-reactive-ir/src/contracts.rs
++++ b/rust/solid-reactive-ir/src/contracts.rs
+@@ -18,7 +18,7 @@
+     CachedContractExports, ContractCallback, ContractExport, ContractExportFragment,
+     ContractNodeKey, ContractReactiveRead, ContractReturn, EntitySymbols, PackageContract,
+     ReactiveSourceKind, StaticViolation, SummaryNode, SummaryRead, SummaryReads, SymbolId,
+-    location, location_order,
++    location, location_order, parallel_slice_results,
+ };
+ #[derive(Clone)]
+ pub(super) struct ResolvedContractBinding {
+@@ -667,15 +667,19 @@
+             }
+         }
+     }
+-    let mut changed_nodes = HashSet::<ContractNodeKey>::new();
+-    for index in dirty_set {
+-        let contract = contract_export_function(
+-            &graph.nodes[index],
+-            &analysis.summaries[index],
+-            &analysis.returned[index],
+-            &analysis.callbacks[index],
++    let mut dirty_indices = dirty_set.into_iter().collect::<Vec<_>>();
++    dirty_indices.sort_unstable();
++    let rebuilt_nodes = parallel_slice_results(&dirty_indices, |index| {
++        contract_export_function(
++            &graph.nodes[*index],
++            &analysis.summaries[*index],
++            &analysis.returned[*index],
++            &analysis.callbacks[*index],
+             &analysis.semantics,
+-        );
++        )
++    });
++    let mut changed_nodes = HashSet::<ContractNodeKey>::new();
++    for (index, contract) in dirty_indices.into_iter().zip(rebuilt_nodes) {
+         let key = node_keys[index].clone();
+         if cache.nodes.get(&key) != Some(&contract) {
+             changed_nodes.insert(key.clone());
+@@ -719,16 +723,19 @@
+                 .map(|summary| (symbol.clone(), summary))
+         })
+         .collect::<HashMap<_, _>>();
+-    for file in &facts.files {
+-        let rebuild = !graph_node_reused_paths.contains(file.path.as_str())
+-            || cache
+-                .files
+-                .get(file.path.as_str())
+-                .is_none_or(|fragment| !fragment.dependencies.is_disjoint(&changed_nodes));
+-        if !rebuild {
+-            continue;
+-        }
+-        let fragment = contract_export_fragment(
++    let rebuild_files = facts
++        .files
++        .iter()
++        .filter(|file| {
++            !graph_node_reused_paths.contains(file.path.as_str())
++                || cache
++                    .files
++                    .get(file.path.as_str())
++                    .is_none_or(|fragment| !fragment.dependencies.is_disjoint(&changed_nodes))
++        })
++        .collect::<Vec<_>>();
++    let rebuilt_fragments = parallel_slice_results(&rebuild_files, |file| {
++        contract_export_fragment(
+             facts,
+             file,
+             project_directory,
+@@ -736,7 +743,9 @@
+             &node_keys,
+             &cache.nodes,
+             &by_symbol,
+-        );
++        )
++    });
++    for (file, fragment) in rebuild_files.into_iter().zip(rebuilt_fragments) {
+         fragments_changed |= cache.files.get(file.path.as_str()) != Some(&fragment);
+         cache.files.insert(file.path.to_string(), fragment);
+     }
+--- a/rust/solid-reactive-ir/src/interproc.rs
++++ b/rust/solid-reactive-ir/src/interproc.rs
+@@ -32,9 +32,10 @@
+     contract_export_summaries_incremental, enclosing_function_label, enclosing_render_function,
+     execution_role, function_binding_name, function_indices_by_path, functions_for_path,
+     go_returned_arrow_pattern_accepts, go_solid_accessor_descriptor, inside_effect_apply, location,
+-    location_order, parallel_slice_results, primitive_name, propagate_returned_summary_deltas,
+-    propagate_summary_deltas, push_contract_callback, push_unique_summary_read,
+-    same_compiler_semantics, semantic_execution_role, source_function_exported,
++    location_order, parallel_file_results, parallel_slice_results, primitive_name,
++    propagate_returned_summary_deltas, propagate_summary_deltas, push_contract_callback,
++    push_unique_summary_read, same_compiler_semantics, semantic_execution_role,
++    source_function_exported,
+ };
+ 
+ #[derive(Clone, Debug, Eq, PartialEq)]
+@@ -1468,30 +1469,46 @@
+             .map(|file| file.path.as_str())
+             .collect::<HashSet<_>>();
+         cache.retain(|path, _| current_paths.contains(path.as_str()));
+-        for file in &facts.files {
+-            if retained_source_paths.contains(file.path.as_str())
+-                && let Some(cached) = cache.get(file.path.as_str())
+-                && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+-                    || same_compiler_semantics(&cached.compiler, &file.compiler))
+-            {
++        let reusable_paths = facts
++            .files
++            .iter()
++            .filter_map(|file| {
++                (retained_source_paths.contains(file.path.as_str())
++                    && cache.get(file.path.as_str()).is_some_and(|cached| {
++                        Arc::ptr_eq(&cached.compiler, &file.compiler)
++                            || same_compiler_semantics(&cached.compiler, &file.compiler)
++                    }))
++                .then_some(file.path.as_str())
++            })
++            .collect::<HashSet<_>>();
++        let discovered = parallel_file_results(&facts.files, |file| {
++            (!reusable_paths.contains(file.path.as_str()))
++                .then(|| discover_summary_nodes(file, project_indexes, entities))
++        });
++        for (file, discovered) in facts.files.iter().zip(discovered) {
++            if let Some(file_nodes) = discovered {
++                nodes.extend(file_nodes.iter().cloned());
++                cache.insert(
++                    file.path.to_string(),
++                    CachedInterproceduralGraph {
++                        nodes: file_nodes,
++                        contribution: InterproceduralGraphContribution::default(),
++                        compiler: file.compiler.clone(),
++                    },
++                );
++            } else {
++                let cached = cache
++                    .get(file.path.as_str())
++                    .expect("reusable graph path has a cached contribution");
+                 nodes.extend(cached.nodes.iter().cloned());
+                 graph_node_reused_paths.insert(file.path.as_str());
+-                continue;
+             }
+-            let file_nodes = discover_summary_nodes(file, project_indexes, entities);
+-            nodes.extend(file_nodes.iter().cloned());
+-            cache.insert(
+-                file.path.to_string(),
+-                CachedInterproceduralGraph {
+-                    nodes: file_nodes,
+-                    contribution: InterproceduralGraphContribution::default(),
+-                    compiler: file.compiler.clone(),
+-                },
+-            );
+         }
+     } else {
+-        for file in &facts.files {
+-            nodes.extend(discover_summary_nodes(file, project_indexes, entities));
++        for file_nodes in parallel_file_results(&facts.files, |file| {
++            discover_summary_nodes(file, project_indexes, entities)
++        }) {
++            nodes.extend(file_nodes);
+         }
+     }
+     let nodes_by_path = function_indices_by_path(&nodes);
+@@ -1532,9 +1549,8 @@
+         };
+         match interprocedural_graph_cache {
+             None => {
+-                for file in &facts.files {
+-                    graph_recomputed_files += 1;
+-                    let contribution = discover_interprocedural_graph(
++                let contributions = parallel_file_results(&facts.files, |file| {
++                    discover_interprocedural_graph(
+                         file,
+                         &nodes,
+                         &nodes_by_path,
+@@ -1542,12 +1558,28 @@
+                         contract_reads,
+                         contract_callbacks,
+                         lookup,
+-                    );
++                    )
++                });
++                for (file, contribution) in facts.files.iter().zip(contributions) {
++                    graph_recomputed_files += 1;
+                     graph.merge(file.path.as_str(), &contribution);
+                 }
+             }
+             Some(cache) => {
+-                for file in &facts.files {
++                let contributions = parallel_file_results(&facts.files, |file| {
++                    (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
++                        discover_interprocedural_graph(
++                            file,
++                            &nodes,
++                            &nodes_by_path,
++                            entities,
++                            contract_reads,
++                            contract_callbacks,
++                            lookup,
++                        )
++                    })
++                });
++                for (file, contribution) in facts.files.iter().zip(contributions) {
+                     if graph_node_reused_paths.contains(file.path.as_str())
+                         && let Some(cached) = cache.get(file.path.as_str())
+                     {
+@@ -1556,15 +1588,8 @@
+                         continue;
+                     }
+                     graph_recomputed_files += 1;
+-                    let contribution = discover_interprocedural_graph(
+-                        file,
+-                        &nodes,
+-                        &nodes_by_path,
+-                        entities,
+-                        contract_reads,
+-                        contract_callbacks,
+-                        lookup,
+-                    );
++                    let contribution =
++                        contribution.expect("recomputed graph path has a fresh contribution");
+                     graph.merge(file.path.as_str(), &contribution);
+                     cache.insert(
+                         file.path.to_string(),
+@@ -1987,79 +2012,118 @@
+         lookup: context.lookup,
+     };
+     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
+-        let current_paths = facts
+-            .files
+-            .iter()
+-            .map(|file| file.path.as_str())
+-            .collect::<HashSet<_>>();
+-        let removed_paths = cache
+-            .files
+-            .keys()
+-            .filter(|path| !current_paths.contains(path.as_str()))
+-            .cloned()
+-            .collect::<Vec<_>>();
+-        for path in removed_paths {
+-            let Some(removed) = cache.files.remove(path.as_str()) else {
+-                continue;
+-            };
+-            for dependency in &removed.dependencies {
+-                remove_interprocedural_dependency_user(
+-                    &mut cache.dependency_users,
+-                    &mut cache.dependency_states,
+-                    dependency,
++        if cache.files.is_empty()
++            && cache.dependency_states.is_empty()
++            && cache.dependency_users.is_empty()
++        {
++            let per_file = parallel_file_results(&facts.files, |file| {
++                interprocedural_result_reads_for_file(file, &result_read_context)
++            });
++            for (file, (reads, dependencies)) in facts.files.iter().zip(per_file) {
++                result_recomputed_files += 1;
++                result.extend(reads.iter().cloned());
++                for dependency in &dependencies {
++                    add_interprocedural_dependency_user(&mut cache.dependency_users, dependency);
++                }
++                cache.files.insert(
++                    file.path.to_string(),
++                    CachedInterproceduralResultFile {
++                        dependencies,
++                        reads,
++                        compiler: file.compiler.clone(),
++                    },
+                 );
+             }
+-        }
+-        let changed_dependencies = cache
+-            .dependency_states
+-            .iter()
+-            .filter(|(dependency, retained)| !result_view.dependency_matches(retained, dependency))
+-            .map(|(dependency, _)| dependency.clone())
+-            .collect::<HashSet<_>>();
+-        for file in &facts.files {
+-            if retained_source_paths.contains(file.path.as_str())
+-                && let Some(cached) = cache.files.get(file.path.as_str())
+-                && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+-                    || same_compiler_semantics(&cached.compiler, &file.compiler))
+-                && cached.dependencies.is_disjoint(&changed_dependencies)
+-            {
+-                result_reused_files += 1;
+-                result.extend(cached.reads.iter().cloned());
+-                continue;
+-            }
+-            result_recomputed_files += 1;
+-            let (reads, dependencies) =
+-                interprocedural_result_reads_for_file(file, &result_read_context);
+-            result.extend(reads.iter().cloned());
+-            if let Some(previous) = cache.files.remove(file.path.as_str()) {
+-                for dependency in previous.dependencies.difference(&dependencies) {
++        } else {
++            let current_paths = facts
++                .files
++                .iter()
++                .map(|file| file.path.as_str())
++                .collect::<HashSet<_>>();
++            let removed_paths = cache
++                .files
++                .keys()
++                .filter(|path| !current_paths.contains(path.as_str()))
++                .cloned()
++                .collect::<Vec<_>>();
++            for path in removed_paths {
++                let Some(removed) = cache.files.remove(path.as_str()) else {
++                    continue;
++                };
++                for dependency in &removed.dependencies {
+                     remove_interprocedural_dependency_user(
+                         &mut cache.dependency_users,
+                         &mut cache.dependency_states,
+                         dependency,
+                     );
+                 }
+-                for dependency in dependencies.difference(&previous.dependencies) {
+-                    add_interprocedural_dependency_user(&mut cache.dependency_users, dependency);
++            }
++            let changed_dependencies = cache
++                .dependency_states
++                .iter()
++                .filter(|(dependency, retained)| {
++                    !result_view.dependency_matches(retained, dependency)
++                })
++                .map(|(dependency, _)| dependency.clone())
++                .collect::<HashSet<_>>();
++            for file in &facts.files {
++                if retained_source_paths.contains(file.path.as_str())
++                    && let Some(cached) = cache.files.get(file.path.as_str())
++                    && (Arc::ptr_eq(&cached.compiler, &file.compiler)
++                        || same_compiler_semantics(&cached.compiler, &file.compiler))
++                    && cached.dependencies.is_disjoint(&changed_dependencies)
++                {
++                    result_reused_files += 1;
++                    result.extend(cached.reads.iter().cloned());
++                    continue;
+                 }
+-            } else {
+-                for dependency in &dependencies {
+-                    add_interprocedural_dependency_user(&mut cache.dependency_users, dependency);
++                result_recomputed_files += 1;
++                let (reads, dependencies) =
++                    interprocedural_result_reads_for_file(file, &result_read_context);
++                result.extend(reads.iter().cloned());
++                if let Some(previous) = cache.files.remove(file.path.as_str()) {
++                    for dependency in previous.dependencies.difference(&dependencies) {
++                        remove_interprocedural_dependency_user(
++                            &mut cache.dependency_users,
++                            &mut cache.dependency_states,
++                            dependency,
++                        );
++                    }
++                    for dependency in dependencies.difference(&previous.dependencies) {
++                        add_interprocedural_dependency_user(
++                            &mut cache.dependency_users,
++                            dependency,
++                        );
++                    }
++                } else {
++                    for dependency in &dependencies {
++                        add_interprocedural_dependency_user(
++                            &mut cache.dependency_users,
++                            dependency,
++                        );
++                    }
+                 }
++                cache.files.insert(
++                    file.path.to_string(),
++                    CachedInterproceduralResultFile {
++                        dependencies,
++                        reads,
++                        compiler: file.compiler.clone(),
++                    },
++                );
+             }
+-            cache.files.insert(
+-                file.path.to_string(),
+-                CachedInterproceduralResultFile {
+-                    dependencies,
+-                    reads,
+-                    compiler: file.compiler.clone(),
+-                },
+-            );
++            for dependency in cache.dependency_users.keys() {
++                if changed_dependencies.contains(dependency)
++                    || !cache.dependency_states.contains_key(dependency)
++                {
++                    cache
++                        .dependency_states
++                        .insert(dependency.clone(), result_view.dependency_state(dependency));
++                }
++            }
+         }
+-        for dependency in cache.dependency_users.keys() {
+-            if changed_dependencies.contains(dependency)
+-                || !cache.dependency_states.contains_key(dependency)
+-            {
++        if cache.dependency_states.is_empty() {
++            for dependency in cache.dependency_users.keys() {
+                 cache
+                     .dependency_states
+                     .insert(dependency.clone(), result_view.dependency_state(dependency));
+

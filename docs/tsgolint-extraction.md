@@ -1,9 +1,10 @@
 # tsgolint extraction and removal plan
 
-The module this plan governs lives in the
-[solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts) repository;
-the `internal/typefacts` and `go.mod` paths below are relative to that
-repository, and this checker consumes the result as a pinned dependency.
+The module this plan governs was imported with history from
+[solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts). Its active
+producer path is `apps/solid-typefacts/internal/typefacts`, with module pins in
+the repository-root `go.mod`; the external repository is provenance, not an
+active dependency.
 
 Milestone 1 uses tsgolint only as a reviewed bridge to unstable
 typescript-go APIs. The checker does not embed tsgolint's product, rule, CLI,
@@ -11,7 +12,8 @@ configuration, diagnostic, or LSP layers.
 
 ## Retained dependency surface
 
-`internal/typefacts/tsgo` imports only the pinned shim modules needed to:
+`apps/solid-typefacts/internal/typefacts/tsgo` imports only the pinned shim
+modules needed to:
 
 - parse a `tsconfig.json` and construct a TypeScript program;
 - bind source files and obtain a checker;

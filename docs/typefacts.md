@@ -1,9 +1,9 @@
 # Type Facts module
 
-The Type Facts module — `internal/typefacts` in the
-[solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts) repository,
-consumed here as the pinned `typefacts` crate and `solid-typefacts` producer —
-is the seam between the certification engine and native TypeScript analysis.
+The Type Facts module consists of the local Go producer under
+`apps/solid-typefacts` and the Rust process/session client under
+`rust/crates/typefacts`. Its versioned process protocol is the seam between the
+certification engine and native TypeScript analysis.
 Its interface exposes only opaque identities and original
 source facts. TypeScript AST nodes, checker types, symbols, programs, and shim
 terminology stay inside the `tsgo` adapter.
@@ -58,11 +58,11 @@ span.
 ## Native integration pins
 
 - tsgolint: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
-- typescript-go: `2bd066d87f5b`
+- typescript-go: `v0.0.0-20260724234109-8d29e62f3585`
 
 All unstable shim modules are replaced from the same tsgolint pseudo-version in
-solid-ts-facts's `go.mod`. No `go:linkname` or native compiler type is allowed outside
-`internal/typefacts/tsgo` and its pinned dependencies.
+the root `go.mod`. No `go:linkname` or native compiler type is allowed outside
+`apps/solid-typefacts/internal/typefacts/tsgo` and its pinned dependencies.
 
 `AffectedSet` starts from the union of the old and updated resolved-module
 graphs. For a single accepted external-module edit, diagnostic-free forced

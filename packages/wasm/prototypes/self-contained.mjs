@@ -1,8 +1,8 @@
 // PROTOTYPE: prove the real TypeScript-Go producer can run as a WASI reactor
 // and answer the Rust checker's exact demand plan without a child process.
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { WASI } from "@napi-rs/wasm-runtime";
@@ -13,7 +13,7 @@ process.env.NODE_ENV ||= "production";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
-const typefactsRoot = resolve(repositoryRoot, ".typefacts");
+const typefactsRoot = repositoryRoot;
 const fixtureRoot = resolve(repositoryRoot, "fixtures/reactive-ir/props-callers");
 const scratch = mkdtempSync(join(tmpdir(), "solid-checker-self-contained-"));
 const typeFactsReactorPath = join(scratch, "solid-typefacts.wasm");
@@ -32,84 +32,33 @@ const { fs: virtualFs } = memfs({
   [`${guestRoot}/solid-js.d.ts`]: readFileSync(resolve(fixtureRoot, "solid-js.d.ts"), "utf8"),
 });
 
-function typefactsGit(args) {
-  const result = spawnSync("git", ["-C", typefactsRoot, ...args], { encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(
-      `git ${args.join(" ")} in ${typefactsRoot} failed: ` +
-        (result.stderr?.trim() || result.error?.message || `status ${result.status}`),
-    );
-  }
-  return result.stdout.trim();
-}
-
-// The producer and the `typefacts` client verify each other on startup, so a
-// reactor built from a drifted checkout would answer a demand plan the checker
-// cannot accept. scripts/build-typefacts.sh reads the pin out of Cargo.toml
-// for the same reason; the prototype only checks it, because moving the pinned
-// checkout is not a prototype's business.
-function assertPinnedTypeFactsCheckout() {
-  const pinned = readFileSync(resolve(repositoryRoot, "rust/Cargo.toml"), "utf8")
-    .match(/^typefacts = .*\brev = "([0-9a-f]{40})"/m)?.[1];
-  if (!pinned) {
-    throw new Error("no typefacts rev pinned in rust/Cargo.toml");
-  }
-  const head = typefactsGit(["rev-parse", "HEAD"]);
-  if (head !== pinned) {
-    throw new Error(
-      `${typefactsRoot} is at ${head} but rust/Cargo.toml pins ${pinned}; ` +
-        "run scripts/build-typefacts.sh to move the checkout to the pin",
-    );
-  }
-  const dirty = typefactsGit(["status", "--porcelain"]);
-  if (dirty) {
-    throw new Error(
-      `${typefactsRoot} has uncommitted changes, so the reactor would not be ` +
-        `built from the pinned revision ${pinned}:\n${dirty}`,
-    );
-  }
-}
-
-// The reactor imports the producer's internal packages, so its command
-// directory has to live inside the pinned checkout. try/finally keeps the
-// prototype from leaving scratch directories behind in it.
 function buildTypeFactsReactor() {
-  const commandRoot = mkdtempSync(join(typefactsRoot, "cmd/solid-typefacts-wasm-prototype-"));
-  try {
-    copyFileSync(
-      resolve(packageRoot, "prototypes/typefacts-reactor/main.go"),
-      join(commandRoot, "main.go"),
-    );
-    const build = spawnSync(
-      "go",
-      [
-        "build",
-        "-trimpath",
-        "-buildmode=c-shared",
-        "-ldflags=-s -w",
-        "-o", typeFactsReactorPath,
-        `./cmd/${basename(commandRoot)}`,
-      ],
-      {
-        cwd: typefactsRoot,
-        env: {
-          ...process.env,
-          GOOS: "wasip1",
-          GOARCH: "wasm",
-          GOCACHE: join(scratch, "go-build-cache"),
-        },
-        encoding: "utf8",
+  const build = spawnSync(
+    "go",
+    [
+      "build",
+      "-trimpath",
+      "-buildmode=c-shared",
+      "-ldflags=-s -w",
+      "-o", typeFactsReactorPath,
+      "./apps/solid-typefacts/prototypes/typefacts-reactor",
+    ],
+    {
+      cwd: typefactsRoot,
+      env: {
+        ...process.env,
+        GOOS: "wasip1",
+        GOARCH: "wasm",
+        GOCACHE: join(scratch, "go-build-cache"),
       },
-    );
-    if (build.status !== 0) {
-      throw new Error(build.stderr || "Type Facts reactor build failed");
-    }
-  } finally {
-    rmSync(commandRoot, { recursive: true, force: true });
+      encoding: "utf8",
+    },
+  );
+  if (build.status !== 0) {
+    throw new Error(build.stderr || "Type Facts reactor build failed");
   }
 }
 
-assertPinnedTypeFactsCheckout();
 buildTypeFactsReactor();
 
 const checkerBuild = spawnSync(

@@ -1,0 +1,473 @@
+# Compiler semantic facts
+
+The package-contract generator can demand semantic facts without reconstructing
+TypeScript semantics from text.
+
+## Constant value
+
+`EntityDemand.constantValue` produces an optional `EntityFact.constantValue`
+with `kind: "string" | "number"` and the matching payload. The producer
+answers only for an expression whose trivia-normalized start and exact end
+match the demanded span. Absence always means not proven constant.
+
+The bounded evaluator folds string and numeric literals, substitution-free
+templates, transparent parentheses/type wrappers/non-null assertions, unary
+numeric signs, and same-kind binary `+`. It follows compiler-resolved symbols
+only to `const` bindings, `readonly` properties, and initialized enum members.
+Calls, parameters, mutable bindings, substituted templates, mixed string and
+number addition, dynamic/error types, cycles, and excessive recursion produce
+no fact.
+
+## Array shape
+
+`EntityDemand.arrayShape` produces `EntityFact.arrayShape`:
+
+- `array` — every union constituent is a reference to the global `Array` or
+  `ReadonlyArray` type, or a tuple.
+- `notArray` — no constituent is. A positive claim, so the negative is usable
+  as proof.
+- `mixed` — a union that genuinely holds both. Proven, but proves neither side.
+- `unknown` — `any`, `unknown`, `never`, an error type, or an instantiable
+  type. Not proven in either direction.
+
+The producer answers only for an expression whose trivia-normalized start and
+exact end match the demanded span, so an array of functions is never confused
+with a function returning an array. The predicate is the checker's own
+`isArrayOrTupleType`, which sees through type aliases and deliberately excludes
+merely array-*like* types such as an interface extending `Array`. Rendered type
+text never participates. Absence means the fact was not demanded or the span was
+not exactly one expression; it is never evidence of a non-array.
+
+## Library types
+
+`EntityDemand.libraryTypes` produces an optional `EntityFact.libraryTypes`: the
+sorted, deduplicated set of standard-library type names the type at the exact
+demanded span is built from at its top level — itself, its union and intersection
+constituents, and one array-element unwrap. Not an object type's properties, not
+a function's return type.
+
+A name is recorded only when the resolved symbol is declared in a default-library
+file, so a user-declared `Map` is not the global one. Every spelling of the same
+runtime type answers alike: a local alias, an alias imported from another file,
+and the built-in written directly. Absence means nothing at the top level came
+from the standard library — never that the type was unresolved.
+
+## Tuple shape
+
+`EntityDemand.tupleShape` produces an optional `EntityFact.tupleShape` with
+`fixedLength`, `hasRest`, `exactLength`, `elementZero` (a callability), and
+`elementZeroMinimumParameters`. It is present when every value-carrying
+constituent at the exact demanded span is a tuple, and never for the global
+`Array`/`ReadonlyArray` types, which have a number index signature rather than
+fixed slots.
+
+Use it, rather than `arrayShape`, when a value has to satisfy an interface with
+numbered members: an array has no `0` or `1` property and is not interchangeable
+with a two-slot tuple. `fixedLength` counts optional slots, matching the
+compiler, so "is there a value at index n" must also consider `hasRest`.
+`exactLength` is present only when every tuple constituent has the same number
+of required slots and has no optional, rest, or variadic element. It therefore
+proves runtime spread arity; `fixedLength` does not.
+
+`elementZero` alone cannot decide whether the first slot can be *invoked*: a
+function requiring more arguments than a caller supplies is not assignable to
+that caller's signature, even though it is callable.
+`elementZeroMinimumParameters` is the fewest arguments any of its call
+signatures requires, so a consumer checks both.
+
+Contextual typing decides tupleness for an array literal. A literal written
+where the expected type has numbered members acquires fixed slots; the same
+literal in an unconstrained position stays a plain array and the fact is absent.
+Absence means not proven a tuple, never "not a tuple".
+
+## Callability
+
+`EntityDemand.callability` produces `EntityFact.callability`:
+`callable`, `untypedCallable`, `nonCallable`, `mixed`, or `unknown`.
+
+The TypeScript-Go adapter obtains the expression type with
+`Checker.GetTypeAtLocation`, distributes real union constituents with
+`Type.Distributed`, and asks `Checker.GetSignaturesOfType` for
+`SignatureKindCall`. Construct signatures do not count. `any`, `unknown`,
+`never`, compiler error types, and missing types report `unknown`. No
+`TypeToString` result participates in this decision.
+
+`untypedCallable` is the signature-less `Function`-supertype family: a
+constituent the compiler permits calling although it exposes no call signature
+at all. lib.es5.d.ts's `Function` interface declares `apply`/`call`/`bind` and
+no signature of its own; `CallableFunction`, `NewableFunction`, an alias or an
+interface reaching them, and an intersection containing one all inherit that
+shape. `GetSignaturesOfType` sees nothing there, but the compiler resolves such
+a call through its TS 1.0 §4.12 rule — `checker.isUntypedFunctionCall`: no
+signatures of *either* kind, not a union, and assignable to the global
+`Function` type — and gives it `anySignature`. So `nonCallable` would have
+claimed the call is illegal where the compiler allows it, and `unknown` would
+have claimed no domain was closed where one was. For a single, non-union
+constituent the value is exact: it proves that constituent *is* callable and
+that no signature, arity, or parameter type can be read from it. It is a
+positive answer and a consumer may treat it as proof of a runtime function for
+that constituent; what it may not do is check any call against it. At a union
+the promise is weaker — see Aggregation below for what does and does not carry
+over once constituents are combined.
+
+The boundary is the compiler's assignability relation and not a list of type
+names. `object`, `{}`, `Record<string, unknown>`, and an interface that merely
+declares a `bind` method are **not** assignable to `Function`, the compiler
+refuses to call them, and they stay `nonCallable` — even though a function value
+is assignable to `object`. A `bind` member alone is only the compiler's cheap
+pre-filter, never the rule.
+
+Aggregation places `untypedCallable` below `callable` and above `mixed`. A union
+whose constituents are all callable, at least one of them unreadably, answers
+`untypedCallable`; a non-callable constituent beside a callable one is still
+`mixed`. So `Function | number` and `Function | undefined` answer `mixed`, and
+`Function | (() => void)` answers `untypedCallable`.
+
+At a union, `untypedCallable` promises only that every constituent is callable
+in some sense — per constituent, not that the union's call as written compiles,
+and not that no constituent's signature is readable. Both directions are
+measured: `Function | (() => void)` still carries one readable,
+arity-enforced call signature (`a(1)` for `declare const a: Function |
+(() => void)` is TS2554, "Expected 0 arguments, but got 1"), while
+`Function | Merged` — where `Merged` is itself in the untyped-call family, for
+example a `declare class C {}` merged with `interface C extends Function {}`
+— has tsc refuse the call outright (`b()` is TS2349, "This expression is not
+callable"), because the untyped-call rule's fallback explicitly excludes
+unions. Either way the answer stays conservative: a consumer reading
+`untypedCallable` as "callable, signature unread" only under-checks what it
+could have proven, and does not itself claim the union's call type-checks.
+Both shapes answered `nonCallable` or `mixed` before this rung existed. A
+design that asked the union type itself for its own call signatures, rather
+than meeting its constituents' individual answers, could recover the readable
+signature in the first case; that is a real precision gain this fact does not
+take.
+
+Constructability deliberately has no counterpart value. `new` on this family is
+a compile error — `resolveNewExpression` carries no untyped fallback, unlike
+call, tagged-template, and decorator resolution — so `nonConstructable` there is
+the compiler's own answer and moving it would invent a claim the type system
+contradicts. This is the one type family where the pair's two halves disagree
+about a single type, and the disagreement is the compiler's.
+
+## Constructability
+
+`EntityDemand.constructability` produces `EntityFact.constructability`:
+`constructable`, `nonConstructable`, `mixed`, or `unknown`. It is callability
+asked of `SignatureKindConstruct` — same type, same
+`GetTypeAtLocation`/`Distributed` walk, same fail-closed type flags — so a
+consumer demanding both gets two answers partitioned over the same
+constituents.
+
+It exists because construct signatures are exactly what callability does not
+count, which leaves a class's value type unanswerable: `typeof C` for
+`class C {}` is `nonCallable` and yet `typeof C === "function"` at runtime.
+That same type is `constructable` here, and only the pair decides whether an
+export is a runtime function. `mixed` on *either* fact does not compose with
+the other into a per-constituent proof:
+`(() => void) | number | (new () => X)` answers `mixed` twice and still holds a
+constituent that is neither.
+
+Abstract construct signatures are deliberately not filtered out — an abstract
+class is still a function object at runtime — so this fact does not answer
+instantiability. A class *declaration name* is not the same span as an export
+specifier: the compiler's type at the name is the class's *instance* type,
+which is `nonConstructable`. Aliases, imports, and re-export specifiers are
+transparent, as they are for callability. Absence means the fact was not
+demanded or the span carried no expression; `unknown` means the checker closed
+no domain. Neither is evidence of a non-constructable type.
+
+The pair proves "not a runtime function" when callability is `nonCallable` and
+constructability is `nonConstructable` — and callability's `untypedCallable`
+value is what makes that conjunction sound, because the family that used to
+satisfy it while being callable no longer answers `nonCallable`. See the
+Callability section above for why `nonConstructable` is nonetheless correct for
+that family.
+
+## Runtime value domain
+
+`EntityDemand.runtimeValueDomain` produces
+`EntityFact.runtimeValueDomain: *RuntimeValueDomain` in Go and
+`Option<RuntimeValueDomain>` in Rust. The fact has four booleans:
+
+- `mayBeCallable`: at least one possible value has a TypeScript call signature.
+- `mayBeUndefined`: at least one possible value is `undefined`.
+- `mayBeOther`: at least one possible value is neither callable nor undefined.
+- `unknown`: TypeScript-Go exposed a dynamic, unresolved, circular, or recovery
+  domain that cannot be exhaustively classified.
+
+The checker adapter recursively ORs the classifications of actual union
+constituents. Non-union structured types are callable when
+`Checker.GetSignaturesOfType(type, SignatureKindCall)` returns a signature;
+this covers functions, overloads, callable interfaces, aliases, and callable
+intersections. `TypeFlagsUndefined` is undefined, and a remaining intersection
+that the checker proves assignable to its canonical undefined type is also
+undefined. Every other known, inhabited type is `other`.
+
+For an instantiable type, the adapter follows TypeScript-Go's resolved generic
+constraint before classifying it. Thus `T extends (() => void) | undefined`
+has the same closed domain as its constraint, while an unconstrained `T` is
+unknown. `never` is the known empty domain: all four fields are false. `any`,
+`unknown`, unconstrained or circular generics, missing types, and types carrying
+`TypeFlagsIncludesError` conservatively set all three `mayBe` fields and
+`unknown` to true. No rendered type text participates.
+
+For Solid 2 cleanup validation, a present fact is exclusively in the accepted
+runtime domain exactly when:
+
+```text
+mayBeOther == false && unknown == false
+```
+
+This accepts callable values, `undefined`, their unions, and the vacuous
+`never` domain. Consumers should not infer that a missing fact is valid; absence
+means it was not demanded.
+
+## Primitive value domain
+
+`EntityDemand.primitiveValueDomain` produces an exact-span
+`EntityFact.primitiveValueDomain`. It partitions every possible runtime value
+into the JavaScript categories `string`, `number`, `boolean`, `bigint`,
+`symbol`, `null`, `undefined`, and `object`, plus an `unknown` bit. Functions
+are objects for this purpose. Null and undefined remain separate so a consumer
+can apply its own runtime or serialization contract. The compact representation
+still keeps the retained Rust entity row within its existing 144-byte budget.
+When `number` is possible, `numbersAreFinite` additionally proves that every
+numeric constituent is a finite compiler literal. Broad `number`, non-finite
+numeric literals, and a union containing either leave the guarantee false.
+This lets a consumer apply JSON-style finite-number policies without retaining
+the literal's exact value.
+
+Unions OR their constituent categories. Aliases are transparent. Instantiable
+types follow the compiler's resolved constraint, so `T extends string |
+boolean` is closed while an unconstrained `T` is unknown. `any`, `unknown`,
+recovery types, circular constraints, and missing types conservatively expose
+every category with `unknown`; `never` is the present empty domain.
+
+The producer answers only when the demanded span is exactly one expression.
+Absence means not demanded or not an exact expression, never a negative fact.
+This fact deliberately does not name a serializer or a policy: a consumer may
+prove its own accepted subset without turning a package-runtime contract into
+compiler vocabulary.
+
+## Call-result runtime value domain
+
+The active lifecycle schema V1 includes `EntityDemand.callResultDomain`, which produces
+`EntityFact.callResultDomain` with the same `RuntimeValueDomain` shape. The
+producer answers only when a call-like expression's trivia-normalized start and
+exact end bytes match the demanded span, then classifies
+`Checker.GetTypeAtLocation` for that call expression. It never substitutes the
+callee or an enclosing expression. A missing exact call is absent; checker
+error or recovery types are present with `unknown: true`.
+
+## Resolved-call validity
+
+`EntityDemand.resolvedCall` always produces a resolved-call fact. Its
+`validity` is:
+
+- `valid`: normal overload resolution selected an applicable signature.
+- `recovery`: TypeScript returned its unknown signature or an overload-failure
+  candidate while recovering from a failed call.
+- `unresolved`: the demanded node does not resolve to a call expression or no
+  signature is available.
+
+The adapter uses `getResolvedSignature`, its compiler candidate list,
+`SignatureFlagsIsSignatureCandidateForOverloadFailure`, and the compiler's
+call-resolution diagnostic codes at that call. Consumers do not inspect
+diagnostics and must only treat `valid` as positive evidence.
+
+## Selected declaration identity
+
+For each demanded call or `new` expression, `resolvedCall.kind` is `call` or
+`construct`. A valid, non-composite signature also carries
+`resolvedCall.declaration`:
+
+- `symbol` is the canonical compiler symbol for the selected signature
+  declaration.
+- `location` and `kind` identify the exact overload declaration returned by
+  `Signature.Declaration`.
+- `owners` is the outermost-to-innermost chain of compiler declaration
+  containers, with a symbol, declaration kind, and location for each.
+- `qualifiedName` joins the compiler symbol names from that chain for display,
+  such as `Storage.getItem`; it is not the equality key.
+- `originModule`, `sourceFile`, and `standardLibrary` report compiler-derived
+  provenance when it exists.
+
+The adapter obtains the selected signature with `getResolvedSignature`, follows
+aliases with `Checker.GetAliasedSymbol`, and derives every owner from the
+declaration AST and its symbols. Identity therefore comes from the selected
+signature symbol plus its containing declaration symbols and locations, not
+from a member-name lookup or source parsing. Two declarations named `push` on
+`Array` and a structural user type have different symbol/owner identities.
+
+An incremental compiler can retain a signature object whose declaration node
+belongs to the preceding source generation. Before emitting locations, the
+adapter maps that declaration through the current target symbol's declarations.
+If no current declaration can be established, it omits the selected declaration
+instead of publishing a stale location.
+
+## Exhaustive target candidate sets
+
+A valid composite call — one whose callee type is a union — carries no single
+selected declaration. The active V1 schema may instead carry
+`resolvedCall.targets`, a `CallTargetSet` with an explicit `exhaustive` proof
+bit and deterministically ordered, deduplicated candidate declarations. The
+set is emitted only when every union constituent is one closed concrete
+callable and every one of its call (or construct) signatures names one exact
+implementation declaration (`FunctionDeclaration`, `MethodDeclaration`,
+`ArrowFunction`, `FunctionExpression`, `Constructor`) with a canonical symbol.
+`any`, `unknown`, nullable, generic, intersection, error, type-level, and
+declaration-less constituents void the whole set; an incomplete candidate set
+is never published. The proof covers the callee's apparent type — the same
+evidence class as the single selected declaration — so consumers must compare
+each candidate's analyzed behavior before certifying the dispatch, and must
+keep divergent or unresolved candidates fail-closed. Argument mappings remain
+`compositeSignature` for composite callees because per-candidate mappings may
+differ.
+
+## Argument-to-parameter mapping
+
+Every supplied argument has an `ArgumentMapping`:
+
+- `resolved` includes the formal parameter index, current declaration location
+  when available, parameter symbol identity, rest/optional flags, callability,
+  and a type descriptor after generic substitution.
+- `unresolved` includes one of `callUnresolved`, `recoverySignature`,
+  `compositeSignature`, `spreadArgument`, or `parameterUnavailable`.
+
+The formal parameter comes from `Signature.Parameters`; rest and minimum
+argument information come from `Signature.HasRestParameter` and
+`Signature.MinArgumentCount`. The instantiated parameter type comes from the
+checker operation corresponding to TypeScript's `getTypeAtPosition`, so generic
+calls report the selected substitution rather than the declaration's type
+parameter. Callability is then calculated from actual call signatures using the
+same rules as demanded expression callability.
+
+Recovery and unresolved calls never expose a parameter as resolved. Spread
+arguments remain explicit `spreadArgument` mappings because one spread can
+cover zero or several formal positions. A synthesized composite signature for
+a union callable reports `compositeSignature`: TypeScript proves the call but
+does not expose one underlying declaration/parameter identity that the producer
+can safely choose. Intersection overloads are mapped when resolution selects a
+real constituent declaration.
+
+When `parameterObjectShape` is demanded beside `resolvedCall`, each resolved
+parameter may also carry the selected declaration object type's required
+properties. Property names come from `Checker.GetPropertiesOfType`, and each
+property carries only a bounded construction candidate derived from checker
+types and constraints:
+`emptyArray`, `emptyObject`, or `unknown`. Optional properties are omitted.
+An empty array is emitted only for an array or a tuple with no required slot;
+an empty object is emitted only when every distributed constituent is an
+object with no required property and no call or construct signature. Type
+parameters are checked through their compiler-resolved base constraint.
+
+This fact discovers reachability input; it is not runtime evidence. A consumer
+must put the proposed values into a synthetic call and require ordinary
+`resolvedCall.validity == valid` before invoking package code. `unknown` is an
+instruction to enumerate exact candidates or stop, never permission to guess.
+The bottom-typed placeholder `null as never` can select an otherwise
+unambiguous signature while asking for its parameter shape; recovery,
+composite, and unresolved signatures still expose no parameter shape.
+
+`TypeDescriptor.text` and `returnTypeText` are display metadata. They do not
+participate in declaration identity, mapping, validity, or callability.
+
+These facts say nothing about callback timing or retention. TypeScript's type
+system cannot prove whether a callback runs inline, later, or at all.
+
+## Reference space
+
+`EntityDemand.referenceSpace` produces `EntityFact.referenceSpace`:
+`value`, `type`, `both`, or `neither`.
+
+The retained reference index visits identifier nodes, resolves each with
+`Checker.GetSymbolAtLocation`, excludes declaration/import-property names with
+`ast.IsDeclarationNameOrImportPropertyName`, walks each identifier through its
+enclosing `QualifiedName` chain, and classifies the resulting compiler node
+with `ast.IsPartOfTypeNode`. Walking the AST chain makes the surrounding
+`TypeReference` or `TypeQuery` authoritative for leftmost namespace
+identifiers. Space is keyed by the local alias symbol rather than its canonical
+target, so two imports of the same export may correctly have different
+results.
+
+## Explicit symbol resolution
+
+`EntityDemand.symbol` produces exactly one of three outcomes at the demanded
+location:
+
+- `EntityFact.symbol` is non-empty when TypeScript-Go resolves a symbol;
+- `EntityFact.symbolUnresolved` is true when the source node exists and
+  `Checker.GetSymbolAtLocation` explicitly returns no symbol;
+- both fields are empty when the producer could not inspect the source node.
+
+The last case is unavailable evidence, not proof that a binding is missing.
+Consumers may diagnose an undefined name only from `symbolUnresolved`; they
+must not reinterpret an empty row as a negative answer. A demand for a narrow
+root inside a JSX member tag stays narrow, while a demand spanning the complete
+tag resolves the selected member.
+
+## Canonical runtime identity
+
+`EntityDemand.runtimeIdentity` produces `EntityFact.runtimeIdentity` when the
+alias-resolved symbol has `SymbolFlagsValue` and a value declaration.
+
+The adapter repeatedly follows `Checker.GetAliasedSymbol` through local
+aliases and reexport chains. The equality key hashes the canonical value
+declaration's normalized real path, byte range, and symbol name. This handles
+named reexports, export-star chains, package subpaths, symlinked package
+layouts, and symbols whose type and value declarations share a name.
+`RuntimeSymbolID` is an equality key, not a `SymbolID` lookup handle.
+
+Resolved-call work is demand-driven: the producer resolves and describes only
+requested call locations. Parameter object shapes are derived only when their
+separate demand bit is set. Selected declarations and instantiated parameters
+are cached by signature and shape demand within one analysis generation, while compiler-identical
+instantiated and return types share one descriptor rendering. All checker-owned
+caches are discarded on update. Declaration, owner, and parameter identities
+are embedded facts rather than standalone symbol-closure lookup handles, so
+they do not duplicate symbol rows. Retained per-file contributions track
+declaration and parameter source dependencies, so an edit rematerializes only
+facts that could otherwise carry stale locations.
+
+## Resolved module graph
+
+The `modules` operation answers for the module graph of the accepted program,
+independently of any demand set. See
+[ADR 0019](adr/0019-v1-attested-resolved-module-graph.md) for the full decision;
+the shape is:
+
+- The **module inventory** is unconditional: every file the program included,
+  with its path, whether it is a declaration file, its emit module format, the
+  compiler's project-reference input/output pairing, and its duplicate-install
+  redirect targets. Paths are realpaths, and default library files are in it,
+  because it is the program's own file list.
+- **Import provenance** is requested per importing file: one fact per module
+  specifier occurrence, carrying its exact span and text, the resolved file, the
+  file the program parses in its place, the symlink path the resolver walked, the
+  extension, the matched `paths` key, and — when asked for — the owning
+  `package.json`'s name, version, and path.
+
+Three absences are load-bearing and must be read as fail-closed rather than as
+negatives:
+
+- **A `.d.ts` beside a `.js` has no reported pairing, because the compiler
+  records none.** Resolution selects the declaration file and never opens the
+  implementation. `includedPath` is populated only by a configured project
+  reference's redirect, which is the only such record TypeScript keeps.
+- **`pathsPattern` says a configured `paths` key matched the specifier**, not
+  that resolution came through it; `ResolvedModule` records no trace of the
+  latter. Read with `resolution` it still settles the case it serves — a bare
+  specifier a `paths` key matched that did not land in `node_modules` is not the
+  installed package of that name.
+- **An empty `symlinkPath` means the resolver saw no divergence**, not that none
+  was looked for. TypeScript takes a realpath only for a non-relative resolution
+  under `node_modules` with `preserveSymlinks` off.
+
+`unknownImportPaths` names requested files the program does not hold, so an empty
+import list is distinguishable from an unanalyzed file.
+
+The active lifecycle schema is V1 and the active Wire table model is v13. The
+`modules` operation carries no Wire table transition: the module graph belongs to
+the program rather than to a fact table. The packed transition framing remains
+version 1. Go and Rust pin the same handshake protocol number and schema digest,
+so mismatched producer/client versions fail during the startup handshake.

@@ -1,4 +1,4 @@
-//! The Solid 2.0 compiler fact domain: the dom-expressions Oxc compiler
+//! The Solid 2.0 compiler fact domain: the Solid Oxc compiler
 //! adapted to the checker's [`CompilerFactsProvider`] seam.
 //!
 //! Nothing outside this crate speaks the compiler's own types. A Solid 1.x
@@ -25,7 +25,7 @@ const READS_TRACE_VERSION: u32 = 2;
 /// instead of silently making the runtime refusal below unreachable again. The
 /// runtime check catches a trace that disagrees with its own producer; this
 /// catches a producer that disagrees with this projection.
-const _: () = assert!(dom_expressions_compiler::SEMANTIC_TRACE_VERSION == READS_TRACE_VERSION);
+const _: () = assert!(solidjs_compiler::SEMANTIC_TRACE_VERSION == READS_TRACE_VERSION);
 
 /// The in-process Solid 2.0 compiler-facts provider.
 #[derive(Default)]
@@ -36,7 +36,7 @@ impl CompilerFactsProvider for NativeCompilerFacts {
         &mut self,
         request: &AnalysisRequest,
     ) -> Result<ExecutionMap, CompilerProviderError> {
-        use dom_expressions_compiler::{CompileOptions, Generate, Wrapper, compile};
+        use solidjs_compiler::{CompileOptions, Generate, Wrapper, compile};
 
         let requested = &request.compiler_options;
         // `None` leaves the compiler's own default wrapper in place; an
@@ -98,12 +98,10 @@ impl CompilerFactsProvider for NativeCompilerFacts {
 ///   template-root void child list is discarded and reported as one `Elided`
 ///   range. The checker consumes both facts without a Babel-parity mitigation.
 fn execution_map_from_trace(
-    trace: &dom_expressions_compiler::SemanticTrace,
+    trace: &solidjs_compiler::SemanticTrace,
     source: &str,
 ) -> Result<ExecutionMap, CompilerProviderError> {
-    use dom_expressions_compiler::{
-        CallbackDecision, ExecutionSiteKind, TerminalDecision, ValueDecision,
-    };
+    use solidjs_compiler::{CallbackDecision, ExecutionSiteKind, TerminalDecision, ValueDecision};
 
     // The trace schema is versioned and its meaning is not forward-compatible:
     // `ownership_sites` is emitted by version 2 but is the producer's legacy
@@ -130,7 +128,7 @@ fn execution_map_from_trace(
     };
 
     for site in &trace.ownership_sites {
-        use dom_expressions_compiler::OwnershipDecision;
+        use solidjs_compiler::OwnershipDecision;
 
         map.ownership_regions.push(OwnershipRegion {
             span: Span::new(site.span.start, site.span.end),
@@ -248,8 +246,8 @@ fn execution_map_from_trace(
 /// Shared by the untracked (`EagerOnce`) and discarded (`Elided`) arms: the
 /// reason describes where the value was written, which does not depend on
 /// whether the emitter kept it.
-fn region_reason(kind: dom_expressions_compiler::ExecutionSiteKind) -> RegionReason {
-    use dom_expressions_compiler::ExecutionSiteKind;
+fn region_reason(kind: solidjs_compiler::ExecutionSiteKind) -> RegionReason {
+    use solidjs_compiler::ExecutionSiteKind;
 
     match kind {
         ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
@@ -390,7 +388,7 @@ mod tests {
     // meaning changed.
     #[test]
     fn an_unreadable_trace_version_is_refused_rather_than_projected() {
-        use dom_expressions_compiler::SemanticTrace;
+        use solidjs_compiler::SemanticTrace;
 
         let source = "const view = <div>{count()}</div>;";
         // A literal version, not `READS_TRACE_VERSION + 1`: the point is that

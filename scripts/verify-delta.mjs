@@ -28,9 +28,9 @@
 //   1. The build products under `/bin/` and `rust/target/` -- above all
 //      `bin/solid-typefacts`, the producer of every fact in the repository.
 //      Rebuilding it changes every answer while `git status` stays silent, so
-//      `build-typefacts` (a stamp check that no-ops when the binary is already
-//      at the pinned revision) is in *every* plan, and a stamp that does not
-//      match `rust/Cargo.toml`'s pin escalates the whole plan.
+//      `build-typefacts` (a local source-manifest stamp check) is in *every*
+//      plan, and a stamp that does not match Type Facts-owned inputs escalates
+//      the whole plan.
 //   2. Ignored fixture inputs -- notably a `node_modules/solid-js` dialect stub
 //      added to an already-tracked fixture without its `.gitignore` exception.
 //      `git status` cannot see it, so no row selects `coverage`, and
@@ -43,6 +43,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { identity as typefactsIdentity } from "./typefacts-source-identity.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -62,7 +63,7 @@ export const CHECKS = {
   "build-typefacts": {
     why:
       "the producer of every fact is gitignored, so `git status` cannot report it moving; " +
-      "this is a stamp check that no-ops when it is already at the pinned revision",
+      "this source-manifest stamp check no-ops only when the ignored binary matches every local Type Facts input",
     command: ["scripts/build-typefacts.sh"],
   },
   "build-debug": {
@@ -279,48 +280,52 @@ export function porcelainPaths(output) {
   return paths;
 }
 
-/** Where the producer's identity is recorded, and where its pin is declared. */
+/** Where the ignored producer's local source identity is recorded. */
 const PRODUCER_STAMP = "bin/solid-typefacts.buildinfo";
-const CARGO_MANIFEST = "rust/Cargo.toml";
 
 /**
- * Whether the built producer is the one this source pins, as a sentence or
+ * Whether the built producer matches this local source manifest, as a sentence or
  * `null`.
  *
- * `bin/` is gitignored, so a producer at some other revision is a change no
+ * `bin/` is gitignored, so a producer built from other inputs is a change no
  * change set can report -- and the producer computes every fact the repository
  * reasons about. A drifted or absent stamp therefore escalates: not because a
  * narrow check is missing, but because nothing here knows which answers moved.
  */
-export function producerStampDrift({ pinned, stamp }) {
-  if (pinned === null) {
-    return `cannot read the typefacts revision pinned in ${CARGO_MANIFEST}`;
+export function producerStampDrift({ expected, stamp }) {
+  if (expected === null) {
+    return "cannot compute the local Type Facts source identity";
   }
   if (stamp === null) {
-    return `${PRODUCER_STAMP} is absent, so the built producer's revision is unknown (pin ${pinned})`;
+    return `${PRODUCER_STAMP} is absent, so the built producer's source identity is unknown`;
   }
-  const recorded = /revision=([0-9a-f]{40})/.exec(stamp)?.[1] ?? null;
-  if (recorded === null) {
-    return `${PRODUCER_STAMP} records no revision (pin ${pinned})`;
+  let recorded;
+  try {
+    recorded = JSON.parse(stamp);
+  } catch {
+    return `${PRODUCER_STAMP} does not contain a valid local source identity`;
   }
-  if (recorded !== pinned) {
+  if (JSON.stringify(recorded) !== JSON.stringify(expected)) {
     return (
-      `the built producer is at ${recorded} but ${CARGO_MANIFEST} pins ${pinned}; ` +
+      `the built producer identity does not match the local Type Facts source manifest; ` +
       `every fact in the repository comes from it`
     );
   }
   return null;
 }
 
-/** The pinned revision and the recorded one, read off disk. */
+/** The expected local identity and the recorded one, read off disk. */
 export function readProducerIdentity(root = ROOT) {
-  const manifest = join(root, CARGO_MANIFEST);
   const stampFile = join(root, PRODUCER_STAMP);
-  const pinned = existsSync(manifest)
-    ? (/^typefacts = .*\brev = "([0-9a-f]{40})"/m.exec(readFileSync(manifest, "utf8"))?.[1] ?? null)
-    : null;
+  let expected = null;
+  try {
+    expected = typefactsIdentity(process.env.TYPEFACTS_BUILD_ID || "dev", root);
+  } catch {
+    // Fail closed below; the reason is deliberately independent of the
+    // platform-specific filesystem/toolchain exception.
+  }
   const stamp = existsSync(stampFile) ? readFileSync(stampFile, "utf8") : null;
-  return { pinned, stamp };
+  return { expected, stamp };
 }
 
 /**

@@ -246,24 +246,28 @@ test("a real rename of a non-ASCII path contributes both sides", () => {
   });
 });
 
-test("a producer that is not the pinned one escalates, because git cannot report it", () => {
+test("a producer that is not built from the local manifest escalates", () => {
   // `bin/` is gitignored (`.gitignore:1`), so `bin/solid-typefacts` -- the
   // producer of every fact in the repository -- is invisible to both halves of
   // the selection basis. A change set that cannot see it moving must not claim
   // a narrow plan is sufficient.
-  const pinned = "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4";
-  const other = "0".repeat(40);
+  const expected = {
+    format: 1,
+    sourceDigest: "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4".padEnd(64, "0"),
+    toolchain: "go-test",
+    buildId: "dev",
+  };
 
   assert.equal(
-    producerStampDrift({ pinned, stamp: `revision=${pinned} build-id=dev` }),
+    producerStampDrift({ expected, stamp: JSON.stringify(expected) }),
     null,
     "a matching stamp is not a reason to escalate",
   );
   for (const [what, input] of [
-    ["a drifted producer", { pinned, stamp: `revision=${other} build-id=dev` }],
-    ["an absent stamp", { pinned, stamp: null }],
-    ["a stamp with no revision", { pinned, stamp: "build-id=dev" }],
-    ["an unreadable pin", { pinned: null, stamp: `revision=${pinned} build-id=dev` }],
+    ["a drifted producer", { expected, stamp: JSON.stringify({ ...expected, sourceDigest: "0".repeat(64) }) }],
+    ["an absent stamp", { expected, stamp: null }],
+    ["a legacy stamp", { expected, stamp: "build-id=dev" }],
+    ["an unreadable manifest", { expected: null, stamp: JSON.stringify(expected) }],
   ]) {
     const drift = producerStampDrift(input);
     assert.equal(typeof drift, "string", `${what} must escalate`);

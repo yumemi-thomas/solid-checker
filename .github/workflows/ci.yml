@@ -35,6 +35,9 @@ jobs:
       # target. This restores it, and the stamp it carries is what makes the
       # `make` dependencies no-ops.
       - uses: ./.github/actions/typefacts
+      - run: test -z "$(gofmt -l apps/solid-typefacts shims)"
+      - run: go vet ./apps/solid-typefacts/...
+      - run: go test -race ./apps/solid-typefacts/...
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
       - name: Check single-dialect composition builds

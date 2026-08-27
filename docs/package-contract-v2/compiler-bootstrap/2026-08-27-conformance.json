@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-compiler-semantic-facts-bootstrap-conformance",
+  "capturedAt": "2026-08-27",
+  "upstream": {
+    "repository": "https://github.com/solidjs/solid",
+    "revision": "a10cf1a147209d8da50697896742d2b1d4afad75",
+    "branch": "next"
+  },
+  "fork": {
+    "repository": "https://github.com/yumemi-thomas/solid",
+    "revision": "1d81e67fd393d12c74b13aa7d3fb492f3d85353b",
+    "branch": "solid-checker/compiler-facts-v2",
+    "upstreamPullRequest": false,
+    "scope": "semantic facts only"
+  },
+  "trace": {
+    "version": 2,
+    "baselineEntries": 358,
+    "baselineBytes": 955562,
+    "baselineSha256": "2f7f2b9a9d8a8cf3eb1d60a0cc35ee4a97142a9ff027fdcb2079f741ed00b92b",
+    "independentlyGeneratedUpstreamBaselineMatched": true,
+    "javascriptSourceMapDiagnosticNeutrality": true
+  },
+  "checker": {
+    "dependency": "solidjs-compiler",
+    "compilerFactsProtocol": 1,
+    "findingsBefore": 558,
+    "findingsAfter": 557,
+    "reviewedFindingDelta": "one stale uncertifiable SC1001 removed because current Solid positively reports the source child as tracked",
+    "otherFindingChanges": 0
+  },
+  "checks": {
+    "compilerRustDefaultFeatures": "passed",
+    "compilerRustNoDefaultFeatures": "passed",
+    "compilerJavaScript": {
+      "testFiles": 28,
+      "tests": 3933,
+      "status": "passed"
+    },
+    "adapterSolid2": {
+      "tests": 9,
+      "status": "passed"
+    },
+    "adapterSolid1AndSelection": {
+      "tests": 7,
+      "status": "passed"
+    },
+    "contractProcess": {
+      "tests": 57,
+      "status": "passed"
+    },
+    "dialectProcess": {
+      "tests": 37,
+      "status": "passed"
+    },
+    "coverage": {
+      "projects": 94,
+      "findings": 557,
+      "status": "passed"
+    },
+    "ownershipGate": {
+      "cases": 289,
+      "ledgerRows": 465,
+      "pending": 0,
+      "status": "passed"
+    },
+    "makeVerify": {
+      "elapsedSeconds": 42.83,
+      "status": "passed"
+    }
+  },
+  "knownInheritedGate": {
+    "command": "cargo clippy --manifest-path packages/compiler/Cargo.toml --no-default-features --all-targets --locked -- -D warnings",
+    "status": "fails on upstream source",
+    "reason": "clippy::collapsible-if in packages/compiler/src/dom/element.rs is present byte-for-byte at the exact upstream base",
+    "forkAction": "not changed because it is unrelated to semantic facts",
+    "factsDeltaWithInheritedLintAllowed": "passed"
+  }
+}

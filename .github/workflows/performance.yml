@@ -89,12 +89,14 @@ jobs:
         if: steps.base-runtime.outputs.cache-hit != 'true'
         run: git worktree add /tmp/perf-base "${{ steps.base.outputs.sha }}"
 
-      # At whatever producer revision that commit pinned, which is the point: a
-      # comparison must not pair one commit's engine with another's producer.
-      - uses: ./.github/actions/typefacts
+      # Build from whichever ownership model the base commit used. This branch's
+      # first merge base predates repatriation and therefore still carries the
+      # legacy revision-pinned builder; later bases build local source.
+      - name: Build the merge-base Type Facts producer
         if: steps.base-runtime.outputs.cache-hit != 'true'
-        with:
-          working-directory: /tmp/perf-base
+        run: |
+          cd /tmp/perf-base
+          TYPEFACTS_BUILD_ID=dev scripts/build-typefacts.sh
 
       - name: Build the merge-base benchmark runtime
         if: steps.base-runtime.outputs.cache-hit != 'true'

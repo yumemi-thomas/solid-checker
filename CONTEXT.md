@@ -21,6 +21,22 @@ _Avoid_: Reference cache, usage map
 A retained analysis lifetime for one configured TypeScript project, carrying its current generation and acknowledged demand state across requests.
 _Avoid_: Lifecycle responder, retained protocol state
 
+**Type Facts producer**:
+The repository-owned process that answers Type Facts demands for one configured TypeScript project. It stays behind the versioned process/session protocol.
+_Avoid_: Server, backend, external sidecar
+
+**Generation**:
+A numbered Type Facts project state. Every accepted update advances it exactly once; generation-scoped identities must be reacquired afterward.
+_Avoid_: Revision, snapshot
+
+**Semantic demand run**:
+One source file's canonically ordered Type Facts demands for a generation.
+_Avoid_: Query batch, demand group
+
+**Wire table transition**:
+A deterministic transport frame that establishes a Type Facts table or transforms the table named by its base generation and state token.
+_Avoid_: Payload, packed delta
+
 **Configured source descriptor**:
 A Type Facts session source entry that names a canonical disk path for local hydration, while edited or virtual sources remain inline. Generation source hashes still prove that Rust and TypeScript-Go analyzed identical content.
 _Avoid_: Path-only source, source shortcut
