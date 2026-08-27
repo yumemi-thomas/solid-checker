@@ -164,7 +164,22 @@ Focused iteration:
 - focused IR/backend Clippy with `-D warnings` — passed;
 - `git diff --check` — passed.
 
-Final `make verify` results are recorded before PR handoff.
+Final handoff authority:
+
+- `make verify` — passed in 81.92 seconds;
+- workspace unit, process, integration, and documentation tests — passed,
+  including 180 IR tests, 75 backend tests, and 8 contract-interface tests;
+- coverage — 94 fixture projects and 557 findings matched;
+- ownership gate — 289 cases passed and all 465 ledger rows are resolved;
+- TypeScript oracle — 161 cases held on both TypeScript and checker sides,
+  with 41 reporting-rule keystones;
+- obligation audit — 7 obligations held and 11 closures discharged theirs;
+- performance certification — passed (2.07x export scaling, 889 Type Facts
+  bytes/source, 79,565 ns/source best first IR, 1,458 ns cached IR);
+- CLI — 7 test files and 60 tests passed;
+- contract/TypeScript probe suites — 26 test files and 333 tests passed; and
+- compiler identity, dialect manifests, schemas, package pins, bundled
+  contract conformance, feature matrices, lint, and formatting gates — passed.
 
 ## Exact remaining open or uncertifiable cases
 
@@ -191,7 +206,10 @@ No upstream Solid pull request is required or authorized for this phase.
 ## Handoff
 
 - Branch: `codex/phase11-proof-checker-receipts`
-- Commits: recorded after green verification
+- Implementation commit: `2ca48aa5` (`feat(contracts): add proof checker and
+  acceptance receipts`)
+- Architecture/report commit: `d2b2cae8` (`docs(contracts): record phase 11
+  completion`)
 - Pull request: recorded after branch push
 
 No upstream Solid pull request was created.
