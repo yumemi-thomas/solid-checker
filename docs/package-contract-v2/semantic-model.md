@@ -1,5 +1,9 @@
 # Package-contract semantic model
 
+Status: **frozen for `semanticModelVersion: 1` on 2026-08-27**. Later wire
+compression may change without changing this model. Any incompatible semantic
+change requires a new semantic-model version and digest domain.
+
 ## Knowledge lattice
 
 Each set-valued claim domain has items and immediate local completeness.
@@ -41,12 +45,23 @@ Operation cardinality distinguishes possible from guaranteed behavior:
 - `"many"` means repetition is unbounded.
 - A missing bound is unknown.
 
+Every bound has exactly one scope:
+
+- `trigger`: per occurrence of the operation's trigger;
+- `call`: across one invocation of the contracted export;
+- `resource`: across the lifetime of one named resource.
+
+Bounds with different scopes are not comparable and never merge implicitly.
+An operation that runs once per async emission uses trigger scope; the stream's
+total emission bound, when known, uses resource scope. A missing scope is
+invalid whenever either bound is present.
+
 A probe can witness possibility. Only replayable static proof can establish a
 positive minimum, a finite maximum, or domain closure.
 
 ## Operations
 
-The initial operation kinds are deliberately consumer-driven:
+The version-1 operation kinds are deliberately consumer-driven:
 
 - callback invocation;
 - return production;
@@ -71,14 +86,25 @@ An operation contains:
 - causal dependencies;
 - error and cleanup edges.
 
+Edges have the closed vocabulary `orders`, `data`, `invalidates`, `error`,
+`cleanup`, and `lifetime`. `orders` is the only pure sequencing edge. The other
+edges assert the named semantic relation and may additionally imply ordering;
+normalization never converts timing coincidence into causality.
+
 The graph is acyclic. Repetition is represented by trigger/cardinality, not a
 graph cycle. This keeps scheduling, repeated invocation, async emissions, and
 cleanup replacement explicit without turning the contract into a full runtime
 trace.
 
-## Execution triggers
+## Trigger cause and execution point
 
-The semantic vocabulary is:
+An operation records separately what makes it eligible (`trigger`) and where it
+actually runs (`at`). Both use semantic events, but they are not aliases. For
+example, an invalidation may trigger an effect whose apply operation executes
+at `flush`; a returned cleanup may be produced at `flush` and invoked later at
+`cleanup`.
+
+The version-1 event vocabulary is:
 
 - call;
 - render;
@@ -91,8 +117,10 @@ The semantic vocabulary is:
 - request;
 - response commitment.
 
-Scheduling attributes distinguish same-stack execution from queued execution.
-Ordering edges express before/after dependencies. A generic `deferred` bucket
+The scheduling relation is `same stack`, `queued`, or `external`. A queued
+operation names its drain event in `at`; an external operation names the
+external event or request resource that invokes it. Ordering edges express
+before/after constraints among actual operations. A generic `deferred` bucket
 is insufficient and is not part of the normalized vocabulary.
 
 ## Tracking
@@ -123,6 +151,12 @@ Owner capabilities are separate:
 - child owners allowed, forbidden, or unknown;
 - cleanup supported, unavailable, or unknown;
 - lifetime bound to call, resource, owner, request, transition, or async source.
+
+An operation also records owner requirements independently: required,
+forbidden, or unconstrained; and, when required, the capabilities it needs.
+Creating an owner does not prove the operation itself required one. Executing
+under an owner does not prove that child owners or cleanup registration are
+allowed.
 
 Owner production, owner requirement, owner source, owner capability, and owner
 lifetime are distinct facts. Labels such as `leaf` may be derived for
@@ -168,7 +202,7 @@ Required shapes:
 - ref application;
 - server-function reference.
 
-Projection and snapshot should be represented by observable capability and
+Projection and snapshot are represented by observable capability and
 resource relationships unless RC.3 exposes a runtime-observable protocol that
 requires a distinct marker. Nominal TypeScript branding is evidence for exact
 identity but does not automatically create a runtime behavior category.
@@ -176,6 +210,13 @@ identity but does not automatically create a runtime behavior category.
 Every tuple item, object property, array element, and choice alternative may be
 unknown independently. A missing or unknown child never contaminates known
 sibling leaves.
+
+Tuple items, object properties, and choice alternatives are themselves local
+set-valued claim domains. Each composite node carries its own collection and
+local closure. A closed empty property or alternative collection proves none;
+a closed tuple-item collection proves the exact tuple length. Arrays carry a
+leaf-local element shape plus a separately proved length interval. No parent
+shape closes a descendant collection.
 
 ## Capability constraints
 
@@ -192,7 +233,7 @@ Normalization rejects contradictory combinations. At minimum:
 
 ## Guards
 
-Wire guards are ordered conjunctions of a restricted set of atoms:
+Guards are conjunctions of a restricted set of atoms:
 
 - selected signature ID;
 - argument count;
@@ -208,6 +249,13 @@ user predicates, and framework labels are invalid. A complete branch partition
 requires disjoint verified cases plus a verified `otherwise` for any open-ended
 remainder. When a call site cannot select one case, consumers monotonically
 join every possible case.
+
+Atom order has no semantic meaning and is canonicalized by atom kind and
+operand. Case order is provenance only: all non-`otherwise` cases must be
+pairwise disjoint, and `otherwise` is the complement of their union. There is
+at most one `otherwise`, and it is last on the wire. Negation is not a guard
+operator; finite false values and the verified remainder express negative
+alternatives.
 
 ## Artifact cases
 
@@ -229,9 +277,12 @@ transform, export surface, and proof root also match.
 ## Stability
 
 Experimental status attaches to the exact effective export in an artifact
-case. Entrypoint status is shorthand only when every export shares it. Absence
-means unknown, never stable. Server components remain experimental until the
-published authority says otherwise.
+case. Entrypoint status is shorthand only when every export shares it. Version
+1 carries only the positive `experimental` marker: absence means unknown,
+never stable. The marker requires hash-bound evidence from published package
+metadata/declarations or an exact official source revision. Documentation
+without exact release identity cannot certify it. Server components remain
+experimental until published authority explicitly changes that status.
 
 ## Canonical semantic identity
 
@@ -239,6 +290,12 @@ The semantic digest includes normalized behavior and exact artifact identity.
 It excludes wire schema version, formatting, key order, summary IDs, evidence
 paths, and receipt bytes. It includes a separate semantic-model version so an
 incompatible change cannot reuse an older digest.
+
+Canonicalization expands summaries with alpha-renamed local IDs, sorts
+semantically unordered sets, preserves ordered tuple positions and causal
+ordering, normalizes guards, and hashes length-delimited typed values. It never
+hashes a pretty-printed JSON representation. Unknown, partial, complete
+positive, and complete negative states have distinct encodings.
 
 ## Core invariants
 

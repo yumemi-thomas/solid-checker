@@ -68,6 +68,10 @@ fact in the adapter, so no compatibility shim was added.
 
 ## Remaining Phase 0A work
 
+This section records the state at the compiler-only handoff. It is superseded
+by the completed
+[Type Facts repatriation conformance](../typefacts-repatriation/2026-08-27-conformance.md).
+
 The compiler half (C1-C18) is complete. Type Facts repatriation is the remaining
 half of Phase 0A and has not started in this change. The external producer and
 client remain pinned and coherent; no mixed local/external Type Facts state was

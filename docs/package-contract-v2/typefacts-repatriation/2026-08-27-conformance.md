@@ -5,9 +5,9 @@ Date: 2026-08-27
 ## Verdict
 
 The Type Facts producer/client source move is behavior-neutral and the active
-build is fully local. The external repository remains only as provenance at
-`92c53392388518d69ef27220729f5c061479deed`; it must not be archived until the
-separate two-CI-runs-and-one-release-build retirement gate completes.
+build is fully local. The external repository remains as archived provenance at
+`92c53392388518d69ef27220729f5c061479deed`. Its history and release tags were
+preserved.
 
 No fact vocabulary, protocol number, schema digest, lifecycle behavior, or
 checker finding changed. No compiler code changed in this repatriation.
@@ -117,13 +117,22 @@ including Go format/vet/race, Rust format/Clippy/workspace/process tests, both
 dialect feature matrices, coverage, ownership, performance, CLI, TypeScript
 oracle, obligation audit, schema validation, and contract conformance.
 
-## Remaining operational gate
+## Operational retirement gate
 
-T13 is intentionally not satisfied by local testing. Before making
-`yumemi-thomas/solid-ts-facts` read-only or archived, require two clean CI runs
-and one release build from the monorepo. Until then, do not delete the ignored
-`.typefacts` compatibility checkout or claim the external repository is
-retired.
+T13 completed on 2026-08-27:
+
+- PR #42 CI completed successfully in run
+  [`33025140131`](https://github.com/yumemi-thomas/solid-checker/actions/runs/33025140131);
+- post-merge `main` CI completed successfully for merge commit
+  `4b43df527bcd578687fb8d162367e0ae4e2d569b` in run
+  [`33025835416`](https://github.com/yumemi-thomas/solid-checker/actions/runs/33025835416);
+- that post-merge run built, packaged, uploaded, and smoke-tested release-mode
+  native artifacts on Linux x64, Linux arm64, macOS arm64, and Windows x64,
+  and built/tested/packed the WASM artifact.
+
+After those gates passed, `yumemi-thomas/solid-ts-facts` was archived. It is no
+longer an active source or pull-request target; all future Type Facts producer,
+client, checker-consumer, and proof changes land atomically in this repository.
 
 ## Independent reviews
 

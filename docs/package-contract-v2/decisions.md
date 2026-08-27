@@ -5,18 +5,34 @@ counterevidence and, for the architectural trust decisions, a superseding ADR.
 
 ## Restricted guards
 
-Use ordered conjunction-only cases over selected signature, argument count,
+Use conjunction-only cases over selected signature, argument count,
 finite literals, callable/value/Promise/AsyncIterable kind, fixed property
 presence/callability, tuple alternative, result protocol, and exact artifact
 case. Require a verified `otherwise` for an open-ended partition. Do not admit
-general Boolean expressions or source code.
+general Boolean expressions or source code. Atom order is semantically inert;
+non-`otherwise` cases are disjoint rather than first-match, and `otherwise` is
+their verified complement.
 
 ## Consumer-driven operation vocabulary
 
-The main contract initially carries callback invocation, return production,
+Semantic-model version 1 carries callback invocation, return production,
 reactive read/write/invalidation, resource creation, cleanup, and disposal.
 Richer trace and transport details stay in sidecars until a diagnostic consumes
 them.
+
+## Cardinality scope
+
+Every known lower or upper operation bound is scoped per trigger occurrence,
+per contracted call, or per named resource lifetime. Missing bounds stay
+unknown. Probes establish possibility but never a minimum, finite maximum, or
+scope. Counts from different scopes never merge implicitly.
+
+## Trigger and execution separation
+
+Record the event or operation that triggers eligibility separately from the
+event where execution occurs and whether dispatch is same-stack, queued, or
+external. Timing coincidence is not causality. A generic deferred phase is not
+part of normalized meaning.
 
 ## Resolver authority
 
@@ -74,7 +90,25 @@ finite index list.
 ## Experimental status
 
 Attach experimental status to the effective export/artifact case. Entrypoint
-status is shorthand only when every export shares it. Absence means unknown.
+status is shorthand only when every export shares it. Version 1 carries only
+the positive experimental marker; absence means unknown, not stable. The marker
+requires evidence tied to an exact published artifact or official source
+revision.
+
+## Recursive closure
+
+Tuple items, object properties, and choice alternatives are independent local
+claim domains. Closure at a composite value node applies only to its immediate
+collection. Arrays separate element-shape knowledge from length knowledge.
+Unknown descendants never contaminate known siblings, and parent closure never
+closes a descendant.
+
+## Frozen wire vocabulary
+
+Use the field and enum spellings in `wire-format.md` for temporary
+`schemaVersion: 2`. Summary references have no overrides; guarded behavior
+lives in the summary. Wire compression may only change through an atomic
+decoder/document update and cannot change `semanticModelVersion: 1` meaning.
 
 ## Digest and renumbering
 

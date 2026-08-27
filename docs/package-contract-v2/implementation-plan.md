@@ -107,12 +107,12 @@ T13. Run two clean CI passes and one release build before making the external
 T14. Require all later Type Facts changes to include their producer, Rust
     client, checker consumer, and proof fixtures in this repository.
 
-**Status 2026-08-27:** T1-T10 and T14 are complete. T11-T12 parity evidence is
-recorded in the repatriation conformance report; response bytes are compared
-after removing only nondeterministic numeric timing values, while timings are
-gated separately. T13 remains an operational retirement gate: the external
-repository must not be archived until two clean CI runs and one release build
-have completed from the monorepo.
+**Status 2026-08-27:** T1-T14 are complete. T11-T12 parity evidence is recorded
+in the repatriation conformance report; response bytes are compared after
+removing only nondeterministic numeric timing values, while timings are gated
+separately. T13 completed with successful PR and post-merge CI plus the
+post-merge cross-platform release-package matrix. The external repository is
+archived and preserved as provenance.
 
 **Exit:** Solid 2 uses a pinned semantic-only fork of the compiler at its new
 upstream location; Type Facts builds locally; both transitions preserve the
@@ -134,6 +134,9 @@ frozen checker findings and fail-closed behavior.
 
 **Exit:** no semantic behavior depends on undocumented omission, inheritance,
 or consumer convention.
+
+**Status 2026-08-27:** complete. Items 9-18 and the exit condition are recorded
+in the [Phase 1 semantic and policy freeze](phase1/2026-08-27-freeze.md).
 
 ## Phase 2 — Deep module interfaces
 

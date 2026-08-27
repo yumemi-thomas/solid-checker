@@ -1,8 +1,10 @@
-# Compact wire-format draft
+# Compact wire format
 
-This is a design draft for temporary `schemaVersion: 2`. The generated JSON
-Schema remains the structural authority once implementation begins; cross-field
-and proof invariants remain Rust validation responsibilities.
+Status: **field vocabulary frozen for temporary `schemaVersion: 2` on
+2026-08-27**. The generated JSON Schema becomes the structural authority when
+implementation begins; cross-field, normalization, and proof invariants remain
+Rust validation responsibilities. Shorter aliases are not permitted unless a
+later corpus measurement changes this document and the decoder atomically.
 
 ## Root
 
@@ -156,44 +158,94 @@ Rules:
     {
       "id": "compute",
       "kind": "invoke",
-      "on": {
-        "event": "call",
-        "schedule": "same-stack"
+      "trigger": {
+        "event": "call"
       },
+      "at": { "event": "flush", "schedule": "queued" },
       "tracking": "tracked",
       "owner": {
         "source": "created",
         "resource": "effect-owner",
-        "children": "allowed"
+        "requires": "required",
+        "children": "allowed",
+        "cleanup": "supported",
+        "lifetime": "resource"
       },
-      "count": { "min": 1, "max": 1 }
+      "count": { "scope": "call", "min": 0, "max": "many" }
     },
     {
       "id": "apply",
       "kind": "invoke",
-      "on": {
-        "event": "flush"
-      },
+      "trigger": { "operation": "compute" },
+      "at": { "event": "flush", "schedule": "same-stack" },
       "tracking": "untracked",
       "owner": {
-        "source": "ambient-at-run"
+        "source": "captured",
+        "resource": "effect-owner",
+        "requires": "required",
+        "children": "forbidden",
+        "cleanup": "supported",
+        "lifetime": "resource"
       },
-      "after": ["compute"],
-      "count": { "min": 0, "max": "many" }
+      "count": { "scope": "trigger", "min": 0, "max": 1 }
+    }
+  ],
+  "edges": [
+    {
+      "kind": "orders",
+      "from": "compute",
+      "to": "apply"
     }
   ]
 }
 ```
 
-The exact final spelling should be chosen for compactness after corpus
-measurement. The semantic distinctions are mandatory even if the wire uses
-shorter names.
+Operation `kind` is one of `invoke`, `return`, `read`, `write`, `invalidate`,
+`create`, `cleanup`, or `dispose`. `trigger` names either an event, an operation,
+or a resource event. `at.event` is one of `call`, `render`, `flush`, `settle`,
+`transition`, `async-emission`, `cleanup`, `external-event`, `request`, or
+`response-commitment`; `at.schedule` is `same-stack`, `queued`, or `external`.
+
+`tracking` is `tracked`, `untracked`, or `ambient-at-execution`. Omission means
+unknown. Owner `source` is `none`, `ambient-at-call`, `ambient-at-execution`,
+`captured`, or `created`; `captured` and `created` require `resource`. Owner
+requirements, child capability, cleanup capability, and lifetime are separate
+keys and may be omitted independently when unknown.
+
+`count.scope` is `trigger`, `call`, or `resource`. `min` and finite `max` are
+non-negative integers; `max` may be `many`. A bound requires a scope, `min`
+must not exceed finite `max`, and an omitted bound stays unknown. Graph edge
+`kind` is `orders`, `data`, `invalidates`, `error`, `cleanup`, or `lifetime`.
+
+## Resources
+
+```json
+{
+  "resources": [
+    {
+      "id": "effect-owner",
+      "kind": "owner",
+      "states": ["active", "disposed"]
+    }
+  ]
+}
+```
+
+Resource `kind` is `owner`, `reactive-source`, `async-computation`,
+`transition`, `cleanup`, `request`, `response`, `stream`, or
+`server-function-reference`. Only conclusion-relevant finite states are legal:
+owner active/disposed; cleanup installed/disposed; async
+pending/settled/errored/cancelled; transition active/settled/reverted; response
+uncommitted/committed; stream unclaimed/claimed. State omission means unknown;
+listing states without locally closing the corresponding state claim is
+partial knowledge.
 
 ## Recursive values
 
 ```json
 {
   "kind": "tuple",
+  "closed": ["items"],
   "items": [
     {
       "kind": "reactive",
@@ -212,6 +264,23 @@ shorter names.
 
 Object, tuple, array, and choice children carry independent knowledge. An
 unknown leaf does not invalidate known siblings.
+
+`closed` at a composite node names only that node's immediate `items`,
+`properties`, or `alternatives` collection. A closed tuple item collection
+proves exact length. An object property is `{ "name": ..., "value": ... }`;
+closing properties proves there are no other statically visible own
+properties. An array has one `element` shape and optional `length: { min, max }`;
+element knowledge and length-interval knowledge are independent. The same local
+closure rules as call domains apply: a closed name requires its collection,
+and an open empty collection is invalid.
+
+Version-1 value `kind` is `unknown`, `plain`, `parameter`, `tuple`, `array`,
+`object`, `choice`, `callable`, `promise`, `async-iterable`, `reactive`,
+`store`, `action`, `component`, `cleanup`, `ref-application`, or
+`server-function-reference`. A reactive value has role `accessor` or `setter`.
+Observable capabilities use only `readable`, `writable`, `refreshable`,
+`pending-aware`, and `optimistic`, and must satisfy the contradictions rejected
+by the semantic normalizer. Projection and snapshot are not nominal wire kinds.
 
 ## Guarded behavior
 
@@ -238,7 +307,9 @@ unknown leaf does not invalidate known siblings.
 Only the restricted, statically decidable atoms defined in
 [semantic-model.md](semantic-model.md) are legal. An `otherwise` case can close
 the partition only when the verifier proves every earlier guard well-formed
-and disjoint.
+and disjoint. Atom order is normalized away. There is at most one
+`otherwise`, it is last, and it means the complement of every preceding case;
+case fallthrough and first-match semantics do not exist.
 
 ## Stability
 
@@ -254,6 +325,7 @@ Experimental status attaches to an export mapping or exact artifact case:
 ```
 
 Absence means unknown stability. A general `stable` default is not inferred.
+`experimental` is the only version-1 stability value.
 
 ## Structural limits
 
@@ -261,10 +333,15 @@ The validator must enforce configurable limits with initial safety defaults:
 
 - main document at most 1 MiB;
 - recursive shape/guard depth at most 32;
-- bounded summary, export, operation, resource, and edge counts;
-- bounded string and path lengths;
+- at most 1,024 entrypoints, 1,024 artifact cases, 16,384 summaries, and
+  65,536 effective exports per package;
+- at most 4,096 operations, 4,096 resources, 8,192 edges, 256 guarded cases,
+  and 256 atoms per guard in one expanded summary;
+- strings at most 16 KiB and package-relative paths at most 4 KiB;
 - no path traversal outside the package root;
 - no reference cycles;
 - linear-time expansion and normalization.
 
-These are denial-of-service limits, not compactness targets.
+These are denial-of-service limits, not compactness targets. A policy may lower
+them but may not silently raise them while accepting an existing receipt;
+resource-limit policy is receipt-bound.

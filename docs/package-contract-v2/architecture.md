@@ -41,8 +41,8 @@ package acquisition and host resolution
 
 The semantic architecture does not require separate repositories. Type Facts is
 a deep module because of its process/session interface, not because its source
-is remote. Its Go producer and Rust client will be co-located in this repository
-so producer, consumer, and proof changes can land atomically:
+is remote. Its Go producer and Rust client are co-located in this repository so
+producer, consumer, and proof changes land atomically:
 
 ```text
 apps/solid-typefacts       Go producer and TypeScript-Go adapters
