@@ -230,5 +230,10 @@ Final handoff authority:
 
 ## Handoff
 
-The final branch, commits, and solid-checker pull-request URL are recorded after
-green verification and publication. No upstream Solid pull request is created.
+- Branch: `codex/phase9-claim-ids-evidence-sidecars`
+- Implementation commit: `7e162a62` (`feat(contracts): add claim-bound
+  evidence sidecars`)
+- Pull request:
+  [yumemi-thomas/solid-checker#51](https://github.com/yumemi-thomas/solid-checker/pull/51)
+
+No upstream Solid pull request was created.
