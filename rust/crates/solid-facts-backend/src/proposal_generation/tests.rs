@@ -317,6 +317,16 @@ fn proof_and_probe_plans_keep_authorities_separate() {
 }
 
 #[test]
+fn evidence_catalog_accepts_every_planned_semantic_subject() {
+    let proposal = planned();
+    let catalog = crate::evidence_sidecars::EvidenceCatalog::for_proposal(&proposal).unwrap();
+    assert_eq!(
+        catalog.contract().semantic_digest(),
+        proposal.contract().semantic_digest()
+    );
+}
+
+#[test]
 fn proposal_emission_is_deterministic_and_has_no_accepted_closure_field() {
     let first = emit_proposal(&planned()).unwrap();
     let second = emit_proposal(&planned()).unwrap();
@@ -337,6 +347,18 @@ fn proposal_emission_is_deterministic_and_has_no_accepted_closure_field() {
                 operation["operation"] == "partial-read" && operation["strength"] == "Possible"
             })
     );
+    for collection in [
+        "closureCandidates",
+        "unresolvedEdges",
+        "positiveOperations",
+        "probePlan",
+    ] {
+        assert!(value[collection].as_array().unwrap().iter().all(|claim| {
+            claim["claimId"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("claim:v1:sha256:"))
+        }));
+    }
 }
 
 #[test]

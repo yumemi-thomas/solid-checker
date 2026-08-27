@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
 pub const SEMANTIC_MODEL_VERSION: u16 = 1;
+pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 
 /// Local knowledge for one immediate collection-valued claim domain.
 ///
@@ -337,18 +338,118 @@ impl NormalizedContract {
     pub fn artifact_case(&self, id: &str) -> Option<&ArtifactCase> {
         self.artifact_cases.iter().find(|case| case.id == id)
     }
+
+    /// Computes the stable identity of one addressable semantic claim.
+    ///
+    /// The digest includes exact package, artifact-case, and export identity
+    /// plus the normalized semantic path. It excludes wire positions, summary
+    /// names, formatting, sidecar layout, and unrelated claim values.
+    pub fn claim_id(
+        &self,
+        subject: &SemanticClaimSubject,
+    ) -> Result<SemanticClaimId, ClaimIdentityError> {
+        let artifact_case = self.artifact_case(&subject.artifact_case).ok_or_else(|| {
+            ClaimIdentityError::MissingArtifactCase {
+                artifact_case: subject.artifact_case.clone(),
+            }
+        })?;
+        let export = artifact_case.exports.get(&subject.export).ok_or_else(|| {
+            ClaimIdentityError::MissingExport {
+                artifact_case: subject.artifact_case.clone(),
+                export: subject.export.clone(),
+            }
+        })?;
+        if !validate::claim_subject_exists(export, &subject.path) {
+            return Err(ClaimIdentityError::InvalidSubject {
+                artifact_case: subject.artifact_case.clone(),
+                export: subject.export.clone(),
+            });
+        }
+        Ok(canonical::semantic_claim_id(
+            &self.package,
+            artifact_case,
+            export,
+            &subject.path,
+        ))
+    }
+}
+
+/// A semantic proposition address, independent of compact-wire layout.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SemanticClaimSubject {
+    pub artifact_case: String,
+    pub export: String,
+    pub path: SemanticClaimPath,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticClaimPath {
+    Domain(ClaimPath),
+    /// Positive existence of one normalized operation. Its axes have their
+    /// own [`ClaimPath::Operation`] subjects.
+    Operation(OperationId),
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SemanticClaimId(String);
+
+impl SemanticClaimId {
+    pub fn parse(value: impl Into<String>) -> Result<Self, ClaimIdentityError> {
+        let value = value.into();
+        let digest = value
+            .strip_prefix("claim:v1:")
+            .ok_or(ClaimIdentityError::InvalidId)?;
+        let parsed = Digest::parse(digest).map_err(|_| ClaimIdentityError::InvalidId)?;
+        if parsed.as_str() != digest {
+            return Err(ClaimIdentityError::InvalidId);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn from_sha256(bytes: [u8; 32]) -> Self {
+        Self(format!(
+            "claim:v{SEMANTIC_CLAIM_ID_VERSION}:{}",
+            Digest::from_sha256(bytes).as_str()
+        ))
+    }
+}
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum ClaimIdentityError {
+    #[error(
+        "semantic claim ID must be canonical claim:v1:sha256 followed by 64 lowercase hexadecimal digits"
+    )]
+    InvalidId,
+    #[error("semantic claim names missing artifact case {artifact_case}")]
+    MissingArtifactCase { artifact_case: String },
+    #[error("semantic claim names missing export {export} in artifact case {artifact_case}")]
+    MissingExport {
+        artifact_case: String,
+        export: String,
+    },
+    #[error(
+        "semantic claim subject does not exist for export {export} in artifact case {artifact_case}"
+    )]
+    InvalidSubject {
+        artifact_case: String,
+        export: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceReference {
-    pub claim: ClaimPath,
+    pub claim: SemanticClaimId,
     pub digest: Digest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceBundle {
-    pub artifact: ArtifactIdentity,
-    pub dependency_closure: Digest,
+    pub semantic_digest: Digest,
     pub static_proofs: Vec<EvidenceReference>,
     pub probe_observations: Vec<EvidenceReference>,
 }

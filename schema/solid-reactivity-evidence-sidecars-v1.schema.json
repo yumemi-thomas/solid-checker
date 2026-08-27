@@ -1,0 +1,470 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yumemi-thomas/solid-checker/schema/solid-reactivity-evidence-sidecars-v1.schema.json",
+  "title": "Solid Reactivity Evidence Sidecars v1",
+  "oneOf": [
+    { "$ref": "#/$defs/proofDocument" },
+    { "$ref": "#/$defs/probeDocument" }
+  ],
+  "$defs": {
+    "string": { "type": "string", "minLength": 1, "maxLength": 16384 },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "claimId": {
+      "type": "string",
+      "pattern": "^claim:v1:sha256:[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "$ref": "#/$defs/string" },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "integrity", "manifest"],
+      "properties": {
+        "name": { "$ref": "#/$defs/string" },
+        "version": { "$ref": "#/$defs/string" },
+        "integrity": { "$ref": "#/$defs/string" },
+        "manifest": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "contractIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semanticModelVersion", "semanticDigest", "package"],
+      "properties": {
+        "semanticModelVersion": { "const": 1 },
+        "semanticDigest": { "$ref": "#/$defs/sha256" },
+        "package": { "$ref": "#/$defs/package" }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "build"],
+      "properties": {
+        "name": { "$ref": "#/$defs/string" },
+        "version": { "$ref": "#/$defs/string" },
+        "build": { "$ref": "#/$defs/sha256" },
+        "protocol": { "$ref": "#/$defs/string" }
+      }
+    },
+    "claimArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactCase",
+        "entrypoint",
+        "runtime",
+        "declarations",
+        "closure"
+      ],
+      "properties": {
+        "artifactCase": { "$ref": "#/$defs/string" },
+        "entrypoint": { "$ref": "#/$defs/string" },
+        "runtime": { "$ref": "#/$defs/artifact" },
+        "declarations": { "$ref": "#/$defs/artifact" },
+        "closure": { "$ref": "#/$defs/sha256" },
+        "transform": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "claimDomain": {
+      "enum": [
+        "callbacks",
+        "reads",
+        "writes",
+        "creates",
+        "invalidates",
+        "throws",
+        "returns",
+        "cleanups",
+        "disposals"
+      ]
+    },
+    "valueClaimDomain": {
+      "enum": [
+        "shape",
+        "tuple-items",
+        "object-properties",
+        "choice-alternatives",
+        "array-minimum-length",
+        "array-maximum-length",
+        "capabilities"
+      ]
+    },
+    "operationClaimDomain": {
+      "enum": [
+        "trigger",
+        "execution-point",
+        "schedule",
+        "tracking",
+        "owner-source",
+        "owner-child-capability",
+        "owner-cleanup-capability",
+        "owner-lifetime",
+        "owner-productions",
+        "cardinality-scope",
+        "cardinality-minimum",
+        "cardinality-maximum"
+      ]
+    },
+    "resourceClaimDomain": {
+      "enum": ["states", "capabilities", "lifetime"]
+    },
+    "valueRoot": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "export" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "operation", "index"],
+          "properties": {
+            "kind": { "const": "operation-input" },
+            "operation": { "$ref": "#/$defs/string" },
+            "index": { "type": "integer", "minimum": 0, "maximum": 65535 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "operation"],
+          "properties": {
+            "kind": { "const": "operation-output" },
+            "operation": { "$ref": "#/$defs/string" }
+          }
+        }
+      ]
+    },
+    "valuePathSegment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "index"],
+          "properties": {
+            "kind": { "const": "tuple-item" },
+            "index": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "array-element" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "const": "object-property" },
+            "name": { "$ref": "#/$defs/string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "index"],
+          "properties": {
+            "kind": { "const": "choice-alternative" },
+            "index": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "promise-value" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "async-iterable-element" } }
+        }
+      ]
+    },
+    "claimPath": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "domain"],
+          "properties": {
+            "kind": { "const": "call" },
+            "domain": { "$ref": "#/$defs/claimDomain" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "root", "path", "domain"],
+          "properties": {
+            "kind": { "const": "value" },
+            "root": { "$ref": "#/$defs/valueRoot" },
+            "path": {
+              "type": "array",
+              "maxItems": 16384,
+              "items": { "$ref": "#/$defs/valuePathSegment" }
+            },
+            "domain": { "$ref": "#/$defs/valueClaimDomain" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "operation", "domain"],
+          "properties": {
+            "kind": { "const": "operation-axis" },
+            "operation": { "$ref": "#/$defs/string" },
+            "domain": { "$ref": "#/$defs/operationClaimDomain" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "resource", "domain"],
+          "properties": {
+            "kind": { "const": "resource" },
+            "resource": { "$ref": "#/$defs/string" },
+            "domain": { "$ref": "#/$defs/resourceClaimDomain" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "guard-partition" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "operation"],
+          "properties": {
+            "kind": { "const": "operation" },
+            "operation": { "$ref": "#/$defs/string" }
+          }
+        }
+      ]
+    },
+    "claimSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactCase", "export", "path"],
+      "properties": {
+        "artifactCase": { "$ref": "#/$defs/string" },
+        "export": { "$ref": "#/$defs/string" },
+        "path": { "$ref": "#/$defs/claimPath" }
+      }
+    },
+    "factTranscript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "transcript", "producer"],
+      "properties": {
+        "domain": {
+          "enum": [
+            "oxc-syntax",
+            "type-facts",
+            "compiler-execution-facts",
+            "accepted-package-contract"
+          ]
+        },
+        "transcript": { "$ref": "#/$defs/sha256" },
+        "generation": { "type": "integer", "minimum": 0 },
+        "producer": { "$ref": "#/$defs/tool" }
+      }
+    },
+    "proofInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "input", "tool"],
+      "properties": {
+        "rule": { "$ref": "#/$defs/string" },
+        "input": { "$ref": "#/$defs/sha256" },
+        "tool": { "$ref": "#/$defs/tool" }
+      }
+    },
+    "proofClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimId",
+        "subject",
+        "artifact",
+        "producer",
+        "factTranscripts",
+        "proofInputs",
+        "coverageLimitations"
+      ],
+      "properties": {
+        "claimId": { "$ref": "#/$defs/claimId" },
+        "subject": { "$ref": "#/$defs/claimSubject" },
+        "artifact": { "$ref": "#/$defs/claimArtifact" },
+        "producer": { "$ref": "#/$defs/tool" },
+        "factTranscripts": {
+          "type": "array",
+          "maxItems": 16384,
+          "items": { "$ref": "#/$defs/factTranscript" }
+        },
+        "proofInputs": {
+          "type": "array",
+          "maxItems": 16384,
+          "items": { "$ref": "#/$defs/proofInput" }
+        },
+        "coverageLimitations": {
+          "type": "array",
+          "maxItems": 16384,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/string" }
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["none", "process", "container", "virtual-machine"] },
+        "policy": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "os", "architecture", "conditions", "sandbox"],
+      "properties": {
+        "runtime": { "$ref": "#/$defs/tool" },
+        "os": { "$ref": "#/$defs/string" },
+        "architecture": { "$ref": "#/$defs/string" },
+        "conditions": {
+          "type": "array",
+          "maxItems": 16384,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/string" }
+        },
+        "sandbox": { "$ref": "#/$defs/sandbox" }
+      }
+    },
+    "probeOutcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "planned" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "transcript"],
+          "properties": {
+            "kind": { "enum": ["witness", "falsification"] },
+            "transcript": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "details"],
+          "properties": {
+            "kind": { "const": "error" },
+            "details": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "limitMillis"],
+          "properties": {
+            "kind": { "const": "timeout" },
+            "limitMillis": { "type": "integer", "minimum": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason"],
+          "properties": {
+            "kind": { "const": "refused" },
+            "reason": { "$ref": "#/$defs/string" }
+          }
+        }
+      ]
+    },
+    "probeClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimId",
+        "subject",
+        "artifact",
+        "producer",
+        "recipe",
+        "environment",
+        "outcome",
+        "coverageLimitations"
+      ],
+      "properties": {
+        "claimId": { "$ref": "#/$defs/claimId" },
+        "subject": { "$ref": "#/$defs/claimSubject" },
+        "artifact": { "$ref": "#/$defs/claimArtifact" },
+        "producer": { "$ref": "#/$defs/tool" },
+        "recipe": { "$ref": "#/$defs/sha256" },
+        "environment": { "$ref": "#/$defs/environment" },
+        "outcome": { "$ref": "#/$defs/probeOutcome" },
+        "coverageLimitations": {
+          "type": "array",
+          "maxItems": 16384,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/string" }
+        }
+      }
+    },
+    "proofDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "sidecarVersion", "contract", "producer", "claims"],
+      "properties": {
+        "format": { "const": "solid-checker-proof-evidence" },
+        "sidecarVersion": { "const": 1 },
+        "contract": { "$ref": "#/$defs/contractIdentity" },
+        "producer": { "$ref": "#/$defs/tool" },
+        "claims": {
+          "type": "array",
+          "maxItems": 65536,
+          "items": { "$ref": "#/$defs/proofClaim" }
+        }
+      }
+    },
+    "probeDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "sidecarVersion", "contract", "producer", "claims"],
+      "properties": {
+        "format": { "const": "solid-checker-runtime-probe-evidence" },
+        "sidecarVersion": { "const": 1 },
+        "contract": { "$ref": "#/$defs/contractIdentity" },
+        "producer": { "$ref": "#/$defs/tool" },
+        "claims": {
+          "type": "array",
+          "maxItems": 65536,
+          "items": { "$ref": "#/$defs/probeClaim" }
+        }
+      }
+    }
+  }
+}

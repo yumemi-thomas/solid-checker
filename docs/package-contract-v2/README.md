@@ -63,6 +63,9 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 8 proposal-generator completion](phase8/2026-08-27-proposal-generator-refactor.md)
   — Rust-owned open proposal construction, local proof/probe planning,
   deterministic fixed points, and Node-only acquisition/orchestration.
+- [Phase 9 claim-ID and evidence-sidecar completion](phase9/2026-08-27-claim-ids-evidence-sidecars.md)
+  — position-independent semantic claim IDs, separate proof/probe evidence
+  families, bidirectional hash binding, and raw-sidecar-free analysis.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

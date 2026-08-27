@@ -50,6 +50,12 @@ pub(crate) struct DecodedContractDocument {
     document: WireDocument,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct SidecarDigests {
+    pub(crate) proof: Option<Digest>,
+    pub(crate) probes: Option<Digest>,
+}
+
 impl DecodedContractDocument {
     pub(crate) const fn semantic_model_version(&self) -> u16 {
         self.document.semantic_model_version
@@ -57,6 +63,25 @@ impl DecodedContractDocument {
 
     pub(crate) fn normalize(self) -> Result<NormalizedContract, ContractFailure> {
         expand(self.document)
+    }
+
+    pub(crate) fn sidecar_digests(&self) -> Result<SidecarDigests, ContractFailure> {
+        Ok(SidecarDigests {
+            proof: self
+                .document
+                .sidecars
+                .proof
+                .as_ref()
+                .map(|reference| parse_wire_digest(&reference.sha256))
+                .transpose()?,
+            probes: self
+                .document
+                .sidecars
+                .probes
+                .as_ref()
+                .map(|reference| parse_wire_digest(&reference.sha256))
+                .transpose()?,
+        })
     }
 }
 

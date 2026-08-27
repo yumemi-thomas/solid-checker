@@ -171,6 +171,14 @@ fn normalized_export(proposal: ContractProposal) -> ExportSemantics {
         .clone()
 }
 
+fn claim_subject(path: SemanticClaimPath) -> SemanticClaimSubject {
+    SemanticClaimSubject {
+        artifact_case: "server-import".into(),
+        export: "createResource".into(),
+        path,
+    }
+}
+
 #[test]
 fn four_knowledge_states_keep_unknown_distinct_from_negative() {
     assert_eq!(
@@ -191,6 +199,105 @@ fn four_knowledge_states_keep_unknown_distinct_from_negative() {
     );
     assert!(!KnowledgeSet::<OperationId>::Unknown.proves_absence());
     assert!(KnowledgeSet::<OperationId>::Complete(vec![]).proves_absence());
+}
+
+#[test]
+fn semantic_claim_ids_ignore_unrelated_meaning_but_bind_exact_identity_and_path() {
+    let first = proposal_with(
+        ValueShape::Plain,
+        call(vec![operation("read", OperationKind::Read)], vec![]),
+    )
+    .normalize()
+    .unwrap();
+    let second = proposal_with(
+        ValueShape::Callable,
+        call(
+            vec![
+                operation("read", OperationKind::Read),
+                operation("write", OperationKind::Write),
+            ],
+            vec![],
+        ),
+    )
+    .normalize()
+    .unwrap();
+    let reads = claim_subject(SemanticClaimPath::Domain(ClaimPath::Call(
+        ClaimDomain::Reads,
+    )));
+    let writes = claim_subject(SemanticClaimPath::Domain(ClaimPath::Call(
+        ClaimDomain::Writes,
+    )));
+
+    let first_id = first.claim_id(&reads).unwrap();
+    assert_eq!(first_id, second.claim_id(&reads).unwrap());
+    assert_ne!(first_id, first.claim_id(&writes).unwrap());
+    assert_eq!(SemanticClaimId::parse(first_id.as_str()).unwrap(), first_id);
+
+    let mut other_package = package();
+    other_package.version = "2.0.0-rc.4".into();
+    let mut case = artifact_case("server-import");
+    case.exports.insert(
+        "createResource".into(),
+        export(
+            &case,
+            "createResource",
+            ValueShape::Plain,
+            call(vec![operation("read", OperationKind::Read)], vec![]),
+        ),
+    );
+    let other = ContractProposal::new(other_package, vec![case])
+        .normalize()
+        .unwrap();
+    assert_ne!(first_id, other.claim_id(&reads).unwrap());
+
+    let mut changed_closure = artifact_case("server-import");
+    changed_closure.dependency_closure = digest('e');
+    changed_closure.exports.insert(
+        "createResource".into(),
+        export(
+            &changed_closure,
+            "createResource",
+            ValueShape::Plain,
+            call(vec![operation("read", OperationKind::Read)], vec![]),
+        ),
+    );
+    let changed_closure = ContractProposal::new(package(), vec![changed_closure])
+        .normalize()
+        .unwrap();
+    assert_ne!(first_id, changed_closure.claim_id(&reads).unwrap());
+}
+
+#[test]
+fn semantic_claim_ids_reject_orphan_subjects_and_noncanonical_spellings() {
+    let contract = proposal_with(
+        ValueShape::Tuple(KnowledgeSet::Complete(vec![ValueShape::Plain])),
+        call(vec![operation("read", OperationKind::Read)], vec![]),
+    )
+    .normalize()
+    .unwrap();
+    let missing_operation =
+        claim_subject(SemanticClaimPath::Operation(OperationId("missing".into())));
+    assert!(matches!(
+        contract.claim_id(&missing_operation),
+        Err(ClaimIdentityError::InvalidSubject { .. })
+    ));
+
+    let missing_leaf = claim_subject(SemanticClaimPath::Domain(ClaimPath::Value {
+        root: ValueRoot::Export,
+        path: ValuePath(vec![ValuePathSegment::TupleItem(1)]),
+        domain: ValueClaimDomain::Shape,
+    }));
+    assert!(matches!(
+        contract.claim_id(&missing_leaf),
+        Err(ClaimIdentityError::InvalidSubject { .. })
+    ));
+
+    let valid = contract
+        .claim_id(&claim_subject(SemanticClaimPath::Operation(OperationId(
+            "read".into(),
+        ))))
+        .unwrap();
+    assert!(SemanticClaimId::parse(valid.as_str().to_ascii_uppercase()).is_err());
 }
 
 #[test]

@@ -12,6 +12,7 @@ mod contract_interface;
 mod demand_plan;
 mod diagnostics;
 pub mod dialect;
+mod evidence_sidecars;
 mod proposal_generation;
 mod wire;
 
@@ -37,6 +38,13 @@ pub use diagnostics::{
     discovered_rule_options_path, imported_package_roots, load_package_contracts,
     load_package_contracts_with, package_contract_statuses, package_contract_statuses_with,
     read_package_contract, semantic_demand_options_for_enablement, snapshot, source_location,
+};
+pub use evidence_sidecars::{
+    EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,
+    EvidenceSidecarError, EvidenceSidecarReferences, FactDomainIdentity, FactTranscriptIdentity,
+    PROBE_EVIDENCE_FORMAT, PROOF_EVIDENCE_FORMAT, ProbeClaimMaterial, ProbeOutcome,
+    ProofClaimMaterial, ProofInputIdentity, SandboxIdentity, SandboxKind, ToolIdentity,
+    ValidatedEvidenceSidecars, emit_evidence_sidecars, validate_evidence_sidecars,
 };
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
