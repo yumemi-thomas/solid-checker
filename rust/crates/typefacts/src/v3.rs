@@ -6,11 +6,12 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Constructability,
-    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, FileFact, Location, ModuleFact,
-    ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape, ParameterFact,
-    PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain, ReferenceSpace,
-    ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain, SourceBinding,
-    SourceCall, SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
+    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, FileFact, InvocationDemand,
+    InvocationEnvelope, InvocationTranscript, Location, ModuleFact, ModuleImportFact,
+    ObjectConstructionProperty, ObjectConstructionShape, ParameterFact, PrimitiveLiteralCandidate,
+    PrimitiveLiteralKind, PrimitiveValueDomain, ReferenceSpace, ResolvedCall, ResolvedCallValidity,
+    ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash,
+    SymbolFact, TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -33,13 +34,11 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:9a217ca6aa3b147f84cd356df069259ecd548328ab0c48c83109832d1cbedeb9";
-/// 2 because the lifecycle operation set widened: `Operation::Modules` is an
-/// operation a peer must know about to be paired at all, where every earlier
-/// vocabulary change added a fact to an existing operation and moved the schema
-/// digest alone. The digest and the build id still move with it, and the
-/// handshake still refuses a producer that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 2;
+    "sha256:b071a78a86949a1e4162408912d7622aed0460fba3a64fd52506fc14091417c7";
+/// 3 because demand-shaped invocation proof transcripts widen the lifecycle
+/// operation set. The digest and build id still move with it, and the handshake
+/// refuses a producer that differs on any one of the three.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 3;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -65,6 +64,9 @@ pub enum Operation {
     /// `Sources` it is a read of the retained program: it carries no state
     /// token, edits no retained demand set, and advances no generation.
     Modules,
+    /// Demand-shaped invocation proof transcripts. This read does not retain
+    /// facts or disturb the editor-analysis state token.
+    Invocations,
     Cancel,
     Close,
 }
@@ -161,6 +163,8 @@ pub struct Request {
     /// inventory alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module_graph: Option<ModuleGraphRequest>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invocation_demands: Vec<InvocationDemand>,
 }
 
 /// The wire form of a module-graph demand.
@@ -269,6 +273,10 @@ pub struct Response {
     pub module_imports: Vec<ModuleImportFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unknown_import_paths: Vec<Arc<str>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invocation_transcripts: Vec<InvocationTranscript>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invocation_envelope: Option<InvocationEnvelope>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]

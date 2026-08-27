@@ -32,6 +32,17 @@ func (p *project) ModuleGraph(
 	if p.closed {
 		return typefacts.ModuleInventory{}, ErrClosed
 	}
+	return p.moduleGraphLocked(ctx, demand)
+}
+
+// moduleGraphLocked is shared by the public module-graph capability and the
+// invocation proof envelope. The caller owns p.mu; keeping one compiler walk
+// prevents the transcript digest from becoming a weaker reconstruction of the
+// graph returned by LifecycleModules.
+func (p *project) moduleGraphLocked(
+	ctx context.Context,
+	demand typefacts.ModuleInventoryDemand,
+) (typefacts.ModuleInventory, error) {
 	program := p.program
 	sourceFiles := program.SourceFiles()
 

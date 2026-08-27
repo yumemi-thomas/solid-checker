@@ -30,6 +30,9 @@ func IsAsExpression(node *ast.Node) bool
 //go:linkname IsArrayBindingPattern github.com/microsoft/typescript-go/internal/ast.IsArrayBindingPattern
 func IsArrayBindingPattern(node *ast.Node) bool
 
+//go:linkname IsObjectBindingPattern github.com/microsoft/typescript-go/internal/ast.IsObjectBindingPattern
+func IsObjectBindingPattern(node *ast.Node) bool
+
 //go:linkname IsArrowFunction github.com/microsoft/typescript-go/internal/ast.IsArrowFunction
 func IsArrowFunction(node *ast.Node) bool
 

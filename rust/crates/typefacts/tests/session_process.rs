@@ -1,12 +1,123 @@
 use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
-    AnalysisDemand, ArrayShape, CallKind, Callability, ConstantValue, ConstantValueKind,
-    Constructability, ConstructionWitness, DemandGroup, Location, ModuleGraphDemand,
-    ModuleResolution, PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity,
-    RuntimeValueDomain, Session, SessionError,
+    AnalysisDemand, ArgumentBindingDisposition, ArrayShape, CallKind, Callability, ConstantValue,
+    ConstantValueKind, Constructability, ConstructionWitness, DemandGroup, FinitePartitionAxis,
+    InvocationDemand, InvocationDomain, Location, ModuleGraphDemand, ModuleResolution,
+    PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain,
+    Session, SessionError,
     v3::{EntityDemand, FileChange},
 };
+
+#[test]
+fn invocation_transcripts_cross_the_process_seam_and_refresh_after_update() {
+    let root = std::env::temp_dir().join(format!(
+        "typefacts-invocation-transcript-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true,"target":"esnext"},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let path = root.join("source.ts");
+    let source = concat!(
+        "type Options = { mode: \"read\" | \"write\"; nested?: { callback: (value: number) => void } };\n",
+        "function execute<T extends Options>(options: T, ...steps: [boolean, (value: number) => void]): Promise<T> { options.nested?.callback(1); steps[1](1); return Promise.resolve(options); }\n",
+        "const callback = (value: number) => void value;\n",
+        "const steps = [true, callback] as const;\n",
+        "execute({ mode: \"read\", nested: { callback } }, ...steps);\n",
+    );
+    fs::write(&path, source).unwrap();
+    let needle = "execute({ mode: \"read\", nested: { callback } }, ...steps)";
+    let start = source.rfind(needle).unwrap();
+    let demand = InvocationDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + needle.len()) as u64,
+        },
+        callable_depth: 3,
+        census: true,
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let first = session.invocations(std::slice::from_ref(&demand)).unwrap();
+    assert_eq!(first.envelope.generation, 1);
+    assert_eq!(first.transcripts.len(), 1);
+    let transcript = &first.transcripts[0];
+    assert_eq!(transcript.validity, ResolvedCallValidity::Valid);
+    assert!(
+        transcript
+            .completeness
+            .contains(InvocationDomain::Signature)
+    );
+    assert!(transcript.completeness.contains(InvocationDomain::Bindings));
+    assert!(transcript.completeness.contains(InvocationDomain::Uses));
+    let signature = transcript.selected_signature.as_ref().unwrap();
+    assert_eq!(signature.minimum_argument_count, 3);
+    assert_eq!(signature.parameters.len(), 2);
+    assert_eq!(
+        transcript.bindings[1].disposition,
+        ArgumentBindingDisposition::ExactTupleSpread
+    );
+    assert_eq!(transcript.bindings[1].slots.len(), 2);
+    assert!(signature.parameters[0].callable_paths.iter().any(|path| {
+        path.path
+            .iter()
+            .filter_map(|segment| (!segment.property.is_empty()).then_some(&*segment.property))
+            .eq(["nested", "callback"])
+            && path.callability == Callability::Callable
+    }));
+    assert!(signature.result.partitions.iter().any(|partition| {
+        partition.axis == FinitePartitionAxis::Protocol && partition.complete
+    }));
+    assert!(transcript.control_flow.is_some());
+
+    let updated_source = source.replace("Promise<T>", "Promise<T | undefined>");
+    session
+        .update([FileChange {
+            path: path.to_string_lossy().into_owned(),
+            source: updated_source.as_bytes().to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let updated_start = updated_source.rfind(needle).unwrap();
+    let updated_demand = InvocationDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: updated_start as u64,
+            end_byte: (updated_start + needle.len()) as u64,
+        },
+        ..demand
+    };
+    let second = session.invocations(&[updated_demand]).unwrap();
+    assert_eq!(second.envelope.generation, 2);
+    assert_ne!(first.envelope.demand_sha256, second.envelope.demand_sha256);
+    assert_ne!(first.envelope.sources, second.envelope.sources);
+    assert_ne!(
+        first.transcripts[0]
+            .selected_signature
+            .as_ref()
+            .unwrap()
+            .identity,
+        second.transcripts[0]
+            .selected_signature
+            .as_ref()
+            .unwrap()
+            .identity
+    );
+    session.close().unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
 
 #[test]
 fn parameter_object_shape_carries_table_witnesses_end_to_end() {

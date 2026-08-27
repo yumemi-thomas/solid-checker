@@ -13,6 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::shared_transition_arena::SharedTransitionArena;
@@ -981,6 +982,57 @@ impl Session {
         })
     }
 
+    /// Returns exact selected-signature, actual-to-formal, callable-path,
+    /// finite-domain and optional implementation-census facts for one live
+    /// generation. The operation is read-only and leaves retained analysis
+    /// state untouched.
+    pub fn invocations(
+        &mut self,
+        demands: &[crate::InvocationDemand],
+    ) -> Result<crate::InvocationAnswer, SessionError> {
+        self.ensure_open()?;
+        if demands
+            .iter()
+            .any(|demand| demand.callable_depth > crate::MAX_INVOCATION_CALLABLE_DEPTH)
+        {
+            return Err(SessionError::InvalidResponse(format!(
+                "invocation callable depth exceeds {}",
+                crate::MAX_INVOCATION_CALLABLE_DEPTH
+            )));
+        }
+        let mut request = request(Operation::Invocations, &self.project_id, self.generation);
+        request.invocation_demands = demands.to_vec();
+        let response = self.exchange(request)?;
+        let envelope = response.invocation_envelope.ok_or_else(|| {
+            SessionError::InvalidResponse("invocation response has no identity envelope".into())
+        })?;
+        if response.invocation_transcripts.len() != demands.len() {
+            return Err(SessionError::InvalidResponse(format!(
+                "invocation response has {} transcripts for {} demands",
+                response.invocation_transcripts.len(),
+                demands.len()
+            )));
+        }
+        for (index, (transcript, demand)) in response
+            .invocation_transcripts
+            .iter()
+            .zip(demands)
+            .enumerate()
+        {
+            if transcript.location != demand.location {
+                return Err(SessionError::InvalidResponse(format!(
+                    "invocation transcript {index} location does not match its demand"
+                )));
+            }
+            validate_invocation_transcript(transcript)?;
+        }
+        validate_invocation_envelope(&envelope, &self.project_id, self.generation, demands)?;
+        Ok(crate::InvocationAnswer {
+            transcripts: response.invocation_transcripts,
+            envelope,
+        })
+    }
+
     pub fn close(&mut self) -> Result<(), SessionError> {
         if self.closed {
             return Ok(());
@@ -1553,7 +1605,426 @@ fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
         reference_paths: Vec::new(),
         cancel_request_id: 0,
         module_graph: None,
+        invocation_demands: Vec::new(),
     }
+}
+
+fn validate_invocation_envelope(
+    envelope: &crate::InvocationEnvelope,
+    project_id: &str,
+    generation: u64,
+    demands: &[crate::InvocationDemand],
+) -> Result<(), SessionError> {
+    if &*envelope.project_id != project_id || envelope.generation != generation {
+        return Err(SessionError::InvalidResponse(
+            "invocation envelope project or generation mismatch".into(),
+        ));
+    }
+    if &*envelope.schema_sha256 != v3::TYPE_FACTS_SCHEMA_SHA256
+        || &*envelope.producer_build != v3::TYPE_FACTS_BUILD_ID
+    {
+        return Err(SessionError::InvalidResponse(
+            "invocation envelope does not match the live handshake".into(),
+        ));
+    }
+    for (name, digest) in [
+        ("demand", &*envelope.demand_sha256),
+        ("module graph", &*envelope.module_graph_sha256),
+        ("schema", &*envelope.schema_sha256),
+    ] {
+        crate::SourceHash::parse(digest.to_owned()).map_err(|_| {
+            SessionError::InvalidResponse(format!("invocation {name} digest is invalid"))
+        })?;
+    }
+    if envelope.demand_sha256.as_ref() != invocation_demand_digest(demands) {
+        return Err(SessionError::InvalidResponse(
+            "invocation envelope demand digest does not match the request".into(),
+        ));
+    }
+    let mut previous = None;
+    for source in &envelope.sources {
+        crate::SourceHash::parse(source.sha256.to_string()).map_err(|_| {
+            SessionError::InvalidResponse("invocation source digest is invalid".into())
+        })?;
+        if previous.is_some_and(|path: &str| path >= &*source.path) {
+            return Err(SessionError::InvalidResponse(
+                "invocation source digests are not uniquely sorted".into(),
+            ));
+        }
+        previous = Some(&*source.path);
+    }
+    Ok(())
+}
+
+fn validate_invocation_transcript(
+    transcript: &crate::InvocationTranscript,
+) -> Result<(), SessionError> {
+    use crate::{ArgumentBindingDisposition, InvocationDomain};
+
+    let mut complete = HashSet::new();
+    if transcript
+        .completeness
+        .0
+        .iter()
+        .any(|domain| !complete.insert(*domain))
+    {
+        return Err(SessionError::InvalidResponse(
+            "invocation completeness contains a duplicate domain".into(),
+        ));
+    }
+
+    if let Some(signature) = &transcript.selected_signature {
+        if transcript.kind == crate::CallKind::Unknown
+            || !transcript
+                .completeness
+                .contains(InvocationDomain::Signature)
+            || !transcript
+                .completeness
+                .contains(InvocationDomain::Parameters)
+            || !transcript.completeness.contains(InvocationDomain::Result)
+        {
+            return Err(SessionError::InvalidResponse(
+                "selected signature lacks locally complete signature/value domains".into(),
+            ));
+        }
+        crate::SourceHash::parse(signature.identity.to_string()).map_err(|_| {
+            SessionError::InvalidResponse("selected signature identity is invalid".into())
+        })?;
+        for (index, parameter) in signature.parameters.iter().enumerate() {
+            if parameter.index != index
+                || (parameter.rest && index + 1 != signature.parameters.len())
+            {
+                return Err(SessionError::InvalidResponse(
+                    "selected signature formal indices or rest position are invalid".into(),
+                ));
+            }
+            validate_invocation_value(&parameter.value)?;
+            validate_callable_paths(
+                &parameter.callable_paths,
+                parameter.value.alternatives.len(),
+            )?;
+        }
+        validate_invocation_value(&signature.result)?;
+        validate_callable_paths(
+            &signature.result_callable_paths,
+            signature.result.alternatives.len(),
+        )?;
+        if signature.identity.as_ref() != selected_signature_digest(transcript.kind, signature) {
+            return Err(SessionError::InvalidResponse(
+                "selected signature identity does not match its inputs".into(),
+            ));
+        }
+    } else if transcript
+        .completeness
+        .contains(InvocationDomain::Signature)
+        || transcript
+            .completeness
+            .contains(InvocationDomain::Parameters)
+        || transcript.completeness.contains(InvocationDomain::Result)
+    {
+        return Err(SessionError::InvalidResponse(
+            "invocation closes signature/value domains without a selected signature".into(),
+        ));
+    }
+    let bindings_complete = transcript.completeness.contains(InvocationDomain::Bindings);
+    let mut next_expanded = 0;
+    let mut bound_parameters = HashSet::new();
+    for (argument_index, binding) in transcript.bindings.iter().enumerate() {
+        if binding.argument_index != argument_index {
+            return Err(SessionError::InvalidResponse(
+                "invocation argument bindings are not ordered by written argument".into(),
+            ));
+        }
+        match binding.disposition {
+            ArgumentBindingDisposition::Direct if binding.slots.len() != 1 => {
+                return Err(SessionError::InvalidResponse(
+                    "direct invocation binding must contain one slot".into(),
+                ));
+            }
+            ArgumentBindingDisposition::ExactTupleSpread if binding.slots.is_empty() => {
+                return Err(SessionError::InvalidResponse(
+                    "exact tuple spread must contain expanded slots".into(),
+                ));
+            }
+            ArgumentBindingDisposition::UnknownLengthSpread
+                if !binding.slots.is_empty() || binding.possible.is_none() =>
+            {
+                return Err(SessionError::InvalidResponse(
+                    "unknown spread must carry only a possible formal range".into(),
+                ));
+            }
+            ArgumentBindingDisposition::Unmapped if !binding.slots.is_empty() => {
+                return Err(SessionError::InvalidResponse(
+                    "unmapped argument carries exact slots".into(),
+                ));
+            }
+            _ => {}
+        }
+        if bindings_complete
+            && matches!(
+                binding.disposition,
+                ArgumentBindingDisposition::UnknownLengthSpread
+                    | ArgumentBindingDisposition::Unmapped
+            )
+        {
+            return Err(SessionError::InvalidResponse(
+                "complete invocation bindings contain an open mapping".into(),
+            ));
+        }
+        if let Some(range) = &binding.possible
+            && (range.end_exclusive.is_some_and(|end| end < range.start)
+                || (range.unbounded && range.end_exclusive.is_some()))
+        {
+            return Err(SessionError::InvalidResponse(
+                "invocation possible formal range is contradictory".into(),
+            ));
+        }
+        let mut next_tuple = 0;
+        if bindings_complete {
+            for slot in &binding.slots {
+                if slot.expanded_index != next_expanded {
+                    return Err(SessionError::InvalidResponse(
+                        "complete invocation bindings are not contiguous".into(),
+                    ));
+                }
+                next_expanded += 1;
+            }
+        }
+        for slot in &binding.slots {
+            let Some(signature) = transcript.selected_signature.as_ref() else {
+                return Err(SessionError::InvalidResponse(
+                    "invocation binding exists without a selected signature".into(),
+                ));
+            };
+            let Some(parameter) = signature.parameters.get(slot.parameter_index) else {
+                return Err(SessionError::InvalidResponse(
+                    "invocation binding names a missing formal parameter".into(),
+                ));
+            };
+            if slot.rest != parameter.rest {
+                return Err(SessionError::InvalidResponse(
+                    "invocation binding rest marker disagrees with its formal".into(),
+                ));
+            }
+            match binding.disposition {
+                ArgumentBindingDisposition::Direct if slot.tuple_index.is_some() => {
+                    return Err(SessionError::InvalidResponse(
+                        "direct invocation binding carries a tuple index".into(),
+                    ));
+                }
+                ArgumentBindingDisposition::ExactTupleSpread => {
+                    if slot.tuple_index != Some(next_tuple) {
+                        return Err(SessionError::InvalidResponse(
+                            "tuple spread slots are not contiguous".into(),
+                        ));
+                    }
+                    next_tuple += 1;
+                }
+                _ => {}
+            }
+            bound_parameters.insert(slot.parameter_index);
+        }
+    }
+    if transcript
+        .completeness
+        .contains(InvocationDomain::Omissions)
+        && !bindings_complete
+    {
+        return Err(SessionError::InvalidResponse(
+            "omissions are closed while bindings are open".into(),
+        ));
+    }
+    let mut omitted = HashSet::new();
+    for &index in &transcript.omitted_parameters {
+        let Some(parameter) = transcript
+            .selected_signature
+            .as_ref()
+            .and_then(|signature| signature.parameters.get(index))
+        else {
+            return Err(SessionError::InvalidResponse(
+                "omitted invocation parameter does not exist".into(),
+            ));
+        };
+        if !omitted.insert(index)
+            || bound_parameters.contains(&index)
+            || parameter.rest
+            || (!parameter.optional && !parameter.defaulted)
+        {
+            return Err(SessionError::InvalidResponse(
+                "omitted invocation parameter is contradictory".into(),
+            ));
+        }
+    }
+    let parameter_count = transcript
+        .selected_signature
+        .as_ref()
+        .map_or(0, |signature| signature.parameters.len());
+    if transcript
+        .parameter_uses
+        .iter()
+        .any(|usage| usage.parameter_index >= parameter_count)
+    {
+        return Err(SessionError::InvalidResponse(
+            "parameter-use census names a missing formal".into(),
+        ));
+    }
+    if transcript
+        .completeness
+        .contains(InvocationDomain::ControlFlow)
+        && transcript
+            .control_flow
+            .as_ref()
+            .is_none_or(|flow| !flow.unsupported.is_empty())
+    {
+        return Err(SessionError::InvalidResponse(
+            "control-flow census is closed while absent or unsupported".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_invocation_value(value: &crate::InvocationValueFact) -> Result<(), SessionError> {
+    for (index, alternative) in value.alternatives.iter().enumerate() {
+        if alternative.index != index {
+            return Err(SessionError::InvalidResponse(
+                "invocation value alternatives are not contiguous".into(),
+            ));
+        }
+    }
+    for partition in &value.partitions {
+        if partition.complete && partition.cases.is_empty() {
+            return Err(SessionError::InvalidResponse(
+                "complete finite partition is empty".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_callable_paths(
+    paths: &[crate::CallablePathFact],
+    alternative_count: usize,
+) -> Result<(), SessionError> {
+    use crate::{Callability, InvocationConstructability, PathPresence, PathSegmentKind};
+
+    let mut seen = HashSet::new();
+    for fact in paths {
+        if fact.alternative >= alternative_count {
+            return Err(SessionError::InvalidResponse(
+                "callable path names a missing value alternative".into(),
+            ));
+        }
+        let mut key = format!("{}:", fact.alternative);
+        for segment in &fact.path {
+            match segment.kind {
+                PathSegmentKind::Property
+                    if segment.property.is_empty() || segment.index.is_some() =>
+                {
+                    return Err(SessionError::InvalidResponse(
+                        "property path segment is malformed".into(),
+                    ));
+                }
+                PathSegmentKind::Tuple
+                    if !segment.property.is_empty() || segment.index.is_none() =>
+                {
+                    return Err(SessionError::InvalidResponse(
+                        "tuple path segment is malformed".into(),
+                    ));
+                }
+                _ => {}
+            }
+            key.push_str(&format!(
+                "{:?}:{}:{:?}/",
+                segment.kind, segment.property, segment.index
+            ));
+        }
+        if !seen.insert(key) {
+            return Err(SessionError::InvalidResponse(
+                "callable paths contain a duplicate alternative/path".into(),
+            ));
+        }
+        if fact.presence == PathPresence::Absent
+            && (fact.callability != Callability::Unknown
+                || fact.constructability != InvocationConstructability::Unknown
+                || fact.declaration.is_some()
+                || !fact.complete)
+        {
+            return Err(SessionError::InvalidResponse(
+                "absent callable path carries a positive or open fact".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn invocation_demand_digest(demands: &[crate::InvocationDemand]) -> String {
+    let mut hasher = Sha256::new();
+    hash_invocation_field(&mut hasher, "solid-checker:typefacts:invocations:v1");
+    for demand in demands {
+        hash_invocation_field(&mut hasher, &demand.location.path);
+        hash_invocation_field(&mut hasher, &demand.location.start_byte.to_string());
+        hash_invocation_field(&mut hasher, &demand.location.end_byte.to_string());
+        hash_invocation_field(&mut hasher, &demand.callable_depth.to_string());
+        hash_invocation_field(&mut hasher, if demand.census { "true" } else { "false" });
+    }
+    format!("sha256:{:x}", hasher.finalize())
+}
+
+fn selected_signature_digest(
+    kind: crate::CallKind,
+    signature: &crate::SelectedSignature,
+) -> String {
+    let mut hasher = Sha256::new();
+    hash_invocation_field(&mut hasher, "solid-checker:typefacts:selected-signature:v1");
+    hash_invocation_field(
+        &mut hasher,
+        match kind {
+            crate::CallKind::Call => "call",
+            crate::CallKind::Construct => "construct",
+            crate::CallKind::Unknown => "unknown",
+        },
+    );
+    hash_invocation_field(&mut hasher, &signature.declaration.symbol);
+    hash_invocation_field(&mut hasher, &signature.declaration.location.path);
+    hash_invocation_field(
+        &mut hasher,
+        &signature.declaration.location.start_byte.to_string(),
+    );
+    hash_invocation_field(
+        &mut hasher,
+        &signature.declaration.location.end_byte.to_string(),
+    );
+    hash_invocation_field(&mut hasher, &signature.overload_ordinal.to_string());
+    hash_invocation_field(&mut hasher, &signature.minimum_argument_count.to_string());
+    hash_invocation_field(
+        &mut hasher,
+        if signature.has_rest { "true" } else { "false" },
+    );
+    for parameter in &signature.parameters {
+        hash_invocation_field(
+            &mut hasher,
+            parameter
+                .value
+                .type_descriptor
+                .as_ref()
+                .map_or("", |descriptor| &descriptor.text),
+        );
+    }
+    hash_invocation_field(
+        &mut hasher,
+        signature
+            .result
+            .type_descriptor
+            .as_ref()
+            .map_or("", |descriptor| &descriptor.text),
+    );
+    format!("sha256:{:x}", hasher.finalize())
+}
+
+fn hash_invocation_field(hasher: &mut Sha256, value: &str) {
+    hasher.update(value.len().to_string().as_bytes());
+    hasher.update(b":");
+    hasher.update(value.as_bytes());
 }
 
 fn exchange_timings(response: &Response) -> ExchangeTimings {
@@ -1878,6 +2349,39 @@ mod tests {
     }
 
     #[test]
+    fn invocation_demand_digest_matches_the_go_producer_fixture() {
+        let demands = [
+            crate::InvocationDemand {
+                location: Location {
+                    path: "/p/a.ts".into(),
+                    start_byte: 4,
+                    end_byte: 12,
+                },
+                callable_depth: 3,
+                census: true,
+            },
+            crate::InvocationDemand {
+                location: Location {
+                    path: "/p/b.ts".into(),
+                    start_byte: 0,
+                    end_byte: 7,
+                },
+                callable_depth: 0,
+                census: false,
+            },
+        ];
+        assert_eq!(
+            invocation_demand_digest(&demands),
+            "sha256:68a28ae5071bb694387c8d372c3a3febd48636f783d4a5881ece0a15656fb88c"
+        );
+        let reversed = [demands[1].clone(), demands[0].clone()];
+        assert_ne!(
+            invocation_demand_digest(&reversed),
+            invocation_demand_digest(&demands)
+        );
+    }
+
+    #[test]
     fn shared_demand_groups_retain_the_callers_allocation() {
         let run: Arc<[EntityDemand]> = vec![EntityDemand {
             location: location("/p/a.ts", 1),
@@ -1970,6 +2474,8 @@ mod tests {
             modules: Vec::new(),
             module_imports: Vec::new(),
             unknown_import_paths: Vec::new(),
+            invocation_transcripts: Vec::new(),
+            invocation_envelope: None,
             client_decode_ns: 0,
             client_response_bytes: 0,
             client_request_send_ns: 0,

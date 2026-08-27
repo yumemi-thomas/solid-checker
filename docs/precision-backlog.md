@@ -2693,7 +2693,8 @@ same file still binds and still raises its obligation
 (`fixtures/reactive-ir/package-contract-paths-shadow`).
 
 **What closed it.** The Type Facts producer's resolved module graph
-(protocol 2's `modules` operation) forwards, per import specifier occurrence,
+(the Type Facts `modules` operation, introduced in handshake protocol 2 and
+retained unchanged in protocol 3) forwards, per import specifier occurrence,
 the file the resolver selected, the shape of the resolution, the owning
 manifest's name and path, and the identity the resolver itself recorded. That
 answer is carried as a fact table — `ProjectFacts.resolved_imports`

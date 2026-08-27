@@ -31,6 +31,59 @@ fn without_claim_evidence(value: &serde_json::Value) -> serde_json::Value {
 }
 
 #[test]
+fn backend_exposes_hash_bound_invocation_transcripts_without_materializing_analysis() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("invocation-transcript");
+    let project = directory.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true,"target":"esnext"},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let source_path = directory.join("source.ts");
+    let source = concat!(
+        "function execute<T>(value: T, ...steps: [boolean, (value: T) => void]): Promise<T> { steps[1](value); return Promise.resolve(value); }\n",
+        "execute(1, ...([true, value => void value] as const));\n",
+    );
+    fs::write(&source_path, source).unwrap();
+    let call = "execute(1, ...([true, value => void value] as const))";
+    let start = source.find(call).unwrap();
+    let demand = typefacts::InvocationDemand {
+        location: typefacts::Location {
+            path: source_path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + call.len()) as u64,
+        },
+        callable_depth: 2,
+        census: true,
+    };
+    let mut session =
+        solid_facts_backend::TypeFactsSession::open(&typefacts, &project.to_string_lossy(), &[])
+            .unwrap();
+    let answer = session.invocations(&[demand]).unwrap();
+    let transcript = &answer.transcripts[0];
+    assert_eq!(answer.envelope.generation, session.generation());
+    assert!(
+        transcript
+            .completeness
+            .contains(typefacts::InvocationDomain::Bindings)
+    );
+    assert_eq!(
+        transcript.bindings[1].disposition,
+        typefacts::ArgumentBindingDisposition::ExactTupleSpread
+    );
+    assert!(
+        transcript
+            .completeness
+            .contains(typefacts::InvocationDomain::Uses)
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn cli_consumes_discovered_package_contracts() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,

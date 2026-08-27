@@ -259,6 +259,20 @@ impl TypeFactsSession {
         Ok(self.session.module_graph(demand)?)
     }
 
+    /// Compiler-selected call facts for exact call-expression demands.
+    ///
+    /// Like [`Self::module_graph`], this is a read of the live TypeScript
+    /// generation and does not alter the retained analysis demand set. Package
+    /// proof callers opt into the bounded callable tree and implementation
+    /// census; ordinary project analysis pays neither serialization nor
+    /// retention cost.
+    pub fn invocations(
+        &mut self,
+        demands: &[typefacts::InvocationDemand],
+    ) -> Result<typefacts::InvocationAnswer, BackendError> {
+        Ok(self.session.invocations(demands)?)
+    }
+
     /// Applies an overlay and advances the generation.
     pub fn update(&mut self, changes: Vec<typefacts::v3::FileChange>) -> Result<(), BackendError> {
         self.session.update(changes)?;

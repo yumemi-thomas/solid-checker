@@ -112,6 +112,9 @@ test -z "$(gofmt -l apps/solid-typefacts shims)"
 step go-vet
 go vet ./apps/solid-typefacts/...
 
+step bun-install
+bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
+
 step go-test-race
 go test -race ./apps/solid-typefacts/...
 
@@ -153,9 +156,6 @@ cargo +1.97 build --profile "$cargo_profile" --manifest-path "$rust_manifest" \
 step coverage
 SOLID_CHECKER_BIN="$checker_bin" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
-
-step bun-install
-bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
 
 # The product-owned corpus carries exact checker expectations and per-finding
 # TypeScript ownership for every retained former parity case.

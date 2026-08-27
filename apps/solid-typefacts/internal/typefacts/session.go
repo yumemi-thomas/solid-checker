@@ -31,6 +31,7 @@ type Session struct {
 	closed          bool
 	closeErr        error
 	schema          uint64
+	producerBuild   string
 }
 
 type retainedSessionState struct {
@@ -43,10 +44,17 @@ type retainedSessionState struct {
 // NewSession assumes ownership of backend, including when construction fails.
 // trace may be nil, which disables producer-side tracing.
 func NewSession(backend Project, projectID string, trace Trace) (*Session, error) {
-	return newSession(backend, projectID, trace)
+	return newSession(backend, projectID, trace, "dev")
 }
 
-func newSession(backend Project, projectID string, trace Trace) (*Session, error) {
+// NewSessionWithBuildID binds proof envelopes to the exact producer build used
+// in the startup handshake. Tests and in-process callers normally use
+// NewSession's explicit dev identity.
+func NewSessionWithBuildID(backend Project, projectID string, trace Trace, buildID string) (*Session, error) {
+	return newSession(backend, projectID, trace, buildID)
+}
+
+func newSession(backend Project, projectID string, trace Trace, buildID string) (*Session, error) {
 	projectID = filepath.Clean(projectID)
 	if projectID == "" || projectID == "." {
 		_ = backend.Close()
@@ -58,11 +66,12 @@ func newSession(backend Project, projectID string, trace Trace) (*Session, error
 		return nil, err
 	}
 	return &Session{
-		closure:    closure,
-		trace:      trace,
-		projectID:  projectID,
-		schema:     TypeFactsSchemaVersionV1,
-		transition: wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersion},
+		closure:       closure,
+		trace:         trace,
+		projectID:     projectID,
+		schema:        TypeFactsSchemaVersionV1,
+		transition:    wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersion},
+		producerBuild: buildID,
 	}, nil
 }
 
@@ -364,6 +373,25 @@ func (s *Session) lifecycle(
 		response.Modules = inventory.Modules
 		response.ModuleImports = inventory.Imports
 		response.UnknownImportPaths = inventory.UnknownImportPaths
+	case LifecycleInvocations:
+		if request.Generation != generation {
+			return fail("generation-mismatch", ErrGenerationMismatch)
+		}
+		answer, err := s.closure.InvocationTranscripts(ctx, request.InvocationDemands)
+		if err != nil {
+			if ctx.Err() != nil {
+				return fail("analysis-cancelled", ctx.Err())
+			}
+			return fail("invocations-failed", err)
+		}
+		if answer.Envelope.Generation != generation || len(answer.Transcripts) != len(request.InvocationDemands) {
+			return fail("invocations-failed", fmt.Errorf("invocation answer does not match generation or demand count"))
+		}
+		answer.Envelope.ProjectID = s.projectID
+		answer.Envelope.SchemaSHA256 = TypeFactsSchemaSHA256
+		answer.Envelope.ProducerBuild = s.producerBuild
+		response.InvocationTranscripts = answer.Transcripts
+		response.InvocationEnvelope = &answer.Envelope
 	case LifecycleCancel:
 		// Cancellation is delivered through the active request's context by
 		// the transport adapter. This operation acknowledges that delivery.

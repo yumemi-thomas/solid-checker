@@ -214,6 +214,8 @@ mod tests {
             modules: Vec::new(),
             module_imports: Vec::new(),
             unknown_import_paths: Vec::new(),
+            invocation_transcripts: Vec::new(),
+            invocation_envelope: None,
             client_decode_ns: 0,
             client_response_bytes: 37,
             client_request_send_ns: 0,

@@ -40,6 +40,28 @@ for import in graph.imports_from("/project/src/index.ts") {
 # Ok::<(), typefacts::SessionError>(())
 ```
 
+Package-proof callers can separately demand invocation transcripts for exact
+call-expression ranges. These carry compiler-selected overload identity,
+actual-to-formal bindings, bounded callable paths, finite value partitions,
+and optional implementation censuses. They are read-only side answers, not
+retained table rows, so ordinary analysis pays no storage cost.
+
+```rust
+use typefacts::{InvocationDemand, Location};
+
+let answer = session.invocations(&[InvocationDemand {
+    location: Location {
+        path: "/project/src/probe.ts".into(),
+        start_byte: 120,
+        end_byte: 148,
+    },
+    callable_depth: 3,
+    census: true,
+}])?;
+assert_eq!(answer.transcripts.len(), 1);
+# Ok::<(), typefacts::SessionError>(())
+```
+
 ## Development
 
 ```sh

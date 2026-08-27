@@ -183,6 +183,15 @@ phase.
 **Exit:** generator and IR no longer guess variadic, overload, nested-callback,
 or finite guard facts.
 
+**Status 2026-08-27:** complete. Items 28-42 are implemented and specified in
+[Type Facts invocation transcripts](phase3/invocation-transcripts.md), with the
+handoff evidence and exact remaining refusals in the
+[Phase 3 completion report](phase3/2026-08-27-typefacts.md). The operation is a
+demand-shaped read rather than a retained-table expansion. The existing checker
+continues to fail closed where these richer proofs are not yet consumed; the
+replacement generator and normalized IR receive them through the backend seam
+in Phases 5-8, without a source/name heuristic in the interim.
+
 ## Phase 4 — Compiler execution-facts protocol 2
 
 43. Specify source/generated operation identities.
