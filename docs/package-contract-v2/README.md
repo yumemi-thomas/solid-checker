@@ -56,6 +56,10 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 6 temporary-wire completion](phase6/2026-08-27-temporary-wire-schema-v2.md)
   — strict schema-v2 decoding, private normalization, goldens, cross-field
   validation, and bounded expansion without producer or consumer cutover.
+- [Phase 7 artifact-resolution completion](phase7/2026-08-27-artifact-resolution-closure.md)
+  — exact host/Type Facts/standalone resolution, independent runtime/types
+  bindings, canonical dependency closure, local opaque frontiers, and strict
+  artifact-case selection.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

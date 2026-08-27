@@ -167,6 +167,32 @@ Two adapters justify this seam:
 Both produce the same `ResolvedImport` model. Friendly host/mode/loader labels
 may be reported for humans but never substitute for the exact resolution trace.
 
+`solid-facts-backend::artifact_resolution` is the owning deep module. The exact
+record contains logical and real package roots, manifest, independently selected
+runtime and declaration artifacts, ordered branch traces, optional transform,
+per-public-export runtime/declaration targets, canonical dependency closure,
+and resolution authority. The authority chain is host, then Type Facts, then
+standalone acquisition; only `Unattested` falls through. Ambiguity or structural
+invalidity at a stronger source refuses the import.
+
+Standalone acquisition follows ordered package `exports` objects, including
+nested custom/default/import/require/browser/node/worker/deno/bun branches and
+subpath-pattern precedence. Runtime and `types` resolution run independently.
+The resolver records the selected JSON-pointer branch and every ordered step;
+the contract compares exact branch provenance only after path and digest
+identity have selected the actual artifact.
+
+The canonical closure binds typed package-relative entries for runtime files,
+declarations used for proof, manifests/resolution inputs, literal dynamic
+chunks, and materialized generated output. External packages are edges to exact
+artifact cases and accepted-contract digests. Paths, roles, bytes, transform
+identity, dependency edges, and opaque hazards are length-delimited into one
+SHA-256 identity. A nonliteral dynamic load, `eval`, native module, opaque WASM,
+mutable unbound global, unmaterialized transform, or unaccepted external edge
+opens only the named export/domain frontier. Anything outside the package,
+missing from the closure, stale, multiply selected, or structurally
+contradictory refuses the artifact case.
+
 ### Evidence store seam
 
 Two adapters justify this seam:

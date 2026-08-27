@@ -428,6 +428,19 @@ impl ExportSemantics {
         validate::unresolved_claims(self)
     }
 
+    /// Opens only the named immediate call domains while preserving every
+    /// known positive operation or callback.
+    ///
+    /// Artifact-closure validation uses this when an opaque edge can affect a
+    /// finite set of domains. A complete negative becomes unknown and a
+    /// complete positive becomes partial; unrelated call and recursive value
+    /// knowledge is unchanged.
+    pub fn open_call_domains(&mut self, domains: impl IntoIterator<Item = ClaimDomain>) {
+        for domain in domains {
+            self.call.claims.open(domain);
+        }
+    }
+
     #[must_use]
     pub fn unresolved_call_claims(&self) -> Vec<ClaimPath> {
         ClaimDomain::ALL
@@ -613,6 +626,26 @@ impl CallClaims {
             ClaimDomain::Returns => Some(&self.returns),
             ClaimDomain::Cleanups => Some(&self.cleanups),
             ClaimDomain::Disposals => Some(&self.disposals),
+        }
+    }
+
+    fn open(&mut self, domain: ClaimDomain) {
+        match domain {
+            ClaimDomain::Callbacks => {
+                self.callbacks = std::mem::take(&mut self.callbacks).weaken();
+            }
+            ClaimDomain::Reads => self.reads = std::mem::take(&mut self.reads).weaken(),
+            ClaimDomain::Writes => self.writes = std::mem::take(&mut self.writes).weaken(),
+            ClaimDomain::Creates => self.creates = std::mem::take(&mut self.creates).weaken(),
+            ClaimDomain::Invalidates => {
+                self.invalidates = std::mem::take(&mut self.invalidates).weaken();
+            }
+            ClaimDomain::Throws => self.throws = std::mem::take(&mut self.throws).weaken(),
+            ClaimDomain::Returns => self.returns = std::mem::take(&mut self.returns).weaken(),
+            ClaimDomain::Cleanups => self.cleanups = std::mem::take(&mut self.cleanups).weaken(),
+            ClaimDomain::Disposals => {
+                self.disposals = std::mem::take(&mut self.disposals).weaken();
+            }
         }
     }
 }

@@ -51,14 +51,7 @@ pub(super) fn normalize(mut proposal: ContractProposal) -> Result<NormalizedCont
         }
 
         for (name, export) in &mut case.exports {
-            validate_export_identity(
-                &case.id,
-                &case.entrypoint,
-                &case.runtime,
-                &case.declarations,
-                name,
-                &export.identity,
-            )?;
+            validate_export_identity(&case.id, &case.entrypoint, name, &export.identity)?;
             normalize_call(&mut export.call, &format!("case {} export {name}", case.id))?;
             let resources = resource_map(&export.call.resources);
             normalize_value(
@@ -110,8 +103,6 @@ fn require_text(value: &str, field: &str) -> Result<(), ModelError> {
 fn validate_export_identity(
     case_id: &str,
     entrypoint: &str,
-    runtime: &ArtifactIdentity,
-    declarations: &ArtifactIdentity,
     name: &str,
     identity: &ExportIdentity,
 ) -> Result<(), ModelError> {
@@ -120,8 +111,6 @@ fn validate_export_identity(
         || identity.entrypoint != entrypoint
         || identity.runtime.export_name.is_empty()
         || identity.declarations.export_name.is_empty()
-        || &identity.runtime.module != runtime
-        || &identity.declarations.module != declarations
         || validate_artifact(&identity.runtime.module, "runtime export target").is_err()
         || validate_artifact(&identity.declarations.module, "declaration export target").is_err()
     {

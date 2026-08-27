@@ -4,6 +4,7 @@
 #[cfg(not(any(feature = "dialect-v1", feature = "dialect-v2")))]
 compile_error!("solid-facts-backend requires at least one dialect feature");
 
+mod artifact_resolution;
 mod cache;
 mod contract_document;
 mod contract_document_v2;
@@ -16,10 +17,13 @@ mod wire;
 pub use cache::{CacheStats, FactsCache};
 pub use contract_document::encode as encode_package_contract;
 pub use contract_interface::{
-    ArtifactResolutionFailure, ArtifactResolver, BundledEvidenceStore, ContractFailure,
-    EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter, ImportRequest,
-    LocalEvidenceStore, ResolutionAuthority, ResolutionTraceStep, ResolvedFile, ResolvedImport,
-    StandaloneResolutionAdapter, load_accepted_contract,
+    AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure, ArtifactResolver,
+    ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole, ClosureHazard,
+    ClosureHazardKind, ClosureInput, ClosureManifest, ContractFailure, EvidenceKey, EvidenceStore,
+    EvidenceStoreFailure, HostResolutionAdapter, ImportRequest, LocalEvidenceStore,
+    ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
+    ResolvedExportTarget, ResolvedFile, ResolvedImport, StandaloneResolutionAdapter,
+    TypeFactsResolutionAdapter, load_accepted_contract,
 };
 #[cfg(feature = "dialect-v2")]
 pub use diagnostics::bundled_solid_js_contract;
@@ -470,6 +474,9 @@ pub fn attest_import_identities(
                     typefacts::ModuleResolution::NonRelative => ImportResolution::NonRelative,
                 },
                 resolved_path: Arc::clone(&import.resolved_path),
+                included_path: Arc::clone(&import.included_path),
+                symlink_path: Arc::clone(&import.symlink_path),
+                extension: Arc::clone(&import.extension),
                 // An empty name is a manifest that declares none — the
                 // `{"type":"module"}` file a published package ships beside its
                 // output — and is carried as absent rather than as the empty
@@ -480,6 +487,12 @@ pub fn attest_import_identities(
                     .map(|package| package.name.as_ref())
                     .filter(|name| !name.is_empty())
                     .map(Into::into),
+                package_version: import
+                    .package
+                    .as_ref()
+                    .map(|package| package.version.as_ref())
+                    .filter(|version| !version.is_empty())
+                    .map(Into::into),
                 package_manifest: import
                     .package
                     .as_ref()
@@ -489,6 +502,12 @@ pub fn attest_import_identities(
                     .as_ref()
                     .map(|package| package.name.as_ref())
                     .filter(|name| !name.is_empty())
+                    .map(Into::into),
+                resolver_package_version: import
+                    .resolver_package
+                    .as_ref()
+                    .map(|package| package.version.as_ref())
+                    .filter(|version| !version.is_empty())
                     .map(Into::into),
             });
     }
