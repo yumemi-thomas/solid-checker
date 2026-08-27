@@ -65,6 +65,18 @@ _Avoid_: Fact domain, section, field group
 Accepted proof that one claim domain enumerates every behavior possible for its exact package, export, artifact case, guard, and resource scope. Closure never transfers implicitly to a parent, child, or sibling claim domain.
 _Avoid_: Complete contract, tested absence, empty result
 
+**Claim knowledge**:
+The local knowledge state of one claim domain: unknown, partial positive, complete positive, or complete negative. A state says nothing about a parent, child, sibling, alternative, or referenced resource unless that subject has its own claim knowledge.
+_Avoid_: Status wrapper, inherited completeness, contract completeness
+
+**Operation cardinality**:
+A proved lower and upper bound on how often one semantic operation occurs within an explicit scope such as one trigger occurrence, one package call, or one resource lifetime. Possibility, guarantee, repetition, and bound scope are separate facts.
+_Avoid_: Call count, observed frequency, phase repetition
+
+**Guard partition**:
+A finite set of statically decidable contract alternatives selected from exact call, value, protocol, or artifact facts. A complete partition is proved disjoint and exhaustive; unresolved selection joins every possible alternative.
+_Avoid_: Runtime condition, source expression, heuristic branch
+
 **Contract proposal**:
 An unaccepted machine description of package behavior together with proof obligations. A proposal cannot certify a project or discharge a proof obligation.
 _Avoid_: Generated contract, inferred contract
@@ -72,6 +84,10 @@ _Avoid_: Generated contract, inferred contract
 **Accepted package contract**:
 A normalized package contract whose closed claims, package identity, artifact cases, and proof inputs are bound by a valid acceptance receipt. Open claims remain usable only as partial knowledge.
 _Avoid_: Verified JSON, trusted contract, reviewed contract
+
+**Normalized contract model**:
+The rich, wire-independent semantic representation produced by the single contract decoder and normalizer. Reactive IR consumes this model and never compact-document omission, summary, closure-array, or schema-version conventions.
+_Avoid_: Expanded JSON, decoded schema, contract AST
 
 **Artifact case**:
 One exact package-entrypoint resolution outcome, including its resolution trace, runtime artifact, declarations, and dependency closure. Artifact cases are selected exclusively and never merged.

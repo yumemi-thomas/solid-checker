@@ -30,8 +30,11 @@ RC.0 bundled examples cannot override those bytes.
   previously open implementation questions.
 - [Semantic model](semantic-model.md) — knowledge lattice, operations,
   recursive values, guards, ownership, and invariants.
-- [Wire-format draft](wire-format.md) — compact version-2 document shape and
+- [Wire format](wire-format.md) — frozen compact version-2 document shape and
   normalization rules.
+- [Phase 1 semantic and policy freeze](phase1/2026-08-27-freeze.md) — closure
+  record for the knowledge, operation, guard, ownership, evidence, digest, and
+  stability decisions that define semantic-model version 1.
 - [Proof, evidence, and receipts](proof-and-evidence.md) — proof authority,
   sidecars, acceptance, and adversarial obligations.
 - [Fact-producer plan](fact-producer-plan.md) — required Type Facts and Solid
@@ -41,7 +44,7 @@ RC.0 bundled examples cannot override those bytes.
   Facts repatriation into this repository.
 - [Type Facts repatriation conformance](typefacts-repatriation/2026-08-27-conformance.md)
   — import identity, cross-pair protocol parity, finding parity, performance,
-  and the remaining external-repository retirement gate.
+  and completed external-repository retirement gate.
 - [Solid 2 conformance matrix](solid2-conformance-matrix.md) — required RC.3
   behaviors and evidence expectations.
 - [Migration and verification](migration-and-verification.md) — corpus
@@ -59,7 +62,8 @@ RC.0 bundled examples cannot override those bytes.
 The accepted architectural decisions are recorded in
 [ADR 0001](../adr/0001-machine-verified-package-contracts.md),
 [ADR 0002](../adr/0002-colocate-type-facts-with-the-checker.md), and
-[ADR 0003](../adr/0003-follow-the-solid-next-compiler.md).
+[ADR 0003](../adr/0003-follow-the-solid-next-compiler.md), and
+[ADR 0004](../adr/0004-freeze-package-contract-semantic-model-v1.md).
 
 ## Relationship to existing RFCs
 

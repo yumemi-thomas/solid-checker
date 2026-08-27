@@ -42,7 +42,7 @@ checker independently replays those obligations.
 
 ## Proof rule families
 
-The initial proof checker supports:
+Semantic-model version 1 admits these proof rule families:
 
 - package identity and registry integrity;
 - manifest and entrypoint identity;

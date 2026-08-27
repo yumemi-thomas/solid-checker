@@ -109,10 +109,10 @@ from the local language-neutral schema and bound by the source-manifest stamp;
 adding a separate wire-level codec digest is a deferred protocol change.
 
 All later Type Facts changes land atomically with the Rust client, checker
-consumer, proof fixtures, and corpus measurements they affect. After two clean
-CI runs and one release build, the external repository becomes read-only or is
-archived with a pointer to the imported commit; it is no longer an active source
-or pull-request target.
+consumer, proof fixtures, and corpus measurements they affect. On 2026-08-27,
+after successful PR and post-merge CI runs plus the cross-platform release
+package build, the external repository was archived. It remains provenance for
+the imported commit and is no longer an active source or pull-request target.
 
 ## Transition invariant
 
