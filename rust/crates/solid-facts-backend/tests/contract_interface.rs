@@ -39,6 +39,10 @@ fn digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
+fn development_document() -> &'static [u8] {
+    br#"{"format":"solid-reactivity-contract","schemaVersion":2,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test","manifest":{"path":"package.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"summaries":{"plain":{"shape":"plain"}},"entrypoints":{".":{"artifact":{"path":"dist/solid.js","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","closureSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"declarations":{"path":"types/index.d.ts","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},"exports":{"version":"plain"}}},"sidecars":{}}"#
+}
+
 #[test]
 fn malformed_documents_fail_through_the_single_loading_interface() {
     assert!(matches!(
@@ -48,8 +52,8 @@ fn malformed_documents_fail_through_the_single_loading_interface() {
 }
 
 #[test]
-fn development_schema_stays_fail_closed_until_normalization_lands() {
-    let document = br#"{"schemaVersion":2,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test"},"entrypoints":{".":{"artifact":{},"exports":{}}}}"#;
+fn normalized_development_schema_stays_fail_closed_until_acceptance_lands() {
+    let document = development_document();
     let receipt = format!(
         "{{\"receiptVersion\":1,\"wireDigest\":\"{}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-2-test\",\"policy\":1}}}}",
         digest(document),
@@ -58,13 +62,28 @@ fn development_schema_stays_fail_closed_until_normalization_lands() {
 
     assert!(matches!(
         load_accepted_contract(document, receipt.as_bytes(), &resolved()),
-        Err(ContractFailure::NormalizationUnavailable)
+        Err(ContractFailure::AcceptanceUnavailable)
+    ));
+}
+
+#[test]
+fn replacement_contract_requires_the_format_discriminator() {
+    let document = br#"{"schemaVersion":2,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test"},"entrypoints":{".":{"artifact":{},"exports":{}}}}"#;
+    let receipt = format!(
+        "{{\"receiptVersion\":1,\"wireDigest\":\"{}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-6-test\",\"policy\":1}}}}",
+        digest(document),
+        zeros = "0".repeat(64),
+    );
+
+    assert!(matches!(
+        load_accepted_contract(document, receipt.as_bytes(), &resolved()),
+        Err(ContractFailure::DocumentDecode { .. })
     ));
 }
 
 #[test]
 fn a_stale_receipt_is_rejected_before_normalization() {
-    let document = br#"{"schemaVersion":2,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test"},"entrypoints":{".":{"artifact":{},"exports":{}}}}"#;
+    let document = development_document();
     let zeros = "0".repeat(64);
     let receipt = format!(
         "{{\"receiptVersion\":1,\"wireDigest\":\"sha256:{zeros}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-2-test\",\"policy\":1}}}}"

@@ -1,0 +1,43 @@
+{
+  "format": "solid-reactivity-contract",
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "package": {
+    "name": "plain-package",
+    "version": "1.0.0",
+    "integrity": "sha512-published-integrity",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "summaries": {
+    "plain-value": {
+      "shape": "plain"
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "artifact": {
+        "path": "dist/index.js",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "closureSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "declarations": {
+        "path": "types/index.d.ts",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "exports": {
+        "version": "plain-value"
+      }
+    }
+  },
+  "sidecars": {
+    "proof": {
+      "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "probes": {
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  }
+}

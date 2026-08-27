@@ -1,0 +1,151 @@
+{
+  "format": "solid-reactivity-contract",
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "package": {
+    "name": "conditional-effects",
+    "version": "3.1.4",
+    "integrity": "sha512-conditional-package",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  },
+  "summaries": {
+    "owned-effect": {
+      "shape": "callable",
+      "call": {
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "callbacks": [
+          {
+            "from": { "arg": 0, "path": [] },
+            "operation": "run"
+          }
+        ],
+        "reads": [],
+        "writes": [],
+        "creates": [],
+        "invalidates": [],
+        "throws": [],
+        "returns": [],
+        "cleanups": [],
+        "disposals": [],
+        "resources": [
+          {
+            "id": "effect-owner",
+            "kind": "owner",
+            "states": ["active"],
+            "lifetime": { "kind": "owner", "resource": "effect-owner" }
+          }
+        ],
+        "operations": [
+          {
+            "id": "run",
+            "kind": "invoke",
+            "trigger": { "event": "call" },
+            "at": { "event": "flush", "schedule": "queued" },
+            "tracking": "tracked",
+            "owner": {
+              "source": "created",
+              "resource": "effect-owner",
+              "requires": "required",
+              "children": "allowed",
+              "cleanup": "supported",
+              "lifetime": "owner",
+              "closed": ["productions"],
+              "productions": [
+                {
+                  "resource": "effect-owner",
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": "owner"
+                }
+              ]
+            },
+            "count": { "scope": "call", "min": 0, "max": "many" }
+          }
+        ],
+        "cases": [
+          {
+            "when": {
+              "all": [
+                { "signature": "overload-1" },
+                { "arg": 0, "path": [], "kind": "callable" }
+              ]
+            },
+            "operations": ["run"]
+          },
+          {
+            "otherwise": true,
+            "operations": []
+          }
+        ]
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "resolution": {
+            "runtimeBranch": "/exports/./browser/development/import/default",
+            "typesBranch": "/exports/./browser/development/import/types"
+          },
+          "artifact": {
+            "path": "dist/browser-development.js",
+            "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+            "closureSha256": "7777777777777777777777777777777777777777777777777777777777777777"
+          },
+          "declarations": {
+            "path": "types/browser.d.ts",
+            "sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+          },
+          "transform": {
+            "path": "dist/compiler-transform.js",
+            "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+          },
+          "stability": "experimental",
+          "exports": {
+            "createOwnedEffect": {
+              "summary": "owned-effect",
+              "stability": "experimental"
+            }
+          }
+        },
+        {
+          "resolution": {
+            "runtimeBranch": "/exports/./node/import/default",
+            "typesBranch": "/exports/./node/import/types"
+          },
+          "artifact": {
+            "path": "dist/node.js",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "closureSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "declarations": {
+            "path": "types/node.d.ts",
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "exports": {
+            "createOwnedEffect": "owned-effect"
+          }
+        }
+      ]
+    }
+  },
+  "sidecars": {
+    "proof": {
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  }
+}

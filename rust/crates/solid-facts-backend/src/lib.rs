@@ -6,6 +6,7 @@ compile_error!("solid-facts-backend requires at least one dialect feature");
 
 mod cache;
 mod contract_document;
+mod contract_document_v2;
 mod contract_interface;
 mod demand_plan;
 mod diagnostics;

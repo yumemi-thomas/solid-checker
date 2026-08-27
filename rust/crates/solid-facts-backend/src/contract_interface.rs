@@ -1,9 +1,9 @@
 //! The only package-contract boundary exposed to analyzer callers.
 //!
-//! Schema spellings and compact document mechanics remain private. Phase 2
-//! intentionally refuses schema-v2 documents after validating their envelope:
-//! normalization and receipt verification land in Phase 5/7, before any
-//! producer or consumer is migrated.
+//! Schema spellings and compact document mechanics remain private. Temporary
+//! schema-v2 documents are decoded and normalized by the sibling deep module;
+//! this interface still refuses acceptance until the proof-and-receipt phase
+//! can construct accepted typestate.
 
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
@@ -11,8 +11,7 @@ use solid_reactive_ir::contract_semantics::AcceptedContract;
 use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
 
-const MAX_DOCUMENT_BYTES: usize = 1024 * 1024;
-const DEVELOPMENT_SCHEMA_VERSION: u16 = 2;
+use crate::contract_document_v2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResolutionAuthority {
@@ -271,10 +270,8 @@ pub enum ContractFailure {
     UnsupportedReceiptVersion { expected: u16, actual: u16 },
     #[error("unsupported contract schema version {actual}; expected {expected}")]
     UnsupportedSchemaVersion { expected: u16, actual: u16 },
-    #[error(
-        "schema-v2 normalization is not enabled until the normalized-model implementation phase"
-    )]
-    NormalizationUnavailable,
+    #[error("contract semantics are normalized but acceptance receipts are not enabled yet")]
+    AcceptanceUnavailable,
     #[error("no artifact case matches the exact resolved import")]
     NoArtifactCase,
     #[error("multiple artifact cases match the exact resolved import")]
@@ -285,46 +282,6 @@ pub enum ContractFailure {
     ReceiptMismatch { field: &'static str },
     #[error("normalized operation graph is invalid: {reason}")]
     InvalidSemanticModel { reason: String },
-}
-
-// These are intentionally private wire types. The shape is only deepened as
-// decoder/normalizer work lands; downstream crates cannot name any of it.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WireDocument {
-    schema_version: u16,
-    semantic_model_version: u16,
-    package: WirePackage,
-    #[serde(default)]
-    summaries: BTreeMap<String, serde_json::Value>,
-    entrypoints: BTreeMap<String, WireEntrypoint>,
-    #[serde(default)]
-    sidecars: Vec<WireSidecar>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WirePackage {
-    name: String,
-    version: String,
-    integrity: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WireEntrypoint {
-    #[serde(default)]
-    artifact: Option<serde_json::Value>,
-    #[serde(default)]
-    cases: Vec<serde_json::Value>,
-    exports: BTreeMap<String, serde_json::Value>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WireSidecar {
-    kind: String,
-    digest: String,
 }
 
 #[derive(Deserialize)]
@@ -348,30 +305,15 @@ struct WireVerifier {
     policy: u32,
 }
 
-/// Loads one accepted contract for an already resolved import. Until the
-/// normalization phase lands, valid development-schema input fails closed at
-/// the explicit `NormalizationUnavailable` boundary.
+/// Loads one accepted contract for an already resolved import. Temporary-v2
+/// wire mechanics are fully normalized here, but Phase 11 remains the sole
+/// authority allowed to construct accepted typestate.
 pub fn load_accepted_contract(
     document_bytes: &[u8],
     receipt: &[u8],
     _import: &ResolvedImport,
 ) -> Result<AcceptedContract, ContractFailure> {
-    if document_bytes.len() > MAX_DOCUMENT_BYTES {
-        return Err(ContractFailure::DocumentTooLarge {
-            limit: MAX_DOCUMENT_BYTES,
-        });
-    }
-    let document: WireDocument = serde_json::from_slice(document_bytes).map_err(|error| {
-        ContractFailure::DocumentDecode {
-            message: error.to_string(),
-        }
-    })?;
-    if document.schema_version != DEVELOPMENT_SCHEMA_VERSION {
-        return Err(ContractFailure::UnsupportedSchemaVersion {
-            expected: DEVELOPMENT_SCHEMA_VERSION,
-            actual: document.schema_version,
-        });
-    }
+    let document = contract_document_v2::decode(document_bytes)?;
     let receipt: WireReceipt =
         serde_json::from_slice(receipt).map_err(|error| ContractFailure::ReceiptDecode {
             message: error.to_string(),
@@ -388,7 +330,7 @@ pub fn load_accepted_contract(
             field: "wireDigest",
         });
     }
-    if receipt.semantic_model_version != document.semantic_model_version {
+    if receipt.semantic_model_version != document.semantic_model_version() {
         return Err(ContractFailure::ReceiptMismatch {
             field: "semanticModelVersion",
         });
@@ -405,28 +347,13 @@ pub fn load_accepted_contract(
         }
     }
 
-    // Read every envelope field here so additions cannot silently become
-    // ignored input while the normalizer is still closed.
+    let normalized = document.normalize()?;
     let _ = (
-        document.semantic_model_version,
-        document.package.name,
-        document.package.version,
-        document.package.integrity,
-        document.summaries,
-        document
-            .entrypoints
-            .into_values()
-            .map(|entry| (entry.artifact, entry.cases, entry.exports))
-            .collect::<Vec<_>>(),
-        document
-            .sidecars
-            .into_iter()
-            .map(|sidecar| (sidecar.kind, sidecar.digest))
-            .collect::<Vec<_>>(),
+        normalized.semantic_digest(),
         receipt.verifier.build,
         receipt.verifier.policy,
     );
-    Err(ContractFailure::NormalizationUnavailable)
+    Err(ContractFailure::AcceptanceUnavailable)
 }
 
 fn is_sha256_digest(value: &str) -> bool {

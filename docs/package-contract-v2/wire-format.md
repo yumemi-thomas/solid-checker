@@ -1,10 +1,11 @@
 # Compact wire format
 
-Status: **field vocabulary frozen for temporary `schemaVersion: 2` on
-2026-08-27**. The generated JSON Schema becomes the structural authority when
-implementation begins; cross-field, normalization, and proof invariants remain
-Rust validation responsibilities. Shorter aliases are not permitted unless a
-later corpus measurement changes this document and the decoder atomically.
+Status: **implemented for temporary `schemaVersion: 2` on 2026-08-27**. The
+checked-in [temporary JSON Schema](../../schema/solid-reactivity-contract-v2.schema.json)
+is the structural authority; cross-field, normalization, and proof invariants
+remain Rust validation responsibilities. Shorter aliases are not permitted
+unless a later corpus measurement changes this document, schema, and decoder
+atomically.
 
 ## Root
 
@@ -40,6 +41,9 @@ The root intentionally excludes generator identity, review status,
 ## Entrypoints
 
 An entrypoint has either one unconditional artifact or an explicit case list.
+Both forms may carry an optional `transform` file identity and the exact case
+may carry `stability: "experimental"`. A transform is a `{ path, sha256 }`
+artifact and is omitted when no materialized transform participates.
 
 ```json
 {
@@ -87,9 +91,14 @@ Conditional example:
 }
 ```
 
-The resolution trace is provenance for an already resolved artifact. The
-contract does not implement package-export resolution by matching host/mode
-tokens. Exactly one case must agree with the actual resolved import.
+The resolution trace is provenance for an already resolved artifact. The two
+wire branches normalize to ordered semantic steps named `runtime` and `types`;
+the full independently attested export trace and exact target binding land in
+Phase 7. The contract does not implement package-export resolution by matching
+host/mode tokens. Exactly one case must agree with the actual resolved import.
+Artifact-case IDs are derived from exact entrypoint, trace, artifact,
+declaration, transform, and closure identities at normalization and are not a
+wire field.
 
 ## Export mappings and summaries
 
@@ -212,6 +221,31 @@ unknown. Owner `source` is `none`, `ambient-at-call`, `ambient-at-execution`,
 requirements, child capability, cleanup capability, and lifetime are separate
 keys and may be omitted independently when unknown.
 
+`requires` constrains the current owner. `requiresChildren` and
+`requiresCleanup` independently constrain child-owner and cleanup capability.
+Owner production is a separate locally closed domain:
+
+```json
+{
+  "closed": ["productions"],
+  "productions": [
+    {
+      "resource": "effect-owner",
+      "children": "allowed",
+      "cleanup": "supported",
+      "lifetime": "owner"
+    }
+  ]
+}
+```
+
+Resource-bound lifetimes may use the owner/resource field already in scope, as
+in `"lifetime": "owner"`, or the exact form
+`{ "kind": "owner", "resource": "effect-owner" }`. The finite kinds are
+`call`, `resource`, `owner`, `request`, `transition`, and `async-source`;
+`call` never names a resource. A `count` whose scope is `resource` carries its
+exact sibling `resource` ID.
+
 `count.scope` is `trigger`, `call`, or `resource`. `min` and finite `max` are
 non-negative integers; `max` may be `many`. A bound requires a scope, `min`
 must not exceed finite `max`, and an omitted bound stays unknown. Graph edge
@@ -280,7 +314,11 @@ Version-1 value `kind` is `unknown`, `plain`, `parameter`, `tuple`, `array`,
 `server-function-reference`. A reactive value has role `accessor` or `setter`.
 Observable capabilities use only `readable`, `writable`, `refreshable`,
 `pending-aware`, and `optimistic`, and must satisfy the contradictions rejected
-by the semantic normalizer. Projection and snapshot are not nominal wire kinds.
+by the semantic normalizer. A resource-bound capability may be written as
+`{ "capability": "refreshable", "resource": "query" }`; intrinsic
+`readable` and `writable` capabilities never name a resource. The local
+`closed: ["capabilities"]` convention applies to reactive and store values.
+Projection and snapshot are not nominal wire kinds.
 
 ## Guarded behavior
 
@@ -341,6 +379,13 @@ The validator must enforce configurable limits with initial safety defaults:
 - no path traversal outside the package root;
 - no reference cycles;
 - linear-time expansion and normalization.
+
+The implementation additionally caps total expanded operation/resource/edge/
+guard nodes at 1,000,000. This closes the multiplicative case where a document
+under 1 MiB points tens of thousands of exports at one maximum-size summary.
+The grammar permits summary references only from exports, so recursive summary
+references are structurally impossible; unused and dangling references are
+still rejected explicitly.
 
 These are denial-of-service limits, not compactness targets. A policy may lower
 them but may not silently raise them while accepting an existing receipt;

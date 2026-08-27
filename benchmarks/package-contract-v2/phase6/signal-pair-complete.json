@@ -1,0 +1,167 @@
+{
+  "format": "solid-reactivity-contract",
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "package": {
+    "name": "solid-js",
+    "version": "2.0.0-rc.3",
+    "integrity": "sha512-published-solid-rc3",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  },
+  "summaries": {
+    "signal-pair": {
+      "shape": {
+        "kind": "tuple",
+        "closed": ["items"],
+        "items": [
+          {
+            "kind": "reactive",
+            "role": "accessor",
+            "resource": "signal",
+            "closed": ["capabilities"],
+            "capabilities": ["readable"]
+          },
+          {
+            "kind": "reactive",
+            "role": "setter",
+            "resource": "signal",
+            "closed": ["capabilities"],
+            "capabilities": ["writable"]
+          },
+          { "kind": "unknown" }
+        ]
+      },
+      "call": {
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "callbacks": [],
+        "reads": ["read"],
+        "writes": ["write"],
+        "creates": ["create"],
+        "invalidates": [],
+        "throws": [],
+        "returns": ["return"],
+        "cleanups": [],
+        "disposals": [],
+        "resources": [
+          {
+            "id": "signal",
+            "kind": "reactive-source",
+            "closed": ["states", "capabilities"],
+            "states": [],
+            "capabilities": ["writable"],
+            "lifetime": "call"
+          }
+        ],
+        "operations": [
+          {
+            "id": "create",
+            "kind": "create",
+            "trigger": { "event": "call" },
+            "at": { "event": "call", "schedule": "same-stack" },
+            "tracking": "untracked",
+            "owner": {
+              "source": "none",
+              "requires": "forbidden",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "lifetime": "call",
+              "closed": ["productions"],
+              "productions": []
+            },
+            "count": { "scope": "call", "min": 1, "max": 1 },
+            "resources": ["signal"]
+          },
+          {
+            "id": "read",
+            "kind": "read",
+            "trigger": { "operation": "create" },
+            "at": { "event": "call", "schedule": "same-stack" },
+            "tracking": "tracked",
+            "owner": {
+              "source": "none",
+              "requires": "forbidden",
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": ["productions"],
+              "productions": []
+            },
+            "count": { "scope": "call", "min": 0, "max": "many" },
+            "resources": ["signal"]
+          },
+          {
+            "id": "write",
+            "kind": "write",
+            "trigger": { "event": "call" },
+            "at": { "event": "call", "schedule": "same-stack" },
+            "tracking": "untracked",
+            "owner": {
+              "source": "none",
+              "requires": "forbidden",
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": ["productions"],
+              "productions": []
+            },
+            "count": { "scope": "call", "min": 0, "max": "many" },
+            "resources": ["signal"]
+          },
+          {
+            "id": "return",
+            "kind": "return",
+            "trigger": { "operation": "create" },
+            "at": { "event": "call", "schedule": "same-stack" },
+            "tracking": "untracked",
+            "owner": {
+              "source": "none",
+              "requires": "forbidden",
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": ["productions"],
+              "productions": []
+            },
+            "count": { "scope": "call", "min": 1, "max": 1 },
+            "output": "plain",
+            "resources": ["signal"]
+          }
+        ],
+        "edges": [
+          { "kind": "orders", "from": "create", "to": "read" },
+          { "kind": "orders", "from": "create", "to": "return" },
+          { "kind": "data", "from": "create", "to": "write" }
+        ]
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "artifact": {
+        "path": "dist/solid.js",
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "closureSha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "declarations": {
+        "path": "types/index.d.ts",
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "exports": {
+        "createSignal": "signal-pair"
+      }
+    }
+  },
+  "sidecars": {}
+}

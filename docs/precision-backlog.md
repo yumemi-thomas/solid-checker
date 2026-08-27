@@ -7567,3 +7567,24 @@ fail-closed. A normalized proposal cannot create an `AcceptedContract`; the
 later proof-and-receipt authority must authorize every proposed closed domain.
 No Type Facts, compiler facts, public schema, generator, evidence sidecar,
 receipt, bundled contract, or snapshot changed in this phase.
+
+## 2026-08-27 — Temporary contract v2 normalizes without accepting closure
+
+The Phase 6 decoder now terminates temporary wire mechanics inside
+`solid-facts-backend::contract_document_v2`. It validates the required format,
+exact package/artifact identities, direct summary references, local closure,
+recursive values, operation/resource/owner/cardinality axes, finite guards,
+experimental status, sidecar hashes, and bounded expansion before handing a
+wire-independent proposal to the Phase 5 semantic normalizer. Three goldens
+cover all four local knowledge states, and adversarial tests reject false
+closure, contradictions, invalid graphs, path traversal, excluded trust/evidence
+fields, unstable normalization, and resource-limit excess.
+
+This closes the old `NormalizationUnavailable` boundary but does not make a
+proposal trusted: the public loader ends at `AcceptanceUnavailable`, and
+`AcceptedContract` still has no public constructor. Exact artifact selection,
+independent runtime/declaration target binding, resolver closure, proof/probe
+content, receipt acceptance, generator cutover, bundled-contract migration, and
+analyzer consumption remain open in their scheduled phases. No open runtime or
+compiler premise from the Phase 5 Solid 2 conformance matrix was converted into
+negative proof.
