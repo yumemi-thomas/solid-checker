@@ -34,9 +34,9 @@ rust-version = "1.97"
 # validation/serialization, and fact tests. Its 358-entry generated-output
 # baseline is byte-identical to that exact upstream base. No upstream PR is
 # opened for this fork; compiler behavior fixes remain outside this branch.
-# The producer carries `SEMANTIC_TRACE_VERSION = 2`; the adapter has an
+# The producer carries `SEMANTIC_TRACE_VERSION = 3`; the adapter has an
 # independent literal and const assertion so an incompatible pin cannot build.
-solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "1d81e67fd393d12c74b13aa7d3fb492f3d85353b", default-features = false }
+solidjs-compiler = { git = "https://github.com/yumemi-thomas/solid", rev = "a1a2b9a35d3e4ff7a193605aadec200c7e33dc53", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on

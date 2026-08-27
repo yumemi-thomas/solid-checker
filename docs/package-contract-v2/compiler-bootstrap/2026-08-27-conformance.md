@@ -2,6 +2,10 @@
 
 Date: 2026-08-27
 
+> Historical Phase 0A record. Phase 4 supersedes this trace-2 distribution pin
+> with trace 3 at `a1a2b9a35d3e4ff7a193605aadec200c7e33dc53`; see the
+> [Phase 4 completion report](../phase4/2026-08-27-compiler-facts.md).
+
 Phase 0A's compiler transition is complete. The checker now consumes
 `solidjs-compiler` from `yumemi-thomas/solid@1d81e67fd393d12c74b13aa7d3fb492f3d85353b`,
 based exactly on `solidjs/solid#next@a10cf1a147209d8da50697896742d2b1d4afad75`.

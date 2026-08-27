@@ -7,9 +7,9 @@
 //! selecting a dialect and never names either.
 
 use solid_facts::compiler::{
-    AnalysisRequest, COMPILER_FACTS_PROTOCOL, CallbackRole, CallbackRoleKind,
-    CompilerFactsProvider, CompilerProviderError, ExecutionMap, ExecutionRegion, JsxOperation,
-    OwnershipRegion, OwnershipRegionKind, RegionReason,
+    AnalysisRequest, CompilerFactsProvider, CompilerOperationInput, CompilerOperationKind,
+    CompilerProducerInput, CompilerProviderError, CompilerTraceInput, ExecutionMap,
+    LegacyCompilerDecision,
 };
 use solid_facts::core::{SourceHash, Span};
 use solid1_dom_expressions_compiler as dom_expressions_compiler;
@@ -22,6 +22,13 @@ use solid1_dom_expressions_compiler as dom_expressions_compiler;
 /// could never fire, for any producer, including a version-3 one arriving
 /// through a pin move.
 const READS_TRACE_VERSION: u32 = 2;
+const PRODUCER_IMPLEMENTATION_REVISION: &str = "ca3bbfae7d1e00e28ef73f9af58bdb46e248b512";
+
+/// Stable cache identity for the exact legacy semantic producer this adapter
+/// reads. Trace v2 has no complete generated-operation identity, which is
+/// represented in the normalized model rather than hidden in this string.
+pub const COMPILER_FACTS_IDENTITY: &str =
+    "solid-v1:trace2:ca3bbfae7d1e00e28ef73f9af58bdb46e248b512";
 
 /// A pin move that changes the producer's schema version fails the build here
 /// instead of silently making the runtime refusal below unreachable again. The
@@ -83,7 +90,24 @@ impl CompilerFactsProvider for NativeCompilerFacts {
         let trace = output
             .semantic_trace
             .ok_or(CompilerProviderError::MissingExecutionMap)?;
-        execution_map_from_trace(&trace, &request.source, default_effect_wrapper)
+        execution_map_from_trace(
+            &trace,
+            &request.source,
+            default_effect_wrapper,
+            output.code,
+            output.source_map,
+            serde_json::json!({
+                "filename": request.path,
+                "moduleName": requested.module_name,
+                "generate": requested.generate,
+                "hydratable": requested.hydratable,
+                "effectWrapper": requested.effect_wrapper,
+                "wrapConditionals": requested.wrap_conditionals.unwrap_or(true),
+                "staticMarker": requested.static_marker,
+                "builtIns": requested.built_ins,
+            })
+            .to_string(),
+        )
     }
 }
 
@@ -113,11 +137,10 @@ fn execution_map_from_trace(
     trace: &dom_expressions_compiler::SemanticTrace,
     source: &str,
     default_effect_wrapper: bool,
+    output: String,
+    source_map: Option<String>,
+    configuration_json: String,
 ) -> Result<ExecutionMap, CompilerProviderError> {
-    use dom_expressions_compiler::{
-        CallbackDecision, ExecutionSiteKind, TerminalDecision, ValueDecision,
-    };
-
     // The trace schema is versioned and its meaning is not forward-compatible:
     // version 2 removed the producer's `ownership_sites` vocabulary, so a
     // trace of any other version must be refused rather than read as if the
@@ -131,134 +154,49 @@ fn execution_map_from_trace(
         )));
     }
 
-    let mut map = ExecutionMap {
-        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
-        source_hash: SourceHash::of(source),
-        tracked_regions: Vec::new(),
-        untracked_regions: Vec::new(),
-        discarded_regions: Vec::new(),
-        ownership_regions: Vec::new(),
-        callback_roles: Vec::new(),
-        jsx_operations: Vec::new(),
-    };
-
-    // Version 2 of the 1.x trace no longer carries ownership decisions, so the
-    // checker derives them from the sites, applying exactly the rule the
-    // producer used to apply: a value the compiler re-runs reactively is
-    // re-run under an owner the compiler's own runtime established, which is
-    // an auditable claim only while that runtime is the compiler's own. A
-    // configured effect wrapper is an unaudited runtime, so no owner is
-    // claimed for it at all — absence here is "not proven", never "unowned".
-    //
-    // `trace.sites` is ordered by (span, kind), so appending in iteration
-    // order already satisfies the non-decreasing span order `validate`
-    // requires.
-    if default_effect_wrapper {
-        for site in &trace.sites {
-            if matches!(
-                site.decision,
-                TerminalDecision::Value(ValueDecision::ReactiveRerun)
-            ) {
-                map.ownership_regions.push(OwnershipRegion {
-                    span: Span::new(site.span.start, site.span.end),
-                    kind: OwnershipRegionKind::Owned,
-                });
-            }
-        }
-    }
-
-    // Sites arrive ordered by (span, kind), so appending in iteration order
-    // keeps every category in the canonical span order `validate` requires.
-    for site in &trace.sites {
-        let span = Span::new(site.span.start, site.span.end);
-        let kind = match site.kind {
-            ExecutionSiteKind::JsxChild => "jsx-expression",
-            ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
-                "dynamic-attribute"
-            }
-            ExecutionSiteKind::ComponentProperty => "component-property",
-            ExecutionSiteKind::ComponentSpread => "component-spread",
-            ExecutionSiteKind::ComponentChild => "component-child",
-            ExecutionSiteKind::EventHandler => "event-listener",
-            ExecutionSiteKind::Ref => "directive-apply",
-            ExecutionSiteKind::ControlFlowRender => "control-flow-render",
-        };
-        map.jsx_operations.push(JsxOperation {
-            span,
-            kind: kind.into(),
-        });
-
-        match site.decision {
-            TerminalDecision::Value(ValueDecision::ReactiveRerun) => {
-                let reason = match site.kind {
-                    ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
-                        RegionReason::JsxAttribute
-                    }
-                    _ => RegionReason::JsxChild,
-                };
-                map.tracked_regions.push(ExecutionRegion { span, reason });
-            }
-            // `CallerContext` is the dynamic component prop: the expression is
-            // handed to the child as a getter and re-evaluated in the child's
-            // tracking context. It is deferred, not untracked — treating it as
-            // an untracked region would report every `when={count()}` as a
-            // stale read.
-            TerminalDecision::Value(ValueDecision::CallerContext) => {
-                map.callback_roles.push(CallbackRole {
-                    span,
-                    role: CallbackRoleKind::Deferred,
-                });
-            }
-            // A component child is handed to the component and invoked from
-            // the component's own render, not from here — a deferred callback
-            // even when the value itself is built once.
-            TerminalDecision::Value(ValueDecision::EagerOnce)
-                if site.kind == ExecutionSiteKind::ComponentChild =>
-            {
-                map.callback_roles.push(CallbackRole {
-                    span,
-                    role: CallbackRoleKind::Deferred,
-                });
-            }
-            // `EagerOnce` settles at render and never re-runs. It does execute:
-            // exactly once, outside any tracking scope, which is what an
-            // untracked region claims.
-            TerminalDecision::Value(ValueDecision::EagerOnce) => {
-                map.untracked_regions.push(ExecutionRegion {
-                    span,
-                    reason: region_reason(site.kind),
-                });
-            }
-            // `Elided` is the opposite: the value is decided and then emitted
-            // nowhere. Every one of this producer's `Elided` sites is a value
-            // the emitter deletes — a confidently-foldable constant baked into
-            // the template (`children.rs`, `static_template.rs`, the folded
-            // attribute plans in `attrs.rs`), or a value discarded unlowered (a
-            // `children` attribute or component `children` prop shadowed by
-            // real children, a spread's skipped `children`). Projecting it as
-            // an untracked region reported the read inside it as a proven stale
-            // read, a claim whose every clause is false of code neither
-            // compiler emits.
-            TerminalDecision::Value(ValueDecision::Elided) => {
-                map.discarded_regions.push(ExecutionRegion {
-                    span,
-                    reason: region_reason(site.kind),
-                });
-            }
-            TerminalDecision::Callback(decision) => {
-                let role = match decision {
-                    CallbackDecision::LaterEvent => CallbackRoleKind::EventHandler,
-                    CallbackDecision::RefApply => CallbackRoleKind::DirectiveApply,
-                    // A render callback runs at render time under no tracking
-                    // scope of its own.
-                    CallbackDecision::LaterRender => CallbackRoleKind::Render,
-                };
-                map.callback_roles.push(CallbackRole { span, role });
-            }
-        }
-    }
-
-    map.validate(source)?;
+    let source_hash = SourceHash::of(source);
+    let source_sha256 = source_hash
+        .as_str()
+        .strip_prefix("sha256:")
+        .expect("SourceHash is canonical")
+        .to_string();
+    let map = ExecutionMap::normalize(
+        CompilerTraceInput {
+            producer: CompilerProducerInput {
+                dialect: "solid-v1".into(),
+                trace_version: trace.version,
+                package_version: None,
+                upstream_revision: None,
+                implementation_revision: PRODUCER_IMPLEMENTATION_REVISION.into(),
+                source_sha256,
+                output,
+                source_map,
+                claimed_output_sha256: None,
+                claimed_source_map_sha256: None,
+                configuration_json,
+                identity_complete: false,
+            },
+            source_operations_complete: true,
+            // Trace v2 did not bind generated wrapper observations to exact
+            // generated operation identities. Preserve that as partial rather
+            // than turning an empty list into negative proof.
+            generated_operations_complete: false,
+            operations: trace
+                .sites
+                .iter()
+                .map(|site| {
+                    CompilerOperationInput::legacy(
+                        Span::new(site.span.start, site.span.end),
+                        operation_kind(site.kind),
+                        legacy_decision(site.decision),
+                        default_effect_wrapper,
+                    )
+                })
+                .collect(),
+            generated_operations: Vec::new(),
+        },
+        source,
+    )?;
     if !map.uncovered_jsx_expressions().is_empty() {
         return Err(CompilerProviderError::Native(
             "Solid 1.x compiler trace is incomplete: a JSX expression has no execution classification"
@@ -268,22 +206,40 @@ fn execution_map_from_trace(
     Ok(map)
 }
 
-/// Which JSX position a one-shot or deleted value sat in.
-///
-/// Shared by the untracked (`EagerOnce`) and discarded (`Elided`) arms: the
-/// reason describes where the value was written, which does not depend on
-/// whether the emitter kept it.
-fn region_reason(kind: dom_expressions_compiler::ExecutionSiteKind) -> RegionReason {
+fn operation_kind(kind: dom_expressions_compiler::ExecutionSiteKind) -> CompilerOperationKind {
     use dom_expressions_compiler::ExecutionSiteKind;
 
     match kind {
-        ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
-            RegionReason::JsxAttribute
+        ExecutionSiteKind::NativeAttribute => CompilerOperationKind::NativeAttribute,
+        ExecutionSiteKind::NativeSpread => CompilerOperationKind::NativeSpread,
+        ExecutionSiteKind::ComponentProperty => CompilerOperationKind::ComponentProperty,
+        ExecutionSiteKind::ComponentSpread => CompilerOperationKind::ComponentSpread,
+        ExecutionSiteKind::ComponentChild => CompilerOperationKind::ComponentChild,
+        ExecutionSiteKind::JsxChild => CompilerOperationKind::JsxChild,
+        ExecutionSiteKind::EventHandler => CompilerOperationKind::EventHandler,
+        ExecutionSiteKind::Ref => CompilerOperationKind::Ref,
+        ExecutionSiteKind::ControlFlowRender => CompilerOperationKind::ControlFlowRender,
+    }
+}
+
+fn legacy_decision(decision: dom_expressions_compiler::TerminalDecision) -> LegacyCompilerDecision {
+    use dom_expressions_compiler::{CallbackDecision, TerminalDecision, ValueDecision};
+    match decision {
+        TerminalDecision::Value(ValueDecision::EagerOnce) => LegacyCompilerDecision::EagerOnce,
+        TerminalDecision::Value(ValueDecision::ReactiveRerun) => {
+            LegacyCompilerDecision::ReactiveRerun
         }
-        ExecutionSiteKind::ComponentProperty
-        | ExecutionSiteKind::ComponentSpread
-        | ExecutionSiteKind::ComponentChild => RegionReason::ComponentGetter,
-        _ => RegionReason::JsxChild,
+        TerminalDecision::Value(ValueDecision::CallerContext) => {
+            LegacyCompilerDecision::CallerContext
+        }
+        TerminalDecision::Value(ValueDecision::Elided) => LegacyCompilerDecision::Elided,
+        TerminalDecision::Callback(CallbackDecision::LaterEvent) => {
+            LegacyCompilerDecision::LaterEvent
+        }
+        TerminalDecision::Callback(CallbackDecision::LaterRender) => {
+            LegacyCompilerDecision::LaterRender
+        }
+        TerminalDecision::Callback(CallbackDecision::RefApply) => LegacyCompilerDecision::RefApply,
     }
 }
 
@@ -381,8 +337,9 @@ mod tests {
             component_render_sites: Vec::new(),
             deferred_callback_sites: Vec::new(),
         };
-        let error = execution_map_from_trace(&trace, source, true)
-            .expect_err("an unknown trace version must fail closed");
+        let error =
+            execution_map_from_trace(&trace, source, true, String::new(), None, "{}".into())
+                .expect_err("an unknown trace version must fail closed");
         assert!(
             matches!(&error, CompilerProviderError::Native(message)
                 if message.contains("semantic trace version 3")
@@ -417,5 +374,19 @@ mod tests {
                 .iter()
                 .any(|operation| operation.kind == "component-spread")
         );
+    }
+
+    #[test]
+    fn legacy_trace_keeps_generated_operations_explicitly_partial() {
+        let facts = compile_source("const view = <div>{count()}</div>;");
+        let producer = facts
+            .semantic_model
+            .producer
+            .as_ref()
+            .expect("legacy producer identity");
+        assert!(!producer.identity_complete);
+        assert!(facts.semantic_model.source_operations_complete);
+        assert!(!facts.semantic_model.generated_operations_complete);
+        assert!(facts.semantic_model.generated_operations.is_empty());
     }
 }

@@ -45,6 +45,14 @@ RC.0 bundled examples cannot override those bytes.
 - [Type Facts repatriation conformance](typefacts-repatriation/2026-08-27-conformance.md)
   — import identity, cross-pair protocol parity, finding parity, performance,
   and completed external-repository retirement gate.
+- [Phase 3 Type Facts completion](phase3/2026-08-27-typefacts.md) — exact
+  invocation transcripts, local completeness, and remaining flow refusals.
+- [Phase 4 compiler-facts completion](phase4/2026-08-27-compiler-facts.md) —
+  semantic trace 3, compiler-facts protocol 2, identity chain, scope proof, and
+  remaining compiler/runtime boundary.
+- [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
+  operation identity, independent execution axes, completeness, normalization,
+  and acceptance invariants.
 - [Solid 2 conformance matrix](solid2-conformance-matrix.md) — required RC.3
   behaviors and evidence expectations.
 - [Migration and verification](migration-and-verification.md) — corpus

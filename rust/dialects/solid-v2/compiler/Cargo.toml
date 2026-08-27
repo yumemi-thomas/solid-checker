@@ -9,3 +9,4 @@ rust-version.workspace = true
 [dependencies]
 solidjs-compiler.workspace = true
 solid-facts = { path = "../../../crates/solid-facts" }
+serde_json.workspace = true

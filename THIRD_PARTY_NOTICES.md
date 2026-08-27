@@ -6,15 +6,19 @@ whose original notices remain applicable.
 ## Solid 2 compiler
 
 - Upstream: https://github.com/solidjs/solid
-- Upstream base: `a10cf1a1`
+- Upstream base: `a10cf1a147209d885f148396068175ab2f0a996a`
 - Consumed semantic-only fork: https://github.com/yumemi-thomas/solid
-- Pinned revision: `1d81e67fd393d12c74b13aa7d3fb492f3d85353b`
+- Semantic implementation revision: `e91bc2ae7fd0e9653db093b1ab74a09c9482042e`
+- Pinned distribution revision: `a1a2b9a35d3e4ff7a193605aadec200c7e33dc53`
+- Fork branch: `solid-checker/compiler-facts-v3`
 - License: MIT
 
 The `solidjs-compiler` crate under `packages/compiler` is consumed as a pinned
 Cargo git dependency, built without its Node-API feature. The fork adds only
-output-neutral semantic trace code, validation, and facts tests. It is maintained
-without an upstream pull request and carries no compiler behavior fixes.
+output-neutral semantic trace code, validation, and facts tests. The second
+revision above changes only the trace's implementation-identity constant to
+the first revision. The fork is maintained without an upstream pull request
+and carries no compiler behavior fixes.
 
 ## Solid 1.x compiler (dom-expressions fork)
 

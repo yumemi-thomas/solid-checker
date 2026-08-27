@@ -1925,6 +1925,7 @@ mod export_kind_proof_tests {
         let compiler = ExecutionMap {
             compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
             source_hash: ast.source.hash.clone(),
+            semantic_model: Default::default(),
             tracked_regions: Vec::new(),
             untracked_regions: Vec::new(),
             discarded_regions: Vec::new(),

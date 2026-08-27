@@ -119,6 +119,12 @@ rebases.
 
 ### Protocol 2 operation census
 
+**Status 2026-08-27:** implemented by Solid 2 semantic trace version 3 and
+checker compiler-facts protocol 2. See the
+[normative Phase 4 protocol](phase4/compiler-execution-facts.md) and
+[completion report](phase4/2026-08-27-compiler-facts.md). The ordering below is
+the preserved migration rule, not remaining work.
+
 Port the existing semantic trace version 2 unchanged first. Only after
 trace-on/trace-off output identity and checker parity pass should the producer
 move to semantic trace version 3 and the checker adapter move to compiler

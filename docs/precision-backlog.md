@@ -7512,3 +7512,29 @@ violation remains. The other 557 baseline findings are unchanged. No
 compatibility shim was added because throwing away the new positive compiler
 fact would reduce precision and contradict the pinned compiler's actual
 lowering.
+
+## 2026-08-27 — Compiler-facts protocol 2 keeps execution knowledge local
+
+Solid 2 now emits semantic trace version 3 from the semantic-only compiler fork
+at distribution revision `a1a2b9a35d3e4ff7a193605aadec200c7e33dc53`. The trace
+separates disposition, trigger, schedule, tracking, cardinality, and owner;
+relates source sites to exact generated operations; reconciles DOM and SSR
+lowering; and binds source, full effective configuration, output, optional
+source map, official upstream base, and semantic implementation identity.
+
+The checker consumes it through compiler-facts protocol 2 and one deep
+normalizer. Legacy region/role arrays are derived compatibility projections and
+cannot disagree with semantic operations. Cache identity includes the producer
+and protocol, and Reactive IR reuse compares normalized operations,
+completeness, and producer semantic revision. This closes
+the former risk that a new trace or compiler pin could reuse old execution
+answers merely because source and dialect were unchanged.
+
+Both adapters keep their generated-operation domains open: Solid 2 reports
+exact positive generated identities but has no independent emission census,
+while Solid 1 lacks that identity model entirely. Solid 1's full
+producer/configuration identity also remains open. Solid 2 universal/dynamic
+modes remain refused. Server-function directive facts now identify
+compiler-created references and registrations, while transport/runtime behavior
+and receipt integration remain open. None of these open domains is interpreted
+as complete-negative knowledge.

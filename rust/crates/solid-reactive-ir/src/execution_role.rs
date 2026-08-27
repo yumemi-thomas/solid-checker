@@ -1380,6 +1380,7 @@ mod tests {
         ExecutionMap {
             compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
             source_hash: SourceHash::of("value"),
+            semantic_model: Default::default(),
             tracked_regions: vec![],
             untracked_regions: vec![],
             discarded_regions: vec![],

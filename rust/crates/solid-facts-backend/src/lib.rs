@@ -87,9 +87,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solid_facts::compiler::{
-    AnalysisRequest, COMPILER_FACTS_PROTOCOL, CompilerOptions, ExecutionMap,
-};
+use solid_facts::compiler::{AnalysisRequest, CompilerOptions, ExecutionMap};
 use solid_facts::core::{Generation, SourceHash, Span};
 
 use crate::dialect::Dialect;
@@ -110,16 +108,7 @@ pub use solid_facts::compiler::{CompilerFactsProvider, CompilerProviderError};
 /// text would either error or, worse, silently misparse it; recording the
 /// proven-empty map is the correct fact, not a fallback.
 fn inert_execution_map(source_hash: SourceHash) -> ExecutionMap {
-    ExecutionMap {
-        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
-        source_hash,
-        tracked_regions: Vec::new(),
-        untracked_regions: Vec::new(),
-        discarded_regions: Vec::new(),
-        ownership_regions: Vec::new(),
-        callback_roles: Vec::new(),
-        jsx_operations: Vec::new(),
-    }
+    ExecutionMap::inert(source_hash)
 }
 
 #[derive(Debug, Error)]
@@ -1763,10 +1752,12 @@ fn compiler_cache_key(
     // must never answer for each other. It sits after the path because
     // `FactsCache::invalidate_path` matches on the `path\0` prefix.
     Ok(format!(
-        "{}\0{}\0{}\0{}",
+        "{}\0{}\0{}\0{}\0{}\0{}",
         request.path,
         request.source_hash,
         dialect.id,
+        dialect.compiler_facts_identity,
+        request.compiler_facts_protocol,
         serde_json::to_string(&request.compiler_options)?
     ))
 }
@@ -1791,6 +1782,7 @@ mod tests {
             Ok(ExecutionMap {
                 compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
                 source_hash: request.source_hash.clone(),
+                semantic_model: Default::default(),
                 tracked_regions: vec![],
                 untracked_regions: vec![],
                 discarded_regions: vec![],
@@ -1848,6 +1840,7 @@ mod tests {
             ExecutionMap {
                 compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
                 source_hash: SourceHash::of(source),
+                semantic_model: Default::default(),
                 tracked_regions: vec![],
                 untracked_regions: vec![],
                 discarded_regions: vec![],
@@ -2292,6 +2285,7 @@ mod tests {
 
     static STUB_DIALECT: dialect::Dialect = dialect::Dialect {
         id: "stub-dialect",
+        compiler_facts_identity: "stub-compiler:trace0:test",
         vocabulary: &solid_dialect::Solid2,
         rule_count: 1,
         compiler: || Box::new(RecordingStubCompiler),
@@ -2362,8 +2356,11 @@ mod tests {
             Arc::<str>::from(source),
             CompilerOptions::default(),
         );
+        let stub_key = compiler_cache_key(&STUB_DIALECT, &request).unwrap();
+        assert!(stub_key.contains(STUB_DIALECT.compiler_facts_identity));
+        assert!(stub_key.contains(&format!("\0{}\0", COMPILER_FACTS_PROTOCOL)));
         assert_ne!(
-            compiler_cache_key(&STUB_DIALECT, &request).unwrap(),
+            stub_key,
             compiler_cache_key(dialect::default_dialect(), &request).unwrap(),
             "an execution map cached by one dialect must never answer for another"
         );

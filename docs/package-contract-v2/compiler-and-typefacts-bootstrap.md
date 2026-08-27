@@ -1,5 +1,10 @@
 # Compiler and Type Facts bootstrap
 
+The source bootstrap described here is complete. Its trace-2 compiler pin is a
+historical parity milestone; Phase 4's current trace-3/protocol-2 identity and
+open domains are recorded in the
+[Phase 4 completion report](phase4/2026-08-27-compiler-facts.md).
+
 This work happens immediately after the legacy baseline and before the package-
 contract semantic model is implemented. It changes source ownership and build
 wiring, but it must not change checker findings until an explicitly reviewed

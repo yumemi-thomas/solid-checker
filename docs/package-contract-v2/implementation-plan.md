@@ -218,6 +218,14 @@ work into an independent upstream contribution.
 **Exit:** compiler-controlled execution is established by reconciled lowering,
 not source-shape prediction.
 
+**Status 2026-08-27:** complete. Items 43-54 and the exit condition are
+implemented by Solid 2 semantic trace version 3 and checker compiler-facts
+protocol 2. Exact identities, scope proof, verification evidence, and remaining
+open domains are recorded in the
+[Phase 4 completion report](phase4/2026-08-27-compiler-facts.md); the normative
+boundary is [compiler execution facts](phase4/compiler-execution-facts.md).
+No upstream Solid pull request was opened.
+
 ## Phase 5 — Normalized semantic model
 
 55. Implement local `KnowledgeSet` completeness.
