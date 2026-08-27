@@ -38,6 +38,12 @@ export interface ResolvedImport {
    * the one claim here that could fail open.
    */
   resolvedPath?: string
+  /** Compiler-selected source/implementation redirect, when distinct. */
+  includedPath?: string
+  /** Pre-realpath package spelling recorded for a symlinked resolution. */
+  symlinkPath?: string
+  /** Exact resolver extension such as `.js`, `.d.ts`, or `.json`. */
+  extension?: string
   /**
    * `name` of the nearest package.json above `resolvedPath`. Absent or empty
    * means that manifest declares none, which is never read as a disagreement:
@@ -45,12 +51,16 @@ export interface ResolvedImport {
    * beside its output.
    */
   packageName?: string
+  /** Version from the same nearest owning manifest as `packageName`. */
+  packageVersion?: string
   packageManifest?: string
   /**
    * The package name the resolver itself recorded for this specifier, which can
    * differ from `packageName` for a subpath export or a nested install.
    */
   resolverPackageName?: string
+  /** Version recorded by the resolver's own package identity. */
+  resolverPackageVersion?: string
 }
 
 export interface ResolvedImportFile {

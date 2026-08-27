@@ -11,148 +11,15 @@ use solid_reactive_ir::contract_semantics::AcceptedContract;
 use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
 use thiserror::Error;
 
-use crate::contract_document_v2;
+use crate::{artifact_resolution::select_and_bind, contract_document_v2};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ResolutionAuthority {
-    HostTypeFacts,
-    StandalonePackageResolver,
-}
-
-/// Exact artifact selected by a real resolver. Friendly environment labels
-/// are intentionally absent: selection is identity and trace based.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ResolvedImport {
-    pub specifier: String,
-    pub importer: String,
-    pub requested_entrypoint: String,
-    pub package_name: String,
-    pub package_version: String,
-    pub package_integrity: String,
-    pub package_manifest: String,
-    pub runtime: ResolvedFile,
-    pub declarations: ResolvedFile,
-    pub dependency_closure_digest: String,
-    pub transform: Option<ResolvedFile>,
-    pub export_trace: Vec<ResolutionTraceStep>,
-    pub authority: ResolutionAuthority,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ResolvedFile {
-    pub path: String,
-    pub digest: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ResolutionTraceStep {
-    pub condition: String,
-    pub target: String,
-}
-
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct ImportRequest {
-    pub specifier: String,
-    pub importer: String,
-    pub export_conditions: Vec<String>,
-}
-
-pub trait ArtifactResolver {
-    fn resolve(&self, request: &ImportRequest)
-    -> Result<ResolvedImport, ArtifactResolutionFailure>;
-}
-
-#[derive(Clone, Debug, Error, Eq, PartialEq)]
-pub enum ArtifactResolutionFailure {
-    #[error("the resolver did not attest this exact import")]
-    Unattested,
-    #[error("the resolver returned more than one result for this exact import")]
-    Ambiguous,
-    #[error("the resolved import is structurally invalid: {reason}")]
-    Invalid { reason: String },
-}
-
-/// Adapter for exact resolutions originating in the configured Type Facts
-/// session. Duplicate rows are retained as ambiguity rather than overwritten.
-#[derive(Clone, Debug, Default)]
-pub struct HostResolutionAdapter {
-    rows: BTreeMap<ImportRequest, Vec<ResolvedImport>>,
-}
-
-impl HostResolutionAdapter {
-    #[must_use]
-    pub fn from_rows(rows: impl IntoIterator<Item = (ImportRequest, ResolvedImport)>) -> Self {
-        Self {
-            rows: collect_resolution_rows(rows, ResolutionAuthority::HostTypeFacts),
-        }
-    }
-}
-
-impl ArtifactResolver for HostResolutionAdapter {
-    fn resolve(
-        &self,
-        request: &ImportRequest,
-    ) -> Result<ResolvedImport, ArtifactResolutionFailure> {
-        exact_resolution(&self.rows, request)
-    }
-}
-
-/// Adapter for exact resolutions produced by the standalone, standards-
-/// compatible package resolver. Resolution itself remains owned by package
-/// acquisition; this adapter prevents it from becoming a second contract
-/// selector.
-#[derive(Clone, Debug, Default)]
-pub struct StandaloneResolutionAdapter {
-    rows: BTreeMap<ImportRequest, Vec<ResolvedImport>>,
-}
-
-impl StandaloneResolutionAdapter {
-    #[must_use]
-    pub fn from_rows(rows: impl IntoIterator<Item = (ImportRequest, ResolvedImport)>) -> Self {
-        Self {
-            rows: collect_resolution_rows(rows, ResolutionAuthority::StandalonePackageResolver),
-        }
-    }
-}
-
-impl ArtifactResolver for StandaloneResolutionAdapter {
-    fn resolve(
-        &self,
-        request: &ImportRequest,
-    ) -> Result<ResolvedImport, ArtifactResolutionFailure> {
-        exact_resolution(&self.rows, request)
-    }
-}
-
-fn collect_resolution_rows(
-    rows: impl IntoIterator<Item = (ImportRequest, ResolvedImport)>,
-    authority: ResolutionAuthority,
-) -> BTreeMap<ImportRequest, Vec<ResolvedImport>> {
-    let mut collected: BTreeMap<_, Vec<_>> = BTreeMap::new();
-    for (request, mut resolved) in rows {
-        resolved.authority = authority;
-        collected.entry(request).or_default().push(resolved);
-    }
-    collected
-}
-
-fn exact_resolution(
-    rows: &BTreeMap<ImportRequest, Vec<ResolvedImport>>,
-    request: &ImportRequest,
-) -> Result<ResolvedImport, ArtifactResolutionFailure> {
-    match rows.get(request).map(Vec::as_slice) {
-        None | Some([]) => Err(ArtifactResolutionFailure::Unattested),
-        Some([resolved])
-            if resolved.specifier == request.specifier && resolved.importer == request.importer =>
-        {
-            Ok(resolved.clone())
-        }
-        Some([_]) => Err(ArtifactResolutionFailure::Invalid {
-            reason: "the result does not identify the requested specifier and importer".into(),
-        }),
-        Some(_) => Err(ArtifactResolutionFailure::Ambiguous),
-    }
-}
+pub use crate::artifact_resolution::{
+    AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure, ArtifactResolver,
+    ArtifactResolverChain, ClosureEntry, ClosureFileRole, ClosureHazard, ClosureHazardKind,
+    ClosureInput, ClosureManifest, HostResolutionAdapter, ImportRequest, ResolutionAuthority,
+    ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget,
+    ResolvedFile, ResolvedImport, StandaloneResolutionAdapter, TypeFactsResolutionAdapter,
+};
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct EvidenceKey(String);
@@ -311,7 +178,7 @@ struct WireVerifier {
 pub fn load_accepted_contract(
     document_bytes: &[u8],
     receipt: &[u8],
-    _import: &ResolvedImport,
+    import: &ResolvedImport,
 ) -> Result<AcceptedContract, ContractFailure> {
     let document = contract_document_v2::decode(document_bytes)?;
     let receipt: WireReceipt =
@@ -348,12 +215,19 @@ pub fn load_accepted_contract(
     }
 
     let normalized = document.normalize()?;
+    let selected = select_and_bind(&normalized, import)?;
     let _ = (
-        normalized.semantic_digest(),
+        selected.semantic_digest(),
         receipt.verifier.build,
         receipt.verifier.policy,
     );
     Err(ContractFailure::AcceptanceUnavailable)
+}
+
+pub(crate) fn invalid_identity(reason: impl Into<String>) -> ContractFailure {
+    ContractFailure::IdentityMismatch {
+        reason: reason.into(),
+    }
 }
 
 fn is_sha256_digest(value: &str) -> bool {

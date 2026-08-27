@@ -78,17 +78,27 @@ struct HostResolvedImport {
     resolution: String,
     #[serde(default)]
     resolved_path: String,
+    #[serde(default)]
+    included_path: String,
+    #[serde(default)]
+    symlink_path: String,
+    #[serde(default)]
+    extension: String,
     /// The `name` of the nearest `package.json` above `resolvedPath`. Absent or
     /// empty means the manifest declares none, which is never read as a
     /// disagreement.
     #[serde(default)]
     package_name: String,
     #[serde(default)]
+    package_version: String,
+    #[serde(default)]
     package_manifest: String,
     /// The package name the host's resolver itself recorded for this
     /// specifier, which can differ from `packageName`.
     #[serde(default)]
     resolver_package_name: String,
+    #[serde(default)]
+    resolver_package_version: String,
 }
 
 impl HostResolvedImports {
@@ -149,14 +159,23 @@ impl HostResolvedImports {
                     text: import.text.into(),
                     resolution,
                     resolved_path: import.resolved_path.into(),
+                    included_path: import.included_path.into(),
+                    symlink_path: import.symlink_path.into(),
+                    extension: import.extension.into(),
                     package_name: Some(import.package_name)
                         .filter(|name| !name.is_empty())
+                        .map(Into::into),
+                    package_version: Some(import.package_version)
+                        .filter(|version| !version.is_empty())
                         .map(Into::into),
                     package_manifest: Some(import.package_manifest)
                         .filter(|path| !path.is_empty())
                         .map(Into::into),
                     resolver_package_name: Some(import.resolver_package_name)
                         .filter(|name| !name.is_empty())
+                        .map(Into::into),
+                    resolver_package_version: Some(import.resolver_package_version)
+                        .filter(|version| !version.is_empty())
                         .map(Into::into),
                 });
             }

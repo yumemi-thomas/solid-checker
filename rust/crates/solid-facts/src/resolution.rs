@@ -55,12 +55,23 @@ pub struct AttestedImport {
     /// walked a symlink. Empty exactly when `resolution` is
     /// [`ImportResolution::Unresolved`].
     pub resolved_path: Arc<str>,
+    /// The file the compiler actually included when it redirected the
+    /// resolver-selected file (for example a project-reference declaration
+    /// output) to its source input. Empty when no redirect occurred.
+    pub included_path: Arc<str>,
+    /// The pre-realpath spelling recorded by the resolver for a symlinked
+    /// package target. Empty when resolution observed no symlink divergence.
+    pub symlink_path: Arc<str>,
+    /// Exact resolver extension (`.js`, `.d.ts`, and so on).
+    pub extension: Arc<str>,
     /// The `name` of the nearest `package.json` above `resolved_path`, and
     /// `None` when there is no such manifest or it declares no name. An
     /// unnamed nested manifest — the `{"type":"module"}` one a published
     /// package ships beside its ESM output — is routine, so an absent name is
     /// never read as a disagreement.
     pub package_name: Option<CompactString>,
+    /// Version from the same nearest owning manifest as `package_name`.
+    pub package_version: Option<CompactString>,
     /// The nearest `package.json` above `resolved_path`, and `None` when there
     /// is none.
     pub package_manifest: Option<Arc<str>>,
@@ -72,6 +83,8 @@ pub struct AttestedImport {
     /// contract against a package must say which of the two it means — see
     /// `solid_reactive_ir::contracts`, which says so at the comparison.
     pub resolver_package_name: Option<CompactString>,
+    /// Version recorded by the resolver's own package identity.
+    pub resolver_package_version: Option<CompactString>,
 }
 
 /// The attested resolution of every import specifier in the files the answer
@@ -119,6 +132,15 @@ impl AttestedImportIndex {
     #[must_use]
     pub fn specifiers(&self) -> usize {
         self.by_file.values().map(Vec::len).sum()
+    }
+
+    /// Every attested row with its exact importing-file identity. This is the
+    /// host/Type Facts adapter input for artifact resolution; order is not
+    /// semantic and callers that serialize it must canonicalize explicitly.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &AttestedImport)> {
+        self.by_file
+            .iter()
+            .flat_map(|(path, imports)| imports.iter().map(move |import| (path.as_ref(), import)))
     }
 
     /// Whether this file's resolutions were answered at all.
@@ -172,9 +194,14 @@ mod tests {
             text: text.into(),
             resolution: ImportResolution::NodeModules,
             resolved_path: "/p/node_modules/pkg/index.d.ts".into(),
+            included_path: "".into(),
+            symlink_path: "".into(),
+            extension: ".d.ts".into(),
             package_name: Some("pkg".into()),
+            package_version: Some("1.0.0".into()),
             package_manifest: Some("/p/node_modules/pkg/package.json".into()),
             resolver_package_name: Some("pkg".into()),
+            resolver_package_version: Some("1.0.0".into()),
         }
     }
 
@@ -237,5 +264,29 @@ mod tests {
             index.specifier("/p/a.ts", Span::new(0, 40), "pkg"),
             SpecifierAttestation::Unattested
         );
+    }
+
+    #[test]
+    fn ordinary_analysis_preserves_every_resolver_identity_field() {
+        let mut index = AttestedImportIndex::default();
+        let mut row = import(20, 25, "pkg");
+        row.included_path = "/p/packages/pkg/src/index.ts".into();
+        row.symlink_path = "/p/node_modules/pkg/index.d.ts".into();
+        index.insert_file("/p/a.ts", vec![row]);
+
+        let rows = index.iter().collect::<Vec<_>>();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "/p/a.ts");
+        assert_eq!(
+            rows[0].1.included_path.as_ref(),
+            "/p/packages/pkg/src/index.ts"
+        );
+        assert_eq!(
+            rows[0].1.symlink_path.as_ref(),
+            "/p/node_modules/pkg/index.d.ts"
+        );
+        assert_eq!(rows[0].1.extension.as_ref(), ".d.ts");
+        assert_eq!(rows[0].1.package_version.as_deref(), Some("1.0.0"));
+        assert_eq!(rows[0].1.resolver_package_version.as_deref(), Some("1.0.0"));
     }
 }

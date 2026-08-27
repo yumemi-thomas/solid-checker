@@ -166,6 +166,26 @@ normalizer. The public loader returns `AcceptanceUnavailable` after successful
 normalization until Phase 11; analyzer findings and bundled legacy contracts
 therefore remain unchanged.
 
+`solid-facts-backend::artifact_resolution` owns the Phase 7 selection seam.
+Host, Type Facts, and standalone acquisition all produce one exact
+`ResolvedImport`; authority falls through in that order only when the stronger
+source is unattested. An invalid or ambiguous stronger answer refuses the
+import. The record separates runtime and declaration roots, branch traces, and
+per-export targets, and binds a normalized proposal only when package,
+manifest, artifact, declarations, closure, transform, entrypoint, and trace
+agree with exactly one case.
+
+The same module owns canonical dependency closure identity. Typed,
+length-delimited hashing covers package-relative runtime/declaration files,
+manifests and resolution inputs, literal chunks, materialized generated output
+and transform identity, accepted dependency-contract edges, and explicit
+opaque hazards. A hazard weakens only its named exports and immediate claim
+domains; it cannot erase known positives or open an unrelated recursive leaf.
+Ordinary Type Facts and WASM-host attestation preserve included paths, symlink
+spellings, extensions, and both owning/resolver package versions, but current
+legacy analyzer consumers remain on their existing contract path until the
+scheduled consumer migration.
+
 ## How the Solid 1.x dialect landed
 
 The sibling-directory shape sketched here before the 1.x dialect existed is

@@ -2895,9 +2895,14 @@ mod tests {
                 text: module.into(),
                 resolution,
                 resolved_path: resolved_path.into(),
+                included_path: "".into(),
+                symlink_path: "".into(),
+                extension: "".into(),
                 package_name: package_name.map(Into::into),
+                package_version: None,
                 package_manifest: None,
                 resolver_package_name: resolver_package_name.map(Into::into),
+                resolver_package_version: None,
             }],
         );
         let mut facts = empty_project(1);

@@ -7588,3 +7588,34 @@ content, receipt acceptance, generator cutover, bundled-contract migration, and
 analyzer consumption remain open in their scheduled phases. No open runtime or
 compiler premise from the Phase 5 Solid 2 conformance matrix was converted into
 negative proof.
+
+## 2026-08-27 — Artifact resolution binds exact closure or refuses the case
+
+Phase 7 adds one exact artifact-resolution boundary without moving legacy
+analyzer consumers forward. Ordinary Type Facts and WASM-host import
+attestations now preserve the compiler-included path, pre-realpath symlink
+spelling, resolver extension, owning package version, and resolver package
+version instead of discarding them. The replacement contract loader compares
+the resolved package, manifest, runtime, declarations, closure, transform,
+entrypoint, and ordered runtime/types branches against normalized artifact
+cases and requires exactly one match. Runtime and declaration reexports bind to
+their independently resolved module/export identities.
+
+Closure identity is canonical across input order but changes with a file role,
+package-relative path, bytes, accepted dependency-contract edge, generated
+output, transform, or opaque frontier. Nonliteral dynamic loading, `eval`,
+native code, opaque WASM, mutable unbound globals, unmaterialized transforms,
+and unaccepted external dependencies cannot support closure. They weaken only
+their named exports and immediate claim domains: complete negatives become
+unknown, complete positives become partial, and known positives and unrelated
+siblings survive.
+
+This does not reduce the current SC9005/SC9012 corpus because Phase 12 still
+owns analyzer consumer migration and Phase 11 still owns acceptance. It closes
+the selection abstraction required for those later reductions. Nonliteral
+dynamic loading, runtime-generated module names, `eval`, native addons, opaque
+WASM, mutable globals with no bound declaration, transforms without stable
+bytes and identity, and external dependencies without an accepted contract
+digest remain exact fail-closed frontiers. The standalone resolver also refuses
+missing or ambiguous exports, invalid targets, escaping symlinks, and stale
+hashes; none is interpreted as negative package behavior.

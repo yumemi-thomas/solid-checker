@@ -309,6 +309,17 @@ stable public-schema cutover occurred.
 **Exit:** selected semantics are identical to actual artifact resolution or the
 case is refused.
 
+**Status 2026-08-27:** complete. Items 81-91 and the exit condition are
+implemented by `solid-facts-backend::artifact_resolution` and the standalone
+package-acquisition resolver. Exact host/Type Facts provenance is retained in
+ordinary analysis; conditional export resolution, independent runtime/types
+bindings, canonical closure identity, opaque-frontier weakening, and
+zero/multiple/stale-identity refusal are covered by focused adversarial tests.
+The exact boundary, test results, and remaining fail-closed domains are recorded
+in the [Phase 7 completion report](phase7/2026-08-27-artifact-resolution-closure.md).
+The proposal generator, proof/receipt authority, bundled contracts, and analyzer
+contract consumers remain unchanged for their scheduled later phases.
+
 ## Phase 8 — Proposal generator refactor
 
 92. Move semantic proposal construction behind the Rust module interface.

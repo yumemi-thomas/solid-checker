@@ -93,9 +93,11 @@ Conditional example:
 
 The resolution trace is provenance for an already resolved artifact. The two
 wire branches normalize to ordered semantic steps named `runtime` and `types`;
-the full independently attested export trace and exact target binding land in
-Phase 7. The contract does not implement package-export resolution by matching
-host/mode tokens. Exactly one case must agree with the actual resolved import.
+Phase 7 independently attests the full runtime/types branch traces and exact
+per-export target bindings, then replaces these provisional public-name
+bindings at the backend normalization boundary. The contract does not
+implement package-export resolution by matching host/mode tokens. Exactly one
+case must agree with the actual resolved import.
 Artifact-case IDs are derived from exact entrypoint, trace, artifact,
 declaration, transform, and closure identities at normalization and are not a
 wire field.
