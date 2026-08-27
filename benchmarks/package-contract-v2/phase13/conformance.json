@@ -1,0 +1,391 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-2-rc3-normalized-conformance-corpus",
+  "semanticModelVersion": 1,
+  "authority": {
+    "solidVersion": "2.0.0-rc.3",
+    "gitHead": "af6fee86e6dcfbf41869da2c607c82b1fd0939ce",
+    "publishedAudit": "benchmarks/package-contract-v2/phase0/rc3/audit.json",
+    "artifactRule": "Exact manifest, entrypoint, runtime, declaration, resolution trace, and dependency-closure identity are required together."
+  },
+  "externalAuthorities": [
+    {
+      "name": "@formkit/auto-animate",
+      "version": "0.10.0",
+      "integrity": "sha512-KGomRttjUfORuPUaR/ZGQw+6xfMrTM+sxnILv7JAd9AmabU9rg9i6gF/iC0Ih+QpKCubJpCA/1DX9UHKE8cX+A==",
+      "manifestSha256": "7413f50676f5e08e24c84cd1ae6cba0cf163bb5b2021997d6b4d6c905f4e4d85",
+      "entrypoint": "./solid",
+      "runtime": { "path": "solid/index.mjs", "sha256": "0e0bdd64956a915698f898a16adf6edb1c031cacf1f7608845781ee0a7246d10" },
+      "declarations": { "path": "solid/index.d.ts", "sha256": "604e208469e4dc03235da3807d5f2e1e0507f163b040b7ac11fadb70d7520920" },
+      "refusalPremise": "The exact Solid adapter imports onMount and onCleanup from solid-js; those exports are absent from published RC.3."
+    }
+  ],
+  "closureIdentities": {
+    "signals": {
+      "digest": "f14cb312787bee8c09948a5beb8cf35956519c5846e36857daf1c6609ad7462c",
+      "components": [
+        { "name": "@solidjs/signals", "version": "2.0.0-rc.3", "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==", "filesManifestSha256": "85164c097c624b2d6f12a5421271ec931f8d5f3f8b254b7ab27bef89f94c8729" }
+      ]
+    },
+    "solid": {
+      "digest": "626ff782ace96d12380cc222f22c537ada35b87bdc681416ed59aba527e39bbe",
+      "components": [
+        { "name": "@solidjs/signals", "version": "2.0.0-rc.3", "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==", "filesManifestSha256": "85164c097c624b2d6f12a5421271ec931f8d5f3f8b254b7ab27bef89f94c8729" },
+        { "name": "csstype", "version": "3.2.3", "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==", "filesManifestSha256": "aeecb0201c5db7514fb18f8d53e3bf24e2485412200b714406bb9a6d2c014b6f" },
+        { "name": "seroval", "version": "1.5.6", "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==", "filesManifestSha256": "e2f0683929c973a9393ef1e27e32a80277fc2f09ec0dc8f9b95229360ecaa54d" },
+        { "name": "seroval-plugins", "version": "1.5.6", "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==", "filesManifestSha256": "9d66eb623953add2f355d6c09446317f29e761a2c7b698d527e4993ffd98b9b2" },
+        { "name": "solid-js", "version": "2.0.0-rc.3", "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==", "filesManifestSha256": "b00731b802f4f2a600191b76319b65a2217bda01cfae7836451fa3fc4ae20adc" }
+      ]
+    },
+    "web": {
+      "digest": "8ffc3f3c194f3408a9e46f020b7729170a0b42fc6bd4108cb977b88e725873af",
+      "components": [
+        { "name": "@solidjs/signals", "version": "2.0.0-rc.3", "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==", "filesManifestSha256": "85164c097c624b2d6f12a5421271ec931f8d5f3f8b254b7ab27bef89f94c8729" },
+        { "name": "@solidjs/web", "version": "2.0.0-rc.3", "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==", "filesManifestSha256": "08ec383f96620df6cf28b30a9fcff3175ef6b35021d24a8c3a8a25e2798fc64b" },
+        { "name": "csstype", "version": "3.2.3", "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==", "filesManifestSha256": "aeecb0201c5db7514fb18f8d53e3bf24e2485412200b714406bb9a6d2c014b6f" },
+        { "name": "seroval", "version": "1.5.6", "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==", "filesManifestSha256": "e2f0683929c973a9393ef1e27e32a80277fc2f09ec0dc8f9b95229360ecaa54d" },
+        { "name": "seroval-plugins", "version": "1.5.6", "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==", "filesManifestSha256": "9d66eb623953add2f355d6c09446317f29e761a2c7b698d527e4993ffd98b9b2" },
+        { "name": "solid-js", "version": "2.0.0-rc.3", "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==", "filesManifestSha256": "b00731b802f4f2a600191b76319b65a2217bda01cfae7836451fa3fc4ae20adc" }
+      ]
+    },
+    "autoAnimateSolid": {
+      "digest": "7011b9171c91c3b6db26f1c5587928cc6310ccb8dc2f02e56ea242bb503a4c7c",
+      "components": [
+        { "name": "@formkit/auto-animate", "version": "0.10.0", "integrity": "sha512-KGomRttjUfORuPUaR/ZGQw+6xfMrTM+sxnILv7JAd9AmabU9rg9i6gF/iC0Ih+QpKCubJpCA/1DX9UHKE8cX+A==", "filesManifestSha256": "d2490b2ab3a9bd225d517ff1bd197644f9731fc72be54f658890659ff734a490" },
+        { "name": "@solidjs/signals", "version": "2.0.0-rc.3", "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==", "filesManifestSha256": "85164c097c624b2d6f12a5421271ec931f8d5f3f8b254b7ab27bef89f94c8729" },
+        { "name": "csstype", "version": "3.2.3", "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==", "filesManifestSha256": "aeecb0201c5db7514fb18f8d53e3bf24e2485412200b714406bb9a6d2c014b6f" },
+        { "name": "seroval", "version": "1.5.6", "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==", "filesManifestSha256": "e2f0683929c973a9393ef1e27e32a80277fc2f09ec0dc8f9b95229360ecaa54d" },
+        { "name": "seroval-plugins", "version": "1.5.6", "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==", "filesManifestSha256": "9d66eb623953add2f355d6c09446317f29e761a2c7b698d527e4993ffd98b9b2" },
+        { "name": "solid-js", "version": "2.0.0-rc.3", "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==", "filesManifestSha256": "b00731b802f4f2a600191b76319b65a2217bda01cfae7836451fa3fc4ae20adc" }
+      ]
+    }
+  },
+  "requiredFixtureKinds": ["positive", "negative", "partial", "refusal", "consumer", "typescriptOracle"],
+  "closureProofFamilies": [
+    "package-identity",
+    "manifest-entrypoint",
+    "export-resolution",
+    "artifact-declarations",
+    "export-identity",
+    "module-closure",
+    "selected-signature",
+    "argument-binding",
+    "rest-spread-coverage",
+    "callable-path",
+    "operation-reachability",
+    "operation-cardinality",
+    "recursive-value-shape",
+    "guard-partition",
+    "compiler-reconciliation",
+    "accepted-dependency-composition",
+    "domain-exhaustiveness",
+    "probe-consistency"
+  ],
+  "rows": [
+    {
+      "id": "split-create-effect",
+      "apis": ["createEffect"],
+      "authorityCases": ["solid-js:browser-development-import"],
+      "closureIdentity": "solid",
+      "declarationEvidence": [{ "path": "solid-js/types/index.d.ts", "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740", "contains": "createEffect" }],
+      "runtimeEvidence": [{ "path": "solid-js/dist/dev.js", "sha256": "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18", "contains": "createEffect" }],
+      "normalized": { "operations": ["initial-compute", "repeated-compute", "queued-apply", "queued-error", "replace-cleanup", "dispose-effect"], "edges": ["data", "error", "cleanup", "lifetime"], "resources": ["effect-owner", "effect-cleanup"], "guards": ["defer", "success", "error", "result-protocol"], "openDomains": ["throws:error-payload"] },
+      "proof": { "families": ["selected-signature", "argument-binding", "operation-reachability", "operation-cardinality", "guard-partition", "domain-exhaustiveness", "probe-consistency"], "probeScenario": "cleanup-lifecycle" },
+      "observation": { "authority": "node-exact-published-browser-development", "events": ["compute:0", "after-create", "apply:0", "compute:1", "cleanup:0", "apply:1", "cleanup:1"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "createEffect(() => source(), value => consume(value));", "expect": "initial compute and possible queued apply" },
+        "negative": { "source": "createEffect(() => 1, () => undefined, { defer: true });", "expect": "no guaranteed initial apply" },
+        "partial": { "source": "createEffect(() => dynamicResult(), value => consume(value));", "expect": "result protocol leaf remains open" },
+        "refusal": { "source": "createEffect(escapedCompute, escapedBundle);", "expect": "uncertifiable callback and result domains" },
+        "consumer": { "source": "query.possibleOperations(\"createEffect\")", "expect": "compute/apply remain distinct" },
+        "typescriptOracle": { "source": "import { createEffect } from 'solid-js'; createEffect(() => 1, value => { void value; });", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "tracked-effect-on-settled",
+      "apis": ["createTrackedEffect", "onSettled"],
+      "authorityCases": ["@solidjs/signals:development-import"],
+      "closureIdentity": "signals",
+      "declarationEvidence": [{ "path": "@solidjs/signals/dist/types/signals.d.ts", "sha256": "c3dd3b2a247183379baaddf140fcdc67e3ac563a97b9af3151646a40471de068", "contains": "createTrackedEffect" }],
+      "runtimeEvidence": [{ "path": "@solidjs/signals/dist/dev.js", "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79", "contains": "createTrackedEffect" }],
+      "normalized": { "operations": ["callback", "returned-cleanup"], "edges": ["cleanup"], "resources": ["createTrackedEffect-leaf-owner", "onSettled-leaf-owner"], "guards": ["owned-versus-unowned"], "openDomains": ["onSettled:unowned-cleanup-lifetime"] },
+      "proof": { "families": ["callable-path", "operation-reachability", "operation-cardinality", "recursive-value-shape", "probe-consistency"], "probeScenario": "cleanup-lifecycle" },
+      "observation": { "authority": "node-exact-published-browser-development", "events": ["tracked:0", "settled", "tracked-cleanup", "tracked:1", "settled-cleanup"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "createTrackedEffect(() => () => disposeWork());", "expect": "tracked leaf and callback cleanup" },
+        "negative": { "source": "onSettled(() => undefined);", "expect": "no invented child-owner capability" },
+        "partial": { "source": "const register = condition ? onSettled : escaped; register(callback);", "expect": "only selected helper branch remains possible" },
+        "refusal": { "source": "escaped(onSettled, callback);", "expect": "ambient owner relation uncertifiable" },
+        "consumer": { "source": "query.ownerRequirements(\"createTrackedEffect\")", "expect": "owner requirement, production, and kind remain separate" },
+        "typescriptOracle": { "source": "import { createTrackedEffect, onSettled } from 'solid-js'; createTrackedEffect(() => undefined); onSettled(() => undefined);", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "batching-flush",
+      "apis": ["flush"],
+      "authorityCases": ["@solidjs/signals:development-import"],
+      "closureIdentity": "signals",
+      "declarationEvidence": [{ "path": "@solidjs/signals/dist/types/core/scheduler.d.ts", "sha256": "0928f6197634c707f5fafe92b26a4acfdc3aaa46edcf6c5cb29794146b4c2988", "contains": "flush" }],
+      "runtimeEvidence": [{ "path": "@solidjs/signals/dist/dev.js", "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79", "contains": "function flush" }],
+      "normalized": { "operations": ["stage-write", "commit-invalidation", "flush-callback", "flush-drain"], "edges": ["invalidates", "orders"], "resources": [], "guards": ["callback-overload", "execution-context"], "openDomains": ["throws:callback"] },
+      "proof": { "families": ["selected-signature", "operation-reachability", "operation-cardinality", "guard-partition", "probe-consistency"], "probeScenario": "operation" },
+      "observation": { "authority": "source-plus-controlled-flush-trace", "events": ["callback-same-stack", "drain-finally"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "flush(() => readSettledValue());", "expect": "same-stack callback before drain" },
+        "negative": { "source": "const value = readSettledValue();", "expect": "no explicit flush barrier" },
+        "partial": { "source": "flush(dynamicCallback);", "expect": "callback throw leaf open" },
+        "refusal": { "source": "unknownScheduler.flush(callback);", "expect": "not identified by property name" },
+        "consumer": { "source": "query.causalEdges(\"flush\")", "expect": "write, invalidation, and drain remain ordered nodes" },
+        "typescriptOracle": { "source": "import { flush } from 'solid-js'; const value: number = flush(() => 1); void value;", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "control-flow-callbacks",
+      "apis": ["For", "Repeat", "Show", "Match"],
+      "authorityCases": ["solid-js:browser-development-import"],
+      "closureIdentity": "solid",
+      "declarationEvidence": [{ "path": "solid-js/types/client/flow.d.ts", "sha256": "81af6e73951ea01b3c28b2c2ded7537522b0ebe67575e33f23ba10aed2f1148a", "contains": "Repeat" }],
+      "runtimeEvidence": [{ "path": "solid-js/dist/dev.js", "sha256": "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18", "contains": "function Repeat" }],
+      "normalized": { "operations": ["raw-child", "accessor-child"], "edges": [], "resources": ["row-owner"], "guards": ["keyed-mode", "callback-shape"], "openDomains": ["dynamic-keyed-selection"] },
+      "proof": { "families": ["selected-signature", "argument-binding", "callable-path", "recursive-value-shape", "guard-partition", "domain-exhaustiveness"], "probeScenario": "operation" },
+      "observation": { "authority": "exact-declarations-and-runtime-callback-arguments", "events": ["raw-item", "accessor-index"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "For({ each: rows, children: (row, index) => consume(row, index) });", "expect": "declared callback variant selected" },
+        "negative": { "source": "Show({ when: true, children: 'plain' });", "expect": "no callback invocation" },
+        "partial": { "source": "Repeat({ each: rows, keyed: dynamicKey, children });", "expect": "monotone join of possible callback shapes" },
+        "refusal": { "source": "const Control = registry[name]; Control(props);", "expect": "dynamic component identity uncertifiable" },
+        "consumer": { "source": "query.callbackInputs(\"Repeat\", callFacts)", "expect": "finite guard selects exact raw/accessor leaves" },
+        "typescriptOracle": { "source": "import { For, Repeat, Show, Match } from 'solid-js'; void [For, Repeat, Show, Match];", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "async-computations",
+      "apis": ["createMemo"],
+      "authorityCases": ["@solidjs/signals:development-import"],
+      "closureIdentity": "signals",
+      "declarationEvidence": [{ "path": "@solidjs/signals/dist/types/signals.d.ts", "sha256": "c3dd3b2a247183379baaddf140fcdc67e3ac563a97b9af3151646a40471de068", "contains": "AsyncIterable" }],
+      "runtimeEvidence": [{ "path": "@solidjs/signals/dist/dev.js", "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79", "contains": "Symbol.asyncIterator" }],
+      "normalized": { "operations": ["compute", "emission", "cancel"], "edges": ["data", "lifetime"], "resources": ["async-computation"], "guards": ["result-protocol"], "openDomains": ["rejection-payload"] },
+      "proof": { "families": ["callable-path", "operation-reachability", "operation-cardinality", "recursive-value-shape", "guard-partition", "probe-consistency"], "probeScenario": "repeated-async-iterable" },
+      "observation": { "authority": "exact-runtime-stream-state-machine", "events": ["pending", "emission", "emission", "iterator-return"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "createMemo(async function* () { yield 1; yield 2; });", "expect": "repeated async emissions and disposal" },
+        "negative": { "source": "createMemo(() => 1);", "expect": "plain result has no stream resource" },
+        "partial": { "source": "createMemo(() => dynamicProtocol());", "expect": "plain, Promise, and AsyncIterable alternatives stay possible" },
+        "refusal": { "source": "createMemo(escapedComputation);", "expect": "unresolved result protocol leaf" },
+        "consumer": { "source": "query.resourceStates(\"async-computation\")", "expect": "pending, settled, errored, and cancelled remain independent" },
+        "typescriptOracle": { "source": "import { createMemo } from 'solid-js'; const value = createMemo(() => Promise.resolve(1)); void value;", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "loading-refresh",
+      "apis": ["Loading", "isPending", "latest", "refresh", "affects"],
+      "authorityCases": ["solid-js:browser-development-import", "@solidjs/signals:development-import"],
+      "closureIdentity": "solid",
+      "declarationEvidence": [{ "path": "@solidjs/signals/dist/types/affects.d.ts", "sha256": "1b983220f67f346b59c1f045e9092c4adf666806db365574fed5d46377d00eae", "contains": "affects" }],
+      "runtimeEvidence": [{ "path": "@solidjs/signals/dist/dev.js", "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79", "contains": "function refresh" }],
+      "normalized": { "operations": ["pending-read", "latest-read", "refresh-target", "affects-key"], "edges": ["invalidates", "data"], "resources": ["async-target", "loading-boundary"], "guards": ["refresh-brand", "store-key", "server-artifact"], "openDomains": ["opaque-target-provenance"] },
+      "proof": { "families": ["artifact-declarations", "recursive-value-shape", "operation-reachability", "accepted-dependency-composition", "domain-exhaustiveness"], "probeScenario": "transition-lifecycle" },
+      "observation": { "authority": "exact-runtime-state-transitions", "events": ["initial-loading", "settled", "revalidation-pending", "latest-settled"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "refresh(refreshable); affects(store, 'name');", "expect": "target and key relations" },
+        "negative": { "source": "latest(() => stableValue);", "expect": "no refresh invalidation" },
+        "partial": { "source": "refresh(dynamicTarget);", "expect": "target capability remains local and open" },
+        "refusal": { "source": "helpers[name](target);", "expect": "dynamic helper identity uncertifiable" },
+        "consumer": { "source": "query.capabilities(target)", "expect": "readable, pending-aware, and refreshable stay independent" },
+        "typescriptOracle": { "source": "import { isPending, latest } from 'solid-js'; const p: boolean = isPending(() => 1); const v: number = latest(() => 1); void [p, v];", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "actions-optimism",
+      "apis": ["action", "createOptimistic", "createOptimisticStore"],
+      "authorityCases": ["@solidjs/signals:development-import"],
+      "closureIdentity": "signals",
+      "declarationEvidence": [{ "path": "@solidjs/signals/dist/types/core/action.d.ts", "sha256": "3643790df75007a043a3ee2cf1bde96eb093ba5ef3edcfe16a827111e3bc1fab", "contains": "action" }],
+      "runtimeEvidence": [{ "path": "@solidjs/signals/dist/dev.js", "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79", "contains": "optimistic" }],
+      "normalized": { "operations": ["invoke-action", "optimistic-write", "yield-resume", "settle-or-revert"], "edges": ["orders", "invalidates", "error"], "resources": ["action-transition", "optimistic-source"], "guards": ["generator-protocol", "server-artifact"], "openDomains": ["opaque-action-helper"] },
+      "proof": { "families": ["callable-path", "operation-reachability", "operation-cardinality", "accepted-dependency-composition", "probe-consistency"], "probeScenario": "transition-lifecycle" },
+      "observation": { "authority": "exact-runtime-transition-trace", "events": ["transition-active", "optimistic-visible", "yield-resume", "settled-or-reverted"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "const submit = action(async function* () { yield save(); return 1; });", "expect": "Promise result and transition lifecycle" },
+        "negative": { "source": "const plain = async () => 1;", "expect": "no action transition inferred" },
+        "partial": { "source": "const wrapped = dynamicWrapper(generator);", "expect": "transition identity open" },
+        "refusal": { "source": "thirdPartyAction(generator);", "expect": "requires accepted dependency contract" },
+        "consumer": { "source": "query.transitionStates(\"action-transition\")", "expect": "active, settled, and reverted are distinct" },
+        "typescriptOracle": { "source": "import { action, createOptimistic } from 'solid-js'; const run = action(async function* () { return 1; }); const state = createOptimistic(0); void [run, state];", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "stores-projections",
+      "apis": ["createStore", "createProjection", "snapshot", "reconcile"],
+      "authorityCases": ["@solidjs/signals:development-import"],
+      "closureIdentity": "signals",
+      "declarationEvidence": [{ "path": "@solidjs/signals/dist/types/store/index.d.ts", "sha256": "4465d814273b75c09f33c4f0d1cbcc18f916373e68898546439bfa3b0dc0b440", "contains": "createStore" }],
+      "runtimeEvidence": [{ "path": "@solidjs/signals/dist/dev.js", "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79", "contains": "snapshot" }],
+      "normalized": { "operations": ["read-store", "write-draft", "shallow-read", "deep-read", "projection-compute", "projection-emission", "snapshot-read", "reconcile-write"], "edges": ["data", "invalidates"], "resources": ["store", "projection"], "guards": ["constructor-overload", "deep-shallow"], "openDomains": ["projection-rejection-payload"] },
+      "proof": { "families": ["selected-signature", "argument-binding", "recursive-value-shape", "operation-reachability", "operation-cardinality", "domain-exhaustiveness"], "probeScenario": "repeated-async-iterable" },
+      "observation": { "authority": "exact-runtime-store-read-write-trace", "events": ["draft-write", "store-read", "snapshot-plain", "reconcile"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "const [store, setStore] = createStore({ count: 0 }); setStore('count', 1);", "expect": "read-only store and writable sibling" },
+        "negative": { "source": "const value = snapshot({ count: 0 });", "expect": "plain snapshot has no store capability" },
+        "partial": { "source": "createProjection(dynamicProjection, seed);", "expect": "projection protocol leaf remains open" },
+        "refusal": { "source": "opaqueStoreHelper(store);", "expect": "accepted dependency contract required" },
+        "consumer": { "source": "query.valueShape(\"createStore\")", "expect": "tuple siblings retain independent capabilities" },
+        "typescriptOracle": { "source": "import { createStore, snapshot, reconcile } from 'solid-js'; const [store, setStore] = createStore({ count: 0 }); setStore(draft => { draft.count = 1; }); void [snapshot(store), reconcile({ count: 2 })];", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "refs-directives",
+      "apis": ["applyRef"],
+      "authorityCases": ["@solidjs/web:browser-development-import"],
+      "closureIdentity": "web",
+      "declarationEvidence": [{ "path": "@solidjs/web/types/client.d.ts", "sha256": "49d281ca558aa359a44bed4ce1fb9cc9b54d65cd353b1d3191ab62d350e18c13", "contains": "applyRef" }],
+      "runtimeEvidence": [{ "path": "@solidjs/web/dist/dev.js", "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851", "contains": "applyRef" }],
+      "normalized": { "operations": ["ref-factory", "ref-application", "ref-cleanup"], "edges": ["data", "cleanup"], "resources": ["setup-owner"], "guards": ["array-composition"], "openDomains": ["dynamic-returned-ref-array", "real-browser-dom-timing-observation"] },
+      "proof": { "families": ["compiler-reconciliation", "callable-path", "argument-binding", "recursive-value-shape", "operation-reachability", "probe-consistency"], "probeScenario": "cleanup-lifecycle" },
+      "observation": { "authority": "compiler-facts-plus-exact-renderer-runtime", "events": ["factory-untracked-under-setup-owner", "application-under-no-owner"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "applyRef([firstRef, secondRef], element);", "expect": "two-phase flattened applications" },
+        "negative": { "source": "const ref = element;", "expect": "no directive factory" },
+        "partial": { "source": "applyRef(dynamicRefs, element);", "expect": "returned array membership open" },
+        "refusal": { "source": "unknownRenderer.applyRef(ref, element);", "expect": "wrong export identity refused" },
+        "consumer": { "source": "query.ownerSource(\"ref-application\")", "expect": "setup owner differs from application owner" },
+        "typescriptOracle": { "source": "import { applyRef } from '@solidjs/web'; const element = document.createElement('div'); applyRef(el => { void el; }, element);", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "root-event-delegation",
+      "apis": ["render"],
+      "authorityCases": ["@solidjs/web:browser-development-import"],
+      "closureIdentity": "web",
+      "declarationEvidence": [{ "path": "@solidjs/web/types/client.d.ts", "sha256": "49d281ca558aa359a44bed4ce1fb9cc9b54d65cd353b1d3191ab62d350e18c13", "contains": "render" }],
+      "runtimeEvidence": [{ "path": "@solidjs/web/dist/dev.js", "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851", "contains": "DelegatedRoot" }],
+      "normalized": { "operations": ["register-delegation", "delegated-event", "unregister-root"], "edges": ["lifetime"], "resources": ["render-root"], "guards": ["root-identity"], "openDomains": ["portal-container-escape", "real-browser-root-lifetime-observation"] },
+      "proof": { "families": ["compiler-reconciliation", "operation-reachability", "operation-cardinality", "module-closure", "probe-consistency"], "probeScenario": "root-lifetime" },
+      "observation": { "authority": "real-browser-exact-renderer-required", "events": ["root-register", "event", "root-unregister"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "const dispose = render(view, firstContainer);", "expect": "root-local delegation lifetime" },
+        "negative": { "source": "const node = document.createElement('div');", "expect": "no delegated root" },
+        "partial": { "source": "render(view, dynamicContainer);", "expect": "container alias leaf open" },
+        "refusal": { "source": "render(view, escapedContainerFactory());", "expect": "unbounded container lifetime uncertifiable" },
+        "consumer": { "source": "query.resourceLifetime(\"render-root\")", "expect": "event callback is not process-global" },
+        "typescriptOracle": { "source": "import { render } from '@solidjs/web'; const dispose: () => void = render(() => 'ok', document.createElement('div')); void dispose;", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "browser-server-rendering",
+      "apis": ["render", "hydrate", "renderToString", "renderToStream"],
+      "authorityCases": ["@solidjs/web:browser-development-import", "@solidjs/web:node-import"],
+      "closureIdentity": "web",
+      "declarationEvidence": [{ "path": "@solidjs/web/types/index.d.ts", "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635", "contains": "server-mock" }, { "path": "@solidjs/web/types/server.d.ts", "sha256": "b9a62f469abc1b861720da806d3a2bb410e5de1ff1bf511c6acfbe1b0e4c6a6f", "contains": "renderToStream" }],
+      "runtimeEvidence": [{ "path": "@solidjs/web/dist/server.js", "sha256": "80abb46a98a9d6695b7d2c42725ccfb538f8e941d6aa3a8ec5343d6d002d54b1", "contains": "renderToStream" }],
+      "normalized": { "operations": ["render-callback", "hydrate-callback", "ssr-callback", "claim-stream"], "edges": ["orders", "lifetime"], "resources": ["browser-root", "ssr-stream"], "guards": ["artifact-case", "stream-consumption-mode"], "openDomains": ["dynamic-asset-manifest", "real-browser-dom-hydration-observation"] },
+      "proof": { "families": ["manifest-entrypoint", "export-resolution", "artifact-declarations", "module-closure", "guard-partition", "probe-consistency"], "probeScenario": "request-response-lifecycle" },
+      "observation": { "authority": "exact-browser-and-node-artifacts", "events": ["browser-root", "hydrate", "ssr-string", "stream-claimed-once"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "renderToStream(() => 'hello');", "expect": "server stream resource" },
+        "negative": { "source": "render(() => 'hello', container);", "expect": "browser root without SSR stream" },
+        "partial": { "source": "renderToStream(view, { manifest: dynamicManifest });", "expect": "manifest resolution stays local and open" },
+        "refusal": { "source": "const renderer = await import(dynamicSpecifier);", "expect": "artifact case uncertifiable" },
+        "consumer": { "source": "query.artifactCase(callSite)", "expect": "DOM and SSR operations never merge by export name" },
+        "typescriptOracle": { "source": "import { render, hydrate, renderToString, renderToStream } from '@solidjs/web'; void [render, hydrate, renderToString, renderToStream];", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "request-response-mutation",
+      "apis": ["httpStatus", "httpHeader"],
+      "authorityCases": ["@solidjs/web:node-import", "@solidjs/web:browser-import"],
+      "closureIdentity": "web",
+      "declarationEvidence": [{ "path": "@solidjs/web/types/index.d.ts", "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635", "contains": "httpStatus" }],
+      "runtimeEvidence": [{ "path": "@solidjs/web/dist/server.js", "sha256": "80abb46a98a9d6695b7d2c42725ccfb538f8e941d6aa3a8ec5343d6d002d54b1", "contains": "httpStatus" }],
+      "normalized": { "operations": ["declare-response", "retract-declaration"], "edges": ["cleanup"], "resources": ["request", "response"], "guards": ["server-artifact", "response-uncommitted"], "openDomains": ["missing-request", "committed-response", "request-context-runtime-observation"] },
+      "proof": { "families": ["artifact-declarations", "operation-reachability", "operation-cardinality", "guard-partition", "probe-consistency"], "probeScenario": "request-response-lifecycle" },
+      "observation": { "authority": "exact-server-request-scope-runtime", "events": ["request-active", "response-uncommitted", "ledger-write", "owner-cleanup"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "httpStatus(201); httpHeader('x-test', 'ok');", "expect": "request-scoped response declarations" },
+        "negative": { "source": "const headers = new Headers();", "expect": "no Solid response mutation" },
+        "partial": { "source": "httpHeader(dynamicName, dynamicValue);", "expect": "value content open without losing request requirement" },
+        "refusal": { "source": "afterCommit(() => httpStatus(204));", "expect": "post-commit mutation not certified" },
+        "consumer": { "source": "query.requiredResourceState(\"declare-response\")", "expect": "uncommitted is a precondition, not inferred absence" },
+        "typescriptOracle": { "source": "import { httpStatus, httpHeader } from '@solidjs/web'; httpStatus(201); httpHeader('x-test', 'ok');", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "server-functions",
+      "apis": ["createServerReference"],
+      "authorityCases": ["@solidjs/web/server-functions:browser-import", "@solidjs/web/server-functions:node-development-import"],
+      "closureIdentity": "web",
+      "declarationEvidence": [{ "path": "@solidjs/web/types/server-functions/client.d.ts", "sha256": "fdce7ef458dc83b823f883e0af58a4cfa75dd77f1889423d1fa03bd771d17eb6", "contains": "createServerReference" }],
+      "runtimeEvidence": [{ "path": "@solidjs/web/server-functions/dist/client.js", "sha256": "f7e754c2119449c94a01b16760efe1cc9fd4bf53f3f17033392a07b4d6bd00a1", "contains": "createServerReference" }],
+      "normalized": { "operations": ["transform-reference", "register-reference", "invoke-reference", "transport", "cancel-stream"], "edges": ["data", "error", "lifetime"], "resources": ["server-reference", "request", "stream"], "guards": ["artifact-case", "compiler-transform", "result-protocol"], "openDomains": ["serialization-user-value", "server-sync-return", "server-transport-integration-observation", "published-client-declaration-unbound-types"] },
+      "proof": { "families": ["compiler-reconciliation", "export-identity", "module-closure", "accepted-dependency-composition", "operation-reachability", "probe-consistency"], "probeScenario": "repeated-async-iterable" },
+      "observation": { "authority": "compiler-facts-composed-with-exact-client-server-runtime", "events": ["reference-created", "client-transport-or-server-call", "settlement", "stream-cancel"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "const call = createServerReference('module#save');", "expect": "exact transformed reference identity" },
+        "negative": { "source": "const call = async (...args) => transport(args);", "expect": "not a server reference" },
+        "partial": { "source": "const result = call(dynamicSerializableValue);", "expect": "serialization leaf open" },
+        "refusal": { "source": "transformWithoutExportIdentity(serverFunction);", "expect": "transformed export refused" },
+        "consumer": { "source": "query.possibleOperations(\"createServerReference\", artifactCase)", "expect": "client transport and server in-process calls remain separate" },
+        "typescriptOracle": { "source": "import { createServerReference } from '@solidjs/web/server-functions'; const call = createServerReference('module#save'); void call;", "tscExitCode": 2, "tscDiagnosticContains": "Cannot find name 'ServerFunctionMetadata'", "ownership": "typescript", "checkerFinding": null }
+      }
+    },
+    {
+      "id": "experimental-server-components",
+      "apis": ["installServerComponents", "renderServerComponent"],
+      "authorityCases": ["@solidjs/web/frames:browser-development-import", "@solidjs/web/frames:node-import"],
+      "closureIdentity": "web",
+      "declarationEvidence": [{ "path": "@solidjs/web/types/frames/client.d.ts", "sha256": "e83afca019249516e25679192d747a2de2f0f93684ac38d25b091717516df33b", "contains": "installServerComponents" }],
+      "runtimeEvidence": [{ "path": "@solidjs/web/frames/dist/client.dev.js", "sha256": "fdd6836e1dee13ac4f04d8c78eae7def8c85d997fdc2bd0b5cdc9419754cfe53", "contains": "installServerComponents" }],
+      "normalized": { "operations": [], "edges": [], "resources": [], "guards": ["matching-client-server-artifacts", "explicit-installation"], "openDomains": ["callbacks", "reads", "writes", "creates", "invalidates", "throws", "returns", "cleanups", "disposals", "unstable-frame-protocol"] },
+      "stability": "experimental",
+      "proof": { "families": ["package-identity", "artifact-declarations", "export-identity", "module-closure"], "probeScenario": null },
+      "observation": { "authority": "published-experimental-declarations-only", "events": [], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "installServerComponents(host);", "expect": "experimental identity only" },
+        "negative": { "source": "const stableComponent = () => null;", "expect": "no experimental protocol inference" },
+        "partial": { "source": "installServerComponents(dynamicHost);", "expect": "installation known, protocol leaves open" },
+        "refusal": { "source": "consumeFrameProtocol(unversionedPayload);", "expect": "unstable protocol remains uncertifiable" },
+        "consumer": { "source": "query.stability(\"installServerComponents\")", "expect": "experimental without default-stable inference" },
+        "typescriptOracle": { "source": "import { installServerComponents } from '@solidjs/web/frames'; void installServerComponents;", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "conditional-adapters",
+      "apis": ["clientOnly"],
+      "authorityCases": ["@solidjs/web:browser-development-import", "@solidjs/web:node-import"],
+      "closureIdentity": "web",
+      "declarationEvidence": [{ "path": "@solidjs/web/types/index.d.ts", "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635", "contains": "clientOnly" }],
+      "runtimeEvidence": [{ "path": "@solidjs/web/dist/dev.js", "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851", "contains": "function clientOnly" }],
+      "normalized": { "operations": ["eager-load", "lazy-load", "resolve-module", "render-fallback", "render-component"], "edges": ["data", "orders"], "resources": ["module-load"], "guards": ["lazy-mode", "artifact-case", "result-protocol"], "openDomains": ["dynamic-module-export", "real-browser-mount-observation"] },
+      "proof": { "families": ["selected-signature", "argument-binding", "guard-partition", "operation-reachability", "domain-exhaustiveness", "probe-consistency"], "probeScenario": "operation" },
+      "observation": { "authority": "branch-specific-exact-runtime-observations", "events": ["eager-module-load", "lazy-first-render-load", "fallback", "component-after-settlement"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "clientOnly(() => import('./Chart'), { lazy: true });", "expect": "load starts on first render" },
+        "negative": { "source": "clientOnly(loader, { lazy: false });", "expect": "lazy-start branch absent" },
+        "partial": { "source": "clientOnly(loader, { lazy: dynamicMode });", "expect": "eager and lazy alternatives join without an invented guarantee" },
+        "refusal": { "source": "adapter.clientOnly(loader);", "expect": "unresolved adapter identity" },
+        "consumer": { "source": "query.guardedOperations(callFacts)", "expect": "selected branch or conservative union" },
+        "typescriptOracle": { "source": "import { clientOnly } from '@solidjs/web'; const Wrapped = clientOnly(async () => ({ default: (_props: {}) => null })); void Wrapped;", "tscExitCode": 0, "checkerFinding": null }
+      }
+    },
+    {
+      "id": "mixed-framework-selection",
+      "apis": ["createAutoAnimate"],
+      "authorityCases": ["@formkit/auto-animate:./solid-import"],
+      "closureIdentity": "autoAnimateSolid",
+      "declarationEvidence": [{ "path": "@formkit/auto-animate/solid/index.d.ts", "sha256": "604e208469e4dc03235da3807d5f2e1e0507f163b040b7ac11fadb70d7520920", "contains": "createAutoAnimate" }],
+      "runtimeEvidence": [{ "path": "@formkit/auto-animate/solid/index.mjs", "sha256": "0e0bdd64956a915698f898a16adf6edb1c031cacf1f7608845781ee0a7246d10", "contains": "onMount" }],
+      "normalized": { "operations": [], "edges": [], "resources": [], "guards": ["exact-entrypoint", "exact-dependency-version"], "openDomains": ["all-call-domains", "tuple-membership", "rc3-incompatible-solid-imports"] },
+      "proof": { "families": ["manifest-entrypoint", "export-resolution", "module-closure", "accepted-dependency-composition"], "probeScenario": null },
+      "observation": { "authority": "exact-published-adapter-source", "events": ["solid-entrypoint-selected", "rc3-onMount-import-missing"], "absenceIsNegativeProof": false },
+      "fixtures": {
+        "positive": { "source": "import { createAutoAnimate } from '@formkit/auto-animate/solid';", "expect": "exact Solid adapter provenance" },
+        "negative": { "source": "import { useAutoAnimate } from '@formkit/auto-animate/react';", "expect": "React artifact never classified as Solid" },
+        "partial": { "source": "import { createAutoAnimate } from '@formkit/auto-animate/solid';", "expect": "shape positives retained while behavior remains open" },
+        "refusal": { "source": "createAutoAnimate();", "expect": "published adapter is not certified RC.3-compatible because onMount/onCleanup are missing" },
+        "consumer": { "source": "query.exactExportIdentity(importSite)", "expect": "entrypoint and dependency closure, never package keywords" },
+        "typescriptOracle": { "source": "import { createAutoAnimate } from '@formkit/auto-animate/solid'; void createAutoAnimate;", "tscExitCode": 0, "checkerFinding": null }
+      }
+    }
+  ]
+}

@@ -10,6 +10,7 @@ mod canonical;
 mod consumer;
 mod guards;
 pub mod proof;
+pub mod solid2_rc3;
 mod validate;
 
 pub use consumer::{
