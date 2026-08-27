@@ -11,6 +11,9 @@ import { expandContract } from "../packages/cli/scripts/contract-document.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+const FROZEN_BASELINE_JSON_SHA256 = "ea8041adc5872fa63f85f18231330e9b6c0c1232c20f23964e6272143a891f18";
+const FROZEN_BASELINE_MARKDOWN_SHA256 = "098bd0cd2a91351019751280b5a95f70406181d9a8da6e0be0072f3ba7332757";
+
 const CONTRACTS = [
   "pkg/contracts/bundled/solid-v1/solid-primitives-debounce.json",
   "pkg/contracts/bundled/solid-v1/solid-primitives-rootless.json",
@@ -381,11 +384,30 @@ function git(...args) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 }
 
-function pinFromCargo(name, cargo) {
+function pinFromCargo(name, cargo, required = true) {
   const expression = new RegExp(`${name.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\s*=\\s*\\{[^\\n]*rev\\s*=\\s*"([0-9a-f]+)"`);
   const match = cargo.match(expression);
-  if (!match) throw new Error(`could not read ${name} pin from rust/Cargo.toml`);
-  return match[1];
+  if (match) return match[1];
+  if (required) throw new Error(`could not read ${name} pin from rust/Cargo.toml`);
+  return null;
+}
+
+export function typeFactsIdentityFromCargo(cargo, buildInfoRaw) {
+  const revision = pinFromCargo("typefacts", cargo, false);
+  if (revision) return revision;
+  if (!/typefacts\s*=\s*\{[^\n]*path\s*=/.test(cargo)) {
+    throw new Error("could not read typefacts dependency identity from rust/Cargo.toml");
+  }
+  let buildInfo;
+  try {
+    buildInfo = JSON.parse(buildInfoRaw);
+  } catch {
+    throw new Error("local Type Facts buildinfo is not JSON");
+  }
+  if (!/^[0-9a-f]{64}$/.test(buildInfo.sourceDigest ?? "")) {
+    throw new Error("local Type Facts buildinfo has no source-manifest digest");
+  }
+  return `source-manifest-sha256:${buildInfo.sourceDigest}`;
 }
 
 function inputManifest(fixtures) {
@@ -425,6 +447,93 @@ export function assertSuccessfulCacheDisabledMeasurements(measurements) {
       throw new Error(`${name} is not a successful cache-disabled measurement`);
     }
   }
+}
+
+function assertBaseline(condition, message) {
+  if (!condition) throw new Error(`invalid frozen Phase 0 baseline: ${message}`);
+}
+
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function assertFrozenBaseline(report) {
+  assertBaseline(report.schemaVersion === 1, "schemaVersion must be 1");
+  assertBaseline(
+    report.documentKind === "solid-checker-package-contract-phase0-baseline",
+    "documentKind is wrong"
+  );
+  assertBaseline(report.scope?.phase === 0, "scope must remain Phase 0");
+  assertBaseline(Number.isFinite(Date.parse(report.capturedAt)), "capturedAt is not an instant");
+  assertBaseline(/^[0-9a-f]{40}$/.test(report.repository?.head ?? ""), "repository head is not a commit");
+
+  assertSuccessfulCacheDisabledMeasurements(report.measurements);
+
+  const rows = report.ecosystem?.classifications?.rows ?? [];
+  assertBaseline(rows.length === report.ecosystem?.verification?.rows, "classification row count drifted");
+  assertBaseline(new Set(rows.map(row => row.probeId)).size === rows.length, "classification IDs are not unique");
+  assertBaseline(
+    sameJson(summarizeClassifications(rows), report.ecosystem.classifications.summary),
+    "classification summary does not match its rows"
+  );
+
+  const fixtures = report.fixtureFreeze?.fixtures ?? [];
+  assertBaseline(fixtures.length === report.fixtureFreeze?.fixtureCount, "fixture count drifted");
+  assertBaseline(
+    sameJson(
+      fixtures.map(fixture => fixture.name).sort(),
+      Object.keys(FROZEN_FIXTURES).sort()
+    ),
+    "fixture set drifted"
+  );
+  for (const fixture of fixtures) {
+    const digestInput = fixture.files.map(file => `${file.sha256}  ${file.path}\n`).join("");
+    assertBaseline(sha256(digestInput) === fixture.treeSha256, `${fixture.name} tree hash is inconsistent`);
+    assertBaseline(
+      fixture.files.reduce((total, file) => total + file.bytes, 0) === fixture.bytes,
+      `${fixture.name} byte count is inconsistent`
+    );
+  }
+
+  const inputFiles = report.inputs?.files ?? [];
+  assertBaseline(new Set(inputFiles.map(file => file.path)).size === inputFiles.length, "input paths are not unique");
+  assertBaseline(
+    inputFiles.every(file => Number.isInteger(file.bytes) && file.bytes >= 0 && /^[0-9a-f]{64}$/.test(file.sha256)),
+    "input file identity is malformed"
+  );
+  const inputDigest = sha256(inputFiles.map(file => `${file.sha256}  ${file.path}\n`).join(""));
+  assertBaseline(inputDigest === report.inputs.sha256, "input manifest hash is inconsistent");
+
+  const inputByPath = new Map(inputFiles.map(file => [file.path, file]));
+  for (const fixture of fixtures) {
+    for (const file of fixture.files) {
+      assertBaseline(sameJson(inputByPath.get(file.path), file), `${file.path} disagrees with the input manifest`);
+    }
+  }
+
+  const contracts = report.legacyContracts?.contracts ?? [];
+  assertBaseline(
+    sameJson(contracts.map(contract => contract.path), CONTRACTS),
+    "legacy contract set or order drifted"
+  );
+  for (const field of [
+    "prettyBytes",
+    "minifiedBytes",
+    "minifiedExpandedBytes",
+    "inlineEvidenceDeltaBytes",
+    "inlineEvidenceNodeBytes"
+  ]) {
+    assertBaseline(
+      contracts.reduce((total, contract) => total + contract[field], 0) ===
+        report.legacyContracts.aggregate[field],
+      `legacy contract aggregate ${field} is inconsistent`
+    );
+  }
+  assertBaseline(report.rc3Audit?.integrityVerified === true, "RC.3 package integrity was not verified");
+  assertBaseline(
+    report.rc3Audit?.allConcreteExportTargetsExist === true,
+    "an RC.3 concrete export target is missing"
+  );
 }
 
 export function buildBaseline({ loadIterations = 300, queryIterations = 200_000 } = {}) {
@@ -467,7 +576,7 @@ export function buildBaseline({ loadIterations = 300, queryIterations = 200_000 
     pins: {
       solid2Compiler: pinFromCargo("solidjs-compiler", cargo),
       solid1Compiler: pinFromCargo("solid1-dom-expressions-compiler", cargo),
-      typeFacts: pinFromCargo("typefacts", cargo),
+      typeFacts: typeFactsIdentityFromCargo(cargo, read("bin/solid-typefacts.buildinfo").toString()),
       typeFactsBuildInfo: read("bin/solid-typefacts.buildinfo").toString().trim(),
       solid2SemanticTraceVersion: traceVersion,
       legacyContractSchemaVersion: schema.properties.schemaVersion.const,
@@ -626,7 +735,7 @@ export function renderMarkdown(report) {
     "The raw command arrays, timestamps, exit status, sampling method, sample count, and peak RSS are preserved under `benchmarks/package-contract-v2/phase0/measurements/`. Re-run generation and verification with stable checker binaries and `SOLID_CHECKER_GATE_CACHE=0`, then run:",
     "",
     "```sh",
-    "bun scripts/package-contract-v2-phase0.mjs",
+    "bun scripts/package-contract-v2-phase0.mjs --capture-current --output-json /tmp/phase0-current.json --output-markdown /tmp/phase0-current.md",
     "bun scripts/package-contract-v2-phase0.mjs --check",
     "```",
     ""
@@ -638,45 +747,54 @@ function parseArgs(argv) {
   const options = {
     outputJson: "benchmarks/package-contract-v2/phase0/baseline.json",
     outputMarkdown: "benchmarks/package-contract-v2/phase0/baseline.md",
-    check: false
+    check: false,
+    captureCurrent: false,
+    outputJsonExplicit: false,
+    outputMarkdownExplicit: false
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--check") options.check = true;
-    else if (argument === "--output-json") options.outputJson = argv[++index];
-    else if (argument === "--output-markdown") options.outputMarkdown = argv[++index];
-    else throw new Error(`unknown argument ${argument}`);
+    else if (argument === "--capture-current") options.captureCurrent = true;
+    else if (argument === "--output-json") {
+      options.outputJson = argv[++index];
+      options.outputJsonExplicit = true;
+    } else if (argument === "--output-markdown") {
+      options.outputMarkdown = argv[++index];
+      options.outputMarkdownExplicit = true;
+    } else throw new Error(`unknown argument ${argument}`);
+  }
+  if (options.check === options.captureCurrent) {
+    throw new Error("choose exactly one of --check or --capture-current");
+  }
+  if (options.captureCurrent && (!options.outputJsonExplicit || !options.outputMarkdownExplicit)) {
+    throw new Error("--capture-current requires explicit --output-json and --output-markdown paths");
   }
   return options;
 }
 
-function comparable(report) {
-  const copy = structuredClone(report);
-  delete copy.capturedAt;
-  delete copy.repository;
-  delete copy.legacyContracts.performance;
-  return copy;
-}
-
 function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.check) {
+    const jsonBytes = read(options.outputJson);
+    const markdownBytes = read(options.outputMarkdown);
+    if (sha256(jsonBytes) !== FROZEN_BASELINE_JSON_SHA256) {
+      throw new Error(`${options.outputJson} is not the frozen Phase 0 machine report`);
+    }
+    if (sha256(markdownBytes) !== FROZEN_BASELINE_MARKDOWN_SHA256) {
+      throw new Error(`${options.outputMarkdown} is not the frozen Phase 0 human report`);
+    }
+    const report = JSON.parse(jsonBytes);
+    assertFrozenBaseline(report);
+    if (markdownBytes.toString() !== renderMarkdown(report)) {
+      throw new Error(`${options.outputMarkdown} is not the rendering of ${options.outputJson}`);
+    }
+    console.log(`phase0 baseline: ${report.ecosystem.classifications.rows.length} rows and ${report.fixtureFreeze.fixtureCount} fixtures verified as frozen evidence`);
+    return;
+  }
   const report = buildBaseline();
   const markdown = renderMarkdown(report);
   const jsonText = `${JSON.stringify(report, null, 2)}\n`;
-  if (options.check) {
-    const current = JSON.parse(read(options.outputJson));
-    if (JSON.stringify(comparable(current)) !== JSON.stringify(comparable(report))) {
-      throw new Error(`${options.outputJson} does not match current Phase 0 inputs`);
-    }
-    const stableMarkdown = value => value
-      .replace(/Captured at `[^`]+` from `[^`]+` on `[^`]+`\./, "Captured at `<dynamic>` from `<dynamic>` on `<dynamic>`.")
-      .replace(/Legacy JavaScript parse\+expand[^\n]+/, "Legacy JavaScript performance: <dynamic>");
-    if (stableMarkdown(read(options.outputMarkdown).toString()) !== stableMarkdown(markdown)) {
-      throw new Error(`${options.outputMarkdown} does not match current Phase 0 inputs`);
-    }
-    console.log(`phase0 baseline: ${report.ecosystem.classifications.rows.length} rows and ${report.fixtureFreeze.fixtureCount} fixtures verified`);
-    return;
-  }
   writeFileSync(resolve(root, options.outputJson), jsonText);
   writeFileSync(resolve(root, options.outputMarkdown), markdown);
   console.log(`phase0 baseline: wrote ${options.outputJson} and ${options.outputMarkdown}`);

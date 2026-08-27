@@ -3,7 +3,7 @@
 Date: 2026-08-27
 
 > Historical Phase 0A record. Phase 4 supersedes this trace-2 distribution pin
-> with trace 3 at `a1a2b9a35d3e4ff7a193605aadec200c7e33dc53`; see the
+> with trace 3 at `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4`; see the
 > [Phase 4 completion report](../phase4/2026-08-27-compiler-facts.md).
 
 Phase 0A's compiler transition is complete. The checker now consumes

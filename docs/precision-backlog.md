@@ -7516,7 +7516,7 @@ lowering.
 ## 2026-08-27 — Compiler-facts protocol 2 keeps execution knowledge local
 
 Solid 2 now emits semantic trace version 3 from the semantic-only compiler fork
-at distribution revision `a1a2b9a35d3e4ff7a193605aadec200c7e33dc53`. The trace
+at distribution revision `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4`. The trace
 separates disposition, trigger, schedule, tracking, cardinality, and owner;
 relates source sites to exact generated operations; reconciles DOM and SSR
 lowering; and binds source, full effective configuration, output, optional

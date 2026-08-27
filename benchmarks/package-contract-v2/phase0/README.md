@@ -44,7 +44,26 @@ The RC.3 audit does not retain an isolated exact transitive installation
 closure for `csstype`, `seroval`, `seroval-plugins`, peers, and declaration
 imports. That is an explicit Phase 7 proof obligation, not an implied success.
 
-## Reproduction
+## Validation and reproduction
+
+`baseline.json` is historical evidence, not a snapshot of the current branch.
+Its compiler and Type Facts pins intentionally predate the compiler bootstrap
+and Type Facts repatriation. Validate that frozen artifact without consulting
+today's dependency declarations:
+
+```sh
+bun scripts/package-contract-v2-phase0.mjs --check
+```
+
+The check pins the exact machine and human reports, validates their internal
+input, fixture, classification, aggregate, and measurement invariants, and
+proves that `baseline.md` is rendered from `baseline.json`. It is part of
+`make verify`. Current source changes therefore cannot silently rewrite Phase
+0 history, and a local path dependency is never mistaken for a missing Git
+revision.
+
+To capture a new comparison report, use explicit output paths. The script will
+not overwrite the frozen report by default:
 
 Build the exact pinned producer and a fresh release checker, then copy both
 binaries to stable paths so another build cannot change a long run. Substitute
@@ -80,8 +99,9 @@ bun benchmarks/measure-command.mjs \
   SOLID_TYPEFACTS_BIN=/stable/path/solid-typefacts \
   bun scripts/contract-corpus.mjs
 
-bun scripts/package-contract-v2-phase0.mjs
-bun scripts/package-contract-v2-phase0.mjs --check
+bun scripts/package-contract-v2-phase0.mjs --capture-current \
+  --output-json /tmp/phase0-current.json \
+  --output-markdown /tmp/phase0-current.md
 ```
 
 ## Invariants

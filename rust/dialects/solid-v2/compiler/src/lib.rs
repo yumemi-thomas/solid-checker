@@ -24,11 +24,16 @@ use solid_facts::core::Span;
 /// through a pin move.
 const READS_TRACE_VERSION: u32 = 3;
 
+/// Consumer-owned provenance literals. These deliberately do not reuse the
+/// producer constants: otherwise a typo in the producer could certify itself.
+const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "a10cf1a147209d8da50697896742d2b1d4afad75";
+const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "7f4e1135943c1fb01231d1bda707b4a1856a5607";
+
 /// Stable cache identity for the exact semantic producer this adapter reads.
 /// Keep this synchronized with the pinned compiler revision and trace
 /// implementation when either changes.
 pub const COMPILER_FACTS_IDENTITY: &str =
-    "solid-v2:trace3:e91bc2ae7fd0e9653db093b1ab74a09c9482042e";
+    "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607";
 
 /// A pin move that changes the producer's schema version fails the build here
 /// instead of silently making the runtime refusal below unreachable again. The
@@ -120,10 +125,12 @@ fn execution_map_from_trace(
         )));
     }
     if trace.identity.compiler.package_version != solidjs_compiler::COMPILER_VERSION
-        || trace.identity.compiler.upstream_revision
-            != solidjs_compiler::SEMANTIC_TRACE_UPSTREAM_REVISION
+        || trace.identity.compiler.upstream_revision != EXPECTED_COMPILER_UPSTREAM_REVISION
+        || solidjs_compiler::SEMANTIC_TRACE_UPSTREAM_REVISION != EXPECTED_COMPILER_UPSTREAM_REVISION
         || trace.identity.compiler.implementation_revision
-            != solidjs_compiler::SEMANTIC_TRACE_IMPLEMENTATION_REVISION
+            != EXPECTED_COMPILER_IMPLEMENTATION_REVISION
+        || solidjs_compiler::SEMANTIC_TRACE_IMPLEMENTATION_REVISION
+            != EXPECTED_COMPILER_IMPLEMENTATION_REVISION
     {
         return Err(CompilerProviderError::Native(
             "Solid 2.0 compiler semantic identity disagrees with the pinned producer".into(),
@@ -490,8 +497,12 @@ mod tests {
         assert!(producer.identity_complete);
         assert_eq!(producer.trace_version, READS_TRACE_VERSION);
         assert_eq!(
+            producer.upstream_revision.as_deref(),
+            Some(EXPECTED_COMPILER_UPSTREAM_REVISION)
+        );
+        assert_eq!(
             producer.implementation_revision,
-            solidjs_compiler::SEMANTIC_TRACE_IMPLEMENTATION_REVISION
+            EXPECTED_COMPILER_IMPLEMENTATION_REVISION
         );
         assert_eq!(producer.output_sha256.len(), 64);
         assert_eq!(producer.configuration_sha256.len(), 64);

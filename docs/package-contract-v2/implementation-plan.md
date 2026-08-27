@@ -21,6 +21,14 @@ details are normative within this documentation set.
 **Exit:** the baseline is reproducible and every current verified/refused row
 has a stable reason.
 
+**Status 2026-08-27:** complete. The historical machine and human reports are
+immutable evidence and are validated by `make phase0-baseline` and
+`make verify`. Validation pins their exact bytes and checks their internal
+input, fixture, classification, aggregate, and measurement invariants; it does
+not reinterpret the historical compiler and Type Facts revisions through the
+current dependency layout. New comparison captures require explicit output
+paths and cannot overwrite the frozen baseline by default.
+
 ## Phase 0A — Compiler and Type Facts source bootstrap
 
 This phase follows

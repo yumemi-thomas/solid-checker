@@ -51,7 +51,7 @@ fi
 #
 # The clock is a single `bun -e` per boundary (bun is already required by
 # steps below), so one read serves as the previous step's end and the next
-# step's start: 22 reads for 21 steps. `date` is not used because POSIX `date`
+# step's start: 27 reads for 26 steps. `date` is not used because POSIX `date`
 # has no sub-second field and several steps finish in tens of milliseconds.
 #
 # `SOLID_CHECKER_GATE_CACHE=0` in the environment forces the content-addressed
@@ -142,6 +142,9 @@ cargo +1.97 check --profile "$cargo_profile" \
   --manifest-path "$rust_manifest" -p solid-checker-wasm \
   --all-targets --no-default-features --features dialect-v2
 
+step compiler-identity
+bun scripts/check-compiler-facts-identity.mjs
+
 step build-typefacts
 scripts/build-typefacts.sh
 
@@ -179,6 +182,11 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
 
 step bun-test
 bun run --cwd packages/cli test
+
+# Phase 0 is immutable historical evidence. Validate its pinned bytes and
+# internal invariants; never regenerate it from the current dependency graph.
+step phase0-baseline
+bun scripts/package-contract-v2-phase0.mjs --check
 
 # AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
 # `tsc` error against the real published Solid typings. Provisioning installs

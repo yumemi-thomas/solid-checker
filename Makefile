@@ -7,7 +7,7 @@ BUN ?= bun
 # compare with `make CARGO_TEST_RUNNER='nextest run' test-rust` when available.
 CARGO_TEST_RUNNER ?= test
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -48,6 +48,12 @@ test-cli:
 
 verify:
 	scripts/verify.sh
+
+phase0-baseline:
+	$(BUN) scripts/package-contract-v2-phase0.mjs --check
+
+compiler-facts-identity:
+	$(BUN) scripts/check-compiler-facts-identity.mjs
 
 # AGENTS.md's "which check to run" table, mechanized: it maps every changed
 # path to the checks that own it, prints each mapping decision, and appends the

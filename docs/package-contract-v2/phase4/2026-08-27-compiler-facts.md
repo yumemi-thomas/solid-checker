@@ -13,10 +13,10 @@ request was opened against upstream Solid.
 
 | Role | Identity |
 | --- | --- |
-| Official upstream base | `solidjs/solid@a10cf1a147209d885f148396068175ab2f0a996a` |
+| Official upstream base | `solidjs/solid@a10cf1a147209d8da50697896742d2b1d4afad75` |
 | Fork branch | `yumemi-thomas/solid:solid-checker/compiler-facts-v3` |
-| Semantic implementation | `e91bc2ae7fd0e9653db093b1ab74a09c9482042e` |
-| Identity-only distribution commit | `a1a2b9a35d3e4ff7a193605aadec200c7e33dc53` |
+| Semantic implementation | `7f4e1135943c1fb01231d1bda707b4a1856a5607` |
+| Identity-only distribution commit | `9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4` |
 | Solid 2 trace | version 3 |
 | Checker compiler-facts | protocol 2 |
 | Solid 1 producer | `yumemi-thomas/solid-1x-compiler@ca3bbfae7d1e00e28ef73f9af58bdb46e248b512`, trace 2 |
@@ -24,6 +24,12 @@ request was opened against upstream Solid.
 The checker pins the distribution commit. The trace reports the semantic
 implementation commit; the distribution commit changes only that identity
 constant. This provides an auditable non-self-referential identity chain.
+The machine-readable identity is
+[`compiler-identity.json`](compiler-identity.json). `make verify` resolves the
+pinned Cargo checkout offline, proves that the upstream revision is an
+ancestor of the implementation, proves that the distribution's sole change is
+the implementation-identity substitution, and cross-checks the adapter,
+lockfile, notices, bootstrap record, and this report.
 
 ## Delivered plan items
 
