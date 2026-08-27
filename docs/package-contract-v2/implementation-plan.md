@@ -253,6 +253,14 @@ No upstream Solid pull request was opened.
 **Exit:** the normalized model can express every row in the Solid 2 conformance
 matrix or represent its exact open domain.
 
+**Status 2026-08-27:** complete. Items 55-67 and the exit condition are
+implemented in `solid-reactive-ir::contract_semantics`. The wire-independent
+model, invariant set, conformance-row mapping, tests, and exact remaining open
+domains are recorded in the
+[Phase 5 completion report](phase5/2026-08-27-normalized-semantic-model.md).
+The backend's development wire decoder remains fail-closed and no generator,
+receipt, bundled contract, or analyzer consumer was migrated in this phase.
+
 ## Phase 6 — Temporary wire schema version 2
 
 68. Add the required `format` discriminator.

@@ -124,6 +124,11 @@ jobs:
           # The matrix is kept identical to publish-npm.yml so every tag job
           # can restore the entry main owns.
           shared-key: release-${{ matrix.runner }}-${{ matrix.arch }}
+          # A macOS ARM64 target cache written by a successful main build has
+          # restored Cargo build-script executables that fail with exit 126.
+          # Keep dependency downloads cached there, but rebuild target
+          # executables on each runner. The publishing workflow must match.
+          cache-targets: ${{ matrix.platform != 'darwin' }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # The build id is CI's rather than the commit's on purpose: it is an
       # opaque handshake identity, and a per-commit one made the producer

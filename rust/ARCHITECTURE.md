@@ -43,7 +43,7 @@ answer; it must not switch on an API spelling itself.
 | Rule projection and wording | `solid-reactive-ir::projection` owns typed finding seeds, shared selection, and finding assembly | `dialects/solid-v1/rules` declares capabilities and maps every supported seed to 1.x identity, severity, message, hint, and evidence | `dialects/solid-v2/rules` declares capabilities and maps every supported seed to 2.0 identity, severity, message, hint, and evidence |
 | ESLint-era file-local checks | fact helpers live in `solid-reactive-ir::upstream_compat` | `solid1x_*` modules; executed only for `Version::V1` | Not executed |
 | Shared static and fine-grained defects | `StaticDefectKind`, populated by static analysis and `upstream_compat::shared_reactivity`; contains no rule prose | Projected and worded by the 1.x catalog | Projected and worded by the 2.0 catalog; the async-tracked-scope check is omitted |
-| Package contracts | shared contract schema and resolver; every modeled package is declared in the dialect's `dialect.json` | review: `contracts/solid-v1/solid-js.json`; bundled: `bundled/solid-v1/solid-js.json`, package `solid-js@1.9.14`, plus the hand-authored `@solid-primitives/scheduled@1.5.3` overlay | review: `contracts/solid-v2/*`; bundled: `bundled/solid-v2/*`, packages `solid-js` and `@solidjs/web` at `2.0.0-rc.0` |
+| Package contracts | legacy shared schema/resolver plus the wire-independent normalized model in `solid-reactive-ir::contract_semantics`; every modeled package is declared in the dialect's `dialect.json` | review: `contracts/solid-v1/solid-js.json`; bundled: `bundled/solid-v1/solid-js.json`, package `solid-js@1.9.14`, plus the hand-authored `@solid-primitives/scheduled@1.5.3` overlay | current bundled legacy contracts remain unchanged; the version-2 authority and normalized model target exact `solid-js@2.0.0-rc.3` and related `@solidjs/*` artifacts |
 
 At runtime the stable dialect ids are `solid-v1` and `solid-v2`. In Rust,
 `Version::V1` always means Solid 1.x and `Version::V2` always means Solid 2.0;
@@ -132,6 +132,36 @@ orchestration receives from callers and Type Facts adapters: `SourceFile`,
 value types). The crate root re-exports that interface for compatibility;
 session lifecycle, caches, incremental rebuilding, and joining stay in the
 orchestration implementation.
+
+## Normalized package-contract seam
+
+`solid-reactive-ir::contract_semantics` owns the rich package-behavior model.
+It is a deep, wire-independent module: the public proposal contains exact
+package, manifest, artifact-case, and export identities plus semantic values;
+its private normalizer owns canonicalization, recursive traversal, guard
+algebra, graph validation, contradictions, and semantic hashing. Compact wire
+summary names, aliases, `closed` arrays, omission rules, and schema versions
+must be expanded by `solid-facts-backend` before this seam. Analyzer consumers
+must query `NormalizedContract` or the later accepted typestate, not decode
+those wire conventions.
+
+Knowledge is local to its immediate domain. `KnowledgeSet` distinguishes
+unknown, partial positive, complete positive, and complete negative; recursive
+tuple, object, array, choice, Promise, and AsyncIterable leaves carry their own
+knowledge. Operations keep trigger, execution point, schedule, tracking,
+ownership, and cardinality independent. Resources provide exact anchors for
+owner, async, transition, cleanup, request/response, stream, and server-function
+lifetimes. The normalizer refuses dangling identities, causal cycles,
+overlapping or non-exhaustive closed guards, impossible capabilities, invalid
+cardinality, and contradictory ownership instead of filling a missing premise
+with a negative.
+
+`ContractProposal::normalize` computes canonical semantic identity but does not
+accept proposed closure. `AcceptedContract` deliberately has no Phase 5 public
+constructor: proof replay and receipt binding remain the later acceptance
+authority. The backend continues to return `NormalizationUnavailable` for the
+development schema until the Phase 6 wire migration, so the normalized model
+does not yet feed analyzer findings.
 
 ## How the Solid 1.x dialect landed
 

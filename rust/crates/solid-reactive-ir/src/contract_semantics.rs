@@ -1,16 +1,27 @@
-//! Wire-independent package behavior accepted at the analyzer trust boundary.
+//! Wire-independent package behavior at the analyzer trust seam.
 //!
-//! Compact JSON concepts such as summary names, `closed` arrays, aliases, and
-//! schema versions deliberately do not appear here. The backend expands and
-//! validates those details before constructing this model.
+//! Compact JSON concepts such as summary names, `closed` arrays, aliases,
+//! omission rules, and schema versions deliberately do not appear here. The
+//! backend expands those mechanics and submits only semantic concepts to
+//! [`ContractProposal::normalize`]. Validation, guard selection, recursive
+//! uncertainty, and canonical semantic identity stay inside this deep module.
+
+mod canonical;
+mod guards;
+mod validate;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use thiserror::Error;
+
 pub const SEMANTIC_MODEL_VERSION: u16 = 1;
 
-/// Local knowledge for one set-valued claim. An open empty set is
-/// unrepresentable: it normalizes to [`Self::Unknown`].
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Local knowledge for one immediate collection-valued claim domain.
+///
+/// The four semantic states are represented without a redundant enum case:
+/// `Unknown`, non-empty `Partial`, non-empty `Complete`, and empty `Complete`.
+/// An open empty collection is invalid and is rejected by normalization.
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub enum KnowledgeSet<T> {
     #[default]
     Unknown,
@@ -61,14 +72,64 @@ impl<T> KnowledgeSet<T> {
             Self::Complete(_) => KnowledgeState::CompletePositive,
         }
     }
+
+    fn into_items(self) -> Vec<T> {
+        match self {
+            Self::Unknown => Vec::new(),
+            Self::Partial(items) | Self::Complete(items) => items,
+        }
+    }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+impl<T: Ord> KnowledgeSet<T> {
+    /// Monotonically joins all possible alternatives.
+    ///
+    /// Positive items are unioned. Closure survives only when every possible
+    /// alternative is complete; therefore one unresolved alternative can
+    /// retract a negative proof but cannot erase a known positive sibling.
+    #[must_use]
+    pub fn join(alternatives: impl IntoIterator<Item = Self>) -> Self {
+        let mut saw_alternative = false;
+        let mut all_complete = true;
+        let mut items = BTreeSet::new();
+        for alternative in alternatives {
+            saw_alternative = true;
+            all_complete &= alternative.is_closed();
+            items.extend(alternative.into_items());
+        }
+        if !saw_alternative {
+            return Self::Unknown;
+        }
+        let items = items.into_iter().collect::<Vec<_>>();
+        match (all_complete, items.is_empty()) {
+            (true, _) => Self::Complete(items),
+            (false, true) => Self::Unknown,
+            (false, false) => Self::Partial(items),
+        }
+    }
+
+    fn weaken(self) -> Self {
+        match self {
+            Self::Complete(items) if items.is_empty() => Self::Unknown,
+            Self::Complete(items) => Self::Partial(items),
+            other => other,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum KnowledgeState {
     Unknown,
     PartialPositive,
     CompletePositive,
     CompleteNegative,
+}
+
+impl KnowledgeState {
+    #[must_use]
+    pub const fn is_open(self) -> bool {
+        matches!(self, Self::Unknown | Self::PartialPositive)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -81,60 +142,112 @@ impl Digest {
         if payload.len() != 64 || !payload.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(ModelError::Digest);
         }
-        Ok(Self(value))
+        Ok(Self(format!("sha256:{}", payload.to_ascii_lowercase())))
     }
 
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    fn from_sha256(bytes: [u8; 32]) -> Self {
+        let mut value = String::with_capacity(71);
+        value.push_str("sha256:");
+        for byte in bytes {
+            use std::fmt::Write as _;
+            write!(value, "{byte:02x}").expect("writing to a String cannot fail");
+        }
+        Self(value)
+    }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum ModelError {
+    #[error("digest must be sha256 followed by exactly 64 hexadecimal digits")]
     Digest,
-    MissingArtifactCase,
+    #[error("semantic model version {actual} is unsupported; expected {expected}")]
     SemanticModelVersion { expected: u16, actual: u16 },
+    #[error("{field} must not be empty")]
+    EmptyIdentity { field: String },
+    #[error("duplicate {kind} identity {id}")]
+    DuplicateIdentity { kind: &'static str, id: String },
+    #[error("invalid local knowledge at {path}: {reason}")]
+    InvalidKnowledge { path: String, reason: String },
+    #[error("contradictory semantic claims at {path}: {reason}")]
+    Contradiction { path: String, reason: String },
+    #[error("{path} references missing operation {operation}")]
+    MissingOperation { path: String, operation: String },
+    #[error("{path} references missing resource {resource}")]
+    MissingResource { path: String, resource: String },
+    #[error("operation graph contains a causal cycle involving {operation}")]
+    OperationCycle { operation: String },
+    #[error("invalid guard at {path}: {reason}")]
+    InvalidGuard { path: String, reason: String },
+    #[error("guards {left} and {right} overlap in partition {path}")]
+    OverlappingGuards {
+        path: String,
+        left: usize,
+        right: usize,
+    },
+    #[error("export {export} does not have exact identity for artifact case {case}")]
+    ExportIdentity { case: String, export: String },
+    #[error("artifact case selection identity is duplicated by {first} and {second}")]
+    DuplicateArtifactSelection { first: String, second: String },
+    #[error("selected artifact case index {selected} does not exist")]
+    MissingArtifactCase { selected: usize },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PackageIdentity {
-    pub name: String,
-    pub version: String,
-    pub integrity: Digest,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactIdentity {
     pub path: String,
     pub digest: Digest,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DeclarationIdentity {
-    pub path: String,
-    pub digest: Digest,
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct PackageIdentity {
+    pub name: String,
+    pub version: String,
+    pub integrity: String,
+    pub manifest: ArtifactIdentity,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ResolutionStep {
     pub condition: String,
     pub target: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Exact runtime or declaration binding selected for one public export.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ExportTargetIdentity {
+    pub module: ArtifactIdentity,
+    pub export_name: String,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ExportIdentity {
+    pub entrypoint: String,
+    pub public_name: String,
+    pub runtime: ExportTargetIdentity,
+    pub declarations: ExportTargetIdentity,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ArtifactCase {
     pub id: String,
     pub entrypoint: String,
     pub resolution_trace: Vec<ResolutionStep>,
     pub runtime: ArtifactIdentity,
-    pub declarations: DeclarationIdentity,
+    pub declarations: ArtifactIdentity,
     pub dependency_closure: Digest,
     pub transform: Option<ArtifactIdentity>,
     pub stability: StabilityKnowledge,
     pub exports: BTreeMap<String, ExportSemantics>,
 }
 
+/// Unaccepted semantic candidates. This typestate may contain proposed local
+/// closure, but it cannot construct [`AcceptedContract`]. Later proof replay
+/// must independently authorize every closed claim and receipt binding.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractProposal {
     semantic_model_version: u16,
@@ -165,6 +278,49 @@ impl ContractProposal {
     #[must_use]
     pub fn artifact_cases(&self) -> &[ArtifactCase] {
         &self.artifact_cases
+    }
+
+    /// Validates every cross-reference and contradiction, canonicalizes every
+    /// semantically unordered collection, and computes semantic identity.
+    pub fn normalize(self) -> Result<NormalizedContract, ModelError> {
+        validate::normalize(self)
+    }
+}
+
+/// Canonical wire-independent meaning. All fields are private so callers must
+/// use semantic queries rather than reconstructing schema mechanics.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedContract {
+    semantic_model_version: u16,
+    package: PackageIdentity,
+    artifact_cases: Vec<ArtifactCase>,
+    semantic_digest: Digest,
+}
+
+impl NormalizedContract {
+    #[must_use]
+    pub const fn semantic_model_version(&self) -> u16 {
+        self.semantic_model_version
+    }
+
+    #[must_use]
+    pub const fn package(&self) -> &PackageIdentity {
+        &self.package
+    }
+
+    #[must_use]
+    pub fn artifact_cases(&self) -> &[ArtifactCase] {
+        &self.artifact_cases
+    }
+
+    #[must_use]
+    pub const fn semantic_digest(&self) -> &Digest {
+        &self.semantic_digest
+    }
+
+    #[must_use]
+    pub fn artifact_case(&self, id: &str) -> Option<&ArtifactCase> {
+        self.artifact_cases.iter().find(|case| case.id == id)
     }
 }
 
@@ -201,6 +357,9 @@ pub struct AcceptanceReceipt {
     pub verifier: VerifierIdentity,
 }
 
+/// Accepted typestate. Phase 5 intentionally exposes no constructor: a
+/// generator proposal and caller-created receipt cannot manufacture accepted
+/// closure before the Phase 11 proof-and-receipt authority exists.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcceptedContract {
     package: PackageIdentity,
@@ -209,31 +368,6 @@ pub struct AcceptedContract {
 }
 
 impl AcceptedContract {
-    /// Constructs the typestate after the backend has independently validated
-    /// selection, identity, normalization, and every receipt binding.
-    pub fn from_verified_selection(
-        proposal: ContractProposal,
-        selected_case: usize,
-        receipt: AcceptanceReceipt,
-    ) -> Result<Self, ModelError> {
-        if receipt.semantic_model_version != proposal.semantic_model_version {
-            return Err(ModelError::SemanticModelVersion {
-                expected: proposal.semantic_model_version,
-                actual: receipt.semantic_model_version,
-            });
-        }
-        let selected_case = proposal
-            .artifact_cases
-            .get(selected_case)
-            .cloned()
-            .ok_or(ModelError::MissingArtifactCase)?;
-        Ok(Self {
-            package: proposal.package,
-            selected_case,
-            receipt,
-        })
-    }
-
     #[must_use]
     pub const fn package(&self) -> &PackageIdentity {
         &self.package
@@ -255,8 +389,9 @@ impl AcceptedContract {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ExportSemantics {
+    pub identity: ExportIdentity,
     pub shape: ValueShape,
     pub stability: StabilityKnowledge,
     pub call: CallSemantics,
@@ -286,16 +421,18 @@ impl ExportSemantics {
             .find(|operation| operation.id.0 == id)
     }
 
+    /// Traverses every local call, operation-axis, resource, and recursive
+    /// value claim without widening an open leaf to a known sibling.
+    #[must_use]
+    pub fn unresolved_claims(&self) -> Vec<ClaimPath> {
+        validate::unresolved_claims(self)
+    }
+
     #[must_use]
     pub fn unresolved_call_claims(&self) -> Vec<ClaimPath> {
         ClaimDomain::ALL
             .into_iter()
-            .filter(|domain| {
-                matches!(
-                    self.call.claim_state(*domain),
-                    KnowledgeState::Unknown | KnowledgeState::PartialPositive
-                )
-            })
+            .filter(|domain| self.call.claims.state(*domain).is_open())
             .map(ClaimPath::Call)
             .collect()
     }
@@ -331,17 +468,83 @@ impl ClaimDomain {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ClaimPath {
     Call(ClaimDomain),
-    Value(String),
-    Resource(String),
+    Value {
+        root: ValueRoot,
+        path: ValuePath,
+        domain: ValueClaimDomain,
+    },
+    Operation {
+        operation: OperationId,
+        domain: OperationClaimDomain,
+    },
+    Resource {
+        resource: ResourceId,
+        domain: ResourceClaimDomain,
+    },
+    GuardPartition,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ValueRoot {
+    Export,
+    OperationInput { operation: OperationId, index: u16 },
+    OperationOutput { operation: OperationId },
+}
+
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ValuePath(pub Vec<ValuePathSegment>);
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ValuePathSegment {
+    TupleItem(u32),
+    ArrayElement,
+    ObjectProperty(String),
+    ChoiceAlternative(u32),
+    PromiseValue,
+    AsyncIterableElement,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ValueClaimDomain {
+    Shape,
+    TupleItems,
+    ObjectProperties,
+    ChoiceAlternatives,
+    ArrayMinimumLength,
+    ArrayMaximumLength,
+    Capabilities,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum OperationClaimDomain {
+    Trigger,
+    ExecutionPoint,
+    Schedule,
+    Tracking,
+    OwnerSource,
+    OwnerChildCapability,
+    OwnerCleanupCapability,
+    OwnerLifetime,
+    OwnerProductions,
+    CardinalityScope,
+    CardinalityMinimum,
+    CardinalityMaximum,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ResourceClaimDomain {
+    States,
+    Capabilities,
+    Lifetime,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallSemantics {
     claims: CallClaims,
     pub operations: Vec<Operation>,
     pub edges: Vec<OperationEdge>,
     pub resources: Vec<Resource>,
-    pub cases: Vec<GuardedCase>,
+    pub guards: GuardPartition,
 }
 
 impl CallSemantics {
@@ -351,14 +554,14 @@ impl CallSemantics {
         operations: Vec<Operation>,
         edges: Vec<OperationEdge>,
         resources: Vec<Resource>,
-        cases: Vec<GuardedCase>,
+        guards: GuardPartition,
     ) -> Self {
         Self {
             claims,
             operations,
             edges,
             resources,
-            cases,
+            guards,
         }
     }
 
@@ -366,9 +569,14 @@ impl CallSemantics {
     pub fn claim_state(&self, domain: ClaimDomain) -> KnowledgeState {
         self.claims.state(domain)
     }
+
+    #[must_use]
+    pub const fn claims(&self) -> &CallClaims {
+        &self.claims
+    }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallClaims {
     pub callbacks: KnowledgeSet<CallbackInvocation>,
     pub reads: KnowledgeSet<OperationId>,
@@ -409,13 +617,13 @@ impl CallClaims {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CallbackInvocation {
     pub from: ValueSource,
     pub operation: OperationId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ValueSource {
     Parameter {
         index: u16,
@@ -437,7 +645,7 @@ pub struct OperationId(pub String);
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ResourceId(pub String);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum OperationKind {
     Invoke,
     Return,
@@ -449,7 +657,7 @@ pub enum OperationKind {
     Dispose,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Event {
     Call,
     Render,
@@ -463,21 +671,21 @@ pub enum Event {
     ResponseCommitment,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Trigger {
     Event(Event),
     Operation(OperationId),
-    Resource(ResourceId, Event),
+    Resource { resource: ResourceId, event: Event },
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Schedule {
     SameStack,
     Queued,
     External,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Tracking {
     Tracked,
     Untracked,
@@ -485,78 +693,144 @@ pub enum Tracking {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum OwnerSource {
     None,
     AmbientAtCall,
     AmbientAtExecution,
-    Captured,
-    Created,
+    Captured(ResourceId),
+    Created(ResourceId),
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Requirement {
     Required,
     Forbidden,
     Unconstrained,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CapabilityKnowledge {
     Allowed,
     Forbidden,
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Lifetime {
     Call,
-    Resource,
-    Owner,
-    Request,
-    Transition,
-    AsyncSource,
+    Resource(ResourceId),
+    Owner(ResourceId),
+    Request(ResourceId),
+    Transition(ResourceId),
+    AsyncSource(ResourceId),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OwnerRelation {
-    pub source: OwnerSource,
-    pub resource: Option<ResourceId>,
-    pub requirement: Requirement,
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct OwnerRequirements {
+    pub owner: Requirement,
+    pub child_owners: Requirement,
+    pub cleanup: Requirement,
+}
+
+impl Default for OwnerRequirements {
+    fn default() -> Self {
+        Self {
+            owner: Requirement::Unconstrained,
+            child_owners: Requirement::Unconstrained,
+            cleanup: Requirement::Unconstrained,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct OwnerCapabilities {
     pub child_owners: CapabilityKnowledge,
     pub cleanup: CapabilityKnowledge,
+}
+
+impl Default for OwnerCapabilities {
+    fn default() -> Self {
+        Self {
+            child_owners: CapabilityKnowledge::Unknown,
+            cleanup: CapabilityKnowledge::Unknown,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct OwnerProduction {
+    pub resource: ResourceId,
+    pub capabilities: OwnerCapabilities,
     pub lifetime: Option<Lifetime>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct OwnerRelation {
+    pub source: OwnerSource,
+    pub requirements: OwnerRequirements,
+    pub capabilities: OwnerCapabilities,
+    pub lifetime: Option<Lifetime>,
+    pub productions: KnowledgeSet<OwnerProduction>,
+}
+
+impl Default for OwnerRelation {
+    fn default() -> Self {
+        Self {
+            source: OwnerSource::Unknown,
+            requirements: OwnerRequirements::default(),
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Unknown,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CardinalityScope {
     Trigger,
     Call,
-    Resource,
+    Resource(ResourceId),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum UpperBound {
     Finite(u32),
     Many,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Cardinality {
     pub scope: Option<CardinalityScope>,
     pub min: Option<u32>,
     pub max: Option<UpperBound>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+impl Cardinality {
+    #[must_use]
+    pub const fn strength(&self) -> BehaviorStrength {
+        match self.min {
+            Some(1..) => BehaviorStrength::Guaranteed,
+            Some(0) | None => BehaviorStrength::Possible,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum BehaviorStrength {
+    Possible,
+    Guaranteed,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Operation {
     pub id: OperationId,
     pub kind: OperationKind,
-    pub guard: Guard,
-    pub trigger: Trigger,
-    pub at: Event,
-    pub schedule: Schedule,
+    pub guard: Option<Guard>,
+    pub trigger: Option<Trigger>,
+    pub at: Option<Event>,
+    pub schedule: Option<Schedule>,
     pub tracking: Tracking,
     pub owner: OwnerRelation,
     pub cardinality: Cardinality,
@@ -565,7 +839,7 @@ pub struct Operation {
     pub resources: BTreeSet<ResourceId>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum EdgeKind {
     Orders,
     Data,
@@ -575,14 +849,14 @@ pub enum EdgeKind {
     Lifetime,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct OperationEdge {
     pub kind: EdgeKind,
     pub from: OperationId,
     pub to: OperationId,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ResourceKind {
     Owner,
     ReactiveSource,
@@ -595,17 +869,44 @@ pub enum ResourceKind {
     ServerFunctionReference,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ResourceState {
+    OwnerActive,
+    OwnerDisposed,
+    CleanupInstalled,
+    CleanupDisposed,
+    AsyncPending,
+    AsyncSettled,
+    AsyncErrored,
+    AsyncCancelled,
+    TransitionActive,
+    TransitionSettled,
+    TransitionReverted,
+    ResponseUncommitted,
+    ResponseCommitted,
+    StreamUnclaimed,
+    StreamClaimed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ResourceCapability {
+    Refreshable,
+    Writable,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Resource {
     pub id: ResourceId,
     pub kind: ResourceKind,
-    pub states: KnowledgeSet<String>,
+    pub states: KnowledgeSet<ResourceState>,
+    pub capabilities: KnowledgeSet<ResourceCapability>,
+    pub lifetime: Option<Lifetime>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Guard(pub Vec<GuardAtom>);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum GuardAtom {
     Signature(String),
     ArgumentCount {
@@ -636,7 +937,7 @@ pub enum GuardAtom {
     ArtifactCase(String),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Literal {
     Null,
     Bool(bool),
@@ -644,11 +945,48 @@ pub enum Literal {
     String(String),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GuardedCase {
-    pub guard: Option<Guard>,
-    pub otherwise: bool,
-    pub operations: Vec<OperationId>,
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum GuardedCase {
+    When {
+        guard: Guard,
+        operations: KnowledgeSet<OperationId>,
+    },
+    Otherwise {
+        operations: KnowledgeSet<OperationId>,
+    },
+}
+
+impl GuardedCase {
+    #[must_use]
+    pub const fn operations(&self) -> &KnowledgeSet<OperationId> {
+        match self {
+            Self::When { operations, .. } | Self::Otherwise { operations } => operations,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct GuardPartition {
+    pub cases: KnowledgeSet<GuardedCase>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum GuardTruth {
+    True,
+    False,
+    Unknown,
+}
+
+impl GuardPartition {
+    /// Selects exact cases when possible and otherwise joins every possible
+    /// alternative without retaining a complete negative from one branch.
+    #[must_use]
+    pub fn select_operations(
+        &self,
+        evaluate: impl FnMut(&GuardAtom) -> GuardTruth,
+    ) -> KnowledgeSet<OperationId> {
+        guards::select_operations(self, evaluate)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -660,20 +998,26 @@ pub enum ObservableCapability {
     Optimistic,
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CapabilityClaim {
+    pub capability: ObservableCapability,
+    pub resource: Option<ResourceId>,
+}
+
 /// Version 1 has only positive experimental evidence. Unknown is not stable.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum StabilityKnowledge {
     Unknown,
     Experimental,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ReactiveRole {
     Accessor,
     Setter,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ValueKind {
     Plain,
     Callable,
@@ -681,13 +1025,19 @@ pub enum ValueKind {
     AsyncIterable,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ObjectProperty {
     pub name: String,
     pub value: ValueShape,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ArrayLength {
+    pub min: Option<u32>,
+    pub max: Option<UpperBound>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ValueShape {
     Unknown,
     Plain,
@@ -698,8 +1048,7 @@ pub enum ValueShape {
     Tuple(KnowledgeSet<ValueShape>),
     Array {
         element: Box<ValueShape>,
-        min_length: Option<u32>,
-        max_length: Option<u32>,
+        length: ArrayLength,
     },
     Object(KnowledgeSet<ObjectProperty>),
     Choice(KnowledgeSet<ValueShape>),
@@ -709,14 +1058,14 @@ pub enum ValueShape {
     Reactive {
         role: ReactiveRole,
         resource: Option<ResourceId>,
-        capabilities: KnowledgeSet<ObservableCapability>,
+        capabilities: KnowledgeSet<CapabilityClaim>,
     },
     Store {
         resource: Option<ResourceId>,
-        capabilities: KnowledgeSet<ObservableCapability>,
+        capabilities: KnowledgeSet<CapabilityClaim>,
     },
     Action {
-        resource: Option<ResourceId>,
+        transition: Option<ResourceId>,
     },
     Component,
     Cleanup {
@@ -730,66 +1079,4 @@ pub enum ValueShape {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        CallClaims, CallSemantics, CallbackInvocation, ClaimDomain, ClaimPath, ExportSemantics,
-        KnowledgeSet, KnowledgeState, OperationId, StabilityKnowledge, ValueShape, ValueSource,
-    };
-
-    #[test]
-    fn knowledge_states_keep_negative_proof_distinct_from_unknown() {
-        assert!(!KnowledgeSet::<u8>::unknown().proves_absence());
-        assert!(KnowledgeSet::<u8>::complete(vec![]).proves_absence());
-        assert!(KnowledgeSet::partial(vec![1]).is_some());
-        assert!(KnowledgeSet::<u8>::partial(vec![]).is_none());
-    }
-
-    #[test]
-    fn semantic_queries_do_not_expose_wire_closure_or_summary_names() {
-        let callback = OperationId("invoke-callback".into());
-        let call = CallSemantics::new(
-            CallClaims {
-                callbacks: KnowledgeSet::complete(vec![CallbackInvocation {
-                    from: ValueSource::Parameter {
-                        index: 0,
-                        path: vec!["effect".into()],
-                    },
-                    operation: callback.clone(),
-                }]),
-                writes: KnowledgeSet::complete(vec![]),
-                ..CallClaims::default()
-            },
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
-        let export = ExportSemantics {
-            shape: ValueShape::Callable,
-            stability: StabilityKnowledge::Unknown,
-            call,
-        };
-
-        assert_eq!(
-            export.claim_state(ClaimDomain::Callbacks),
-            KnowledgeState::CompletePositive
-        );
-        assert_eq!(
-            export.claim_state(ClaimDomain::Writes),
-            KnowledgeState::CompleteNegative
-        );
-        assert_eq!(export.callbacks().items()[0].operation, callback);
-        assert_eq!(
-            export.unresolved_call_claims(),
-            vec![
-                ClaimPath::Call(ClaimDomain::Reads),
-                ClaimPath::Call(ClaimDomain::Creates),
-                ClaimPath::Call(ClaimDomain::Invalidates),
-                ClaimPath::Call(ClaimDomain::Throws),
-                ClaimPath::Call(ClaimDomain::Returns),
-                ClaimPath::Call(ClaimDomain::Cleanups),
-                ClaimPath::Call(ClaimDomain::Disposals),
-            ]
-        );
-    }
-}
+mod tests;

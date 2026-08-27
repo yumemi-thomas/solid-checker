@@ -7538,3 +7538,32 @@ modes remain refused. Server-function directive facts now identify
 compiler-created references and registrations, while transport/runtime behavior
 and receipt integration remain open. None of these open domains is interpreted
 as complete-negative knowledge.
+
+## 2026-08-27 — Normalized package semantics keep uncertainty at the exact leaf
+
+The Phase 5 package-contract model now lives in the deep
+`solid-reactive-ir::contract_semantics` module. It separates the four local
+knowledge states, recursive value leaves, operation causality, resources and
+lifetimes, possible versus guaranteed cardinality, owner requirements/source/
+production/capabilities, restricted guard partitions, exact artifact/export
+identity, and local experimental status. Normalization canonicalizes unordered
+semantic collections and number guards, validates cross-references and
+contradictions, and hashes typed length-delimited meaning under semantic model
+version 1. Wire summary names, aliases, `closed` arrays, omission rules, and
+schema versions are not part of this model or digest.
+
+All sixteen Solid 2 conformance rows have normalized representations. This
+does not close their behavior. Runtime callback behavior, async emission and
+cancellation, cleanup replacement/disposal, transition and optimistic
+lifecycle, request/response commitment, root event disposal, renderer/runtime
+transport, exact artifact selection, and mixed-framework closure still require
+the later static-proof, probe, resolution, and receipt phases. Solid 2 generated
+operation positives also retain Phase 4's open emission census; universal and
+dynamic compiler modes remain refused. Experimental server-component protocol
+leaves stay open even while their exact export and artifact can be known.
+
+The backend wire decoder and all analyzer consumers remain unchanged and
+fail-closed. A normalized proposal cannot create an `AcceptedContract`; the
+later proof-and-receipt authority must authorize every proposed closed domain.
+No Type Facts, compiler facts, public schema, generator, evidence sidecar,
+receipt, bundled contract, or snapshot changed in this phase.
