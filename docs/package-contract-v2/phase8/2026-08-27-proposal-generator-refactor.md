@@ -213,5 +213,10 @@ Final authority:
 
 Branch: `codex/phase8-proposal-generator-refactor`
 
-The exact commit and solid-checker pull-request URL are recorded after
-publication. No upstream Solid pull request is created.
+Implementation commit: `8f6e6c55` (`feat(contracts): refactor open proposal
+generation`)
+
+Pull request: [yumemi-thomas/solid-checker#50](https://github.com/yumemi-thomas/solid-checker/pull/50)
+
+The documentation-only handoff commit records this publication metadata after
+the verified implementation commit. No upstream Solid pull request is created.
