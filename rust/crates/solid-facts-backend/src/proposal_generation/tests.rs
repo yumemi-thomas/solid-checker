@@ -9,8 +9,10 @@ use solid_reactive_ir::contract_semantics::{
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    ClosureManifest, ResolutionAuthority, ResolutionTrace, ResolvedExportBinding,
-    ResolvedExportTarget, ResolvedFile, ResolvedImport,
+    ArtifactModeMatrix, ClosureManifest, DrainStep, EnvironmentIdentity, ProbeAuthority,
+    ProbeEventClass, ProbeEventMatch, ProbeMode, ProbePolicy, ProbeRecipe, ProbeScenario,
+    ResolutionAuthority, ResolutionTrace, ResolvedExportBinding, ResolvedExportTarget,
+    ResolvedFile, ResolvedImport, RuntimeProbePlan, SandboxIdentity, SandboxKind, ToolIdentity,
 };
 
 fn digest(byte: char) -> Digest {
@@ -324,6 +326,77 @@ fn evidence_catalog_accepts_every_planned_semantic_subject() {
         catalog.contract().semantic_digest(),
         proposal.contract().semantic_digest()
     );
+}
+
+#[test]
+fn runtime_probe_plan_accepts_only_witness_and_closure_subjects_from_the_proposal() {
+    let proposal = planned();
+    let witness = proposal.plan().probe_candidates()[0]
+        .operation
+        .semantic_subject();
+    let closure = proposal.plan().closure_candidates()[0].semantic_subject();
+    let operation = match &witness.path {
+        SemanticClaimPath::Operation(operation) => operation.clone(),
+        SemanticClaimPath::Domain(_) => unreachable!(),
+    };
+    let environment = EnvironmentIdentity {
+        runtime: ToolIdentity {
+            name: "node".into(),
+            version: "24.0.0".into(),
+            build: digest('d'),
+            protocol: Some("probe-1".into()),
+        },
+        os: "linux".into(),
+        architecture: "x64".into(),
+        conditions: vec!["browser".into(), "development".into()],
+        sandbox: SandboxIdentity {
+            kind: SandboxKind::Process,
+            policy: Some(digest('e')),
+        },
+    };
+    let matrix = ArtifactModeMatrix::new(
+        proposal.contract(),
+        vec![ProbeMode {
+            name: "browser-development".into(),
+            artifact_case: "import-case".into(),
+            environment,
+        }],
+    )
+    .unwrap();
+    let common = |subject, authority, operation| ProbeRecipe {
+        subject,
+        authority,
+        scenario: ProbeScenario::Operation,
+        construction: digest('f'),
+        expected_event: ProbeEventMatch {
+            marker: "observed".into(),
+            class: ProbeEventClass::Callback,
+            operation,
+        },
+        drain: vec![DrainStep::Flush, DrainStep::Microtasks { max_turns: 4 }],
+        coverage_limitations: vec!["one exact artifact mode".into()],
+    };
+    let plan = RuntimeProbePlan::for_proposal(
+        &proposal,
+        matrix,
+        vec![
+            common(
+                witness,
+                ProbeAuthority::PossiblePositiveWitness,
+                Some(operation),
+            ),
+            common(closure, ProbeAuthority::ClosureFalsification, None),
+        ],
+        ProbePolicy {
+            repeat_runs: 2,
+            timeout_millis: 5_000,
+            max_microtask_turns: 4,
+            max_macrotask_turns: 0,
+            max_events: 128,
+        },
+    )
+    .unwrap();
+    assert_eq!(plan.sessions().len(), 4);
 }
 
 #[test]

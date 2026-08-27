@@ -74,19 +74,40 @@ fn probe_material(subject: SemanticClaimSubject) -> ProbeClaimMaterial {
         subject,
         producer: tool("probe-planner", '8'),
         recipe: digest('9'),
-        environment: EnvironmentIdentity {
-            runtime: tool("bun", 'a'),
-            os: "darwin".into(),
-            architecture: "arm64".into(),
-            conditions: vec!["production".into(), "browser".into()],
-            sandbox: SandboxIdentity {
-                kind: SandboxKind::Container,
-                policy: Some(digest('b')),
+        observations: vec![
+            ProbeObservationMaterial {
+                mode: "browser-development".into(),
+                environment: EnvironmentIdentity {
+                    runtime: tool("bun", 'a'),
+                    os: "darwin".into(),
+                    architecture: "arm64".into(),
+                    conditions: vec!["development".into(), "browser".into()],
+                    sandbox: SandboxIdentity {
+                        kind: SandboxKind::Container,
+                        policy: Some(digest('b')),
+                    },
+                },
+                outcome: ProbeOutcome::Witness {
+                    transcript: digest('1'),
+                },
             },
-        },
-        outcome: ProbeOutcome::Falsification {
-            transcript: digest('c'),
-        },
+            ProbeObservationMaterial {
+                mode: "browser-production".into(),
+                environment: EnvironmentIdentity {
+                    runtime: tool("bun", 'a'),
+                    os: "darwin".into(),
+                    architecture: "arm64".into(),
+                    conditions: vec!["production".into(), "browser".into()],
+                    sandbox: SandboxIdentity {
+                        kind: SandboxKind::Container,
+                        policy: Some(digest('b')),
+                    },
+                },
+                outcome: ProbeOutcome::Falsification {
+                    transcript: digest('c'),
+                },
+            },
+        ],
         coverage_limitations: vec!["one exact artifact mode".into()],
     }
 }
@@ -191,7 +212,10 @@ fn sidecar_families_emit_deterministically_and_keep_material_separate() {
     proof.fact_transcripts.reverse();
     proof.coverage_limitations.reverse();
     let mut probe = probe_material(probe_subject);
-    probe.environment.conditions.reverse();
+    probe.observations.reverse();
+    for observation in &mut probe.observations {
+        observation.environment.conditions.reverse();
+    }
     let second = emit_evidence_sidecars(
         &catalog,
         tool("solid-contract-evidence", 'd'),
@@ -208,6 +232,13 @@ fn sidecar_families_emit_deterministically_and_keep_material_separate() {
     assert_eq!(proof["sidecarVersion"], EVIDENCE_SIDECAR_VERSION);
     assert_eq!(probes["sidecarVersion"], EVIDENCE_SIDECAR_VERSION);
     assert!(proof["claims"][0].get("environment").is_none());
+    assert_eq!(
+        probes["claims"][0]["observations"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
     assert!(probes["claims"][0].get("factTranscripts").is_none());
     assert!(
         proof["claims"][0]["claimId"]
@@ -410,7 +441,8 @@ fn probe_outcomes_record_limits_and_never_create_acceptance_authority() {
         },
     ] {
         let mut material = probe_material(probe_subject.clone());
-        material.outcome = outcome;
+        material.observations.truncate(1);
+        material.observations[0].outcome = outcome;
         let documents = emit_evidence_sidecars(
             &catalog,
             tool("solid-contract-evidence", 'd'),
@@ -427,4 +459,52 @@ fn probe_outcomes_record_limits_and_never_create_acceptance_authority() {
         }
         assert!(documents.proof().is_none());
     }
+}
+
+#[test]
+fn probe_mode_matrices_reject_empty_duplicate_and_noncanonical_observations() {
+    let contract = fixture_contract();
+    let (_, probe_subject) = fixture_subjects(&contract);
+    let catalog = EvidenceCatalog::new(contract, [], [probe_subject.clone()]).unwrap();
+
+    let mut empty = probe_material(probe_subject.clone());
+    empty.observations.clear();
+    assert!(matches!(
+        emit_evidence_sidecars(
+            &catalog,
+            tool("solid-contract-evidence", 'd'),
+            vec![],
+            vec![empty]
+        ),
+        Err(EvidenceSidecarError::InvalidMaterial { .. })
+    ));
+
+    let mut duplicate = probe_material(probe_subject);
+    duplicate.observations[1].mode = duplicate.observations[0].mode.clone();
+    assert!(matches!(
+        emit_evidence_sidecars(
+            &catalog,
+            tool("solid-contract-evidence", 'd'),
+            vec![],
+            vec![duplicate]
+        ),
+        Err(EvidenceSidecarError::InvalidMaterial { .. })
+    ));
+
+    let (_, documents, _, _) = fixture();
+    let mut unsorted: serde_json::Value =
+        serde_json::from_slice(documents.probes().unwrap()).unwrap();
+    unsorted["claims"][0]["observations"]
+        .as_array_mut()
+        .unwrap()
+        .reverse();
+    let unsorted = serde_json::to_vec(&unsorted).unwrap();
+    let main = main_with_references(&EvidenceSidecarReferences {
+        proof: None,
+        probes: Some(content_digest(&unsorted)),
+    });
+    assert!(matches!(
+        validate_evidence_sidecars(&main, &catalog, None, Some(&unsorted)),
+        Err(EvidenceSidecarError::InvalidMaterial { .. })
+    ));
 }

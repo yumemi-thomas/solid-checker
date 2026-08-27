@@ -111,6 +111,27 @@ Probe observations therefore create possible-positive evidence or falsify a
 closure candidate. Static proof supplies guaranteed-positive and negative
 claims.
 
+Phase 10 enforces this as a typed runtime-plan boundary. A probe plan is built
+from an exact Phase 8 `PlannedProposal`, an artifact-case mode matrix, and
+claim-addressed recipes. Possible-positive recipes are admitted only for
+planned possible operations; closure-falsification recipes are admitted only
+for planned closure domains. There is no recipe authority for negative,
+minimum, maximum, exhaustive, or accepted claims.
+
+Each recipe uses semantic drains (`flush`, bounded microtask turns, and bounded
+macrotask turns), never elapsed-time sleeps as behavioral evidence. Every
+session also has a wall-clock timeout as a termination bound. Each exact mode
+runs at least twice with fresh process, realm, and module-instance identity.
+Only identical semantic event sequences across every repeat are usable.
+
+The event vocabulary is call, render, flush, callback, cleanup, settlement,
+emission, transition, request, response, and stream. Scenario validators
+require ordered cleanup production/disposal, repeated zero-based
+AsyncIterable emissions followed by settlement, active-to-settled/reverted
+transitions, request-to-uncommitted-to-committed responses, or root-lifetime
+cleanup as appropriate. A finite run that does not contain the expected
+positive marker is a refusal, never evidence of absence.
+
 ## Evidence sidecars
 
 Sidecars contain detailed, claim-addressed material:
@@ -134,9 +155,18 @@ Phase 9 fixes two independent document families at sidecar version 1:
 - `solid-checker-proof-evidence` contains claim-local fact-transcript and proof-
   input identities, coverage limitations, and the producer identities needed
   for later replay;
-- `solid-checker-runtime-probe-evidence` contains claim-local probe recipe,
-  runtime, conditions, operating system, architecture, explicit sandbox kind
-  and policy, outcome, limitations, and producer identity.
+- `solid-checker-runtime-probe-evidence` contains a claim-local probe recipe
+  and a non-empty exact mode matrix. Each mode observation records runtime,
+  conditions, operating system, architecture, explicit sandbox kind and
+  policy, outcome, limitations, and producer identity.
+
+Phase 10 probe transcripts are deterministic internal documents with their own
+kind/version discriminator. They bind the normalized semantic digest, probe
+plan, claim, exact runtime/declaration/transform/closure artifacts, export,
+recipe, mode/environment, isolated repeat identities, semantic drain counts,
+and ordered events. Their SHA-256 becomes the sidecar witness or falsification
+identity. The transcript is not the temporary public main schema and does not
+advance that schema version.
 
 The checked-in structural authority is
 [`solid-reactivity-evidence-sidecars-v1.schema.json`](../../schema/solid-reactivity-evidence-sidecars-v1.schema.json).

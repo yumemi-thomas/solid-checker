@@ -107,9 +107,15 @@ pub struct ProbeClaimMaterial {
     pub subject: SemanticClaimSubject,
     pub producer: ToolIdentity,
     pub recipe: Digest,
+    pub observations: Vec<ProbeObservationMaterial>,
+    pub coverage_limitations: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProbeObservationMaterial {
+    pub mode: String,
     pub environment: EnvironmentIdentity,
     pub outcome: ProbeOutcome,
-    pub coverage_limitations: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -200,7 +206,14 @@ impl EvidenceCatalog {
                 .plan()
                 .probe_candidates()
                 .iter()
-                .map(|probe| probe.operation.semantic_subject()),
+                .map(|probe| probe.operation.semantic_subject())
+                .chain(
+                    proposal
+                        .plan()
+                        .closure_candidates()
+                        .iter()
+                        .map(|claim| claim.semantic_subject()),
+                ),
         )
     }
 
@@ -487,15 +500,36 @@ fn canonicalize_proof_material(
 fn canonicalize_probe_material(
     material: &mut ProbeClaimMaterial,
 ) -> Result<(), EvidenceSidecarError> {
-    validate_environment(&mut material.environment)?;
-    if let ProbeOutcome::Refused { reason } = &material.outcome {
-        validate_nonempty(reason, "probe refusal reason")?;
+    if material.observations.is_empty() || material.observations.len() > MAX_ITEMS_PER_CLAIM {
+        return invalid_material("probe claim must contain a bounded non-empty mode matrix");
     }
-    if let ProbeOutcome::Timeout { limit_millis: 0 } = material.outcome {
-        return invalid_material("probe timeout must be non-zero");
+    for observation in &mut material.observations {
+        validate_nonempty(&observation.mode, "probe mode")?;
+        validate_environment(&mut observation.environment)?;
+        validate_probe_outcome(&observation.outcome)?;
+    }
+    material
+        .observations
+        .sort_by(|left, right| left.mode.cmp(&right.mode));
+    if material
+        .observations
+        .windows(2)
+        .any(|window| window[0].mode == window[1].mode)
+    {
+        return invalid_material("probe modes must be unique within one semantic claim");
     }
     canonicalize_strings(&mut material.coverage_limitations, "coverage limitation")?;
     Ok(())
+}
+
+fn validate_probe_outcome(outcome: &ProbeOutcome) -> Result<(), EvidenceSidecarError> {
+    match outcome {
+        ProbeOutcome::Refused { reason } => validate_nonempty(reason, "probe refusal reason"),
+        ProbeOutcome::Timeout { limit_millis: 0 } => {
+            invalid_material("probe timeout must be non-zero")
+        }
+        _ => Ok(()),
+    }
 }
 
 fn validate_environment(environment: &mut EnvironmentIdentity) -> Result<(), EvidenceSidecarError> {
@@ -710,8 +744,7 @@ struct WireProbeClaim {
     artifact: WireClaimArtifactIdentity,
     producer: WireToolIdentity,
     recipe: String,
-    environment: WireEnvironmentIdentity,
-    outcome: WireProbeOutcome,
+    observations: Vec<WireProbeObservation>,
     coverage_limitations: Vec<String>,
 }
 
@@ -727,9 +760,30 @@ impl WireProbeClaim {
             artifact: WireClaimArtifactIdentity::from(&expected.artifact),
             producer: WireToolIdentity::from(&material.producer),
             recipe: material.recipe.as_str().into(),
-            environment: WireEnvironmentIdentity::from(&material.environment),
-            outcome: WireProbeOutcome::from(&material.outcome),
+            observations: material
+                .observations
+                .iter()
+                .map(WireProbeObservation::from)
+                .collect(),
             coverage_limitations: material.coverage_limitations,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WireProbeObservation {
+    mode: String,
+    environment: WireEnvironmentIdentity,
+    outcome: WireProbeOutcome,
+}
+
+impl From<&ProbeObservationMaterial> for WireProbeObservation {
+    fn from(observation: &ProbeObservationMaterial) -> Self {
+        Self {
+            mode: observation.mode.clone(),
+            environment: WireEnvironmentIdentity::from(&observation.environment),
+            outcome: WireProbeOutcome::from(&observation.outcome),
         }
     }
 }
@@ -1279,8 +1333,19 @@ fn validate_probe_document(
         )?;
         validate_wire_tool(&claim.producer)?;
         parse_digest(&claim.recipe)?;
-        validate_wire_environment(&claim.environment)?;
-        validate_wire_outcome(&claim.outcome)?;
+        if claim.observations.is_empty() || claim.observations.len() > MAX_ITEMS_PER_CLAIM {
+            return invalid_material("probe claim must contain a bounded non-empty mode matrix");
+        }
+        let mut previous_mode = None;
+        for observation in &claim.observations {
+            validate_nonempty(&observation.mode, "probe mode")?;
+            if previous_mode.is_some_and(|previous| previous >= observation.mode.as_str()) {
+                return invalid_material("probe modes must be sorted and unique");
+            }
+            previous_mode = Some(observation.mode.as_str());
+            validate_wire_environment(&observation.environment)?;
+            validate_wire_outcome(&observation.outcome)?;
+        }
         validate_wire_strings(&claim.coverage_limitations, "coverage limitation")?;
         if !claims.insert(claim_id.clone()) {
             return Err(EvidenceSidecarError::DuplicateClaim {

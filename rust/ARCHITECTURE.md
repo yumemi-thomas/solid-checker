@@ -231,6 +231,32 @@ and runtime transcripts are neither stored in `AcceptedContract` nor exposed
 to analyzer consumers; Phase 11 may consume them while issuing a receipt, and
 ordinary analysis remains offline after they are deleted.
 
+`solid-facts-backend::runtime_probes` owns the Phase 10 semantic probe seam.
+Node will remain responsible for package acquisition, worker process launch,
+and raw runtime interaction when the Phase 14 migration switches the public
+probe pipeline. Rust already owns every judgement over those observations:
+exact artifact-case/mode planning, bounded time and semantic queue drains,
+fresh process/realm/module identities, isolated deterministic repeats, event
+and lifecycle validation, transcript identity, and authority classification.
+
+Probe recipes come only from a `PlannedProposal`. A possible-positive recipe
+must name one exact planned possible operation and marker. A closure-
+falsification recipe must name one exact planned closure domain. Completed
+repeats emit call, render, flush, callback, cleanup, settlement, emission,
+transition, request, response, and stream events with zero-based semantic
+sequence numbers. Cleanup, repeated AsyncIterable, transition, request/
+response, and root-lifetime scenarios impose their own ordered lifecycle
+checks. Runtime observations are grouped into exact claim-local modes in the
+probe evidence sidecar, so refusal in one mode does not erase a valid sibling.
+
+Only a repeated positive marker produces a witness or closure contradiction.
+Missing markers, missing repeats, timeouts, errors, worker refusals,
+environment mismatch, isolation reuse, excess drain, invalid lifecycles, and
+nondeterministic event streams remain errors or local refusals. The module has
+no negative, minimum, maximum, exhaustive, closure-acceptance, receipt, or
+`AcceptedContract` output. Phase 11 is the first consumer allowed to replay a
+contradiction record while proving closure.
+
 ## How the Solid 1.x dialect landed
 
 The sibling-directory shape sketched here before the 1.x dialect existed is

@@ -76,6 +76,12 @@ transcript, error detail, bounded timeout, or refusal reason. They are evidence
 records only. Phase 10 still owns semantic event markers, mode matrices,
 isolation, draining, repeatability, and probe authority enforcement.
 
+Phase 10 subsequently refined each runtime-probe claim from one environment/
+outcome pair to a bounded non-empty `observations` matrix keyed by exact mode.
+The document kind and sidecar version remain unchanged because this format has
+not reached the Phase 14 public cutover; the newer Phase 10 report is the
+current authority for probe material.
+
 Every document and claim records tool build identity. Fact transcripts also
 record their exact fact domain and producer. Proof inputs record their rule,
 input digest, and proof tool. Runtime records distinguish no sandbox from a

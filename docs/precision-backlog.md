@@ -7673,8 +7673,38 @@ unplanned evidence.
 
 The validated evidence result contains claim IDs only, and contract
 normalization still succeeds using main-document hash references after the raw
-sidecars are removed. This does not accept any claim: semantic event probes
-remain Phase 10, proof replay and receipt issuance remain Phase 11, analyzer
-consumption remains Phase 12, and public producer/consumer cutover remains
-Phase 14. No Type Facts or compiler fact changed, no current finding moved, and
-no open Solid 2 runtime premise became negative proof.
+sidecars are removed. That Phase 9 slice did not accept any claim. Phase 10 now
+owns semantic event evaluation, while proof replay and receipt issuance remain
+Phase 11, analyzer consumption remains Phase 12, and public producer/consumer
+cutover remains Phase 14. No Type Facts or compiler fact changed, no current
+finding moved, and no open Solid 2 runtime premise became negative proof.
+
+## 2026-08-27 — Runtime probes witness positives and falsify closure only
+
+Phase 10 adds the replacement probe authority in
+`solid-facts-backend::runtime_probes`. Exact artifact cases and runtime modes
+expand into bounded repeat sessions. Every repeat must use fresh process,
+realm, and module-instance identity, must remain within the recipe's timeout
+and semantic microtask/macrotask drain limits, and must produce the identical
+zero-based semantic event transcript. Call, render, flush, callback, cleanup,
+settlement, emission, transition, request, response, and stream events replace
+elapsed-time behavior guesses.
+
+Only a planned possible operation can produce a possible-positive witness, and
+only a planned closure domain can produce a contradiction record. Missing
+markers, finite absence, timeouts, errors, isolation reuse, environment
+mismatch, excess drain, malformed lifecycles, and repeat disagreement refuse
+the exact mode. They never produce complete-negative knowledge, a guaranteed
+minimum, a finite maximum, exhaustiveness, accepted closure, or a receipt.
+Claim-local sidecar observations preserve this locality across modes.
+
+The module validates ordered cleanup, repeated AsyncIterable emission,
+transition, request/response, and root-lifetime scenarios. It deliberately
+does not switch the legacy public probe plan, worker, driver, or harness;
+implementation-plan item 161 owns that atomic Phase 14 migration. Phase 11
+must still replay contradiction records as one proof input, prove every closure
+family, compute proof roots, and issue acceptance receipts. Actual RC.3 corpus
+recipes and end-to-end worker execution remain open until the Phase 13
+conformance work and Phase 14 cutover. No current analyzer finding, Type Facts
+protocol, compiler-facts protocol, bundled contract, fixture snapshot, or
+public main-schema document changed.
