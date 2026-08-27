@@ -1,269 +1,210 @@
 # Compiler facts
 
-Solid compiler facts describe original-source JSX execution semantics. The
-production Rust checker loads the controlled `solidjs-compiler`
-implementation in-process, so facts come from the same transform branches as
-compilation. Solid 2.0 uses the semantic-only
-[`solid`](https://github.com/yumemi-thomas/solid) fork based on the official
-compiler under `packages/compiler`; Solid 1.x remains on the separate
+Compiler facts describe execution behavior created or selected by Solid's
+compiler. They are not syntax guesses and they do not describe arbitrary
+package-runtime behavior. Solid 2 facts come from the semantic-only
+[`yumemi-thomas/solid`](https://github.com/yumemi-thomas/solid) fork of the
+official compiler under `packages/compiler`; Solid 1 facts remain on the
+separate
 [`solid-1x-compiler`](https://github.com/yumemi-thomas/solid-1x-compiler) fork.
-Both are built without their Node-API feature. The revisions are pinned in
-`rust/Cargo.toml` and recorded in `THIRD_PARTY_NOTICES.md`.
+Both are exact Cargo revisions and run in-process without Node-API types.
 
-## The semantic trace
+The public checker boundary is compiler-facts protocol 2 in
+`solid-facts::compiler`. Producer structs stop in their dialect adapters. One
+deep normalization module validates identity and semantics, then emits a
+`CompilerSemanticModel`. The older `trackedRegions`, `untrackedRegions`,
+`discardedRegions`, `ownershipRegions`, `callbackRoles`, and `jsxOperations`
+arrays are deterministic compatibility views derived there. A decoded map is
+refused if any view disagrees with the normalized operations.
 
-The compiler emits a `SemanticTrace`: a versioned, total list of
-`ExecutionSite` records pairing an original-source span with a typed semantic
-decision. The compiler censuses the JSX execution sites it lowers before
-lowering them, and fails closed if any censused site reaches the end without a
-decision — so within the census there is no unclassified hole.
+## Solid 2 semantic trace version 3
 
-The census is *not* a census of every JSX expression in the source. Each
-producer censuses the JSX it lowers, and it does not lower everything: 1.x
-drops a nested non-hydratable `<head>` before recording its descendants, while
-some lowering paths retract sites without replacing them with an `Elided`
-decision. A source-level JSX expression a producer never censused reaches the
-checker as absence, and absence is not evidence that it runs untracked or that
-it was deleted. By contrast, current-pin void child lists are positive facts:
-kept positions are tracked and deleted positions are one discarded range.
+The Solid 2 compiler emits two related operation sets.
 
-The trace carries a `version` field (`SEMANTIC_TRACE_VERSION`, currently 2), and
-each dialect adapter refuses a trace whose version is not the one it was written
-against rather than reading the fields it recognizes and assuming the rest mean
-nothing. Facts may be added within a version; a removal or a meaning change is a
-version bump.
+- A source operation identifies one original-source span and semantic kind,
+  such as a JSX child, native attribute, component property, event handler,
+  ref factory, or control-flow render callback.
+- A generated operation identifies a concrete lowering operation, such as an
+  effect, insert, memo, scope, component invocation, deferred callback,
+  delegated event, ref application, SSR claim, or runtime wrapper.
 
-That check is entirely consumer-side, and it has to be written carefully to mean
-anything:
+Source operations cite generated-operation IDs. Normalization verifies every
+such reference, unique IDs, canonical span order, nonempty identities, and
+canonical generated receiver spans. The producer reconciles censused source
+sites with the decisions actually taken during lowering and refuses an
+unresolved or conflicting site. Semantic recording can be disabled without
+allocating facts and does not participate in lowering decisions.
 
-- **The adapter compares against its own literal**, `READS_TRACE_VERSION = 2`,
-  declared in each of `rust/dialects/solid-v1/compiler` and
-  `rust/dialects/solid-v2/compiler`. Comparing against the producer's exported
-  `SEMANTIC_TRACE_VERSION` would be tautological — the producer fills the field
-  from that same constant — so the runtime check could never fire for any
-  producer, including a version-3 one arriving through a pin move. It was
-  written that way once; the unit tests passed because they built the wrong
-  version by adding to that same constant.
-- **A `const _: () = assert!(…)` per adapter** holds the producer's constant
-  equal to the consumer's literal, so a pin move that bumps the schema version
-  fails the *build* rather than quietly making the runtime refusal unreachable
-  again.
-- **The producer's `#[serde(deny_unknown_fields)]` protects nobody here.** No
-  code in this repository deserializes a `SemanticTrace`: `compile()` returns
-  the struct in-process, and the adapters read its fields directly. The version
-  gate and the compile-time assert are the whole of the consumer-side
-  protection. The one remaining silent-widening path is a struct literal filled
-  with `..SemanticTrace::default()`, which absorbs a newly added field without
-  complaint — so both adapters' version tests name every field instead, and a
-  producer that adds one fails the build.
+The Solid 2 source-operation set is complete for supported lowering. Reported
+generated operations are exact positive facts, but their set remains partial:
+the producer does not yet maintain an independent census over every possible
+generated wrapper emission. An empty or incomplete generated list therefore
+never proves absence.
 
-Each dialect compiler adapter projects the trace onto the checker's
-`ExecutionMap` boundary:
+Every source operation carries independent execution axes:
 
-| Site decision | Execution map |
+| Axis | Meaning |
 | --- | --- |
-| `Value(ReactiveRerun)` | tracked region |
-| `Value(EagerOnce)` | untracked region |
-| `Value(Elided)` | discarded region |
-| `Value(EagerOnce)` on a component child | deferred callback |
-| `Value(CallerContext)` | deferred callback |
-| `Callback(LaterEvent)` | `event-handler` callback |
-| `Callback(LaterRender)` | `render` callback |
-| `Callback(RefApply)` | `directive-apply` callback |
+| disposition | whether the source is discarded, eager, deferred, reactive, event-triggered, a ref factory/application, a component getter/control-flow render, or SSR evaluation/render callback |
+| trigger | no invocation, render, dependency, event, ref application, caller, or unknown |
+| schedule | no execution, inline, render, deferred, or unknown |
+| tracking | none, tracked, untracked, inherited, or unknown |
+| cardinality | never, zero-or-one, exactly-once, zero-or-more, one-or-more, or unknown |
+| owner | none, ambient at source, ambient at generated invocation, captured generated owner, created generated owner, or unknown |
 
-With the compiler's default effect wrapper, every `ReactiveRerun` also yields an
-owned ownership region: the generated wrapper establishes a reactive owner while
-that source region executes. Custom and disabled effect wrappers yield no
-ownership claim, because the runtime that would establish the owner is then not
-the audited one. Absence is deliberately unknown, not unowned; component,
-control-flow, event, and ref ownership continues to be composed from exact
-TypeFacts identity and runtime contracts.
+The axes stay independent. An unknown owner does not erase known scheduling or
+tracking. Validation rejects contradictory terminal combinations, including a
+discarded operation that claims a live trigger, schedule, owner, or nonzero
+cardinality. Generated operations carry trigger, schedule, tracking,
+cardinality, and owner independently as well.
 
-Where that rule is applied differs by dialect, and only there. The Solid 2.0
-producer still reports it as a `SemanticTrace::ownership_sites` entry and the
-2.0 adapter projects those entries. The Solid 1.x producer removed that field
-in version 2 in favor of additive wrapper facts, so the 1.x adapter applies
-the same rule itself, over the same trace sites, using the effect-wrapper
-option it already had to pass to the compiler. The resulting `ExecutionMap` is
-identical either way; nothing downstream of the adapters can tell which side
-derived it.
+### Identity envelope
 
-Version 2 also adds `owner_establishments`, `component_render_sites`, and
-`deferred_callback_sites` — additive, span-level observations of the wrappers
-lowering emitted. No adapter consumes them yet; see
-`docs/precision-backlog.md` for the join rules they require and what they could
-strengthen.
+Trace version 3 binds facts to all inputs and products that can change their
+meaning:
 
-## Census gaps
+- compiler package version;
+- exact official upstream base revision;
+- exact semantic implementation revision;
+- SHA-256 of original source bytes;
+- SHA-256 of generated JavaScript;
+- optional source-map SHA-256;
+- generation mode and the complete effective compiler configuration, including
+  filename and source-map selection.
 
-`ExecutionMap::uncovered_jsx_expressions` holds the census against *itself*: a
-site the producer censused but left unclassified. It cannot see a source-level
-JSX expression the census never listed, and both producers have shapes they do
-not list.
+The checker recomputes source, output, source-map, and canonical configuration
+digests during normalization. It also requires the trace's compiler identity
+to equal the constants exported by the pinned producer. A stale trace, changed
+output, partial Solid 2 identity, or pin/schema disagreement fails closed.
 
-The checker used to read that absence as a proof. A reactive read inside such an
-expression matched no tracked region, no untracked region, no callback role and
-no JSX operation, fell through to "inside a component body, classified by
-nothing", and SC1001 fired as a **proven violation** about an expression the
-compiler had declined to report on.
+The implementation revision deliberately names the first semantic
+implementation commit. The following distribution commit changes only that
+constant, avoiding an impossible self-hash. `rust/Cargo.toml` pins the exact
+distribution commit and the Phase 4 report records both identities.
 
-`missing_jsx_census` in `rust/crates/solid-reactive-ir/src/execution_role.rs`
-closes that. When the untracked-rendering role came from the fall-through rather
-than from a fact, it finds the narrowest source-level JSX region containing the
-read — an attribute expression container, a spread container, or a child, all
-read from solid-facts' syntax rather than from the census, because the question
-is precisely what the source has that the census does not — and asks whether any
-census entry touches it. If none does, the read is reported as **uncertifiable**:
-a missing compiler fact, worded as one in both the message and the evidence
-chain.
+## DOM and SSR semantics
 
-Two things it deliberately does not do. It does not certify the read safe — "the
-compiler deleted this expression" is a second claim with no more evidence behind
-it than the first. (When the compiler *does* say it deleted the expression, that
-is a discarded region, below, and it is a fact rather than a hole: silence
-follows from the fact, never from the silence.) And it does not fire for a role
-any *fact* established: the escalation is gated on `UntrackedRendering`, so a
-read the dialect proved runs in an untracked callback keeps its proven violation
-even inside an uncensused region, because that proof never came from the census.
-Verified live at the current pins:
-`<br>{runWithOwner(owner, () => a())}</br>` — the 2.0 census gap
-of the fixture below, wrapped around a callback `Solid2` reports untracked reads
-in (`reports_untracked_reads_at`, `RunWithOwner` argument 1, giving
-`UntrackedCallback`) — stays an SC1001 **violation**, matching its censused
-control.
+DOM and SSR are separately reconciled modes. Universal and dynamic generation
+remain unsupported for semantic tracing and are refused.
 
-A hole arrives two ways, and the mitigation cannot key on which. Either the
-producer never censused the expression (1.x's nested non-hydratable `<head>`),
-or it censused the expression and then **retracted** the site during lowering
-without a replacement decision (the textarea `value` fold or the inert
-`<noscript>` fast path). Both leave the same shape, so both take the same
-wording and verdict. Current-pin void child lists are not holes: the producers
-record their discarded ranges explicitly.
+DOM facts distinguish reactive reruns from eager values, deferred component
+getters and children, events, control-flow render callbacks, discarded source,
+ref factories, generated ref application, and owner-creating wrappers. In
+particular, a two-phase ref/directive factory is not collapsed into its later
+application.
 
-Fixtures: `fixtures/reactive-ir/jsx-census-gap-solid-1x` (a read in a nested
-non-hydratable `<head>`, child and attribute arms) and
-`fixtures/reactive-ir/jsx-census-gap-solid-2` (an inert `<noscript>` child,
-censused then retracted, with a template-root void child as a positive discarded
-control). Its dynamic-`textContent` arm follows Ryan's current `next` semantics.
-Each fixture also pins the two negatives — a censused tracked read stays silent,
-and an untracked read outside all JSX stays a proven violation.
+SSR facts describe evaluation performed by the server transform and generated
+render callbacks using inherited tracking. They are not projected to the old
+"untracked render" array, because doing so would make a stronger and incorrect
+client-style claim. Browser-only event and ref paths discarded by ordinary SSR
+remain discarded; generated SSR render callbacks and claim operations have
+their own identities. These facts do not claim request transport, response
+commitment, stream flushing, or runtime package behavior.
 
-## Discarded regions
+## Server-function transformation facts
 
-`Value(Elided)` is the compiler reporting a deletion: the site was censused, a
-decision was reached, and nothing was emitted for it. Both adapters project it
-to `ExecutionMap::discarded_regions`, and the IR classifies a span inside one as
-`ExecutionRole::DiscardedRendering`.
+The compiler's `transformDirectives` interface has an independent,
+output-neutral semantic trace for server-function transforms. It records exact
+directive/source spans, module and function scope, export identity, whether a
+server-function reference was created, and whether a server implementation was
+registered. Its identity envelope binds source, output, optional source map,
+configuration, and the same compiler revisions.
 
-It is deliberately a category of its own, and it took a defect to establish
-that. Until 2026-08-24 both adapters projected `Elided` and `EagerOnce` to the
-same untracked region, so a reactive read inside a deleted value was a **proven
-SC1001 violation** — "the read sees the current value once and never updates" —
-about code no compiler emits. Every clause is false when the read does not
-happen. `EagerOnce` keeps the untracked projection, because it evaluates exactly
-once and that sentence is true of it.
+This is compiler transformation evidence only. It does not certify network
+transport, serialization, authentication, deployment routing, or invocation
+success. The ordinary JSX adapter does not invent those facts, and package
+contract proof integration for the directive trace remains a later consumer
+step.
 
-Three properties define the class, and the third is what keeps it from becoming
-a certification channel:
+## Solid 1 normalization
 
-- **It is not a hole.** `census_touches` counts a discarded region, so
-  `missing_jsx_census` does not escalate a deletion into an uncertifiable
-  obligation. Nothing is missing: the compiler reported on this JSX and said the
-  code is gone.
-- **It is not an execution claim.** `reports_untracked_read` and
-  `reports_disallowed_write` both exclude it, so no read, write or action
-  finding is projected from it, and `contract_callback_execution` publishes no
-  timing for a callback inside one — "inline" would license a consumer to run
-  it eagerly, which is a positive claim dead code cannot support.
-- **It proves nothing positive either.** Silence over a discarded region means
-  "both compilers deleted this", never "this was proven safe". Deletion
-  dominates: `execution_role` and `semantic_execution_role` both answer
-  `DiscardedRendering` for a span inside a discarded region *before* consulting
-  any narrower region or any semantic role, so a deleted value cannot certify a
-  read through a deferred position, or convict one through an `untrack()`
-  position, on the strength of syntax whose code was removed. Dominance is safe
-  because every one of both producers' `Elided` spans is a single attribute or
-  child *value* expression, never a wider enclosing construct — checked at both
-  pins, and pinned by the adapters' own unit tests.
+Solid 1 still emits semantic trace version 2. Its dialect adapter translates
+legacy terminal decisions into the same protocol-2 source-operation model in
+one place. Source-operation completeness is retained, but the old trace does
+not bind generated wrapper observations to exact generated-operation IDs.
+Therefore:
 
-The deletion gate is applied once at the final common IR seam to every
-source-derived diagnostic table that does not otherwise ask for an execution
-role: structured static defects, upstream-compatible static violations,
-directive creations, and contract-generation obligations. Thus a syntax/API
-shape such as a one-argument `createEffect` inside compiler-deleted JSX is
-absent, while the byte-identical live shape still reports. Individual rules do
-not get to invent different dead-code policies.
+- `sourceOperationsComplete` is true;
+- `generatedOperationsComplete` is false;
+- the generated-operation list is empty and means unknown/partial, never
+  proven absence; and
+- producer `identityComplete` is false because the legacy trace lacks the full
+  Solid 2 identity envelope.
 
-At the current pins there is no checker-maintained child-content transform
-divergence. Solid 1.x is intentionally faithful to its shipped Babel compiler:
-its void set includes the legacy `keygen` and `menuitem` tags, and discarded
-void or `<noscript>` child lists carry positive `Elided` facts. Solid 2 follows
-Ryan's authoritative `next` semantics rather than treating Babel parity as its
-target: nested native void children remain live and tracked, while a
-template-root void child list is discarded and reported as one `Elided` range.
+This asymmetry is intentional. Shared consumers see one normalized model while
+the older producer cannot certify facts it never emitted.
 
-That distinction belongs in the producers' traces, not in a consumer-side tag
-table. The former `DivergentLowering` carrier, dialect void-list hook, rerun
-suppression, owner suppression, and autofix suppression were deleted after both
-pins supplied truthful facts. `fixtures/reactive-ir/jsx-void-child-divergence-solid-{1x,2}`
-keeps byte-identical source across the dialects and proves that the different
-intentional outcomes are both certified. Missing facts still fail closed through
-`missing_jsx_census`; positive deletion facts still dominate through
-`DiscardedRendering`.
+## Compatibility projection
 
-The historical investigations and baseline measurements for the retired
-mitigations remain in `docs/precision-backlog.md`. New compiler disagreements
-must be established with producer probes before adding consumer policy; compiler
-silence is never enough.
+Existing IR consumers continue to receive conservative projections:
 
-`Value(CallerContext)` is the dynamic component property: the expression is
-handed to the child as a getter and re-evaluated in the child's tracking
-context, so it is deferred rather than untracked. A component child is invoked
-from the component's own render for the same reason, even though the value
-itself is built once.
+| Normalized fact | Compatibility view |
+| --- | --- |
+| tracked reactive rerun | tracked region |
+| discarded / cardinality never | discarded region |
+| exactly-once untracked eager value or ref factory | untracked region |
+| deferred/component getter | deferred callback |
+| event-triggered | event-handler callback |
+| ref application | directive-apply callback |
+| control-flow render | render callback |
+| reactive rerun under a created generated owner | owned region |
+| SSR inherited execution, partial/unknown axes | no stronger legacy execution claim |
 
-The hardened DOM contract covers these compiler decisions:
+Every source operation still yields an exact JSX-operation kind. The source
+AST independently detects JSX regions with no compiler census entry;
+`missing_jsx_census` converts silence into an uncertifiable obligation rather
+than negative proof. A positive discarded operation is different: it proves
+the code executes zero times and dominates every live execution inference
+inside its span.
 
-- Dynamic native JSX children and attributes are tracked regions.
-- Expressions the compiler evaluates exactly once are explicit untracked
-  regions: template-inlined and unwrapped-insert children (including
-  `staticMarker` holes), one-shot `setAttr` attribute values, and by-value
-  component properties. "Once" is the claim — the code runs, at render, outside
-  any tracking scope — so a reactive read there is a proven stale read.
-- Expressions the compiler **deletes** are discarded regions, and they are the
-  opposite claim, not a weaker one: a `Value(Elided)` value evaluates *zero*
-  times. Every one of both producers' `Elided` sites is either a confidently
-  foldable constant baked into the template or a value discarded unlowered (a
-  `children` attribute shadowed by real children, a promoted capture the slot's
-  winner drops, a spread's skipped `$key`/`children`, 1.x's shadowed component
-  `children` prop) — none of them evaluates at runtime, in this producer or in
-  the compiler Solid ships. See "Discarded regions" below.
-- `on*` JSX values are deferred `event-handler` callbacks rather than tracked
-  reads at element creation.
-- Dynamic component properties and component children are deferred callbacks;
-  their operations retain distinct `component-property` and `component-child`
-  kinds so a component value prop is not confused with a render callback.
-- `hydratable`, `dev`, `effectWrapper`, `wrapConditionals`, `staticMarker`, and
-  sorted, unique `builtIns` are forwarded exactly to the compiler.
-- Fact arrays are sorted deterministically by original UTF-8 byte spans.
+## Proof obligations
 
-Completeness invariant: every `jsx-expression` operation must be covered by a
-tracked region, an untracked region, a discarded region, a callback role, or a
-`component-property`, `component-spread`, or `component-child` operation.
-Because the trace is total, every site lands in
-exactly one category and the invariant holds by construction. Completeness is
-a producer-integrity property: compiler-adapter tests must reject or expose an
-incomplete trace before project analysis, rather than translating a producer
-bug into a user-facing diagnostic.
+A producer may mark a source or generated operation set complete only after:
 
-Only DOM generation is supported. Other renderer modes, malformed options,
-unknown fact kinds, invalid UTF-8 boundaries, stale hashes, and incompatible
-protocol versions fail closed.
+1. every supported lowering entrypoint has participated in the census;
+2. every censused source site has exactly one terminal semantic disposition;
+3. speculative/retracted lowering observations have been rolled back or
+   replaced with an explicit discarded fact;
+4. every source-to-generated reference resolves uniquely;
+5. every span and operation ID is canonical and deterministic;
+6. the full compiler fixture corpus and adversarial probes reconcile;
+7. trace-on and trace-off JavaScript, source maps, diagnostics, and observable
+   compiler behavior are byte-identical; and
+8. output without facts matches the exact upstream base.
+
+The checker revalidates structural and semantic invariants. It cannot by itself
+prove that a compromised producer observed every lowering branch, so closure is
+accepted only for the revision whose independent reconciliation tests and
+conformance report are pinned with the checker.
+
+## Cache and protocol invalidation
+
+Compiler cache keys include the source path and digest, dialect identity,
+exact compiler-facts producer identity, protocol number, and canonical compiler
+options. Reactive IR reuse compares normalized operations, completeness,
+producer semantic revision, and compatibility views; it deliberately ignores
+per-build source/output/configuration digests after normalization so a body-only
+edit with identical execution semantics can reuse later indexes. Moving a
+producer pin, trace version, semantic implementation, or protocol still
+invalidates cached answers even when source semantics happen to match.
+
+JSON modules use an explicit inert model with no producer operations because no
+JSX compiler is invoked. An absent semantic model in a serialized protocol-2
+map is a decode failure, not an empty fact set.
 
 ## Moving the pin
 
-Solid 2 compiler conformance lives on the semantic-only fork branch and compares
-its output with the exact `solidjs/solid` base. Solid 1.x conformance remains in
-its dedicated compiler fork. To adopt new compiler work, update the appropriate
-compiler `rev` in `rust/Cargo.toml`, refresh `THIRD_PARTY_NOTICES.md`, regenerate
-the compiler-bootstrap conformance report, and run `make verify`.
+To adopt new Solid 2 compiler facts:
+
+1. branch from an exact official `solidjs/solid#next` commit;
+2. keep the fork delta semantic-only;
+3. record separate semantic implementation and distribution commits;
+4. update the Cargo revision, lockfile, trace-version assertion, adapter/cache
+   identity, notices, and conformance report atomically; and
+5. run compiler reconciliation/output-neutrality, both adapters, process tests,
+   coverage, ownership, and full `make verify`.
+
+No upstream Solid pull request is opened for the checker-only semantic trace.
+A compiler behavior defect is fixed upstream in an independent contribution;
+the semantic fork leaves the corresponding fact open until that fix is present
+in its official upstream base.

@@ -65,6 +65,12 @@ the trace-version assertion and cache identity, and runs:
 - Solid 2 compiler-adapter and process fixtures;
 - checker finding parity, coverage, ownership, and full verification.
 
+The current Solid 2 boundary is semantic trace version 3 normalized through
+checker compiler-facts protocol 2. It binds source, complete effective
+configuration, output, optional source map, upstream base, and semantic
+implementation identity. The exact distribution and implementation revisions
+are deliberately separate and are recorded in the Phase 4 report.
+
 The detailed transition is in
 [Compiler and Type Facts bootstrap](package-contract-v2/compiler-and-typefacts-bootstrap.md).
 

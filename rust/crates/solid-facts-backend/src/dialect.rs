@@ -294,6 +294,10 @@ pub struct Dialect {
     /// Stable identity, folded into every cache key and retained session
     /// identity so artifacts from different dialects can never collide.
     pub id: &'static str,
+    /// Exact compiler semantic producer identity. This is separate from the
+    /// dialect because a producer pin or trace revision can change answers
+    /// while the language dialect remains the same.
+    pub compiler_facts_identity: &'static str,
     /// The Solid-version vocabulary the reactive IR analyzes with: which
     /// names are primitives, where their callbacks sit, which JSX tags open
     /// boundaries. The engine asks this table; it never names a version.
@@ -426,6 +430,7 @@ fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
 #[cfg(feature = "dialect-v2")]
 static SOLID_V2: Dialect = Dialect {
     id: "solid-v2",
+    compiler_facts_identity: solid_v2_compiler::COMPILER_FACTS_IDENTITY,
     vocabulary: &solid_dialect::Solid2,
     rule_count: solid_v2_rules::Rule::ALL.len(),
     compiler: || Box::new(solid_v2_compiler::NativeCompilerFacts),
@@ -452,6 +457,7 @@ static SOLID_V2: Dialect = Dialect {
 #[cfg(feature = "dialect-v1")]
 static SOLID_V1: Dialect = Dialect {
     id: "solid-v1",
+    compiler_facts_identity: solid_v1_compiler::COMPILER_FACTS_IDENTITY,
     vocabulary: &solid_dialect::Solid1x,
     rule_count: solid_v1_rules::Rule::ALL.len(),
     compiler: || Box::new(solid_v1_compiler::NativeCompilerFacts),

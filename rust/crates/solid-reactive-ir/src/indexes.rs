@@ -2269,6 +2269,7 @@ mod tests {
                 compiler: Arc::new(ExecutionMap {
                     compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
                     source_hash: SourceHash::of(source),
+                    semantic_model: Default::default(),
                     tracked_regions: Vec::new(),
                     untracked_regions: Vec::new(),
                     discarded_regions: Vec::new(),

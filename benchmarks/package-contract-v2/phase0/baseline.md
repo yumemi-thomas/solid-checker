@@ -95,6 +95,6 @@ Legacy JavaScript parse+expand of all 7 bundles: p50 0.105 ms, p95 0.164 ms. Dir
 The raw command arrays, timestamps, exit status, sampling method, sample count, and peak RSS are preserved under `benchmarks/package-contract-v2/phase0/measurements/`. Re-run generation and verification with stable checker binaries and `SOLID_CHECKER_GATE_CACHE=0`, then run:
 
 ```sh
-bun scripts/package-contract-v2-phase0.mjs
+bun scripts/package-contract-v2-phase0.mjs --capture-current --output-json /tmp/phase0-current.json --output-markdown /tmp/phase0-current.md
 bun scripts/package-contract-v2-phase0.mjs --check
 ```

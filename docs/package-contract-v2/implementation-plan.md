@@ -21,6 +21,14 @@ details are normative within this documentation set.
 **Exit:** the baseline is reproducible and every current verified/refused row
 has a stable reason.
 
+**Status 2026-08-27:** complete. The historical machine and human reports are
+immutable evidence and are validated by `make phase0-baseline` and
+`make verify`. Validation pins their exact bytes and checks their internal
+input, fixture, classification, aggregate, and measurement invariants; it does
+not reinterpret the historical compiler and Type Facts revisions through the
+current dependency layout. New comparison captures require explicit output
+paths and cannot overwrite the frozen baseline by default.
+
 ## Phase 0A — Compiler and Type Facts source bootstrap
 
 This phase follows
@@ -217,6 +225,14 @@ work into an independent upstream contribution.
 
 **Exit:** compiler-controlled execution is established by reconciled lowering,
 not source-shape prediction.
+
+**Status 2026-08-27:** complete. Items 43-54 and the exit condition are
+implemented by Solid 2 semantic trace version 3 and checker compiler-facts
+protocol 2. Exact identities, scope proof, verification evidence, and remaining
+open domains are recorded in the
+[Phase 4 completion report](phase4/2026-08-27-compiler-facts.md); the normative
+boundary is [compiler execution facts](phase4/compiler-execution-facts.md).
+No upstream Solid pull request was opened.
 
 ## Phase 5 — Normalized semantic model
 

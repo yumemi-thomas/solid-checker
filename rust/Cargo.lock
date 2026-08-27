@@ -1485,6 +1485,7 @@ name = "solid-v1-compiler"
 version = "0.1.0"
 dependencies = [
  "dom-expressions-compiler",
+ "serde_json",
  "solid-facts",
  "solidjs-compiler",
 ]
@@ -1500,6 +1501,7 @@ dependencies = [
 name = "solid-v2-compiler"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "solid-facts",
  "solidjs-compiler",
 ]
@@ -1515,7 +1517,7 @@ dependencies = [
 [[package]]
 name = "solidjs-compiler"
 version = "0.0.0"
-source = "git+https://github.com/yumemi-thomas/solid?rev=1d81e67fd393d12c74b13aa7d3fb492f3d85353b#1d81e67fd393d12c74b13aa7d3fb492f3d85353b"
+source = "git+https://github.com/yumemi-thomas/solid?rev=9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4#9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4"
 dependencies = [
  "html5ever",
  "htmlize",
@@ -1531,6 +1533,8 @@ dependencies = [
  "oxc_str 0.144.0",
  "oxc_syntax 0.144.0",
  "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

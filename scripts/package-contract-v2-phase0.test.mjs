@@ -4,15 +4,35 @@ import { describe, test } from "vitest";
 
 import {
   assertSuccessfulCacheDisabledMeasurements,
+  assertFrozenBaseline,
   classifyVerificationRows,
   freezeFixture,
   measureContract,
-  schemaMetrics
+  schemaMetrics,
+  typeFactsIdentityFromCargo
 } from "./package-contract-v2-phase0.mjs";
 
 const readJson = path => JSON.parse(readFileSync(path));
 
 describe("Phase 0 baseline", () => {
+  test("validates the immutable historical report without current dependency pins", () => {
+    const baseline = readJson("benchmarks/package-contract-v2/phase0/baseline.json");
+    assert.doesNotThrow(() => assertFrozenBaseline(baseline));
+
+    const corrupted = structuredClone(baseline);
+    corrupted.fixtureFreeze.fixtures[0].treeSha256 = "0".repeat(64);
+    assert.throws(() => assertFrozenBaseline(corrupted), /tree hash is inconsistent/);
+  });
+
+  test("uses the source-manifest digest for repatriated Type Facts", () => {
+    const cargo = 'typefacts = { path = "crates/typefacts" }';
+    const buildInfo = JSON.stringify({ sourceDigest: "a".repeat(64) });
+    assert.equal(
+      typeFactsIdentityFromCargo(cargo, buildInfo),
+      `source-manifest-sha256:${"a".repeat(64)}`
+    );
+  });
+
   test("pins the legacy schema structure", () => {
     assert.deepEqual(schemaMetrics(readJson("schema/solid-reactivity.schema.json")), {
       definitions: 6,

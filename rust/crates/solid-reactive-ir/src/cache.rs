@@ -617,12 +617,36 @@ pub(crate) fn same_compiler_semantics(
     current: &solid_facts::compiler::ExecutionMap,
 ) -> bool {
     previous.compiler_facts_protocol == current.compiler_facts_protocol
+        && same_compiler_model_semantics(&previous.semantic_model, &current.semantic_model)
         && previous.tracked_regions == current.tracked_regions
         && previous.untracked_regions == current.untracked_regions
         && previous.discarded_regions == current.discarded_regions
         && previous.ownership_regions == current.ownership_regions
         && previous.callback_roles == current.callback_roles
         && previous.jsx_operations == current.jsx_operations
+}
+
+fn same_compiler_model_semantics(
+    previous: &solid_facts::compiler::CompilerSemanticModel,
+    current: &solid_facts::compiler::CompilerSemanticModel,
+) -> bool {
+    let same_producer_semantics = match (&previous.producer, &current.producer) {
+        (None, None) => true,
+        (Some(previous), Some(current)) => {
+            previous.dialect == current.dialect
+                && previous.trace_version == current.trace_version
+                && previous.package_version == current.package_version
+                && previous.upstream_revision == current.upstream_revision
+                && previous.implementation_revision == current.implementation_revision
+                && previous.identity_complete == current.identity_complete
+        }
+        _ => false,
+    };
+    same_producer_semantics
+        && previous.source_operations_complete == current.source_operations_complete
+        && previous.generated_operations_complete == current.generated_operations_complete
+        && previous.operations == current.operations
+        && previous.generated_operations == current.generated_operations
 }
 
 pub(crate) fn late_stage_source_fingerprint(

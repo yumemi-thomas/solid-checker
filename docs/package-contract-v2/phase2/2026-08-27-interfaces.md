@@ -83,12 +83,14 @@ format is loadable yet. These operations remain assigned to later phases:
 
 - invariant validation, monotone joins, capability contradiction checks, graph
   validation, and recursive unresolved-claim traversal: Phase 5;
-- private wire expansion, alpha-renaming, exact artifact-case selection,
-  canonical hashing, and full receipt validation: Phase 7;
-- proof replay and receipt issuance: Phase 9;
-- movement of current analysis consumers: Phase 10;
-- generator migration: Phase 11;
-- temporary-version renumbering and stable cutover: Phase 14.
+- private wire expansion, alpha-renaming, and canonical hashing: Phase 6;
+- exact artifact-case selection: Phase 7;
+- proposal generator refactoring: Phase 8;
+- proof replay, full receipt validation, and receipt issuance: Phase 11;
+- movement of current analysis consumers: Phase 12;
+- producer and consumer migration: Phase 14;
+- temporary-version convergence: Phase 17;
+- temporary-version renumbering and stable cutover: Phase 18.
 
 Until those phases land, no code path can construct an accepted contract from
 schema-v2 bytes. That refusal is the accuracy-preserving behavior.
