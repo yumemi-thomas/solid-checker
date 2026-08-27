@@ -162,10 +162,14 @@ constructor outside the Phase 11 proof authority.
 `solid-facts-backend::contract_document_v2` owns the complete
 temporary-schema decoder, summary expansion, local-closure interpretation,
 resource limits, artifact-case identity derivation, and handoff into this
-normalizer. The public loader returns `AcceptanceUnavailable` after successful
-normalization until the Phase 12 analyzer migration validates proof-issued
-receipts; analyzer findings and bundled legacy contracts therefore remain
-unchanged.
+normalizer. `solid-facts-backend::contract_interface` now validates a
+proof-issued receipt after exact artifact selection and is the only ordinary
+analysis constructor of accepted typestate. `AcceptedContractIndex` retains
+the exact importer/specifier binding, resolves exports through full runtime and
+declaration identity, instantiates restricted guards from demand-shaped call
+facts, and exposes only local normalized claim answers. Analyzer findings and
+bundled legacy contracts remain unchanged until the atomic Phase 14 public
+input migration.
 
 `solid-facts-backend::artifact_resolution` owns the Phase 7 selection seam.
 Host, Type Facts, and standalone acquisition all produce one exact
@@ -183,9 +187,10 @@ and transform identity, accepted dependency-contract edges, and explicit
 opaque hazards. A hazard weakens only its named exports and immediate claim
 domains; it cannot erase known positives or open an unrelated recursive leaf.
 Ordinary Type Facts and WASM-host attestation preserve included paths, symlink
-spellings, extensions, and both owning/resolver package versions, but current
-legacy analyzer consumers remain on their existing contract path until the
-scheduled consumer migration.
+spellings, extensions, and both owning/resolver package versions. The Phase 12
+accepted index consumes those exact resolutions; public discovery and legacy
+process fixtures remain on their existing path until the scheduled Phase 14
+cutover.
 
 `solid-facts-backend::proposal_generation` owns the Phase 8 replacement
 generator seam. Exact Phase 7 resolutions select and bind every analyzed
@@ -284,8 +289,10 @@ census input order is irrelevant; transcript bytes, family, authority, claim,
 scope, and policy remain identity. `BundledEvidenceStore` is immutable and
 rehashes compiled receipt bytes. `LocalEvidenceStore` adds atomic,
 content-addressed, idempotent receipt writes. Analyzer exposure through
-`load_accepted_contract` intentionally remains disabled until the Phase 12
-consumer migration validates these proof-issued receipts.
+`load_accepted_contract` now requires those receipt bindings to replay exactly.
+The proof root remains opaque authority because raw proof material is outside
+the analysis hot path; semantic, artifact, closure, and closed-claim roots plus
+verifier policy are checked before any normalized query is exposed.
 
 ## How the Solid 1.x dialect landed
 

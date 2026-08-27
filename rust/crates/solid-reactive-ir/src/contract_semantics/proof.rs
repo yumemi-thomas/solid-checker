@@ -197,6 +197,28 @@ pub enum ProofError {
     Model(#[from] ModelError),
 }
 
+/// Refusal from replaying an already issued receipt against the final compact
+/// document selected for one actual import. Raw proof material is deliberately
+/// absent: the receipt is the ordinary-analysis authority, while every binding
+/// that can drift after issuance is recomputed from normalized meaning.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum ReceiptValidationError {
+    #[error("unsupported acceptance receipt version {actual}; expected {expected}")]
+    ReceiptVersion { expected: u16, actual: u16 },
+    #[error("receipt verifier build identity must not be empty")]
+    EmptyVerifierBuild,
+    #[error("unsupported proof policy {actual}; expected {expected}")]
+    ProofPolicy { expected: u32, actual: u32 },
+    #[error("receipt selects missing artifact case {artifact_case}")]
+    MissingArtifactCase { artifact_case: String },
+    #[error("acceptance receipt has no locally closed semantic claim")]
+    NoClosedClaims,
+    #[error("acceptance receipt does not bind the selected contract: {field}")]
+    Mismatch { field: &'static str },
+    #[error("accepted semantic claim is invalid: {0}")]
+    Claim(String),
+}
+
 /// Canonical expected scope for a rule. Static fact and proof producers must
 /// derive the same value from their independently acquired identities.
 pub fn proof_scope_digest(
@@ -430,6 +452,95 @@ pub fn verify_and_accept(request: AcceptanceRequest) -> Result<AcceptedContract,
     };
     Ok(AcceptedContract {
         package,
+        selected_case,
+        receipt,
+    })
+}
+
+/// Validates a stored verifier-issued receipt and exposes accepted typestate.
+///
+/// This is the only ordinary-analysis constructor. It intentionally accepts a
+/// one-case normalized contract: artifact selection and exact export rebinding
+/// must already have happened at the backend normalization seam. The proof
+/// root remains opaque receipt authority; all identities derivable without raw
+/// sidecars are recomputed here and must match exactly.
+pub fn validate_receipt_and_accept(
+    contract: NormalizedContract,
+    selected_artifact_case: &str,
+    receipt: AcceptanceReceipt,
+) -> Result<AcceptedContract, ReceiptValidationError> {
+    if receipt.receipt_version != ACCEPTANCE_RECEIPT_VERSION {
+        return Err(ReceiptValidationError::ReceiptVersion {
+            expected: ACCEPTANCE_RECEIPT_VERSION,
+            actual: receipt.receipt_version,
+        });
+    }
+    if receipt.verifier.build.is_empty() {
+        return Err(ReceiptValidationError::EmptyVerifierBuild);
+    }
+    if receipt.verifier.policy != PROOF_POLICY_VERSION {
+        return Err(ReceiptValidationError::ProofPolicy {
+            expected: PROOF_POLICY_VERSION,
+            actual: receipt.verifier.policy,
+        });
+    }
+    if receipt.semantic_model_version != contract.semantic_model_version() {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "semanticModelVersion",
+        });
+    }
+    if receipt.semantic_digest != *contract.semantic_digest() {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "semanticDigest",
+        });
+    }
+    let selected_case = contract
+        .artifact_case(selected_artifact_case)
+        .ok_or_else(|| ReceiptValidationError::MissingArtifactCase {
+            artifact_case: selected_artifact_case.into(),
+        })?
+        .clone();
+    if contract.artifact_cases().len() != 1 {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "selectedArtifactCase",
+        });
+    }
+    if receipt.artifacts_digest != artifacts_digest(contract.package(), &selected_case) {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "artifactsDigest",
+        });
+    }
+    if receipt.closure_digest != selected_case.dependency_closure {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "closureDigest",
+        });
+    }
+
+    let mut closed = BTreeSet::new();
+    for (export_name, export) in &selected_case.exports {
+        for path in super::validate::closed_claims(export) {
+            let subject = SemanticClaimSubject {
+                artifact_case: selected_case.id.clone(),
+                export: export_name.clone(),
+                path: SemanticClaimPath::Domain(path),
+            };
+            let claim = contract
+                .claim_id(&subject)
+                .map_err(|error| ReceiptValidationError::Claim(error.to_string()))?;
+            closed.insert(claim);
+        }
+    }
+    if closed.is_empty() {
+        return Err(ReceiptValidationError::NoClosedClaims);
+    }
+    if receipt.closed_claims_root != closed_claims_root(closed.iter()) {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "closedClaimsRoot",
+        });
+    }
+
+    Ok(AcceptedContract {
+        package: contract.package().clone(),
         selected_case,
         receipt,
     })

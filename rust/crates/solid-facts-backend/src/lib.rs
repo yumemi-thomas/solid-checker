@@ -21,13 +21,14 @@ mod wire;
 pub use cache::{CacheStats, FactsCache};
 pub use contract_document::encode as encode_package_contract;
 pub use contract_interface::{
-    AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure, ArtifactResolver,
-    ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole, ClosureHazard,
-    ClosureHazardKind, ClosureInput, ClosureManifest, ContractFailure, EvidenceKey, EvidenceStore,
-    EvidenceStoreFailure, HostResolutionAdapter, ImportRequest, LocalEvidenceStore, ReceiptStore,
-    ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
+    AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
+    ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole,
+    ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest, ContractFailure, EvidenceKey,
+    EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter, ImportRequest, LocalEvidenceStore,
+    ReceiptStore, ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
     ResolvedExportTarget, ResolvedFile, ResolvedImport, StandaloneResolutionAdapter,
     TypeFactsResolutionAdapter, encode_acceptance_receipt, load_accepted_contract,
+    load_accepted_contract_index,
 };
 #[cfg(feature = "dialect-v2")]
 pub use diagnostics::bundled_solid_js_contract;

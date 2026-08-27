@@ -73,6 +73,9 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 11 proof/receipt completion](phase11/2026-08-27-proof-checker-receipts.md)
   — replayable claim-local proof families, authority separation, verified-only
   closure, canonical proof roots, receipts, and content-addressed storage.
+- [Phase 12 analyzer-integration completion](phase12/2026-08-28-analyzer-integration.md)
+  — receipt-gated loading, exact import/export identity, demand-shaped guard
+  queries, local open-domain diagnostics, native precedence, and cache identity.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

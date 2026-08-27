@@ -87,7 +87,7 @@ fn malformed_documents_fail_through_the_single_loading_interface() {
 }
 
 #[test]
-fn normalized_development_schema_stays_fail_closed_until_acceptance_lands() {
+fn normalized_development_schema_refuses_a_receipt_not_issued_for_its_semantics() {
     let document = development_document();
     let receipt = format!(
         "{{\"receiptVersion\":1,\"wireDigest\":\"{}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-2-test\",\"policy\":1}}}}",
@@ -96,10 +96,12 @@ fn normalized_development_schema_stays_fail_closed_until_acceptance_lands() {
     );
 
     let result = load_accepted_contract(&document, receipt.as_bytes(), &resolved());
-    assert!(
-        matches!(result, Err(ContractFailure::AcceptanceUnavailable)),
-        "unexpected loader result: {result:?}"
-    );
+    assert!(matches!(
+        result,
+        Err(ContractFailure::ReceiptMismatch {
+            field: "semanticDigest"
+        })
+    ));
 }
 
 #[test]

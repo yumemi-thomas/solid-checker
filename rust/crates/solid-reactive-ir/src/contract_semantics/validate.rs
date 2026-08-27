@@ -1341,6 +1341,174 @@ pub(super) fn unresolved_claims(export: &ExportSemantics) -> Vec<ClaimPath> {
     claims
 }
 
+/// Enumerates exactly the immediate knowledge leaves whose closure is present
+/// in finalized normalized meaning. This is the inverse of
+/// [`unresolved_claims`] only for proof-closable set domains: scalar unknowns
+/// such as a missing cardinality bound are open premises, not receipt claims.
+pub(super) fn closed_claims(export: &ExportSemantics) -> Vec<ClaimPath> {
+    let mut claims = Vec::new();
+    for domain in ClaimDomain::ALL {
+        if export.claim_state(domain).is_open() {
+            continue;
+        }
+        claims.push(ClaimPath::Call(domain));
+    }
+    visit_closed_value(
+        &export.shape,
+        ValueRoot::Export,
+        ValuePath::default(),
+        &mut claims,
+    );
+    for operation in &export.call.operations {
+        if operation.owner.productions.is_closed() {
+            push_operation(
+                &mut claims,
+                &operation.id,
+                OperationClaimDomain::OwnerProductions,
+            );
+        }
+        for (index, input) in operation.inputs.iter().enumerate() {
+            visit_closed_value(
+                input,
+                ValueRoot::OperationInput {
+                    operation: operation.id.clone(),
+                    index: u16::try_from(index).unwrap_or(u16::MAX),
+                },
+                ValuePath::default(),
+                &mut claims,
+            );
+        }
+        if let Some(output) = &operation.output {
+            visit_closed_value(
+                output,
+                ValueRoot::OperationOutput {
+                    operation: operation.id.clone(),
+                },
+                ValuePath::default(),
+                &mut claims,
+            );
+        }
+    }
+    for resource in &export.call.resources {
+        if resource.states.is_closed() {
+            claims.push(ClaimPath::Resource {
+                resource: resource.id.clone(),
+                domain: ResourceClaimDomain::States,
+            });
+        }
+        if resource.capabilities.is_closed() {
+            claims.push(ClaimPath::Resource {
+                resource: resource.id.clone(),
+                domain: ResourceClaimDomain::Capabilities,
+            });
+        }
+    }
+    if export.call.guards.cases.is_closed()
+        && export
+            .call
+            .guards
+            .cases
+            .items()
+            .iter()
+            .all(|case| case.operations().is_closed())
+    {
+        claims.push(ClaimPath::GuardPartition);
+    }
+    claims.sort();
+    claims.dedup();
+    claims
+}
+
+fn visit_closed_value(
+    value: &ValueShape,
+    root: ValueRoot,
+    path: ValuePath,
+    claims: &mut Vec<ClaimPath>,
+) {
+    match value {
+        ValueShape::Tuple(items) => {
+            if items.is_closed() {
+                push_value(
+                    claims,
+                    root.clone(),
+                    path.clone(),
+                    ValueClaimDomain::TupleItems,
+                );
+            }
+            for (index, item) in items.items().iter().enumerate() {
+                let mut nested = path.clone();
+                nested.0.push(ValuePathSegment::TupleItem(
+                    u32::try_from(index).unwrap_or(u32::MAX),
+                ));
+                visit_closed_value(item, root.clone(), nested, claims);
+            }
+        }
+        ValueShape::Array { element, .. } => {
+            let mut nested = path;
+            nested.0.push(ValuePathSegment::ArrayElement);
+            visit_closed_value(element, root, nested, claims);
+        }
+        ValueShape::Object(properties) => {
+            if properties.is_closed() {
+                push_value(
+                    claims,
+                    root.clone(),
+                    path.clone(),
+                    ValueClaimDomain::ObjectProperties,
+                );
+            }
+            for property in properties.items() {
+                let mut nested = path.clone();
+                nested
+                    .0
+                    .push(ValuePathSegment::ObjectProperty(property.name.clone()));
+                visit_closed_value(&property.value, root.clone(), nested, claims);
+            }
+        }
+        ValueShape::Choice(alternatives) => {
+            if alternatives.is_closed() {
+                push_value(
+                    claims,
+                    root.clone(),
+                    path.clone(),
+                    ValueClaimDomain::ChoiceAlternatives,
+                );
+            }
+            for (index, alternative) in alternatives.items().iter().enumerate() {
+                let mut nested = path.clone();
+                nested.0.push(ValuePathSegment::ChoiceAlternative(
+                    u32::try_from(index).unwrap_or(u32::MAX),
+                ));
+                visit_closed_value(alternative, root.clone(), nested, claims);
+            }
+        }
+        ValueShape::Promise(inner) => {
+            let mut nested = path;
+            nested.0.push(ValuePathSegment::PromiseValue);
+            visit_closed_value(inner, root, nested, claims);
+        }
+        ValueShape::AsyncIterable(inner) => {
+            let mut nested = path;
+            nested.0.push(ValuePathSegment::AsyncIterableElement);
+            visit_closed_value(inner, root, nested, claims);
+        }
+        ValueShape::Reactive { capabilities, .. } | ValueShape::Store { capabilities, .. } => {
+            if capabilities.is_closed() {
+                push_value(claims, root, path, ValueClaimDomain::Capabilities);
+            }
+        }
+        ValueShape::Unknown
+        | ValueShape::Plain
+        | ValueShape::Parameter { .. }
+        | ValueShape::Callable
+        | ValueShape::Action { .. }
+        | ValueShape::Component
+        | ValueShape::Cleanup { .. }
+        | ValueShape::RefApplication
+        | ValueShape::ServerFunctionReference { .. } => {}
+    }
+}
+
 pub(super) fn claim_subject_exists(export: &ExportSemantics, subject: &SemanticClaimPath) -> bool {
     match subject {
         SemanticClaimPath::Operation(operation) => export.operation(&operation.0).is_some(),
