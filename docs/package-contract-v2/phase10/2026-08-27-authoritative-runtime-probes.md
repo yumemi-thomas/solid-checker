@@ -244,3 +244,15 @@ Final handoff authority:
   component behavior remain open exactly where earlier phases recorded them.
 
 No upstream Solid pull request is required or authorized for this phase.
+
+## Handoff
+
+- Branch: `codex/phase10-authoritative-runtime-probes`
+- Implementation commit: `88752e6a` (`feat(contracts): add authoritative
+  runtime probe model`)
+- Architecture/report commit: `d3857662` (`docs(contracts): record phase 10
+  completion`)
+- Pull request:
+  [yumemi-thomas/solid-checker#52](https://github.com/yumemi-thomas/solid-checker/pull/52)
+
+No upstream Solid pull request was created.
