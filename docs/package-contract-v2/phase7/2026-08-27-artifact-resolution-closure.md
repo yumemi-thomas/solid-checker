@@ -231,3 +231,12 @@ The green commit list and pull-request URL are added at handoff.
 
 These boundaries preserve known unrelated facts and do not claim completeness
 where the required artifact or acceptance premise remains absent.
+
+## Handoff
+
+- branch: `codex/phase7-artifact-resolution-closure`;
+- implementation commit: `2bca6253` (`feat(contracts): implement artifact
+  resolution closure`);
+- solid-checker PR: <https://github.com/yumemi-thomas/solid-checker/pull/49>;
+- this handoff metadata is the report-only follow-up commit on that PR;
+- no upstream Solid PR was created.
