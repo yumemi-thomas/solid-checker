@@ -215,5 +215,8 @@ Final authority:
 ## Handoff
 
 - branch: `codex/phase6-temporary-wire-schema-v2`;
-- implementation commit and solid-checker PR: recorded after the first push;
+- implementation commit: `161d8e01` (`feat(contracts): implement temporary
+  semantic wire v2`);
+- solid-checker PR: <https://github.com/yumemi-thomas/solid-checker/pull/48>;
+- this handoff metadata is the report-only follow-up commit on that PR;
 - no upstream Solid PR was created.
