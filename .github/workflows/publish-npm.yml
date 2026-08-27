@@ -53,6 +53,10 @@ jobs:
           # against a newer image's headers have no business being linked into
           # that artifact. Identical images share; 22.04 builds its own.
           shared-key: release-${{ matrix.runner }}-${{ matrix.arch }}
+          # Match CI's cache paths. Restored macOS ARM64 Cargo build-script
+          # executables have failed with exit 126 even when produced by the
+          # same runner/toolchain, so cache downloads but not rust/target.
+          cache-targets: ${{ matrix.platform != 'darwin' }}
           save-if: false
       # A release's build id is its tag, so this producer is a genuinely new
       # binary every time and nothing is cached: what ships is always compiled

@@ -39,6 +39,11 @@ function sharedKey(body) {
   return body.match(/^\s+shared-key:\s*(.+)$/m)?.[1].trim();
 }
 
+function actionInput(body, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return body.match(new RegExp(`^\\s+${escaped}:\\s*(.+)$`, "m"))?.[1].trim();
+}
+
 test("main warms every native Rust cache consumed while publishing", () => {
   const mainTargets = new Set(
     matrixTargets(jobBody(ci, "rust-package")).map(JSON.stringify),
@@ -58,4 +63,14 @@ test("main and publishing share one explicit WASM Rust cache key", () => {
 
   assert.ok(mainKey, "main's WASM Rust cache key must be explicit");
   assert.equal(publishKey, mainKey);
+});
+
+test("native caches do not restore macOS target executables", () => {
+  const main = jobBody(ci, "rust-package");
+  const release = jobBody(publish, "build");
+  const safeTargetPolicy = "${{ matrix.platform != 'darwin' }}";
+
+  assert.equal(sharedKey(release), sharedKey(main));
+  assert.equal(actionInput(main, "cache-targets"), safeTargetPolicy);
+  assert.equal(actionInput(release, "cache-targets"), safeTargetPolicy);
 });
