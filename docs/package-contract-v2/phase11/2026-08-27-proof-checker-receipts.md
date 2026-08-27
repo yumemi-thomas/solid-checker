@@ -210,6 +210,9 @@ No upstream Solid pull request is required or authorized for this phase.
   acceptance receipts`)
 - Architecture/report commit: `d2b2cae8` (`docs(contracts): record phase 11
   completion`)
-- Pull request: recorded after branch push
+- Verification handoff commit: `174e92d9` (`docs(contracts): add phase 11
+  verification handoff`)
+- Pull request:
+  [yumemi-thomas/solid-checker#53](https://github.com/yumemi-thomas/solid-checker/pull/53)
 
 No upstream Solid pull request was created.
