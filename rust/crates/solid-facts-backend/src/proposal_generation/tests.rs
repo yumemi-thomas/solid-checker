@@ -4,15 +4,20 @@ use solid_reactive_ir::contract_semantics::{
     CardinalityScope, ClaimDomain, ExportIdentity, ExportSemantics, ExportTargetIdentity,
     GuardPartition, KnowledgeSet, KnowledgeState, Lifetime, ObjectProperty, Operation, OperationId,
     OwnerCapabilities, OwnerRelation, OwnerRequirements, OwnerSource, Requirement, ResolutionStep,
-    Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueShape,
+    Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueShape, VerifierIdentity,
+    proof::{
+        CLOSURE_PROOF_FAMILIES, CensusCompleteness, PROOF_POLICY_VERSION, ProofRuleInput,
+        family_authority, proof_scope_digest, replay_proof_rule,
+    },
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     ArtifactModeMatrix, ClosureManifest, DrainStep, EnvironmentIdentity, ProbeAuthority,
-    ProbeEventClass, ProbeEventMatch, ProbeMode, ProbePolicy, ProbeRecipe, ProbeScenario,
-    ResolutionAuthority, ResolutionTrace, ResolvedExportBinding, ResolvedExportTarget,
-    ResolvedFile, ResolvedImport, RuntimeProbePlan, SandboxIdentity, SandboxKind, ToolIdentity,
+    ProbeContradictionRecord, ProbeEventClass, ProbeEventMatch, ProbeMode, ProbePolicy,
+    ProbeRecipe, ProbeScenario, ProposalProofRequest, ResolutionAuthority, ResolutionTrace,
+    ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport, RuntimeProbePlan,
+    SandboxIdentity, SandboxKind, ToolIdentity, verify_planned_proposal,
 };
 
 fn digest(byte: char) -> Digest {
@@ -229,6 +234,87 @@ fn analysis() -> ProposalAnalysis {
 
 fn planned() -> PlannedProposal {
     plan_probes(plan_proofs(construct_proposal(analysis()).unwrap()))
+}
+
+fn replay_all_closure_proofs(
+    proposal: &PlannedProposal,
+) -> Vec<solid_reactive_ir::contract_semantics::proof::ReplayedProof> {
+    proposal
+        .plan()
+        .closure_candidates()
+        .iter()
+        .flat_map(|candidate| {
+            CLOSURE_PROOF_FAMILIES.into_iter().map(move |family| {
+                let subject = candidate.semantic_subject();
+                replay_proof_rule(
+                    proposal.contract(),
+                    family,
+                    subject.clone(),
+                    ProofRuleInput {
+                        authority: family_authority(family),
+                        transcript: format!("{family:?} proof transcript").into_bytes(),
+                        observed_scope: proof_scope_digest(proposal.contract(), family, &subject)
+                            .unwrap(),
+                        enumerated: vec![],
+                        classified: vec![],
+                        unresolved: vec![],
+                        completeness: CensusCompleteness::Complete,
+                    },
+                )
+                .unwrap()
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradictions() {
+    let proposal = planned();
+    let proofs = replay_all_closure_proofs(&proposal);
+    let first_subject = proposal.plan().closure_candidates()[0].semantic_subject();
+    let contradiction = ProbeContradictionRecord {
+        claim_id: proposal.contract().claim_id(&first_subject).unwrap(),
+        subject: first_subject,
+        mode: "browser-development".into(),
+        transcript: digest('8'),
+    };
+    let rejected = verify_planned_proposal(ProposalProofRequest {
+        proposal: proposal.clone(),
+        selected_artifact_case: "import-case".into(),
+        wire_bytes: b"temporary-main-contract".to_vec(),
+        proofs: proofs.clone(),
+        contradictions: vec![contradiction],
+        verifier: VerifierIdentity {
+            build: "phase-11-test".into(),
+            policy: PROOF_POLICY_VERSION,
+        },
+    });
+    assert!(matches!(
+        rejected,
+        Err(solid_reactive_ir::contract_semantics::proof::ProofError::ProbeContradiction { .. })
+    ));
+
+    let accepted = verify_planned_proposal(ProposalProofRequest {
+        proposal,
+        selected_artifact_case: "import-case".into(),
+        wire_bytes: b"temporary-main-contract".to_vec(),
+        proofs,
+        contradictions: vec![],
+        verifier: VerifierIdentity {
+            build: "phase-11-test".into(),
+            policy: PROOF_POLICY_VERSION,
+        },
+    })
+    .unwrap();
+    assert_eq!(accepted.artifact_case().id, "import-case");
+    assert!(
+        accepted
+            .artifact_case()
+            .exports
+            .values()
+            .flat_map(ExportSemantics::unresolved_claims)
+            .any(|claim| matches!(claim, ClaimPath::Value { .. }))
+    );
 }
 
 #[test]

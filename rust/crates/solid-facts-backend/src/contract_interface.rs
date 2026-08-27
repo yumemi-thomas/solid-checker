@@ -2,13 +2,19 @@
 //!
 //! Schema spellings and compact document mechanics remain private. Temporary
 //! schema-v2 documents are decoded and normalized by the sibling deep module;
-//! this interface still refuses acceptance until the proof-and-receipt phase
-//! can construct accepted typestate.
+//! this analyzer-loading interface still refuses exposure until Phase 12 can
+//! validate proof-issued receipts and migrate consumers atomically.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
-use solid_reactive_ir::contract_semantics::AcceptedContract;
-use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
+use solid_reactive_ir::contract_semantics::{AcceptanceReceipt, AcceptedContract};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::PathBuf,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use thiserror::Error;
 
 use crate::{artifact_resolution::select_and_bind, contract_document_v2};
@@ -33,7 +39,17 @@ impl EvidenceKey {
         if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             return Err(EvidenceStoreFailure::InvalidKey);
         }
-        Ok(Self(value))
+        Ok(Self(format!("sha256:{}", digest.to_ascii_lowercase())))
+    }
+
+    #[must_use]
+    pub fn for_content(bytes: &[u8]) -> Self {
+        Self(sha256_digest(bytes))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 
     fn filename(&self) -> &str {
@@ -45,6 +61,10 @@ impl EvidenceKey {
 
 pub trait EvidenceStore {
     fn receipt(&self, key: &EvidenceKey) -> Result<Option<Arc<[u8]>>, EvidenceStoreFailure>;
+}
+
+pub trait ReceiptStore: EvidenceStore {
+    fn store_receipt(&self, bytes: &[u8]) -> Result<EvidenceKey, EvidenceStoreFailure>;
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
@@ -110,6 +130,43 @@ impl EvidenceStore for LocalEvidenceStore {
     }
 }
 
+impl ReceiptStore for LocalEvidenceStore {
+    fn store_receipt(&self, bytes: &[u8]) -> Result<EvidenceKey, EvidenceStoreFailure> {
+        let key = EvidenceKey::for_content(bytes);
+        let path = self.receipt_path(&key);
+        if let Some(existing) = self.receipt(&key)? {
+            if existing.as_ref() == bytes {
+                return Ok(key);
+            }
+            return Err(EvidenceStoreFailure::ContentMismatch);
+        }
+        let directory = path.parent().expect("receipt path has a parent");
+        fs::create_dir_all(directory).map_err(io_failure)?;
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let temporary = directory.join(format!(
+            ".{}.{}.{nonce}.tmp",
+            key.filename(),
+            std::process::id()
+        ));
+        fs::write(&temporary, bytes).map_err(io_failure)?;
+        if let Err(error) = fs::rename(&temporary, &path) {
+            let _ = fs::remove_file(&temporary);
+            return Err(io_failure(error));
+        }
+        verify_evidence_content(&key, fs::read(path).map_err(io_failure)?.into())?;
+        Ok(key)
+    }
+}
+
+fn io_failure(error: std::io::Error) -> EvidenceStoreFailure {
+    EvidenceStoreFailure::Io {
+        message: error.to_string(),
+    }
+}
+
 fn verify_evidence_content(
     key: &EvidenceKey,
     bytes: Arc<[u8]>,
@@ -137,7 +194,7 @@ pub enum ContractFailure {
     UnsupportedReceiptVersion { expected: u16, actual: u16 },
     #[error("unsupported contract schema version {actual}; expected {expected}")]
     UnsupportedSchemaVersion { expected: u16, actual: u16 },
-    #[error("contract semantics are normalized but acceptance receipts are not enabled yet")]
+    #[error("accepted-contract loading is reserved for the Phase 12 analyzer integration")]
     AcceptanceUnavailable,
     #[error("no artifact case matches the exact resolved import")]
     NoArtifactCase,
@@ -172,9 +229,52 @@ struct WireVerifier {
     policy: u32,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceiptDocument<'a> {
+    receipt_version: u16,
+    wire_digest: &'a str,
+    semantic_model_version: u16,
+    semantic_digest: &'a str,
+    artifacts_digest: &'a str,
+    closure_digest: &'a str,
+    proof_root: &'a str,
+    closed_claims_root: &'a str,
+    verifier: ReceiptVerifier<'a>,
+}
+
+#[derive(Serialize)]
+struct ReceiptVerifier<'a> {
+    build: &'a str,
+    policy: u32,
+}
+
+pub fn encode_acceptance_receipt(receipt: &AcceptanceReceipt) -> Result<Vec<u8>, ContractFailure> {
+    let mut bytes = serde_json::to_vec(&ReceiptDocument {
+        receipt_version: receipt.receipt_version,
+        wire_digest: receipt.wire_digest.as_str(),
+        semantic_model_version: receipt.semantic_model_version,
+        semantic_digest: receipt.semantic_digest.as_str(),
+        artifacts_digest: receipt.artifacts_digest.as_str(),
+        closure_digest: receipt.closure_digest.as_str(),
+        proof_root: receipt.proof_root.as_str(),
+        closed_claims_root: receipt.closed_claims_root.as_str(),
+        verifier: ReceiptVerifier {
+            build: &receipt.verifier.build,
+            policy: receipt.verifier.policy,
+        },
+    })
+    .map_err(|error| ContractFailure::ReceiptDecode {
+        message: error.to_string(),
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 /// Loads one accepted contract for an already resolved import. Temporary-v2
-/// wire mechanics are fully normalized here, but Phase 11 remains the sole
-/// authority allowed to construct accepted typestate.
+/// wire mechanics are fully normalized here, but analyzer exposure remains
+/// disabled until the Phase 12 consumer migration validates proof-issued
+/// receipts through this boundary.
 pub fn load_accepted_contract(
     document_bytes: &[u8],
     receipt: &[u8],

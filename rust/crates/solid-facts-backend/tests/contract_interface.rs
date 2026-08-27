@@ -2,9 +2,12 @@ use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     ArtifactResolutionFailure, ArtifactResolver, BundledEvidenceStore, ClosureManifest,
     ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
-    ImportRequest, LocalEvidenceStore, ResolutionAuthority, ResolutionTrace, ResolvedExportBinding,
-    ResolvedExportTarget, ResolvedFile, ResolvedImport, StandaloneResolutionAdapter,
-    load_accepted_contract,
+    ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
+    ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
+    StandaloneResolutionAdapter, encode_acceptance_receipt, load_accepted_contract,
+};
+use solid_reactive_ir::contract_semantics::{
+    AcceptanceReceipt, Digest as SemanticDigest, VerifierIdentity,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -194,4 +197,75 @@ fn evidence_stores_rehash_receipts_and_missing_local_entries_are_not_errors() {
         Some(&b"accepted receipt"[..])
     );
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_local_receipts_are_canonical_content_addressed_and_idempotent() {
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "solid-checker-phase11-receipts-{}-{unique}",
+        std::process::id()
+    ));
+    let local = LocalEvidenceStore::new(&root);
+    let bytes = b"canonical acceptance receipt\n";
+    let first = local.store_receipt(bytes).unwrap();
+    let second = local.store_receipt(bytes).unwrap();
+    assert_eq!(first, second);
+    assert_eq!(
+        local.receipt(&first).unwrap().as_deref(),
+        Some(bytes.as_slice())
+    );
+    assert_eq!(first.as_str(), digest(bytes));
+
+    let uppercase = EvidenceKey::parse(format!(
+        "sha256:{}",
+        first
+            .as_str()
+            .trim_start_matches("sha256:")
+            .to_ascii_uppercase()
+    ))
+    .unwrap();
+    assert_eq!(uppercase, first);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn acceptance_receipt_encoding_is_deterministic_and_complete() {
+    let semantic = |byte: char| {
+        SemanticDigest::parse(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
+    };
+    let receipt = AcceptanceReceipt {
+        receipt_version: 1,
+        wire_digest: semantic('1'),
+        semantic_model_version: 1,
+        semantic_digest: semantic('2'),
+        artifacts_digest: semantic('3'),
+        closure_digest: semantic('4'),
+        proof_root: semantic('5'),
+        closed_claims_root: semantic('6'),
+        verifier: VerifierIdentity {
+            build: "phase-11-test".into(),
+            policy: 1,
+        },
+    };
+    let first = encode_acceptance_receipt(&receipt).unwrap();
+    let second = encode_acceptance_receipt(&receipt).unwrap();
+    assert_eq!(first, second);
+    assert_eq!(first.last(), Some(&b'\n'));
+    let decoded: serde_json::Value = serde_json::from_slice(&first).unwrap();
+    assert_eq!(decoded["wireDigest"], receipt.wire_digest.as_str());
+    assert_eq!(decoded["semanticDigest"], receipt.semantic_digest.as_str());
+    assert_eq!(
+        decoded["artifactsDigest"],
+        receipt.artifacts_digest.as_str()
+    );
+    assert_eq!(decoded["closureDigest"], receipt.closure_digest.as_str());
+    assert_eq!(decoded["proofRoot"], receipt.proof_root.as_str());
+    assert_eq!(
+        decoded["closedClaimsRoot"],
+        receipt.closed_claims_root.as_str()
+    );
 }

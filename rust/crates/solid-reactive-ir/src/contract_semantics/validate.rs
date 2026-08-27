@@ -1508,6 +1508,141 @@ pub(super) fn open_proposed_closure(export: &mut ExportSemantics) -> Vec<ClaimPa
     candidates
 }
 
+pub(super) fn close_verified_claim(
+    export: &mut ExportSemantics,
+    claim: &ClaimPath,
+) -> Result<(), ModelError> {
+    let closed = match claim {
+        ClaimPath::Call(domain) => match domain {
+            ClaimDomain::Callbacks => export.call.claims.callbacks.close_verified(),
+            ClaimDomain::Reads => export.call.claims.reads.close_verified(),
+            ClaimDomain::Writes => export.call.claims.writes.close_verified(),
+            ClaimDomain::Creates => export.call.claims.creates.close_verified(),
+            ClaimDomain::Invalidates => export.call.claims.invalidates.close_verified(),
+            ClaimDomain::Throws => export.call.claims.throws.close_verified(),
+            ClaimDomain::Returns => export.call.claims.returns.close_verified(),
+            ClaimDomain::Cleanups => export.call.claims.cleanups.close_verified(),
+            ClaimDomain::Disposals => export.call.claims.disposals.close_verified(),
+        },
+        ClaimPath::Value { root, path, domain } => {
+            let value =
+                value_root_mut(export, root).and_then(|value| value_at_path_mut(value, &path.0));
+            match (value, domain) {
+                (Some(ValueShape::Tuple(items)), ValueClaimDomain::TupleItems) => {
+                    items.close_verified()
+                }
+                (Some(ValueShape::Object(properties)), ValueClaimDomain::ObjectProperties) => {
+                    properties.close_verified()
+                }
+                (Some(ValueShape::Choice(alternatives)), ValueClaimDomain::ChoiceAlternatives) => {
+                    alternatives.close_verified()
+                }
+                (
+                    Some(
+                        ValueShape::Reactive { capabilities, .. }
+                        | ValueShape::Store { capabilities, .. },
+                    ),
+                    ValueClaimDomain::Capabilities,
+                ) => capabilities.close_verified(),
+                _ => false,
+            }
+        }
+        ClaimPath::Operation { operation, domain } => export
+            .call
+            .operations
+            .iter_mut()
+            .find(|candidate| candidate.id == *operation)
+            .is_some_and(|operation| match domain {
+                OperationClaimDomain::OwnerProductions => {
+                    operation.owner.productions.close_verified()
+                }
+                _ => false,
+            }),
+        ClaimPath::Resource { resource, domain } => export
+            .call
+            .resources
+            .iter_mut()
+            .find(|candidate| candidate.id == *resource)
+            .is_some_and(|resource| match domain {
+                ResourceClaimDomain::States => resource.states.close_verified(),
+                ResourceClaimDomain::Capabilities => resource.capabilities.close_verified(),
+                ResourceClaimDomain::Lifetime => false,
+            }),
+        ClaimPath::GuardPartition => {
+            let mut changed = export.call.guards.cases.close_verified();
+            for guarded in export.call.guards.cases.items_mut() {
+                let operations = match guarded {
+                    GuardedCase::When { operations, .. }
+                    | GuardedCase::Otherwise { operations } => operations,
+                };
+                changed |= operations.close_verified();
+            }
+            changed
+        }
+    };
+    if closed {
+        Ok(())
+    } else {
+        Err(ModelError::InvalidKnowledge {
+            path: format!("{claim:?}"),
+            reason: "claim is not an open, closable local knowledge leaf".into(),
+        })
+    }
+}
+
+fn value_root_mut<'a>(
+    export: &'a mut ExportSemantics,
+    root: &ValueRoot,
+) -> Option<&'a mut ValueShape> {
+    match root {
+        ValueRoot::Export => Some(&mut export.shape),
+        ValueRoot::OperationInput { operation, index } => export
+            .call
+            .operations
+            .iter_mut()
+            .find(|candidate| candidate.id == *operation)?
+            .inputs
+            .get_mut(usize::from(*index)),
+        ValueRoot::OperationOutput { operation } => export
+            .call
+            .operations
+            .iter_mut()
+            .find(|candidate| candidate.id == *operation)?
+            .output
+            .as_mut(),
+    }
+}
+
+fn value_at_path_mut<'a>(
+    mut value: &'a mut ValueShape,
+    path: &[ValuePathSegment],
+) -> Option<&'a mut ValueShape> {
+    for segment in path {
+        value = match (value, segment) {
+            (ValueShape::Tuple(items), ValuePathSegment::TupleItem(index)) => {
+                items.items_mut().get_mut(usize::try_from(*index).ok()?)?
+            }
+            (ValueShape::Array { element, .. }, ValuePathSegment::ArrayElement) => element,
+            (ValueShape::Object(properties), ValuePathSegment::ObjectProperty(name)) => {
+                &mut properties
+                    .items_mut()
+                    .iter_mut()
+                    .find(|property| property.name == *name)?
+                    .value
+            }
+            (ValueShape::Choice(alternatives), ValuePathSegment::ChoiceAlternative(index)) => {
+                alternatives
+                    .items_mut()
+                    .get_mut(usize::try_from(*index).ok()?)?
+            }
+            (ValueShape::Promise(inner), ValuePathSegment::PromiseValue)
+            | (ValueShape::AsyncIterable(inner), ValuePathSegment::AsyncIterableElement) => inner,
+            _ => return None,
+        };
+    }
+    Some(value)
+}
+
 fn open_value_closure(
     value: &mut ValueShape,
     root: ValueRoot,
