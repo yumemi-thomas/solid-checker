@@ -50,6 +50,12 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 4 compiler-facts completion](phase4/2026-08-27-compiler-facts.md) —
   semantic trace 3, compiler-facts protocol 2, identity chain, scope proof, and
   remaining compiler/runtime boundary.
+- [Phase 5 normalized-model completion](phase5/2026-08-27-normalized-semantic-model.md)
+  — wire-independent knowledge, operation, resource, guard, ownership, value,
+  artifact, validation, and canonical-digest semantics.
+- [Phase 6 temporary-wire completion](phase6/2026-08-27-temporary-wire-schema-v2.md)
+  — strict schema-v2 decoding, private normalization, goldens, cross-field
+  validation, and bounded expansion without producer or consumer cutover.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

@@ -157,11 +157,14 @@ cardinality, and contradictory ownership instead of filling a missing premise
 with a negative.
 
 `ContractProposal::normalize` computes canonical semantic identity but does not
-accept proposed closure. `AcceptedContract` deliberately has no Phase 5 public
+accept proposed closure. `AcceptedContract` deliberately has no public
 constructor: proof replay and receipt binding remain the later acceptance
-authority. The backend continues to return `NormalizationUnavailable` for the
-development schema until the Phase 6 wire migration, so the normalized model
-does not yet feed analyzer findings.
+authority. `solid-facts-backend::contract_document_v2` now owns the complete
+temporary-schema decoder, summary expansion, local-closure interpretation,
+resource limits, artifact-case identity derivation, and handoff into this
+normalizer. The public loader returns `AcceptanceUnavailable` after successful
+normalization until Phase 11; analyzer findings and bundled legacy contracts
+therefore remain unchanged.
 
 ## How the Solid 1.x dialect landed
 

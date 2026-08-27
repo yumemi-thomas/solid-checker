@@ -1,0 +1,716 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yumemi-thomas/solid-checker/schema/solid-reactivity-contract-v2.schema.json",
+  "title": "Temporary Solid Reactivity Contract v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schemaVersion",
+    "semanticModelVersion",
+    "package",
+    "summaries",
+    "entrypoints",
+    "sidecars"
+  ],
+  "properties": {
+    "format": { "const": "solid-reactivity-contract" },
+    "schemaVersion": { "const": 2 },
+    "semanticModelVersion": { "const": 1 },
+    "package": { "$ref": "#/$defs/package" },
+    "summaries": {
+      "type": "object",
+      "maxProperties": 16384,
+      "propertyNames": { "$ref": "#/$defs/nonemptyString" },
+      "additionalProperties": { "$ref": "#/$defs/summary" }
+    },
+    "entrypoints": {
+      "type": "object",
+      "maxProperties": 1024,
+      "propertyNames": { "$ref": "#/$defs/nonemptyString" },
+      "additionalProperties": { "$ref": "#/$defs/entrypoint" }
+    },
+    "sidecars": { "$ref": "#/$defs/sidecars" }
+  },
+  "$defs": {
+    "string": { "type": "string", "maxLength": 16384 },
+    "nonemptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16384
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{64}$"
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "integrity", "manifest"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonemptyString" },
+        "version": { "$ref": "#/$defs/nonemptyString" },
+        "integrity": { "$ref": "#/$defs/nonemptyString" },
+        "manifest": { "$ref": "#/$defs/file" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "runtimeArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "closureSha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "closureSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sidecars": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "proof": { "$ref": "#/$defs/hashReference" },
+        "probes": { "$ref": "#/$defs/hashReference" }
+      }
+    },
+    "hashReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256"],
+      "properties": { "sha256": { "$ref": "#/$defs/sha256" } }
+    },
+    "entrypoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/unconditionalEntrypoint" },
+        { "$ref": "#/$defs/conditionalEntrypoint" }
+      ]
+    },
+    "unconditionalEntrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "declarations", "exports"],
+      "properties": {
+        "artifact": { "$ref": "#/$defs/runtimeArtifact" },
+        "declarations": { "$ref": "#/$defs/file" },
+        "transform": { "$ref": "#/$defs/file" },
+        "stability": { "$ref": "#/$defs/stability" },
+        "exports": { "$ref": "#/$defs/exportMap" }
+      }
+    },
+    "conditionalEntrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cases"],
+      "properties": {
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/artifactCase" }
+        }
+      }
+    },
+    "artifactCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolution", "artifact", "declarations", "exports"],
+      "properties": {
+        "resolution": { "$ref": "#/$defs/resolution" },
+        "artifact": { "$ref": "#/$defs/runtimeArtifact" },
+        "declarations": { "$ref": "#/$defs/file" },
+        "transform": { "$ref": "#/$defs/file" },
+        "stability": { "$ref": "#/$defs/stability" },
+        "exports": { "$ref": "#/$defs/exportMap" }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtimeBranch", "typesBranch"],
+      "properties": {
+        "runtimeBranch": { "$ref": "#/$defs/nonemptyString" },
+        "typesBranch": { "$ref": "#/$defs/nonemptyString" }
+      }
+    },
+    "stability": { "const": "experimental" },
+    "exportMap": {
+      "type": "object",
+      "maxProperties": 65536,
+      "propertyNames": { "$ref": "#/$defs/nonemptyString" },
+      "additionalProperties": { "$ref": "#/$defs/exportReference" }
+    },
+    "exportReference": {
+      "oneOf": [
+        { "$ref": "#/$defs/nonemptyString" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["summary"],
+          "properties": {
+            "summary": { "$ref": "#/$defs/nonemptyString" },
+            "stability": { "$ref": "#/$defs/stability" }
+          }
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shape"],
+      "properties": {
+        "shape": { "$ref": "#/$defs/value" },
+        "call": { "$ref": "#/$defs/call" }
+      }
+    },
+    "call": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "closed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/callDomain" }
+        },
+        "callbacks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/callback" }
+        },
+        "reads": { "$ref": "#/$defs/operationIds" },
+        "writes": { "$ref": "#/$defs/operationIds" },
+        "creates": { "$ref": "#/$defs/operationIds" },
+        "invalidates": { "$ref": "#/$defs/operationIds" },
+        "throws": { "$ref": "#/$defs/operationIds" },
+        "returns": { "$ref": "#/$defs/operationIds" },
+        "cleanups": { "$ref": "#/$defs/operationIds" },
+        "disposals": { "$ref": "#/$defs/operationIds" },
+        "operations": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/operation" }
+        },
+        "edges": {
+          "type": "array",
+          "maxItems": 8192,
+          "items": { "$ref": "#/$defs/edge" }
+        },
+        "resources": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/resource" }
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/guardedCase" }
+        }
+      }
+    },
+    "callDomain": {
+      "enum": [
+        "callbacks",
+        "reads",
+        "writes",
+        "creates",
+        "invalidates",
+        "throws",
+        "returns",
+        "cleanups",
+        "disposals"
+      ]
+    },
+    "operationIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonemptyString" }
+    },
+    "callback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "operation"],
+      "properties": {
+        "from": { "$ref": "#/$defs/valueSource" },
+        "operation": { "$ref": "#/$defs/nonemptyString" }
+      }
+    },
+    "valueSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "operation": { "$ref": "#/$defs/nonemptyString" },
+        "resource": { "$ref": "#/$defs/nonemptyString" },
+        "path": { "$ref": "#/$defs/stringPath" }
+      },
+      "oneOf": [
+        { "required": ["arg"], "not": { "anyOf": [{ "required": ["operation"] }, { "required": ["resource"] }] } },
+        { "required": ["operation"], "not": { "anyOf": [{ "required": ["arg"] }, { "required": ["resource"] }] } },
+        { "required": ["resource"], "not": { "anyOf": [{ "required": ["arg"] }, { "required": ["operation"] }] } }
+      ]
+    },
+    "stringPath": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/string" }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonemptyString" },
+        "kind": { "enum": ["invoke", "return", "read", "write", "invalidate", "create", "cleanup", "dispose"] },
+        "guard": { "$ref": "#/$defs/guard" },
+        "trigger": { "$ref": "#/$defs/trigger" },
+        "at": { "$ref": "#/$defs/executionPoint" },
+        "tracking": { "enum": ["tracked", "untracked", "ambient-at-execution"] },
+        "owner": { "$ref": "#/$defs/owner" },
+        "count": { "$ref": "#/$defs/cardinality" },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/value" }
+        },
+        "output": { "$ref": "#/$defs/value" },
+        "resources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonemptyString" }
+        }
+      }
+    },
+    "event": {
+      "enum": ["call", "render", "flush", "settle", "transition", "async-emission", "cleanup", "external-event", "request", "response-commitment"]
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event": { "$ref": "#/$defs/event" },
+        "operation": { "$ref": "#/$defs/nonemptyString" },
+        "resource": { "$ref": "#/$defs/nonemptyString" }
+      },
+      "oneOf": [
+        { "required": ["event"], "not": { "anyOf": [{ "required": ["operation"] }, { "required": ["resource"] }] } },
+        { "required": ["operation"], "not": { "anyOf": [{ "required": ["event"] }, { "required": ["resource"] }] } },
+        { "required": ["event", "resource"], "not": { "required": ["operation"] } }
+      ]
+    },
+    "executionPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "schedule"],
+      "properties": {
+        "event": { "$ref": "#/$defs/event" },
+        "schedule": { "enum": ["same-stack", "queued", "external"] }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["none", "ambient-at-call", "ambient-at-execution", "captured", "created"] },
+        "resource": { "$ref": "#/$defs/nonemptyString" },
+        "requires": { "$ref": "#/$defs/requirement" },
+        "requiresChildren": { "$ref": "#/$defs/requirement" },
+        "requiresCleanup": { "$ref": "#/$defs/requirement" },
+        "children": { "enum": ["allowed", "forbidden"] },
+        "cleanup": { "enum": ["supported", "forbidden"] },
+        "lifetime": { "$ref": "#/$defs/lifetime" },
+        "closed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "const": "productions" }
+        },
+        "productions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ownerProduction" }
+        }
+      }
+    },
+    "requirement": { "enum": ["required", "forbidden", "unconstrained"] },
+    "ownerProduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource"],
+      "properties": {
+        "resource": { "$ref": "#/$defs/nonemptyString" },
+        "children": { "enum": ["allowed", "forbidden"] },
+        "cleanup": { "enum": ["supported", "forbidden"] },
+        "lifetime": { "$ref": "#/$defs/lifetime" }
+      }
+    },
+    "lifetime": {
+      "oneOf": [
+        { "enum": ["call", "resource", "owner", "request", "transition", "async-source"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "resource"],
+          "properties": {
+            "kind": { "enum": ["resource", "owner", "request", "transition", "async-source"] },
+            "resource": { "$ref": "#/$defs/nonemptyString" }
+          }
+        }
+      ]
+    },
+    "cardinality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": { "enum": ["trigger", "call", "resource"] },
+        "resource": { "$ref": "#/$defs/nonemptyString" },
+        "min": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "max": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+            { "const": "many" }
+          ]
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to"],
+      "properties": {
+        "kind": { "enum": ["orders", "data", "invalidates", "error", "cleanup", "lifetime"] },
+        "from": { "$ref": "#/$defs/nonemptyString" },
+        "to": { "$ref": "#/$defs/nonemptyString" }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonemptyString" },
+        "kind": { "enum": ["owner", "reactive-source", "async-computation", "transition", "cleanup", "request", "response", "stream", "server-function-reference"] },
+        "closed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["states", "capabilities"] }
+        },
+        "states": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["active", "disposed", "installed", "pending", "settled", "errored", "cancelled", "reverted", "uncommitted", "committed", "unclaimed", "claimed"] }
+        },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["refreshable", "writable"] }
+        },
+        "lifetime": { "$ref": "#/$defs/lifetime" }
+      }
+    },
+    "guardedCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "when": { "$ref": "#/$defs/guard" },
+        "otherwise": { "const": true },
+        "operations": { "$ref": "#/$defs/operationIds" }
+      },
+      "oneOf": [
+        { "required": ["when"], "not": { "required": ["otherwise"] } },
+        { "required": ["otherwise"], "not": { "required": ["when"] } }
+      ]
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all"],
+      "properties": {
+        "all": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/guardAtom" }
+        }
+      }
+    },
+    "guardValueKind": { "enum": ["plain", "callable", "promise", "async-iterable"] },
+    "guardAtom": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["signature"],
+          "properties": { "signature": { "$ref": "#/$defs/nonemptyString" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["argumentCount"],
+          "properties": {
+            "argumentCount": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["min"],
+              "properties": {
+                "min": { "type": "integer", "minimum": 0, "maximum": 65535 },
+                "max": { "type": "integer", "minimum": 0, "maximum": 65535 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["arg", "literal"],
+          "properties": {
+            "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "path": { "$ref": "#/$defs/stringPath" },
+            "literal": { "type": ["null", "boolean", "number", "string"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["arg", "kind"],
+          "properties": {
+            "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "path": { "$ref": "#/$defs/stringPath" },
+            "kind": { "$ref": "#/$defs/guardValueKind" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["arg", "property"],
+          "properties": {
+            "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "path": { "$ref": "#/$defs/stringPath" },
+            "property": { "$ref": "#/$defs/nonemptyString" },
+            "callable": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["arg", "tupleAlternative"],
+          "properties": {
+            "arg": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "tupleAlternative": { "type": "integer", "minimum": 0, "maximum": 65535 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resultProtocol"],
+          "properties": { "resultProtocol": { "$ref": "#/$defs/guardValueKind" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["artifactCase"],
+          "properties": { "artifactCase": { "$ref": "#/$defs/nonemptyString" } }
+        }
+      ]
+    },
+    "value": {
+      "oneOf": [
+        { "enum": ["unknown", "plain", "callable", "component", "ref-application"] },
+        { "$ref": "#/$defs/unknownValue" },
+        { "$ref": "#/$defs/plainValue" },
+        { "$ref": "#/$defs/parameterValue" },
+        { "$ref": "#/$defs/tupleValue" },
+        { "$ref": "#/$defs/arrayValue" },
+        { "$ref": "#/$defs/objectValue" },
+        { "$ref": "#/$defs/choiceValue" },
+        { "$ref": "#/$defs/callableValue" },
+        { "$ref": "#/$defs/promiseValue" },
+        { "$ref": "#/$defs/asyncIterableValue" },
+        { "$ref": "#/$defs/reactiveValue" },
+        { "$ref": "#/$defs/storeValue" },
+        { "$ref": "#/$defs/actionValue" },
+        { "$ref": "#/$defs/componentValue" },
+        { "$ref": "#/$defs/cleanupValue" },
+        { "$ref": "#/$defs/refApplicationValue" },
+        { "$ref": "#/$defs/serverFunctionReferenceValue" }
+      ]
+    },
+    "unknownValue": { "$ref": "#/$defs/kindOnlyUnknown" },
+    "plainValue": { "$ref": "#/$defs/kindOnlyPlain" },
+    "callableValue": { "$ref": "#/$defs/kindOnlyCallable" },
+    "componentValue": { "$ref": "#/$defs/kindOnlyComponent" },
+    "refApplicationValue": { "$ref": "#/$defs/kindOnlyRefApplication" },
+    "kindOnlyUnknown": { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "unknown" } } },
+    "kindOnlyPlain": { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "plain" } } },
+    "kindOnlyCallable": { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "callable" } } },
+    "kindOnlyComponent": { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "component" } } },
+    "kindOnlyRefApplication": { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "ref-application" } } },
+    "parameterValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "index"],
+      "properties": {
+        "kind": { "const": "parameter" },
+        "index": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "path": { "$ref": "#/$defs/stringPath" }
+      }
+    },
+    "tupleValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "tuple" },
+        "closed": { "type": "array", "uniqueItems": true, "items": { "const": "items" } },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/value" } }
+      }
+    },
+    "arrayValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "array" },
+        "element": { "$ref": "#/$defs/value" },
+        "length": { "$ref": "#/$defs/arrayLength" }
+      }
+    },
+    "arrayLength": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "max": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+            { "const": "many" }
+          ]
+        }
+      }
+    },
+    "objectValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "object" },
+        "closed": { "type": "array", "uniqueItems": true, "items": { "const": "properties" } },
+        "properties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value"],
+            "properties": {
+              "name": { "$ref": "#/$defs/nonemptyString" },
+              "value": { "$ref": "#/$defs/value" }
+            }
+          }
+        }
+      }
+    },
+    "choiceValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "choice" },
+        "closed": { "type": "array", "uniqueItems": true, "items": { "const": "alternatives" } },
+        "alternatives": { "type": "array", "items": { "$ref": "#/$defs/value" } }
+      }
+    },
+    "promiseValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "promise" },
+        "value": { "$ref": "#/$defs/value" }
+      }
+    },
+    "asyncIterableValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "async-iterable" },
+        "element": { "$ref": "#/$defs/value" }
+      }
+    },
+    "reactiveValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "role"],
+      "properties": {
+        "kind": { "const": "reactive" },
+        "role": { "enum": ["accessor", "setter"] },
+        "resource": { "$ref": "#/$defs/nonemptyString" },
+        "closed": { "type": "array", "uniqueItems": true, "items": { "const": "capabilities" } },
+        "capabilities": { "$ref": "#/$defs/capabilityClaims" }
+      }
+    },
+    "storeValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "store" },
+        "resource": { "$ref": "#/$defs/nonemptyString" },
+        "closed": { "type": "array", "uniqueItems": true, "items": { "const": "capabilities" } },
+        "capabilities": { "$ref": "#/$defs/capabilityClaims" }
+      }
+    },
+    "capabilityClaims": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "enum": ["readable", "writable", "refreshable", "pending-aware", "optimistic"] },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["capability", "resource"],
+            "properties": {
+              "capability": { "enum": ["refreshable", "pending-aware", "optimistic"] },
+              "resource": { "$ref": "#/$defs/nonemptyString" }
+            }
+          }
+        ]
+      }
+    },
+    "actionValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "action" },
+        "transition": { "$ref": "#/$defs/nonemptyString" }
+      }
+    },
+    "cleanupValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "cleanup" },
+        "resource": { "$ref": "#/$defs/nonemptyString" },
+        "lifetime": { "$ref": "#/$defs/lifetime" }
+      }
+    },
+    "serverFunctionReferenceValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "server-function-reference" },
+        "resource": { "$ref": "#/$defs/nonemptyString" }
+      }
+    }
+  }
+}

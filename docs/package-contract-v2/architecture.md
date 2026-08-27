@@ -90,8 +90,11 @@ resolver adapters. Those seams do not become analyzer interfaces.
 
 ### Contract document module
 
-Owned by `solid-facts-backend`, beginning at
-`rust/crates/solid-facts-backend/src/contract_document.rs`.
+Owned by `solid-facts-backend`. The legacy stable-v1 adapter remains in
+`rust/crates/solid-facts-backend/src/contract_document.rs`; the isolated
+temporary replacement decoder is
+`rust/crates/solid-facts-backend/src/contract_document_v2.rs` until the atomic
+cut removes the legacy path.
 
 Responsibilities:
 

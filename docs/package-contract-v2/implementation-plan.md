@@ -280,6 +280,15 @@ receipt, bundled contract, or analyzer consumer was migrated in this phase.
 
 **Exit:** every golden document round-trips to identical normalized semantics.
 
+**Status 2026-08-27:** complete. Items 68-80 and the exit condition are
+implemented by the crate-private `solid-facts-backend::contract_document_v2`
+boundary and the temporary structural JSON Schema. Three complete goldens,
+all four knowledge states, normalization-equivalence checks, adversarial
+cross-field validation, and resource-limit tests are recorded in the
+[Phase 6 completion report](phase6/2026-08-27-temporary-wire-schema-v2.md).
+No generator, bundled contract, analyzer consumer, proof sidecar, receipt, or
+stable public-schema cutover occurred.
+
 ## Phase 7 — Artifact resolution and closure
 
 81. Define exact resolution records.
