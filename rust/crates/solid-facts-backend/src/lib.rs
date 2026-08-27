@@ -12,6 +12,7 @@ mod contract_interface;
 mod demand_plan;
 mod diagnostics;
 pub mod dialect;
+mod proposal_generation;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
@@ -36,6 +37,12 @@ pub use diagnostics::{
     discovered_rule_options_path, imported_package_roots, load_package_contracts,
     load_package_contracts_with, package_contract_statuses, package_contract_statuses_with,
     read_package_contract, semantic_demand_options_for_enablement, snapshot, source_location,
+};
+pub use proposal_generation::{
+    ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
+    ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,
+    ProposalGenerationError, ProposalPlan, ProposalSubject, construct_proposal, emit_proposal,
+    plan_probes, plan_proofs,
 };
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,

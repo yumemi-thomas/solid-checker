@@ -337,6 +337,17 @@ contract consumers remain unchanged for their scheduled later phases.
 **Exit:** generation without verification always produces an unaccepted open
 proposal.
 
+Completed on 2026-08-27. The replacement path now terminates semantic proposal
+construction in `solid-facts-backend::proposal_generation`, requires exact
+Phase 7 artifact binding, withdraws proposed closure into local proof
+obligations, preserves partial positive operations and unrelated candidates,
+and emits only deterministic `unaccepted` proposal plans. Node contains a
+seven-stage acquisition/orchestration pipeline with no variant collapse or
+mutable semantic summaries. Fixed-point, false-closure, local-uncertainty, and
+deterministic-output behavior is covered by focused Rust and Node tests. The
+public legacy generator remains unchanged for the Phase 14 atomic producer
+migration. See the [Phase 8 completion report](phase8/2026-08-27-proposal-generator-refactor.md).
+
 ## Phase 9 — Claim IDs and evidence sidecars
 
 101. Define semantic claim IDs independent of JSON position and summary name.

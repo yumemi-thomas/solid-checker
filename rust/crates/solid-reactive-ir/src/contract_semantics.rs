@@ -79,9 +79,24 @@ impl<T> KnowledgeSet<T> {
             Self::Partial(items) | Self::Complete(items) => items,
         }
     }
+
+    fn items_mut(&mut self) -> &mut [T] {
+        match self {
+            Self::Unknown => &mut [],
+            Self::Partial(items) | Self::Complete(items) => items,
+        }
+    }
 }
 
 impl<T: Ord> KnowledgeSet<T> {
+    fn open_proposed_closure(&mut self) -> bool {
+        if !self.is_closed() {
+            return false;
+        }
+        *self = std::mem::take(self).weaken();
+        true
+    }
+
     /// Monotonically joins all possible alternatives.
     ///
     /// Positive items are unioned. Closure survives only when every possible
@@ -426,6 +441,17 @@ impl ExportSemantics {
     #[must_use]
     pub fn unresolved_claims(&self) -> Vec<ClaimPath> {
         validate::unresolved_claims(self)
+    }
+
+    /// Withdraws every locally proposed completeness claim and returns the
+    /// exact semantic leaves whose closure must be proved later.
+    ///
+    /// Positive items survive as partial knowledge. Complete-negative leaves
+    /// become unknown. This is the proposal-generator boundary: constructing
+    /// a proposal can retain candidates for later proof planning, but cannot
+    /// publish any of them as accepted closure.
+    pub fn open_proposed_closure(&mut self) -> Vec<ClaimPath> {
+        validate::open_proposed_closure(self)
     }
 
     /// Opens only the named immediate call domains while preserving every
