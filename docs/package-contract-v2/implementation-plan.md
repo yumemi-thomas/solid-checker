@@ -387,6 +387,15 @@ returns no raw evidence bytes to ordinary analysis. See the
 
 **Exit:** probes detect contradictions without becoming a negative-proof engine.
 
+Completed on 2026-08-27. The backend now owns exact artifact-mode probe plans,
+bounded isolated repeat sessions, the complete semantic event vocabulary,
+scenario lifecycle validation, deterministic transcripts, and claim-local
+mode outcomes. Only planned possible operations can produce witnesses and only
+planned closure candidates can produce contradiction records; absence,
+timeouts, errors, malformed lifecycles, or nondeterminism refuse locally and
+never promote negative, minimum, maximum, exhaustive, or accepted facts. See
+the [Phase 10 completion report](phase10/2026-08-27-authoritative-runtime-probes.md).
+
 ## Phase 11 — Proof checker and acceptance receipts
 
 117. Implement package, manifest, artifact, declaration, and closure proofs.

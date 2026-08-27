@@ -177,6 +177,11 @@ binary.
 - Removing one reachable operation from a closed domain fails verification.
 - An unresolved call or escape opens only affected domains.
 - A probe never creates complete-negative knowledge.
+- A probe plan admits only possible-positive operation witnesses and closure-
+  candidate falsifiers from the exact proposal.
+- Every mode uses fresh process, realm, and module state and deterministic
+  bounded repeat runs; disagreement refuses only that exact mode.
+- A timeout bounds execution but elapsed time never classifies behavior.
 - Zero or multiple artifact-case matches fail closed.
 - Inline and summarized wire forms normalize identically.
 - Every contract-driven diagnostic has a `tsc`-silent witness against exact

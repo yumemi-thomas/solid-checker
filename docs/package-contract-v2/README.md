@@ -66,6 +66,10 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 9 claim-ID and evidence-sidecar completion](phase9/2026-08-27-claim-ids-evidence-sidecars.md)
   — position-independent semantic claim IDs, separate proof/probe evidence
   families, bidirectional hash binding, and raw-sidecar-free analysis.
+- [Phase 10 runtime-probe completion](phase10/2026-08-27-authoritative-runtime-probes.md)
+  — exact artifact-mode matrices, semantic event transcripts, isolated bounded
+  repeat runs, positive-witness/closure-falsification authority, and local
+  refusal without negative proof.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.
