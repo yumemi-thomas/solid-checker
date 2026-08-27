@@ -34,11 +34,29 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 // and the fact that the digest above is the schema file's. The third, the build
 // id, is stamped at link time and is covered by the Rust process tests.
 func TestHandshakeDeclaresTheOperationSetsProtocol(t *testing.T) {
-	if typefacts.TypeFactsHandshakeProtocol != 2 {
+	if typefacts.TypeFactsHandshakeProtocol != 3 {
 		t.Fatalf(
-			"handshake protocol = %d, want 2: it moved to 2 when the modules operation joined the lifecycle set",
+			"handshake protocol = %d, want 3: it moved to 3 when invocation transcripts joined the lifecycle set",
 			typefacts.TypeFactsHandshakeProtocol,
 		)
+	}
+}
+
+func TestLifecycleInvocationsIsAValidReadOnlyGenerationOperation(t *testing.T) {
+	request := typefacts.LifecycleRequest{
+		Schema:     typefacts.TypeFactsSchemaVersionV1,
+		RequestID:  1,
+		Operation:  typefacts.LifecycleInvocations,
+		ProjectID:  "/project/tsconfig.json",
+		Generation: 1,
+		InvocationDemands: []typefacts.InvocationDemand{{
+			Location:      typefacts.Location{Path: "/project/source.ts", StartByte: 1, EndByte: 8},
+			CallableDepth: 2,
+			Census:        true,
+		}},
+	}
+	if err := typefacts.ValidateLifecycleRequest(request); err != nil {
+		t.Fatal(err)
 	}
 }
 

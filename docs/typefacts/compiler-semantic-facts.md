@@ -429,6 +429,38 @@ they do not duplicate symbol rows. Retained per-file contributions track
 declaration and parameter source dependencies, so an edit rematerializes only
 facts that could otherwise carry stale locations.
 
+## Invocation transcripts
+
+The read-only `invocations` operation takes exact call- or construct-expression
+ranges. It is separate from retained `EntityDemand` rows: callable trees and
+implementation censuses exist only in the response that requested them and do
+not change the retained state token.
+
+For a valid, non-composite compiler-selected signature, each transcript carries
+the exact declaration and overload, instantiated formal and result facts,
+direct and exact tuple-spread mappings, explicit unknown-length spreads, and
+omitted optional/defaulted formals. Callable paths are alternative-local and
+bounded by the demand; finite literal, callability, protocol, tuple, and genuine
+common-discriminant partitions are marked complete only when compiler relations
+prove them exhaustive.
+
+An optional census classifies every formal-binding reference in the current
+implementation by symbol identity and separately enumerates return, throw, and
+branch sites. It deliberately does not assign Solid timing, tracking, or owner
+semantics. Unsupported loop, switch, and try reachability opens only the
+control-flow domain.
+
+Every answer binds the project generation, ordered demand digest, complete
+module-graph digest, sorted source/declaration digests, schema digest, and
+producer build. The Rust client recomputes demand and selected-signature
+identities and validates local completeness and binding/path invariants before
+exposing the answer. Recovery signatures, composite dispatch, untyped
+`Function` calls, and `.call`/`.apply`/`.bind` remain explicit refusals rather
+than being approximated with wrapper signatures.
+
+The normative model and closure obligations are in
+[Type Facts invocation transcripts](../package-contract-v2/phase3/invocation-transcripts.md).
+
 ## Resolved module graph
 
 The `modules` operation answers for the module graph of the accepted program,
@@ -466,8 +498,10 @@ negatives:
 `unknownImportPaths` names requested files the program does not hold, so an empty
 import list is distinguishable from an unanalyzed file.
 
-The active lifecycle schema is V1 and the active Wire table model is v13. The
-`modules` operation carries no Wire table transition: the module graph belongs to
-the program rather than to a fact table. The packed transition framing remains
-version 1. Go and Rust pin the same handshake protocol number and schema digest,
-so mismatched producer/client versions fail during the startup handshake.
+The active lifecycle schema is V1 and the active Wire table model is v17. The
+`modules` and `invocations` operations carry no Wire table transition: their
+answers belong to the open program generation rather than to a retained fact
+table. The packed transition framing remains version 1. Handshake protocol 3
+adds invocation transcripts; Go and Rust pin that protocol, the same schema
+digest, and the same build identity, so mismatched producer/client versions fail
+during startup.

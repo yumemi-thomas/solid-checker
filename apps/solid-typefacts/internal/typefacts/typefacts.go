@@ -24,9 +24,9 @@ type RuntimeSymbolID string
 // TypeDescriptor exposes source identity for named types without leaking a
 // backend AST. It is available through the optional TypeDescriber capability.
 type TypeDescriptor struct {
-	Text              string
-	OriginModule      string
-	AliasDeclarations []Declaration
+	Text              string        `cbor:"text,omitempty" json:"text,omitempty"`
+	OriginModule      string        `cbor:"originModule,omitempty" json:"originModule,omitempty"`
+	AliasDeclarations []Declaration `cbor:"aliasDeclarations,omitempty" json:"aliasDeclarations,omitempty"`
 }
 
 type TypeDescriber interface {
@@ -453,24 +453,24 @@ const (
 // resolution. Symbol and each owner symbol are compiler-resolved identities;
 // names and QualifiedName are display metadata.
 type ResolvedDeclaration struct {
-	Symbol          SymbolID
-	Name            string
-	Kind            string
-	Location        Location
-	Owners          []DeclarationOwner
-	QualifiedName   string
-	OriginModule    string
-	SourceFile      string
-	StandardLibrary bool
+	Symbol          SymbolID           `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	Name            string             `cbor:"name,omitempty" json:"name,omitempty"`
+	Kind            string             `cbor:"kind" json:"kind"`
+	Location        Location           `cbor:"location" json:"location"`
+	Owners          []DeclarationOwner `cbor:"owners,omitempty" json:"owners,omitempty"`
+	QualifiedName   string             `cbor:"qualifiedName,omitempty" json:"qualifiedName,omitempty"`
+	OriginModule    string             `cbor:"originModule,omitempty" json:"originModule,omitempty"`
+	SourceFile      string             `cbor:"sourceFile,omitempty" json:"sourceFile,omitempty"`
+	StandardLibrary bool               `cbor:"standardLibrary,omitempty" json:"standardLibrary,omitempty"`
 }
 
 // DeclarationOwner is one compiler declaration containing a selected
 // signature declaration, ordered outermost to innermost.
 type DeclarationOwner struct {
-	Symbol   SymbolID
-	Name     string
-	Kind     string
-	Location Location
+	Symbol   SymbolID `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	Name     string   `cbor:"name,omitempty" json:"name,omitempty"`
+	Kind     string   `cbor:"kind" json:"kind"`
+	Location Location `cbor:"location" json:"location"`
 }
 
 // ModuleFormat is the compiler's emit module format for one included file, as
@@ -769,8 +769,8 @@ type ArgumentMapping struct {
 // treated as the complete runtime dispatch set. Candidates are deduplicated
 // and ordered deterministically by declaration location, then symbol.
 type CallTargetSet struct {
-	Exhaustive bool
-	Candidates []ResolvedDeclaration
+	Exhaustive bool                  `cbor:"exhaustive,omitempty" json:"exhaustive,omitempty"`
+	Candidates []ResolvedDeclaration `cbor:"candidates,omitempty" json:"candidates,omitempty"`
 }
 
 // Call describes the target and instantiated return type of a demanded call.

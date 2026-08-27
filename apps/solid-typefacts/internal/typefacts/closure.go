@@ -64,6 +64,11 @@ type symbolEvidenceBackend interface {
 // cannot answer says so instead.
 var ErrModuleGraphUnavailable = errors.New("type facts backend reports no resolved module graph")
 
+// ErrInvocationFactsUnavailable is returned when a backend cannot provide the
+// exact selected-signature and census capability. Falling back to weaker entity
+// facts would turn an absent proof into a false closed transcript.
+var ErrInvocationFactsUnavailable = errors.New("type facts backend reports no invocation transcripts")
+
 // ClosureStats reports the cost of one generation's closed fact table.
 type ClosureStats struct {
 	BuildSequence    uint64           `json:"-"`
@@ -408,6 +413,24 @@ func (p *DemandClosure) ModuleGraph(
 		return ModuleInventory{}, ErrModuleGraphUnavailable
 	}
 	return provider.ModuleGraph(ctx, demand)
+}
+
+// InvocationTranscripts answers from the retained compiler program without
+// materializing or mutating the retained entity demand table.
+func (p *DemandClosure) InvocationTranscripts(
+	ctx context.Context,
+	demands []InvocationDemand,
+) (InvocationAnswer, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return InvocationAnswer{}, errors.New("closure project is closed")
+	}
+	provider, ok := p.backend.(InvocationAnalyzer)
+	if !ok {
+		return InvocationAnswer{}, ErrInvocationFactsUnavailable
+	}
+	return provider.InvocationTranscripts(ctx, demands)
 }
 
 // resolveSymbolEvidence answers one Rust-owned closure worklist batch. It does

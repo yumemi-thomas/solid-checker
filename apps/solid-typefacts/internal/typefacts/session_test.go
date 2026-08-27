@@ -24,6 +24,30 @@ func (b *sessionTestBackend) Close() error {
 	return nil
 }
 
+type invocationSessionBackend struct {
+	*sessionTestBackend
+	demands []InvocationDemand
+}
+
+func (b *invocationSessionBackend) InvocationTranscripts(
+	_ context.Context,
+	demands []InvocationDemand,
+) (InvocationAnswer, error) {
+	b.demands = append([]InvocationDemand(nil), demands...)
+	transcripts := make([]InvocationTranscript, len(demands))
+	for index := range demands {
+		transcripts[index] = InvocationTranscript{Location: demands[index].Location, Validity: ResolvedCallValid, Kind: CallKindCall}
+	}
+	return InvocationAnswer{
+		Transcripts: transcripts,
+		Envelope: InvocationEnvelope{
+			Generation:        1,
+			DemandSHA256:      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			ModuleGraphSHA256: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+	}, nil
+}
+
 func lifecycleRequest(id uint64, operation LifecycleOperation, generation uint64) LifecycleRequest {
 	return LifecycleRequest{
 		Schema: TypeFactsSchemaVersionV1, RequestID: id,
@@ -486,5 +510,61 @@ func TestSessionFailsClosedWhenTheBackendHasNoModuleGraph(t *testing.T) {
 	}
 	if len(response.Modules) != 0 {
 		t.Errorf("a failed modules response carried %d modules", len(response.Modules))
+	}
+}
+
+func TestSessionInvocationReadBindsEnvelopeAndPreservesRetainedState(t *testing.T) {
+	t.Parallel()
+	backend := &invocationSessionBackend{sessionTestBackend: newSessionTestBackend()}
+	session, err := NewSessionWithBuildID(backend, "/project/tsconfig.json", nil, "phase3-test-build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	analyzeRequest := lifecycleRequest(1, LifecycleAnalyze, 1)
+	analyzeRequest.ResetState = true
+	analyze := session.Lifecycle(context.Background(), analyzeRequest)
+	if !analyze.OK {
+		t.Fatalf("analyze response = %+v", analyze)
+	}
+	request := lifecycleRequest(2, LifecycleInvocations, 1)
+	request.InvocationDemands = []InvocationDemand{{
+		Location:      Location{Path: "/project/source.ts", StartByte: 0, EndByte: 7},
+		CallableDepth: 2,
+		Census:        true,
+	}}
+	response := session.Lifecycle(context.Background(), request)
+	if !response.OK || len(response.InvocationTranscripts) != 1 || response.InvocationEnvelope == nil {
+		t.Fatalf("invocations response = %+v", response)
+	}
+	if response.InvocationEnvelope.ProjectID != "/project/tsconfig.json" ||
+		response.InvocationEnvelope.SchemaSHA256 != TypeFactsSchemaSHA256 ||
+		response.InvocationEnvelope.ProducerBuild != "phase3-test-build" {
+		t.Fatalf("invocation envelope = %+v", response.InvocationEnvelope)
+	}
+	if len(backend.demands) != 1 || backend.demands[0] != request.InvocationDemands[0] {
+		t.Fatalf("backend demands = %+v", backend.demands)
+	}
+
+	reuseRequest := lifecycleRequest(3, LifecycleAnalyze, 1)
+	reuseRequest.StateToken = analyze.StateToken
+	reuse := session.Lifecycle(context.Background(), reuseRequest)
+	if !reuse.OK || reuse.StateToken != analyze.StateToken || len(reuse.TableTransition) != 0 {
+		t.Fatalf("retained analysis did not survive invocation read: %+v", reuse)
+	}
+}
+
+func TestSessionInvocationReadRejectsStaleGeneration(t *testing.T) {
+	t.Parallel()
+	backend := &invocationSessionBackend{sessionTestBackend: newSessionTestBackend()}
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	response := session.Lifecycle(context.Background(), lifecycleRequest(1, LifecycleInvocations, 2))
+	if response.OK || response.Error == nil || response.Error.Code != "generation-mismatch" {
+		t.Fatalf("stale invocation response = %+v", response)
 	}
 }

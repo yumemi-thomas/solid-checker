@@ -36,6 +36,22 @@ func Checker_getBaseConstraintOfType(recv *checker.Checker, t *checker.Type) *ch
 //go:linkname Checker_getAwaitedType github.com/microsoft/typescript-go/internal/checker.(*Checker).getAwaitedType
 func Checker_getAwaitedType(recv *checker.Checker, t *checker.Type) *checker.Type
 
+type IterationUse = checker.IterationUse
+type IterationTypeKind = checker.IterationTypeKind
+
+const (
+	IterationUseAsyncGeneratorReturnType = checker.IterationUseAsyncGeneratorReturnType
+	IterationTypeKindYield               = checker.IterationTypeKindYield
+)
+
+// Checker_getIterationTypeOfIterable asks the compiler's iterable protocol
+// resolver whether a type exposes the async-iterator contract. Unlike symbol
+// name inspection this covers aliases, extensions, structural implementations,
+// and unions using the same relation that validates async generators.
+//
+//go:linkname Checker_getIterationTypeOfIterable github.com/microsoft/typescript-go/internal/checker.(*Checker).getIterationTypeOfIterable
+func Checker_getIterationTypeOfIterable(recv *checker.Checker, use checker.IterationUse, typeKind checker.IterationTypeKind, inputType *checker.Type, errorNode *ast.Node) *checker.Type
+
 //go:linkname Checker_isTypeIdenticalTo github.com/microsoft/typescript-go/internal/checker.(*Checker).isTypeIdenticalTo
 func Checker_isTypeIdenticalTo(recv *checker.Checker, source *checker.Type, target *checker.Type) bool
 

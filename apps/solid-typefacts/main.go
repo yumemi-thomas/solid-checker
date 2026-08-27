@@ -144,7 +144,7 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 		trace.Stage("open", time.Since(started))
 	}
 	var session *typefacts.Session
-	session, err = typefacts.NewSession(backend, projectID, trace)
+	session, err = typefacts.NewSessionWithBuildID(backend, projectID, trace, buildID)
 	if err != nil {
 		return err
 	}
