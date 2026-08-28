@@ -164,5 +164,9 @@ complete ecosystem package knowledge.
 ## Handoff
 
 - Branch: `codex/phase15-adversarial-hardening`
-- Implementation commit and pull request: recorded after the green handoff
-  commit is published.
+- Implementation commit: `ad86652c` (`feat: harden package contracts against
+  adversarial inputs`)
+- Pull request: <https://github.com/yumemi-thomas/solid-checker/pull/57>
+
+This handoff metadata is a documentation-only follow-up commit. The complete
+final `make verify` result above was recorded against the implementation commit.
