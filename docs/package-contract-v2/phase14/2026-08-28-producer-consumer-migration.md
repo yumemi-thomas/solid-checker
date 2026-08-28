@@ -239,5 +239,11 @@ producer/consumer migration while preserving exact fail-closed domains.
 
 ## Handoff
 
-Commit and pull-request metadata will be recorded here after the verified
-branch is pushed.
+- Branch: `codex/phase14-producer-consumer-migration`
+- Implementation commit: `474c101f` (`feat: migrate package contracts to
+  normalized v2`)
+- Pull request: <https://github.com/yumemi-thomas/solid-checker/pull/56>
+
+The handoff metadata itself is a documentation-only follow-up commit. The full
+`make verify` result above was recorded against the implementation commit; the
+follow-up changes no executable or generated artifact.
