@@ -166,5 +166,6 @@ complete semantic knowledge of every package export.
 ## Handoff
 
 - Branch: `codex/phase16-corpus-compactness-performance`
-- Implementation commit: recorded after the final repository gate
-- Pull request: created after the final repository gate
+- Implementation commit: `35ab4d36` (`feat: complete package contract phase 16
+  gates`)
+- Pull request: <https://github.com/yumemi-thomas/solid-checker/pull/58>
