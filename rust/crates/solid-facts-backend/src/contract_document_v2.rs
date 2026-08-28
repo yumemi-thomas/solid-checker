@@ -32,6 +32,7 @@ const DEVELOPMENT_SCHEMA_VERSION: u16 = 2;
 const MAX_DOCUMENT_BYTES: usize = 1024 * 1024;
 const MAX_RECURSIVE_DEPTH: usize = 32;
 const MAX_JSON_DEPTH: usize = 128;
+const MAX_JSON_NODES: usize = 250_000;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 const MAX_PATH_BYTES: usize = 4 * 1024;
 const MAX_ENTRYPOINTS: usize = 1_024;
@@ -92,8 +93,16 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedContractDocument, ContractFa
             limit: MAX_DOCUMENT_BYTES,
         });
     }
-    let value: serde_json::Value = serde_json::from_slice(bytes).map_err(document_decode)?;
-    validate_json_tree(&value, 0)?;
+    let value = crate::bounded_json::value(
+        bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_DOCUMENT_BYTES,
+            depth: MAX_JSON_DEPTH,
+            nodes: MAX_JSON_NODES,
+            string_bytes: MAX_STRING_BYTES,
+        },
+    )
+    .map_err(|message| ContractFailure::DocumentDecode { message })?;
     let document: WireDocument = serde_json::from_value(value).map_err(document_decode)?;
     if document.format != FORMAT {
         return invalid_document(format!(
@@ -1166,37 +1175,6 @@ fn invalid_model<T>(reason: impl Into<String>) -> Result<T, ContractFailure> {
     })
 }
 
-fn validate_json_tree(value: &serde_json::Value, depth: usize) -> Result<(), ContractFailure> {
-    if depth > MAX_JSON_DEPTH {
-        return invalid_document(format!("JSON container depth exceeds {MAX_JSON_DEPTH}"));
-    }
-    match value {
-        serde_json::Value::String(value) => validate_string(value),
-        serde_json::Value::Array(items) => {
-            for item in items {
-                validate_json_tree(item, depth + 1)?;
-            }
-            Ok(())
-        }
-        serde_json::Value::Object(fields) => {
-            for (name, value) in fields {
-                validate_string(name)?;
-                validate_json_tree(value, depth + 1)?;
-            }
-            Ok(())
-        }
-        _ => Ok(()),
-    }
-}
-
-fn validate_string(value: &str) -> Result<(), ContractFailure> {
-    if value.len() > MAX_STRING_BYTES {
-        invalid_document(format!("string exceeds {MAX_STRING_BYTES} bytes"))
-    } else {
-        Ok(())
-    }
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct WireDocument {
@@ -2097,7 +2075,7 @@ fn expand(document: WireDocument) -> Result<NormalizedContract, ContractFailure>
     let mut effective_exports = 0usize;
     let mut expansion_nodes = 0usize;
     for (entrypoint, definition) in document.entrypoints {
-        validate_nonempty(&entrypoint, "entrypoint")?;
+        validate_entrypoint(&entrypoint)?;
         match definition {
             WireEntrypoint::Unconditional(case) => {
                 effective_exports = checked_add_exports(effective_exports, case.exports.len())?;
@@ -2412,6 +2390,28 @@ fn validate_path(value: &str) -> Result<(), ContractFailure> {
     {
         return invalid_document(format!(
             "path {value:?} is not confined to the package root"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_entrypoint(value: &str) -> Result<(), ContractFailure> {
+    if value == "." {
+        return Ok(());
+    }
+    let Some(path) = value.strip_prefix("./") else {
+        return invalid_document(format!(
+            "entrypoint {value:?} must be the package root or a package subpath"
+        ));
+    };
+    if path.is_empty()
+        || path.contains('\\')
+        || path
+            .split('/')
+            .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
+    {
+        return invalid_document(format!(
+            "entrypoint {value:?} contains a non-canonical or traversing segment"
         ));
     }
     Ok(())
@@ -3528,6 +3528,148 @@ mod tests {
                 .normalize(),
             Err(ContractFailure::DocumentDecode { .. })
         ));
+    }
+
+    #[test]
+    fn every_seeded_false_closure_mutation_is_detected() {
+        let reject = |name: &str, value: serde_json::Value| {
+            let bytes = serde_json::to_vec(&value).unwrap();
+            let rejected = decode(&bytes)
+                .and_then(DecodedContractDocument::normalize)
+                .is_err();
+            assert!(rejected, "seeded false-closure mutation {name:?} survived");
+        };
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        value["summaries"]["plain-value"]["call"] = serde_json::json!({
+            "closed": ["reads"]
+        });
+        value["summaries"]["sibling"] = serde_json::json!({
+            "shape": "plain",
+            "call": {"closed": ["reads"], "reads": []}
+        });
+        reject("closure collection moved to a sibling summary", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        value["summaries"]["plain-value"]["call"] = serde_json::json!({"reads": []});
+        reject("empty open domain", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        value["entrypoints"]["."]["exports"]["version"] = serde_json::json!("missing");
+        reject("dangling summary", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        value["summaries"]["plain-value"]["shape"] =
+            serde_json::json!({"kind": "promise", "summary": "plain-value"});
+        reject("summary recursion smuggled through an unknown field", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(SIGNAL).unwrap();
+        value["summaries"]["signal-pair"]["call"]["operations"][0]["trigger"] =
+            serde_json::json!({"operation": "read"});
+        reject("operation trigger cycle", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        value["summaries"]["plain-value"]["call"] = serde_json::json!({
+            "resources": [
+                {"id": "left", "kind": "reactive-source", "lifetime": {"kind": "resource", "resource": "right"}},
+                {"id": "right", "kind": "reactive-source", "lifetime": {"kind": "resource", "resource": "left"}}
+            ]
+        });
+        reject("resource lifetime cycle", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(SIGNAL).unwrap();
+        value["summaries"]["signal-pair"]["call"]["operations"][0]["resources"][0] =
+            serde_json::json!("missing");
+        reject("dangling resource", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(SIGNAL).unwrap();
+        value["summaries"]["signal-pair"]["call"]["edges"][0]["to"] = serde_json::json!("missing");
+        reject("dangling operation", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(SIGNAL).unwrap();
+        value["summaries"]["signal-pair"]["shape"]["items"][0]["capabilities"] =
+            serde_json::json!(["readable", "writable"]);
+        reject("contradictory accessor capabilities", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(CONDITIONAL).unwrap();
+        let duplicate = value["summaries"]["owned-effect"]["call"]["cases"][0].clone();
+        value["summaries"]["owned-effect"]["call"]["cases"]
+            .as_array_mut()
+            .unwrap()
+            .insert(1, duplicate);
+        reject("overlapping guard branches", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(CONDITIONAL).unwrap();
+        value["summaries"]["owned-effect"]["call"]["cases"][1]["otherwise"] =
+            serde_json::json!(false);
+        reject("uncovered remainder represented as complete", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        value["summaries"]["plain-value"]["call"] = serde_json::json!({
+            "closed": ["states"],
+            "reads": []
+        });
+        reject("misplaced closure domain", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        value["package"]["manifest"]["path"] = serde_json::json!("../outside.json");
+        reject("package path traversal", value);
+
+        let mut value: serde_json::Value = serde_json::from_slice(MINIMAL).unwrap();
+        let entrypoint = value["entrypoints"]
+            .as_object_mut()
+            .unwrap()
+            .remove(".")
+            .unwrap();
+        value["entrypoints"]
+            .as_object_mut()
+            .unwrap()
+            .insert("../outside".into(), entrypoint);
+        reject("entrypoint traversal", value);
+    }
+
+    #[test]
+    fn seeded_decode_normalize_encode_fuzz_preserves_semantics_or_refuses() {
+        let seeds = [MINIMAL, SIGNAL, CONDITIONAL];
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut survivors = 0usize;
+        for iteration in 0..512usize {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let seed = seeds[iteration % seeds.len()];
+            let mut bytes = seed.to_vec();
+            let edits = 1 + usize::try_from(state % 4).unwrap();
+            for edit in 0..edits {
+                state = state.rotate_left(11) ^ 0xa076_1d64_78bd_642f;
+                let index = usize::try_from(state).unwrap_or(0) % bytes.len();
+                let replacement = b"{}[]\",:0 "[(iteration + edit) % 9];
+                bytes[index] = replacement;
+            }
+
+            let Ok(decoded) = decode(&bytes) else {
+                continue;
+            };
+            let Ok(first) = decoded.normalize() else {
+                continue;
+            };
+            survivors += 1;
+            let encoded = encode(&first, &SidecarDigests::default(), false).unwrap();
+            let second = normalized(&encoded);
+            assert_eq!(
+                first, second,
+                "semantic drift at fuzz iteration {iteration}"
+            );
+            assert_eq!(
+                encoded,
+                encode(&second, &SidecarDigests::default(), false).unwrap(),
+                "nondeterministic encoding at fuzz iteration {iteration}"
+            );
+        }
+        assert!(
+            survivors > 0,
+            "mutation corpus did not exercise round-trip checks"
+        );
     }
 
     #[test]

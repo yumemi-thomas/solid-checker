@@ -506,6 +506,11 @@ impl ResolvedImport {
         if !Path::new(&self.package_root).is_absolute() {
             return invalid_resolution("package root must be absolute");
         }
+        validate_import_coordinates(
+            &self.specifier,
+            &self.package_name,
+            &self.requested_entrypoint,
+        )?;
         if let Some(real_root) = &self.package_real_root
             && !Path::new(real_root).is_absolute()
         {
@@ -974,6 +979,39 @@ fn validate_trace(trace: &ResolutionTrace, axis: &str) -> Result<(), ArtifactRes
     Ok(())
 }
 
+fn validate_import_coordinates(
+    specifier: &str,
+    package_name: &str,
+    requested_entrypoint: &str,
+) -> Result<(), ArtifactResolutionFailure> {
+    let expected = if specifier == package_name {
+        ".".to_owned()
+    } else if let Some(suffix) = specifier.strip_prefix(package_name)
+        && suffix.starts_with('/')
+    {
+        format!(".{suffix}")
+    } else {
+        return invalid_resolution("specifier does not belong to the resolved package name");
+    };
+    if requested_entrypoint != expected {
+        return invalid_resolution(
+            "requested entrypoint does not match the exact package specifier",
+        );
+    }
+    if requested_entrypoint != "."
+        && requested_entrypoint.strip_prefix("./").is_none_or(|path| {
+            path.is_empty()
+                || path.contains('\\')
+                || path
+                    .split('/')
+                    .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
+        })
+    {
+        return invalid_resolution("requested entrypoint contains traversal or is non-canonical");
+    }
+    Ok(())
+}
+
 fn validate_closure_path(path: &str) -> Result<(), ArtifactResolutionFailure> {
     if let Some(id) = path.strip_prefix("virtual:") {
         return validate_identifier(id, "virtual output identity");
@@ -981,7 +1019,15 @@ fn validate_closure_path(path: &str) -> Result<(), ArtifactResolutionFailure> {
     if !path.starts_with("./") {
         return invalid_resolution("closure paths must be package-relative");
     }
-    canonical_package_path(Path::new(path.trim_start_matches("./"))).map(|_| ())
+    let relative = path.strip_prefix("./").expect("prefix checked above");
+    if path.contains('\\')
+        || relative
+            .split('/')
+            .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
+    {
+        return invalid_resolution("closure paths must be canonical and traversal-free");
+    }
+    canonical_package_path(Path::new(relative)).map(|_| ())
 }
 
 fn reject_conflicting_entries(entries: &[ClosureEntry]) -> Result<(), ArtifactResolutionFailure> {
@@ -1412,6 +1458,21 @@ mod tests {
         assert!(matches!(
             select_and_bind(&ambiguous, &traced),
             Err(ContractFailure::MultipleArtifactCases)
+        ));
+
+        let mut traversing = resolved.clone();
+        traversing.specifier = "example/../other".into();
+        traversing.requested_entrypoint = "./../other".into();
+        assert!(matches!(
+            traversing.validate(),
+            Err(ArtifactResolutionFailure::Invalid { .. })
+        ));
+
+        let mut substituted = resolved;
+        substituted.specifier = "other-framework".into();
+        assert!(matches!(
+            substituted.validate(),
+            Err(ArtifactResolutionFailure::Invalid { .. })
         ));
     }
 

@@ -7842,3 +7842,30 @@ protocol details. Solid 1 `jsx-runtime` and `jsx-dev-runtime` subpaths with no
 common runtime/declaration value binding remain in the checked census without
 an accepted semantic case. No Type Facts or compiler-facts producer, protocol,
 pin, or generated binary changed in this phase.
+
+## 2026-08-28 — Adversarial contract inputs stay bounded and fail closed
+
+Phase 15 consolidates every untrusted package-contract JSON family behind one
+structural limit owner. Main documents, workflow inputs, proof/probe sidecars,
+runtime-probe documents and transcripts, receipts, and accepted catalogs have
+explicit byte, depth, node, and string limits. Catalog, contract, and receipt
+files are size-checked before allocation. Traversal spellings, noncanonical
+entrypoints and closure paths, cross-platform absolute paths, mixed-package
+specifier substitution, and noncanonical receipt digests are refused.
+
+Normalized validation now treats operation triggers as causal arcs alongside
+explicit edges and rejects their combined cycles. Indirect resource-lifetime
+cycles are rejected while a typed resource may still name itself as its own
+lifetime anchor. The seeded false-closure suite attacks sibling/misplaced
+closure, empty open domains, dangling or cyclic identities, contradictory
+capabilities, guard overlap and falsely covered remainders, and path or package
+substitution. Deterministic mutation fuzzing accepts an input only when
+decode/normalize/encode preserves identical semantics and canonical bytes.
+
+This hardening creates no new diagnostic and closes no previously open claim.
+Type Facts and compiler producer protocols did not change. Missing or stale
+fact generations, incomplete Type Facts domains, unreconciled compiler sites,
+unbounded exports, ambiguous artifact selection, closure hazards, stale
+evidence, unresolved guards, and recursive open leaves remain locally
+uncertifiable. The explicit resource limits may refuse an otherwise meaningful
+oversized document; that is an intentional bounded failure, not negative proof.

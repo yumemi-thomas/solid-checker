@@ -551,6 +551,25 @@ report](phase14/2026-08-28-producer-consumer-migration.md).
 
 **Exit:** malformed inputs remain bounded and all false closure is rejected.
 
+Completed on 2026-08-28. Every untrusted contract JSON family now crosses one
+shared byte/depth/node/string-bounded decoder before protocol deserialization;
+catalog and receipt files are size-checked before allocation. Exact package
+coordinates and package-relative paths reject traversal and mixed-package
+substitution. The normalized model includes trigger-derived causal arcs and
+inter-resource lifetime dependencies in its cycle checks. Receipt digests must
+use canonical lowercase spelling, so byte or identity drift cannot survive by
+rewriting an equivalent value.
+
+A seeded adversarial corpus covers misplaced/sibling closure, empty open
+domains, dangling and cyclic references, contradictory capabilities,
+overlapping and falsely exhaustive guards, traversal, stale bytes, and
+mixed-package identity. Deterministic mutation fuzzing requires every surviving
+decode/normalize/encode path to preserve identical normalized semantics and
+canonical bytes. Resolver-order, same-byte/different-closure, stale evidence,
+Type Facts generation/completeness, and compiler reconciliation tests complete
+the attack matrix. See the [Phase 15 completion
+report](phase15/2026-08-28-adversarial-hardening.md).
+
 ## Phase 16 — Corpus, compactness, and performance
 
 186. Run official Solid RC.3 packages.

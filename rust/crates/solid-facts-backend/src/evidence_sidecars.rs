@@ -28,6 +28,8 @@ const MAX_SIDECAR_BYTES: usize = 16 * 1024 * 1024;
 const MAX_CLAIMS: usize = 65_536;
 const MAX_ITEMS_PER_CLAIM: usize = 16_384;
 const MAX_STRING_BYTES: usize = 16 * 1024;
+const MAX_SIDECAR_DEPTH: usize = 128;
+const MAX_SIDECAR_NODES: usize = 1_000_000;
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ToolIdentity {
@@ -1248,7 +1250,16 @@ fn validate_proof_document(
     catalog: &EvidenceCatalog,
 ) -> Result<Vec<SemanticClaimId>, EvidenceSidecarError> {
     validate_size(bytes)?;
-    let document: WireProofDocument = serde_json::from_slice(bytes).map_err(decode_error)?;
+    let document: WireProofDocument = crate::bounded_json::decode(
+        bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_SIDECAR_BYTES,
+            depth: MAX_SIDECAR_DEPTH,
+            nodes: MAX_SIDECAR_NODES,
+            string_bytes: MAX_STRING_BYTES,
+        },
+    )
+    .map_err(decode_error)?;
     validate_document_header(
         "proof",
         PROOF_EVIDENCE_FORMAT,
@@ -1308,7 +1319,16 @@ fn validate_probe_document(
     catalog: &EvidenceCatalog,
 ) -> Result<Vec<SemanticClaimId>, EvidenceSidecarError> {
     validate_size(bytes)?;
-    let document: WireProbeDocument = serde_json::from_slice(bytes).map_err(decode_error)?;
+    let document: WireProbeDocument = crate::bounded_json::decode(
+        bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_SIDECAR_BYTES,
+            depth: MAX_SIDECAR_DEPTH,
+            nodes: MAX_SIDECAR_NODES,
+            string_bytes: MAX_STRING_BYTES,
+        },
+    )
+    .map_err(decode_error)?;
     validate_document_header(
         "runtime-probe",
         PROBE_EVIDENCE_FORMAT,
@@ -1511,7 +1531,7 @@ fn validate_size(bytes: &[u8]) -> Result<(), EvidenceSidecarError> {
     }
 }
 
-fn decode_error(error: serde_json::Error) -> EvidenceSidecarError {
+fn decode_error(error: impl std::fmt::Display) -> EvidenceSidecarError {
     EvidenceSidecarError::Decode {
         message: error.to_string(),
     }

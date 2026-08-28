@@ -22,6 +22,15 @@ use thiserror::Error;
 
 use crate::{artifact_resolution::select_and_bind, contract_document_v2};
 
+const MAX_CONTRACT_DOCUMENT_BYTES: usize = 1024 * 1024;
+const MAX_RECEIPT_BYTES: usize = 64 * 1024;
+const MAX_CATALOG_BYTES: usize = 16 * 1024 * 1024;
+const MAX_CATALOG_CONTRACTS: usize = 65_536;
+const MAX_BOUNDARY_DEPTH: usize = 128;
+const MAX_BOUNDARY_STRING_BYTES: usize = 16 * 1024;
+const MAX_RECEIPT_NODES: usize = 4_096;
+const MAX_CATALOG_NODES: usize = 1_000_000;
+
 pub use crate::artifact_resolution::{
     AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure, ArtifactResolver,
     ArtifactResolverChain, ClosureEntry, ClosureFileRole, ClosureHazard, ClosureHazardKind,
@@ -79,6 +88,8 @@ pub enum EvidenceStoreFailure {
     Io { message: String },
     #[error("evidence content does not match its content-addressed key")]
     ContentMismatch,
+    #[error("evidence content exceeds the {limit}-byte resource limit")]
+    ResourceLimit { limit: usize },
 }
 
 #[derive(Clone, Debug, Default)]
@@ -124,9 +135,18 @@ impl LocalEvidenceStore {
 impl EvidenceStore for LocalEvidenceStore {
     fn receipt(&self, key: &EvidenceKey) -> Result<Option<Arc<[u8]>>, EvidenceStoreFailure> {
         let path = self.receipt_path(key);
+        match fs::metadata(&path) {
+            Ok(metadata) if metadata.len() > MAX_RECEIPT_BYTES as u64 => {
+                return Err(EvidenceStoreFailure::ResourceLimit {
+                    limit: MAX_RECEIPT_BYTES,
+                });
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(io_failure(error)),
+        }
         match fs::read(path) {
             Ok(bytes) => verify_evidence_content(key, bytes.into()).map(Some),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(EvidenceStoreFailure::Io {
                 message: error.to_string(),
             }),
@@ -136,6 +156,11 @@ impl EvidenceStore for LocalEvidenceStore {
 
 impl ReceiptStore for LocalEvidenceStore {
     fn store_receipt(&self, bytes: &[u8]) -> Result<EvidenceKey, EvidenceStoreFailure> {
+        if bytes.len() > MAX_RECEIPT_BYTES {
+            return Err(EvidenceStoreFailure::ResourceLimit {
+                limit: MAX_RECEIPT_BYTES,
+            });
+        }
         let key = EvidenceKey::for_content(bytes);
         let path = self.receipt_path(&key);
         if let Some(existing) = self.receipt(&key)? {
@@ -312,13 +337,13 @@ pub fn read_accepted_contract_catalog(
     for mut entry in catalog.contracts {
         let document_path = catalog_member_path(&base, &entry.document)?;
         let receipt_path = catalog_member_path(&base, &entry.receipt)?;
-        let document =
-            fs::read(&document_path).map_err(|error| ContractFailure::DocumentDecode {
-                message: format!("read contract {}: {error}", document_path.display()),
-            })?;
-        let receipt = fs::read(&receipt_path).map_err(|error| ContractFailure::ReceiptDecode {
-            message: format!("read receipt {}: {error}", receipt_path.display()),
-        })?;
+        let document = read_boundary_file(
+            &document_path,
+            MAX_CONTRACT_DOCUMENT_BYTES,
+            "contract",
+            false,
+        )?;
+        let receipt = read_boundary_file(&receipt_path, MAX_RECEIPT_BYTES, "receipt", true)?;
         rebase_catalog_import(&base, &mut entry.import)?;
         loaded.push((document, receipt, entry.import));
     }
@@ -349,22 +374,35 @@ pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, Co
 fn decode_accepted_contract_catalog(
     path: &Path,
 ) -> Result<(AcceptedCatalogDocument, PathBuf), ContractFailure> {
-    let bytes = fs::read(path).map_err(|error| ContractFailure::DocumentDecode {
-        message: format!("read accepted contract catalog {}: {error}", path.display()),
+    let bytes = read_boundary_file(path, MAX_CATALOG_BYTES, "accepted contract catalog", false)?;
+    let catalog: AcceptedCatalogDocument = crate::bounded_json::decode(
+        &bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_CATALOG_BYTES,
+            depth: MAX_BOUNDARY_DEPTH,
+            nodes: MAX_CATALOG_NODES,
+            string_bytes: MAX_BOUNDARY_STRING_BYTES,
+        },
+    )
+    .map_err(|message| ContractFailure::DocumentDecode {
+        message: format!(
+            "decode accepted contract catalog {}: {message}",
+            path.display()
+        ),
     })?;
-    let catalog: AcceptedCatalogDocument =
-        serde_json::from_slice(&bytes).map_err(|error| ContractFailure::DocumentDecode {
-            message: format!(
-                "decode accepted contract catalog {}: {error}",
-                path.display()
-            ),
-        })?;
     if catalog.format != ACCEPTED_CATALOG_FORMAT
         || catalog.catalog_version != ACCEPTED_CATALOG_VERSION
     {
         return Err(ContractFailure::DocumentDecode {
             message: format!(
                 "accepted contract catalog must use format {ACCEPTED_CATALOG_FORMAT:?} version {ACCEPTED_CATALOG_VERSION}"
+            ),
+        });
+    }
+    if catalog.contracts.len() > MAX_CATALOG_CONTRACTS {
+        return Err(ContractFailure::DocumentDecode {
+            message: format!(
+                "accepted contract catalog exceeds the {MAX_CATALOG_CONTRACTS} contract resource limit"
             ),
         });
     }
@@ -378,6 +416,30 @@ fn decode_accepted_contract_catalog(
         directory
     };
     Ok((catalog, base.to_path_buf()))
+}
+
+fn read_boundary_file(
+    path: &Path,
+    limit: usize,
+    label: &str,
+    receipt: bool,
+) -> Result<Vec<u8>, ContractFailure> {
+    let failure = |message: String| {
+        if receipt {
+            ContractFailure::ReceiptDecode { message }
+        } else {
+            ContractFailure::DocumentDecode { message }
+        }
+    };
+    let metadata = fs::metadata(path)
+        .map_err(|error| failure(format!("read {label} {}: {error}", path.display())))?;
+    if metadata.len() > u64::try_from(limit).unwrap_or(u64::MAX) {
+        return Err(failure(format!(
+            "{label} {} exceeds the {limit}-byte resource limit",
+            path.display()
+        )));
+    }
+    fs::read(path).map_err(|error| failure(format!("read {label} {}: {error}", path.display())))
 }
 
 fn rebase_catalog_import(base: &Path, import: &mut ResolvedImport) -> Result<(), ContractFailure> {
@@ -423,8 +485,19 @@ fn catalog_absolute_path(base: &Path, value: &str) -> Result<String, ContractFai
 
 fn catalog_member_path(base: &Path, member: &str) -> Result<PathBuf, ContractFailure> {
     let member = Path::new(member);
+    let spelling = member.to_string_lossy();
+    let windows_absolute = spelling.as_bytes().get(1) == Some(&b':')
+        && spelling
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic);
     if member.as_os_str().is_empty()
         || member.is_absolute()
+        || spelling.starts_with('\\')
+        || windows_absolute
+        || spelling
+            .split(['/', '\\'])
+            .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
         || member.components().any(|component| {
             matches!(
                 component,
@@ -482,10 +555,16 @@ fn decode_and_validate_receipt(
     semantic_model_version: u16,
     receipt_bytes: &[u8],
 ) -> Result<AcceptanceReceipt, ContractFailure> {
-    let receipt: WireReceipt =
-        serde_json::from_slice(receipt_bytes).map_err(|error| ContractFailure::ReceiptDecode {
-            message: error.to_string(),
-        })?;
+    let receipt: WireReceipt = crate::bounded_json::decode(
+        receipt_bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_RECEIPT_BYTES,
+            depth: MAX_BOUNDARY_DEPTH,
+            nodes: MAX_RECEIPT_NODES,
+            string_bytes: MAX_BOUNDARY_STRING_BYTES,
+        },
+    )
+    .map_err(|message| ContractFailure::ReceiptDecode { message })?;
 
     if receipt.receipt_version != 1 {
         return Err(ContractFailure::UnsupportedReceiptVersion {
@@ -597,7 +676,12 @@ fn is_sha256_digest(value: &str) -> bool {
 }
 
 fn parse_receipt_digest(value: String, field: &'static str) -> Result<Digest, ContractFailure> {
-    Digest::parse(value).map_err(|_| ContractFailure::ReceiptMismatch { field })
+    let digest = Digest::parse(&value).map_err(|_| ContractFailure::ReceiptMismatch { field })?;
+    if digest.as_str() == value {
+        Ok(digest)
+    } else {
+        Err(ContractFailure::ReceiptMismatch { field })
+    }
 }
 
 #[cfg(test)]
@@ -742,5 +826,38 @@ mod tests {
                 .resolve(&import.importer, &import.specifier, &identity)
                 .is_ok()
         );
+
+        let mut reformatted = document.as_bytes().to_vec();
+        reformatted.push(b' ');
+        assert!(matches!(
+            load_accepted_contract(&reformatted, &receipt, &import),
+            Err(ContractFailure::ReceiptMismatch {
+                field: "wireDigest"
+            })
+        ));
+
+        let mut noncanonical: serde_json::Value = serde_json::from_slice(&receipt).unwrap();
+        noncanonical["semanticDigest"] = serde_json::json!(
+            noncanonical["semanticDigest"]
+                .as_str()
+                .unwrap()
+                .to_ascii_uppercase()
+        );
+        assert!(matches!(
+            load_accepted_contract(
+                document.as_bytes(),
+                &serde_json::to_vec(&noncanonical).unwrap(),
+                &import,
+            ),
+            Err(ContractFailure::ReceiptMismatch {
+                field: "semanticDigest"
+            })
+        ));
+
+        let oversized = vec![b' '; MAX_RECEIPT_BYTES + 1];
+        assert!(matches!(
+            load_accepted_contract(document.as_bytes(), &oversized, &import),
+            Err(ContractFailure::ReceiptDecode { .. })
+        ));
     }
 }

@@ -432,6 +432,53 @@ fn operation_graph_rejects_missing_nodes_and_cycles() {
         proposal_with(ValueShape::Plain, cyclic).normalize(),
         Err(ModelError::OperationCycle { .. })
     ));
+
+    let mut trigger_left = operation("trigger-left", OperationKind::Read);
+    trigger_left.trigger = Some(Trigger::Operation(OperationId("trigger-right".into())));
+    let mut trigger_right = operation("trigger-right", OperationKind::Write);
+    trigger_right.trigger = Some(Trigger::Operation(OperationId("trigger-left".into())));
+    assert!(matches!(
+        proposal_with(
+            ValueShape::Plain,
+            call(vec![trigger_left, trigger_right], vec![]),
+        )
+        .normalize(),
+        Err(ModelError::OperationCycle { .. })
+    ));
+
+    let mut mixed_left = operation("mixed-left", OperationKind::Read);
+    mixed_left.trigger = Some(Trigger::Operation(OperationId("mixed-right".into())));
+    let mixed_right = operation("mixed-right", OperationKind::Write);
+    let mut mixed = call(vec![mixed_left, mixed_right], vec![]);
+    mixed.edges.push(OperationEdge {
+        kind: EdgeKind::Data,
+        from: OperationId("mixed-left".into()),
+        to: OperationId("mixed-right".into()),
+    });
+    assert!(matches!(
+        proposal_with(ValueShape::Plain, mixed).normalize(),
+        Err(ModelError::OperationCycle { .. })
+    ));
+}
+
+#[test]
+fn resource_lifetime_graph_allows_self_anchor_but_rejects_indirect_cycles() {
+    let mut self_bound = resource("self", ResourceKind::ReactiveSource);
+    self_bound.lifetime = Some(Lifetime::Resource(ResourceId("self".into())));
+    assert!(
+        proposal_with(ValueShape::Plain, call(vec![], vec![self_bound]))
+            .normalize()
+            .is_ok()
+    );
+
+    let mut first = resource("first", ResourceKind::ReactiveSource);
+    first.lifetime = Some(Lifetime::Resource(ResourceId("second".into())));
+    let mut second = resource("second", ResourceKind::ReactiveSource);
+    second.lifetime = Some(Lifetime::Resource(ResourceId("first".into())));
+    assert!(matches!(
+        proposal_with(ValueShape::Plain, call(vec![], vec![first, second])).normalize(),
+        Err(ModelError::ResourceCycle { .. })
+    ));
 }
 
 #[test]

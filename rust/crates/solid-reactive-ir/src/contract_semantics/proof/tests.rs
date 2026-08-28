@@ -257,6 +257,30 @@ fn rule_replay_refuses_incomplete_unresolved_and_mismatched_censuses() {
         ),
         Err(ProofError::WrongAuthority { .. })
     ));
+
+    let stale_scope = ProofRuleInput {
+        authority: ProofAuthority::TypeFacts,
+        transcript: b"complete but stale Type Facts census".to_vec(),
+        observed_scope: proof_scope_digest(
+            &contract,
+            ProofFamily::DomainExhaustiveness,
+            &reads_subject(),
+        )
+        .unwrap(),
+        enumerated: vec![],
+        classified: vec![],
+        unresolved: vec![],
+        completeness: CensusCompleteness::Complete,
+    };
+    assert!(matches!(
+        replay_proof_rule(
+            &open_contract('e'),
+            ProofFamily::DomainExhaustiveness,
+            reads_subject(),
+            stale_scope
+        ),
+        Err(ProofError::ScopeMismatch)
+    ));
 }
 
 #[test]

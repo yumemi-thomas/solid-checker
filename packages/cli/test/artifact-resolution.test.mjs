@@ -112,6 +112,48 @@ describe("standalone package-export resolution", () => {
     ]);
   });
 
+  test("uses manifest key order rather than caller condition order for default and custom branches", () => {
+    const defaultFirst = {
+      name: "ordered-default",
+      version: "1.0.0",
+      exports: {
+        ".": {
+          default: "./dist/default.js",
+          browser: "./dist/browser.js"
+        }
+      }
+    };
+    const defaultRoot = fixture(defaultFirst, {
+      "dist/default.js": "export const selected = 'default';\n",
+      "dist/browser.js": "export const selected = 'browser';\n"
+    });
+    expect(target(defaultRoot, defaultFirst, ["browser"]).file.path).toBe(
+      join(defaultRoot, "dist/default.js")
+    );
+
+    const customFirst = {
+      name: "ordered-custom",
+      version: "1.0.0",
+      exports: {
+        ".": {
+          edge: "./dist/edge.js",
+          import: "./dist/import.js",
+          default: "./dist/default.js"
+        }
+      }
+    };
+    const customRoot = fixture(customFirst, {
+      "dist/edge.js": "export const selected = 'edge';\n",
+      "dist/import.js": "export const selected = 'import';\n",
+      "dist/default.js": "export const selected = 'default';\n"
+    });
+    for (const conditions of [["import", "edge"], ["edge", "import"]]) {
+      expect(target(customRoot, customFirst, conditions).file.path).toBe(
+        join(customRoot, "dist/edge.js")
+      );
+    }
+  });
+
   test("binds runtime and declarations independently", () => {
     const manifest = {
       name: "independent",
