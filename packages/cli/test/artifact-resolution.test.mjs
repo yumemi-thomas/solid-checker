@@ -15,7 +15,8 @@ import {
   canonicalClosure,
   materializedGeneratedClosureEntry,
   resolvePackageArtifacts,
-  resolvePackageExport
+  resolvePackageExport,
+  selectTypeScriptApi
 } from "../scripts/artifact-resolution.mjs";
 
 const roots = [];
@@ -371,4 +372,14 @@ describe("exact artifact records and closure", () => {
       "sha256:fc5aa068103c10e1e89193af111113541668254cd82440497dbe8cb72e48f961"
     );
   });
+});
+
+test("accepts direct and default-wrapped TypeScript CommonJS namespaces", () => {
+  const api = {
+    ScriptTarget: { Latest: 99 },
+    createProgram() {}
+  };
+
+  expect(selectTypeScriptApi(api)).toBe(api);
+  expect(selectTypeScriptApi({ default: api })).toBe(api);
 });

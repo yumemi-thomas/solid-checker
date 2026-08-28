@@ -114,6 +114,11 @@ closure roots, proof-policy and verifier identity, proof inputs, and the exact
 closed-claim root. Any wire, semantic, artifact, closure, proof-policy, or
 closed-claim drift invalidates replay.
 
+Because `wireDigest` binds raw bytes rather than parsed JSON, `.gitattributes`
+forces LF checkout bytes for JSON on every platform. A Windows checkout may
+not translate an accepted document to CRLF while retaining a receipt issued
+for its LF bytes.
+
 ## First-party and fixture artifacts
 
 `make contracts` regenerated 24 receipt-issued artifact cases in both
@@ -166,7 +171,10 @@ Focused/property coverage added or retained by the migration includes:
 - false closure, stale receipt, wrong artifact/export identity, and duplicate
   exact import refusal;
 - accepted-only native/WASM process paths and explicit schema-1 refusal;
-- source-versus-receipt-issued consumer differential equality.
+- source-versus-receipt-issued consumer differential equality;
+- direct and default-wrapped TypeScript CommonJS namespace loading under Bun;
+- LF checkout enforcement for receipt-bound bundle, dialect, and fixture
+  documents.
 
 Commands run during implementation:
 
@@ -175,14 +183,14 @@ Commands run during implementation:
 | `cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-reactive-ir --lib` | 188 passed |
 | `cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --lib` | 80 passed |
 | armed `contracts_process`, `diagnostics_process`, and `dialects_process` | 5 + 15 + 37 passed |
-| `bun run --cwd packages/cli test` | 4 files, 37 tests passed; TypeScript check passed |
+| `bun run --cwd packages/cli test` | 4 files, 38 tests passed; TypeScript check passed |
 | `bun run --cwd packages/wasm test` | 2 files, 6 tests passed |
 | temporary-v2 contract corpus, update then compare | 39 fixtures checked; 13 refusals; 27 cases; 53 operations; 178 proof candidates; 989 open claims |
 | contract differential | source and receipt-issued consumers agree; 0 findings |
 | coverage compare after intentional update | 94 projects, 542 findings |
 | armed `bun scripts/tsc-oracle-gate.mjs` | 161 rule cases and 41 keystones passed |
 | `make contract-conformance` | 24 cases and both physical locations reproducible; 7 live npm pins verified; composed bundles passed |
-| `make verify` | passed in 223.03 seconds |
+| `make verify` | passed in 223.03 seconds for the migration and 141.21 seconds after the CI portability fix |
 
 The initial contract-conformance invocation was sandboxed from DNS and failed
 only its seven live registry lookups. The authorized rerun performed all seven
@@ -193,6 +201,15 @@ the TypeScript oracle, ownership (289 cases and 465 ledger rows, none pending),
 performance, CLI/WASM tests, obligation audit (7 obligations and 11 closures),
 all 24 bundled cases in both locations, all seven live pins, and composed
 contract conformance.
+
+The first PR run exposed two platform-only assumptions that local macOS did
+not exercise. Linux Bun 1.4 default-wrapped the TypeScript CommonJS compiler
+API, so artifact resolution now validates and accepts either the direct or
+default-wrapped namespace. Windows Git translated accepted JSON to CRLF, so
+the embedded document no longer matched its receipt's LF `wireDigest`; the LF
+checkout policy above prevents that byte drift. The original 39-fixture
+contract-corpus command and both focused regressions passed before the second
+full verification run.
 
 ## Type Facts, compiler facts, and generated binaries
 

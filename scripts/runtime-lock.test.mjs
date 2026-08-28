@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -51,4 +52,22 @@ test("runtime lock pins the Solid 1.x probe closure", () => {
   assert.equal(debounce.peerDependencies["solid-js"].version, "1.9.14");
   const rootless = lock.packages["@solid-primitives/rootless@1.5.4"];
   assert.equal(rootless.peerDependencies["solid-js"].version, "1.9.14");
+});
+
+test("receipt-bound contract documents are checked out with LF bytes", () => {
+  const documents = [
+    "pkg/contracts/bundled/solid-v2/solid-js.json",
+    "rust/crates/solid-dialect/contracts/solid-v2/solid-js.json",
+    "fixtures/reactive-ir/package-consumer/node_modules/reactive-package/solid-reactivity.json"
+  ];
+  const result = spawnSync("git", ["check-attr", "eol", "--", ...documents], {
+    cwd: root,
+    encoding: "utf8"
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(
+    result.stdout.trim().split("\n"),
+    documents.map(document => `${document}: eol: lf`)
+  );
 });
