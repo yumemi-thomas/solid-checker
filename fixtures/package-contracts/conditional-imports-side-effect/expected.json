@@ -1,29 +1,45 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c597e80989eb9870a50b5b2b908274ff8139fae1779ebe72456f7574d244b74a",
+            "path": "./index.js",
+            "sha256": "ae8341cc050a61f78b132391d9609fdd86c48824d7e264fe7eb937cd265c7155"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "ae8341cc050a61f78b132391d9609fdd86c48824d7e264fe7eb937cd265c7155"
+          },
+          "exports": {
+            "thing": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:bde24079897f38f8bd882a821f0d1a42ca1dc13e7d93a825d99ab6c5b9cdd69d",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "bde24079897f38f8bd882a821f0d1a42ca1dc13e7d93a825d99ab6c5b9cdd69d"
+    },
     "name": "conditional-imports-side-effect",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "value-1": [
-          "thing"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

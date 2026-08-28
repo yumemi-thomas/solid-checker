@@ -1,0 +1,142 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/laundered-dependency/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:057be730f87552eac721b1176bdb5008119e161047de5789ab3a2d77120d43d9",
+          "entries": [
+            {
+              "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+          "path": "node_modules/laundered-dependency/package.json"
+        },
+        "exports": {
+          "addClickInterceptor": {
+            "declarations": {
+              "exportName": "addClickInterceptor",
+              "module": {
+                "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+                "path": "node_modules/laundered-dependency/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "addClickInterceptor",
+              "module": {
+                "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+                "path": "node_modules/laundered-dependency/package.json"
+              }
+            }
+          },
+          "hostValue": {
+            "declarations": {
+              "exportName": "hostValue",
+              "module": {
+                "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+                "path": "node_modules/laundered-dependency/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "hostValue",
+              "module": {
+                "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+                "path": "node_modules/laundered-dependency/package.json"
+              }
+            }
+          }
+        },
+        "importer": "laundered.ts",
+        "packageIntegrity": "fixture:sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+        "packageManifest": {
+          "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+          "path": "node_modules/laundered-dependency/package.json"
+        },
+        "packageName": "laundered-dependency",
+        "packageRoot": "node_modules/laundered-dependency",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:cfba77d1a84d4ffcd69782e08eaa6b207192d402be7d1277b5a73730160a0c5c",
+          "path": "node_modules/laundered-dependency/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "laundered-dependency"
+      },
+      "receipt": "node_modules/laundered-dependency/solid-reactivity.receipt.json"
+    },
+    {
+      "document": "node_modules/laundered-typed-dependency/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:76cca20ceef04fd89be973d73dd3bf98cf0b393d58b65a2aaca479c7f4dfc4f5",
+          "entries": [
+            {
+              "digest": "sha256:1f1e6022d4fa87bcddf5dd7858f312e4cc79825799da5fb23a2f5fc792de8b32",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:1f1e6022d4fa87bcddf5dd7858f312e4cc79825799da5fb23a2f5fc792de8b32",
+          "path": "node_modules/laundered-typed-dependency/package.json"
+        },
+        "exports": {
+          "addTypedInterceptor": {
+            "declarations": {
+              "exportName": "addTypedInterceptor",
+              "module": {
+                "digest": "sha256:1f1e6022d4fa87bcddf5dd7858f312e4cc79825799da5fb23a2f5fc792de8b32",
+                "path": "node_modules/laundered-typed-dependency/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "addTypedInterceptor",
+              "module": {
+                "digest": "sha256:1f1e6022d4fa87bcddf5dd7858f312e4cc79825799da5fb23a2f5fc792de8b32",
+                "path": "node_modules/laundered-typed-dependency/package.json"
+              }
+            }
+          }
+        },
+        "importer": "index.ts",
+        "packageIntegrity": "fixture:sha256:1f1e6022d4fa87bcddf5dd7858f312e4cc79825799da5fb23a2f5fc792de8b32",
+        "packageManifest": {
+          "digest": "sha256:1f1e6022d4fa87bcddf5dd7858f312e4cc79825799da5fb23a2f5fc792de8b32",
+          "path": "node_modules/laundered-typed-dependency/package.json"
+        },
+        "packageName": "laundered-typed-dependency",
+        "packageRoot": "node_modules/laundered-typed-dependency",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:1f1e6022d4fa87bcddf5dd7858f312e4cc79825799da5fb23a2f5fc792de8b32",
+          "path": "node_modules/laundered-typed-dependency/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "laundered-typed-dependency"
+      },
+      "receipt": "node_modules/laundered-typed-dependency/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

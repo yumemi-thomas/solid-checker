@@ -14,7 +14,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadDialectManifests, root } from "./dialect-manifests.mjs";
@@ -276,18 +276,65 @@ export function verifyPin({ label, file, expectedName, document }, lookup = regi
 }
 
 function main() {
-  const contracts = loadDialectManifests({ requireArtifacts: true }).flatMap(manifest =>
-    manifest.contracts.map(contract => ({ dialect: manifest.id, ...contract })),
-  );
-  const memo = memoizedIntegrity();
+  const manifests = loadDialectManifests({ requireArtifacts: true });
+  const contracts = [];
+  for (const manifest of manifests) {
+    const index = JSON.parse(readFileSync(join(root, manifest.bundleIndex), "utf8"));
+    if (
+      index.schemaVersion !== 2 ||
+      index.format !== "solid-checker-temporary-v2-bundle-index" ||
+      !Array.isArray(index.contracts)
+    ) {
+      fail(`${manifest.id}: ${manifest.bundleIndex} is not a temporary-v2 bundle index`);
+      continue;
+    }
+    const declared = new Set(manifest.contracts.map(contract => contract.package));
+    const present = new Set();
+    for (const entry of index.contracts) {
+      if (!declared.has(entry.package)) {
+        fail(`${manifest.id}: bundle index contains undeclared package ${entry.package}`);
+        continue;
+      }
+      const relativeFile = relative(
+        root,
+        join(dirname(join(root, manifest.bundleIndex)), entry.document),
+      );
+      const document = JSON.parse(readFileSync(join(root, relativeFile), "utf8"));
+      present.add(entry.package);
+      contracts.push({
+        dialect: manifest.id,
+        package: entry.package,
+        file: relativeFile,
+        document,
+      });
+    }
+    for (const package_ of declared) {
+      if (!present.has(package_)) fail(`${manifest.id}: bundle index omits ${package_}`);
+    }
+  }
+  const uniqueContracts = new Map();
   for (const contract of contracts) {
+    const key = `${contract.dialect}/${contract.package}`;
+    const existing = uniqueContracts.get(key);
+    if (
+      existing &&
+      JSON.stringify(existing.document.package) !== JSON.stringify(contract.document.package)
+    ) {
+      fail(`${key}: artifact cases carry contradictory package pins`);
+      continue;
+    }
+    uniqueContracts.set(key, existing ?? contract);
+  }
+  const memo = memoizedIntegrity();
+  const checked = new Set();
+  for (const contract of uniqueContracts.values()) {
     const label = `${contract.dialect}/${contract.package}`;
     const failure = verifyPin(
       {
         label,
-        file: contract.bundledContract,
+        file: contract.file,
         expectedName: contract.package,
-        document: JSON.parse(readFileSync(join(root, contract.bundledContract), "utf8")),
+        document: contract.document,
       },
       (name, version, expected) => memo.lookup(name, version, expected),
     );
@@ -295,7 +342,12 @@ function main() {
       fail(failure);
       continue;
     }
-    console.log(`ok   ${label}: matches its audited tarball`);
+    const pin = contract.document.package;
+    const identity = `${label}@${pin.version}:${pin.integrity}`;
+    if (!checked.has(identity)) {
+      console.log(`ok   ${label}: matches its audited tarball`);
+      checked.add(identity);
+    }
   }
   memo.flush();
   console.log(memo.summary());
@@ -303,7 +355,7 @@ function main() {
     console.error(`${failures} bundled contract pin(s) could not be verified`);
     process.exit(1);
   }
-  console.log(`verified ${contracts.length} bundled contract pins against the registry`);
+  console.log(`verified ${checked.size} bundled package pins against the registry`);
 }
 
 if (fileURLToPath(import.meta.url) === resolve(process.argv[1] ?? "")) main();

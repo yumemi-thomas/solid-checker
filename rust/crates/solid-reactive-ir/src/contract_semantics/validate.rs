@@ -1193,12 +1193,11 @@ fn normalize_guard_partition(
             reason: "a complete non-empty partition requires an otherwise case".into(),
         });
     }
-    if !complete && otherwise.is_some() {
-        return Err(ModelError::InvalidGuard {
-            path: format!("{path}.guard-partition"),
-            reason: "an open partition cannot claim an exhaustive otherwise case".into(),
-        });
-    }
+    // An open proposal may retain a known fallback as possible-positive
+    // behavior. The partition's open remainder means that fallback is not an
+    // exhaustive negative claim and the consumer must weaken its selected
+    // operations until proof closes the partition. This preserves proposal
+    // behavior without letting a generator manufacture an accepted `else`.
     when.sort();
     for left in 0..when.len() {
         for right in left + 1..when.len() {

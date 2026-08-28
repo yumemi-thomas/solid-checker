@@ -30,7 +30,7 @@ against those.
 
 | File | What it is |
 | --- | --- |
-| `packages.json` | The audited package versions per dialect, plus the `jsxImportSource` each needs. `v1` tracks `pkg/contracts/bundled/solid-v1/solid-js.json`; `v2` tracks `pkg/contracts/bundled/runtime-lock.json`. |
+| `packages.json` | The audited package versions per dialect, plus the `jsxImportSource` each needs. `v1` tracks the receipt-issued Solid 1 bundle index; `v2` tracks `pkg/contracts/bundled/runtime-lock.json`. |
 | `rule-cases.json` | The executable half of the redundancy ledger: one case per rule whose positive spelling could plausibly also be a `tsc` error, with the two expectations it must satisfy — `expect` for TypeScript, `checker` for this checker — and a written reason. |
 
 The prose half of the ledger — every rule, its classification, and the actual

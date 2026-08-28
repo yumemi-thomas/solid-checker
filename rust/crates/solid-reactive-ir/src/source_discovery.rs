@@ -10,9 +10,9 @@ use crate::owners::{
 };
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
-    BuildTimings, ContractCallback, ContractReturn, PackageContract, PrimitiveName,
-    ReactiveSourceKind, RuntimeEnvironment, RuntimeRendering, jsx_primitive_name, known_primitive,
-    location, primitive_name,
+    BuildTimings, ContractCallback, ContractReturn, PrimitiveName, ReactiveSourceKind,
+    RuntimeEnvironment, RuntimeRendering, jsx_primitive_name, known_primitive, location,
+    primitive_name,
 };
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -25,29 +25,6 @@ use solid_dialect::{Dialect, Primitive};
 use solid_facts::core::{SourceHash, SourcePath};
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::{Declaration, Location, ResolvedCallValidity};
-
-/// Whether a caller-supplied `solid-js` contract is the artifact whose name the
-/// dialect stamps into provenance.
-///
-/// Every return kind `bundled_returns` contributes is cited as
-/// `bundled://<dialect label>#<primitive>`. The two majors answer different
-/// questions under the same export names, so reading one contract while citing
-/// the other's filename attributes a fact to a file that was never consulted.
-/// Two discriminators, in order of strength: the backend stamps its own
-/// embedded artifacts' `source_path`, and both those artifacts (like every real
-/// install of the package) carry a semver `package.version`. A `solid-js`
-/// contract with neither proves nothing about which dialect it describes and is
-/// therefore not read here -- dropping a fact is a silent gap, citing the wrong
-/// file is a false claim.
-pub(crate) fn bundled_contract_matches_dialect(
-    contract: &PackageContract,
-    dialect: &dyn Dialect,
-) -> bool {
-    if let Some(label) = contract.source_path.strip_prefix("bundled://") {
-        return label == dialect.bundled_contract_label();
-    }
-    solid_dialect::Version::for_solid_js(&contract.package.version) == Some(dialect.version())
-}
 
 /// The provenance stamped on facts read from a bundled contract:
 /// `bundled://<dialect label>#<primitive>`, carrying no span of its own.
@@ -1345,7 +1322,7 @@ pub(crate) struct StageContext<'a> {
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) resolved_contracts: &'a ResolvedContracts,
-    pub(crate) contracts: &'a [PackageContract],
+    pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) runtime: &'a crate::RuntimeEnvironment,
 }
 
@@ -1422,31 +1399,12 @@ pub(crate) fn discover_sources(
         symbol_names,
         semantic_lookup,
         resolved_contracts,
-        contracts,
+        bundled_returns,
         runtime,
     } = *ctx;
     let mut clock = StageClock::new(emit_timings);
     let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
-    let bundled_returns = contracts
-        .iter()
-        .find(|contract| {
-            contract.package.name == "solid-js"
-                && bundled_contract_matches_dialect(contract, semantic_lookup.dialect)
-        })
-        .map(|contract| {
-            contract
-                .root_exports()
-                .iter()
-                .filter_map(|(name, summary)| {
-                    summary
-                        .returns
-                        .known()
-                        .and_then(Clone::clone)
-                        .map(|returned| (symbol_id(name), returned))
-                })
-                .collect::<HashMap<_, _>>()
-        })
-        .unwrap_or_default();
+    let bundled_returns = bundled_returns.clone();
     let mut accessor_origins = HashMap::<SymbolId, (SymbolId, SymbolId, Location)>::new();
     let mut setters = HashMap::<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>::new();
     let mut actions = HashMap::<SymbolId, (SymbolId, Location)>::new();

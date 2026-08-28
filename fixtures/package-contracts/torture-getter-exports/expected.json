@@ -1,68 +1,90 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c5c44fc9a6df27662d96fef2f3956062a333a8894d2de196f512dabb006cb4ab",
+            "path": "./index.js",
+            "sha256": "2ecd56eb18b7ff147a132b59344eb90270bc94b9c76666ec3e76a399d38229f2"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "2ecd56eb18b7ff147a132b59344eb90270bc94b9c76666ec3e76a399d38229f2"
+          },
+          "exports": {
+            "getterFunction": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "getterObject": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "getterResult": "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:ac66bb39d65f6efe3a8389f1746cc10015772783e534f27886e973179f5937ac",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "ac66bb39d65f6efe3a8389f1746cc10015772783e534f27886e973179f5937ac"
+    },
     "name": "torture-getter-exports-package",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "reactiveReads": [
-        {
-          "kind": "accessor",
-          "label": "memo result",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "returns": {
-        "kind": "object",
-        "properties": {
-          "value": {
-            "kind": "accessor",
-            "label": "value",
-            "evidence": {
-              "kind": "inferred"
+    "summary-2fc45d622851089b087ed456f74d816348b1190522c2a63ed74b61b03d2e563f": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "value",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
             }
           }
-        },
-        "evidence": {
-          "kind": "inferred"
-        }
+        ],
+        "returns": [
+          "return"
+        ]
       },
-      "evidence": {
-        "kind": "inferred"
-      }
+      "shape": "callable"
     },
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-1": ["getterFunction"],
-        "value-1": ["getterObject"],
-        "function-2": ["getterResult"]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

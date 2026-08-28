@@ -168,7 +168,7 @@ impl CatalogWording for Catalog {
                             "has a reactivity contract for version {contract_version}, but version {installed_version} is installed"
                         ),
                         format!(
-                            "The contract is evidence about a release this project no longer installs. Regenerate it with `solid-checker contract generate --package-root node_modules/{package} --output .solid-checker/contracts/{package}/solid-reactivity.json`, then review the checklist written beside it. A project-owned contract overrides a package-published one, so this is the remedy for either.",
+                            "The accepted document is evidence about a release this project no longer installs. Generate a temporary-v2 proposal for node_modules/{package} with its exact registry integrity, prove the open claims, issue a new receipt, and update .solid-checker/accepted-contracts.json.",
                             package = issue.package
                         ),
                     ),
@@ -199,20 +199,20 @@ impl CatalogWording for Catalog {
                             )
                         } else {
                             format!(
-                                "A version string is not a pin: the installed bytes were republished, patched, or overridden, so the contract is evidence about a tarball this project does not have. Regenerate it with `solid-checker contract generate --package-root node_modules/{package} --output .solid-checker/contracts/{package}/solid-reactivity.json`, then review the checklist written beside it.",
+                                "A version string is not a pin: the installed bytes were republished, patched, or overridden, so the accepted document is evidence about a tarball this project does not have. Generate a temporary-v2 proposal for node_modules/{package} with its exact registry integrity, prove it, issue a receipt, and update .solid-checker/accepted-contracts.json.",
                                 package = issue.package
                             )
                         },
                     ),
                     PackageContractIssueKind::Unverified => (
-                        "has only an unverified generated reactivity contract".to_owned(),
-                        "Verify the generated contract against the exact package artifacts and behavioral probes, then record verified, reviewed, or attested evidence.".into(),
+                        "has only an unaccepted temporary-v2 reactivity proposal".to_owned(),
+                        "Replay the proposal's required proof plan against the exact artifact. Only the Rust verifier may finalize closed claims and issue the receipt referenced by .solid-checker/accepted-contracts.json; probes may falsify but cannot accept closure.".into(),
                     ),
                     PackageContractIssueKind::Missing => (
                         "has no reactivity contract".to_owned(),
                         format!(
-                            "Create a local contract at {}, or pass one explicitly with --contract <PATH>. If you maintain {}, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format.",
-                            issue.contract_path, issue.package
+                            "Generate a temporary-v2 proposal for {} at {}, verify its required proofs, and add the proof-issued receipt plus exact import identity to .solid-checker/accepted-contracts.json. Missing evidence remains uncertifiable. See docs/package-contracts.md for the workflow.",
+                            issue.package, issue.contract_path
                         ),
                     ),
                 };
@@ -749,12 +749,25 @@ mod removed_export_tests {
             .join("../../../crates/solid-dialect/contracts/solid-v2/solid-js.json");
         let contract: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&contract).unwrap()).unwrap();
-        let exports = contract["exports"]
+        let entrypoints = contract["entrypoints"]
             .as_object()
-            .expect("bundled contract has an exports object");
+            .expect("bundled contract has entrypoints");
+        let exports = entrypoints
+            .values()
+            .flat_map(|entrypoint| {
+                entrypoint["cases"]
+                    .as_array()
+                    .expect("bundled entrypoint has artifact cases")
+            })
+            .map(|case| {
+                case["exports"]
+                    .as_object()
+                    .expect("bundled artifact case has exact exports")
+            })
+            .collect::<Vec<_>>();
         for (name, _) in V2_REMOVED_EXPORTS {
             assert!(
-                !exports.contains_key(*name),
+                exports.iter().all(|case| !case.contains_key(*name)),
                 "{name} is exported by the bundled solid-v2 contract, so it is not a removed API and must leave V2_REMOVED_EXPORTS"
             );
         }

@@ -1,29 +1,45 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "4fe88054550c2eef1989cb1d30c2e629509157c5a5575a857b212a60f044f28a",
+            "path": "./index.js",
+            "sha256": "652048a46d33739344c27d0658b0fa2f96d2ab00c8f85367ff11f4c91c3728d2"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "6cf3f6718e226906f0b8a50c6c373e9e6548b4af9263aba101d7ba59360294ed"
+          },
+          "exports": {
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:e33a47c5b9af87092039f7733e1caf39d39adebc334cd173369cb4c05c57c5a3",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "e33a47c5b9af87092039f7733e1caf39d39adebc334cd173369cb4c05c57c5a3"
+    },
     "name": "unreached-private-obligation",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-1": [
-          "Steady"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

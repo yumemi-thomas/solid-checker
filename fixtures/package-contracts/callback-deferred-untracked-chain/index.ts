@@ -22,8 +22,8 @@ export {
 // Positive: solid-js 1.9.14's own `onMount`, byte for byte
 // (`dist/solid.js:485-487`). The `untrack` clears the listener, so the callback
 // is not tracked; the `createEffect` still schedules it, so it has not run when
-// `mountShape` returns. `deferred` is what the reviewed bundled contract states
-// for `onMount`, and what the runtime does.
+// `mountShape` returns. The normalized operation is queued and untracked,
+// matching the reviewed `onMount` authority and runtime behavior.
 export function mountShape(handle: () => void): void {
   createEffect(() => untrack(handle));
 }
@@ -84,17 +84,16 @@ export function mergePropsShape(handle: () => number): void {
   mergeProps({ a: 1 }, () => untrack(handle));
 }
 
-// Positive *sentinel*: a tracked wrapper this dialect states no schedule for.
+// Positive open leaf: a tracked wrapper this dialect states no schedule for.
 // 1.x `createSignal(fn)` stores the function as the signal's value and never
 // invokes it (`Solid1x::stores_function_argument_as_value`), so neither
-// `inline` nor `deferred` is true and the fold refuses rather than picking one.
-// The whole `callbacks` domain is the unknown sentinel, which is the only
-// per-export encoding schema v1 has.
+// same-stack nor queued is proven and the fold refuses rather than picking one.
+// The callback domain remains open in the proposal.
 export function unestablishedScheduleShape(handle: () => number): void {
   createSignal(() => untrack(handle));
 }
 
-// Positive sentinel, second seam: the same chain with the callback *invoked*
+// Positive open leaf, second seam: the same chain with the callback *invoked*
 // rather than forwarded by identity, which is a different rung of the ladder.
 // A refusal there must not fall through to the lexical answer either.
 export function unestablishedDirectShape(handle: () => number): void {

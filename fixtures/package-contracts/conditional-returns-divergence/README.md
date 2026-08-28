@@ -1,24 +1,16 @@
-# A conditional branch that proves a return where the other proves none
+# Conditional return divergence
 
-`Show` returns `{ view: <accessor> }` in the `browser` branch and a plain
-`{ view: props.when }` in the `node` branch. Both branches were analyzed, so
-the node branch is not silence: it is a *proven negative*, the certified claim
-that this export returns nothing reactive there.
+`Show` returns a reactive accessor leaf in the browser artifact and a plain
+value in the node artifact. `Steady` is the control whose return behavior is
+equivalent in both.
 
-`mergeSummaries` used to read only the both-present case as a divergence, so
-`left.returns ?? right.returns` handed the browser branch's accessor to the
-environment-unaware base. A server consumer then read a certified positive
-claim about a value that is not reactive in its environment. One-sided
-presence is a divergence too: the base is the unknown sentinel, and the exact
-per-branch claims stay in `variants` so an environment-aware consumer loses
-nothing.
+Temporary-v2 generation models finite runtime/declaration selections as exact
+artifact cases, not a base summary plus wire variants. One branch's positive
+return and another branch's complete negative are distinct semantics; unresolved
+selection may join possible behavior monotonically but cannot invent a
+guaranteed accessor or a global negative.
 
-The review plan's `unknown-sentinel` item for `.:Show: returns` carries the
-reason under `because.divergences` — which branches disagreed and how. A merge
-is the second emitter of the sentinel and used to be the silent one.
-
-`Steady` is the negative control: identical in both branches, so it stays
-unconditional and gains neither a variant nor a sentinel.
-
-The `node_modules/solid-js` stub exists only so `createSignal` resolves to a
-1.x dialect; nothing here depends on its body.
+This synthetic package does not provide enough exact artifact authority for the
+generator to prove and partition those branches, so Phase 14 records a focused
+refusal in `expected-refusal.txt`. The known fact about either branch is not
+discarded or silently selected, and no unrelated claim domain is opened.

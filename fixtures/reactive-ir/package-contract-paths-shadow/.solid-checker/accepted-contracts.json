@@ -1,0 +1,82 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/other-reactive-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:93d79dfb0d58ee153bb7f5d14a7dbd32610b2b1b04729d56ec643f562b772845",
+          "entries": [
+            {
+              "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+          "path": "node_modules/other-reactive-package/package.json"
+        },
+        "exports": {
+          "mapPath": {
+            "declarations": {
+              "exportName": "mapPath",
+              "module": {
+                "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+                "path": "node_modules/other-reactive-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "mapPath",
+              "module": {
+                "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+                "path": "node_modules/other-reactive-package/package.json"
+              }
+            }
+          },
+          "mapValue": {
+            "declarations": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+                "path": "node_modules/other-reactive-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+                "path": "node_modules/other-reactive-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.ts",
+        "packageIntegrity": "fixture:sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+        "packageManifest": {
+          "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+          "path": "node_modules/other-reactive-package/package.json"
+        },
+        "packageName": "other-reactive-package",
+        "packageRoot": "node_modules/other-reactive-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:d8c6aa57008fd4e14594d8961b1aa4606921ca4daae2cb5e69ed56647fd5d3e1",
+          "path": "node_modules/other-reactive-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "other-reactive-package"
+      },
+      "receipt": "node_modules/other-reactive-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

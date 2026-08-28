@@ -26,29 +26,38 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
       const source = join(dialectsRoot, entry.name, "dialect.json");
       if (!existsSync(source)) fail(`${entry.name} has no dialect.json`);
       const manifest = JSON.parse(readFileSync(source, "utf8"));
-      if (manifest.schemaVersion !== 1) fail(`${source} has unsupported schemaVersion`);
+      if (manifest.schemaVersion !== 2) fail(`${source} has unsupported schemaVersion`);
       requiredString(manifest.id, "id", source);
       if (manifest.id !== entry.name) {
         fail(`${source} id ${manifest.id} must match directory ${entry.name}`);
       }
       requiredString(manifest.ruleManifest, "ruleManifest", source);
+      requiredString(manifest.bundleIndex, "bundleIndex", source);
+      requiredString(manifest.reviewBundleIndex, "reviewBundleIndex", source);
       if (requireArtifacts && !existsSync(join(projectRoot, manifest.ruleManifest))) {
         fail(`${source} references missing ${manifest.ruleManifest}`);
+      }
+      for (const field of ["bundleIndex", "reviewBundleIndex"]) {
+        if (requireArtifacts && !existsSync(join(projectRoot, manifest[field]))) {
+          fail(`${source} references missing ${manifest[field]}`);
+        }
       }
       if (!Array.isArray(manifest.contracts) || manifest.contracts.length === 0) {
         fail(`${source} requires at least one contract`);
       }
       for (const contract of manifest.contracts) {
-        // A contract is generated from an installed package unless it says
-        // otherwise. `generated: false` declares a hand-authored bundled
-        // overlay — reviewed against the package rather than derived from it,
-        // so it has no generator target, no review contract, and no export
-        // index. It is still declared, because the manifest is the inventory
-        // of every package a dialect models and a package missing from it is
-        // covered by no gate at all.
-        const generated = contract.generated !== false;
-        if (typeof contract.generated !== "undefined" && typeof contract.generated !== "boolean") {
-          fail(`${source} contracts[].generated must be a boolean`);
+        requiredString(contract.package, "contracts[].package", source);
+        const allowed = new Set(["package", "probeRuntime", "probeModes"]);
+        for (const field of Object.keys(contract)) {
+          if (!allowed.has(field)) {
+            fail(`${source} contracts[].${field} is not part of the normalized bundle inventory`);
+          }
+        }
+        if (
+          typeof contract.probeRuntime !== "undefined" &&
+          typeof contract.probeRuntime !== "boolean"
+        ) {
+          fail(`${source} contracts[].probeRuntime must be a boolean`);
         }
         // A contract may state its claims for fewer than all four condition
         // modes when a build under some condition is a different artifact.
@@ -63,55 +72,12 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
             fail(`${source} contracts[].probeModes has no meaning without probeRuntime`);
           }
         }
-        const generatorFields = [
-          "packagePathEnv",
-          "defaultPackagePath",
-          "generatorTarget",
-          "reviewContract",
-          "exportsIndex",
-        ];
-        for (const field of generated
-          ? ["package", ...generatorFields, "bundledContract"]
-          : ["package", "bundledContract"]) {
-          requiredString(contract[field], `contracts[].${field}`, source);
-        }
-        if (!generated) {
-          // Refused rather than ignored: a half-filled entry means someone
-          // meant to declare a generated contract and left fields out, which
-          // must not pass as a deliberate hand-authored one.
-          for (const field of generatorFields) {
-            if (typeof contract[field] !== "undefined") {
-              fail(`${source} contracts[].${field} is not allowed when generated is false`);
-            }
-          }
-        }
-        if (generated && !contract.generatorTarget.startsWith(`${manifest.id}/`)) {
-          fail(`${source} generatorTarget ${contract.generatorTarget} must start with ${manifest.id}/`);
-        }
-        const artifacts = generated
-          ? [contract.reviewContract, contract.exportsIndex, contract.bundledContract]
-          : [contract.bundledContract];
-        for (const path of artifacts) {
-          if (requireArtifacts && !existsSync(join(projectRoot, path))) {
-            fail(`${source} references missing ${path}`);
-          }
-        }
-        if (contract.composeScript && !existsSync(join(projectRoot, contract.composeScript))) {
-          fail(`${source} references missing ${contract.composeScript}`);
-        }
-        for (const input of contract.composeInputs ?? []) {
-          requiredString(input, "contracts[].composeInputs[]", source);
-          if (requireArtifacts && !existsSync(join(projectRoot, input))) {
-            fail(`${source} references missing ${input}`);
-          }
-        }
       }
       return { ...manifest, source: relative(projectRoot, source) };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
 
   const ids = new Set();
-  const targets = new Set();
   const packages = new Set();
   const ruleManifests = new Set();
   for (const manifest of manifests) {
@@ -126,11 +92,6 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
         fail(`${manifest.id} declares ${contract.package} twice`);
       }
       packages.add(`${manifest.id}/${contract.package}`);
-      if (contract.generated === false) continue;
-      if (targets.has(contract.generatorTarget)) {
-        fail(`duplicate generatorTarget ${contract.generatorTarget}`);
-      }
-      targets.add(contract.generatorTarget);
     }
   }
   return manifests;
@@ -143,44 +104,26 @@ function run(command, args) {
 }
 
 function generateContracts(check) {
-  for (const manifest of loadDialectManifests()) {
-    for (const contract of manifest.contracts) {
-      // Hand-authored overlays have nothing to regenerate from; their artifact
-      // is reviewed, not derived. `make contract-conformance` is what checks
-      // them.
-      if (contract.generated === false) continue;
-      const packagePath = process.env[contract.packagePathEnv] ?? contract.defaultPackagePath;
-      const args = [
-        "+1.97",
-        "run",
-        "--manifest-path",
-        "rust/Cargo.toml",
-        "-p",
-        "solid-facts-backend",
-        "--bin",
-        "solid-contract-gen",
-        "--",
-        "--package",
-        packagePath,
-        "--dialect",
-        contract.generatorTarget,
-        "--out",
-        contract.reviewContract,
-        "--index-out",
-        contract.exportsIndex,
-      ];
-      if (check) args.push("--check");
-      run("cargo", args);
-    }
-  }
+  loadDialectManifests({ requireArtifacts: check });
+  const args = [
+    "+1.97",
+    "run",
+    "--manifest-path",
+    "rust/Cargo.toml",
+    "-p",
+    "solid-facts-backend",
+    "--bin",
+    "solid-contract-bundles",
+    "--",
+    "--root",
+    root,
+  ];
+  if (check) args.push("--check");
+  run("cargo", args);
 }
 
 function checkComposedContracts() {
-  for (const manifest of loadDialectManifests({ requireArtifacts: true })) {
-    for (const contract of manifest.contracts) {
-      if (contract.composeScript) run(process.execPath, [contract.composeScript, "--check"]);
-    }
-  }
+  generateContracts(true);
 }
 
 const invokedDirectly =

@@ -1,64 +1,110 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "268aabbe2b00a896dd1f12e6c9f75ccadd2951e12dc3feb1f13babf5256fe44e",
+            "path": "./index.js",
+            "sha256": "b8a4ca8c61d895a74865ca30be94af837b3d3eeabcbb247dcc9b43d83e59611d"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "7ef9e694a262b5b6893a789f7b51ed68642396130217353d24a9a054864c3ec7"
+          },
+          "exports": {
+            "Arrow": "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5",
+            "Direct": "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5",
+            "Helper": "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5",
+            "inert": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:a2aaaa565e8d06d11f13d4ce98a75845160ae9a76b283ee885e8fc9357ea62aa",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a2aaaa565e8d06d11f13d4ce98a75845160ae9a76b283ee885e8fc9357ea62aa"
+    },
     "name": "unresolved-dispatch-attribution",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
           }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "reactiveReads": {
-        "status": "unknown"
-      },
-      "returns": {
-        "status": "unknown"
-      },
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-2": [
-          "Arrow",
-          "Direct",
-          "Helper"
         ],
-        "function-1": [
-          "inert"
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
         ]
-      }
+      },
+      "shape": "callable"
+    },
+    "summary-cfa5f14e1529b4c09e9a86e873e15e8da957c9080683c7a7897b524f7dd8e4e5": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
     }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

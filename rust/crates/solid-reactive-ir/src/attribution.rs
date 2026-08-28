@@ -1,6 +1,6 @@
 //! Which project functions can reach an unresolved proof obligation.
 //!
-//! Contract emission has to say *which exports* an unknown claim belongs to.
+//! Contract emission has to say *which exports* an open claim belongs to.
 //! An obligation that sits inside an exported function answers that question
 //! lexically, and emission resolves that case itself from the AST. An
 //! obligation inside a private helper does not: the only thing that can say

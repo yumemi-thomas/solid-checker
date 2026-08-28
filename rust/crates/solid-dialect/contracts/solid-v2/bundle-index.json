@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "format": "solid-checker-temporary-v2-bundle-index",
+  "contracts": [
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:e4aeb06fda36e411b43d4a97f2e8c92efea05b74c0200cb69df143cf2aac102b",
+      "document": "solid-js.json",
+      "receipt": "solid-js.receipt.json"
+    },
+    {
+      "package": "@solidjs/signals",
+      "artifactCase": "artifact-case:abb66ccfe188674a927bb43ec6bc9f10d9ea61a64c4639aa15f4f61614bf595b",
+      "document": "solidjs-signals.json",
+      "receipt": "solidjs-signals.receipt.json"
+    },
+    {
+      "package": "@solidjs/web",
+      "artifactCase": "artifact-case:896cdc2cc79b47cf8466e7da53f20ec73915f0cfa03fa22588d2111fed9c075d",
+      "document": "solidjs-web.json",
+      "receipt": "solidjs-web.receipt.json"
+    },
+    {
+      "package": "@solidjs/web",
+      "artifactCase": "artifact-case:af303568254a2f7f0b90f42d5917f195f89b6d0abb48d3170da78e980404433b",
+      "document": "solidjs-web--server-functions-browser-client.json",
+      "receipt": "solidjs-web--server-functions-browser-client.receipt.json"
+    },
+    {
+      "package": "@solidjs/web",
+      "artifactCase": "artifact-case:d2148b3197cbd5fd9dae66f00cd1de2618103aa830f6e88defcfe8982df4b80b",
+      "document": "solidjs-web--server-functions-node-server.json",
+      "receipt": "solidjs-web--server-functions-node-server.receipt.json"
+    },
+    {
+      "package": "@solidjs/web",
+      "artifactCase": "artifact-case:250d863ead32487d5aae2f34fddc7687ebb2ca4b72305752f33378a9167fe542",
+      "document": "solidjs-web--web-node-server.json",
+      "receipt": "solidjs-web--web-node-server.receipt.json"
+    }
+  ]
+}

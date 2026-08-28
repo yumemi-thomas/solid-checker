@@ -1,0 +1,66 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/reactive-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:cb8aeef15a571deaaef974ea87367f48cca32595883f2dd0c98a1b9d27c50b37",
+          "entries": [
+            {
+              "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+          "path": "node_modules/reactive-package/package.json"
+        },
+        "exports": {
+          "load": {
+            "declarations": {
+              "exportName": "load",
+              "module": {
+                "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+                "path": "node_modules/reactive-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "load",
+              "module": {
+                "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+                "path": "node_modules/reactive-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.ts",
+        "packageIntegrity": "fixture:sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+        "packageManifest": {
+          "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+          "path": "node_modules/reactive-package/package.json"
+        },
+        "packageName": "reactive-package",
+        "packageRoot": "node_modules/reactive-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:c5e435a532843fc676bc282bfcacf5cd3efca43d345bd74e7d713aa399f95cd7",
+          "path": "node_modules/reactive-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "reactive-package"
+      },
+      "receipt": "node_modules/reactive-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

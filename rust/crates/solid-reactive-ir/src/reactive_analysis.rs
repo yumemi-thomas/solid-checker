@@ -288,7 +288,7 @@ pub(crate) fn collect_project<'facts>(
                 parameter: obligation.parameter,
                 parameter_type: obligation.parameter_type.clone(),
                 required_execution: obligation.required_execution.clone(),
-                contract_stub: obligation.contract_stub.clone(),
+                claim_context: obligation.claim_context.clone(),
             },
             location: obligation.location.clone(),
             analysis_context: obligation.message.clone(),
@@ -374,7 +374,7 @@ mod tests {
             parameter: 0,
             parameter_type: "() => void".into(),
             required_execution: "synchronous".into(),
-            contract_stub: "{}".into(),
+            claim_context: "{}".into(),
         };
         let consumer = StaticDefectKind::PackageContractExportMissing {
             module: "partial-package".into(),

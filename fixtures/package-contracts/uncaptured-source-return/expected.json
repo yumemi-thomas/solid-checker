@@ -1,54 +1,47 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "33bd448960b5c3e52b8a7aa9e1878718ee301de9491b9780803081ba247d46ea",
+            "path": "./index.js",
+            "sha256": "69e1d972a9c34c60be4910dd8a9687a1409cfb5d47e9c82485174cf041d79843"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "104aca8e9368a63ca120f1401de577f1d2d494d418f474f34fe3ea8aa81546dd"
+          },
+          "exports": {
+            "Derived": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Held": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:472e935a11e1a1b70b958814b19070039d6cd34ccaa3c353218f24d91ed8a6cf",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "472e935a11e1a1b70b958814b19070039d6cd34ccaa3c353218f24d91ed8a6cf"
+    },
     "name": "uncaptured-source-return",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "reactiveReads": {
-        "status": "unknown"
-      },
-      "returns": {
-        "status": "unknown"
-      },
-      "callbacks": {
-        "status": "unknown"
-      },
-      "ownerRequirements": {
-        "status": "unknown"
-      },
-      "asyncBehavior": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-2": [
-          "Derived",
-          "Held"
-        ],
-        "function-1": [
-          "Steady"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

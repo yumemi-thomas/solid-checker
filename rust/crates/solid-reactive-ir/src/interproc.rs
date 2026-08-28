@@ -506,25 +506,23 @@ fn unknown_callback_obligation(
         .filter(|text| !text.is_empty())
         .unwrap_or_else(|| "callable value".into());
     let function = node.name.clone().unwrap_or_else(|| "<anonymous>".into());
-    let contract_stub = serde_json::json!({
-        "schemaVersion": 1,
-        "package": { "name": package, "version": "<exact-installed-version>" },
-        "compilerFactsProtocol": 1,
-        "summaries": {
-            "callback-stub": {
-                "kind": "function",
-                "callbacks": [{
-                    "parameter": parameter,
-                    "execution": "<choose: inline | tracked | deferred>"
-                }]
-            }
+    let claim_context = serde_json::json!({
+        "format": "solid-checker-open-contract-claim",
+        "semanticModelVersion": 1,
+        "artifactCase": {
+            "package": package,
+            "entrypoint": entrypoint,
+            "export": function,
         },
-        "entrypoints": {
-            entrypoint.clone(): { "exports": { "callback-stub": [function.clone()] } }
+        "path": {
+            "domain": "callbacks",
+            "parameter": parameter,
         },
-        "evidence": {
-            "kind": "<set reviewed after auditing runtime behavior>",
-            "generator": "solid-checker unknown-callback"
+        "requiredAxes": {
+            "schedule": "<prove exact schedule>",
+            "tracking": "<prove tracked or untracked>",
+            "ownership": "<prove requirements and production independently>",
+            "cardinality": "<prove possible and guaranteed bounds independently>",
         }
     })
     .to_string();
@@ -536,7 +534,7 @@ fn unknown_callback_obligation(
         entrypoint,
         parameter_type,
         required_execution: "choose exactly one audited mode: inline, tracked, or deferred".into(),
-        contract_stub,
+        claim_context,
         location,
         message: format!(
             "{}; generate or add the exact package entrypoint/export contract before this callback can be certified",
@@ -677,7 +675,7 @@ fn contract_callback_arguments_unbound(
 /// - a **computed read of a rest parameter** (`sources[index]`) — a rest
 ///   parameter absorbs an unbounded argument tail that no `callbacks` row can
 ///   name, so anything at all happening to one of its elements is unstatable
-///   in schema v1 as anything but the sentinel.
+///   as a closed callback claim.
 ///
 /// Only *potentially callable* parameters can escape into a callback claim, so
 /// a parameter the type facts prove non-callable never opens the sentinel.
@@ -1205,7 +1203,7 @@ fn discover_interprocedural_graph(
             //
             // The outer `Option` is "is there a usable chain"; the inner one is
             // the chain's own answer, and a `None` there is authoritative. A
-            // usable chain that composes to the unknown sentinel must not fall
+            // usable chain that composes to an open callback leaf must not fall
             // through to the rungs below: those answer the lexical question,
             // which is the answer this rung exists to replace, so falling
             // through would publish exactly the claim the chain just refused.
@@ -1258,7 +1256,6 @@ fn discover_interprocedural_graph(
                             accessors,
                         ),
                         owner: None,
-                        evidence: None,
                     },
                 ));
             } else {
@@ -1328,7 +1325,6 @@ fn discover_interprocedural_graph(
                                 execution: callback.execution.clone(),
                                 arguments: callback.arguments.clone(),
                                 owner: None,
-                                evidence: None,
                             },
                         ));
                     }
@@ -1509,7 +1505,6 @@ fn discover_interprocedural_graph(
                             execution: execution.into(),
                             arguments: Vec::new(),
                             owner: None,
-                            evidence: None,
                         },
                     ));
                 } else {
@@ -1612,7 +1607,6 @@ fn discover_interprocedural_graph(
                                 .into(),
                                 arguments: Vec::new(),
                                 owner: None,
-                                evidence: None,
                             },
                         ));
                     }
@@ -2425,7 +2419,7 @@ fn callback_chain_reaches_owner_body(
 /// `tracked` because it read the lexical tracking scope rather than the
 /// schedule relative to the export's return.
 ///
-/// `None` is the unknown sentinel: a wrapper in the chain has no established
+/// `None` is local openness: a wrapper in the chain has no established
 /// schedule, so no word is honest. It arises for exactly one shape -- a
 /// *detached* callback under a tracked wrapper whose
 /// [`solid_dialect::Dialect::tracked_callback_timing`] the dialect does not
@@ -2483,7 +2477,7 @@ pub(crate) enum ForwardedAmbientExecution {
     Composed(String),
     /// A wrapper in the chain has no established schedule, so no
     /// export-relative word is honest. The callee's `inline` rows must not be
-    /// republished and the unknown sentinel opens instead.
+    /// republished and the callback leaf stays open instead.
     Unknown,
 }
 
@@ -5061,7 +5055,6 @@ fn interprocedural_reads(
                     },
                     arguments: callback.arguments.clone(),
                     owner: callback.owner.clone(),
-                    evidence: callback.evidence.clone(),
                 };
                 if !callback_summaries[*owner].contains(&forwarded) {
                     callback_summaries[*owner].push(forwarded);
@@ -5085,7 +5078,7 @@ fn interprocedural_reads(
                     entrypoint: obligation.entrypoint.clone(),
                     parameter_type: obligation.parameter_type.clone(),
                     required_execution: obligation.required_execution.clone(),
-                    contract_stub: obligation.contract_stub.clone(),
+                    claim_context: obligation.claim_context.clone(),
                     location: obligation.location,
                     message: format!(
                         "parameter {owner_parameter} reaches unresolved behavior through {}; {}",
@@ -5972,7 +5965,6 @@ mod tests {
             execution: execution.to_owned(),
             arguments: Vec::new(),
             owner: None,
-            evidence: None,
         };
         let repeated = [callback(0, "deferred"), callback(0, "deferred")];
         let distinct = [callback(0, "deferred"), callback(1, "inline")];
@@ -5990,7 +5982,6 @@ mod tests {
             execution: "deferred".into(),
             arguments: Vec::new(),
             owner: Some("inherited".into()),
-            evidence: None,
         };
         let leaf = ContractCallback {
             owner: Some("leaf".into()),
@@ -6174,7 +6165,7 @@ mod tests {
         // here is one the probe fails.
         assert_eq!(compose_callback_chain(&[Detaching, EAGER]), Some("inline"));
         // No established schedule for the tracked wrapper: no word is honest,
-        // and the unknown sentinel is the answer rather than either guess.
+        // and local openness is the answer rather than either guess.
         assert_eq!(compose_callback_chain(&[Detaching, UNKNOWN]), None);
         // Order is the answer: `untrack(() => createMemo(fn))` still tracks
         // `fn`, because the memo subscribes it and the outer untrack cannot

@@ -1,0 +1,126 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/environment-dependent-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:0ffbf717daf816811c1aa53b799979fb2adbb954137f69e838ea5d992d5a936f",
+          "entries": [
+            {
+              "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+          "path": "node_modules/environment-dependent-package/package.json"
+        },
+        "exports": {
+          "environmentDependentValue": {
+            "declarations": {
+              "exportName": "environmentDependentValue",
+              "module": {
+                "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+                "path": "node_modules/environment-dependent-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "environmentDependentValue",
+              "module": {
+                "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+                "path": "node_modules/environment-dependent-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "bare.js",
+        "packageIntegrity": "fixture:sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+        "packageManifest": {
+          "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+          "path": "node_modules/environment-dependent-package/package.json"
+        },
+        "packageName": "environment-dependent-package",
+        "packageRoot": "node_modules/environment-dependent-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+          "path": "node_modules/environment-dependent-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "environment-dependent-package"
+      },
+      "receipt": "node_modules/environment-dependent-package/solid-reactivity.receipt.json"
+    },
+    {
+      "document": "node_modules/environment-dependent-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:0ffbf717daf816811c1aa53b799979fb2adbb954137f69e838ea5d992d5a936f",
+          "entries": [
+            {
+              "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+          "path": "node_modules/environment-dependent-package/package.json"
+        },
+        "exports": {
+          "environmentDependentValue": {
+            "declarations": {
+              "exportName": "environmentDependentValue",
+              "module": {
+                "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+                "path": "node_modules/environment-dependent-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "environmentDependentValue",
+              "module": {
+                "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+                "path": "node_modules/environment-dependent-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "index.js",
+        "packageIntegrity": "fixture:sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+        "packageManifest": {
+          "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+          "path": "node_modules/environment-dependent-package/package.json"
+        },
+        "packageName": "environment-dependent-package",
+        "packageRoot": "node_modules/environment-dependent-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:f5b6c6b212205d395aea689df32992bb95100463b930d4698f8bf8d45b227fbf",
+          "path": "node_modules/environment-dependent-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "environment-dependent-package"
+      },
+      "receipt": "node_modules/environment-dependent-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

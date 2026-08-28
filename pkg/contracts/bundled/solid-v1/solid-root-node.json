@@ -1,0 +1,682 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+            "path": "./dist/server.js",
+            "sha256": "dfa0ec736228fb544ed655c4008f8ac987543118100bfc96eaec828db07331f0"
+          },
+          "declarations": {
+            "path": "./types/index.d.ts",
+            "sha256": "6e70da1429948b2ca8201ccc248bd2cb77cd6bbc4cf33f639c4b0f8f6a35cbd1"
+          },
+          "exports": {
+            "$DEVCOMP": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "$PROXY": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "$TRACK": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "DEV": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "ErrorBoundary": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "For": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Index": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Match": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Show": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Suspense": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "SuspenseList": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Switch": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "batch": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "catchError": "summary-bffbdb840b00a8c5658e85497b26847d04b694873e30fbb436ac36681a03c8a6",
+            "children": "summary-d97436f10834758ca341d4da10b349b0f75a20307d436c7fc103a06df68c99f6",
+            "createComponent": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "createComputed": "summary-ae1102b2f5bc82e431d96e0f69a4c076de9eed00e6b118c4307f96cebf091049",
+            "createContext": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "createDeferred": "summary-d97436f10834758ca341d4da10b349b0f75a20307d436c7fc103a06df68c99f6",
+            "createEffect": "summary-ae1102b2f5bc82e431d96e0f69a4c076de9eed00e6b118c4307f96cebf091049",
+            "createMemo": "summary-d97436f10834758ca341d4da10b349b0f75a20307d436c7fc103a06df68c99f6",
+            "createReaction": "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026",
+            "createRenderEffect": "summary-ae1102b2f5bc82e431d96e0f69a4c076de9eed00e6b118c4307f96cebf091049",
+            "createResource": "summary-3a7b86009cf4f9d5ee07b47d5ef2b9e0db629ad671ae6546cd2ba2cb2c1b597a",
+            "createRoot": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "createSelector": "summary-056a4819fd03e413079f429eb8b4ae4d2a65a51bbb764e2c78b7c1691ad7211f",
+            "createSignal": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "createUniqueId": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "enableExternalSource": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "enableHydration": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "enableScheduling": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "equalFn": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "from": "summary-5f880640956ab31ffaffb56be1ecd4b17975f8e66f228d41e55ed9a7f7fca3c3",
+            "getListener": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getOwner": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "indexArray": "summary-b5976ded4331793eb0d32858c785687845f5e4c20f04b2bb4d711616e1162671",
+            "lazy": "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026",
+            "mapArray": "summary-b5976ded4331793eb0d32858c785687845f5e4c20f04b2bb4d711616e1162671",
+            "mergeProps": "summary-3a7b86009cf4f9d5ee07b47d5ef2b9e0db629ad671ae6546cd2ba2cb2c1b597a",
+            "observable": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "on": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "onCleanup": "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026",
+            "onError": "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026",
+            "onMount": "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026",
+            "requestCallback": "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026",
+            "resetErrorBoundaries": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "runWithOwner": "summary-ff67434379978ce3690be1e2d799d07ff64e507070a2457ddb072e59c558fd62",
+            "sharedConfig": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "splitProps": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "startTransition": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "untrack": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "useContext": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "useTransition": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./node/import",
+            "typesBranch": "/exports/./node/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0"
+    },
+    "name": "solid-js",
+    "version": "1.9.14"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "95f1fb31499efa5961113033c2ac36086c48f1363082d86ca64f955f082070f3"
+    }
+  },
+  "summaries": {
+    "summary-056a4819fd03e413079f429eb8b4ae4d2a65a51bbb764e2c78b7c1691ad7211f": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-1"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-1",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-3a7b86009cf4f9d5ee07b47d5ef2b9e0db629ad671ae6546cd2ba2cb2c1b597a": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-5f880640956ab31ffaffb56be1ecd4b17975f8e66f228d41e55ed9a7f7fca3c3": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ae1102b2f5bc82e431d96e0f69a4c076de9eed00e6b118c4307f96cebf091049": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-b5976ded4331793eb0d32858c785687845f5e4c20f04b2bb4d711616e1162671": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-1"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-1",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-bffbdb840b00a8c5658e85497b26847d04b694873e30fbb436ac36681a03c8a6": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-1"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-1",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-d97436f10834758ca341d4da10b349b0f75a20307d436c7fc103a06df68c99f6": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "plain"
+    },
+    "summary-ff67434379978ce3690be1e2d799d07ff64e507070a2457ddb072e59c558fd62": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

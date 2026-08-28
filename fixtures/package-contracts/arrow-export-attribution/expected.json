@@ -1,46 +1,48 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "003efc8392287a56e69f5558c31d894257b102ee261f99616cfe67869160c24f",
+            "path": "./index.js",
+            "sha256": "cd68d93ee31ab1236cb5e7c87e84141b4d3b9d47e5040d494353d5e086979980"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "af07926c7dab8f18c2fd11bbbad1b7fa7d55095f65a5d5cc87610310a90c0e07"
+          },
+          "exports": {
+            "Arrowed": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Declared": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Direct": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:4ec53e5e03eaf729902f7085e1e3b4a376edced4876488ad9822abd589f516ac",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "4ec53e5e03eaf729902f7085e1e3b4a376edced4876488ad9822abd589f516ac"
+    },
     "name": "arrow-export-attribution",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "reactiveReads": {
-        "status": "unknown"
-      },
-      "returns": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-2": [
-          "Arrowed",
-          "Declared",
-          "Direct"
-        ],
-        "function-1": [
-          "Isolated"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

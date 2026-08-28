@@ -1,0 +1,56 @@
+{
+  "entrypoints": {
+    "./universal": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+            "path": "./universal/dist/dev.js",
+            "sha256": "551b50626326274fa73cf0719bc822bacd166b6b2b8ae6a34ef569c5688c4145"
+          },
+          "declarations": {
+            "path": "./universal/types/index.d.ts",
+            "sha256": "7a1b83f2fbab5ef21abe6a1ebf942f789aeaaaac226d748b8b2859cbc2a2bbd4"
+          },
+          "exports": {
+            "createRenderer": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1universal/development/import",
+            "typesBranch": "/exports/.~1universal/development/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0"
+    },
+    "name": "solid-js",
+    "version": "1.9.14"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

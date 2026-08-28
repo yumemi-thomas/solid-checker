@@ -12,21 +12,45 @@ bun add --dev solid-checker
 
 Then run `solid-checker --certify`.
 
-Library maintainers can generate an inferred contract for every exact and
-wildcard package export without writing JSON:
+Library maintainers can generate an unaccepted temporary-v2 proposal from one
+exact installed package without writing semantic JSON:
 
 ```sh
-solid-checker contract generate --package-root .
+solid-checker contract generate \
+  --package-root . \
+  --integrity 'sha512-…'
 ```
 
-Application developers can generate the same contract into their local
-override directory:
+Application developers can write the proposal into their project-owned
+contract directory:
 
 ```sh
 solid-checker contract generate \
   --package-root node_modules/solid-dnd \
+  --integrity 'sha512-…' \
   --output .solid-checker/contracts/solid-dnd/solid-reactivity.json
 ```
+
+Generation acquires exact runtime, declaration, export, and closure identities
+without executing package code. It enumerates finite entrypoints and condition
+partitions, refuses wildcard/unbounded surfaces, and preserves unresolved
+semantic leaves as local open claims. The proposal cannot affect analysis
+until the Rust proof checker accepts its exact bytes and issues a receipt:
+
+```sh
+solid-checker contract review solid-reactivity.json
+solid-checker contract verify solid-reactivity.json \
+  --plan solid-reactivity.json.proposal.json \
+  --proof proof-transcript.json \
+  --artifact-case artifact-case:…
+```
+
+Register the accepted document, its receipt, and the independently acquired
+full import resolution in `.solid-checker/accepted-contracts.json`. The native
+checker rejects name-only, stale, unreceipted, or artifact-mismatched inputs.
+`solid-checker contract probe` is a separate opt-in falsification workflow;
+ordinary generation and analysis never execute dependency code, and a passing
+probe never closes a claim.
 
 Check which dependencies still need one, and which have a contract that no
 longer matches the installed version:
@@ -35,21 +59,14 @@ longer matches the installed version:
 solid-checker contract check
 ```
 
-Packages are reported as `bundled`, `published`, `local`, `explicit`,
-`unverified`, `stale`, `unbound`, or `missing`; every status that cannot certify
-prints the command that resolves it, and the command exits non-zero when any
-package needs action. `unbound` is a usable contract that describes no import in
-the project, because every specifier carrying its name resolves somewhere the
-contract's package is not. `stale` means the contract was generated against a different
-version of the package than the installed one — regenerate and re-review it
-after an upgrade.
-
-Use `--conditions browser,import` for a specific conditional export
-environment. Generation uses implementation facts plus published declaration
-call signatures, merges compatible conditional targets conservatively, and
-does not execute package code. Generated contracts deduplicate effect summaries
-and identical subpath surfaces while the checker expands them internally for
-analysis.
+Packages are reported as bundled, accepted, unverified, stale, unbound, or
+missing; every uncertifying status names its remedy, and the command exits
+non-zero when action is required. `unbound` means no exact project import
+occurrence matches the catalog entry. `stale` means document, receipt, package,
+artifact, closure, or proof identity drifted and must be regenerated and
+re-proved. `contract generate --missing` sweeps registry-installed missing
+packages with exact package-manager integrity while leaving existing proposals
+alone. Linked/local packages without that identity remain uncertifiable.
 
 The CLI uses the Oxc graphical reporter for framed terminal diagnostics:
 

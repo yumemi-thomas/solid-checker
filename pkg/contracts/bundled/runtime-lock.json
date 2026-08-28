@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
-  "auditedAt": "2026-08-25",
+  "schemaVersion": 2,
+  "format": "solid-checker-package-runtime-lock",
+  "auditedAt": "2026-08-28",
   "packages": {
     "@solid-primitives/rootless@1.5.4": {
       "dependencies": {
@@ -48,10 +49,10 @@
         }
       }
     },
-    "@solidjs/signals@2.0.0-rc.0": {
+    "@solidjs/signals@2.0.0-rc.3": {
       "dependencies": {}
     },
-    "@solidjs/web@2.0.0-rc.0": {
+    "@solidjs/web@2.0.0-rc.3": {
       "dependencies": {
         "seroval": {
           "range": "~1.5.4",
@@ -66,9 +67,9 @@
       },
       "peerDependencies": {
         "solid-js": {
-          "range": "^2.0.0-rc.0",
-          "version": "2.0.0-rc.0",
-          "integrity": "sha512-3enTJ71VL69nM5p/it2InVBDBt316Cqfij+F0S7VuHZLITc8YV7Rvavjoy52nAKKxYWXM+BcXh2K7KcLTf1zdQ=="
+          "range": "^2.0.0-rc.3",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ=="
         }
       }
     },
@@ -107,12 +108,12 @@
         }
       }
     },
-    "solid-js@2.0.0-rc.0": {
+    "solid-js@2.0.0-rc.3": {
       "dependencies": {
         "@solidjs/signals": {
-          "range": "^2.0.0-rc.0",
-          "version": "2.0.0-rc.0",
-          "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA=="
+          "range": "^2.0.0-rc.3",
+          "version": "2.0.0-rc.3",
+          "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA=="
         },
         "csstype": {
           "range": "^3.1.0",

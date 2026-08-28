@@ -136,7 +136,9 @@ function loadSnapshot(context) {
   const commandArgs = config.command || process.env.SOLID_CHECKER_BIN
     ? [...(config.commandArgs ?? [])]
     : [join(__dirname, "bin", "solid-checker.mjs")];
-  const contracts = Array.isArray(config.contracts) ? config.contracts : [];
+  const acceptedContracts = typeof config.acceptedContracts === "string"
+    ? config.acceptedContracts
+    : null;
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
   const runtime = runtimeConfiguration(config);
@@ -148,7 +150,7 @@ function loadSnapshot(context) {
     command,
     commandArgs,
     project,
-    contracts,
+    acceptedContracts,
     dialect,
     presets,
     enableRules,
@@ -177,7 +179,7 @@ function loadSnapshot(context) {
     "json"
   ];
   if (dialect) args.push("--dialect", dialect);
-  for (const contract of contracts) args.push("--contract", contract);
+  if (acceptedContracts) args.push("--accepted-contracts", acceptedContracts);
   for (const preset of presets) args.push("--preset", preset);
   for (const rule of enableRules) args.push("--enable-rule", rule);
   if (runtime?.target) args.push("--runtime-target", runtime.target);
@@ -269,7 +271,7 @@ const adapterSchema = [{
     commandArgs: { type: "array", items: { type: "string" } },
     project: { type: "string" },
     cwd: { type: "string" },
-    contracts: { type: "array", items: { type: "string" } },
+    acceptedContracts: { type: "string" },
     dialect: { type: "string" },
     preset: { type: "array", items: { type: "string" } },
     enableRule: { type: "array", items: { type: "string" } },

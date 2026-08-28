@@ -7,28 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/bundled-contract-callback-consumer/App.tsx",
-      "start": 597,
-      "end": 621,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/bundled-contract-callback-consumer/App.tsx",
-      "start": 611,
-      "end": 620,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/bundled-contract-callback-consumer/App.tsx",
-      "start": 1074,
-      "end": 1104,
+      "start": 563,
+      "end": 572,
       "fixes": 0
     }
   ]

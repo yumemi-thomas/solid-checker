@@ -12,11 +12,7 @@
 use std::path::Path;
 
 use solid_facts::compiler::CompilerFactsProvider;
-use solid_reactive_ir::{
-    Finding, PackageContract, PackageContractIssue, Program, RuleMetadata, SolveTimings,
-};
-
-use crate::BackendError;
+use solid_reactive_ir::{Finding, Program, RuleMetadata, SolveTimings};
 
 /// Rule identities this checker used to publish and has since removed, with the
 /// reason, so a project's existing `.solid-checker/rule-options.json` does not
@@ -322,14 +318,6 @@ pub struct Dialect {
     pub semantic_demands: SemanticDemandCapabilities,
     /// Dialect-owned projection policy used after rule enablement filtering.
     pub catalog_capabilities: solid_reactive_ir::CatalogCapabilities,
-    /// Projects a package-contract issue through this dialect's catalog so
-    /// SC9005 identity and every sentence remain catalog-owned.
-    pub package_contract_finding: fn(&PackageContractIssue) -> Finding,
-    /// Package roots the dialect ships a bundled contract for; answers the
-    /// cheap membership question without decoding any contract.
-    pub bundled_packages: &'static [&'static str],
-    /// The contract the dialect bundles for a package root, if any.
-    pub bundled_contract: fn(&str) -> Result<Option<PackageContract>, BackendError>,
 }
 
 impl Dialect {
@@ -449,9 +437,6 @@ static SOLID_V2: Dialect = Dialect {
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_2,
     catalog_capabilities: solid_v2_rules::CATALOG_CAPABILITIES,
-    package_contract_finding: solid_v2_rules::package_contract_finding,
-    bundled_packages: &["solid-js", "@solidjs/web", "@solidjs/signals"],
-    bundled_contract: crate::diagnostics::bundled_contract_v2,
 };
 
 #[cfg(feature = "dialect-v1")]
@@ -476,14 +461,6 @@ static SOLID_V1: Dialect = Dialect {
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_1,
     catalog_capabilities: solid_v1_rules::CATALOG_CAPABILITIES,
-    package_contract_finding: solid_v1_rules::package_contract_finding,
-    bundled_packages: &[
-        "solid-js",
-        "@solid-primitives/debounce",
-        "@solid-primitives/rootless",
-        "@solid-primitives/scheduled",
-    ],
-    bundled_contract: crate::diagnostics::bundled_contract_v1,
 };
 
 #[cfg(test)]
@@ -548,15 +525,39 @@ mod tests {
                         .to_owned()
                 })
                 .collect::<HashSet<_>>();
-            // Both halves of "models": the vocabulary owns the module's
-            // exports, or the backend compiles a contract in for it. Either is
-            // a claim about the package that the manifest has to carry.
+            let bundle_index = root.join(
+                manifest["bundleIndex"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{} has no bundleIndex", source.display())),
+            );
+            let bundle: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(&bundle_index)
+                    .unwrap_or_else(|error| panic!("{}: {error}", bundle_index.display())),
+            )
+            .unwrap_or_else(|error| panic!("{}: {error}", bundle_index.display()));
+            let bundled = bundle["contracts"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{} has no contracts array", bundle_index.display()))
+                .iter()
+                .map(|case| {
+                    case["package"]
+                        .as_str()
+                        .unwrap_or_else(|| {
+                            panic!("{} has a case without a package", bundle_index.display())
+                        })
+                        .to_owned()
+                })
+                .collect::<HashSet<_>>();
+            assert_eq!(
+                declared, bundled,
+                "{} package inventory and receipt-issued bundle index disagree",
+                dialect.id
+            );
             let modeled = dialect
                 .vocabulary
                 .modules()
                 .iter()
                 .copied()
-                .chain(dialect.bundled_packages.iter().copied())
                 .map(|module| package_root(module).to_owned())
                 .collect::<HashSet<_>>();
             let mut undeclared = modeled.difference(&declared).collect::<Vec<_>>();
@@ -565,15 +566,6 @@ mod tests {
                 undeclared.is_empty(),
                 "{} models {undeclared:?} but declares no contract for them; add an entry to {} \
                  (a hand-authored bundled overlay sets \"generated\": false)",
-                dialect.id,
-                source.display()
-            );
-            let mut unmodeled = declared.difference(&modeled).collect::<Vec<_>>();
-            unmodeled.sort();
-            assert!(
-                unmodeled.is_empty(),
-                "{} declares a contract for {unmodeled:?}, which its vocabulary does not own and \
-                 the backend does not bundle; the entry in {} is dead weight",
                 dialect.id,
                 source.display()
             );

@@ -1,0 +1,126 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/bare-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:400316078e5ab0b6bbcd0759681bdc4a3c260b81cc972235eb2e22c30c7ff472",
+          "entries": [
+            {
+              "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+          "path": "node_modules/bare-package/package.json"
+        },
+        "exports": {
+          "helper": {
+            "declarations": {
+              "exportName": "helper",
+              "module": {
+                "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+                "path": "node_modules/bare-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "helper",
+              "module": {
+                "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+                "path": "node_modules/bare-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.ts",
+        "packageIntegrity": "fixture:sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+        "packageManifest": {
+          "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+          "path": "node_modules/bare-package/package.json"
+        },
+        "packageName": "bare-package",
+        "packageRoot": "node_modules/bare-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+          "path": "node_modules/bare-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "bare-package"
+      },
+      "receipt": "node_modules/bare-package/solid-reactivity.receipt.json"
+    },
+    {
+      "document": "node_modules/bare-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:400316078e5ab0b6bbcd0759681bdc4a3c260b81cc972235eb2e22c30c7ff472",
+          "entries": [
+            {
+              "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+          "path": "node_modules/bare-package/package.json"
+        },
+        "exports": {
+          "helper": {
+            "declarations": {
+              "exportName": "helper",
+              "module": {
+                "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+                "path": "node_modules/bare-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "helper",
+              "module": {
+                "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+                "path": "node_modules/bare-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "external-reexport.ts",
+        "packageIntegrity": "fixture:sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+        "packageManifest": {
+          "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+          "path": "node_modules/bare-package/package.json"
+        },
+        "packageName": "bare-package",
+        "packageRoot": "node_modules/bare-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:040b84ef149110e0ebb981991c5694382fa200e3f41c9512afe66f64a8221525",
+          "path": "node_modules/bare-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "bare-package"
+      },
+      "receipt": "node_modules/bare-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

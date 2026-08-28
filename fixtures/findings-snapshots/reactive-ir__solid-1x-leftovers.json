@@ -2,54 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",
-      "start": 9,
-      "end": 14,
-      "fixes": 0,
-      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export batch; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-      "hint": "batch was removed in Solid 2.0; see the migration guide — updates batch by default on the microtask queue; call flush() where you need the old synchronous application."
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",
-      "start": 16,
-      "end": 30,
-      "fixes": 0,
-      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export createComputed; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-      "hint": "createComputed was removed in Solid 2.0; see the migration guide — use createEffect(compute, apply), a function-form createSignal/createStore, or createMemo."
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",
-      "start": 32,
-      "end": 46,
-      "fixes": 0,
-      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export createResource; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-      "hint": "createResource was removed in Solid 2.0; see the migration guide — use an async computation (createMemo(async ...) or createStore(fn)) read under a <Loading> boundary."
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",
-      "start": 62,
-      "end": 69,
-      "fixes": 0,
-      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export onMount; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-      "hint": "onMount was removed in Solid 2.0; see the migration guide — use onSettled, which can also return a cleanup function."
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

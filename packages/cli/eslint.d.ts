@@ -29,11 +29,11 @@ export interface SolidCheckerSettings {
   command?: string;
   /** Arguments placed before solid-checker's generated CLI arguments. */
   commandArgs?: string[];
-  /** Additional reviewed package-contract documents. */
-  contracts?: string[];
+  /** Receipt-issued temporary-v2 contract catalog for exact imports. */
+  acceptedContracts?: string;
   /** Force a dialect instead of detecting it from the project. */
   dialect?: "solid-v1" | "solid-v2" | (string & {});
-  /** Explicit runtime conditions used for contract variants and rendering proofs. */
+  /** Exact runtime selection used for artifact cases and rendering proofs. */
   runtime?: SolidCheckerRuntimeSettings;
   /** Read a canonical JSON snapshot instead of starting an analysis process. */
   snapshotPath?: string;

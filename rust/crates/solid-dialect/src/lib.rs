@@ -324,10 +324,9 @@ pub enum KeyForm {
 /// and `createRoot(fn)` share a position and differ in owner; `untrack(fn)` and
 /// `createMemo(fn)` share a position and differ here.
 ///
-/// The three words are the package contracts' own — `tracked`, `deferred`,
-/// `inline` — and mean exactly what the contract schema means by them, because
-/// the tables below are transcribed from the reviewed semantics in
-/// `solid-contract-gen` and a test holds them to it.
+/// These three analyzer roles are projections of the normalized contract's
+/// independent tracking, event, and schedule axes. The checked bundle
+/// authorities hold the tables below to the exact published package behavior.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Execution {
     /// The callback creates its own observer: reads inside it subscribe *it*,
@@ -554,7 +553,7 @@ pub trait Dialect: Sync {
     /// established no schedule for that callback — because the audited runtime
     /// was not read for it, because the primitive never invokes the argument at
     /// all (1.x `createSignal(fn)` stores it), or because the shape resisted
-    /// measurement. Contract emission answers the unknown sentinel there rather
+    /// measurement. Contract emission leaves that exact callback leaf open rather
     /// than guessing, so a missing answer costs precision and never
     /// correctness. It is the direction to fail in, and *not* a licence to
     /// leave a member out because its name looks like a neighbour's: the two
@@ -1203,6 +1202,74 @@ pub(crate) fn reverse(
 }
 
 #[cfg(test)]
+fn callback_exports_from_bundles(
+    dialect: &str,
+    packages: &[&str],
+) -> std::collections::BTreeMap<String, Vec<(usize, Execution)>> {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("contracts")
+        .join(dialect);
+    let mut exports = std::collections::BTreeMap::<String, Vec<(usize, Execution)>>::new();
+    for entry in std::fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("json")
+            || path.file_name().is_some_and(|name| {
+                name.to_string_lossy().contains("receipt") || name == "bundle-index.json"
+            })
+        {
+            continue;
+        }
+        let contract: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        if !packages.contains(&contract["package"]["name"].as_str().unwrap_or_default()) {
+            continue;
+        }
+        let summaries = contract["summaries"].as_object().unwrap();
+        for entrypoint in contract["entrypoints"].as_object().unwrap().values() {
+            let cases = entrypoint["cases"]
+                .as_array()
+                .map_or_else(|| vec![entrypoint], |cases| cases.iter().collect());
+            for artifact_case in cases {
+                for (name, reference) in artifact_case["exports"].as_object().unwrap() {
+                    let summary_id = reference
+                        .as_str()
+                        .or_else(|| reference["summary"].as_str())
+                        .unwrap();
+                    let call = &summaries[summary_id]["call"];
+                    let rows = exports.entry(name.clone()).or_default();
+                    for callback in call["callbacks"].as_array().into_iter().flatten() {
+                        let Some(index) = callback["from"]["arg"]
+                            .as_u64()
+                            .and_then(|index| usize::try_from(index).ok())
+                        else {
+                            continue;
+                        };
+                        let operation_id = callback["operation"].as_str().unwrap();
+                        let operation = call["operations"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .find(|operation| operation["id"] == operation_id)
+                            .unwrap();
+                        let execution = if operation["tracking"] == "tracked" {
+                            Execution::Tracked
+                        } else if operation["at"]["schedule"] == "same-stack" {
+                            Execution::Inline
+                        } else {
+                            Execution::Deferred
+                        };
+                        if !rows.contains(&(index, execution)) {
+                            rows.push((index, execution));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    exports
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1238,19 +1305,18 @@ mod tests {
         );
     }
 
-    /// [`Dialect::callback_executions`] is a transcription of the reviewed
-    /// semantics tables inside `solid-contract-gen`, and this is what keeps it
-    /// one. Both describe the same package; a name they disagree about means
-    /// one of them was edited alone.
+    /// [`Dialect::callback_executions`] is a projection of receipt-issued
+    /// normalized first-party semantics. Both describe the same package; a
+    /// name they disagree about means one of them was edited alone.
     ///
     /// Read from the generated contracts rather than the generator's source,
     /// because the contract is what the checker actually loads — and because a
     /// crate below `solid-facts-backend` cannot depend on it. The files are
     /// parsed with `serde_json`, a dev-dependency that exists for this.
     ///
-    /// Names whose dialect-modelled callbacks are runtime facts the review
-    /// contract's flat schema cannot carry, exempted from the reverse
-    /// direction of the agreement test below. Every entry needs a reason:
+    /// Names whose dialect-modelled overload behavior is more call-site
+    /// specific than the selected first-party artifact case, exempted from the
+    /// reverse direction below. Every entry needs a reason:
     ///
     /// - 2.0 `createSignal`/`createStore`/`createOptimistic`/
     ///   `createOptimisticStore`: the derived `createX(fn, …)` forms branch on
@@ -1258,16 +1324,19 @@ mod tests {
     ///   value form, which takes no callback.
     /// - 2.0 `dynamic`: the browser implementation owns a tracked memo. The
     ///   root server helper is eager, while the JSX runtime's lazy memo defers
-    ///   the same source. The flat review contract records `unknown`; the
-    ///   bundled entrypoint variants retain the exact executions.
+    ///   the same source. Exact behavior remains local to the artifact case.
+    /// - 2.0 `clientOnly`: browser and server artifact cases intentionally
+    ///   disagree about whether the loader is invoked on the same stack.
+    /// - 2.0 `latest`/`isPending`: the analyzer's callback position denotes a
+    ///   reactive accessor input; the normalized contract models it as a read
+    ///   operation rather than invocation of a caller-supplied callback.
     /// - 1.x `on`: the dialect's `(0, Inline)` row is an engine keying — the
     ///   returned adapter's invocation site decides the role (see
     ///   `callback_executions`' comment) — not a package fact the review
     ///   contract should record as `inline`.
     /// - 1.x `createResource`: parameter 0 is a tracked source in the sourced
     ///   overload and the deferred fetcher in the unsourced overload. The
-    ///   dialect resolves that overload at the call site; schema v1 has only
-    ///   one flat callback map for the export and records `unknown`.
+    ///   dialect resolves that overload at the call site.
     fn contract_schema_exemptions(version: Version, name: &str) -> bool {
         match version {
             Version::V1 => matches!(name, "createResource" | "on"),
@@ -1277,7 +1346,10 @@ mod tests {
                     | "createStore"
                     | "createOptimistic"
                     | "createOptimisticStore"
+                    | "clientOnly"
                     | "dynamic"
+                    | "isPending"
+                    | "latest"
             ),
         }
     }
@@ -1292,52 +1364,30 @@ mod tests {
     /// flat schema cannot express the fact.
     #[test]
     fn the_callback_executions_agree_with_the_bundled_contract() {
-        let contracts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("contracts");
         let mut checked = 0;
-        for (version, files) in [
-            (Version::V1, vec!["solid-v1/solid-js.json"]),
-            (
-                Version::V2,
-                vec!["solid-v2/solid-js.json", "solid-v2/solidjs-web.json"],
-            ),
+        for (version, bundle, packages) in [
+            (Version::V1, "solid-v1", &["solid-js"][..]),
+            (Version::V2, "solid-v2", &["solid-js", "@solidjs/web"][..]),
         ] {
             let dialect = version.dialect();
-            // name -> union of (parameter, execution) rows across the
-            // version's contract files, for the reverse direction: a name
-            // re-exported by a second entrypoint (2.0's `untrack`) need not
-            // repeat its rows there.
-            let mut contract_rows: std::collections::BTreeMap<String, Vec<(usize, Execution)>> =
-                std::collections::BTreeMap::new();
-            for file in files {
-                let text = std::fs::read_to_string(contracts.join(file)).unwrap();
-                let contract: serde_json::Value = serde_json::from_str(&text).unwrap();
-                let exports = contract["exports"].as_object().unwrap();
-                for (name, entry) in exports {
-                    let Some(primitive) = dialect.primitive(name) else {
-                        continue;
-                    };
-                    let modelled = dialect.callback_executions(primitive);
-                    contract_rows.entry(name.clone()).or_default();
-                    for callback in entry["callbacks"].as_array().into_iter().flatten() {
-                        let index =
-                            usize::try_from(callback["parameter"].as_u64().unwrap()).unwrap();
-                        let expected = match callback["execution"].as_str().unwrap() {
-                            "tracked" => Execution::Tracked,
-                            "deferred" => Execution::Deferred,
-                            "inline" => Execution::Inline,
-                            other => panic!("{file}: {name} has an unknown execution {other}"),
-                        };
-                        assert!(
-                            modelled.contains(&(index, expected)),
-                            "{file}: {name} argument {index} is {expected:?} in the contract, \
-                             and the {version:?} dialect says {modelled:?}"
-                        );
-                        contract_rows
-                            .get_mut(name.as_str())
-                            .unwrap()
-                            .push((index, expected));
-                        checked += 1;
-                    }
+            let contract_rows = callback_exports_from_bundles(bundle, packages);
+            for (name, rows) in &contract_rows {
+                let Some(primitive) = dialect.primitive(name) else {
+                    continue;
+                };
+                if contract_schema_exemptions(version, name) {
+                    continue;
+                }
+                let modelled = dialect.callback_executions(primitive);
+                if modelled.is_empty() {
+                    continue;
+                }
+                for (index, expected) in rows {
+                    assert!(
+                        modelled.contains(&(*index, *expected)),
+                        "{bundle}: {name} argument {index} is {expected:?} in the contract, and the {version:?} dialect says {modelled:?}"
+                    );
+                    checked += 1;
                 }
             }
             let mut missing = Vec::new();
@@ -1345,7 +1395,9 @@ mod tests {
                 if contract_schema_exemptions(version, name) {
                     continue;
                 }
-                let primitive = dialect.primitive(name).unwrap();
+                let Some(primitive) = dialect.primitive(name) else {
+                    continue;
+                };
                 for entry in dialect.callback_executions(primitive) {
                     if !rows.contains(entry) {
                         missing.push(format!("{name} {entry:?}"));

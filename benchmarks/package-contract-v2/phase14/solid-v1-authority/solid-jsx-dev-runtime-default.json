@@ -1,0 +1,38 @@
+{
+  "entrypoints": {
+    "./jsx-dev-runtime": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+            "path": "./dist/solid.js",
+            "sha256": "b0525eede2c4209fb444831f3bb54f5fdb1a8d748aa7d597cd392880c761c11d"
+          },
+          "declarations": {
+            "path": "./types/jsx.d.ts",
+            "sha256": "d35504a35868edaa3f43c244b397177f7ce6a6ab872347b7271473299c2e5d27"
+          },
+          "exports": {},
+          "resolution": {
+            "runtimeBranch": "/exports/.~1jsx-dev-runtime/default",
+            "typesBranch": "/exports/.~1jsx-dev-runtime/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0"
+    },
+    "name": "solid-js",
+    "version": "1.9.14"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {}
+}

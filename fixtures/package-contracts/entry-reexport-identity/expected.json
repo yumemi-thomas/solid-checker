@@ -1,45 +1,47 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "bd2a2811de18d49901df2279a3a7e7b51028631c2be1653c4defa055ba39e620",
+            "path": "./index.js",
+            "sha256": "e685eac8d283e76c30e41736c7bbcd64329c6e6d7d1207378b9f9f29416d9258"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "0855fd07fbc0bf73f29fd317aa0b02ae587cd1f876542f8065dabc7b903cd307"
+          },
+          "exports": {
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "channelFor": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "forwarded": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:1a4b41d6e73511ffcb95feb741258d4272b0ccfdb0d3c781b27d7cfebb5ad1db",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "1a4b41d6e73511ffcb95feb741258d4272b0ccfdb0d3c781b27d7cfebb5ad1db"
+    },
     "name": "entry-reexport-identity",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "reactiveReads": {
-        "status": "unknown"
-      },
-      "returns": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-2": [
-          "channelFor",
-          "forwarded"
-        ],
-        "function-1": [
-          "Isolated"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

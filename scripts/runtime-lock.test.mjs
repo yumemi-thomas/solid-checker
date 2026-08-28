@@ -13,16 +13,18 @@ test("runtime lock pins the Solid 2 transitive runtime edge", () => {
   const lock = JSON.parse(
     readFileSync(join(root, "pkg/contracts/bundled/runtime-lock.json"), "utf8")
   );
-  const edge = lock.packages["solid-js@2.0.0-rc.0"].dependencies["@solidjs/signals"];
+  assert.equal(lock.schemaVersion, 2);
+  assert.equal(lock.format, "solid-checker-package-runtime-lock");
+  const edge = lock.packages["solid-js@2.0.0-rc.3"].dependencies["@solidjs/signals"];
   assert.deepEqual(edge, {
-    range: "^2.0.0-rc.0",
-    version: "2.0.0-rc.0",
+    range: "^2.0.0-rc.3",
+    version: "2.0.0-rc.3",
     integrity:
-      "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA=="
+      "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA=="
   });
   assert.equal(
-    lock.packages["@solidjs/web@2.0.0-rc.0"].peerDependencies["solid-js"].version,
-    "2.0.0-rc.0"
+    lock.packages["@solidjs/web@2.0.0-rc.3"].peerDependencies["solid-js"].version,
+    "2.0.0-rc.3"
   );
 });
 
@@ -47,4 +49,6 @@ test("runtime lock pins the Solid 1.x probe closure", () => {
   const debounce = lock.packages["@solid-primitives/debounce@1.3.0"];
   assert.equal(debounce.peerDependencies["solid-js"].range, ">=1.0.0");
   assert.equal(debounce.peerDependencies["solid-js"].version, "1.9.14");
+  const rootless = lock.packages["@solid-primitives/rootless@1.5.4"];
+  assert.equal(rootless.peerDependencies["solid-js"].version, "1.9.14");
 });

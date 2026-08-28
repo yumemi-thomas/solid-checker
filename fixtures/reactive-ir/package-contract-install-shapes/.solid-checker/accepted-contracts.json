@@ -1,0 +1,186 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/ambient-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:96d6c225cc7b10117248f9a88a6f2d9dc50ee2b5364081ecb818bfa8537824d2",
+          "entries": [
+            {
+              "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+          "path": "node_modules/ambient-package/package.json"
+        },
+        "exports": {
+          "mapValue": {
+            "declarations": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+                "path": "node_modules/ambient-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+                "path": "node_modules/ambient-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.ts",
+        "packageIntegrity": "fixture:sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+        "packageManifest": {
+          "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+          "path": "node_modules/ambient-package/package.json"
+        },
+        "packageName": "ambient-package",
+        "packageRoot": "node_modules/ambient-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+          "path": "node_modules/ambient-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "ambient-package"
+      },
+      "receipt": "node_modules/ambient-package/solid-reactivity.receipt.json"
+    },
+    {
+      "document": "node_modules/ambient-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:96d6c225cc7b10117248f9a88a6f2d9dc50ee2b5364081ecb818bfa8537824d2",
+          "entries": [
+            {
+              "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+          "path": "node_modules/ambient-package/package.json"
+        },
+        "exports": {
+          "mapValue": {
+            "declarations": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+                "path": "node_modules/ambient-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+                "path": "node_modules/ambient-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "ambient-package.d.ts",
+        "packageIntegrity": "fixture:sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+        "packageManifest": {
+          "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+          "path": "node_modules/ambient-package/package.json"
+        },
+        "packageName": "ambient-package",
+        "packageRoot": "node_modules/ambient-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:a26544cb30f87430d1d677337642d374bd28a22e06a62549f3702878472b9abc",
+          "path": "node_modules/ambient-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "ambient-package"
+      },
+      "receipt": "node_modules/ambient-package/solid-reactivity.receipt.json"
+    },
+    {
+      "document": "node_modules/subpath-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:471286fe5abcbff21ee457c6d68f497d67088711560df0bcc3285e6f894ce2a1",
+          "entries": [
+            {
+              "digest": "sha256:0b334123c22cda12c1a22ce5f877e7e021bce263581e4eecc64c6f069939b270",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:0b334123c22cda12c1a22ce5f877e7e021bce263581e4eecc64c6f069939b270",
+          "path": "node_modules/subpath-package/package.json"
+        },
+        "exports": {
+          "mapValue": {
+            "declarations": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:0b334123c22cda12c1a22ce5f877e7e021bce263581e4eecc64c6f069939b270",
+                "path": "node_modules/subpath-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "mapValue",
+              "module": {
+                "digest": "sha256:0b334123c22cda12c1a22ce5f877e7e021bce263581e4eecc64c6f069939b270",
+                "path": "node_modules/subpath-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.ts",
+        "packageIntegrity": "fixture:sha256:0b334123c22cda12c1a22ce5f877e7e021bce263581e4eecc64c6f069939b270",
+        "packageManifest": {
+          "digest": "sha256:0b334123c22cda12c1a22ce5f877e7e021bce263581e4eecc64c6f069939b270",
+          "path": "node_modules/subpath-package/package.json"
+        },
+        "packageName": "subpath-package",
+        "packageRoot": "node_modules/subpath-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": "./deep",
+        "runtime": {
+          "digest": "sha256:0b334123c22cda12c1a22ce5f877e7e021bce263581e4eecc64c6f069939b270",
+          "path": "node_modules/subpath-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "subpath-package/deep"
+      },
+      "receipt": "node_modules/subpath-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

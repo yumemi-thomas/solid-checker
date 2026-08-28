@@ -1,0 +1,403 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8ffc3f3c194f3408a9e46f020b7729170a0b42fc6bd4108cb977b88e725873af",
+            "path": "dist/server.js",
+            "sha256": "80abb46a98a9d6695b7d2c42725ccfb538f8e941d6aa3a8ec5343d6d002d54b1"
+          },
+          "declarations": {
+            "path": "types/index.d.ts",
+            "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+          },
+          "exports": {
+            "clientOnly": "summary-483140acbc18aaa00d3db45337fdd8fd31997eceec74fb9a398e49abc7990ebf",
+            "httpHeader": "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
+            "httpStatus": "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
+            "renderToStream": "summary-30fffd30aef18cf5bf6d511f59de3c326546b56c73803871ed1404299fd5284f",
+            "renderToString": "summary-2262199cc4c76735878285c1c5b96d152da26a273e30ea57faa1ef777d8d4fe1"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./node/import/default",
+            "typesBranch": "/exports/./node/import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
+    },
+    "name": "@solidjs/web",
+    "version": "2.0.0-rc.3"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "5ce11bf96f67e3329ab238f02f20b0f89156cc89c1a63bf5f0ab636fc87750ae"
+    }
+  },
+  "summaries": {
+    "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [
+          "retract-declaration"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "edges": [
+          {
+            "from": "declare-response",
+            "kind": "cleanup",
+            "to": "retract-declaration"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "request",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "declare-response",
+            "kind": "write",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "source": "ambient-at-execution"
+            },
+            "resources": [
+              "request",
+              "response"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "request",
+              "resource": "request"
+            }
+          },
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "retract-declaration",
+            "kind": "cleanup",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "response"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "declare-response"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "request",
+            "kind": "request",
+            "states": []
+          },
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "response",
+            "kind": "response",
+            "states": [
+              "uncommitted",
+              "committed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": [
+          "declare-response"
+        ]
+      },
+      "shape": "plain"
+    },
+    "summary-2262199cc4c76735878285c1c5b96d152da26a273e30ea57faa1ef777d8d4fe1": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "ssr-callback"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "ssr-callback",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "source": "ambient-at-execution"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [],
+        "writes": []
+      },
+      "shape": "plain"
+    },
+    "summary-30fffd30aef18cf5bf6d511f59de3c326546b56c73803871ed1404299fd5284f": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "ssr-callback"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "edges": [
+          {
+            "from": "ssr-callback",
+            "kind": "orders",
+            "to": "claim-stream"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": 1,
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "claim-stream",
+            "kind": "read",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "ssr-stream"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "external-event"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "ssr-callback",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "source": "ambient-at-execution"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [
+          "claim-stream"
+        ],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "ssr-stream",
+            "kind": "stream",
+            "states": [
+              "unclaimed",
+              "claimed"
+            ]
+          }
+        ],
+        "returns": [],
+        "writes": []
+      },
+      "shape": {
+        "kind": "object"
+      }
+    },
+    "summary-483140acbc18aaa00d3db45337fdd8fd31997eceec74fb9a398e49abc7990ebf": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "render-fallback",
+            "kind": "return",
+            "output": "plain",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [
+          "render-fallback"
+        ],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "component"
+    }
+  }
+}

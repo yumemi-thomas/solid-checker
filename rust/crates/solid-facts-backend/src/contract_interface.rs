@@ -14,7 +14,7 @@ use solid_reactive_ir::contract_semantics::{
 use std::{
     collections::BTreeMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -25,9 +25,10 @@ use crate::{artifact_resolution::select_and_bind, contract_document_v2};
 pub use crate::artifact_resolution::{
     AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure, ArtifactResolver,
     ArtifactResolverChain, ClosureEntry, ClosureFileRole, ClosureHazard, ClosureHazardKind,
-    ClosureInput, ClosureManifest, HostResolutionAdapter, ImportRequest, ResolutionAuthority,
-    ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget,
-    ResolvedFile, ResolvedImport, StandaloneResolutionAdapter, TypeFactsResolutionAdapter,
+    ClosureInput, ClosureManifest, ClosurePackageIdentity, HostResolutionAdapter, ImportRequest,
+    ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
+    ResolvedExportTarget, ResolvedFile, ResolvedImport, StandaloneResolutionAdapter,
+    TypeFactsResolutionAdapter,
 };
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -281,6 +282,163 @@ pub struct AcceptedContractSource<'a> {
     pub import: &'a ResolvedImport,
 }
 
+const ACCEPTED_CATALOG_FORMAT: &str = "solid-checker-accepted-contract-catalog";
+const ACCEPTED_CATALOG_VERSION: u16 = 1;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AcceptedCatalogDocument {
+    format: String,
+    catalog_version: u16,
+    contracts: Vec<AcceptedCatalogEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AcceptedCatalogEntry {
+    document: String,
+    receipt: String,
+    import: ResolvedImport,
+}
+
+/// Reads an explicit host-acquisition catalog and terminates every file and
+/// wire-format concept at this boundary. Paths are relative to the catalog;
+/// analyzer consumers receive only the accepted semantic index.
+pub fn read_accepted_contract_catalog(
+    path: &Path,
+) -> Result<AcceptedContractIndex, ContractFailure> {
+    let (catalog, base) = decode_accepted_contract_catalog(path)?;
+    let mut loaded = Vec::with_capacity(catalog.contracts.len());
+    for mut entry in catalog.contracts {
+        let document_path = catalog_member_path(&base, &entry.document)?;
+        let receipt_path = catalog_member_path(&base, &entry.receipt)?;
+        let document =
+            fs::read(&document_path).map_err(|error| ContractFailure::DocumentDecode {
+                message: format!("read contract {}: {error}", document_path.display()),
+            })?;
+        let receipt = fs::read(&receipt_path).map_err(|error| ContractFailure::ReceiptDecode {
+            message: format!("read receipt {}: {error}", receipt_path.display()),
+        })?;
+        rebase_catalog_import(&base, &mut entry.import)?;
+        loaded.push((document, receipt, entry.import));
+    }
+    load_accepted_contract_index(loaded.iter().map(|(document, receipt, import)| {
+        AcceptedContractSource {
+            document,
+            receipt,
+            import,
+        }
+    }))
+}
+
+/// Returns the exact main documents and receipts referenced by an accepted
+/// catalog. Retained hosts hash these paths together with the catalog so an
+/// in-place proof or semantic edit cannot reuse an older accepted analysis.
+pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
+    let (catalog, base) = decode_accepted_contract_catalog(path)?;
+    let mut paths = Vec::with_capacity(catalog.contracts.len() * 2);
+    for entry in catalog.contracts {
+        paths.push(catalog_member_path(&base, &entry.document)?);
+        paths.push(catalog_member_path(&base, &entry.receipt)?);
+    }
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
+}
+
+fn decode_accepted_contract_catalog(
+    path: &Path,
+) -> Result<(AcceptedCatalogDocument, PathBuf), ContractFailure> {
+    let bytes = fs::read(path).map_err(|error| ContractFailure::DocumentDecode {
+        message: format!("read accepted contract catalog {}: {error}", path.display()),
+    })?;
+    let catalog: AcceptedCatalogDocument =
+        serde_json::from_slice(&bytes).map_err(|error| ContractFailure::DocumentDecode {
+            message: format!(
+                "decode accepted contract catalog {}: {error}",
+                path.display()
+            ),
+        })?;
+    if catalog.format != ACCEPTED_CATALOG_FORMAT
+        || catalog.catalog_version != ACCEPTED_CATALOG_VERSION
+    {
+        return Err(ContractFailure::DocumentDecode {
+            message: format!(
+                "accepted contract catalog must use format {ACCEPTED_CATALOG_FORMAT:?} version {ACCEPTED_CATALOG_VERSION}"
+            ),
+        });
+    }
+    let directory = path.parent().unwrap_or_else(|| Path::new("."));
+    let base = if directory
+        .file_name()
+        .is_some_and(|name| name == ".solid-checker")
+    {
+        directory.parent().unwrap_or(directory)
+    } else {
+        directory
+    };
+    Ok((catalog, base.to_path_buf()))
+}
+
+fn rebase_catalog_import(base: &Path, import: &mut ResolvedImport) -> Result<(), ContractFailure> {
+    import.importer = catalog_absolute_path(base, &import.importer)?;
+    import.package_root = catalog_absolute_path(base, &import.package_root)?;
+    if let Some(real_root) = &mut import.package_real_root {
+        *real_root = catalog_absolute_path(base, real_root)?;
+    }
+    rebase_catalog_file(base, &mut import.package_manifest)?;
+    rebase_catalog_file(base, &mut import.runtime)?;
+    rebase_catalog_file(base, &mut import.declarations)?;
+    if let Some(transform) = &mut import.transform {
+        rebase_catalog_file(base, transform)?;
+    }
+    for binding in import.exports.values_mut() {
+        rebase_catalog_file(base, &mut binding.runtime.module)?;
+        rebase_catalog_file(base, &mut binding.declarations.module)?;
+    }
+    Ok(())
+}
+
+fn rebase_catalog_file(base: &Path, file: &mut ResolvedFile) -> Result<(), ContractFailure> {
+    file.path = catalog_absolute_path(base, &file.path)?;
+    if let Some(real_path) = &mut file.real_path {
+        *real_path = catalog_absolute_path(base, real_path)?;
+    }
+    Ok(())
+}
+
+fn catalog_absolute_path(base: &Path, value: &str) -> Result<String, ContractFailure> {
+    let path = Path::new(value);
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        catalog_member_path(base, value)?
+    };
+    path.canonicalize()
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| ContractFailure::DocumentDecode {
+            message: format!("accepted contract catalog path {}: {error}", path.display()),
+        })
+}
+
+fn catalog_member_path(base: &Path, member: &str) -> Result<PathBuf, ContractFailure> {
+    let member = Path::new(member);
+    if member.as_os_str().is_empty()
+        || member.is_absolute()
+        || member.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir | std::path::Component::RootDir
+            )
+        })
+    {
+        return Err(ContractFailure::DocumentDecode {
+            message: "accepted contract catalog contains an invalid member path".into(),
+        });
+    }
+    Ok(base.join(member))
+}
+
 /// Loads one accepted contract for an already resolved import. Temporary-v2
 /// wire mechanics terminate here; only receipt-validated normalized semantics
 /// can cross into analyzer queries.
@@ -290,8 +448,42 @@ pub fn load_accepted_contract(
     import: &ResolvedImport,
 ) -> Result<AcceptedContract, ContractFailure> {
     let document = contract_document_v2::decode(document_bytes)?;
+    let receipt =
+        decode_and_validate_receipt(document_bytes, document.semantic_model_version(), receipt)?;
+
+    let normalized = document.normalize()?;
+    let selected = select_and_bind(&normalized, import)?;
+    accept_selected(selected, receipt)
+}
+
+/// Validates a compile-time embedded, already single-case bundle and its
+/// receipt. The caller remains responsible for independently proving that the
+/// installed package census and selected artifacts match this checked bundle;
+/// ordinary host documents must use [`load_accepted_contract`] instead.
+pub(crate) fn load_receipt_issued_embedded_contract(
+    document_bytes: &[u8],
+    receipt_bytes: &[u8],
+) -> Result<AcceptedContract, ContractFailure> {
+    let document = contract_document_v2::decode(document_bytes)?;
+    let receipt = decode_and_validate_receipt(
+        document_bytes,
+        document.semantic_model_version(),
+        receipt_bytes,
+    )?;
+    let normalized = document.normalize()?;
+    if normalized.artifact_cases().len() != 1 {
+        return Err(ContractFailure::MultipleArtifactCases);
+    }
+    accept_selected(normalized, receipt)
+}
+
+fn decode_and_validate_receipt(
+    document_bytes: &[u8],
+    semantic_model_version: u16,
+    receipt_bytes: &[u8],
+) -> Result<AcceptanceReceipt, ContractFailure> {
     let receipt: WireReceipt =
-        serde_json::from_slice(receipt).map_err(|error| ContractFailure::ReceiptDecode {
+        serde_json::from_slice(receipt_bytes).map_err(|error| ContractFailure::ReceiptDecode {
             message: error.to_string(),
         })?;
 
@@ -306,7 +498,7 @@ pub fn load_accepted_contract(
             field: "wireDigest",
         });
     }
-    if receipt.semantic_model_version != document.semantic_model_version() {
+    if receipt.semantic_model_version != semantic_model_version {
         return Err(ContractFailure::ReceiptMismatch {
             field: "semanticModelVersion",
         });
@@ -323,15 +515,7 @@ pub fn load_accepted_contract(
         }
     }
 
-    let normalized = document.normalize()?;
-    let selected = select_and_bind(&normalized, import)?;
-    let selected_case = selected
-        .artifact_cases()
-        .first()
-        .expect("artifact selection returns exactly one case")
-        .id
-        .clone();
-    let receipt = AcceptanceReceipt {
+    Ok(AcceptanceReceipt {
         receipt_version: receipt.receipt_version,
         wire_digest: parse_receipt_digest(receipt.wire_digest, "wireDigest")?,
         semantic_model_version: receipt.semantic_model_version,
@@ -344,7 +528,19 @@ pub fn load_accepted_contract(
             build: receipt.verifier.build,
             policy: receipt.verifier.policy,
         },
-    };
+    })
+}
+
+fn accept_selected(
+    selected: solid_reactive_ir::contract_semantics::NormalizedContract,
+    receipt: AcceptanceReceipt,
+) -> Result<AcceptedContract, ContractFailure> {
+    let selected_case = selected
+        .artifact_cases()
+        .first()
+        .expect("artifact selection returns exactly one case")
+        .id
+        .clone();
     validate_receipt_and_accept(selected, &selected_case, receipt).map_err(|error| {
         use solid_reactive_ir::contract_semantics::proof::ReceiptValidationError;
         match error {

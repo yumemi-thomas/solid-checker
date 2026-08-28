@@ -1,454 +1,1036 @@
 {
-  "schemaVersion": 1,
-  "package": {
-    "name": "solid-js",
-    "version": "2.0.0-rc.0"
-  },
-  "compilerFactsProtocol": 1,
-  "exports": {
-    "action": {
-      "kind": "function",
-      "callbacks": [
+  "entrypoints": {
+    ".": {
+      "cases": [
         {
-          "parameter": 0,
-          "execution": "deferred"
+          "artifact": {
+            "closureSha256": "626ff782ace96d12380cc222f22c537ada35b87bdc681416ed59aba527e39bbe",
+            "path": "dist/dev.js",
+            "sha256": "dfc362391cbc0b069cef8b8d0d72c99d34310231a76fd66ef615533424d3ac18"
+          },
+          "declarations": {
+            "path": "types/index.d.ts",
+            "sha256": "76b94bfb3a95099405a8cae461fff7b83c5a3cd61667cf72c23e7f850cf52740"
+          },
+          "exports": {
+            "For": "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            "Loading": "summary-7e8eaca8531ccab3121be0a039c44b383b80aa9d8c0fa51cca31884efc083149",
+            "Match": "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            "Repeat": "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            "Show": "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            "affects": "summary-92efacc141c683cc0a3779fa9106ff29f624ed876f3f6d0e0635643dec1d46fd",
+            "createEffect": "summary-8ea1870d089429f8bbc554fcea620264e1952f06433f57c07e252b0885b5467d",
+            "isPending": "summary-d41bc9d7ea19dd2a6dae7d51199a8448e627d5b6ac99a2eeb20cb02c7799c724",
+            "latest": "summary-13d78920672aa68cb9fb09d4b51dafaf4281d67628d73e4ba93f06de39512c40",
+            "refresh": "summary-49a501fb15bcd7c7961085bd54009503618b3729e6e49e8d299f0eb90ad9d322"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser/development/import/default",
+            "typesBranch": "/exports/./browser/development/import/types"
+          }
         }
       ]
-    },
-    "affects": {
-      "kind": "function"
-    },
-    "children": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "resolved children"
-      }
-    },
-    "$$component": {
-      "kind": "function"
-    },
-    "configureRefresh": {
-      "kind": "function"
-    },
-    "createComponent": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "createContext": {
-      "kind": "function"
-    },
-    "createEffect": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        },
-        {
-          "parameter": 1,
-          "execution": "deferred"
-        }
-      ]
-    },
-    "createErrorBoundary": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "guarded value or error fallback"
-      },
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        },
-        {
-          "parameter": 1,
-          "execution": "tracked"
-        }
-      ]
-    },
-    "createLoadingBoundary": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "guarded value or loading fallback"
-      },
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        },
-        {
-          "parameter": 1,
-          "execution": "tracked"
-        }
-      ]
-    },
-    "createMemo": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "memo result"
-      },
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ]
-    },
-    "createOptimistic": {
-      "kind": "function"
-    },
-    "createOptimisticStore": {
-      "kind": "function"
-    },
-    "createOwner": {
-      "kind": "function"
-    },
-    "createProjection": {
-      "kind": "function",
-      "returns": {
-        "kind": "store-path",
-        "label": "projection result"
-      },
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ]
-    },
-    "createReaction": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "deferred"
-        }
-      ]
-    },
-    "createRenderEffect": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        },
-        {
-          "parameter": 1,
-          "execution": "deferred"
-        }
-      ]
-    },
-    "createRevealOrder": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "createRoot": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "createSignal": {
-      "kind": "function"
-    },
-    "createStore": {
-      "kind": "function"
-    },
-    "createTrackedEffect": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ]
-    },
-    "createUniqueId": {
-      "kind": "function"
-    },
-    "creationStamp": {
-      "kind": "function"
-    },
-    "$$decline": {
-      "kind": "function"
-    },
-    "deep": {
-      "kind": "function"
-    },
-    "DEV": {
-      "kind": "value"
-    },
-    "$DEVCOMP": {
-      "kind": "value"
-    },
-    "devComponent": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "enableExternalSource": {
-      "kind": "function"
-    },
-    "enableHydration": {
-      "kind": "function"
-    },
-    "enforceLoadingBoundary": {
-      "kind": "function"
-    },
-    "Errored": {
-      "kind": "function"
-    },
-    "flatten": {
-      "kind": "function"
-    },
-    "flush": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "For": {
-      "kind": "function"
-    },
-    "getNextChildId": {
-      "kind": "function"
-    },
-    "getObserver": {
-      "kind": "function"
-    },
-    "getOwner": {
-      "kind": "function"
-    },
-    "getProjectionTrace": {
-      "kind": "function"
-    },
-    "Hydration": {
-      "kind": "function"
-    },
-    "inServerComponentScope": {
-      "kind": "function"
-    },
-    "IS_DEV": {
-      "kind": "value"
-    },
-    "isDisposed": {
-      "kind": "function"
-    },
-    "isEqual": {
-      "kind": "function"
-    },
-    "isPending": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "isWrappable": {
-      "kind": "function"
-    },
-    "latest": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "lazy": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "deferred"
-        }
-      ]
-    },
-    "Loading": {
-      "kind": "function"
-    },
-    "mapArray": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "mapped array"
-      },
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "tracked"
-        }
-      ]
-    },
-    "Match": {
-      "kind": "function"
-    },
-    "materializeContainerTrace": {
-      "kind": "function"
-    },
-    "merge": {
-      "kind": "function"
-    },
-    "NoHydrateContext": {
-      "kind": "value"
-    },
-    "NoHydration": {
-      "kind": "function"
-    },
-    "NotReadyError": {
-      "kind": "value"
-    },
-    "omit": {
-      "kind": "function"
-    },
-    "onCleanup": {
-      "kind": "function"
-    },
-    "onSettled": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "deferred"
-        }
-      ]
-    },
-    "$PROXY": {
-      "kind": "value"
-    },
-    "reconcile": {
-      "kind": "function"
-    },
-    "$$refresh": {
-      "kind": "function"
-    },
-    "$REFRESH": {
-      "kind": "value"
-    },
-    "refresh": {
-      "kind": "function"
-    },
-    "$$registry": {
-      "kind": "function"
-    },
-    "Repeat": {
-      "kind": "function"
-    },
-    "repeat": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        },
-        {
-          "parameter": 1,
-          "execution": "inline"
-        }
-      ]
-    },
-    "resolve": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "deferred"
-        }
-      ]
-    },
-    "Reveal": {
-      "kind": "function"
-    },
-    "runInServerComponentScope": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "runWithOwner": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "inline"
-        }
-      ]
-    },
-    "sharedConfig": {
-      "kind": "value"
-    },
-    "Show": {
-      "kind": "function"
-    },
-    "snapshot": {
-      "kind": "function"
-    },
-    "ssrHandleError": {
-      "kind": "function"
-    },
-    "ssrScope": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "storePath": {
-      "kind": "value"
-    },
-    "Switch": {
-      "kind": "function"
-    },
-    "$TRACK": {
-      "kind": "value"
-    },
-    "untrack": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "useContext": {
-      "kind": "function"
     }
   },
-  "evidence": {
-    "kind": "reviewed",
-    "generator": "solid-contract-gen"
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b"
+    },
+    "name": "solid-js",
+    "version": "2.0.0-rc.3"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "31aa2da93b8d8b5d34b4b7a1dc3de7132bbbbb6281ecbece8ea2af007bd256f5"
+    }
+  },
+  "summaries": {
+    "summary-13d78920672aa68cb9fb09d4b51dafaf4281d67628d73e4ba93f06de39512c40": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "latest-read",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "resource": "async-target",
+                "role": "accessor"
+              }
+            ],
+            "kind": "read",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "async-target"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "latest-read"
+        ],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "async-target",
+            "kind": "reactive-source",
+            "states": []
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    },
+    "summary-49a501fb15bcd7c7961085bd54009503618b3729e6e49e8d299f0eb90ad9d322": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [
+          "refresh-target"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "refresh-target",
+            "inputs": [
+              {
+                "capabilities": [
+                  "readable",
+                  {
+                    "capability": "refreshable",
+                    "resource": "async-target"
+                  }
+                ],
+                "closed": [
+                  "capabilities"
+                ],
+                "kind": "reactive",
+                "resource": "async-target",
+                "role": "accessor"
+              }
+            ],
+            "kind": "invalidate",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "async-target"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [
+              "refreshable"
+            ],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "async-target",
+            "kind": "reactive-source",
+            "states": []
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    },
+    "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "children"
+              ]
+            },
+            "operation": "accessor-child"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": [
+                "children"
+              ]
+            },
+            "operation": "raw-child"
+          }
+        ],
+        "cases": [
+          {
+            "operations": [
+              "accessor-child"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 0,
+                  "literal": "index",
+                  "path": [
+                    "keyed"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "raw-child"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 0,
+                  "literal": "value",
+                  "path": [
+                    "keyed"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "accessor-child",
+              "raw-child"
+            ],
+            "otherwise": true
+          }
+        ],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "literal": "index",
+                  "path": [
+                    "keyed"
+                  ]
+                }
+              ]
+            },
+            "id": "accessor-child",
+            "inputs": [
+              {
+                "capabilities": [
+                  "readable"
+                ],
+                "closed": [
+                  "capabilities"
+                ],
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "row-owner"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "row-owner"
+                  },
+                  "resource": "row-owner"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "row-owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 0,
+                  "literal": "value",
+                  "path": [
+                    "keyed"
+                  ]
+                }
+              ]
+            },
+            "id": "raw-child",
+            "inputs": [
+              "plain",
+              "plain"
+            ],
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "row-owner"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "row-owner"
+                  },
+                  "resource": "row-owner"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "row-owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "row-owner",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "component"
+    },
+    "summary-7e8eaca8531ccab3121be0a039c44b383b80aa9d8c0fa51cca31884efc083149": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "pending-read",
+            "kind": "read",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "async-target",
+              "loading-boundary"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [
+          "pending-read"
+        ],
+        "resources": [
+          {
+            "capabilities": [
+              "refreshable"
+            ],
+            "closed": [
+              "states"
+            ],
+            "id": "async-target",
+            "kind": "async-computation",
+            "states": [
+              "pending",
+              "settled",
+              "errored",
+              "cancelled"
+            ]
+          },
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "loading-boundary",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "component"
+    },
+    "summary-8ea1870d089429f8bbc554fcea620264e1952f06433f57c07e252b0885b5467d": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "initial-compute"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "repeated-compute"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "queued-apply"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": [
+                "error"
+              ]
+            },
+            "operation": "queued-error"
+          }
+        ],
+        "cases": [
+          {
+            "operations": [
+              "initial-compute",
+              "queued-apply",
+              "queued-error"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 2,
+                  "literal": false,
+                  "path": [
+                    "defer"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "initial-compute"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 2,
+                  "literal": true,
+                  "path": [
+                    "defer"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "initial-compute",
+              "queued-apply",
+              "queued-error"
+            ],
+            "otherwise": true
+          }
+        ],
+        "cleanups": [
+          "replace-cleanup"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [
+          "dispose-effect"
+        ],
+        "edges": [
+          {
+            "from": "initial-compute",
+            "kind": "data",
+            "to": "queued-apply"
+          },
+          {
+            "from": "repeated-compute",
+            "kind": "data",
+            "to": "queued-apply"
+          },
+          {
+            "from": "initial-compute",
+            "kind": "error",
+            "to": "queued-error"
+          },
+          {
+            "from": "repeated-compute",
+            "kind": "error",
+            "to": "queued-error"
+          },
+          {
+            "from": "queued-apply",
+            "kind": "cleanup",
+            "to": "replace-cleanup"
+          },
+          {
+            "from": "replace-cleanup",
+            "kind": "lifetime",
+            "to": "dispose-effect"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "dispose-effect",
+            "kind": "dispose",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "effect-owner"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "cleanup"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "initial-compute",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "source": "ambient-at-call"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "queued-apply",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "source": "ambient-at-execution"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "initial-compute"
+            }
+          },
+          {
+            "at": {
+              "event": "flush",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "callable": true,
+                  "path": [],
+                  "property": "error"
+                }
+              ]
+            },
+            "id": "queued-error",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "source": "ambient-at-execution"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "initial-compute"
+            }
+          },
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "repeated-compute",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "resource": "effect-owner",
+              "source": "captured"
+            },
+            "tracking": "tracked",
+            "trigger": {
+              "event": "external-event"
+            }
+          },
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "replace-cleanup",
+            "kind": "cleanup",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "effect-cleanup"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "queued-apply"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "effect-cleanup",
+            "kind": "cleanup",
+            "states": [
+              "installed",
+              "disposed"
+            ]
+          },
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "effect-owner",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "writes": []
+      },
+      "shape": "plain"
+    },
+    "summary-92efacc141c683cc0a3779fa9106ff29f624ed876f3f6d0e0635643dec1d46fd": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [
+          "affects-key"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "affects-key",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "resource": "async-target",
+                "role": "accessor"
+              }
+            ],
+            "kind": "invalidate",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "async-target"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "async-target",
+            "kind": "reactive-source",
+            "states": []
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    },
+    "summary-d41bc9d7ea19dd2a6dae7d51199a8448e627d5b6ac99a2eeb20cb02c7799c724": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "pending-read",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "resource": "async-target",
+                "role": "accessor"
+              }
+            ],
+            "kind": "read",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "async-target"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "pending-read"
+        ],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "capabilities"
+            ],
+            "id": "async-target",
+            "kind": "reactive-source"
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    }
   }
 }

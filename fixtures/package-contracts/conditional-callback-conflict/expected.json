@@ -1,80 +1,125 @@
 {
-  "schemaVersion": 1,
-  "package": {
-    "name": "conditional-callback-conflict-package",
-    "version": "1.0.0"
-  },
-  "compilerFactsProtocol": 1,
-  "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "variants": [
-        {
-          "conditions": [
-            "default"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "deferred",
-                "evidence": {
-                  "kind": "inferred"
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "inferred"
-            }
-          },
-          "precedence": 1
-        },
-        {
-          "conditions": [
-            "development"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline",
-                "evidence": {
-                  "kind": "inferred"
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "inferred"
-            }
-          },
-          "precedence": 0
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    }
-  },
   "entrypoints": {
     ".": {
-      "exports": {
-        "function-1": [
-          "schedule"
-        ]
-      },
-      "conditions": [
-        "default",
-        "development"
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "42d2ef7e3976ea964e1fb936d2ef3e0c7942492e7572b1e8d56e760ff15d20cd",
+            "path": "./production.js",
+            "sha256": "2340dac402cc91c4fe5a3b9b52d7644f92110cff780a98d91c158acc28e944c6"
+          },
+          "declarations": {
+            "path": "./production.js",
+            "sha256": "2340dac402cc91c4fe5a3b9b52d7644f92110cff780a98d91c158acc28e944c6"
+          },
+          "exports": {
+            "schedule": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./default"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "e5b7b7783d06f1a4e59204d6f14df3ea4e62148e31082956b39d5ed4791b6bb1",
+            "path": "./development.js",
+            "sha256": "8e66ea95b7e643a8d59c5256d3c569f0b2d79b606c1e46aa0605f15cfd262963"
+          },
+          "declarations": {
+            "path": "./development.js",
+            "sha256": "8e66ea95b7e643a8d59c5256d3c569f0b2d79b606c1e46aa0605f15cfd262963"
+          },
+          "exports": {
+            "schedule": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./development",
+            "typesBranch": "/exports/./development"
+          }
+        }
       ]
     }
   },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:c10d54342639e76cd9a4287a337b793cccfd4e403d5f0d70a97078513f61b991",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "c10d54342639e76cd9a4287a337b793cccfd4e403d5f0d70a97078513f61b991"
+    },
+    "name": "conditional-callback-conflict-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
   }
 }

@@ -11,15 +11,16 @@ behavior across that package boundary.
 The rule reports three message variants:
 
 - no usable contract exists for the exact installed package version;
-- a contract exists but omits the imported export or has environment-dependent
-  implementations that cannot be summarized as one behavior;
+- an accepted contract exists but omits the imported export or exact artifact
+  selection/guard facts are unresolved;
 - an exact external helper receives a callback, but the contract does not say
   whether that callback runs synchronously, deferred, tracked, or owned.
 
-Version matching is exact. A project-owned contract can override a package or
-bundled contract, but stale evidence never silently certifies a newer artifact.
-Unknown callbacks include an editable schema-v1 JSON stub in the diagnostic so
-the missing execution fact can be filled deliberately.
+Package, version, integrity, runtime/declaration files, closure, entrypoint, and
+export identity must all match. Unknown callbacks include a wire-independent
+open-claim context naming the exact callback and independent semantic axes; the
+diagnostic never emits an editable contract or treats an omitted field as
+negative proof.
 
 ## Why it matters
 
@@ -30,19 +31,21 @@ therefore an explicit certification gap rather than a guessed violation.
 
 ## How to fix
 
-Generate a local contract for the exact installed package and review it against
-the runtime artifact:
+Generate a proposal for the exact installed package:
 
 ```sh
 solid-checker contract generate \
   --package-root node_modules/example \
+  --integrity 'sha512-…' \
   --output .solid-checker/contracts/example/solid-reactivity.json
 ```
 
-Add the missing export summary or callback parameter execution mode, preserve
-the generated package/version evidence, and validate the document. Package
-maintainers can ship `solid-reactivity.json` in the package root so all
-consumers receive the reviewed facts.
+Review the recursively open claim, supply complete proof-family transcripts,
+run `solid-checker contract verify` to issue an accepted document and receipt,
+then register those exact bytes with the full import resolution in
+`.solid-checker/accepted-contracts.json`. A package-shipped proposal is not
+accepted merely because it is on disk; probes may falsify closure but cannot
+replace proof.
 
 ## Related
 

@@ -1,0 +1,59 @@
+{
+  "entrypoints": {
+    "./h/jsx-dev-runtime": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+            "path": "./h/jsx-runtime/dist/jsx.js",
+            "sha256": "2efd8f99ad1e90ea87934e28bbce86b05e9fb6454da42202a51ff8d416fddce7"
+          },
+          "declarations": {
+            "path": "./h/jsx-runtime/types/index.d.ts",
+            "sha256": "dfd7de37e363d18ea0225bb7ecf3aaff39fc250c2642f0058689e899e61038c0"
+          },
+          "exports": {
+            "Fragment": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "jsx": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "jsxDEV": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "jsxs": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1h~1jsx-dev-runtime/import",
+            "typesBranch": "/exports/.~1h~1jsx-dev-runtime/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0"
+    },
+    "name": "solid-js",
+    "version": "1.9.14"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

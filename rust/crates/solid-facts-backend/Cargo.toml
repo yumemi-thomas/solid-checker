@@ -46,8 +46,8 @@ name = "solid-checker-cold-start-bench"
 path = "src/bin/solid-checker-cold-start-bench.rs"
 
 [[bin]]
-name = "solid-contract-gen"
-path = "src/bin/solid-contract-gen.rs"
+name = "solid-contract-bundles"
+path = "src/bin/solid-contract-bundles.rs"
 
 # Keep the two focused process boundaries addressable by the verification
 # matrix, but link the remaining integration modules once. Each root-level

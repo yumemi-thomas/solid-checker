@@ -12,6 +12,14 @@ Because legacy and new formats both eventually use version 1, the replacement
 has a required `format` discriminator and the stable cut removes every legacy
 decoder and artifact. No build may accept both meanings of version 1.
 
+Phase 14 completed the temporary-v2 producer/consumer cut on 2026-08-28. The
+inventory below remains the audit ledger, including retired filenames: the old
+JavaScript document/closure/verification helpers and Rust generator were
+deleted, their temporary-v2 replacements are live, native and WASM consumers
+accept only receipt-issued normalized inputs, and both bundle locations and all
+fixtures were regenerated. The stable `2` → `1` renumber remains Phase 17 and
+must still be atomic.
+
 ## Document-version namespaces
 
 The following are independent and must never be changed by a global

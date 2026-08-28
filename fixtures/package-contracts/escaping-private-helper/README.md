@@ -152,11 +152,10 @@ nothing here is widened.
 
 `JSX` is an `export namespace` inside the module, exactly as solid-js declares
 it — the published package contributes no *global* `JSX`, which is why a real
-Solid project sets `jsxImportSource: "solid-js"`. The contract generator writes
-its own `tsconfig.json` with `jsx: "preserve"` and no `jsxImportSource`
-(`packages/cli/scripts/generate-package-contract.mjs`), so during generation no
-`JSX` namespace is in scope at all. Two consequences, both recorded rather than
-papered over:
+Solid project sets `jsxImportSource: "solid-js"`. The temporary-v2 package
+producer writes an isolated analysis config with `jsx: "preserve"` and no
+`jsxImportSource`, so during generation no `JSX` namespace is in scope at all.
+Two consequences, both recorded rather than papered over:
 
 - `./intrinsic`'s claim is about TypeScript's *binding* rule — a lowercase tag
   name is an intrinsic element name and is never looked up in the value scope —

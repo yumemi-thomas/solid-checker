@@ -1,0 +1,82 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/partial-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:1ac2a6b9561ce0c4dfeae3b695dccc086dde26b0fb432f9b0a1d6e0732aa4724",
+          "entries": [
+            {
+              "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+          "path": "node_modules/partial-package/package.json"
+        },
+        "exports": {
+          "noCallback": {
+            "declarations": {
+              "exportName": "noCallback",
+              "module": {
+                "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+                "path": "node_modules/partial-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "noCallback",
+              "module": {
+                "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+                "path": "node_modules/partial-package/package.json"
+              }
+            }
+          },
+          "runUnknown": {
+            "declarations": {
+              "exportName": "runUnknown",
+              "module": {
+                "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+                "path": "node_modules/partial-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "runUnknown",
+              "module": {
+                "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+                "path": "node_modules/partial-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.ts",
+        "packageIntegrity": "fixture:sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+        "packageManifest": {
+          "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+          "path": "node_modules/partial-package/package.json"
+        },
+        "packageName": "partial-package",
+        "packageRoot": "node_modules/partial-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:de4d2922ee4cb162c696cab26ac31b11214e507ddc98429f088a5e490eab0f67",
+          "path": "node_modules/partial-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "partial-package"
+      },
+      "receipt": "node_modules/partial-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

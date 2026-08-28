@@ -1,0 +1,299 @@
+{
+  "entrypoints": {
+    "./server-functions": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8ffc3f3c194f3408a9e46f020b7729170a0b42fc6bd4108cb977b88e725873af",
+            "path": "server-functions/dist/client.js",
+            "sha256": "f7e754c2119449c94a01b16760efe1cc9fd4bf53f3f17033392a07b4d6bd00a1"
+          },
+          "declarations": {
+            "path": "types/server-functions/client.d.ts",
+            "sha256": "fdce7ef458dc83b823f883e0af58a4cfa75dd77f1889423d1fa03bd771d17eb6"
+          },
+          "exports": {
+            "createServerReference": "summary-33c4330cdf90dbdbd560c13d61521e676fa82bd21fd7656de46fab1ea60ef936"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1server-functions/browser/import/default",
+            "typesBranch": "/exports/.~1server-functions/browser/import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
+    },
+    "name": "@solidjs/web",
+    "version": "2.0.0-rc.3"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "d55f4967733fba773508f89993dee180c8f3a1b0e1402f6d711895fa006d4459"
+    }
+  },
+  "summaries": {
+    "summary-33c4330cdf90dbdbd560c13d61521e676fa82bd21fd7656de46fab1ea60ef936": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "path": [
+                "callable"
+              ],
+              "resource": "server-reference"
+            },
+            "operation": "invoke-reference"
+          },
+          {
+            "from": {
+              "path": [
+                "callable"
+              ],
+              "resource": "server-reference"
+            },
+            "operation": "transport"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [
+          "transform-reference"
+        ],
+        "disposals": [
+          "cancel-stream"
+        ],
+        "edges": [
+          {
+            "from": "invoke-reference",
+            "kind": "data",
+            "to": "transport"
+          },
+          {
+            "from": "transform-reference",
+            "kind": "data",
+            "to": "invoke-reference"
+          },
+          {
+            "from": "transport",
+            "kind": "error",
+            "to": "cancel-stream"
+          },
+          {
+            "from": "transport",
+            "kind": "lifetime",
+            "to": "cancel-stream"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "cancel-stream",
+            "kind": "dispose",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "stream"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "cleanup",
+              "resource": "stream"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "invoke-reference",
+            "kind": "invoke",
+            "output": {
+              "kind": "promise",
+              "value": "unknown"
+            },
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "server-reference"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "signature": "compiler:server-function-reference"
+                }
+              ]
+            },
+            "id": "transform-reference",
+            "kind": "create",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "server-reference"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "transport",
+            "kind": "invoke",
+            "output": {
+              "kind": "promise",
+              "value": "unknown"
+            },
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "request",
+              "server-reference",
+              "stream"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "invoke-reference"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "request",
+            "kind": "request",
+            "lifetime": "call",
+            "states": []
+          },
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "server-reference",
+            "kind": "server-function-reference",
+            "states": []
+          },
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "stream",
+            "kind": "stream",
+            "lifetime": {
+              "kind": "resource",
+              "resource": "request"
+            },
+            "states": [
+              "unclaimed",
+              "claimed"
+            ]
+          }
+        ],
+        "writes": []
+      },
+      "shape": {
+        "kind": "server-function-reference",
+        "resource": "server-reference"
+      }
+    }
+  }
+}

@@ -11,6 +11,7 @@ use std::{
 };
 
 use serde::Deserialize;
+use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     ArrayLength, ArtifactCase, ArtifactIdentity, CallbackInvocation, CapabilityClaim,
@@ -51,9 +52,9 @@ pub(crate) struct DecodedContractDocument {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct SidecarDigests {
-    pub(crate) proof: Option<Digest>,
-    pub(crate) probes: Option<Digest>,
+pub struct SidecarDigests {
+    pub proof: Option<Digest>,
+    pub probes: Option<Digest>,
 }
 
 impl DecodedContractDocument {
@@ -113,6 +114,1038 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedContractDocument, ContractFa
         ));
     }
     Ok(DecodedContractDocument { document })
+}
+
+/// Canonical temporary-v2 emission. This is the inverse of [`decode`] for a
+/// normalized contract that originated at this boundary. Compact summary IDs
+/// and local operation/resource spellings are created here and nowhere else.
+pub(crate) fn encode(
+    contract: &NormalizedContract,
+    sidecars: &SidecarDigests,
+    pretty: bool,
+) -> Result<Vec<u8>, ContractFailure> {
+    let document = compact(contract, sidecars)?;
+    let mut bytes = if pretty {
+        serde_json::to_vec_pretty(&document)
+    } else {
+        serde_json::to_vec(&document)
+    }
+    .map_err(document_decode)?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+fn compact(
+    contract: &NormalizedContract,
+    sidecars: &SidecarDigests,
+) -> Result<JsonValue, ContractFailure> {
+    let package = contract.package();
+    let mut summaries = BTreeMap::<String, JsonValue>::new();
+    let mut summary_ids = BTreeMap::<Vec<u8>, String>::new();
+    let mut entrypoint_cases = BTreeMap::<String, Vec<JsonValue>>::new();
+
+    for artifact_case in contract.artifact_cases() {
+        let mut exports = JsonMap::new();
+        for (public_name, export) in &artifact_case.exports {
+            if export.identity.entrypoint != artifact_case.entrypoint
+                || export.identity.public_name != *public_name
+            {
+                return invalid_model(format!(
+                    "export {public_name:?} identity does not match its artifact case"
+                ));
+            }
+            let wire_case_id = compact_artifact_case_id(artifact_case)?;
+            let ids = CompactIds::new(&artifact_case.id, &wire_case_id, public_name);
+            let summary = compact_summary(export, &ids)?;
+            let key = serde_json::to_vec(&summary).map_err(document_decode)?;
+            let summary_id = if let Some(existing) = summary_ids.get(&key) {
+                existing.clone()
+            } else {
+                let digest = Sha256::digest(&key);
+                let id = format!("summary-{:x}", digest);
+                summary_ids.insert(key, id.clone());
+                summaries.insert(id.clone(), summary);
+                id
+            };
+            let reference = if export.stability == StabilityKnowledge::Experimental {
+                json!({"summary": summary_id, "stability": "experimental"})
+            } else {
+                JsonValue::String(summary_id)
+            };
+            exports.insert(public_name.clone(), reference);
+        }
+
+        let mut case = JsonMap::new();
+        if !artifact_case.resolution_trace.is_empty() {
+            let runtime = trace_target(artifact_case, "runtime")?;
+            let declarations = trace_target(artifact_case, "types")?;
+            if artifact_case.resolution_trace.len() != 2 {
+                return invalid_model(format!(
+                    "artifact case {:?} has a non-wire resolution trace",
+                    artifact_case.id
+                ));
+            }
+            case.insert(
+                "resolution".into(),
+                json!({"runtimeBranch": runtime, "typesBranch": declarations}),
+            );
+        }
+        case.insert(
+            "artifact".into(),
+            json!({
+                "path": artifact_case.runtime.path,
+                "sha256": wire_digest(&artifact_case.runtime.digest)?,
+                "closureSha256": wire_digest(&artifact_case.dependency_closure)?,
+            }),
+        );
+        case.insert(
+            "declarations".into(),
+            compact_artifact(&artifact_case.declarations)?,
+        );
+        if let Some(transform) = &artifact_case.transform {
+            case.insert("transform".into(), compact_artifact(transform)?);
+        }
+        if artifact_case.stability == StabilityKnowledge::Experimental {
+            case.insert("stability".into(), json!("experimental"));
+        }
+        case.insert("exports".into(), JsonValue::Object(exports));
+        entrypoint_cases
+            .entry(artifact_case.entrypoint.clone())
+            .or_default()
+            .push(JsonValue::Object(case));
+    }
+
+    let mut entrypoints = JsonMap::new();
+    for (entrypoint, mut cases) in entrypoint_cases {
+        cases.sort_by_key(|case| serde_json::to_vec(case).unwrap_or_default());
+        if cases.len() == 1 && cases[0].get("resolution").is_none() {
+            entrypoints.insert(entrypoint, cases.pop().expect("one case"));
+        } else {
+            if cases.iter().any(|case| case.get("resolution").is_none()) {
+                return invalid_model(format!(
+                    "conditional entrypoint {entrypoint:?} contains an untraced artifact case"
+                ));
+            }
+            entrypoints.insert(entrypoint, json!({"cases": cases}));
+        }
+    }
+
+    let mut sidecar_document = JsonMap::new();
+    if let Some(proof) = &sidecars.proof {
+        sidecar_document.insert("proof".into(), json!({"sha256": wire_digest(proof)?}));
+    }
+    if let Some(probes) = &sidecars.probes {
+        sidecar_document.insert("probes".into(), json!({"sha256": wire_digest(probes)?}));
+    }
+
+    Ok(json!({
+        "format": FORMAT,
+        "schemaVersion": DEVELOPMENT_SCHEMA_VERSION,
+        "semanticModelVersion": contract.semantic_model_version(),
+        "package": {
+            "name": package.name,
+            "version": package.version,
+            "integrity": package.integrity,
+            "manifest": compact_artifact(&package.manifest)?,
+        },
+        "summaries": summaries,
+        "entrypoints": entrypoints,
+        "sidecars": sidecar_document,
+    }))
+}
+
+fn trace_target<'a>(
+    artifact_case: &'a ArtifactCase,
+    axis: &str,
+) -> Result<&'a str, ContractFailure> {
+    artifact_case
+        .resolution_trace
+        .iter()
+        .find(|step| step.condition == axis)
+        .map(|step| step.target.as_str())
+        .ok_or_else(|| ContractFailure::InvalidSemanticModel {
+            reason: format!(
+                "artifact case {:?} is missing its {axis} resolution branch",
+                artifact_case.id
+            ),
+        })
+}
+
+fn compact_artifact(artifact: &ArtifactIdentity) -> Result<JsonValue, ContractFailure> {
+    Ok(json!({
+        "path": artifact.path,
+        "sha256": wire_digest(&artifact.digest)?,
+    }))
+}
+
+fn wire_digest(digest: &Digest) -> Result<&str, ContractFailure> {
+    digest
+        .as_str()
+        .strip_prefix("sha256:")
+        .ok_or_else(|| ContractFailure::InvalidSemanticModel {
+            reason: "semantic digest is not a sha256 digest".into(),
+        })
+}
+
+struct CompactIds {
+    source_case: String,
+    wire_case: String,
+    operation_prefix: String,
+    resource_prefix: String,
+}
+
+impl CompactIds {
+    fn new(source_case: &str, wire_case: &str, export: &str) -> Self {
+        Self {
+            source_case: source_case.into(),
+            wire_case: wire_case.into(),
+            operation_prefix: format!("{source_case}:{export}:operation:"),
+            resource_prefix: format!("{source_case}:{export}:resource:"),
+        }
+    }
+
+    fn operation<'a>(&self, id: &'a OperationId) -> Result<&'a str, ContractFailure> {
+        Ok(id.0.strip_prefix(&self.operation_prefix).unwrap_or(&id.0))
+    }
+
+    fn resource<'a>(&self, id: &'a ResourceId) -> Result<&'a str, ContractFailure> {
+        Ok(id.0.strip_prefix(&self.resource_prefix).unwrap_or(&id.0))
+    }
+}
+
+fn compact_artifact_case_id(artifact_case: &ArtifactCase) -> Result<String, ContractFailure> {
+    let trace = if artifact_case.resolution_trace.is_empty() {
+        Vec::new()
+    } else {
+        vec![
+            ResolutionStep {
+                condition: "runtime".into(),
+                target: trace_target(artifact_case, "runtime")?.into(),
+            },
+            ResolutionStep {
+                condition: "types".into(),
+                target: trace_target(artifact_case, "types")?.into(),
+            },
+        ]
+    };
+    Ok(artifact_case_id(
+        &artifact_case.entrypoint,
+        &trace,
+        &artifact_case.runtime,
+        &artifact_case.declarations,
+        &artifact_case.dependency_closure,
+        artifact_case.transform.as_ref(),
+    ))
+}
+
+fn compact_summary(
+    export: &ExportSemantics,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    Ok(json!({
+        "shape": compact_value(&export.shape, ids)?,
+        "call": compact_call(&export.call, ids)?,
+    }))
+}
+
+fn compact_call(
+    call: &solid_reactive_ir::contract_semantics::CallSemantics,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    let claims = call.claims();
+    let mut object = JsonMap::new();
+    let mut closed = Vec::new();
+    compact_knowledge(
+        &mut object,
+        &mut closed,
+        "callbacks",
+        &claims.callbacks,
+        |callback| compact_callback(callback, ids),
+    )?;
+    for (name, knowledge) in [
+        ("reads", &claims.reads),
+        ("writes", &claims.writes),
+        ("creates", &claims.creates),
+        ("invalidates", &claims.invalidates),
+        ("throws", &claims.throws),
+        ("returns", &claims.returns),
+        ("cleanups", &claims.cleanups),
+        ("disposals", &claims.disposals),
+    ] {
+        compact_knowledge(&mut object, &mut closed, name, knowledge, |id| {
+            Ok(json!(ids.operation(id)?))
+        })?;
+    }
+    if !closed.is_empty() {
+        object.insert("closed".into(), json!(closed));
+    }
+    if !call.operations.is_empty() {
+        object.insert(
+            "operations".into(),
+            JsonValue::Array(
+                call.operations
+                    .iter()
+                    .map(|operation| compact_operation(operation, ids))
+                    .collect::<Result<_, _>>()?,
+            ),
+        );
+    }
+    if !call.edges.is_empty() {
+        object.insert(
+            "edges".into(),
+            JsonValue::Array(
+                call.edges
+                    .iter()
+                    .map(|edge| {
+                        Ok(json!({
+                            "kind": edge_kind(edge.kind),
+                            "from": ids.operation(&edge.from)?,
+                            "to": ids.operation(&edge.to)?,
+                        }))
+                    })
+                    .collect::<Result<_, ContractFailure>>()?,
+            ),
+        );
+    }
+    if !call.resources.is_empty() {
+        object.insert(
+            "resources".into(),
+            JsonValue::Array(
+                call.resources
+                    .iter()
+                    .map(|resource| compact_resource(resource, ids))
+                    .collect::<Result<_, _>>()?,
+            ),
+        );
+    }
+    compact_guard_partition(&mut object, &call.guards, ids)?;
+    Ok(JsonValue::Object(object))
+}
+
+fn compact_knowledge<T>(
+    object: &mut JsonMap<String, JsonValue>,
+    closed: &mut Vec<&'static str>,
+    name: &'static str,
+    knowledge: &KnowledgeSet<T>,
+    mut item: impl FnMut(&T) -> Result<JsonValue, ContractFailure>,
+) -> Result<(), ContractFailure> {
+    match knowledge {
+        KnowledgeSet::Unknown => {}
+        KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+            object.insert(
+                name.into(),
+                JsonValue::Array(items.iter().map(&mut item).collect::<Result<_, _>>()?),
+            );
+            if knowledge.is_closed() {
+                closed.push(name);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn compact_callback(
+    callback: &CallbackInvocation,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    Ok(json!({
+        "from": compact_value_source(&callback.from, ids)?,
+        "operation": ids.operation(&callback.operation)?,
+    }))
+}
+
+fn compact_value_source(
+    source: &ValueSource,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    Ok(match source {
+        ValueSource::Parameter { index, path } => json!({"arg": index, "path": path}),
+        ValueSource::OperationOutput { operation, path } => {
+            json!({"operation": ids.operation(operation)?, "path": path})
+        }
+        ValueSource::Resource { resource, path } => {
+            json!({"resource": ids.resource(resource)?, "path": path})
+        }
+    })
+}
+
+fn compact_operation(
+    operation: &Operation,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    let mut object = JsonMap::new();
+    object.insert("id".into(), json!(ids.operation(&operation.id)?));
+    object.insert("kind".into(), json!(operation_kind(operation.kind)));
+    if let Some(guard) = &operation.guard {
+        object.insert("guard".into(), compact_guard(guard, ids)?);
+    }
+    if let Some(trigger) = &operation.trigger {
+        object.insert("trigger".into(), compact_trigger(trigger, ids)?);
+    }
+    match (operation.at, operation.schedule) {
+        (Some(event), Some(schedule)) => {
+            object.insert(
+                "at".into(),
+                json!({"event": event_name(event), "schedule": schedule_name(schedule)}),
+            );
+        }
+        (None, None) => {}
+        _ => return invalid_model("operation execution point and schedule must be known together"),
+    }
+    if operation.tracking != Tracking::Unknown {
+        object.insert("tracking".into(), json!(tracking_name(operation.tracking)));
+    }
+    if operation.owner != OwnerRelation::default() {
+        object.insert("owner".into(), compact_owner(&operation.owner, ids)?);
+    }
+    if operation.cardinality != Cardinality::default() {
+        object.insert(
+            "count".into(),
+            compact_cardinality(&operation.cardinality, ids)?,
+        );
+    }
+    if !operation.inputs.is_empty() {
+        object.insert(
+            "inputs".into(),
+            JsonValue::Array(
+                operation
+                    .inputs
+                    .iter()
+                    .map(|value| compact_value(value, ids))
+                    .collect::<Result<_, _>>()?,
+            ),
+        );
+    }
+    if let Some(output) = &operation.output {
+        object.insert("output".into(), compact_value(output, ids)?);
+    }
+    if !operation.resources.is_empty() {
+        object.insert(
+            "resources".into(),
+            JsonValue::Array(
+                operation
+                    .resources
+                    .iter()
+                    .map(|resource| Ok(json!(ids.resource(resource)?)))
+                    .collect::<Result<_, ContractFailure>>()?,
+            ),
+        );
+    }
+    Ok(JsonValue::Object(object))
+}
+
+fn compact_trigger(trigger: &Trigger, ids: &CompactIds) -> Result<JsonValue, ContractFailure> {
+    Ok(match trigger {
+        Trigger::Event(event) => json!({"event": event_name(*event)}),
+        Trigger::Operation(operation) => json!({"operation": ids.operation(operation)?}),
+        Trigger::Resource { resource, event } => {
+            json!({"resource": ids.resource(resource)?, "event": event_name(*event)})
+        }
+    })
+}
+
+fn compact_owner(owner: &OwnerRelation, ids: &CompactIds) -> Result<JsonValue, ContractFailure> {
+    let mut object = JsonMap::new();
+    match &owner.source {
+        OwnerSource::Unknown => {}
+        OwnerSource::None => {
+            object.insert("source".into(), json!("none"));
+        }
+        OwnerSource::AmbientAtCall => {
+            object.insert("source".into(), json!("ambient-at-call"));
+        }
+        OwnerSource::AmbientAtExecution => {
+            object.insert("source".into(), json!("ambient-at-execution"));
+        }
+        OwnerSource::Captured(resource) => {
+            object.insert("source".into(), json!("captured"));
+            object.insert("resource".into(), json!(ids.resource(resource)?));
+        }
+        OwnerSource::Created(resource) => {
+            object.insert("source".into(), json!("created"));
+            object.insert("resource".into(), json!(ids.resource(resource)?));
+        }
+    }
+    compact_requirement(&mut object, "requires", owner.requirements.owner);
+    compact_requirement(
+        &mut object,
+        "requiresChildren",
+        owner.requirements.child_owners,
+    );
+    compact_requirement(&mut object, "requiresCleanup", owner.requirements.cleanup);
+    compact_capability(
+        &mut object,
+        "children",
+        owner.capabilities.child_owners,
+        "allowed",
+    );
+    compact_capability(
+        &mut object,
+        "cleanup",
+        owner.capabilities.cleanup,
+        "supported",
+    );
+    if let Some(lifetime) = &owner.lifetime {
+        object.insert("lifetime".into(), compact_lifetime(lifetime, ids)?);
+    }
+    match &owner.productions {
+        KnowledgeSet::Unknown => {}
+        KnowledgeSet::Partial(productions) | KnowledgeSet::Complete(productions) => {
+            object.insert(
+                "productions".into(),
+                JsonValue::Array(
+                    productions
+                        .iter()
+                        .map(|production| compact_owner_production(production, ids))
+                        .collect::<Result<_, _>>()?,
+                ),
+            );
+            if owner.productions.is_closed() {
+                object.insert("closed".into(), json!(["productions"]));
+            }
+        }
+    }
+    Ok(JsonValue::Object(object))
+}
+
+fn compact_owner_production(
+    production: &OwnerProduction,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    let mut object = JsonMap::new();
+    object.insert(
+        "resource".into(),
+        json!(ids.resource(&production.resource)?),
+    );
+    compact_capability(
+        &mut object,
+        "children",
+        production.capabilities.child_owners,
+        "allowed",
+    );
+    compact_capability(
+        &mut object,
+        "cleanup",
+        production.capabilities.cleanup,
+        "supported",
+    );
+    if let Some(lifetime) = &production.lifetime {
+        object.insert("lifetime".into(), compact_lifetime(lifetime, ids)?);
+    }
+    Ok(JsonValue::Object(object))
+}
+
+fn compact_requirement(object: &mut JsonMap<String, JsonValue>, name: &str, value: Requirement) {
+    if value != Requirement::Unconstrained {
+        object.insert(
+            name.into(),
+            json!(match value {
+                Requirement::Required => "required",
+                Requirement::Forbidden => "forbidden",
+                Requirement::Unconstrained => "unconstrained",
+            }),
+        );
+    }
+}
+
+fn compact_capability(
+    object: &mut JsonMap<String, JsonValue>,
+    name: &str,
+    value: CapabilityKnowledge,
+    positive: &str,
+) {
+    if value != CapabilityKnowledge::Unknown {
+        object.insert(
+            name.into(),
+            json!(if value == CapabilityKnowledge::Allowed {
+                positive
+            } else {
+                "forbidden"
+            }),
+        );
+    }
+}
+
+fn compact_lifetime(lifetime: &Lifetime, ids: &CompactIds) -> Result<JsonValue, ContractFailure> {
+    Ok(match lifetime {
+        Lifetime::Call => json!("call"),
+        Lifetime::Resource(resource) => {
+            json!({"kind": "resource", "resource": ids.resource(resource)?})
+        }
+        Lifetime::Owner(resource) => {
+            json!({"kind": "owner", "resource": ids.resource(resource)?})
+        }
+        Lifetime::Request(resource) => {
+            json!({"kind": "request", "resource": ids.resource(resource)?})
+        }
+        Lifetime::Transition(resource) => {
+            json!({"kind": "transition", "resource": ids.resource(resource)?})
+        }
+        Lifetime::AsyncSource(resource) => {
+            json!({"kind": "async-source", "resource": ids.resource(resource)?})
+        }
+    })
+}
+
+fn compact_cardinality(
+    cardinality: &Cardinality,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    let mut object = JsonMap::new();
+    if let Some(scope) = &cardinality.scope {
+        match scope {
+            CardinalityScope::Trigger => {
+                object.insert("scope".into(), json!("trigger"));
+            }
+            CardinalityScope::Call => {
+                object.insert("scope".into(), json!("call"));
+            }
+            CardinalityScope::Resource(resource) => {
+                object.insert("scope".into(), json!("resource"));
+                object.insert("resource".into(), json!(ids.resource(resource)?));
+            }
+        }
+    }
+    if let Some(min) = cardinality.min {
+        object.insert("min".into(), json!(min));
+    }
+    if let Some(max) = cardinality.max {
+        object.insert(
+            "max".into(),
+            match max {
+                UpperBound::Finite(value) => json!(value),
+                UpperBound::Many => json!("many"),
+            },
+        );
+    }
+    Ok(JsonValue::Object(object))
+}
+
+fn compact_resource(resource: &Resource, ids: &CompactIds) -> Result<JsonValue, ContractFailure> {
+    let mut object = JsonMap::new();
+    object.insert("id".into(), json!(ids.resource(&resource.id)?));
+    object.insert("kind".into(), json!(resource_kind(resource.kind)));
+    let mut closed = Vec::new();
+    compact_knowledge(
+        &mut object,
+        &mut closed,
+        "states",
+        &resource.states,
+        |state| Ok(json!(resource_state(*state))),
+    )?;
+    compact_knowledge(
+        &mut object,
+        &mut closed,
+        "capabilities",
+        &resource.capabilities,
+        |capability| Ok(json!(resource_capability(*capability))),
+    )?;
+    if !closed.is_empty() {
+        object.insert("closed".into(), json!(closed));
+    }
+    if let Some(lifetime) = &resource.lifetime {
+        object.insert("lifetime".into(), compact_lifetime(lifetime, ids)?);
+    }
+    Ok(JsonValue::Object(object))
+}
+
+fn compact_guard_partition(
+    object: &mut JsonMap<String, JsonValue>,
+    partition: &GuardPartition,
+    ids: &CompactIds,
+) -> Result<(), ContractFailure> {
+    let cases = match &partition.cases {
+        KnowledgeSet::Unknown => return Ok(()),
+        KnowledgeSet::Partial(cases) | KnowledgeSet::Complete(cases) => cases,
+    };
+    let values = cases
+        .iter()
+        .map(|case| match case {
+            GuardedCase::When { guard, operations } => {
+                let mut value = JsonMap::new();
+                value.insert("when".into(), compact_guard(guard, ids)?);
+                compact_guard_operations(&mut value, operations, ids)?;
+                Ok(JsonValue::Object(value))
+            }
+            GuardedCase::Otherwise { operations } => {
+                let mut value = JsonMap::new();
+                value.insert("otherwise".into(), JsonValue::Bool(true));
+                compact_guard_operations(&mut value, operations, ids)?;
+                Ok(JsonValue::Object(value))
+            }
+        })
+        .collect::<Result<Vec<_>, ContractFailure>>()?;
+    object.insert("cases".into(), JsonValue::Array(values));
+    Ok(())
+}
+
+fn compact_guard_operations(
+    object: &mut JsonMap<String, JsonValue>,
+    operations: &KnowledgeSet<OperationId>,
+    ids: &CompactIds,
+) -> Result<(), ContractFailure> {
+    match operations {
+        KnowledgeSet::Unknown => Ok(()),
+        KnowledgeSet::Partial(operations) => {
+            let encoded = operations
+                .iter()
+                .map(|operation| Ok(ids.operation(operation)?.to_owned()))
+                .collect::<Result<Vec<_>, ContractFailure>>()?;
+            object.insert("operations".into(), json!(encoded));
+            object.insert("operationsOpen".into(), JsonValue::Bool(true));
+            Ok(())
+        }
+        KnowledgeSet::Complete(operations) => {
+            let encoded = operations
+                .iter()
+                .map(|operation| Ok(ids.operation(operation)?.to_owned()))
+                .collect::<Result<Vec<_>, ContractFailure>>()?;
+            object.insert("operations".into(), json!(encoded));
+            Ok(())
+        }
+    }
+}
+
+fn compact_guard(guard: &Guard, ids: &CompactIds) -> Result<JsonValue, ContractFailure> {
+    Ok(json!({
+        "all": guard
+            .0
+            .iter()
+            .map(|atom| compact_guard_atom(atom, ids))
+            .collect::<Result<Vec<_>, _>>()?,
+    }))
+}
+
+fn compact_guard_atom(atom: &GuardAtom, ids: &CompactIds) -> Result<JsonValue, ContractFailure> {
+    Ok(match atom {
+        GuardAtom::Signature(signature) => json!({"signature": signature}),
+        GuardAtom::ArgumentCount { min, max } => {
+            let mut count = JsonMap::new();
+            count.insert("min".into(), json!(min));
+            if let Some(max) = max {
+                count.insert("max".into(), json!(max));
+            }
+            json!({"argumentCount": count})
+        }
+        GuardAtom::Literal {
+            argument,
+            path,
+            value,
+        } => json!({"arg": argument, "path": path, "literal": compact_literal(value)?}),
+        GuardAtom::ValueKind {
+            argument,
+            path,
+            kind,
+        } => json!({"arg": argument, "path": path, "kind": value_kind(*kind)}),
+        GuardAtom::Property {
+            argument,
+            path,
+            name,
+            callable,
+        } => {
+            let mut value = json!({"arg": argument, "path": path, "property": name});
+            if let Some(callable) = callable {
+                value["callable"] = json!(callable);
+            }
+            value
+        }
+        GuardAtom::TupleAlternative {
+            argument,
+            alternative,
+        } => json!({"arg": argument, "tupleAlternative": alternative}),
+        GuardAtom::ResultProtocol(kind) => json!({"resultProtocol": value_kind(*kind)}),
+        GuardAtom::ArtifactCase(case) if case == &ids.source_case => {
+            json!({"artifactCase": ids.wire_case})
+        }
+        GuardAtom::ArtifactCase(case) => {
+            return invalid_model(format!(
+                "artifact-case guard {case:?} crosses its selected case"
+            ));
+        }
+    })
+}
+
+fn compact_literal(literal: &Literal) -> Result<JsonValue, ContractFailure> {
+    match literal {
+        Literal::Null => Ok(JsonValue::Null),
+        Literal::Bool(value) => Ok(json!(value)),
+        Literal::String(value) => Ok(json!(value)),
+        Literal::Number(value) => value
+            .parse::<serde_json::Number>()
+            .map(JsonValue::Number)
+            .map_err(|_| ContractFailure::InvalidSemanticModel {
+                reason: format!("guard number {value:?} is not valid JSON"),
+            }),
+    }
+}
+
+fn compact_value(value: &ValueShape, ids: &CompactIds) -> Result<JsonValue, ContractFailure> {
+    Ok(match value {
+        ValueShape::Unknown => json!("unknown"),
+        ValueShape::Plain => json!("plain"),
+        ValueShape::Parameter { index, path } => {
+            json!({"kind": "parameter", "index": index, "path": path})
+        }
+        ValueShape::Tuple(items) => compact_value_collection("tuple", "items", items, ids)?,
+        ValueShape::Array { element, length } => {
+            let mut node = JsonMap::new();
+            node.insert("kind".into(), json!("array"));
+            node.insert("element".into(), compact_value(element, ids)?);
+            if length != &ArrayLength::default() {
+                let mut wire_length = JsonMap::new();
+                if let Some(min) = length.min {
+                    wire_length.insert("min".into(), json!(min));
+                }
+                if let Some(max) = length.max {
+                    wire_length.insert(
+                        "max".into(),
+                        match max {
+                            UpperBound::Finite(max) => json!(max),
+                            UpperBound::Many => json!("many"),
+                        },
+                    );
+                }
+                node.insert("length".into(), JsonValue::Object(wire_length));
+            }
+            JsonValue::Object(node)
+        }
+        ValueShape::Object(properties) => {
+            let mut node = JsonMap::new();
+            node.insert("kind".into(), json!("object"));
+            compact_value_knowledge(&mut node, "properties", properties, |property| {
+                Ok(json!({
+                    "name": property.name,
+                    "value": compact_value(&property.value, ids)?,
+                }))
+            })?;
+            JsonValue::Object(node)
+        }
+        ValueShape::Choice(alternatives) => {
+            compact_value_collection("choice", "alternatives", alternatives, ids)?
+        }
+        ValueShape::Callable => json!("callable"),
+        ValueShape::Promise(value) => {
+            json!({"kind": "promise", "value": compact_value(value, ids)?})
+        }
+        ValueShape::AsyncIterable(element) => {
+            json!({"kind": "async-iterable", "element": compact_value(element, ids)?})
+        }
+        ValueShape::Reactive {
+            role,
+            resource,
+            capabilities,
+        } => compact_capability_value("reactive", Some(*role), resource, capabilities, ids)?,
+        ValueShape::Store {
+            resource,
+            capabilities,
+        } => compact_capability_value("store", None, resource, capabilities, ids)?,
+        ValueShape::Action { transition } => {
+            let mut node = json!({"kind": "action"});
+            if let Some(transition) = transition {
+                node["transition"] = json!(ids.resource(transition)?);
+            }
+            node
+        }
+        ValueShape::Component => json!("component"),
+        ValueShape::Cleanup { resource, lifetime } => {
+            let mut node = json!({"kind": "cleanup"});
+            if let Some(resource) = resource {
+                node["resource"] = json!(ids.resource(resource)?);
+            }
+            if let Some(lifetime) = lifetime {
+                node["lifetime"] = compact_lifetime(lifetime, ids)?;
+            }
+            node
+        }
+        ValueShape::RefApplication => json!("ref-application"),
+        ValueShape::ServerFunctionReference { resource } => {
+            let mut node = json!({"kind": "server-function-reference"});
+            if let Some(resource) = resource {
+                node["resource"] = json!(ids.resource(resource)?);
+            }
+            node
+        }
+    })
+}
+
+fn compact_value_collection(
+    kind: &str,
+    field: &'static str,
+    values: &KnowledgeSet<ValueShape>,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    let mut node = JsonMap::new();
+    node.insert("kind".into(), json!(kind));
+    compact_value_knowledge(&mut node, field, values, |value| compact_value(value, ids))?;
+    Ok(JsonValue::Object(node))
+}
+
+fn compact_value_knowledge<T>(
+    node: &mut JsonMap<String, JsonValue>,
+    field: &'static str,
+    knowledge: &KnowledgeSet<T>,
+    mut item: impl FnMut(&T) -> Result<JsonValue, ContractFailure>,
+) -> Result<(), ContractFailure> {
+    match knowledge {
+        KnowledgeSet::Unknown => {}
+        KnowledgeSet::Partial(items) | KnowledgeSet::Complete(items) => {
+            node.insert(
+                field.into(),
+                JsonValue::Array(items.iter().map(&mut item).collect::<Result<_, _>>()?),
+            );
+            if knowledge.is_closed() {
+                node.insert("closed".into(), json!([field]));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn compact_capability_value(
+    kind: &str,
+    role: Option<ReactiveRole>,
+    resource: &Option<ResourceId>,
+    capabilities: &KnowledgeSet<CapabilityClaim>,
+    ids: &CompactIds,
+) -> Result<JsonValue, ContractFailure> {
+    let mut node = JsonMap::new();
+    node.insert("kind".into(), json!(kind));
+    if let Some(role) = role {
+        node.insert(
+            "role".into(),
+            json!(match role {
+                ReactiveRole::Accessor => "accessor",
+                ReactiveRole::Setter => "setter",
+            }),
+        );
+    }
+    if let Some(resource) = resource {
+        node.insert("resource".into(), json!(ids.resource(resource)?));
+    }
+    compact_value_knowledge(&mut node, "capabilities", capabilities, |claim| {
+        if let Some(resource) = &claim.resource {
+            Ok(json!({
+                "capability": observable_capability(claim.capability),
+                "resource": ids.resource(resource)?,
+            }))
+        } else {
+            Ok(json!(observable_capability(claim.capability)))
+        }
+    })?;
+    Ok(JsonValue::Object(node))
+}
+
+const fn operation_kind(value: OperationKind) -> &'static str {
+    match value {
+        OperationKind::Invoke => "invoke",
+        OperationKind::Return => "return",
+        OperationKind::Read => "read",
+        OperationKind::Write => "write",
+        OperationKind::Invalidate => "invalidate",
+        OperationKind::Create => "create",
+        OperationKind::Cleanup => "cleanup",
+        OperationKind::Dispose => "dispose",
+    }
+}
+
+const fn event_name(value: Event) -> &'static str {
+    match value {
+        Event::Call => "call",
+        Event::Render => "render",
+        Event::Flush => "flush",
+        Event::Settle => "settle",
+        Event::Transition => "transition",
+        Event::AsyncEmission => "async-emission",
+        Event::Cleanup => "cleanup",
+        Event::External => "external-event",
+        Event::Request => "request",
+        Event::ResponseCommitment => "response-commitment",
+    }
+}
+
+const fn schedule_name(value: Schedule) -> &'static str {
+    match value {
+        Schedule::SameStack => "same-stack",
+        Schedule::Queued => "queued",
+        Schedule::External => "external",
+    }
+}
+
+const fn tracking_name(value: Tracking) -> &'static str {
+    match value {
+        Tracking::Tracked => "tracked",
+        Tracking::Untracked => "untracked",
+        Tracking::AmbientAtExecution => "ambient-at-execution",
+        Tracking::Unknown => "unknown",
+    }
+}
+
+const fn edge_kind(value: EdgeKind) -> &'static str {
+    match value {
+        EdgeKind::Orders => "orders",
+        EdgeKind::Data => "data",
+        EdgeKind::Invalidates => "invalidates",
+        EdgeKind::Error => "error",
+        EdgeKind::Cleanup => "cleanup",
+        EdgeKind::Lifetime => "lifetime",
+    }
+}
+
+const fn resource_kind(value: ResourceKind) -> &'static str {
+    match value {
+        ResourceKind::Owner => "owner",
+        ResourceKind::ReactiveSource => "reactive-source",
+        ResourceKind::AsyncComputation => "async-computation",
+        ResourceKind::Transition => "transition",
+        ResourceKind::Cleanup => "cleanup",
+        ResourceKind::Request => "request",
+        ResourceKind::Response => "response",
+        ResourceKind::Stream => "stream",
+        ResourceKind::ServerFunctionReference => "server-function-reference",
+    }
+}
+
+const fn resource_state(value: ResourceState) -> &'static str {
+    match value {
+        ResourceState::OwnerActive | ResourceState::TransitionActive => "active",
+        ResourceState::OwnerDisposed | ResourceState::CleanupDisposed => "disposed",
+        ResourceState::CleanupInstalled => "installed",
+        ResourceState::AsyncPending => "pending",
+        ResourceState::AsyncSettled | ResourceState::TransitionSettled => "settled",
+        ResourceState::AsyncErrored => "errored",
+        ResourceState::AsyncCancelled => "cancelled",
+        ResourceState::TransitionReverted => "reverted",
+        ResourceState::ResponseUncommitted => "uncommitted",
+        ResourceState::ResponseCommitted => "committed",
+        ResourceState::StreamUnclaimed => "unclaimed",
+        ResourceState::StreamClaimed => "claimed",
+    }
+}
+
+const fn resource_capability(value: ResourceCapability) -> &'static str {
+    match value {
+        ResourceCapability::Refreshable => "refreshable",
+        ResourceCapability::Writable => "writable",
+    }
+}
+
+const fn value_kind(value: ValueKind) -> &'static str {
+    match value {
+        ValueKind::Plain => "plain",
+        ValueKind::Callable => "callable",
+        ValueKind::Promise => "promise",
+        ValueKind::AsyncIterable => "async-iterable",
+    }
+}
+
+const fn observable_capability(value: ObservableCapability) -> &'static str {
+    match value {
+        ObservableCapability::Readable => "readable",
+        ObservableCapability::Writable => "writable",
+        ObservableCapability::Refreshable => "refreshable",
+        ObservableCapability::PendingAware => "pending-aware",
+        ObservableCapability::Optimistic => "optimistic",
+    }
 }
 
 fn document_decode(error: serde_json::Error) -> ContractFailure {
@@ -882,6 +1915,8 @@ struct WireGuardedCase {
     otherwise: Option<bool>,
     #[serde(default)]
     operations: Option<Vec<String>>,
+    #[serde(default, rename = "operationsOpen")]
+    operations_open: bool,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1875,23 +2910,35 @@ fn expand_guard_partition(
         });
     };
     if cases.is_empty() {
-        return invalid_document("open guard partition has an empty case collection");
+        return Ok(GuardPartition {
+            cases: KnowledgeSet::Complete(Vec::new()),
+        });
     }
     validate_count("guard cases", cases.len(), MAX_GUARD_CASES)?;
     let complete = cases.iter().any(|case| case.otherwise == Some(true));
     let mut expanded = Vec::with_capacity(cases.len());
     for case in cases {
-        let operations = case
-            .operations
-            .map(|operations| {
-                KnowledgeSet::Complete(
-                    operations
-                        .into_iter()
-                        .map(|operation| ids.operation(&operation))
-                        .collect(),
-                )
-            })
-            .unwrap_or(KnowledgeSet::Unknown);
+        if case.operations_open && case.operations.is_none() {
+            return invalid_document("operationsOpen requires a non-empty operations array");
+        }
+        let operations = match case.operations {
+            Some(operations) if case.operations_open => KnowledgeSet::partial(
+                operations
+                    .into_iter()
+                    .map(|operation| ids.operation(&operation))
+                    .collect(),
+            )
+            .ok_or_else(|| ContractFailure::DocumentDecode {
+                message: "operationsOpen requires a non-empty operations array".into(),
+            })?,
+            Some(operations) => KnowledgeSet::Complete(
+                operations
+                    .into_iter()
+                    .map(|operation| ids.operation(&operation))
+                    .collect(),
+            ),
+            None => KnowledgeSet::Unknown,
+        };
         match (case.when, case.otherwise) {
             (Some(guard), None) => expanded.push(GuardedCase::When {
                 guard: expand_guard(guard, ids)?,
@@ -2253,12 +3300,30 @@ mod tests {
     fn all_goldens_round_trip_through_identical_normalized_semantics() {
         for bytes in [MINIMAL, SIGNAL, CONDITIONAL] {
             let first = normalized(bytes);
-            let second =
-                ContractProposal::new(first.package().clone(), first.artifact_cases().to_vec())
-                    .normalize()
-                    .unwrap();
+            let encoded = encode(&first, &SidecarDigests::default(), true).unwrap();
+            let second = normalized(&encoded);
             assert_eq!(first, second);
+            assert_eq!(
+                encoded,
+                encode(&second, &SidecarDigests::default(), true).unwrap()
+            );
         }
+    }
+
+    #[test]
+    fn encoder_keeps_sidecar_hashes_wire_only() {
+        let expected = normalized(SIGNAL);
+        let bytes = encode(
+            &expected,
+            &SidecarDigests {
+                proof: Some(Digest::parse(format!("sha256:{}", "a".repeat(64))).unwrap()),
+                probes: Some(Digest::parse(format!("sha256:{}", "b".repeat(64))).unwrap()),
+            },
+            false,
+        )
+        .unwrap();
+        let decoded = decode(&bytes).unwrap();
+        assert_eq!(decoded.normalize().unwrap(), expected);
     }
 
     #[test]

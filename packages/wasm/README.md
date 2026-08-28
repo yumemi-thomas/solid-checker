@@ -27,36 +27,23 @@ only one; requests naming an omitted dialect receive the normal unknown-id
 error. CI compiles both single-dialect variants so shared infrastructure cannot
 grow an accidental dependency on either compiler or catalog.
 
-Package contracts are bound to the installed package an import specifier
-actually resolves to, and this entry point has no Type Facts session of its own
-with which to ask the compiler where that is. The optional `resolvedImports`
-field carries the host's own answer, and a host that supplies it gets
-identity-bound contracts: a specifier that resolves outside the installed
-directory a contract was classified against -- a tsconfig `paths` entry mapping
-a bare specifier onto project source while a package of that name is installed
-beside it -- has the contract refused, and the import becomes uncertifiable
-exactly as an unknown package's would.
+Package behavior enters WASM only through `acceptedContracts`. Each entry pairs
+a temporary main schema-version-2 document's exact JSON text, its proof-issued
+receipt's exact JSON text, and the
+host's full Phase-7 `ResolvedImport`: exact package identity, independently
+selected runtime and declarations, resolution traces, export identities, and
+canonical dependency closure. Rust validates and normalizes all three before
+analysis sees a semantic claim.
 
-Two things about a supplied row are checked rather than trusted, because a
-wrong row is otherwise indistinguishable from a project whose contracts
-genuinely do not apply. `startByte`/`endByte` are UTF-8 **byte** offsets into
-the source this same request carries, and the source at that span must read as
-the specifier — TypeScript reports positions in UTF-16 code units, so a host
-that forwards them unconverted is correct for ASCII and silently wrong after
-the first non-ASCII character. And `resolvedPath` is empty exactly when
-`resolution` is `"unresolved"`; a row claiming `unresolved` is *accepted* by
-contract binding, so labelling resolutions the host did not perform is the one
-mistake here that would fail open. Either violation is a hard error naming the
-row, not a refused contract.
+The document and receipt are strings rather than parsed JSON values because a
+receipt binds the document's exact bytes; parsing and reserializing would
+silently change that wire identity.
 
-A request that omits the field binds package contracts by specifier name, which
-is what this adapter has always done. That is a stated limitation of the
-adapter, not a weaker analysis of the same request: nothing is silently
-upgraded, and nothing about the older behavior changes. When the field *is*
-supplied it is all-or-nothing per specifier -- a file it omits has no answer,
-and a contract is refused there rather than quietly falling back to the name,
-because a partially trusted answer is the one shape that could certify from a
-resolution nobody reported.
+The field is optional only because a project may have no accepted external
+behavior. Omitting an import never falls back to package-name matching; that
+import remains uncertifiable. Hosts should use the same artifact-acquisition
+adapter as the Node CLI and must not manufacture closure digests from contract
+bytes.
 
 Rule configuration is not yet transported through the WASM `CheckRequest`.
 The adapter cannot read `.solid-checker/rule-options.json` and exposes no rule

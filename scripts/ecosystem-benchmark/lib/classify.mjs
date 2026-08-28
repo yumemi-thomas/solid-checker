@@ -63,15 +63,15 @@ export const FAILURE_CLASSES = [
 ];
 
 const SUCCESS_PATTERN =
-  /^generated .+ contract with \d+ entrypoints at .+; review plan .+ \(\d+ checklist items\)$/m;
+  /^(?:generated unaccepted temporary-v2 proposal for .+ at .+; proof verification must issue its receipt|generated .+ contract with \d+ entrypoints at .+; review plan .+ \(\d+ checklist items\))$/m;
 
-// The generator's own note for a partial contract (see
-// packages/cli/scripts/generate-package-contract.mjs, which appends it to the
-// same single stdout line). Read from the generator's statement rather than
+// Historical schema-v1 benchmark logs may carry the old generator's own note
+// for a partial contract. Read it from the recorded statement rather than
 // inferred by comparing declared and generated entrypoint counts: a wildcard
 // subpath is one declared pattern expanding to many generated entrypoints, and
 // `sameAs` aliases collapse, so those two counts legitimately disagree on a
-// complete contract.
+// complete contract. The temporary-v2 generator refuses such cases locally
+// and never emits this suffix.
 const REFUSED_ENTRYPOINTS_PATTERN = /;\s*(\d+) entrypoint\(s\) refused and omitted/;
 
 const INTEGRITY_PATTERN = /EINTEGRITY|integrity checksum failed|integrity mismatch|sha512 integrity/i;

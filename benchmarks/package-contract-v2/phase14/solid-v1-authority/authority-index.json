@@ -1,0 +1,828 @@
+{
+  "cases": [
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-root-browser-development.json",
+      "entrypoint": ".",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "development",
+        "target": "browser"
+      },
+      "stem": "solid-root-browser-development"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-root-browser-production.json",
+      "entrypoint": ".",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "production",
+        "target": "browser"
+      },
+      "stem": "solid-root-browser-production"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-root-node.json",
+      "entrypoint": ".",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "target": "node"
+      },
+      "stem": "solid-root-node"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-store-browser-development.json",
+      "entrypoint": "./store",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "development",
+        "target": "browser"
+      },
+      "stem": "solid-store-browser-development"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-store-browser-production.json",
+      "entrypoint": "./store",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "production",
+        "target": "browser"
+      },
+      "stem": "solid-store-browser-production"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-store-node.json",
+      "entrypoint": "./store",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "target": "node"
+      },
+      "stem": "solid-store-node"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-web-browser-development.json",
+      "entrypoint": "./web",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "development",
+        "target": "browser"
+      },
+      "stem": "solid-web-browser-development"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-web-browser-production.json",
+      "entrypoint": "./web",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "production",
+        "target": "browser"
+      },
+      "stem": "solid-web-browser-production"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-web-node.json",
+      "entrypoint": "./web",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "target": "node"
+      },
+      "stem": "solid-web-node"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-jsx-runtime-default.json",
+      "entrypoint": "./jsx-runtime",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {},
+      "stem": "solid-jsx-runtime-default"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-jsx-dev-runtime-default.json",
+      "entrypoint": "./jsx-dev-runtime",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {},
+      "stem": "solid-jsx-dev-runtime-default"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-universal-development.json",
+      "entrypoint": "./universal",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "development"
+      },
+      "stem": "solid-universal-development"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-universal-production.json",
+      "entrypoint": "./universal",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {
+        "build": "production"
+      },
+      "stem": "solid-universal-production"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-h-jsx-runtime-default.json",
+      "entrypoint": "./h/jsx-runtime",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {},
+      "stem": "solid-h-jsx-runtime-default"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-h-jsx-dev-runtime-default.json",
+      "entrypoint": "./h/jsx-dev-runtime",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {},
+      "stem": "solid-h-jsx-dev-runtime-default"
+    },
+    {
+      "closure": {
+        "digest": "sha256:b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "solid-web-storage-default.json",
+      "entrypoint": "./web/storage",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-js.json",
+      "package": "solid-js",
+      "selector": {},
+      "stem": "solid-web-storage-default"
+    },
+    {
+      "closure": {
+        "digest": "sha256:3b591572cab0ba2dd4264c52d921f580244794a61f727fb7be9fef34060621e0",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:e0ca291d18311b0a70cdb822c3605d318d3f81eac82631dc8b3174e283fdef93",
+            "integrity": "sha512-oNwLE6E6lxJAWrc8QXuwM0k2oU1BnANnkChwMw82aK1j3+mWGJkG1IFe5gCwbV+afYmjI76t9JJV3md/8tLw+g==",
+            "name": "@solid-primitives/scheduled",
+            "version": "1.5.3"
+          },
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "scheduled-root-browser.json",
+      "entrypoint": ".",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json",
+      "package": "@solid-primitives/scheduled",
+      "selector": {
+        "target": "browser"
+      },
+      "stem": "scheduled-root-browser"
+    },
+    {
+      "closure": {
+        "digest": "sha256:3b591572cab0ba2dd4264c52d921f580244794a61f727fb7be9fef34060621e0",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:e0ca291d18311b0a70cdb822c3605d318d3f81eac82631dc8b3174e283fdef93",
+            "integrity": "sha512-oNwLE6E6lxJAWrc8QXuwM0k2oU1BnANnkChwMw82aK1j3+mWGJkG1IFe5gCwbV+afYmjI76t9JJV3md/8tLw+g==",
+            "name": "@solid-primitives/scheduled",
+            "version": "1.5.3"
+          },
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "scheduled-root-node.json",
+      "entrypoint": ".",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json",
+      "package": "@solid-primitives/scheduled",
+      "selector": {
+        "target": "node"
+      },
+      "stem": "scheduled-root-node"
+    },
+    {
+      "closure": {
+        "digest": "sha256:ba12f52ff6ff1ea368ec4d40d58993735ce387dc64a7f6460077225a4b059b32",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:325aec3e2c3e44e50b09cae7d6210c4f36f62d04ac1acdebd7213b3c8964d97d",
+            "integrity": "sha512-Cen4ccCPTuEtQM7o9aEKuOJ0LRlAnzKvN7loEBBOQ+zKdu7/7kYKr7HHE/WS8JAI3QeQr5v2ModYRIZLERw5zw==",
+            "name": "@solid-primitives/debounce",
+            "version": "1.3.0"
+          },
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "debounce-root-default.json",
+      "entrypoint": ".",
+      "legacyAuthority": "pkg/contracts/bundled/solid-v1/solid-primitives-debounce.json",
+      "package": "@solid-primitives/debounce",
+      "selector": {},
+      "stem": "debounce-root-default"
+    },
+    {
+      "closure": {
+        "digest": "sha256:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471",
+        "entries": [],
+        "packages": [
+          {
+            "filesManifestDigest": "sha256:fa28bb561737e291ef8194414356da43d70a13af4e0f43b9daf577c38c907477",
+            "integrity": "sha512-TOIZa1VUfVJ+9nkCcRajw3U4t9vBOP1HxX1WHNTbXq32mXwlqTvUnC4CRIilohcryBkT9u2ZkhUDSHRTaGp55g==",
+            "name": "@solid-primitives/rootless",
+            "version": "1.5.4"
+          },
+          {
+            "filesManifestDigest": "sha256:2569b80eae7b87c3f429d62496d21d2c99f587321964ebdbbf4f96f9a4fa6601",
+            "integrity": "sha512-ISSB5QX1qP2ynrheIpYwc4oKR5Ny4siNuUyf1qZniy+Il+p/PtDB0QK1Dnle8noiHpwRD3gpPdubOC3qI/Zamg==",
+            "name": "@solid-primitives/utils",
+            "version": "6.4.1"
+          },
+          {
+            "filesManifestDigest": "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108",
+            "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+            "name": "csstype",
+            "version": "3.2.3"
+          },
+          {
+            "filesManifestDigest": "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918",
+            "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==",
+            "name": "seroval-plugins",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80",
+            "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==",
+            "name": "seroval",
+            "version": "1.5.6"
+          },
+          {
+            "filesManifestDigest": "sha256:02fa59f100a40572ce9628dacc340e0f8bec3fec8b2b9ea629e275b3236ddf2a",
+            "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+            "name": "solid-js",
+            "version": "1.9.14"
+          }
+        ]
+      },
+      "document": "rootless-root-default.json",
+      "entrypoint": ".",
+      "legacyAuthority": "/tmp/solid1-rootless-legacy/solid-primitives-rootless.json",
+      "package": "@solid-primitives/rootless",
+      "selector": {},
+      "stem": "rootless-root-default"
+    }
+  ],
+  "format": "solid-checker-phase14-solid1-normalized-authority",
+  "schemaVersion": 2
+}

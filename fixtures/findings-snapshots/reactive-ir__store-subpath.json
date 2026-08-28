@@ -1,15 +1,4 @@
 {
-  "status": "uncertifiable",
-  "findings": [
-    {
-      "rule": "v1/package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/store-subpath/wrong-subpath.tsx",
-      "start": 9,
-      "end": 20,
-      "fixes": 0
-    }
-  ]
+  "status": "certified",
+  "findings": []
 }

@@ -14,32 +14,22 @@ function load(contracts) {
   writeFileSync(
     join(dialect, "dialect.json"),
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: "solid-v9",
       ruleManifest: "packages/cli/lib/rules-solid-v9.json",
+      bundleIndex: "pkg/contracts/bundled/solid-v9/bundle-index.json",
+      reviewBundleIndex: "rust/crates/solid-dialect/contracts/solid-v9/bundle-index.json",
       contracts
     })
   );
   return () => loadDialectManifests({ projectRoot });
 }
 
-const generated = {
-  package: "solid-js",
-  packagePathEnv: "SOLID_V9_SOLID_JS_PACKAGE",
-  defaultPackagePath: "node_modules/solid-js",
-  generatorTarget: "solid-v9/solid-js",
-  reviewContract: "rust/crates/solid-dialect/contracts/solid-v9/solid-js.json",
-  exportsIndex: "rust/crates/solid-dialect/src/exports/solid_v9_solid_js.rs",
-  bundledContract: "pkg/contracts/bundled/solid-v9/solid-js.json"
-};
+const generated = { package: "solid-js", probeRuntime: true };
 
-const overlay = {
-  package: "@solid-primitives/scheduled",
-  bundledContract: "pkg/contracts/bundled/solid-v9/scheduled.json",
-  generated: false
-};
+const overlay = { package: "@solid-primitives/scheduled" };
 
-test("a hand-authored overlay declares only its package and bundled artifact", () => {
+test("the manifest is only a package inventory plus normalized bundle indexes", () => {
   const manifests = load([generated, overlay])();
   assert.deepEqual(
     manifests[0].contracts.map(contract => contract.package),
@@ -47,27 +37,27 @@ test("a hand-authored overlay declares only its package and bundled artifact", (
   );
 });
 
-test("a generated contract still requires every generator field", () => {
-  const { generatorTarget, ...withoutTarget } = generated;
-  assert.throws(load([withoutTarget]), /requires non-empty contracts\[\]\.generatorTarget/);
-});
-
-test("generator fields are refused beside generated: false", () => {
-  // A half-filled entry is someone leaving fields out of a generated contract;
-  // accepting it silently would let a package skip generation and its gate.
+test("legacy per-document generator and bundle fields are refused", () => {
   assert.throws(
-    load([{ ...generated, generated: false }]),
-    /packagePathEnv is not allowed when generated is false/
+    load([{ ...generated, bundledContract: "pkg/contracts/bundled/solid-v9/solid-js.json" }]),
+    /bundledContract is not part of the normalized bundle inventory/
   );
 });
 
-test("generated must be a boolean when present", () => {
-  assert.throws(load([{ ...generated, generated: "false" }]), /must be a boolean/);
+test("probeRuntime must be a boolean when present", () => {
+  assert.throws(load([{ ...generated, probeRuntime: "true" }]), /probeRuntime must be a boolean/);
+});
+
+test("probe modes require an enabled runtime probe", () => {
+  assert.throws(
+    load([{ package: "solid-js", probeModes: ["client"] }]),
+    /has no meaning without probeRuntime/
+  );
 });
 
 test("one package cannot be declared twice in a dialect", () => {
   assert.throws(
-    load([generated, { ...generated, generatorTarget: "solid-v9/solid-js-again" }]),
+    load([generated, generated]),
     /declares solid-js twice/
   );
 });

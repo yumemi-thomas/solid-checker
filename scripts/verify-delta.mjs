@@ -113,7 +113,6 @@ export const CHECKS = {
     commands: [
       ["bun", "scripts/check-bundled-contracts.mjs"],
       ["bun", "scripts/check-contract-pins.mjs"],
-      ["bun", "scripts/generate-solid1-runtime-surface.mjs", "--check"],
       ["bun", "scripts/dialect-manifests.mjs", "check-composed-contracts"],
     ],
   },

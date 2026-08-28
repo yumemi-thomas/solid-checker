@@ -519,6 +519,19 @@ report](phase13/2026-08-28-solid2-rc3-conformance.md).
 
 **Exit:** every producer and consumer speaks temporary main schema version 2.
 
+Completed on 2026-08-28. Package, missing-contract, first-party bundle, probe,
+review, verifier, differential, pin, closure, process, and fixture producers now
+emit temporary-v2 documents or claim-addressed workflow artifacts. Native and
+WASM analysis consume only exact `ResolvedImport` + normalized document bytes +
+proof receipt inputs; both bundled locations, runtime locks, dialect manifests,
+and fixture catalogs were regenerated together. The analyzer sees only the
+accepted semantic index. Schema-1 decoding, unknown sentinels, public variants
+and condition arrays, inline evidence, name-only dependency proposal trust,
+duplicate JavaScript normalization, and the legacy native generator were
+deleted. Snapshot changes were accepted only after comparing normalized
+semantics and recording exact-artifact refusals. See the [Phase 14 completion
+report](phase14/2026-08-28-producer-consumer-migration.md).
+
 ## Phase 15 — Adversarial hardening
 
 172. Attack misplaced and sibling closure.

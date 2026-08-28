@@ -1,0 +1,1 @@
+solid-checker: solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export "runtimeOnly"

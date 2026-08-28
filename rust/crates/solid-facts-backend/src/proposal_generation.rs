@@ -19,6 +19,7 @@ use thiserror::Error;
 
 use crate::{
     artifact_resolution::{ResolvedImport, select_and_bind},
+    contract_document_v2::{self, SidecarDigests},
     contract_interface::ContractFailure,
 };
 
@@ -269,11 +270,16 @@ pub enum ProposalGenerationError {
 pub fn construct_proposal(
     analysis: ProposalAnalysis,
 ) -> Result<ConstructedProposal, ProposalGenerationError> {
-    let normalized =
-        ContractProposal::new(analysis.package, analysis.artifact_cases).normalize()?;
     if analysis.resolutions.is_empty() {
         return Err(ProposalGenerationError::MissingArtifactResolutions);
     }
+    let analyzed = ContractProposal::new(analysis.package, analysis.artifact_cases).normalize()?;
+    // Artifact-case, operation, and resource identifiers are local wire
+    // mechanics. Canonicalize them through the sole encoder/decoder boundary
+    // before claim IDs or proof plans can observe them.
+    let canonical_bytes =
+        contract_document_v2::encode(&analyzed, &SidecarDigests::default(), false)?;
+    let normalized = contract_document_v2::decode(&canonical_bytes)?.normalize()?;
     let analyzed = normalized.artifact_cases().len();
     let mut cases = Vec::new();
     let mut selected_ids = BTreeSet::new();

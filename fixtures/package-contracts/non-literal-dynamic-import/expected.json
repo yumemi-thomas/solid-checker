@@ -1,29 +1,50 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "4f7c6f47945ce56ff29f2a3dbb7da56906bffbce09e5a5abaedc398f9269eee7",
+            "path": "./index.js",
+            "sha256": "4e3467d677df73a1e0c34b706c8b9fe35c13e44f74268e61acbf2ef82ff20149"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "4e3467d677df73a1e0c34b706c8b9fe35c13e44f74268e61acbf2ef82ff20149"
+          },
+          "exports": {
+            "load": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "thing": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:0cc2336673ccc83b478e6627e8002d63b9257b12af83844d18b2da23ee278721",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "0cc2336673ccc83b478e6627e8002d63b9257b12af83844d18b2da23ee278721"
+    },
     "name": "non-literal-dynamic-import",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "value-1": [
-          "thing"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

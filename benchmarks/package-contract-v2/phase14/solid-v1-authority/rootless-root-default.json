@@ -1,0 +1,851 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471",
+            "path": "./dist/index.js",
+            "sha256": "0b7d93cfb6e96d7878b49ec28816d50216274e5e486b4171bb64c8c4bc36767f"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "4bd627da07b514353e4f81e0b070f28a077bd2ddd85ed6ce0a447aee3b1bf17b"
+          },
+          "exports": {
+            "createBranch": "summary-5e5c4fa451e42152d3bd30be3e31c4045a184ebc932d33abf1bf4b3da40e11bd",
+            "createCallback": "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026",
+            "createDisposable": "summary-7f65eca690e24a8003480f9b80d6a54c5c463a9dd3358ec0b6044767dbd27862",
+            "createHydratableSingletonRoot": "summary-675a874445d9107a1b599800bfd212308857dee9a23548cc322927e8238d81e3",
+            "createRootPool": "summary-40356c9544d8b459006c0019e3a5b87412de34b28378cb683039586d3191a7ea",
+            "createSharedRoot": "summary-3b05d7de80ac0f80e069b73c19fb3847df67acf5db46d7c3d374fca318aff66f",
+            "createSingletonRoot": "summary-942e62398a8cbc8c2aecc7970a14a63420064289d7c0a08f35861f1a8638750a",
+            "createSubRoot": "summary-30a28bc8b32ac276077b4b273d3d7fac235beff9fb6985c30635356c2bf9c44e"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import/default",
+            "typesBranch": "/exports/./import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-TOIZa1VUfVJ+9nkCcRajw3U4t9vBOP1HxX1WHNTbXq32mXwlqTvUnC4CRIilohcryBkT9u2ZkhUDSHRTaGp55g==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "80f29332aedf6caedef85b9299bee0d4d4588d232f64cc212ef0c725968fee12"
+    },
+    "name": "@solid-primitives/rootless",
+    "version": "1.5.4"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-30a28bc8b32ac276077b4b273d3d7fac235beff9fb6985c30635356c2bf9c44e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSubRoot:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSubRoot:operation:callback-0owner"
+                  },
+                  "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSubRoot:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSubRoot:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "unknown",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSubRoot:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSubRoot:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-3b05d7de80ac0f80e069b73c19fb3847df67acf5db46d7c3d374fca318aff66f": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSharedRoot:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSharedRoot:operation:callback-0owner"
+                  },
+                  "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSharedRoot:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSharedRoot:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "unknown",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSharedRoot:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSharedRoot:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-40356c9544d8b459006c0019e3a5b87412de34b28378cb683039586d3191a7ea": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "inputs": [
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              },
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              },
+              "unknown"
+            ],
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createRootPool:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createRootPool:operation:callback-0owner"
+                  },
+                  "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createRootPool:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createRootPool:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "create",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "requires": "required",
+              "requiresCleanup": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "unknown",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createRootPool:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createRootPool:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-5e5c4fa451e42152d3bd30be3e31c4045a184ebc932d33abf1bf4b3da40e11bd": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createBranch:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createBranch:operation:callback-0owner"
+                  },
+                  "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createBranch:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createBranch:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "unknown",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createBranch:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createBranch:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-675a874445d9107a1b599800bfd212308857dee9a23548cc322927e8238d81e3": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createHydratableSingletonRoot:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createHydratableSingletonRoot:operation:callback-0owner"
+                  },
+                  "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createHydratableSingletonRoot:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createHydratableSingletonRoot:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "unknown",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createHydratableSingletonRoot:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createHydratableSingletonRoot:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-7f65eca690e24a8003480f9b80d6a54c5c463a9dd3358ec0b6044767dbd27862": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createDisposable:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createDisposable:operation:callback-0owner"
+                  },
+                  "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createDisposable:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createDisposable:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createDisposable:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createDisposable:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-942e62398a8cbc8c2aecc7970a14a63420064289d7c0a08f35861f1a8638750a": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "allowed",
+              "cleanup": "supported",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSingletonRoot:operation:callback-0owner"
+              },
+              "productions": [
+                {
+                  "children": "allowed",
+                  "cleanup": "supported",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSingletonRoot:operation:callback-0owner"
+                  },
+                  "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSingletonRoot:operation:callback-0owner"
+                }
+              ],
+              "requires": "required",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSingletonRoot:operation:callback-0owner",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": "unknown",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSingletonRoot:operation:callback-0owner",
+            "kind": "owner",
+            "lifetime": {
+              "kind": "owner",
+              "resource": "proposal:@solid-primitives/rootless:.:9fda42d28be8ce57177d1d050b38513a3a220ebd6cab09a4cb3dbf4ce47c7471:createSingletonRoot:operation:callback-0owner"
+            },
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-b6ec63eaf514ba15fc1222ba3fab63daef4a897f34aa516d0848c1eaab945026": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

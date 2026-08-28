@@ -1,0 +1,308 @@
+{
+  "entrypoints": {
+    "./web": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+            "path": "./web/dist/web.js",
+            "sha256": "3ed54085b946329dbddb5c8b08d0386d3f9370f5273e556e864de19f8f89edf8"
+          },
+          "declarations": {
+            "path": "./web/types/index.d.ts",
+            "sha256": "f8db03cdd070621b978744c04d42fc50232317bdfb114c2d1815bd5c8aef7386"
+          },
+          "exports": {
+            "Aliases": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "Assets": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ChildProperties": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "DOMElements": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "DelegatedEvents": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "Dynamic": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ErrorBoundary": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "For": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Hydration": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "HydrationScript": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Index": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Match": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "NoHydration": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Portal": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Properties": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "RequestContext": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "SVGElements": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "SVGNamespace": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "Show": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Suspense": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "SuspenseList": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "Switch": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "addEventListener": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "assign": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "classList": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "className": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "clearDelegatedEvents": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "createComponent": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "createDynamic": "summary-ae1102b2f5bc82e431d96e0f69a4c076de9eed00e6b118c4307f96cebf091049",
+            "delegateEvents": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "dynamicProperty": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "effect": "summary-ae1102b2f5bc82e431d96e0f69a4c076de9eed00e6b118c4307f96cebf091049",
+            "escape": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "generateHydrationScript": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getAssets": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getHydrationKey": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getNextElement": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "getNextMarker": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getNextMatch": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getOwner": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getPropAlias": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "getRequestEvent": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "hydrate": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "insert": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "isDev": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "isServer": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "memo": "summary-d97436f10834758ca341d4da10b349b0f75a20307d436c7fc103a06df68c99f6",
+            "mergeProps": "summary-3a7b86009cf4f9d5ee07b47d5ef2b9e0db629ad671ae6546cd2ba2cb2c1b597a",
+            "render": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "renderToStream": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "renderToString": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "renderToStringAsync": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "resolveSSRNode": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "runHydrationEvents": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "setAttribute": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "setAttributeNS": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "setBoolAttribute": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "setProperty": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "setStyleProperty": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "spread": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ssr": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ssrAttribute": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ssrClassList": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ssrElement": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ssrHydrationKey": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ssrSpread": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "ssrStyle": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "style": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "template": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "untrack": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "use": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "useAssets": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1web/browser/import",
+            "typesBranch": "/exports/.~1web/browser/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0"
+    },
+    "name": "solid-js",
+    "version": "1.9.14"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "5cfe7e7fcaad22a072272dcb29f5302cdb4a707dcc11c8e618dc46020208d033"
+    }
+  },
+  "summaries": {
+    "summary-3a7b86009cf4f9d5ee07b47d5ef2b9e0db629ad671ae6546cd2ba2cb2c1b597a": {
+      "call": {
+        "closed": [
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-ae1102b2f5bc82e431d96e0f69a4c076de9eed00e6b118c4307f96cebf091049": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-d97436f10834758ca341d4da10b349b0f75a20307d436c7fc103a06df68c99f6": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "plain"
+    }
+  }
+}

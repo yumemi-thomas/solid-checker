@@ -228,12 +228,20 @@ function packageFilesManifest(packageRoot) {
   };
   visit(packageRoot);
   files.sort((left, right) =>
-    left.slice(packageRoot.length + 1).localeCompare(right.slice(packageRoot.length + 1))
+    comparePackagePath(left.slice(packageRoot.length + 1), right.slice(packageRoot.length + 1))
   );
   const manifest = files
     .map(file => `${sha256(readFileSync(file))}  ${file.slice(packageRoot.length + 1)}\n`)
     .join("");
   return sha256(Buffer.from(manifest));
+}
+
+function comparePackagePath(left, right) {
+  const foldedLeft = left.toLowerCase();
+  const foldedRight = right.toLowerCase();
+  if (foldedLeft < foldedRight) return -1;
+  if (foldedLeft > foldedRight) return 1;
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 export function replayPublishedArtifactEvidence(report, nodeModulesRoot) {

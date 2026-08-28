@@ -1,7 +1,6 @@
 // Standards-compatible standalone package acquisition for contract artifact
-// resolution. This module produces exact records; it does not select contract
-// semantics and is intentionally not wired into the legacy generator before
-// Phase 8.
+// resolution. This module produces exact records and never selects or rewrites
+// contract semantics; Rust consumes the records at the normalization boundary.
 
 import { createHash } from "node:crypto";
 import {
@@ -269,7 +268,7 @@ function declarationCandidate(path) {
     ...DECLARATION_EXTENSIONS.map(candidate => `${stem}${candidate}`),
     ...DECLARATION_EXTENSIONS.map(candidate => join(path, `index${candidate}`))
   ];
-  return candidates.find(isFile);
+  return candidates.find(isFile) ?? (RUNTIME_EXTENSIONS.some(candidate => path.endsWith(candidate)) && isFile(path) ? path : undefined);
 }
 
 function resolvedFile(path) {
@@ -310,10 +309,20 @@ export function resolvePackageExport({
   }
 
   if (entrypoint !== ".") fail("not-exported", `${entrypoint} has no legacy package entrypoint`);
-  const field = axis === "declarations" ? "types" : "main";
-  const fallback = axis === "declarations" ? undefined : "index.js";
-  const target = manifest[field] ?? fallback;
-  if (!target) fail("declarations-not-found", `legacy package declares no ${field} target`);
+  const fallback = "index.js";
+  const field =
+    axis === "declarations"
+      ? manifest.types
+        ? "types"
+        : manifest.typings
+          ? "typings"
+          : manifest.main
+            ? "main"
+            : "index"
+      : manifest.main
+        ? "main"
+        : "index";
+  const target = field === "index" ? fallback : manifest[field];
   const initial = resolve(packageRoot, target);
   const path = axis === "declarations" ? declarationCandidate(initial) : initial;
   if (!path) fail("declarations-not-found", `no declaration target exists for ${initial}`);
@@ -354,17 +363,47 @@ function localModuleTarget(importer, specifier, axis, packageRoot) {
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) return undefined;
   const base = specifier.startsWith("/") ? specifier : resolve(dirname(importer), specifier);
   const extension = extname(base);
+  if (
+    extension &&
+    !(axis === "runtime"
+      ? RUNTIME_EXTENSIONS
+      : [...DECLARATION_EXTENSIONS, ...RUNTIME_EXTENSIONS]
+    ).includes(extension)
+  ) {
+    return undefined;
+  }
+  const sourceSubstitutions =
+    extension === ".js"
+      ? [`${base.slice(0, -3)}.ts`, `${base.slice(0, -3)}.tsx`, `${base.slice(0, -3)}.d.ts`]
+      : extension === ".jsx"
+        ? [`${base.slice(0, -4)}.tsx`, `${base.slice(0, -4)}.d.ts`]
+        : extension === ".mjs"
+          ? [`${base.slice(0, -4)}.mts`, `${base.slice(0, -4)}.d.mts`]
+          : extension === ".cjs"
+            ? [`${base.slice(0, -4)}.cts`, `${base.slice(0, -4)}.d.cts`]
+            : [];
   const candidates = axis === "runtime"
     ? extension
-      ? [base]
+      ? [base, ...sourceSubstitutions]
       : [base, ...RUNTIME_EXTENSIONS.map(value => `${base}${value}`), ...RUNTIME_EXTENSIONS.map(value => join(base, `index${value}`))]
     : extension
-      ? [base, declarationCandidate(base)].filter(Boolean)
+      ? [declarationCandidate(base), ...sourceSubstitutions].filter(Boolean)
       : [...DECLARATION_EXTENSIONS.map(value => `${base}${value}`), ...DECLARATION_EXTENSIONS.map(value => join(base, `index${value}`))];
   const selected = candidates.find(isFile);
   if (!selected) return undefined;
   packagePath(packageRoot, selected);
   return selected;
+}
+
+function localAssetTarget(importer, specifier, packageRoot) {
+  if (!specifier.startsWith(".") && !specifier.startsWith("/")) return undefined;
+  const path = specifier.startsWith("/") ? specifier : resolve(dirname(importer), specifier);
+  if (!isFile(path)) return undefined;
+  packagePath(packageRoot, path);
+  const extension = extname(path);
+  return RUNTIME_EXTENSIONS.includes(extension) || DECLARATION_EXTENSIONS.includes(extension)
+    ? undefined
+    : path;
 }
 
 function moduleDescription(path, axis, packageRoot, cache) {
@@ -376,7 +415,11 @@ function moduleDescription(path, axis, packageRoot, cache) {
   for (const statement of file.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
       const target = localModuleTarget(path, statement.moduleSpecifier.text, axis, packageRoot);
-      description.specifiers.push({ text: statement.moduleSpecifier.text, target });
+      description.specifiers.push({
+        text: statement.moduleSpecifier.text,
+        target,
+        asset: target ? undefined : localAssetTarget(path, statement.moduleSpecifier.text, packageRoot)
+      });
       if (!target || !statement.importClause) continue;
       if (statement.importClause.name) {
         description.imports.set(statement.importClause.name.text, { file: target, name: "default" });
@@ -396,7 +439,13 @@ function moduleDescription(path, axis, packageRoot, cache) {
       const target = module && ts.isStringLiteral(module)
         ? localModuleTarget(path, module.text, axis, packageRoot)
         : undefined;
-      if (module && ts.isStringLiteral(module)) description.specifiers.push({ text: module.text, target });
+      if (module && ts.isStringLiteral(module)) {
+        description.specifiers.push({
+          text: module.text,
+          target,
+          asset: target ? undefined : localAssetTarget(path, module.text, packageRoot)
+        });
+      }
       if (!statement.exportClause) {
         if (target) description.stars.push(target);
         continue;
@@ -445,6 +494,7 @@ function moduleDescription(path, axis, packageRoot, cache) {
       description.specifiers.push({
         text,
         target: opaque ? undefined : localModuleTarget(path, text, axis, packageRoot),
+        asset: opaque ? undefined : localAssetTarget(path, text, packageRoot),
         dynamic: node.expression.kind === ts.SyntaxKind.ImportKeyword
       });
     }
@@ -582,6 +632,15 @@ function closureForRoots(
     const description = moduleDescription(path, axis, packageRoot, cache);
     hazards.push(...syntaxHazards(relativePath, description.file, description.checker));
     for (const specifier of description.specifiers) {
+      if (specifier.asset) {
+        const assetPath = packagePath(packageRoot, specifier.asset);
+        entries.set(`resolution-input:${assetPath}`, {
+          role: "resolution-input",
+          path: assetPath,
+          digest: fileDigest(realpath(specifier.asset))
+        });
+        continue;
+      }
       if (specifier.target) {
         visit(
           specifier.target,

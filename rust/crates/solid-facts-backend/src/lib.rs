@@ -6,41 +6,45 @@ compile_error!("solid-facts-backend requires at least one dialect feature");
 
 mod artifact_resolution;
 mod cache;
-mod contract_document;
 mod contract_document_v2;
 mod contract_interface;
+mod contract_workflow;
 mod demand_plan;
 mod diagnostics;
 pub mod dialect;
 mod evidence_sidecars;
+mod first_party_bundles;
+mod inferred_contract_v2;
 mod proof_checker;
 mod proposal_generation;
+mod runtime_probe_wire;
 mod runtime_probes;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
-pub use contract_document::encode as encode_package_contract;
+pub use contract_document_v2::SidecarDigests;
 pub use contract_interface::{
     AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
     ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole,
-    ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest, ContractFailure, EvidenceKey,
-    EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter, ImportRequest, LocalEvidenceStore,
-    ReceiptStore, ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
-    ResolvedExportTarget, ResolvedFile, ResolvedImport, StandaloneResolutionAdapter,
-    TypeFactsResolutionAdapter, encode_acceptance_receipt, load_accepted_contract,
-    load_accepted_contract_index,
+    ClosureHazard, ClosureHazardKind, ClosureInput, ClosureManifest, ClosurePackageIdentity,
+    ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
+    ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
+    ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
+    StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
+    encode_acceptance_receipt, load_accepted_contract, load_accepted_contract_index,
+    read_accepted_contract_catalog,
 };
-#[cfg(feature = "dialect-v2")]
-pub use diagnostics::bundled_solid_js_contract;
+pub use contract_workflow::{
+    AcceptedArtifacts, ContractWorkflowError, ProposalArtifacts, merge_plans,
+    review as review_contract_document, verify as verify_contract_proposal,
+};
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
     PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
-    SnapshotFix, SnapshotTextEdit, SourceLocation, analysis_metrics, analyze_project,
-    analyze_project_measured, analyze_project_measured_with,
-    analyze_project_measured_with_enablement, discovered_contract_paths,
-    discovered_rule_options_path, imported_package_roots, load_package_contracts,
-    load_package_contracts_with, package_contract_statuses, package_contract_statuses_with,
-    read_package_contract, semantic_demand_options_for_enablement, snapshot, source_location,
+    SnapshotFix, SnapshotTextEdit, SourceLocation, accepted_package_contract_statuses,
+    analysis_metrics, analyze_project_accepted_measured_with_enablement, discovered_contract_paths,
+    discovered_rule_options_path, imported_package_roots, semantic_demand_options_for_enablement,
+    source_location,
 };
 pub use evidence_sidecars::{
     EVIDENCE_SIDECAR_VERSION, EnvironmentIdentity, EvidenceCatalog, EvidenceSidecarDocuments,
@@ -49,12 +53,22 @@ pub use evidence_sidecars::{
     ProbeOutcome, ProofClaimMaterial, ProofInputIdentity, SandboxIdentity, SandboxKind,
     ToolIdentity, ValidatedEvidenceSidecars, emit_evidence_sidecars, validate_evidence_sidecars,
 };
-pub use proof_checker::{ProposalProofRequest, verify_planned_proposal};
+pub use first_party_bundles::{
+    BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
+    solid1_bundles, solid2_rc3_bundles,
+};
+pub use proof_checker::{
+    ProposalProofRequest, ProposalVerificationError, ProposalVerificationRequest,
+    VerifiedContractArtifact, verify_and_encode_planned_proposal, verify_planned_proposal,
+};
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
     ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,
     ProposalGenerationError, ProposalPlan, ProposalSubject, construct_proposal, emit_proposal,
     plan_probes, plan_proofs,
+};
+pub use runtime_probe_wire::{
+    PlannedRuntimeProbes, RuntimeProbeWireError, evaluate_runtime_probe_runs, plan_runtime_probes,
 };
 pub use runtime_probes::{
     ArtifactModeMatrix, BoundaryPhase, CleanupPhase, DrainStep, IsolationIdentity,
@@ -67,6 +81,70 @@ pub use runtime_probes::{
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
 };
+
+/// Validates one temporary-v2 main document without exposing its wire model.
+/// Analyzer use still requires exact artifact selection and a receipt through
+/// [`load_accepted_contract`].
+pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
+    contract_document_v2::decode(bytes)?.normalize()?;
+    Ok(())
+}
+
+/// Encodes one exact artifact's analyzer inference as an unaccepted
+/// temporary-v2 proposal. Every proposed closure is opened before emission;
+/// only the proof checker can later finalize it and issue a receipt.
+pub fn encode_inferred_contract_proposal(
+    inferred: &solid_reactive_ir::PackageContract,
+    resolved: &ResolvedImport,
+    pretty: bool,
+) -> Result<Vec<u8>, ContractFailure> {
+    let proposal = inferred_contract_v2::normalize_inferred_contract(inferred, resolved)?;
+    contract_document_v2::encode(&proposal, &SidecarDigests::default(), pretty)
+}
+
+/// Emits the temporary-v2 main proposal and its separately bound proof plan.
+/// Neither artifact carries analyzer acceptance authority.
+pub fn encode_inferred_contract_workflow(
+    inferred: &solid_reactive_ir::PackageContract,
+    resolved: &ResolvedImport,
+    pretty: bool,
+) -> Result<ProposalArtifacts, ContractWorkflowError> {
+    let (proposal, candidates) =
+        inferred_contract_v2::normalize_inferred_contract_with_candidates(inferred, resolved)?;
+    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
+}
+
+/// Merges independently analyzed exact artifact cases without exposing compact
+/// summary mechanics to JavaScript orchestration.
+pub fn merge_contract_proposals<'a>(
+    documents: impl IntoIterator<Item = &'a [u8]>,
+    pretty: bool,
+) -> Result<Vec<u8>, ContractFailure> {
+    let mut package = None;
+    let mut cases = Vec::new();
+    for document in documents {
+        let contract = contract_document_v2::decode(document)?.normalize()?;
+        if let Some(expected) = &package {
+            if expected != contract.package() {
+                return Err(ContractFailure::IdentityMismatch {
+                    reason: "proposal documents describe different package identities".into(),
+                });
+            }
+        } else {
+            package = Some(contract.package().clone());
+        }
+        cases.extend_from_slice(contract.artifact_cases());
+    }
+    let package = package.ok_or_else(|| ContractFailure::InvalidSemanticModel {
+        reason: "proposal merge requires at least one document".into(),
+    })?;
+    let contract = solid_reactive_ir::contract_semantics::ContractProposal::new(package, cases)
+        .normalize()
+        .map_err(|error| ContractFailure::InvalidSemanticModel {
+            reason: error.to_string(),
+        })?;
+    contract_document_v2::encode(&contract, &SidecarDigests::default(), pretty)
+}
 
 #[must_use]
 pub fn default_typefacts_executable() -> String {
@@ -2291,15 +2369,6 @@ mod tests {
         presets: &[],
     };
 
-    const STUB_CONTRACT_RULE: solid_reactive_ir::RuleMetadata = solid_reactive_ir::RuleMetadata {
-        code: "ST9001",
-        name: "stub-contract-missing",
-        severity: "error",
-        uncertifiable: true,
-        default_enabled: true,
-        presets: &[],
-    };
-
     fn stub_solve(
         _program: &solid_reactive_ir::Program,
     ) -> (
@@ -2320,16 +2389,6 @@ mod tests {
         )
     }
 
-    fn stub_package_contract_finding(
-        issue: &solid_reactive_ir::PackageContractIssue,
-    ) -> solid_reactive_ir::Finding {
-        solid_reactive_ir::Finding::new(
-            STUB_CONTRACT_RULE,
-            "the stub dialect's package contract is unavailable".into(),
-            issue.location.clone(),
-        )
-    }
-
     static STUB_DIALECT: dialect::Dialect = dialect::Dialect {
         id: "stub-dialect",
         compiler_facts_identity: "stub-compiler:trace0:test",
@@ -2342,9 +2401,6 @@ mod tests {
         rule_metadata: |rule| (rule == STUB_RULE.name).then_some(STUB_RULE),
         semantic_demands: dialect::SemanticDemandCapabilities::NONE,
         catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,
-        package_contract_finding: stub_package_contract_finding,
-        bundled_packages: &[],
-        bundled_contract: |_| Ok(None),
     };
 
     /// An alternate dialect flows end to end through the native pipeline:
@@ -2378,14 +2434,16 @@ mod tests {
             STUB_COMPILER_RUNS.load(std::sync::atomic::Ordering::SeqCst) > 0,
             "the stub dialect's compiler must produce the execution maps"
         );
-        let analysis = analyze_project(
+        let analysis = analyze_project_accepted_measured_with_enablement(
             &STUB_DIALECT,
             std::path::Path::new("project/tsconfig.json"),
             &sources,
             &facts,
-            &[],
+            &solid_reactive_ir::contract_semantics::AcceptedContractIndex::default(),
+            RequestedRuleEnablement::default(),
         )
-        .unwrap();
+        .unwrap()
+        .0;
         let identities = analysis
             .snapshot
             .findings

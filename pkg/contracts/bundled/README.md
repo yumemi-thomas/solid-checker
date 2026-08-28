@@ -1,76 +1,24 @@
-# Bundled runtime contracts
+# Receipt-issued first-party contracts
 
-These are the normalized, entrypoint-aware package contracts compiled into the
-backend and used during project analysis. Paths are grouped by the same stable
-dialect id used by the checker:
+Each dialect directory contains a `bundle-index.json` plus normalized
+temporary-schema-v2 main documents and their proof-issued receipts. The same
+bytes are generated under `rust/crates/solid-dialect/contracts/` so the runtime
+and review locations cannot drift.
 
-- `solid-v1/solid-js.json` models `solid-js@1.9.14`;
-- `solid-v1/solid-primitives-scheduled.json` is the reviewed callback-timing
-  overlay for `@solid-primitives/scheduled@1.5.3`;
-- `solid-v2/solid-js.json` models `solid-js@2.0.0-rc.0`;
-- `solid-v2/solidjs-web.json` models `@solidjs/web@2.0.0-rc.0`;
-- `solid-v2/solidjs-signals.json` carries the reviewed inert `isEqual`
-  export from `@solidjs/signals@2.0.0-rc.0`; other package exports remain
-  explicitly incomplete until their runtime behavior is audited;
-- `runtime-lock.json` pins the resolved dependency closure used by the Solid 2
-  runtime probes, including `@solidjs/signals`, with version and registry
-  integrity.
+`solid-v1` is generated from the checked published-artifact authority under
+`benchmarks/package-contract-v2/phase14/solid-v1-authority/`. It covers exact
+`solid-js@1.9.14`, `@solid-primitives/scheduled@1.5.3`,
+`@solid-primitives/debounce@1.3.0`, and
+`@solid-primitives/rootless@1.5.4` artifact cases. Two JSX subpaths have no
+common runtime/declaration value bindings; they remain in the package census
+without an accepted semantic case.
 
-Every one of these contracts pins its package by version **and** by the
-integrity of the exact tarball it was audited against.
-`bun scripts/check-contract-pins.mjs` holds each pin to the registry, so a
-republished release stops matching instead of silently becoming what the
-contract claims to describe. A contract that records no integrity fails that
-check: a pin that cannot be falsified is not a pin. This covers the contracts
-the probe suite below does not install, which is how the scheduled overlay and
-the Solid 1.x core are verified at all.
+`solid-v2` is generated from the checked RC.3 conformance authority. It covers
+exact `solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and
+`@solidjs/signals@2.0.0-rc.3` cases. Environment selection is explicit; the
+consumer never guesses a browser, node, development, or production branch.
 
-The per-dialect assembly files at `rust/dialects/<id>/dialect.json` own these
-paths. `bun scripts/check-bundled-contracts.mjs` enumerates contracts marked
-`probeRuntime`, installs their exact releases, checks their export surfaces and
-integrity, checks every edge in `runtime-lock.json`, and executes every
-declared behavior probe in client, server, development, and production Node
-condition modes. A lock or probe mismatch fails conformance; it is not repaired
-by `--write`.
-
-The Solid 1.x artifact is composed by
-`scripts/generate-bundled-solid1-contract.mjs` from the adjacent
-`solid-v1/solid-js-runtime-surface.json` and the reviewed vocabulary contract.
-The surface says which exports the package actually has, under which
-entrypoints; it is generated from the installed release by
-`scripts/generate-solid1-runtime-surface.mjs`, which `--check` holds to that
-release. It replaced a census copied from the 1.x branch that answered the same
-question from declarations and was wrong in both directions: 20 names no build
-exports, and two — `innerHTML` and `ssrStyleProperty` on `./web` — that every
-build does. Run `bun scripts/dialect-manifests.mjs check-composed-contracts` to
-detect drift between the artifact and its inputs. `make contract-conformance`
-runs all of these.
-
-The scheduled-primitives overlay is intentionally Solid 1.x-only because that
-release's peer range is `solid-js@^1.6.12`. Its exact npm version and integrity
-are pinned, and its claims are runtime-probed in all four condition modes
-against `solid-js@1.9.14` in a Solid 1.x install root of their own.
-
-The 1.x core contract is runtime-probed too, in the client, development and
-production modes it states. It does not state the server mode: under `node`,
-1.x resolves a build where `createEffect` never runs and memos never re-run, and
-that build needs its own contract rather than a footnote in this one.
-
-Probing found that `leading` and `leadingAndTrailing` do not behave the same way
-everywhere: their server branch returns early and never invokes the scheduler
-factory, so the `inline` claim on parameter 0 is true off the server only. Those
-two exports therefore carry per-condition `variants` — the browser variant keeps
-both claims, the node variant states only the deferred one. The debounce,
-throttle, and scheduleIdle claims need no variants: their server branch returns
-a no-op, so the callback is not invoked during the call in any condition, which
-is exactly what `deferred` asserts.
-
-The similarly named files below `rust/crates/solid-dialect/contracts/` are a
-different artifact set: flat review inputs used to test the hand-written
-vocabulary and generate Rust export indexes. See that directory's README and
-use `make contracts` to regenerate them.
-
-The Solid 2 contracts retain conditional variants for browser/development and
-server/worker builds. The backend does not guess which variant an unconfigured
-consumer runs: it reports an uncertifiable environment-dependent export until
-the runtime condition is explicitly selected.
+Run `make contracts` to reissue both physical bundle sets and `make
+contract-conformance` to check deterministic bytes, receipt roots, dialect
+inventories, and live registry pins. `runtime-lock.json` records the exact
+published package closure used by the runtime authority.

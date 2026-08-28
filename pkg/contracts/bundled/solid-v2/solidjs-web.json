@@ -1,1237 +1,869 @@
 {
-  "schemaVersion": 1,
-  "package": {
-    "name": "@solidjs/web",
-    "version": "2.0.0-rc.0",
-    "integrity": "sha512-pYSaA9+dH8H1h/d/ZF/P2kR6omfzFGNcdzKhWTcg9fJghXhn8+5UrXUr2iYxDdYNOXZzxxFQhYHSJ7P4HKDqgw=="
-  },
-  "compilerFactsProtocol": 1,
-  "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked",
-          "evidence": {
-            "kind": "probed",
-            "modes": [
-              "client",
-              "development",
-              "production"
-            ],
-            "calls": 2
-          }
-        },
-        {
-          "parameter": 1,
-          "execution": "deferred",
-          "evidence": {
-            "kind": "probed",
-            "modes": [
-              "client",
-              "development",
-              "production",
-              "server"
-            ],
-            "calls": 2
-          }
-        }
-      ],
-      "variants": [
-        {
-          "conditions": [
-            "browser",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "client",
-                    "development",
-                    "production"
-                  ],
-                  "calls": 2
-                }
-              },
-              {
-                "parameter": 1,
-                "execution": "deferred",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "client",
-                    "development",
-                    "production"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "client",
-                "development",
-                "production"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
-            "deno",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              },
-              {
-                "parameter": 1,
-                "execution": "inline"
-              }
-            ]
-          }
-        },
-        {
-          "conditions": [
-            "node",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              },
-              {
-                "parameter": 1,
-                "execution": "inline",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "server"
-                  ],
-                  "calls": 1
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "server"
-              ],
-              "calls": 1
-            }
-          }
-        },
-        {
-          "conditions": [
-            "worker",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              },
-              {
-                "parameter": 1,
-                "execution": "inline"
-              }
-            ]
-          }
-        }
-      ],
-      "evidence": {
-        "kind": "probed",
-        "modes": [
-          "client",
-          "development",
-          "production"
-        ],
-        "calls": 2
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "memo result",
-        "evidence": {
-          "kind": "probed",
-          "modes": [
-            "client",
-            "development",
-            "production",
-            "server"
-          ],
-          "calls": 1
-        }
-      },
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ],
-      "variants": [
-        {
-          "conditions": [
-            "browser",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "returns": {
-              "kind": "accessor",
-              "label": "memo result",
-              "evidence": {
-                "kind": "probed",
-                "modes": [
-                  "client",
-                  "development",
-                  "production"
-                ],
-                "calls": 1
-              }
-            },
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "client",
-                    "development",
-                    "production"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "client",
-                "development",
-                "production"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
-            "deno",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "returns": {
-              "kind": "accessor",
-              "label": "memo result"
-            },
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              }
-            ]
-          }
-        },
-        {
-          "conditions": [
-            "node",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "returns": {
-              "kind": "accessor",
-              "label": "memo result",
-              "evidence": {
-                "kind": "probed",
-                "modes": [
-                  "server"
-                ],
-                "calls": 1
-              }
-            },
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "server"
-              ],
-              "calls": 1
-            }
-          }
-        },
-        {
-          "conditions": [
-            "worker",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "returns": {
-              "kind": "accessor",
-              "label": "memo result"
-            },
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "function": {
-      "kind": "function"
-    },
-    "function-inline-0": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "function-inline-1": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "inline"
-        }
-      ]
-    },
-    "function-unknown-callbacks": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "function-dynamic": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ],
-      "variants": [
-        {
-          "conditions": [
-            "browser",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked"
-              }
-            ]
-          }
-        },
-        {
-          "conditions": [
-            "deno",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              }
-            ]
-          }
-        },
-        {
-          "conditions": [
-            "node",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              }
-            ]
-          }
-        },
-        {
-          "conditions": [
-            "worker",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "function-dynamic-jsx": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ],
-      "variants": [
-        {
-          "conditions": ["browser", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "tracked" }]
-          }
-        },
-        {
-          "conditions": ["deno", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "deferred" }]
-          }
-        },
-        {
-          "conditions": ["node", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "deferred" }]
-          }
-        },
-        {
-          "conditions": ["worker", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "deferred" }]
-          }
-        }
-      ]
-    },
-    "function-browser-inline-0": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ],
-      "variants": [
-        {
-          "conditions": [
-            "browser",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "inline"
-              }
-            ]
-          }
-        },
-        {
-          "conditions": ["deno", "import"],
-          "summary": { "kind": "function" }
-        },
-        {
-          "conditions": ["node", "import"],
-          "summary": { "kind": "function" }
-        },
-        {
-          "conditions": ["worker", "import"],
-          "summary": { "kind": "function" }
-        }
-      ]
-    },
-    "function-server-inline-0": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "variants": [
-        {
-          "conditions": ["browser", "import"],
-          "summary": { "kind": "function" }
-        },
-        {
-          "conditions": ["deno", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["node", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["worker", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "inline" }]
-          }
-        }
-      ]
-    },
-    "function-server-ssr-element": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "variants": [
-        {
-          "conditions": ["browser", "import"],
-          "summary": { "kind": "function" }
-        },
-        {
-          "conditions": ["deno", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              { "parameter": 1, "execution": "inline" },
-              { "parameter": 2, "execution": "inline" }
-            ]
-          }
-        },
-        {
-          "conditions": ["node", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              { "parameter": 1, "execution": "inline" },
-              { "parameter": 2, "execution": "inline" }
-            ]
-          }
-        },
-        {
-          "conditions": ["worker", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              { "parameter": 1, "execution": "inline" },
-              { "parameter": 2, "execution": "inline" }
-            ]
-          }
-        }
-      ]
-    },
-    "function-frame-result": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "variants": [
-        {
-          "conditions": ["browser", "import"],
-          "summary": { "kind": "function" }
-        },
-        {
-          "conditions": ["deno", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 1, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["node", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 1, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["worker", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 1, "execution": "inline" }]
-          }
-        }
-      ]
-    },
-    "function-frame-component": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "variants": [
-        {
-          "conditions": ["browser", "import"],
-          "summary": { "kind": "function" }
-        },
-        {
-          "conditions": ["deno", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["node", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["worker", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 0, "execution": "inline" }]
-          }
-        }
-      ]
-    },
-    "function-storage-callback": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "variants": [
-        {
-          "conditions": ["browser", "import"],
-          "summary": { "kind": "function" }
-        },
-        {
-          "conditions": ["deno", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 1, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["node", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 1, "execution": "inline" }]
-          }
-        },
-        {
-          "conditions": ["worker", "import"],
-          "summary": {
-            "kind": "function",
-            "callbacks": [{ "parameter": 1, "execution": "inline" }]
-          }
-        }
-      ]
-    },
-    "value": {
-      "kind": "value"
-    }
-  },
   "entrypoints": {
     ".": {
-      "exports": {
-        "function": [
-          "acquireAsset",
-          "addEvent",
-          "assign",
-          "claimElement",
-          "claimElementTree",
-          "className",
-          "clearFlashCookie",
-          "clientOnly",
-          "commitEventResponse",
-          "commitResponseStub",
-          "composeMiddleware",
-          "createLiveHoles",
-          "createRequestEvent",
-          "createResponseStub",
-          "createSSRResponse",
-          "delegateEvents",
-          "Dynamic",
-          "dynamicProperty",
-          "Errored",
-          "escape",
-          "For",
-          "generateHydrationScript",
-          "getDelegatedRoot",
-          "getExpectedRedirectStatus",
-          "getFirstChild",
-          "getHydrationKey",
-          "getNextMarker",
-          "getNextMatch",
-          "getNextSibling",
-          "getOwner",
-          "getRequestEvent",
-          "getServerFunctionMetadata",
-          "getServerFunctionRPC",
-          "hasFlashCookie",
-          "httpHeader",
-          "httpStatus",
-          "hydrate",
-          "Hydration",
-          "HydrationScript",
-          "insert",
-          "installHydrationRuntime",
-          "isHref",
-          "isResponseEnvelope",
-          "isSafeError",
-          "isServerFunction",
-          "Loading",
-          "markSafeError",
-          "Match",
-          "NoHydration",
-          "parseCookieHeader",
-          "Portal",
-          "redirect",
-          "ref",
-          "registerDelegatedContainer",
-          "registerDelegatedRoot",
-          "registerElementClaim",
-          "reload",
-          "render",
-          "renderToStream",
-          "Repeat",
-          "resolveSSRNode",
-          "respond",
-          "ResponseEnvelope",
-          "Reveal",
-          "runHydrationEvents",
-          "scope",
-          "serializeCookie",
-          "setAttribute",
-          "setAttributeNS",
-          "setProperty",
-          "setStyleProperty",
-          "Show",
-          "spread",
-          "ssr",
-          "ssrAttribute",
-          "ssrClassName",
-          "ssrGroup",
-          "ssrHydrationKey",
-          "ssrStyle",
-          "ssrStyleProperty",
-          "style",
-          "Switch",
-          "template",
-          "unregisterDelegatedContainer",
-          "unregisterDelegatedRoot",
-          "useHead",
-          "warmAsset"
-        ],
-        "value": [
-          "ChildProperties",
-          "DelegatedEvents",
-          "DOMElements",
-          "DOMWithState",
-          "HREF",
-          "isDev",
-          "isServer",
-          "MathMLElements",
-          "Namespaces",
-          "RawTextElements",
-          "RequestContext",
-          "REVALIDATE_HEADER",
-          "SAFE_ERROR",
-          "SVGElements",
-          "VoidElements"
-        ],
-        "function-1": [
-          "effect"
-        ],
-        "function-2": [
-          "memo"
-        ],
-        "function-inline-0": [
-          "applyRef",
-          "createComponent",
-          "untrack"
-        ],
-        "function-unknown-callbacks": [
-          "mergeProps"
-        ],
-        "function-dynamic": [
-          "dynamic"
-        ],
-        "function-browser-inline-0": [
-          "getNextElement"
-        ],
-        "function-server-inline-0": [
-          "renderToString"
-        ],
-        "function-server-ssr-element": [
-          "ssrElement"
-        ]
-      },
-      "conditions": [
-        "browser",
-        "deno",
-        "development",
-        "import",
-        "node",
-        "worker"
-      ]
-    },
-    "./frames": {
-      "exports": {
-        "function": [
-          "applyFrameResponse",
-          "asyncArg",
-          "createFrame",
-          "createFrameElement",
-          "createFrameHost",
-          "createFrameSink",
-          "createServerComponentHandler",
-          "frameTransformDirectResult",
-          "frameTransformFlightResult",
-          "getFrameHost",
-          "installServerComponents",
-          "isFrameStreamResponse",
-          "renderServerComponent",
-          "renderToFrameStream"
-        ],
-        "function-frame-result": [
-          "frameTransformResult"
-        ],
-        "function-frame-component": [
-          "serverComponentResponse"
-        ],
-        "value": [
-          "FRAME_APPLIED_EVENT",
-          "FRAME_STREAM_HEADER",
-          "SERVER_COMPONENT_BOOTSTRAP",
-          "ServerComponentPlugin"
-        ]
-      },
-      "conditions": [
-        "browser",
-        "deno",
-        "development",
-        "import",
-        "node",
-        "worker"
-      ]
-    },
-    "./frames/client": {
-      "exports": {
-        "function": [
-          "applyFrameResponse",
-          "asyncArg",
-          "createFrame",
-          "createFrameElement",
-          "createFrameHost",
-          "createServerComponentHandler",
-          "getFrameHost",
-          "installServerComponents",
-          "isFrameStreamResponse"
-        ],
-        "value": [
-          "FRAME_APPLIED_EVENT",
-          "FRAME_STREAM_HEADER"
-        ]
-      },
-      "conditions": [
-        "import"
-      ]
-    },
-    "./frames/server": {
-      "exports": {
-        "function": [
-          "asyncArg",
-          "createFrameSink",
-          "frameTransformDirectResult",
-          "frameTransformFlightResult",
-          "isFrameStreamResponse",
-          "renderServerComponent",
-          "renderToFrameStream"
-        ],
-        "function-inline-1": [
-          "frameTransformResult"
-        ],
-        "function-inline-0": [
-          "serverComponentResponse"
-        ],
-        "value": [
-          "FRAME_STREAM_HEADER",
-          "SERVER_COMPONENT_BOOTSTRAP",
-          "ServerComponentPlugin"
-        ]
-      },
-      "conditions": [
-        "import"
-      ]
-    },
-    "./jsx-dev-runtime": {
-      "exports": {
-        "function": [
-          "acquireAsset",
-          "addEvent",
-          "assign",
-          "claimElement",
-          "claimElementTree",
-          "className",
-          "clearFlashCookie",
-          "clientOnly",
-          "commitEventResponse",
-          "composeMiddleware",
-          "createRequestEvent",
-          "createResponseStub",
-          "createSSRResponse",
-          "delegateEvents",
-          "Dynamic",
-          "dynamicProperty",
-          "Errored",
-          "escape",
-          "For",
-          "generateHydrationScript",
-          "getDelegatedRoot",
-          "getExpectedRedirectStatus",
-          "getFirstChild",
-          "getHydrationKey",
-          "getNextMarker",
-          "getNextMatch",
-          "getNextSibling",
-          "getOwner",
-          "getRequestEvent",
-          "getServerFunctionMetadata",
-          "getServerFunctionRPC",
-          "hasFlashCookie",
-          "httpHeader",
-          "httpStatus",
-          "hydrate",
-          "Hydration",
-          "HydrationScript",
-          "insert",
-          "installHydrationRuntime",
-          "isHref",
-          "isResponseEnvelope",
-          "isSafeError",
-          "isServerFunction",
-          "Loading",
-          "markSafeError",
-          "Match",
-          "NoHydration",
-          "parseCookieHeader",
-          "Portal",
-          "redirect",
-          "ref",
-          "registerDelegatedContainer",
-          "registerDelegatedRoot",
-          "registerElementClaim",
-          "reload",
-          "render",
-          "renderToStream",
-          "renderToString",
-          "Repeat",
-          "resolveSSRNode",
-          "respond",
-          "ResponseEnvelope",
-          "Reveal",
-          "runHydrationEvents",
-          "scope",
-          "serializeCookie",
-          "setAttribute",
-          "setAttributeNS",
-          "setProperty",
-          "setStyleProperty",
-          "Show",
-          "spread",
-          "ssr",
-          "ssrAttribute",
-          "ssrClassName",
-          "ssrElement",
-          "ssrGroup",
-          "ssrHydrationKey",
-          "ssrStyle",
-          "ssrStyleProperty",
-          "style",
-          "Switch",
-          "template",
-          "unregisterDelegatedContainer",
-          "unregisterDelegatedRoot",
-          "useHead",
-          "warmAsset"
-        ],
-        "value": [
-          "ChildProperties",
-          "DelegatedEvents",
-          "DOMElements",
-          "DOMWithState",
-          "HREF",
-          "isDev",
-          "isServer",
-          "MathMLElements",
-          "Namespaces",
-          "RawTextElements",
-          "RequestContext",
-          "REVALIDATE_HEADER",
-          "SAFE_ERROR",
-          "SVGElements",
-          "VoidElements"
-        ],
-        "function-inline-0": [
-          "applyRef",
-          "createComponent",
-          "getNextElement",
-          "untrack"
-        ],
-        "function-unknown-callbacks": [
-          "mergeProps"
-        ],
-        "function-dynamic-jsx": [
-          "dynamic"
-        ],
-        "function-1": [
-          "effect"
-        ],
-        "function-2": [
-          "memo"
-        ]
-      },
-      "conditions": [
-        "import"
-      ]
-    },
-    "./jsx-runtime": {
-      "sameAs": "./jsx-dev-runtime",
-      "conditions": [
-        "import"
-      ]
-    },
-    "./serialization": {
-      "exports": {
-        "function": [
-          "createHydrationSerializer",
-          "createJSONDataTable",
-          "createJSONDeserializer",
-          "createJSONSerializer",
-          "createPlugin",
-          "createSerializer",
-          "getLocalHeaderScript",
-          "OpaqueReference",
-          "resolveSerializerPlugins",
-          "serializeJSON"
-        ],
-        "value": [
-          "DEFAULT_WEB_PLUGINS"
-        ]
-      },
-      "conditions": [
-        "import"
-      ]
-    },
-    "./serialization/decode": {
-      "exports": {
-        "function": [
-          "createJSONDataTable",
-          "createJSONDeserializer",
-          "resolveCodecOptions",
-          "resolveSerializerPlugins"
-        ],
-        "value": [
-          "DEFAULT_WEB_PLUGINS"
-        ]
-      },
-      "conditions": [
-        "import"
-      ]
-    },
-    "./server-functions": {
-      "exports": {
-        "function": [
-          "ChunkReader",
-          "clearFlashCookie",
-          "configureServerFunctionsClient",
-          "configureServerFunctionsServer",
-          "createChunk",
-          "createNoJSHandler",
-          "createServerReference",
-          "decodeErrorHeaderValue",
-          "decodeFlashCookie",
-          "decodeResponse",
-          "decodeResponsePayload",
-          "deserializeStream",
-          "encodeErrorHeaderValue",
-          "encodeFlashCookie",
-          "foldSetCookies",
-          "frameAddress",
-          "GET",
-          "getEventServerFunctionInvocation",
-          "getFlightDataConsumer",
-          "getServerFunction",
-          "getServerFunctionInvocation",
-          "getServerFunctionMetadata",
-          "getServerFunctionsCodec",
-          "handleServerFunctionRequest",
-          "hasFlashCookie",
-          "isServerFunction",
-          "registerServerFunction",
-          "registerServerReference",
-          "sanitizeServerError",
-          "serializeString",
-          "setServerFunctionsDev",
-          "subscribeFlightData",
-          "withMeta"
-        ],
-        "value": [
-          "ERROR_HEADER",
-          "FLASH_COOKIE",
-          "FUNCTION_HEADER",
-          "GENERIC_SERVER_ERROR_MESSAGE",
-          "INSTANCE_HEADER",
-          "REVALIDATE_HEADER",
-          "SINGLE_FLIGHT_HEADER"
-        ]
-      },
-      "conditions": [
-        "browser",
-        "deno",
-        "development",
-        "import",
-        "node",
-        "worker"
-      ]
-    },
-    "./server-functions/client": {
-      "exports": {
-        "function": [
-          "ChunkReader",
-          "clearFlashCookie",
-          "configureServerFunctionsClient",
-          "createChunk",
-          "createServerReference",
-          "decodeErrorHeaderValue",
-          "decodeResponse",
-          "decodeResponsePayload",
-          "deserializeStream",
-          "encodeErrorHeaderValue",
-          "frameAddress",
-          "GET",
-          "getFlightDataConsumer",
-          "getServerFunctionInvocation",
-          "getServerFunctionMetadata",
-          "getServerFunctionsCodec",
-          "hasFlashCookie",
-          "isServerFunction",
-          "registerServerReference",
-          "serializeString",
-          "subscribeFlightData",
-          "withMeta"
-        ],
-        "value": [
-          "ERROR_HEADER",
-          "FLASH_COOKIE",
-          "FUNCTION_HEADER",
-          "INSTANCE_HEADER",
-          "REVALIDATE_HEADER",
-          "SINGLE_FLIGHT_HEADER"
-        ]
-      },
-      "conditions": [
-        "import"
-      ]
-    },
-    "./server-functions/rich-args": {
-      "exports": {
-        "function": [
-          "enableRichArguments"
-        ]
-      },
-      "conditions": [
-        "import"
-      ]
-    },
-    "./server-functions/server": {
-      "exports": {
-        "function": [
-          "clearFlashCookie",
-          "configureServerFunctionsServer",
-          "createNoJSHandler",
-          "createServerReference",
-          "decodeErrorHeaderValue",
-          "decodeFlashCookie",
-          "decodeResponse",
-          "decodeResponsePayload",
-          "encodeErrorHeaderValue",
-          "encodeFlashCookie",
-          "foldSetCookies",
-          "GET",
-          "getEventServerFunctionInvocation",
-          "getServerFunction",
-          "getServerFunctionInvocation",
-          "getServerFunctionMetadata",
-          "handleServerFunctionRequest",
-          "hasFlashCookie",
-          "isServerFunction",
-          "registerServerFunction",
-          "registerServerReference",
-          "sanitizeServerError",
-          "setServerFunctionsDev",
-          "subscribeFlightData",
-          "withMeta"
-        ],
-        "value": [
-          "ERROR_HEADER",
-          "FLASH_COOKIE",
-          "FUNCTION_HEADER",
-          "GENERIC_SERVER_ERROR_MESSAGE",
-          "INSTANCE_HEADER",
-          "SINGLE_FLIGHT_HEADER"
-        ]
-      },
-      "conditions": [
-        "development",
-        "import"
-      ]
-    },
-    "./storage": {
-      "exports": {
-        "function-storage-callback": [
-          "provideRequestEvent"
-        ]
-      },
-      "conditions": [
-        "import"
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8ffc3f3c194f3408a9e46f020b7729170a0b42fc6bd4108cb977b88e725873af",
+            "path": "dist/dev.js",
+            "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851"
+          },
+          "declarations": {
+            "path": "types/index.d.ts",
+            "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+          },
+          "exports": {
+            "applyRef": "summary-3f8fe1be95bf373ec8494426a2568244fa54fd00ea0258bbf6bb29e09a9f5321",
+            "clientOnly": "summary-33b1f252bf40ccbf4afd30c2d3c9e9cc74f10c3ece12fee903d628e8da7c231e",
+            "httpHeader": "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+            "httpStatus": "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+            "hydrate": "summary-7dc57984919daf1dd41a313f41608c3f779ecf3be74645aaeedf55473bbb255c",
+            "render": "summary-d6e8921e93fd37f6028c1ad809693ef42764ab602a477ba683dd4afc3efa7530"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser/development/import/default",
+            "typesBranch": "/exports/./browser/development/import/types"
+          }
+        }
       ]
     }
   },
-  "evidence": {
-    "kind": "verified",
-    "generator": "solid-checker bundled Solid 2 DOM model"
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
+    },
+    "name": "@solidjs/web",
+    "version": "2.0.0-rc.3"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "1d18b261f3e3c7af68b750ecc71391e868847229d6360c67b7a3197b44b0710e"
+    }
+  },
+  "summaries": {
+    "summary-33b1f252bf40ccbf4afd30c2d3c9e9cc74f10c3ece12fee903d628e8da7c231e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "eager-load"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "lazy-load"
+          },
+          {
+            "from": {
+              "operation": "resolve-module",
+              "path": []
+            },
+            "operation": "render-component"
+          }
+        ],
+        "cases": [
+          {
+            "operations": [
+              "eager-load",
+              "render-component",
+              "render-fallback",
+              "resolve-module"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 1,
+                  "literal": false,
+                  "path": [
+                    "lazy"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "lazy-load",
+              "render-component",
+              "render-fallback",
+              "resolve-module"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 1,
+                  "literal": true,
+                  "path": [
+                    "lazy"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "eager-load",
+              "render-component",
+              "render-fallback",
+              "resolve-module"
+            ],
+            "otherwise": true
+          }
+        ],
+        "cleanups": [],
+        "closed": [
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "edges": [
+          {
+            "from": "render-fallback",
+            "kind": "orders",
+            "to": "render-component"
+          },
+          {
+            "from": "eager-load",
+            "kind": "data",
+            "to": "resolve-module"
+          },
+          {
+            "from": "lazy-load",
+            "kind": "data",
+            "to": "resolve-module"
+          },
+          {
+            "from": "resolve-module",
+            "kind": "data",
+            "to": "render-component"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "eager-load",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "module-load"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "literal": true,
+                  "path": [
+                    "lazy"
+                  ]
+                }
+              ]
+            },
+            "id": "lazy-load",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "module-load"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "settle",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "render-component",
+            "kind": "invoke",
+            "output": "component",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "resolve-module"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "render-fallback",
+            "kind": "return",
+            "output": "plain",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "settle",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "resolve-module",
+            "kind": "return",
+            "output": {
+              "kind": "object"
+            },
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "module-load"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "settle",
+              "resource": "module-load"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "module-load",
+            "kind": "async-computation",
+            "states": [
+              "pending",
+              "settled",
+              "errored",
+              "cancelled"
+            ]
+          }
+        ],
+        "returns": [
+          "render-fallback",
+          "resolve-module"
+        ],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "component"
+    },
+    "summary-3f8fe1be95bf373ec8494426a2568244fa54fd00ea0258bbf6bb29e09a9f5321": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "ref-factory"
+          },
+          {
+            "from": {
+              "operation": "ref-factory",
+              "path": []
+            },
+            "operation": "ref-application"
+          }
+        ],
+        "cases": [],
+        "cleanups": [
+          "ref-cleanup"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "edges": [
+          {
+            "from": "ref-factory",
+            "kind": "data",
+            "to": "ref-application"
+          },
+          {
+            "from": "ref-application",
+            "kind": "cleanup",
+            "to": "ref-cleanup"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "ref-application",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "ref-factory"
+            }
+          },
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "ref-cleanup",
+            "kind": "cleanup",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "ref-application"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "ref-factory",
+            "kind": "invoke",
+            "output": {
+              "element": "ref-application",
+              "kind": "array",
+              "length": {
+                "max": "many",
+                "min": 1
+              }
+            },
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "resource": "setup-owner",
+              "source": "captured"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "setup-owner",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    },
+    "summary-7dc57984919daf1dd41a313f41608c3f779ecf3be74645aaeedf55473bbb255c": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "hydrate-callback"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "hydrate-callback",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "browser-root"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "browser-root"
+                  },
+                  "resource": "browser-root"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "browser-root",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "browser-root",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": {
+        "kind": "cleanup",
+        "lifetime": {
+          "kind": "owner",
+          "resource": "browser-root"
+        }
+      }
+    },
+    "summary-d6e8921e93fd37f6028c1ad809693ef42764ab602a477ba683dd4afc3efa7530": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "render-callback"
+          },
+          {
+            "from": {
+              "path": [
+                "listeners"
+              ],
+              "resource": "browser-root"
+            },
+            "operation": "delegated-event"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [
+          "register-delegation"
+        ],
+        "disposals": [
+          "unregister-root"
+        ],
+        "edges": [
+          {
+            "from": "delegated-event",
+            "kind": "lifetime",
+            "to": "unregister-root"
+          },
+          {
+            "from": "register-delegation",
+            "kind": "lifetime",
+            "to": "delegated-event"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "delegated-event",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "resource": "browser-root",
+              "source": "captured"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "external-event"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "register-delegation",
+            "kind": "create",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "browser-root"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "browser-root"
+                  },
+                  "resource": "browser-root"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "browser-root",
+              "source": "created"
+            },
+            "resources": [
+              "browser-root"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "render-callback",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "browser-root"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "browser-root"
+                  },
+                  "resource": "browser-root"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "browser-root",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "unregister-root",
+            "kind": "dispose",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "browser-root"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "cleanup"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "browser-root",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": {
+        "kind": "cleanup",
+        "lifetime": {
+          "kind": "owner",
+          "resource": "browser-root"
+        }
+      }
+    },
+    "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "reads": [],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    }
   }
 }
