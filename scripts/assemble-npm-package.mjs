@@ -47,6 +47,7 @@ const packageJsonPath = join(mainOutput, "package.json");
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
 packageJson.version = version;
 packageJson.dependencies = {
+  ...packageJson.dependencies,
   "solid-checker-wasm": `^${version}`
 };
 packageJson.optionalDependencies = {};

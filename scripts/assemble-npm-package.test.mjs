@@ -51,6 +51,7 @@ test("restores executable permissions after artifact download", () => {
       name: "solid-checker",
       version: "0.0.0",
       license: "MIT",
+      dependencies: { typescript: "5.9.3" },
       repository: { type: "git", url: "https://example.com/solid-checker.git" },
       publishConfig: { access: "public" }
     })}\n`);
@@ -87,6 +88,10 @@ test("restores executable permissions after artifact download", () => {
       readFileSync(join(output, "solid-checker", "package.json"), "utf8")
     );
     assert.equal(packageJson.version, "1.2.3");
+    assert.deepEqual(packageJson.dependencies, {
+      typescript: "5.9.3",
+      "solid-checker-wasm": "^1.2.3"
+    });
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -11,7 +11,9 @@ on:
       - "schema/typefacts-*"
       - "go.mod"
       - "go.sum"
-      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "packages/cli/scripts/**"
+      - "packages/cli/package.json"
+      - "packages/cli/bun.lock"
       - "scripts/contract-corpus.mjs"
       - "fixtures/package-contracts/torture-*/**"
       - "Makefile"
@@ -24,7 +26,9 @@ on:
       - "schema/typefacts-*"
       - "go.mod"
       - "go.sum"
-      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "packages/cli/scripts/**"
+      - "packages/cli/package.json"
+      - "packages/cli/bun.lock"
       - "scripts/contract-corpus.mjs"
       - "fixtures/package-contracts/torture-*/**"
       - "Makefile"
@@ -43,6 +47,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
+      - run: bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
       # This job builds the same debug workspace the CI engine job does, on the
       # same image and toolchain, so it restores that job's dependency cache
       # instead of compiling the dependency graph from nothing. CI's engine job

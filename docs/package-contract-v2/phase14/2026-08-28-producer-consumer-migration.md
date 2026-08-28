@@ -174,6 +174,10 @@ Focused/property coverage added or retained by the migration includes:
 - source-versus-receipt-issued consumer differential equality;
 - repository-root Bun loading of the TypeScript compiler API through its
   standards-compatible ESM default export;
+- standalone corpus installation and path-filter coverage for the complete
+  temporary-v2 producer script surface;
+- preservation of the exact TypeScript runtime dependency in assembled npm
+  packages;
 - LF checkout enforcement for receipt-bound bundle, dialect, and fixture
   documents.
 
@@ -191,7 +195,7 @@ Commands run during implementation:
 | coverage compare after intentional update | 94 projects, 542 findings |
 | armed `bun scripts/tsc-oracle-gate.mjs` | 161 rule cases and 41 keystones passed |
 | `make contract-conformance` | 24 cases and both physical locations reproducible; 7 live npm pins verified; composed bundles passed |
-| `make verify` | passed in 223.03 seconds for the migration and 139.69 seconds after the final CI portability fix |
+| `make verify` | passed in 223.03 seconds for the migration and 139.57 seconds after the final CI portability fix |
 
 The initial contract-conformance invocation was sandboxed from DNS and failed
 only its seven live registry lookups. The authorized rerun performed all seven
@@ -204,14 +208,17 @@ all 24 bundled cases in both locations, all seven live pins, and composed
 contract conformance.
 
 The first PR run exposed two platform-only assumptions that local macOS did
-not exercise. Linux Bun 1.4 did not expose the TypeScript compiler API through
-`createRequire` when the artifact module was reached from the repository-root
-corpus process, so artifact resolution now uses the standards-compatible ESM
-default import and validates the selected API. Windows Git translated accepted
-JSON to CRLF, so the embedded document no longer matched its receipt's LF
-`wireDigest`; the LF checkout policy above prevents that byte drift. The
-original 39-fixture contract-corpus command and both focused regressions passed
-before the final full verification run.
+not exercise. The standalone Linux corpus workflow did not install the CLI
+package at all after Phase 14 made TypeScript part of the live producer; it now
+performs the frozen install and watches the full producer script tree instead
+of the deleted schema-1 generator path. TypeScript 5.9.3 is an exact runtime
+dependency, package assembly preserves it, and artifact resolution uses and
+validates its standards-compatible ESM default API. Windows Git translated
+accepted JSON to CRLF, so the embedded document no longer matched its receipt's
+LF `wireDigest`; the LF checkout policy above prevents that byte drift. The
+original 39-fixture contract-corpus command, dependency-lock checks, package
+assembly tests, and focused regressions passed before the final full
+verification run.
 
 ## Type Facts, compiler facts, and generated binaries
 

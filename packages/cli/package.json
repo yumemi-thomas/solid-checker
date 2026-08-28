@@ -44,9 +44,11 @@
       "optional": true
     }
   },
+  "dependencies": {
+    "typescript": "5.9.3"
+  },
   "devDependencies": {
     "eslint": "10.8.0",
-    "typescript": "5.9.3",
     "vitest": "^4.1.11"
   },
   "packageManager": "bun@1.4.0",
