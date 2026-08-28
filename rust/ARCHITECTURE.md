@@ -171,6 +171,16 @@ facts, and exposes only local normalized claim answers. Phase 14 removed the
 legacy decoder and public contract types: ordinary native and WASM analysis now
 accept only receipt-issued temporary-v2 inputs.
 
+Phase 15 makes that boundary structurally bounded. Main documents, proof and
+probe sidecars, workflow documents, probe transcripts, receipts, and accepted
+catalogs all pass through one byte/depth/node/string-limited JSON decoder;
+file-backed documents are size-checked before allocation. Artifact coordinates
+and catalog/closure paths are canonical and traversal-free. Normalized causal
+validation includes both explicit operation edges and operation triggers, while
+resource lifetime dependencies are checked as their own acyclic graph. These
+checks remain in the backend/normalized deep modules, so analysis consumers do
+not acquire wire-limit, path, or schema mechanics.
+
 `solid-facts-backend::artifact_resolution` owns the Phase 7 selection seam.
 Host, Type Facts, and standalone acquisition all produce one exact
 `ResolvedImport`; authority falls through in that order only when the stronger

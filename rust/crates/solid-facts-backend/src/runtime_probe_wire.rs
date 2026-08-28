@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use solid_reactive_ir::contract_semantics::{Digest, OperationId, ResourceId};
 use thiserror::Error;
 
@@ -27,6 +27,9 @@ const RUNS_FORMAT: &str = "solid-checker-runtime-probe-runs";
 const EVALUATION_FORMAT: &str = "solid-checker-runtime-probe-evaluation";
 const SCHEMA_VERSION: u16 = 2;
 const MAX_DOCUMENT_BYTES: usize = 16 * 1024 * 1024;
+const MAX_DOCUMENT_DEPTH: usize = 128;
+const MAX_DOCUMENT_NODES: usize = 1_000_000;
+const MAX_DOCUMENT_STRING_BYTES: usize = 16 * 1024;
 
 #[derive(Debug, Error)]
 pub enum RuntimeProbeWireError {
@@ -580,7 +583,16 @@ pub fn evaluate_runtime_probe_runs(
         .transcripts()
         .iter()
         .map(|transcript| {
-            let document = serde_json::from_slice(transcript.bytes()).map_err(decode_error)?;
+            let document = crate::bounded_json::value(
+                transcript.bytes(),
+                crate::bounded_json::Limits {
+                    bytes: MAX_DOCUMENT_BYTES,
+                    depth: MAX_DOCUMENT_DEPTH,
+                    nodes: MAX_DOCUMENT_NODES,
+                    string_bytes: MAX_DOCUMENT_STRING_BYTES,
+                },
+            )
+            .map_err(decode_error)?;
             Ok(WireTranscript {
                 claim_id: transcript.claim_id().as_str().into(),
                 mode: transcript.mode().into(),
@@ -876,11 +888,17 @@ fn validate_transport_string(value: &str, field: &str) -> Result<(), RuntimeProb
     }
 }
 
-fn decode<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<T, RuntimeProbeWireError> {
-    if bytes.len() > MAX_DOCUMENT_BYTES {
-        return invalid("runtime probe document exceeds the 16 MiB resource limit");
-    }
-    serde_json::from_slice(bytes).map_err(decode_error)
+fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, RuntimeProbeWireError> {
+    crate::bounded_json::decode(
+        bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_DOCUMENT_BYTES,
+            depth: MAX_DOCUMENT_DEPTH,
+            nodes: MAX_DOCUMENT_NODES,
+            string_bytes: MAX_DOCUMENT_STRING_BYTES,
+        },
+    )
+    .map_err(decode_error)
 }
 
 fn emit(value: &impl Serialize) -> Result<Vec<u8>, RuntimeProbeWireError> {

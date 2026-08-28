@@ -2349,6 +2349,64 @@ mod tests {
     }
 
     #[test]
+    fn invocation_completeness_and_generation_identity_fail_closed_locally() {
+        let transcript = crate::InvocationTranscript {
+            location: location("/p/source.ts", 0),
+            validity: crate::ResolvedCallValidity::Unresolved,
+            kind: crate::CallKind::Unknown,
+            target: "".into(),
+            targets: None,
+            selected_signature: None,
+            bindings: Vec::new(),
+            omitted_parameters: Vec::new(),
+            parameter_uses: Vec::new(),
+            control_flow: None,
+            completeness: crate::InvocationCompleteness(vec![
+                crate::InvocationDomain::Bindings,
+                crate::InvocationDomain::Bindings,
+            ]),
+            open_reasons: Vec::new(),
+        };
+        assert!(matches!(
+            validate_invocation_transcript(&transcript),
+            Err(SessionError::InvalidResponse(_))
+        ));
+
+        let transcript = crate::InvocationTranscript {
+            completeness: crate::InvocationCompleteness(vec![crate::InvocationDomain::Signature]),
+            ..transcript
+        };
+        assert!(matches!(
+            validate_invocation_transcript(&transcript),
+            Err(SessionError::InvalidResponse(_))
+        ));
+
+        let demands = Vec::<crate::InvocationDemand>::new();
+        let envelope = crate::InvocationEnvelope {
+            project_id: "/p/tsconfig.json".into(),
+            generation: 7,
+            demand_sha256: invocation_demand_digest(&demands).into(),
+            module_graph_sha256: crate::SourceHash::of("module graph").as_str().into(),
+            schema_sha256: v3::TYPE_FACTS_SCHEMA_SHA256.into(),
+            producer_build: v3::TYPE_FACTS_BUILD_ID.into(),
+            sources: Vec::new(),
+            open_reasons: Vec::new(),
+        };
+        assert!(validate_invocation_envelope(&envelope, "/p/tsconfig.json", 7, &demands,).is_ok());
+        assert!(matches!(
+            validate_invocation_envelope(&envelope, "/p/tsconfig.json", 8, &demands),
+            Err(SessionError::InvalidResponse(_))
+        ));
+
+        let mut stale_producer = envelope;
+        stale_producer.producer_build = "stale-build".into();
+        assert!(matches!(
+            validate_invocation_envelope(&stale_producer, "/p/tsconfig.json", 7, &demands,),
+            Err(SessionError::InvalidResponse(_))
+        ));
+    }
+
+    #[test]
     fn invocation_demand_digest_matches_the_go_producer_fixture() {
         let demands = [
             crate::InvocationDemand {

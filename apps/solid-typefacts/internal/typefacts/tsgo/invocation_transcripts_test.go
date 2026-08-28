@@ -104,6 +104,13 @@ execute({ mode: "read", nested: { callback } }, ...steps);
 		!transcript.Completeness.Contains(typefacts.InvocationDomainOmissions) {
 		t.Fatalf("completeness = %#v, want bindings and omissions closed", transcript.Completeness)
 	}
+	seenCompleteness := make(map[typefacts.InvocationDomain]bool, len(transcript.Completeness))
+	for _, domain := range transcript.Completeness {
+		if seenCompleteness[domain] {
+			t.Fatalf("completeness contains duplicate domain %q: %#v", domain, transcript.Completeness)
+		}
+		seenCompleteness[domain] = true
+	}
 	parameter := transcript.SelectedSignature.Parameters[0]
 	if !hasCallablePath(parameter.CallablePaths, "nested", "callback") {
 		t.Fatalf("callable paths = %#v, want nested.callback", parameter.CallablePaths)

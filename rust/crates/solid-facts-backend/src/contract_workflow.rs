@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     Digest, NormalizedContract, SemanticClaimPath, SemanticClaimSubject, VerifierIdentity,
@@ -30,6 +30,9 @@ const PROOF_FORMAT: &str = "solid-checker-contract-proof-transcript";
 const PROOF_VERSION: u16 = 1;
 const MAX_WORKFLOW_BYTES: usize = 16 * 1024 * 1024;
 const MAX_CLAIMS: usize = 65_536;
+const MAX_WORKFLOW_DEPTH: usize = 128;
+const MAX_WORKFLOW_NODES: usize = 1_000_000;
+const MAX_WORKFLOW_STRING_BYTES: usize = 16 * 1024;
 
 #[derive(Debug, Error)]
 pub enum ContractWorkflowError {
@@ -808,11 +811,17 @@ fn proof_family_name(family: ProofFamily) -> &'static str {
     }
 }
 
-fn decode<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<T, ContractWorkflowError> {
-    if bytes.is_empty() || bytes.len() > MAX_WORKFLOW_BYTES {
-        return invalid("contract workflow document exceeds the resource limit");
-    }
-    serde_json::from_slice(bytes).map_err(decode_error)
+fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ContractWorkflowError> {
+    crate::bounded_json::decode(
+        bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_WORKFLOW_BYTES,
+            depth: MAX_WORKFLOW_DEPTH,
+            nodes: MAX_WORKFLOW_NODES,
+            string_bytes: MAX_WORKFLOW_STRING_BYTES,
+        },
+    )
+    .map_err(decode_error)
 }
 
 fn emit(value: &impl Serialize) -> Result<Vec<u8>, ContractWorkflowError> {
@@ -821,7 +830,7 @@ fn emit(value: &impl Serialize) -> Result<Vec<u8>, ContractWorkflowError> {
     Ok(bytes)
 }
 
-fn decode_error(error: serde_json::Error) -> ContractWorkflowError {
+fn decode_error(error: impl std::fmt::Display) -> ContractWorkflowError {
     ContractWorkflowError::Decode {
         message: error.to_string(),
     }

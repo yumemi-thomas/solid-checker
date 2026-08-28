@@ -201,6 +201,7 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
             )?;
         }
     }
+    validate_resource_lifetimes(&call.resources)?;
 
     let mut operation_ids = BTreeSet::new();
     for operation in &call.operations {
@@ -219,7 +220,7 @@ fn normalize_call(call: &mut CallSemantics, path: &str) -> Result<(), ModelError
         .sort_by(|left, right| left.id.cmp(&right.id));
 
     validate_call_claims(&call.claims, &call.operations, &resources, path)?;
-    normalize_edges(&mut call.edges, &operation_ids, path)?;
+    normalize_operation_graph(&mut call.edges, &call.operations, &operation_ids, path)?;
     normalize_guard_partition(&mut call.guards, &operation_ids, path)?;
     Ok(())
 }
@@ -529,6 +530,71 @@ fn validate_lifetime(
         Lifetime::AsyncSource(resource) => (resource, ResourceKind::AsyncComputation),
     };
     require_resource_kind(expected.0, expected.1, resources, path)
+}
+
+fn validate_resource_lifetimes(resources: &[Resource]) -> Result<(), ModelError> {
+    let mut adjacency = BTreeMap::<ResourceId, BTreeSet<ResourceId>>::new();
+    let mut indegree = resources
+        .iter()
+        .map(|resource| (resource.id.clone(), 0usize))
+        .collect::<BTreeMap<_, _>>();
+    for resource in resources {
+        let Some(target) = resource.lifetime.as_ref().and_then(lifetime_resource) else {
+            continue;
+        };
+        // A resource may be the explicit anchor for its own typed lifetime
+        // (`owner: self`, `transition: self`, and so on). Only a dependency
+        // through another resource contributes a graph edge.
+        if target == &resource.id {
+            continue;
+        }
+        if adjacency
+            .entry(resource.id.clone())
+            .or_default()
+            .insert(target.clone())
+        {
+            *indegree
+                .get_mut(target)
+                .expect("resource lifetimes were foreign-key checked") += 1;
+        }
+    }
+
+    let mut ready = indegree
+        .iter()
+        .filter_map(|(resource, degree)| (*degree == 0).then_some(resource.clone()))
+        .collect::<BTreeSet<_>>();
+    let mut visited = 0usize;
+    while let Some(resource) = ready.pop_first() {
+        visited += 1;
+        for next in adjacency.get(&resource).into_iter().flatten() {
+            let degree = indegree
+                .get_mut(next)
+                .expect("resource lifetimes were foreign-key checked");
+            *degree -= 1;
+            if *degree == 0 {
+                ready.insert(next.clone());
+            }
+        }
+    }
+    if visited == indegree.len() {
+        return Ok(());
+    }
+    let resource = indegree
+        .into_iter()
+        .find_map(|(resource, degree)| (degree > 0).then_some(resource.0))
+        .expect("an incomplete topological traversal leaves a positive indegree");
+    Err(ModelError::ResourceCycle { resource })
+}
+
+fn lifetime_resource(lifetime: &Lifetime) -> Option<&ResourceId> {
+    match lifetime {
+        Lifetime::Call => None,
+        Lifetime::Resource(resource)
+        | Lifetime::Owner(resource)
+        | Lifetime::Request(resource)
+        | Lifetime::Transition(resource)
+        | Lifetime::AsyncSource(resource) => Some(resource),
+    }
 }
 
 fn require_operation(
@@ -1084,8 +1150,9 @@ fn require_operation_kind(
     }
 }
 
-fn normalize_edges(
+fn normalize_operation_graph(
     edges: &mut [OperationEdge],
+    operation_nodes: &[Operation],
     operations: &BTreeSet<OperationId>,
     path: &str,
 ) -> Result<(), ModelError> {
@@ -1106,40 +1173,75 @@ fn normalize_edges(
         });
     }
 
-    let mut adjacency = BTreeMap::<&OperationId, Vec<&OperationId>>::new();
+    let mut adjacency = BTreeMap::<OperationId, BTreeSet<OperationId>>::new();
+    let mut indegree = operations
+        .iter()
+        .cloned()
+        .map(|operation| (operation, 0usize))
+        .collect::<BTreeMap<_, _>>();
     for edge in edges.iter() {
-        adjacency.entry(&edge.from).or_default().push(&edge.to);
+        insert_causal_arc(
+            &mut adjacency,
+            &mut indegree,
+            edge.from.clone(),
+            edge.to.clone(),
+        );
     }
-    let mut visiting = BTreeSet::new();
-    let mut visited = BTreeSet::new();
-    for operation in operations {
-        visit_operation(operation, &adjacency, &mut visiting, &mut visited)?;
-    }
-    Ok(())
-}
-
-fn visit_operation<'a>(
-    operation: &'a OperationId,
-    adjacency: &BTreeMap<&'a OperationId, Vec<&'a OperationId>>,
-    visiting: &mut BTreeSet<&'a OperationId>,
-    visited: &mut BTreeSet<&'a OperationId>,
-) -> Result<(), ModelError> {
-    if visited.contains(operation) {
-        return Ok(());
-    }
-    if !visiting.insert(operation) {
-        return Err(ModelError::OperationCycle {
-            operation: operation.0.clone(),
-        });
-    }
-    if let Some(next) = adjacency.get(operation) {
-        for next in next {
-            visit_operation(next, adjacency, visiting, visited)?;
+    for operation in operation_nodes {
+        if let Some(Trigger::Operation(trigger)) = &operation.trigger {
+            insert_causal_arc(
+                &mut adjacency,
+                &mut indegree,
+                trigger.clone(),
+                operation.id.clone(),
+            );
         }
     }
-    visiting.remove(operation);
-    visited.insert(operation);
-    Ok(())
+    reject_operation_cycle(adjacency, indegree)
+}
+
+fn insert_causal_arc(
+    adjacency: &mut BTreeMap<OperationId, BTreeSet<OperationId>>,
+    indegree: &mut BTreeMap<OperationId, usize>,
+    from: OperationId,
+    to: OperationId,
+) {
+    if adjacency.entry(from).or_default().insert(to.clone()) {
+        *indegree
+            .get_mut(&to)
+            .expect("causal arc endpoints were foreign-key checked") += 1;
+    }
+}
+
+fn reject_operation_cycle(
+    adjacency: BTreeMap<OperationId, BTreeSet<OperationId>>,
+    mut indegree: BTreeMap<OperationId, usize>,
+) -> Result<(), ModelError> {
+    let mut ready = indegree
+        .iter()
+        .filter_map(|(operation, degree)| (*degree == 0).then_some(operation.clone()))
+        .collect::<BTreeSet<_>>();
+    let mut visited = 0usize;
+    while let Some(operation) = ready.pop_first() {
+        visited += 1;
+        for next in adjacency.get(&operation).into_iter().flatten() {
+            let degree = indegree
+                .get_mut(next)
+                .expect("causal arc endpoints were foreign-key checked");
+            *degree -= 1;
+            if *degree == 0 {
+                ready.insert(next.clone());
+            }
+        }
+    }
+    if visited == indegree.len() {
+        return Ok(());
+    }
+    let operation = indegree
+        .into_iter()
+        .find_map(|(operation, degree)| (degree > 0).then_some(operation.0))
+        .expect("an incomplete topological traversal leaves a positive indegree");
+    Err(ModelError::OperationCycle { operation })
 }
 
 fn normalize_guard_partition(

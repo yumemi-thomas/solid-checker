@@ -216,6 +216,8 @@ pub enum ModelError {
     MissingResource { path: String, resource: String },
     #[error("operation graph contains a causal cycle involving {operation}")]
     OperationCycle { operation: String },
+    #[error("resource lifetime graph contains a cycle involving {resource}")]
+    ResourceCycle { resource: String },
     #[error("invalid guard at {path}: {reason}")]
     InvalidGuard { path: String, reason: String },
     #[error("guards {left} and {right} overlap in partition {path}")]

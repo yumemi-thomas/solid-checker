@@ -20,6 +20,13 @@ accept only receipt-issued normalized inputs, and both bundle locations and all
 fixtures were regenerated. The stable `2` → `1` renumber remains Phase 17 and
 must still be atomic.
 
+Phase 15 completed the adversarial gate on 2026-08-28. All contract JSON
+families now share explicit byte, depth, node, and string bounds; file-backed
+catalog, document, and receipt inputs are bounded before allocation. The seeded
+mutation suite must reject every false-closure mutation, and any fuzz input that
+survives decode and normalization must re-encode deterministically to identical
+semantics. The stable-version cut remains unchanged.
+
 ## Document-version namespaces
 
 The following are independent and must never be changed by a global
