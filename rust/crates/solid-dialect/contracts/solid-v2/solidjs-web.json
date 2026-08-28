@@ -1,621 +1,869 @@
 {
-  "schemaVersion": 1,
-  "package": {
-    "name": "@solidjs/web",
-    "version": "2.0.0-rc.0"
-  },
-  "compilerFactsProtocol": 1,
-  "exports": {
-    "acquireAsset": {
-      "kind": "function"
-    },
-    "addEvent": {
-      "kind": "function"
-    },
-    "applyFrameResponse": {
-      "kind": "function"
-    },
-    "applyRef": {
-      "kind": "function",
-      "callbacks": [
+  "entrypoints": {
+    ".": {
+      "cases": [
         {
-          "parameter": 0,
-          "execution": "inline"
+          "artifact": {
+            "closureSha256": "8ffc3f3c194f3408a9e46f020b7729170a0b42fc6bd4108cb977b88e725873af",
+            "path": "dist/dev.js",
+            "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851"
+          },
+          "declarations": {
+            "path": "types/index.d.ts",
+            "sha256": "5870c51be7674969670ccb084077d3df29ed732db8e8ad03527d384285c99635"
+          },
+          "exports": {
+            "applyRef": "summary-3f8fe1be95bf373ec8494426a2568244fa54fd00ea0258bbf6bb29e09a9f5321",
+            "clientOnly": "summary-33b1f252bf40ccbf4afd30c2d3c9e9cc74f10c3ece12fee903d628e8da7c231e",
+            "httpHeader": "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+            "httpStatus": "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+            "hydrate": "summary-7dc57984919daf1dd41a313f41608c3f779ecf3be74645aaeedf55473bbb255c",
+            "render": "summary-d6e8921e93fd37f6028c1ad809693ef42764ab602a477ba683dd4afc3efa7530"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser/development/import/default",
+            "typesBranch": "/exports/./browser/development/import/types"
+          }
         }
       ]
-    },
-    "assign": {
-      "kind": "function"
-    },
-    "asyncArg": {
-      "kind": "function"
-    },
-    "ChildProperties": {
-      "kind": "value"
-    },
-    "ChunkReader": {
-      "kind": "function"
-    },
-    "claimElement": {
-      "kind": "function"
-    },
-    "claimElementTree": {
-      "kind": "function"
-    },
-    "className": {
-      "kind": "function"
-    },
-    "clearFlashCookie": {
-      "kind": "function"
-    },
-    "clientOnly": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "deferred"
-        }
-      ]
-    },
-    "commitEventResponse": {
-      "kind": "function"
-    },
-    "composeMiddleware": {
-      "kind": "function"
-    },
-    "configureServerFunctionsClient": {
-      "kind": "function"
-    },
-    "configureServerFunctionsServer": {
-      "kind": "function"
-    },
-    "createChunk": {
-      "kind": "function"
-    },
-    "createComponent": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "createFrame": {
-      "kind": "function"
-    },
-    "createFrameElement": {
-      "kind": "function"
-    },
-    "createFrameHost": {
-      "kind": "function"
-    },
-    "createFrameSink": {
-      "kind": "function"
-    },
-    "createHydrationSerializer": {
-      "kind": "function"
-    },
-    "createJSONDataTable": {
-      "kind": "function"
-    },
-    "createJSONDeserializer": {
-      "kind": "function"
-    },
-    "createJSONSerializer": {
-      "kind": "function"
-    },
-    "createNoJSHandler": {
-      "kind": "function"
-    },
-    "createPlugin": {
-      "kind": "function"
-    },
-    "createRequestEvent": {
-      "kind": "function"
-    },
-    "createResponseStub": {
-      "kind": "function"
-    },
-    "createSerializer": {
-      "kind": "function"
-    },
-    "createServerComponentHandler": {
-      "kind": "function"
-    },
-    "createServerReference": {
-      "kind": "function"
-    },
-    "createSSRResponse": {
-      "kind": "function"
-    },
-    "decodeErrorHeaderValue": {
-      "kind": "function"
-    },
-    "decodeFlashCookie": {
-      "kind": "function"
-    },
-    "decodeResponse": {
-      "kind": "function"
-    },
-    "decodeResponsePayload": {
-      "kind": "function"
-    },
-    "DEFAULT_WEB_PLUGINS": {
-      "kind": "value"
-    },
-    "DelegatedEvents": {
-      "kind": "value"
-    },
-    "delegateEvents": {
-      "kind": "function"
-    },
-    "deserializeStream": {
-      "kind": "function"
-    },
-    "DOMElements": {
-      "kind": "value"
-    },
-    "DOMWithState": {
-      "kind": "value"
-    },
-    "Dynamic": {
-      "kind": "function"
-    },
-    "dynamic": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "dynamicProperty": {
-      "kind": "function"
-    },
-    "effect": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "enableRichArguments": {
-      "kind": "function"
-    },
-    "encodeErrorHeaderValue": {
-      "kind": "function"
-    },
-    "encodeFlashCookie": {
-      "kind": "function"
-    },
-    "ERROR_HEADER": {
-      "kind": "value"
-    },
-    "Errored": {
-      "kind": "function"
-    },
-    "escape": {
-      "kind": "function"
-    },
-    "FLASH_COOKIE": {
-      "kind": "value"
-    },
-    "foldSetCookies": {
-      "kind": "function"
-    },
-    "For": {
-      "kind": "function"
-    },
-    "FRAME_APPLIED_EVENT": {
-      "kind": "value"
-    },
-    "FRAME_STREAM_HEADER": {
-      "kind": "value"
-    },
-    "frameAddress": {
-      "kind": "function"
-    },
-    "frameTransformDirectResult": {
-      "kind": "function"
-    },
-    "frameTransformFlightResult": {
-      "kind": "function"
-    },
-    "frameTransformResult": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "inline"
-        }
-      ]
-    },
-    "FUNCTION_HEADER": {
-      "kind": "value"
-    },
-    "generateHydrationScript": {
-      "kind": "function"
-    },
-    "GENERIC_SERVER_ERROR_MESSAGE": {
-      "kind": "value"
-    },
-    "GET": {
-      "kind": "function"
-    },
-    "getDelegatedRoot": {
-      "kind": "function"
-    },
-    "getEventServerFunctionInvocation": {
-      "kind": "function"
-    },
-    "getExpectedRedirectStatus": {
-      "kind": "function"
-    },
-    "getFlightDataConsumer": {
-      "kind": "function"
-    },
-    "getFrameHost": {
-      "kind": "function"
-    },
-    "getHydrationKey": {
-      "kind": "function"
-    },
-    "getLocalHeaderScript": {
-      "kind": "function"
-    },
-    "getNextElement": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "getNextMarker": {
-      "kind": "function"
-    },
-    "getNextMatch": {
-      "kind": "function"
-    },
-    "getOwner": {
-      "kind": "function"
-    },
-    "getRequestEvent": {
-      "kind": "function"
-    },
-    "getServerFunction": {
-      "kind": "function"
-    },
-    "getServerFunctionInvocation": {
-      "kind": "function"
-    },
-    "getServerFunctionMetadata": {
-      "kind": "function"
-    },
-    "getServerFunctionRPC": {
-      "kind": "function"
-    },
-    "getServerFunctionsCodec": {
-      "kind": "function"
-    },
-    "handleServerFunctionRequest": {
-      "kind": "function"
-    },
-    "hasFlashCookie": {
-      "kind": "function"
-    },
-    "HREF": {
-      "kind": "value"
-    },
-    "httpHeader": {
-      "kind": "function"
-    },
-    "httpStatus": {
-      "kind": "function"
-    },
-    "hydrate": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "Hydration": {
-      "kind": "function"
-    },
-    "HydrationScript": {
-      "kind": "function"
-    },
-    "insert": {
-      "kind": "function"
-    },
-    "installServerComponents": {
-      "kind": "function"
-    },
-    "INSTANCE_HEADER": {
-      "kind": "value"
-    },
-    "isDev": {
-      "kind": "value"
-    },
-    "isFrameStreamResponse": {
-      "kind": "function"
-    },
-    "isHref": {
-      "kind": "function"
-    },
-    "isResponseEnvelope": {
-      "kind": "function"
-    },
-    "isSafeError": {
-      "kind": "function"
-    },
-    "isServer": {
-      "kind": "value"
-    },
-    "isServerFunction": {
-      "kind": "function"
-    },
-    "Loading": {
-      "kind": "function"
-    },
-    "markSafeError": {
-      "kind": "function"
-    },
-    "Match": {
-      "kind": "function"
-    },
-    "MathMLElements": {
-      "kind": "value"
-    },
-    "memo": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "memo result"
-      },
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "mergeProps": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "Namespaces": {
-      "kind": "value"
-    },
-    "NoHydration": {
-      "kind": "function"
-    },
-    "OpaqueReference": {
-      "kind": "value"
-    },
-    "parseCookieHeader": {
-      "kind": "function"
-    },
-    "Portal": {
-      "kind": "function"
-    },
-    "provideRequestEvent": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "RawTextElements": {
-      "kind": "value"
-    },
-    "redirect": {
-      "kind": "function"
-    },
-    "ref": {
-      "kind": "function"
-    },
-    "registerDelegatedContainer": {
-      "kind": "function"
-    },
-    "registerDelegatedRoot": {
-      "kind": "function"
-    },
-    "registerElementClaim": {
-      "kind": "function"
-    },
-    "registerServerFunction": {
-      "kind": "function"
-    },
-    "registerServerReference": {
-      "kind": "function"
-    },
-    "reload": {
-      "kind": "function"
-    },
-    "render": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "renderServerComponent": {
-      "kind": "function"
-    },
-    "renderToFrameStream": {
-      "kind": "function"
-    },
-    "renderToStream": {
-      "kind": "function"
-    },
-    "renderToString": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "Repeat": {
-      "kind": "function"
-    },
-    "RequestContext": {
-      "kind": "value"
-    },
-    "resolveSerializerPlugins": {
-      "kind": "function"
-    },
-    "resolveSSRNode": {
-      "kind": "function"
-    },
-    "respond": {
-      "kind": "function"
-    },
-    "ResponseEnvelope": {
-      "kind": "value"
-    },
-    "REVALIDATE_HEADER": {
-      "kind": "value"
-    },
-    "Reveal": {
-      "kind": "function"
-    },
-    "runHydrationEvents": {
-      "kind": "function"
-    },
-    "SAFE_ERROR": {
-      "kind": "value"
-    },
-    "sanitizeServerError": {
-      "kind": "function"
-    },
-    "scope": {
-      "kind": "function"
-    },
-    "serializeCookie": {
-      "kind": "function"
-    },
-    "serializeJSON": {
-      "kind": "function"
-    },
-    "serializeString": {
-      "kind": "function"
-    },
-    "SERVER_COMPONENT_BOOTSTRAP": {
-      "kind": "value"
-    },
-    "ServerComponentPlugin": {
-      "kind": "value"
-    },
-    "serverComponentResponse": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "setAttribute": {
-      "kind": "function"
-    },
-    "setAttributeNS": {
-      "kind": "function"
-    },
-    "setProperty": {
-      "kind": "function"
-    },
-    "setServerFunctionsDev": {
-      "kind": "function"
-    },
-    "setStyleProperty": {
-      "kind": "function"
-    },
-    "Show": {
-      "kind": "function"
-    },
-    "SINGLE_FLIGHT_HEADER": {
-      "kind": "value"
-    },
-    "spread": {
-      "kind": "function"
-    },
-    "ssr": {
-      "kind": "function"
-    },
-    "ssrAttribute": {
-      "kind": "function"
-    },
-    "ssrClassName": {
-      "kind": "function"
-    },
-    "ssrElement": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      }
-    },
-    "ssrGroup": {
-      "kind": "function"
-    },
-    "ssrHydrationKey": {
-      "kind": "function"
-    },
-    "ssrStyle": {
-      "kind": "function"
-    },
-    "ssrStyleProperty": {
-      "kind": "function"
-    },
-    "style": {
-      "kind": "function"
-    },
-    "subscribeFlightData": {
-      "kind": "function"
-    },
-    "SVGElements": {
-      "kind": "value"
-    },
-    "Switch": {
-      "kind": "function"
-    },
-    "template": {
-      "kind": "function"
-    },
-    "unregisterDelegatedContainer": {
-      "kind": "function"
-    },
-    "unregisterDelegatedRoot": {
-      "kind": "function"
-    },
-    "untrack": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline"
-        }
-      ]
-    },
-    "useHead": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked"
-        }
-      ]
-    },
-    "VoidElements": {
-      "kind": "value"
-    },
-    "warmAsset": {
-      "kind": "function"
-    },
-    "withMeta": {
-      "kind": "function"
     }
   },
-  "evidence": {
-    "kind": "reviewed",
-    "generator": "solid-contract-gen"
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
+    },
+    "name": "@solidjs/web",
+    "version": "2.0.0-rc.3"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "1d18b261f3e3c7af68b750ecc71391e868847229d6360c67b7a3197b44b0710e"
+    }
+  },
+  "summaries": {
+    "summary-33b1f252bf40ccbf4afd30c2d3c9e9cc74f10c3ece12fee903d628e8da7c231e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "eager-load"
+          },
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "lazy-load"
+          },
+          {
+            "from": {
+              "operation": "resolve-module",
+              "path": []
+            },
+            "operation": "render-component"
+          }
+        ],
+        "cases": [
+          {
+            "operations": [
+              "eager-load",
+              "render-component",
+              "render-fallback",
+              "resolve-module"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 1,
+                  "literal": false,
+                  "path": [
+                    "lazy"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "lazy-load",
+              "render-component",
+              "render-fallback",
+              "resolve-module"
+            ],
+            "when": {
+              "all": [
+                {
+                  "arg": 1,
+                  "literal": true,
+                  "path": [
+                    "lazy"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "operations": [
+              "eager-load",
+              "render-component",
+              "render-fallback",
+              "resolve-module"
+            ],
+            "otherwise": true
+          }
+        ],
+        "cleanups": [],
+        "closed": [
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "edges": [
+          {
+            "from": "render-fallback",
+            "kind": "orders",
+            "to": "render-component"
+          },
+          {
+            "from": "eager-load",
+            "kind": "data",
+            "to": "resolve-module"
+          },
+          {
+            "from": "lazy-load",
+            "kind": "data",
+            "to": "resolve-module"
+          },
+          {
+            "from": "resolve-module",
+            "kind": "data",
+            "to": "render-component"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "eager-load",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "module-load"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "arg": 1,
+                  "literal": true,
+                  "path": [
+                    "lazy"
+                  ]
+                }
+              ]
+            },
+            "id": "lazy-load",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "module-load"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "settle",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "render-component",
+            "kind": "invoke",
+            "output": "component",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "resolve-module"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "render-fallback",
+            "kind": "return",
+            "output": "plain",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "settle",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "resolve-module",
+            "kind": "return",
+            "output": {
+              "kind": "object"
+            },
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "module-load"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "settle",
+              "resource": "module-load"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "module-load",
+            "kind": "async-computation",
+            "states": [
+              "pending",
+              "settled",
+              "errored",
+              "cancelled"
+            ]
+          }
+        ],
+        "returns": [
+          "render-fallback",
+          "resolve-module"
+        ],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "component"
+    },
+    "summary-3f8fe1be95bf373ec8494426a2568244fa54fd00ea0258bbf6bb29e09a9f5321": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "ref-factory"
+          },
+          {
+            "from": {
+              "operation": "ref-factory",
+              "path": []
+            },
+            "operation": "ref-application"
+          }
+        ],
+        "cases": [],
+        "cleanups": [
+          "ref-cleanup"
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "edges": [
+          {
+            "from": "ref-factory",
+            "kind": "data",
+            "to": "ref-application"
+          },
+          {
+            "from": "ref-application",
+            "kind": "cleanup",
+            "to": "ref-cleanup"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "ref-application",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "ref-factory"
+            }
+          },
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "ref-cleanup",
+            "kind": "cleanup",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "operation": "ref-application"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "ref-factory",
+            "kind": "invoke",
+            "output": {
+              "element": "ref-application",
+              "kind": "array",
+              "length": {
+                "max": "many",
+                "min": 1
+              }
+            },
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "resource": "setup-owner",
+              "source": "captured"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "setup-owner",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    },
+    "summary-7dc57984919daf1dd41a313f41608c3f779ecf3be74645aaeedf55473bbb255c": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "hydrate-callback"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "hydrate-callback",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "browser-root"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "browser-root"
+                  },
+                  "resource": "browser-root"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "browser-root",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "browser-root",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": {
+        "kind": "cleanup",
+        "lifetime": {
+          "kind": "owner",
+          "resource": "browser-root"
+        }
+      }
+    },
+    "summary-d6e8921e93fd37f6028c1ad809693ef42764ab602a477ba683dd4afc3efa7530": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "render-callback"
+          },
+          {
+            "from": {
+              "path": [
+                "listeners"
+              ],
+              "resource": "browser-root"
+            },
+            "operation": "delegated-event"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [
+          "register-delegation"
+        ],
+        "disposals": [
+          "unregister-root"
+        ],
+        "edges": [
+          {
+            "from": "delegated-event",
+            "kind": "lifetime",
+            "to": "unregister-root"
+          },
+          {
+            "from": "register-delegation",
+            "kind": "lifetime",
+            "to": "delegated-event"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "external-event",
+              "schedule": "external"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "delegated-event",
+            "kind": "invoke",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "resource": "browser-root",
+              "source": "captured"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "external-event"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "register-delegation",
+            "kind": "create",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "browser-root"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "browser-root"
+                  },
+                  "resource": "browser-root"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "browser-root",
+              "source": "created"
+            },
+            "resources": [
+              "browser-root"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "render",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 1,
+              "scope": "call"
+            },
+            "id": "render-callback",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": {
+                "kind": "owner",
+                "resource": "browser-root"
+              },
+              "productions": [
+                {
+                  "children": "forbidden",
+                  "cleanup": "forbidden",
+                  "lifetime": {
+                    "kind": "owner",
+                    "resource": "browser-root"
+                  },
+                  "resource": "browser-root"
+                }
+              ],
+              "requires": "required",
+              "requiresChildren": "forbidden",
+              "requiresCleanup": "forbidden",
+              "resource": "browser-root",
+              "source": "created"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "render"
+            }
+          },
+          {
+            "at": {
+              "event": "cleanup",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "unregister-root",
+            "kind": "dispose",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "browser-root"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "cleanup"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "browser-root",
+            "kind": "owner",
+            "states": [
+              "active",
+              "disposed"
+            ]
+          }
+        ],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": {
+        "kind": "cleanup",
+        "lifetime": {
+          "kind": "owner",
+          "resource": "browser-root"
+        }
+      }
+    },
+    "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f": {
+      "call": {
+        "callbacks": [],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [],
+        "disposals": [],
+        "invalidates": [],
+        "reads": [],
+        "returns": [],
+        "throws": [],
+        "writes": []
+      },
+      "shape": "plain"
+    }
   }
 }

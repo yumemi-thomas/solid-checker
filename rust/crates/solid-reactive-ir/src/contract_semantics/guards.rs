@@ -18,7 +18,13 @@ pub(super) fn select_operations(
     for case in partition.cases.items() {
         match case {
             GuardedCase::When { guard, operations } => match evaluate_guard(guard, &mut evaluate) {
-                GuardTruth::True => return operations.clone(),
+                GuardTruth::True => {
+                    return if partition.cases.is_closed() {
+                        operations.clone()
+                    } else {
+                        operations.clone().weaken()
+                    };
+                }
                 GuardTruth::Unknown => possible.push(operations.clone()),
                 GuardTruth::False => {}
             },

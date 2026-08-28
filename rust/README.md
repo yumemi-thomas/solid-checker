@@ -66,10 +66,14 @@ include/exclude and project resolution are authoritative rather than
 reimplemented by a directory walk.
 
 The CLI defaults to text output. `--format json` emits the stable certification
-snapshot (`status`, findings, package summaries, and metrics), `--certify`
-returns exit code 1 unless the status is `certified`, repeatable `--contract`
-flags override discovered contracts, and `--validate-contract` validates a
-contract and its artifact hashes without opening a project.
+snapshot (`status`, findings, package summaries, and metrics), and `--certify`
+returns exit code 1 unless the status is `certified`. Package behavior is loaded
+only from receipt-issued temporary-v2 documents registered with exact import
+resolutions in `.solid-checker/accepted-contracts.json`; the old `--contract`
+override and schema-1 validation path do not exist. Proposal generation,
+review, probes, and proof verification are exposed through the Node
+`solid-checker contract` workflow, while Rust remains the only semantic
+normalizer and receipt authority.
 
 Implemented rule slices are:
 

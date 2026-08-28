@@ -119,16 +119,11 @@ contract-differential: build-checker-debug tsc-oracle-provision
 contract-conformance:
 	$(BUN) scripts/check-bundled-contracts.mjs
 	$(BUN) scripts/check-contract-pins.mjs
-	$(BUN) scripts/generate-solid1-runtime-surface.mjs --check
 	$(BUN) scripts/dialect-manifests.mjs check-composed-contracts
 
-# `contracts` and `contracts-check` read real installed packages: the exact
-# versions the checked-in artifacts were generated against (solid-js 1.9.14
-# aliased as solid-js-1x, solid-js and @solidjs/web 2.0.0-rc.0). The
-# repository has no root package.json, so set each manifest-declared package
-# path environment variable to node_modules holding those pins. CI's
-# rust-engine job installs them into a scratch directory and runs
-# `contracts-check` on every push and PR.
+# Both targets replay the checked normalized authorities through the ordinary
+# proof-and-receipt bundle issuer. Registry pin verification remains a separate
+# live falsifier in `contract-conformance`.
 contracts:
 	$(BUN) scripts/dialect-manifests.mjs generate-contracts
 

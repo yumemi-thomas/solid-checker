@@ -36,7 +36,10 @@ if (packageJson.optionalDependencies) {
 }
 if (packageJson.dependencies) {
   const wasmVersion = packageJson.dependencies["solid-checker-wasm"];
-  if (wasmVersion !== `^${packageJson.version}`) {
+  if (wasmVersion !== undefined && wasmVersion !== `^${packageJson.version}`) {
     throw new Error(`invalid solid-checker-wasm dependency: ${wasmVersion}`);
+  }
+  if (packageJson.dependencies.typescript !== "5.9.3") {
+    throw new Error(`invalid TypeScript compiler dependency: ${packageJson.dependencies.typescript}`);
   }
 }

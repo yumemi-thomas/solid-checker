@@ -1,0 +1,66 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/partial-contract-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:4a63259e5ad5daef60975f54f23c075eeb99a426de49dcd9bb783af7aab82d60",
+          "entries": [
+            {
+              "digest": "sha256:8810c5f6e3323b548eefff8c26b67a7ea96c130e5661fa3d95d2fea47b41d71f",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:8810c5f6e3323b548eefff8c26b67a7ea96c130e5661fa3d95d2fea47b41d71f",
+          "path": "node_modules/partial-contract-package/package.json"
+        },
+        "exports": {
+          "describedValue": {
+            "declarations": {
+              "exportName": "describedValue",
+              "module": {
+                "digest": "sha256:8810c5f6e3323b548eefff8c26b67a7ea96c130e5661fa3d95d2fea47b41d71f",
+                "path": "node_modules/partial-contract-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "describedValue",
+              "module": {
+                "digest": "sha256:8810c5f6e3323b548eefff8c26b67a7ea96c130e5661fa3d95d2fea47b41d71f",
+                "path": "node_modules/partial-contract-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "index.js",
+        "packageIntegrity": "fixture:sha256:8810c5f6e3323b548eefff8c26b67a7ea96c130e5661fa3d95d2fea47b41d71f",
+        "packageManifest": {
+          "digest": "sha256:8810c5f6e3323b548eefff8c26b67a7ea96c130e5661fa3d95d2fea47b41d71f",
+          "path": "node_modules/partial-contract-package/package.json"
+        },
+        "packageName": "partial-contract-package",
+        "packageRoot": "node_modules/partial-contract-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:8810c5f6e3323b548eefff8c26b67a7ea96c130e5661fa3d95d2fea47b41d71f",
+          "path": "node_modules/partial-contract-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "partial-contract-package"
+      },
+      "receipt": "node_modules/partial-contract-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

@@ -8,10 +8,18 @@
 
 use solid_reactive_ir::contract_semantics::{
     AcceptedContract, VerifierIdentity,
-    proof::{AcceptanceRequest, ProofContradiction, ProofError, ReplayedProof, verify_and_accept},
+    proof::{
+        AcceptanceRequest, ClosureVerificationRequest, ProofContradiction, ProofError,
+        ReplayedProof, verify_and_accept, verify_closure,
+    },
 };
 
-use crate::{proposal_generation::PlannedProposal, runtime_probes::ProbeContradictionRecord};
+use crate::{
+    contract_document_v2::{self, SidecarDigests},
+    contract_interface::ContractFailure,
+    proposal_generation::PlannedProposal,
+    runtime_probes::ProbeContradictionRecord,
+};
 
 pub struct ProposalProofRequest {
     pub proposal: PlannedProposal,
@@ -20,6 +28,29 @@ pub struct ProposalProofRequest {
     pub proofs: Vec<ReplayedProof>,
     pub contradictions: Vec<ProbeContradictionRecord>,
     pub verifier: VerifierIdentity,
+}
+
+pub struct ProposalVerificationRequest {
+    pub proposal: PlannedProposal,
+    pub selected_artifact_case: String,
+    pub proofs: Vec<ReplayedProof>,
+    pub contradictions: Vec<ProbeContradictionRecord>,
+    pub verifier: VerifierIdentity,
+    pub sidecars: SidecarDigests,
+    pub pretty: bool,
+}
+
+pub struct VerifiedContractArtifact {
+    pub contract: AcceptedContract,
+    pub document: Vec<u8>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ProposalVerificationError {
+    #[error(transparent)]
+    Proof(#[from] ProofError),
+    #[error(transparent)]
+    Document(#[from] ContractFailure),
 }
 
 /// Verifies and finalizes exactly the selected artifact case's planned local
@@ -53,4 +84,39 @@ pub fn verify_planned_proposal(
         contradictions,
         verifier: request.verifier,
     })
+}
+
+/// Proof-first production path. Closure is finalized before encoding, and the
+/// receipt is then issued over the encoder's exact temporary-v2 bytes.
+pub fn verify_and_encode_planned_proposal(
+    request: ProposalVerificationRequest,
+) -> Result<VerifiedContractArtifact, ProposalVerificationError> {
+    let closed_claims = request
+        .proposal
+        .plan()
+        .closure_candidates()
+        .iter()
+        .filter(|claim| claim.artifact_case == request.selected_artifact_case)
+        .map(|claim| claim.semantic_subject())
+        .collect();
+    let contradictions = request
+        .contradictions
+        .into_iter()
+        .map(|record| ProofContradiction {
+            claim: record.claim_id,
+            transcript: record.transcript,
+        })
+        .collect();
+    let verified = verify_closure(ClosureVerificationRequest {
+        contract: request.proposal.contract().clone(),
+        selected_artifact_case: request.selected_artifact_case,
+        closed_claims,
+        proofs: request.proofs,
+        contradictions,
+        verifier: request.verifier,
+    })?;
+    let document =
+        contract_document_v2::encode(verified.contract(), &request.sidecars, request.pretty)?;
+    let contract = verified.issue(&document)?;
+    Ok(VerifiedContractArtifact { contract, document })
 }

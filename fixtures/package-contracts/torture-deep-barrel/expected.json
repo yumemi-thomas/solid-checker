@@ -1,43 +1,79 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "0e60b25e2f2c093fc7c421abcc630357abb291e9dcf8586e8b3817ded30c68c7",
+            "path": "./index.js",
+            "sha256": "38b0ddc2ca0220a224f0b27b37aaffe05b317d0e124c2050e99a81750b3cfb42"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "38b0ddc2ca0220a224f0b27b37aaffe05b317d0e124c2050e99a81750b3cfb42"
+          },
+          "exports": {
+            "deepFactory": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
+            "deepValue": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:9164c73bede4a37bf5beedae7813f85e8feb46efafe3febb4d9ea604c8fb8cc7",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "9164c73bede4a37bf5beedae7813f85e8feb46efafe3febb4d9ea604c8fb8cc7"
+    },
     "name": "torture-deep-barrel-package",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
           }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
     },
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-1": ["deepFactory"],
-        "value-1": ["deepValue"]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

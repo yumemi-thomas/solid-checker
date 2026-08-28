@@ -260,7 +260,7 @@
       "closureIdentity": "web",
       "declarationEvidence": [{ "path": "@solidjs/web/types/client.d.ts", "sha256": "49d281ca558aa359a44bed4ce1fb9cc9b54d65cd353b1d3191ab62d350e18c13", "contains": "render" }],
       "runtimeEvidence": [{ "path": "@solidjs/web/dist/dev.js", "sha256": "d848d00341ac8195e191404ace7dd8b4c650f47befb0cfecac78ddcf01587851", "contains": "DelegatedRoot" }],
-      "normalized": { "operations": ["register-delegation", "delegated-event", "unregister-root"], "edges": ["lifetime"], "resources": ["render-root"], "guards": ["root-identity"], "openDomains": ["portal-container-escape", "real-browser-root-lifetime-observation"] },
+      "normalized": { "operations": ["register-delegation", "delegated-event", "unregister-root"], "edges": ["lifetime"], "resources": ["browser-root"], "guards": ["root-identity"], "openDomains": ["portal-container-escape", "real-browser-root-lifetime-observation"] },
       "proof": { "families": ["compiler-reconciliation", "operation-reachability", "operation-cardinality", "module-closure", "probe-consistency"], "probeScenario": "root-lifetime" },
       "observation": { "authority": "real-browser-exact-renderer-required", "events": ["root-register", "event", "root-unregister"], "absenceIsNegativeProof": false },
       "fixtures": {
@@ -268,7 +268,7 @@
         "negative": { "source": "const node = document.createElement('div');", "expect": "no delegated root" },
         "partial": { "source": "render(view, dynamicContainer);", "expect": "container alias leaf open" },
         "refusal": { "source": "render(view, escapedContainerFactory());", "expect": "unbounded container lifetime uncertifiable" },
-        "consumer": { "source": "query.resourceLifetime(\"render-root\")", "expect": "event callback is not process-global" },
+        "consumer": { "source": "query.resourceLifetime(\"browser-root\")", "expect": "event callback is not process-global" },
         "typescriptOracle": { "source": "import { render } from '@solidjs/web'; const dispose: () => void = render(() => 'ok', document.createElement('div')); void dispose;", "tscExitCode": 0, "checkerFinding": null }
       }
     },

@@ -1,29 +1,45 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "35b38f851a7dbb2070cd8d0d13bbc738dbe5fd3f5e854b6d6169d89ea0d9ad22",
+            "path": "./index.js",
+            "sha256": "93759a22c08aa996c97e6e8db5caaacdfb03e834203e4aeefe726cce0d10c481"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "93759a22c08aa996c97e6e8db5caaacdfb03e834203e4aeefe726cce0d10c481"
+          },
+          "exports": {
+            "thing": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:dfc52d6da4878b7851b443ed13f832a7981ae34949730d37a884a6d2cb4dbc5e",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "dfc52d6da4878b7851b443ed13f832a7981ae34949730d37a884a6d2cb4dbc5e"
+    },
     "name": "attested-record-matches-walk",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "value-1": [
-          "thing"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

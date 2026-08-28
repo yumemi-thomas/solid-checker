@@ -2,12 +2,9 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { performance } from "node:perf_hooks";
-
-import { expandContract } from "../packages/cli/scripts/contract-document.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -139,27 +136,10 @@ function evidenceNodeBytes(value) {
 }
 
 export function measureContract(relativePath) {
-  const raw = read(relativePath);
-  const document = JSON.parse(raw);
-  const minified = JSON.stringify(document);
-  const withoutEvidence = JSON.stringify(stripEvidence(document));
-  const expanded = expandContract(document);
-  return {
-    path: relativePath,
-    package: `${document.package.name}@${document.package.version}`,
-    prettyBytes: raw.byteLength,
-    minifiedBytes: bytes(minified),
-    minifiedExpandedBytes: bytes(JSON.stringify(expanded)),
-    minifiedWithoutEvidenceBytes: bytes(withoutEvidence),
-    inlineEvidenceDeltaBytes: bytes(minified) - bytes(withoutEvidence),
-    inlineEvidenceNodeBytes: evidenceNodeBytes(document),
-    summaries: Object.keys(document.summaries).length,
-    entrypoints: Object.keys(document.entrypoints).length,
-    expandedExports: Object.values(expanded.entrypoints).reduce(
-      (total, entrypoint) => total + Object.keys(entrypoint.exports).length,
-      0
-    )
-  };
+  const frozen = json("benchmarks/package-contract-v2/phase0/baseline.json")
+    .legacyContracts.contracts.find(contract => contract.path === relativePath);
+  if (!frozen) throw new Error(`${relativePath} is not part of the frozen Phase 0 corpus`);
+  return structuredClone(frozen);
 }
 
 function listFiles(directory) {
@@ -332,6 +312,7 @@ function classifyGenerationAnomalies(generation) {
 }
 
 function benchmarkContracts(loadIterations, queryIterations) {
+  throw new Error("Phase 0 measurements are immutable and cannot be recaptured after migration");
   const raw = CONTRACTS.map(path => read(path));
   const loadSamples = [];
   for (let index = 0; index < loadIterations; index += 1) {
@@ -537,6 +518,7 @@ export function assertFrozenBaseline(report) {
 }
 
 export function buildBaseline({ loadIterations = 300, queryIterations = 200_000 } = {}) {
+  throw new Error("Phase 0 is immutable historical evidence; current producers cannot recapture it");
   const generation = json("benchmarks/ecosystem/report.json");
   const verification = json("benchmarks/ecosystem/verification-report.json");
   const rc3 = json("benchmarks/package-contract-v2/phase0/rc3/audit.json");
@@ -748,14 +730,15 @@ function parseArgs(argv) {
     outputJson: "benchmarks/package-contract-v2/phase0/baseline.json",
     outputMarkdown: "benchmarks/package-contract-v2/phase0/baseline.md",
     check: false,
-    captureCurrent: false,
     outputJsonExplicit: false,
     outputMarkdownExplicit: false
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--check") options.check = true;
-    else if (argument === "--capture-current") options.captureCurrent = true;
+    else if (argument === "--capture-current") {
+      throw new Error("Phase 0 is immutable historical evidence; --capture-current was retired in Phase 14");
+    }
     else if (argument === "--output-json") {
       options.outputJson = argv[++index];
       options.outputJsonExplicit = true;
@@ -764,12 +747,7 @@ function parseArgs(argv) {
       options.outputMarkdownExplicit = true;
     } else throw new Error(`unknown argument ${argument}`);
   }
-  if (options.check === options.captureCurrent) {
-    throw new Error("choose exactly one of --check or --capture-current");
-  }
-  if (options.captureCurrent && (!options.outputJsonExplicit || !options.outputMarkdownExplicit)) {
-    throw new Error("--capture-current requires explicit --output-json and --output-markdown paths");
-  }
+  if (!options.check) throw new Error("Phase 0 supports only --check after producer migration");
   return options;
 }
 
@@ -792,12 +770,6 @@ function main() {
     console.log(`phase0 baseline: ${report.ecosystem.classifications.rows.length} rows and ${report.fixtureFreeze.fixtureCount} fixtures verified as frozen evidence`);
     return;
   }
-  const report = buildBaseline();
-  const markdown = renderMarkdown(report);
-  const jsonText = `${JSON.stringify(report, null, 2)}\n`;
-  writeFileSync(resolve(root, options.outputJson), jsonText);
-  writeFileSync(resolve(root, options.outputMarkdown), markdown);
-  console.log(`phase0 baseline: wrote ${options.outputJson} and ${options.outputMarkdown}`);
 }
 
 if (import.meta.main) main();

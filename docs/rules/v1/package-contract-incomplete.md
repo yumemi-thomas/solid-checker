@@ -9,15 +9,12 @@ that the package is transparent or owner-preserving.
 
 ## What it does
 
-The message distinguishes a wholly missing/stale contract, a missing or
-environment-dependent export summary, and an external callback whose timing,
-tracking, or ownership mode is unspecified. Contracts are tied to the exact
-installed package version; evidence for another release cannot certify it.
-
-Unknown callback diagnostics provide an editable schema-v1 contract stub. A
-project-owned contract overrides package and bundled evidence, allowing an
-application to audit a dependency even when its maintainer does not publish
-one.
+The message distinguishes a wholly missing/stale accepted input, a missing or
+unselected exact artifact/export, and an external callback whose schedule,
+tracking, ownership, or cardinality leaf is open. Package identity, runtime and
+declaration bytes, closure, receipt, and proof policy must all match; evidence
+for another release or same-named fixture cannot certify it. The diagnostic
+contains an open-claim descriptor, never an editable contract stub.
 
 ## How to fix
 
@@ -26,13 +23,15 @@ Generate and review a contract for the installed artifact:
 ```sh
 solid-checker contract generate \
   --package-root node_modules/example \
+  --integrity 'sha512-…' \
   --output .solid-checker/contracts/example/solid-reactivity.json
 ```
 
-Complete the relevant export or callback entry, verify it against the runtime
-implementation, then validate the result. Library maintainers should ship a
-reviewed `solid-reactivity.json` at the package root. Do not add blanket trust:
-describe only the exact exports and execution behavior the artifact proves.
+Review the exact open leaf, prove every required family, issue the receipt with
+`solid-checker contract verify`, and register the document/receipt/full import
+resolution in `.solid-checker/accepted-contracts.json`. Do not add blanket
+trust or copy a Solid 2 claim into this dialect: describe only behavior proved
+for the exact Solid 1 artifact case.
 
 ## Related
 

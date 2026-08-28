@@ -1,29 +1,45 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "9e8f2292d17f5467c6793c82883e1057fa501070a7c0a689ce7974c7c78fdb9d",
+            "path": "./index.js",
+            "sha256": "00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "00c6b8468730c25c3d0d7e7d4524edb07c91383d771e19f0a9fb1121a0d455f8"
+          },
+          "exports": {
+            "thing": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:8fbc088b534e062f54ad21d519ee57ba0130a20f43ffbe9adb58028483435f4e",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "8fbc088b534e062f54ad21d519ee57ba0130a20f43ffbe9adb58028483435f4e"
+    },
     "name": "attested-specifier-restated",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "value-1": [
-          "thing"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

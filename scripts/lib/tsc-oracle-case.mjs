@@ -76,7 +76,7 @@ export const sourceName = (testCase, index) =>
  * checker selects and the typings the oracle compiles against both come from
  * whatever is behind this link.
  */
-export const ensureDirectoryLink = (link, target) => {
+const ensureLink = (link, target, type, label) => {
   const currentTarget = () => {
     try {
       return readlinkSync(link);
@@ -84,7 +84,7 @@ export const ensureDirectoryLink = (link, target) => {
       if (error.code === "ENOENT") return null;
       if (error.code === "EINVAL") {
         throw new Error(
-          `${link} exists but is not a symlink; it must be a link to ${target}. ` +
+          `${link} exists but is not a symlink; it must be a ${label} link to ${target}. ` +
             `Remove it (or \`make clean\`) and re-run.`,
         );
       }
@@ -94,7 +94,7 @@ export const ensureDirectoryLink = (link, target) => {
   let current = currentTarget();
   if (current === null) {
     try {
-      symlinkSync(target, link, "dir");
+      symlinkSync(target, link, type);
       current = target;
     } catch (error) {
       // Lost the race, or the guard above was fooled by a dangling link.
@@ -107,7 +107,7 @@ export const ensureDirectoryLink = (link, target) => {
     // a link-to-directory with `ERR_FS_EISDIR`, and `recursive: true` would
     // delete the audited install behind it. Unlinking removes only the link.
     unlinkSync(link);
-    symlinkSync(target, link, "dir");
+    symlinkSync(target, link, type);
     current = currentTarget();
     if (current !== target) {
       throw new Error(`${link} points at ${JSON.stringify(current)}, not ${target}`);
@@ -122,6 +122,10 @@ export const ensureDirectoryLink = (link, target) => {
   return link;
 };
 
+export const ensureDirectoryLink = (link, target) => ensureLink(link, target, "dir", "directory");
+
+const ensureFileLink = (link, target) => ensureLink(link, target, "file", "file");
+
 const prepared = new Map();
 export const dialectBase = (dialect) => {
   if (prepared.has(dialect)) return prepared.get(dialect);
@@ -129,6 +133,12 @@ export const dialectBase = (dialect) => {
   const base = join(CASE_ROOT, dialect);
   mkdirSync(base, { recursive: true });
   ensureDirectoryLink(join(base, "node_modules"), join(root, "node_modules"));
+  // Package contracts require independently acquired registry integrity. The
+  // audited oracle install uses Bun, so its lockfile must be visible from each
+  // isolated checker project just as its node_modules tree is. Linking only
+  // node_modules made the temporary-v2 consumer correctly refuse every exact
+  // first-party bundle even though TypeScript resolved the same package.
+  ensureFileLink(join(base, "bun.lock"), join(root, "bun.lock"));
   const entry = { base };
   prepared.set(dialect, entry);
   return entry;

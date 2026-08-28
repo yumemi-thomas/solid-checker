@@ -1,0 +1,66 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/uncharted-helpers/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:c1bab60116b4cb8f1b4f7113b1310ed168577681345aea65186dea62d92f535b",
+          "entries": [
+            {
+              "digest": "sha256:624b2ab4f443baa24761fe7e59c0da84d2cda5a625b3eb2ac91b24228956467d",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:624b2ab4f443baa24761fe7e59c0da84d2cda5a625b3eb2ac91b24228956467d",
+          "path": "node_modules/uncharted-helpers/package.json"
+        },
+        "exports": {
+          "described": {
+            "declarations": {
+              "exportName": "described",
+              "module": {
+                "digest": "sha256:624b2ab4f443baa24761fe7e59c0da84d2cda5a625b3eb2ac91b24228956467d",
+                "path": "node_modules/uncharted-helpers/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "described",
+              "module": {
+                "digest": "sha256:624b2ab4f443baa24761fe7e59c0da84d2cda5a625b3eb2ac91b24228956467d",
+                "path": "node_modules/uncharted-helpers/package.json"
+              }
+            }
+          }
+        },
+        "importer": "index.js",
+        "packageIntegrity": "fixture:sha256:624b2ab4f443baa24761fe7e59c0da84d2cda5a625b3eb2ac91b24228956467d",
+        "packageManifest": {
+          "digest": "sha256:624b2ab4f443baa24761fe7e59c0da84d2cda5a625b3eb2ac91b24228956467d",
+          "path": "node_modules/uncharted-helpers/package.json"
+        },
+        "packageName": "uncharted-helpers",
+        "packageRoot": "node_modules/uncharted-helpers",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:624b2ab4f443baa24761fe7e59c0da84d2cda5a625b3eb2ac91b24228956467d",
+          "path": "node_modules/uncharted-helpers/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "uncharted-helpers"
+      },
+      "receipt": "node_modules/uncharted-helpers/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

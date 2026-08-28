@@ -1,0 +1,219 @@
+{
+  "entrypoints": {
+    "./server-functions": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8ffc3f3c194f3408a9e46f020b7729170a0b42fc6bd4108cb977b88e725873af",
+            "path": "server-functions/dist/server.dev.js",
+            "sha256": "e1fc68d86022e2d26d9e6a24150001c1e69aaeadedf58398f1480304d948040c"
+          },
+          "declarations": {
+            "path": "types/server-functions/server.d.ts",
+            "sha256": "0459be58eb62d4ba980d06864b11df7b59e8d81fe8c490b81b64412f83b37fbf"
+          },
+          "exports": {
+            "createServerReference": "summary-e007b028c073d1073946dd5b2a27d71fc92c92d2a0c5b353e680a73c0b101bad"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1server-functions/node/development/import/default",
+            "typesBranch": "/exports/.~1server-functions/node/development/import/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+    "manifest": {
+      "path": "package.json",
+      "sha256": "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e"
+    },
+    "name": "@solidjs/web",
+    "version": "2.0.0-rc.3"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "34326b9cf59e3319f53ebb67fc165afd190517a13b68ee7e526338c6bc5c7f18"
+    }
+  },
+  "summaries": {
+    "summary-e007b028c073d1073946dd5b2a27d71fc92c92d2a0c5b353e680a73c0b101bad": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "path": [
+                "callable"
+              ],
+              "resource": "server-reference"
+            },
+            "operation": "invoke-reference"
+          }
+        ],
+        "cases": [],
+        "cleanups": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "cleanups",
+          "disposals"
+        ],
+        "creates": [
+          "register-reference",
+          "transform-reference"
+        ],
+        "disposals": [],
+        "edges": [
+          {
+            "from": "register-reference",
+            "kind": "data",
+            "to": "invoke-reference"
+          },
+          {
+            "from": "transform-reference",
+            "kind": "data",
+            "to": "register-reference"
+          }
+        ],
+        "invalidates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "invoke-reference",
+            "kind": "invoke",
+            "output": {
+              "alternatives": [
+                "plain",
+                {
+                  "kind": "promise",
+                  "value": "unknown"
+                }
+              ],
+              "kind": "choice"
+            },
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "server-reference"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "register-reference",
+            "kind": "create",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "server-reference"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "guard": {
+              "all": [
+                {
+                  "signature": "compiler:server-function-reference"
+                }
+              ]
+            },
+            "id": "transform-reference",
+            "kind": "create",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "resources": [
+              "server-reference"
+            ],
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "resources": [
+          {
+            "capabilities": [],
+            "closed": [
+              "states",
+              "capabilities"
+            ],
+            "id": "server-reference",
+            "kind": "server-function-reference",
+            "states": []
+          }
+        ],
+        "writes": []
+      },
+      "shape": {
+        "kind": "server-function-reference",
+        "resource": "server-reference"
+      }
+    }
+  }
+}

@@ -493,10 +493,9 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// Source: the reviewed `SOLID_2` and `SOLIDJS_WEB` semantics tables in
-    /// `solid-contract-gen`, which the dialect review contract is generated
-    /// from and which `the_callback_executions_agree_with_the_bundled_contract`
-    /// holds this to.
+    /// Source: the checked Solid 2 RC.3 normalized authorities, held to the
+    /// receipt-issued bundles by
+    /// `the_callback_executions_agree_with_the_bundled_contract`.
     ///
     /// The four `createX(fn, …)` derived forms are not in that table and were
     /// read from the runtime bundled by `solid-js@2.0.0-rc.0` instead:
@@ -604,7 +603,7 @@ impl Dialect for Solid2 {
     /// (their derived overloads did not accept the probe's call shape, so no
     /// measurement backs a claim), `dynamic`, `useHead`, the two boundary
     /// primitives and `mapArray`/`repeat`. Contract emission answers the
-    /// unknown sentinel for those rather than assuming they follow `computed`.
+    /// exact callback leaf open for those rather than assuming they follow `computed`.
     fn tracked_callback_timing(
         &self,
         primitive: Primitive,
@@ -1148,37 +1147,15 @@ mod tests {
     /// callback-taking export is in the vocabulary" can be asserted rather
     /// than asserted-with-exceptions-nobody-wrote-down.
     ///
-    /// The compiler helpers are internals. `createComponent` and `devComponent` are
-    /// emitted by the JSX transform; `ssrScope` and
-    /// `runInServerComponentScope` support server compilation; `effect` and
-    /// `memo` are `@solidjs/web`'s dom-expressions runtime helpers, called by
-    /// compiled JSX output rather than written by hand (unlike 1.x, whose
-    /// `solid-js/web` re-exports them as public aliases of
-    /// `createRenderEffect` and a memo factory, which that dialect models).
-    /// The remaining names are contract-owned helpers rather than dialect
-    /// primitives. They stay outside the native vocabulary so their exact
-    /// package/entrypoint variants, including schema-v1 unknown sentinels, are
-    /// consumed through the bundled contract instead of being flattened into
+    /// These names are contract-owned helpers rather than dialect primitives.
+    /// They stay outside the native vocabulary so their exact
+    /// package, artifact-case, and locally open normalized semantics are
+    /// consumed through accepted contracts instead of being flattened into
     /// one dialect-wide execution role.
     ///
     /// The generator records the same reviewed callback shapes in the checked-
     /// in contract, which the completeness test below reads directly.
-    const UNMODELLED_CALLBACK_TAKERS: &[&str] = &[
-        "createComponent",
-        "devComponent",
-        "effect",
-        "frameTransformResult",
-        "getNextElement",
-        "applyRef",
-        "mergeProps",
-        "memo",
-        "provideRequestEvent",
-        "renderToString",
-        "runInServerComponentScope",
-        "serverComponentResponse",
-        "ssrElement",
-        "ssrScope",
-    ];
+    const UNMODELLED_CALLBACK_TAKERS: &[&str] = &["applyRef", "renderToStream", "renderToString"];
 
     /// Every `solid-js` 2.0 export that takes a callback is either in the
     /// vocabulary or on the exclusion list above.
@@ -1195,30 +1172,17 @@ mod tests {
     /// package by `contracts_process.rs`.
     #[test]
     fn every_callback_taking_export_is_modelled_or_excluded() {
-        // Both dialect review contracts: `render`/`hydrate` live in
-        // `@solidjs/web`,
-        // and reading only the core contract is exactly how an unmodelled
-        // mount entry point went unnoticed.
-        let exports: std::collections::BTreeMap<String, serde_json::Value> = [
-            include_str!("../contracts/solid-v2/solid-js.json"),
-            include_str!("../contracts/solid-v2/solidjs-web.json"),
-        ]
-        .iter()
-        .flat_map(|contract| {
-            serde_json::from_str::<serde_json::Value>(contract).unwrap()["exports"]
-                .as_object()
-                .unwrap()
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect::<Vec<_>>()
-        })
-        .collect();
+        // Both package authorities: `render`/`hydrate` live in `@solidjs/web`,
+        // and reading only the core bundle is exactly how an unmodelled mount
+        // entry point went unnoticed.
+        let exports =
+            crate::callback_exports_from_bundles("solid-v2", &["solid-js", "@solidjs/web"]);
 
         // The contract records callbacks it knows about; the vocabulary is
         // this crate's. Anything in the first and not the second is a gap.
         let mut unmodelled = Vec::new();
-        for (name, entry) in &exports {
-            if entry.get("callbacks").is_none() {
+        for (name, callbacks) in &exports {
+            if callbacks.is_empty() {
                 continue;
             }
             if Solid2.primitive(name).is_none()

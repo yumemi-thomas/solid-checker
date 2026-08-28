@@ -146,30 +146,6 @@
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
     },
     {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
-      "start": 4858,
-      "end": 4863,
-      "fixes": 0,
-      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export batch; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-      "hint": "batch was removed in Solid 2.0; see the migration guide — updates batch by default on the microtask queue; call flush() where you need the old synchronous application."
-    },
-    {
-      "rule": "package-contract-incomplete",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
-      "start": 4865,
-      "end": 4872,
-      "fixes": 0,
-      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export onMount; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-      "hint": "onMount was removed in Solid 2.0; see the migration guide — use onSettled, which can also return a cleanup function."
-    },
-    {
       "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",

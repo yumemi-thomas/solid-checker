@@ -9,18 +9,18 @@
         "@solidjs/signals": "2.0.0-rc.0"
       },
       "jsxImportSource": "solid-js",
-      "audit": "pkg/contracts/bundled/solid-v1/solid-js.json"
+      "audit": "pkg/contracts/bundled/solid-v1/bundle-index.json"
     },
     "v2": {
       "install": [
-        "solid-js@2.0.0-rc.0",
-        "@solidjs/signals@2.0.0-rc.0",
-        "@solidjs/web@2.0.0-rc.0"
+        "solid-js@2.0.0-rc.3",
+        "@solidjs/signals@2.0.0-rc.3",
+        "@solidjs/web@2.0.0-rc.3"
       ],
       "expect": {
-        "solid-js": "2.0.0-rc.0",
-        "@solidjs/signals": "2.0.0-rc.0",
-        "@solidjs/web": "2.0.0-rc.0"
+        "solid-js": "2.0.0-rc.3",
+        "@solidjs/signals": "2.0.0-rc.3",
+        "@solidjs/web": "2.0.0-rc.3"
       },
       "jsxImportSource": "@solidjs/web",
       "audit": "pkg/contracts/bundled/runtime-lock.json"

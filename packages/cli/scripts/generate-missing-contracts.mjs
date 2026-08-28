@@ -3,7 +3,10 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 
 import { runNative } from "../bin/launcher.mjs";
-import { generatePackageContract, packageContractHelp } from "./generate-package-contract.mjs";
+import {
+  generatePackageContract,
+  packageContractHelp
+} from "./generate-package-contract-v2.mjs";
 
 // Every other `contract generate` option describes one package. Accepting one
 // beside `--missing` would apply a package-scoped assertion -- an entrypoint,
@@ -124,8 +127,20 @@ export async function generateMissingContracts(arguments_) {
     try {
       const packageRoot = installedPackageRoot(directory, entry.name);
       if (!packageRoot) throw new Error(`no installed package at node_modules/${entry.name}`);
+      if (!entry.installedIntegrity) {
+        throw new Error(
+          "the package manager supplied no exact registry integrity; linked and local packages cannot be certified automatically"
+        );
+      }
       const result = await generatePackageContract(
-        ["--package-root", packageRoot, "--output", localContractPath(directory, entry.name)],
+        [
+          "--package-root",
+          packageRoot,
+          "--output",
+          localContractPath(directory, entry.name),
+          "--integrity",
+          entry.installedIntegrity
+        ],
         { quiet: json }
       );
       generated.push(result);

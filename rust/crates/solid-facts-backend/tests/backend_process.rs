@@ -13,8 +13,6 @@ mod cross_file_callbacks_process;
 mod cross_file_digest_process;
 #[path = "harness_process.rs"]
 mod harness_process;
-#[path = "json_import_contract_process.rs"]
-mod json_import_contract_process;
 #[path = "owner_parity_process.rs"]
 mod owner_parity_process;
 #[path = "props_reactivity_process.rs"]

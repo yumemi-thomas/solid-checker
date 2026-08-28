@@ -374,10 +374,14 @@ consumer proof path before it can be reduced. The generator currently refuses
 CJS-only targets rather than inventing claims, and review output records
 callback/owner gaps. No unreviewed inferred contract is used as certification.
 
-The exact reviewed `@solidjs/signals@2.0.0-rc.0` `isEqual` contract now closes
-the v2 oracle's inert-comparison gap. Its other exports remain intentionally
-unmodeled until each runtime surface is audited; the v1 equivalent and
-arbitrary uncontracted packages remain SC9005/SC9012 obligations.
+The original exact reviewed `@solidjs/signals@2.0.0-rc.0` `isEqual` contract
+closed the v2 oracle's inert-comparison gap. Phase 14 preserves that guarantee
+against `@solidjs/signals@2.0.0-rc.3` through a new exact runtime/declaration
+witness and proof-bound receipt. The RC.3 body is a strict identity comparison,
+so all nine call-effect domains are complete-negative without saying anything
+about sibling exports. Other exports remain intentionally unmodeled until each
+runtime surface is audited; the v1 equivalent and arbitrary uncontracted
+packages remain SC9005/SC9012 obligations.
 - **2026-08-20 — cross-rule ownership follows effective enablement.** SC1004,
   SC5001, and Solid 2 SC1007 suppress an overlapping SC1001 only after both
   findings pass rule enablement. Disabling a more specific owner therefore
@@ -7800,3 +7804,41 @@ details; and the incompatible `onMount`/`onCleanup` imports in
 `@formkit/auto-animate@0.10.0`'s exact Solid adapter. Phase 14 still owns public
 schema/tooling/bundle migration, so none of these corpus facts reaches ordinary
 analysis early.
+
+## 2026-08-28 — Temporary-v2 contracts are the only producer/consumer path
+
+Phase 14 atomically switches package and missing-contract generation, first-
+party bundle issuance, probes, review, proof verification, native discovery,
+WASM input, differential/pin/conformance gates, and all process/fixture
+contracts to the normalized temporary-v2 workflow. Analyzer consumers receive
+only an `AcceptedContractIndex` assembled from exact document bytes, a
+proof-issued receipt, and an independently acquired `ResolvedImport`. The old
+public decoder, schema-1 generator, serialized unknown sentinel, public
+variants/conditions, inline evidence, name-only dependency proposal trust, and
+duplicate JavaScript normalization are deleted.
+
+This intentionally removes several former package-name successes. A reduced
+fixture declaration or implementation cannot borrow the receipted first-party
+bundle because its artifact bytes and closure differ. Conversely, stale
+`package-contract-incomplete` rows that existed only because a legacy bundle
+omitted an export disappear when the exact accepted artifact has complete
+negative knowledge. The ten changed finding snapshots record these semantic
+differences; none is a weakened proof rule.
+
+Proposal generation still refuses wildcard/unbounded public surfaces,
+unresolvable callable kind, non-literal dynamic imports, unsupported classes or
+namespaces, and external export-all boundaries without independently accepted
+semantics. The corpus records each refusal instead of synthesizing a negative
+claim. Missing registry integrity for linked/local packages, missing or
+ambiguous exact runtime/declaration/export identity, closure hazards, stale or
+absent receipts, unresolved guard selection, and open recursive leaves remain
+locally uncertifiable. Runtime probes remain falsifiers only.
+
+The Phase 13 RC.3 open leaves remain open: the server-functions client
+declaration's TypeScript-owned self-error; real-browser DOM/delegation/hydration
+observations; request-context and transport integration observations; user
+serialization; dynamic payload/target/selection leaves; and unstable frames
+protocol details. Solid 1 `jsx-runtime` and `jsx-dev-runtime` subpaths with no
+common runtime/declaration value binding remain in the checked census without
+an accepted semantic case. No Type Facts or compiler-facts producer, protocol,
+pin, or generated binary changed in this phase.

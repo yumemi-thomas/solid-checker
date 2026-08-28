@@ -1,0 +1,98 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/structured-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:c4e98531b0cd380efcff81d750bb86d24a2ec6cecd97dbcb8de74cef634cdc92",
+          "entries": [
+            {
+              "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+          "path": "node_modules/structured-package/package.json"
+        },
+        "exports": {
+          "identityTuple": {
+            "declarations": {
+              "exportName": "identityTuple",
+              "module": {
+                "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+                "path": "node_modules/structured-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "identityTuple",
+              "module": {
+                "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+                "path": "node_modules/structured-package/package.json"
+              }
+            }
+          },
+          "structuredObject": {
+            "declarations": {
+              "exportName": "structuredObject",
+              "module": {
+                "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+                "path": "node_modules/structured-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "structuredObject",
+              "module": {
+                "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+                "path": "node_modules/structured-package/package.json"
+              }
+            }
+          },
+          "structuredTuple": {
+            "declarations": {
+              "exportName": "structuredTuple",
+              "module": {
+                "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+                "path": "node_modules/structured-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "structuredTuple",
+              "module": {
+                "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+                "path": "node_modules/structured-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.tsx",
+        "packageIntegrity": "fixture:sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+        "packageManifest": {
+          "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+          "path": "node_modules/structured-package/package.json"
+        },
+        "packageName": "structured-package",
+        "packageRoot": "node_modules/structured-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:5457656327e83e728f38393605d1013d2b19229820dde3f1d011414e614535b0",
+          "path": "node_modules/structured-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "structured-package"
+      },
+      "receipt": "node_modules/structured-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

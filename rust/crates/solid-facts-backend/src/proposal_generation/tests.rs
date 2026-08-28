@@ -1,4 +1,5 @@
 use super::*;
+use sha2::Digest as _;
 use solid_reactive_ir::contract_semantics::{
     ArtifactIdentity, CallClaims, CallSemantics, CapabilityKnowledge, Cardinality,
     CardinalityScope, ClaimDomain, ExportIdentity, ExportSemantics, ExportTargetIdentity,
@@ -15,9 +16,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     ArtifactModeMatrix, ClosureManifest, DrainStep, EnvironmentIdentity, ProbeAuthority,
     ProbeContradictionRecord, ProbeEventClass, ProbeEventMatch, ProbeMode, ProbePolicy,
-    ProbeRecipe, ProbeScenario, ProposalProofRequest, ResolutionAuthority, ResolutionTrace,
-    ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport, RuntimeProbePlan,
-    SandboxIdentity, SandboxKind, ToolIdentity, verify_planned_proposal,
+    ProbeRecipe, ProbeScenario, ProposalProofRequest, ProposalVerificationRequest,
+    ResolutionAuthority, ResolutionTrace, ResolvedExportBinding, ResolvedExportTarget,
+    ResolvedFile, ResolvedImport, RuntimeProbePlan, SandboxIdentity, SandboxKind, SidecarDigests,
+    ToolIdentity, verify_and_encode_planned_proposal, verify_planned_proposal,
 };
 
 fn digest(byte: char) -> Digest {
@@ -236,6 +238,10 @@ fn planned() -> PlannedProposal {
     plan_probes(plan_proofs(construct_proposal(analysis()).unwrap()))
 }
 
+fn selected_case(contract: &NormalizedContract) -> &ArtifactCase {
+    &contract.artifact_cases()[0]
+}
+
 fn replay_all_closure_proofs(
     proposal: &PlannedProposal,
 ) -> Vec<solid_reactive_ir::contract_semantics::proof::ReplayedProof> {
@@ -270,6 +276,7 @@ fn replay_all_closure_proofs(
 #[test]
 fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradictions() {
     let proposal = planned();
+    let selected_artifact_case = selected_case(proposal.contract()).id.clone();
     let proofs = replay_all_closure_proofs(&proposal);
     let first_subject = proposal.plan().closure_candidates()[0].semantic_subject();
     let contradiction = ProbeContradictionRecord {
@@ -280,7 +287,7 @@ fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradict
     };
     let rejected = verify_planned_proposal(ProposalProofRequest {
         proposal: proposal.clone(),
-        selected_artifact_case: "import-case".into(),
+        selected_artifact_case: selected_artifact_case.clone(),
         wire_bytes: b"temporary-main-contract".to_vec(),
         proofs: proofs.clone(),
         contradictions: vec![contradiction],
@@ -296,7 +303,7 @@ fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradict
 
     let accepted = verify_planned_proposal(ProposalProofRequest {
         proposal,
-        selected_artifact_case: "import-case".into(),
+        selected_artifact_case: selected_artifact_case.clone(),
         wire_bytes: b"temporary-main-contract".to_vec(),
         proofs,
         contradictions: vec![],
@@ -306,7 +313,7 @@ fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradict
         },
     })
     .unwrap();
-    assert_eq!(accepted.artifact_case().id, "import-case");
+    assert_eq!(accepted.artifact_case().id, selected_artifact_case);
     assert!(
         accepted
             .artifact_case()
@@ -318,9 +325,49 @@ fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradict
 }
 
 #[test]
+fn proof_finalization_precedes_v2_emission_and_receipt_issuance() {
+    let analysis = analysis();
+    let resolved = analysis.resolutions[0].clone();
+    let proposal = plan_probes(plan_proofs(construct_proposal(analysis).unwrap()));
+    let selected_artifact_case = selected_case(proposal.contract()).id.clone();
+    let artifact = verify_and_encode_planned_proposal(ProposalVerificationRequest {
+        proofs: replay_all_closure_proofs(&proposal),
+        proposal,
+        selected_artifact_case,
+        contradictions: vec![],
+        verifier: VerifierIdentity {
+            build: "phase-14-test".into(),
+            policy: PROOF_POLICY_VERSION,
+        },
+        sidecars: SidecarDigests::default(),
+        pretty: true,
+    })
+    .unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&artifact.document).unwrap();
+    assert_eq!(document["schemaVersion"], 2);
+    assert_eq!(
+        artifact.contract.receipt().wire_digest,
+        Digest::parse(format!(
+            "sha256:{:x}",
+            sha2::Sha256::digest(&artifact.document)
+        ))
+        .unwrap()
+    );
+    let normalized = crate::contract_document_v2::decode(&artifact.document)
+        .unwrap()
+        .normalize()
+        .unwrap();
+    let normalized = crate::artifact_resolution::select_and_bind(&normalized, &resolved).unwrap();
+    assert_eq!(
+        normalized.semantic_digest(),
+        &artifact.contract.receipt().semantic_digest
+    );
+}
+
+#[test]
 fn construction_withdraws_false_closure_but_keeps_partial_positive_operations() {
     let proposal = construct_proposal(analysis()).unwrap();
-    let case = proposal.contract().artifact_case("import-case").unwrap();
+    let case = selected_case(proposal.contract());
     let partial = &case.exports["partial"];
     assert_eq!(
         partial.claim_state(ClaimDomain::Reads),
@@ -334,7 +381,13 @@ fn construction_withdraws_false_closure_but_keeps_partial_positive_operations() 
         partial.claim_state(ClaimDomain::Callbacks),
         KnowledgeState::Unknown
     );
-    assert!(partial.operation("partial-read").is_some());
+    assert!(
+        partial
+            .call
+            .operations
+            .iter()
+            .any(|operation| operation.id.0.ends_with(":partial-read"))
+    );
     assert!(proposal.closure_candidates().iter().any(|candidate| {
         candidate.export == "sibling" && candidate.claim == ClaimPath::Call(ClaimDomain::Callbacks)
     }));
@@ -346,11 +399,7 @@ fn construction_withdraws_false_closure_but_keeps_partial_positive_operations() 
 #[test]
 fn local_unknowns_do_not_erase_unrelated_closure_candidates_or_known_siblings() {
     let proposal = construct_proposal(analysis()).unwrap();
-    let sibling = &proposal
-        .contract()
-        .artifact_case("import-case")
-        .unwrap()
-        .exports["sibling"];
+    let sibling = &selected_case(proposal.contract()).exports["sibling"];
     assert_eq!(
         sibling.claim_state(ClaimDomain::Callbacks),
         KnowledgeState::Unknown
@@ -393,14 +442,14 @@ fn proof_and_probe_plans_keep_authorities_separate() {
             .plan()
             .probe_candidates
             .iter()
-            .any(|candidate| { candidate.operation.operation == "partial-read" })
+            .any(|candidate| { candidate.operation.operation.ends_with(":partial-read") })
     );
     assert!(
         !planned
             .plan()
             .probe_candidates
             .iter()
-            .any(|candidate| { candidate.operation.operation == "sibling-read" })
+            .any(|candidate| { candidate.operation.operation.ends_with(":sibling-read") })
     );
 }
 
@@ -444,7 +493,7 @@ fn runtime_probe_plan_accepts_only_witness_and_closure_subjects_from_the_proposa
         proposal.contract(),
         vec![ProbeMode {
             name: "browser-development".into(),
-            artifact_case: "import-case".into(),
+            artifact_case: selected_case(proposal.contract()).id.clone(),
             environment,
         }],
     )
@@ -503,7 +552,10 @@ fn proposal_emission_is_deterministic_and_has_no_accepted_closure_field() {
             .unwrap()
             .iter()
             .any(|operation| {
-                operation["operation"] == "partial-read" && operation["strength"] == "Possible"
+                operation["operation"]
+                    .as_str()
+                    .is_some_and(|operation| operation.ends_with(":partial-read"))
+                    && operation["strength"] == "Possible"
             })
     );
     for collection in [

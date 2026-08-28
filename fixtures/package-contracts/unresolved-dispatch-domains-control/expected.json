@@ -1,71 +1,140 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d273a3d05ba0febd16d190b4055a08baabb8f318c557799864656b342a72db8e",
+            "path": "./index.js",
+            "sha256": "5a53427f064bae1f4fd98de896d0b8f84c22c7b45a3d0e917671d9e80be4f182"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "87a566d89b8834846ea929f314e585aecb286fd1c2fed7207d14cfc3cc99115d"
+          },
+          "exports": {
+            "Direct": "summary-31edfd83199d80e5090b421bbf909bb77ef24428b2966c8585ba090875a3fa9e",
+            "inert": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:a4a1052d65c132a9d406f4f48c51f40f1098e6d24dbd2528ab8eec06e32543a0",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "a4a1052d65c132a9d406f4f48c51f40f1098e6d24dbd2528ab8eec06e32543a0"
+    },
     "name": "unresolved-dispatch-domains-control",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
+    "summary-31edfd83199d80e5090b421bbf909bb77ef24428b2966c8585ba090875a3fa9e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
           }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "returns": {
-        "kind": "object",
-        "properties": {
-          "value": {
-            "kind": "accessor",
-            "label": "result",
-            "evidence": {
-              "kind": "inferred"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "value",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
             }
           }
-        },
-        "evidence": {
-          "kind": "inferred"
-        }
-      },
-      "callbacks": [
-        {
-          "parameter": 1,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-2": [
-          "Direct"
         ],
-        "function-1": [
-          "inert"
+        "returns": [
+          "return"
         ]
-      }
+      },
+      "shape": "callable"
+    },
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
     }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

@@ -446,7 +446,13 @@ impl<'a> SemanticLookup<'a> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)
-            .filter(|binding| binding.summary.callbacks.is_unknown())
+            .filter(|binding| {
+                binding.summary.callbacks.is_open()
+                    || binding
+                        .summary
+                        .open_claims
+                        .contains(&crate::contract_semantics::ClaimDomain::Callbacks)
+            })
             .map(|binding| {
                 (
                     binding.package_name.as_str(),

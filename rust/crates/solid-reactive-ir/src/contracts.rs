@@ -6,7 +6,7 @@
 //! builds; the public contract data types stay in the crate root.
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     path::Path,
     sync::Arc,
 };
@@ -16,13 +16,293 @@ use solid_facts::ProjectFacts;
 use typefacts::{Callability, Constructability, Location, ReferenceSpace};
 
 use super::{
-    ContractCallback, ContractClaim, ContractExport, ContractExportVariant, ContractReactiveRead,
-    ContractReturn, ContractUnknownClaim, EntitySymbols, PackageContract, ReactiveSourceKind,
-    RuntimeEnvironment, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead, SummaryReads,
-    SymbolId, location, location_order,
+    ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
+    ContractReactiveRead, ContractReturn, EntitySymbols, OwnerRequirementOperation,
+    PackageContract, ReactiveSourceKind, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead,
+    SummaryReads, SymbolId, location, location_order,
 };
 use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
+use crate::contract_semantics::{
+    AcceptedContractIndex, AcceptedContractUse, ClaimDomain, KnowledgeSet, OperationKind,
+    OwnerSource, Requirement, Schedule, Tracking, ValueShape, ValueSource,
+};
+use crate::identity::symbol_id;
 use crate::pipeline::parallel_slice_results;
+
+/// Projects an already receipt-validated normalized export into the compact
+/// indexes used by the current interprocedural solver. This is deliberately
+/// downstream of exact import/artifact selection: no schema version, summary
+/// ID, condition label, evidence spelling, or closure-array mechanic is inspected.
+pub(crate) fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
+    let export = accepted.export();
+    let mut open_claims = BTreeSet::new();
+    let kind = if matches!(export.shape, ValueShape::Callable | ValueShape::Component) {
+        "function"
+    } else {
+        "value"
+    };
+
+    let callbacks = project_callbacks(export, &mut open_claims);
+    let reactive_reads = project_reactive_reads(export, &mut open_claims);
+    let returns = project_return(export, &mut open_claims);
+    let owner_requirements = project_owner_requirements(export, &mut open_claims);
+    let async_behavior = project_async_behavior(export, &mut open_claims);
+
+    ContractExport {
+        kind: kind.into(),
+        reactive_reads,
+        returns,
+        callbacks,
+        owner_requirements,
+        async_behavior,
+        open_claims,
+    }
+}
+
+fn project_callbacks(
+    export: &crate::contract_semantics::ExportSemantics,
+    open: &mut BTreeSet<ClaimDomain>,
+) -> ContractClaim<Vec<ContractCallback>> {
+    let knowledge = export.callbacks();
+    if !knowledge.is_closed() {
+        open.insert(ClaimDomain::Callbacks);
+    }
+    let mut callbacks = Vec::new();
+    for callback in knowledge.items() {
+        let ValueSource::Parameter { index, .. } = callback.from else {
+            open.insert(ClaimDomain::Callbacks);
+            continue;
+        };
+        let Some(operation) = export.operation(&callback.operation.0) else {
+            open.insert(ClaimDomain::Callbacks);
+            continue;
+        };
+        let Some(execution) = projected_execution(operation) else {
+            open.insert(ClaimDomain::Callbacks);
+            continue;
+        };
+        callbacks.push(ContractCallback {
+            parameter: usize::from(index),
+            execution: execution.into(),
+            arguments: operation.inputs.iter().map(project_return_shape).collect(),
+            owner: match operation.owner.source {
+                OwnerSource::None => Some("none".into()),
+                OwnerSource::Created(_)
+                    if operation.owner.requirements.child_owners == Requirement::Forbidden
+                        && operation.owner.requirements.cleanup == Requirement::Forbidden =>
+                {
+                    Some("leaf".into())
+                }
+                OwnerSource::Created(_) => Some("created".into()),
+                OwnerSource::Captured(_)
+                | OwnerSource::AmbientAtCall
+                | OwnerSource::AmbientAtExecution => Some("inherited".into()),
+                OwnerSource::Unknown => None,
+            },
+        });
+    }
+    callbacks.sort_by_key(|callback| callback.parameter);
+    match knowledge {
+        KnowledgeSet::Unknown if callbacks.is_empty() => ContractClaim::Open,
+        _ => ContractClaim::Known(callbacks),
+    }
+}
+
+fn projected_execution(operation: &crate::contract_semantics::Operation) -> Option<&'static str> {
+    if operation.tracking == Tracking::Tracked {
+        return Some("tracked");
+    }
+    match operation.schedule {
+        Some(Schedule::SameStack) => Some("inline"),
+        Some(Schedule::Queued | Schedule::External) => Some("deferred"),
+        None => None,
+    }
+}
+
+fn project_reactive_reads(
+    export: &crate::contract_semantics::ExportSemantics,
+    open: &mut BTreeSet<ClaimDomain>,
+) -> ContractClaim<Vec<ContractReactiveRead>> {
+    let knowledge = export
+        .operation_claim(ClaimDomain::Reads)
+        .expect("reads is an operation domain");
+    if !knowledge.is_closed() {
+        open.insert(ClaimDomain::Reads);
+    }
+    let mut reads = Vec::new();
+    for id in knowledge.items() {
+        let Some(operation) = export.operation(&id.0) else {
+            open.insert(ClaimDomain::Reads);
+            continue;
+        };
+        match operation.inputs.first() {
+            Some(ValueShape::Parameter { index, path }) => reads.push(ContractReactiveRead {
+                kind: "parameter-member".into(),
+                label: String::new(),
+                parameter: Some(usize::from(*index)),
+                member: path.last().cloned(),
+            }),
+            Some(ValueShape::Reactive { .. }) => reads.push(ContractReactiveRead {
+                kind: "accessor".into(),
+                label: "normalized reactive read".into(),
+                parameter: None,
+                member: None,
+            }),
+            Some(ValueShape::Store { .. }) => reads.push(ContractReactiveRead {
+                kind: "store-path".into(),
+                label: "normalized store read".into(),
+                parameter: None,
+                member: None,
+            }),
+            _ => {
+                open.insert(ClaimDomain::Reads);
+            }
+        }
+    }
+    match knowledge {
+        KnowledgeSet::Unknown if reads.is_empty() => ContractClaim::Open,
+        _ => ContractClaim::Known(reads),
+    }
+}
+
+fn project_return(
+    export: &crate::contract_semantics::ExportSemantics,
+    open: &mut BTreeSet<ClaimDomain>,
+) -> ContractClaim<Option<ContractReturn>> {
+    let knowledge = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    if !knowledge.is_closed() {
+        open.insert(ClaimDomain::Returns);
+    }
+    let mut returns = knowledge
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+        .filter_map(|operation| operation.output.as_ref())
+        .filter_map(project_return_shape)
+        .collect::<Vec<_>>();
+    returns.sort_by(|left, right| format!("{left:?}").cmp(&format!("{right:?}")));
+    returns.dedup();
+    match (knowledge, returns.as_slice()) {
+        (KnowledgeSet::Complete(items), []) if items.is_empty() => ContractClaim::Known(None),
+        (KnowledgeSet::Unknown, []) => ContractClaim::Open,
+        (_, [returned]) => ContractClaim::Known(Some(returned.clone())),
+        _ => {
+            open.insert(ClaimDomain::Returns);
+            ContractClaim::Open
+        }
+    }
+}
+
+fn project_return_shape(shape: &ValueShape) -> Option<ContractReturn> {
+    match shape {
+        ValueShape::Reactive { .. } => Some(ContractReturn {
+            kind: "accessor".into(),
+            label: "normalized reactive result".into(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Store { .. } => Some(ContractReturn {
+            kind: "store-path".into(),
+            label: "normalized store result".into(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Parameter { index, .. } => Some(ContractReturn {
+            kind: "argument".into(),
+            parameter: Some(usize::from(*index)),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Tuple(KnowledgeSet::Complete(items)) => Some(ContractReturn {
+            kind: "tuple".into(),
+            elements: items.iter().map(project_return_shape).collect(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Object(KnowledgeSet::Complete(properties)) => Some(ContractReturn {
+            kind: "object".into(),
+            properties: properties
+                .iter()
+                .filter_map(|property| {
+                    project_return_shape(&property.value)
+                        .map(|value| (property.name.clone(), value))
+                })
+                .collect(),
+            ..ContractReturn::default()
+        }),
+        ValueShape::Promise(value) | ValueShape::AsyncIterable(value) => {
+            project_return_shape(value)
+        }
+        ValueShape::Unknown
+        | ValueShape::Plain
+        | ValueShape::Tuple(_)
+        | ValueShape::Array { .. }
+        | ValueShape::Object(_)
+        | ValueShape::Choice(_)
+        | ValueShape::Callable
+        | ValueShape::Action { .. }
+        | ValueShape::Component
+        | ValueShape::Cleanup { .. }
+        | ValueShape::RefApplication
+        | ValueShape::ServerFunctionReference { .. } => None,
+    }
+}
+
+fn project_owner_requirements(
+    export: &crate::contract_semantics::ExportSemantics,
+    open: &mut BTreeSet<ClaimDomain>,
+) -> ContractClaim<Vec<ContractOwnerRequirement>> {
+    let knowledge = export
+        .operation_claim(ClaimDomain::Creates)
+        .expect("creates is an operation domain");
+    if !knowledge.is_closed() {
+        open.insert(ClaimDomain::Creates);
+    }
+    let mut requirements = Vec::new();
+    for operation in knowledge
+        .items()
+        .iter()
+        .filter_map(|id| export.operation(&id.0))
+    {
+        if operation.owner.requirements.owner == Requirement::Required {
+            let operation = match operation.kind {
+                OperationKind::Cleanup | OperationKind::Dispose => {
+                    OwnerRequirementOperation::Cleanup
+                }
+                _ => OwnerRequirementOperation::Effect,
+            };
+            requirements.push(ContractOwnerRequirement { operation });
+        }
+    }
+    requirements.sort_by_key(|requirement| format!("{:?}", requirement.operation));
+    requirements.dedup_by_key(|requirement| requirement.operation);
+    match knowledge {
+        KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
+        _ => ContractClaim::Known(requirements),
+    }
+}
+
+fn project_async_behavior(
+    export: &crate::contract_semantics::ExportSemantics,
+    open: &mut BTreeSet<ClaimDomain>,
+) -> ContractClaim<String> {
+    let mut protocol = None;
+    let returns = export
+        .operation_claim(ClaimDomain::Returns)
+        .expect("returns is an operation domain");
+    if !returns.is_closed() {
+        open.insert(ClaimDomain::Returns);
+    }
+    for operation in returns.items() {
+        match export
+            .operation(&operation.0)
+            .and_then(|operation| operation.output.as_ref())
+        {
+            Some(ValueShape::Promise(_)) => protocol = Some("promise"),
+            Some(ValueShape::AsyncIterable(_)) => protocol = Some("async-iterable"),
+            _ => {}
+        }
+    }
+    ContractClaim::Known(protocol.unwrap_or_default().into())
+}
 #[derive(Clone)]
 pub(super) struct ResolvedContractBinding {
     pub(super) local_name: String,
@@ -201,39 +481,24 @@ fn native_vocabulary_outranks_contract(
     dialect.owns_module(module) && dialect.declares_primitive(imported)
 }
 
-/// Keep exact, condition-selected callback timing from a reviewed package
+fn missing_accepted_export_needs_obligation(
+    dialect: &dyn Dialect,
+    module: &str,
+    imported: &str,
+) -> bool {
+    !native_vocabulary_outranks_contract(dialect, module, imported)
+}
+
+/// Keep exact, artifact-selected callback timing from an accepted package
 /// contract even when the dialect owns the rest of the primitive. Ownership,
-/// returns, reads, and async behavior remain native; this narrow overlay is
-/// what lets browser/server export variants refine a native vocabulary without
-/// replacing its richer semantics.
+/// returns, reads, and async behavior remain native.
 fn native_callback_overlay(summary: &ContractExport) -> Option<ContractExport> {
     let callbacks = summary.callbacks.known()?.clone();
     (!callbacks.is_empty()).then(|| ContractExport {
         kind: summary.kind.clone(),
-        evidence: summary.evidence.clone(),
         callbacks: ContractClaim::Known(callbacks),
         ..ContractExport::default()
     })
-}
-
-fn push_environment_dependent_export(
-    missing_exports: &mut Vec<StaticDefect>,
-    module: &str,
-    export: &str,
-    reexported: bool,
-    location: Location,
-) {
-    missing_exports.push(StaticDefect {
-        kind: StaticDefectKind::PackageContractEnvironmentDependent {
-            module: module.to_owned(),
-            export: export.to_owned(),
-            reexported,
-        },
-        location,
-        analysis_context: String::new(),
-        fixes: vec![],
-        uncertain: false,
-    });
 }
 
 /// Keep the known parts of a partial export usable while opening the existing
@@ -251,16 +516,32 @@ fn push_unknown_contract_claims(
     location: Location,
 ) {
     let mut claims = Vec::new();
-    if summary.reactive_reads.is_unknown() {
+    if summary.reactive_reads.is_open()
+        || summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Reads)
+    {
         claims.push("reactiveReads");
     }
-    if summary.returns.is_unknown() {
+    if summary.returns.is_open()
+        || summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Returns)
+    {
         claims.push("returns");
     }
-    if summary.owner_requirements.is_unknown() {
+    if summary.owner_requirements.is_open()
+        || summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Creates)
+    {
         claims.push("ownerRequirements");
     }
-    if summary.async_behavior.is_unknown() {
+    if summary.async_behavior.is_open()
+        || summary
+            .open_claims
+            .contains(&crate::contract_semantics::ClaimDomain::Throws)
+    {
         claims.push("asyncBehavior");
     }
     if claims.is_empty() {
@@ -279,101 +560,116 @@ fn push_unknown_contract_claims(
     });
 }
 
-fn selected_contract_export(
-    contract: &PackageContract,
-    module: &str,
-    summary: ContractExport,
-    environment: &RuntimeEnvironment,
-) -> Option<ContractExport> {
-    let suffix = module.strip_prefix(&contract.package.name)?;
-    let entrypoint_name = if suffix.is_empty() {
-        ".".to_owned()
-    } else if suffix.starts_with('/') {
-        format!(".{suffix}")
-    } else {
-        return None;
-    };
-    let entrypoint = contract.entrypoints.get(&entrypoint_name)?;
-    if !entrypoint.conditions.is_empty()
-        && !environment.matches_entrypoint_conditions(&entrypoint.conditions)
-    {
-        return None;
-    }
-    if summary.variants.is_empty() {
-        return Some(summary);
-    }
-    let matching = summary
-        .variants
-        .iter()
-        .filter(|variant| environment.matches_conditions(&variant.conditions))
-        .collect::<Vec<_>>();
-    match matching.len() {
-        0 => None,
-        1 => Some(*matching[0].summary.clone()),
-        _ => selected_variant(&matching).map(|variant| *variant.summary.clone()),
-    }
-}
-
-/// Choose between several export-map branches that all match this environment.
-///
-/// Generated contracts carry `precedence` on every variant, which is the
-/// export map's own first-match-wins order and therefore the exact answer.
-/// A handwritten contract carries none; there the only thing that can be
-/// proven without inventing an order is that an explicitly named branch is
-/// more specific than the unconditional `default` fallback. Anything else --
-/// two named branches with no recorded order, or a tie in `precedence` --
-/// stays fail-closed.
-fn selected_variant<'a>(
-    matching: &'a [&'a ContractExportVariant],
-) -> Option<&'a ContractExportVariant> {
-    if matching.iter().all(|variant| variant.precedence.is_some()) {
-        return lowest_unique_precedence(matching);
-    }
-    let mut named = matching.iter().filter(|variant| {
-        !variant
-            .conditions
-            .iter()
-            .any(|condition| condition == "default")
-    });
-    let winner = *named.next()?;
-    named.next().is_none().then_some(winner)
-}
-
-/// Resolve two or more overlapping export-map branches by `precedence`.
-///
-/// `package.json#exports` is an ordered map resolved first-match-wins, so
-/// when several variants match the runtime environment, the branch with the
-/// lowest `precedence` is the one Node itself would have resolved. That
-/// substitution is only safe when it removes ambiguity rather than guessing
-/// through it: every matching variant must declare a `precedence`, and the
-/// minimum among them must be unique. A tie, or any matching variant missing
-/// `precedence`, leaves the choice undetermined and must stay fail-closed.
-fn lowest_unique_precedence<'a>(
-    matching: &'a [&'a ContractExportVariant],
-) -> Option<&'a ContractExportVariant> {
-    let mut precedences = Vec::with_capacity(matching.len());
-    for variant in matching {
-        precedences.push(variant.precedence?);
-    }
-    let min = *precedences.iter().min()?;
-    let mut winner = None;
-    for (variant, precedence) in matching.iter().zip(precedences.iter()) {
-        if *precedence == min {
-            if winner.is_some() {
-                return None;
-            }
-            winner = Some(*variant);
-        }
-    }
-    winner
-}
-
-pub(super) fn resolve_contract_imports(
+pub(super) fn resolve_accepted_contract_imports(
     facts: &ProjectFacts,
-    contracts: &[PackageContract],
+    contracts: &AcceptedContractIndex,
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
-    environment: &RuntimeEnvironment,
+) -> ResolvedContracts {
+    let projected = project_accepted_contracts(facts, contracts);
+    resolve_contract_imports_inner(facts, &projected, contracts, entities, dialect)
+}
+
+pub(super) fn accepted_bundled_returns(
+    facts: &ProjectFacts,
+    contracts: &AcceptedContractIndex,
+) -> HashMap<SymbolId, ContractReturn> {
+    let mut returned = HashMap::new();
+    for file in &facts.files {
+        if !file
+            .ast
+            .imports
+            .iter()
+            .any(|import| !import.type_only && import.module.as_str() == "solid-js")
+        {
+            continue;
+        }
+        let Ok(contract) = contracts.contract(file.path.as_str(), "solid-js") else {
+            continue;
+        };
+        if contract.artifact_case().entrypoint != "." {
+            continue;
+        }
+        for name in contract.artifact_case().exports.keys() {
+            let Ok(accepted) = contracts.resolve_name(file.path.as_str(), "solid-js", name) else {
+                continue;
+            };
+            if let Some(value) = project_accepted_export(&accepted)
+                .returns
+                .known()
+                .and_then(Clone::clone)
+            {
+                returned.entry(symbol_id(name)).or_insert(value);
+            }
+        }
+    }
+    returned
+}
+
+fn project_accepted_contracts(
+    facts: &ProjectFacts,
+    contracts: &AcceptedContractIndex,
+) -> HashMap<(String, String), PackageContract> {
+    let mut projected = HashMap::new();
+    for file in &facts.files {
+        let modules = file
+            .ast
+            .imports
+            .iter()
+            .filter(|import| !import.type_only)
+            .map(|import| import.module.as_str())
+            .chain(
+                file.ast
+                    .exports
+                    .iter()
+                    .filter(|export| !export.type_only)
+                    .filter_map(|export| export.module.as_deref()),
+            )
+            .collect::<BTreeSet<_>>();
+        for module in modules {
+            let Ok(contract) = contracts.contract(file.path.as_str(), module) else {
+                continue;
+            };
+            let artifact_case = contract.artifact_case();
+            let exports = artifact_case
+                .exports
+                .keys()
+                .filter_map(|name| {
+                    contracts
+                        .resolve_name(file.path.as_str(), module, name)
+                        .ok()
+                        .map(|accepted| (name.clone(), project_accepted_export(&accepted)))
+                })
+                .collect();
+            projected.insert(
+                (file.path.to_string(), module.to_owned()),
+                PackageContract {
+                    package: crate::ContractPackage {
+                        name: contract.package().name.clone(),
+                        version: contract.package().version.clone(),
+                        integrity: contract.package().integrity.clone(),
+                    },
+                    entrypoints: BTreeMap::from([(
+                        artifact_case.entrypoint.clone(),
+                        crate::ContractEntrypoint { exports },
+                    )]),
+                    source_path: format!(
+                        "accepted:{}",
+                        contract.receipt().semantic_digest.as_str()
+                    ),
+                },
+            );
+        }
+    }
+    projected
+}
+
+fn resolve_contract_imports_inner(
+    facts: &ProjectFacts,
+    exact: &HashMap<(String, String), PackageContract>,
+    accepted: &AcceptedContractIndex,
+    entities: &EntitySymbols,
+    dialect: &dyn Dialect,
 ) -> ResolvedContracts {
     let mut bindings = Vec::new();
     let mut by_symbol = HashMap::new();
@@ -384,23 +680,20 @@ pub(super) fn resolve_contract_imports(
             if import.type_only {
                 continue;
             }
-            let contract = match PackageContract::bind_import(
-                contracts,
-                facts,
-                file.path.as_str(),
-                import.span,
-                &import.module,
-            ) {
-                crate::ImportBinding::Bound(contract) => {
-                    counts.bound += 1;
-                    contract
+            let Some(contract) = exact.get(&(file.path.to_string(), import.module.to_string()))
+            else {
+                if accepted.is_uncertifiable(file.path.as_str(), &import.module) {
+                    push_missing_accepted_import(
+                        &mut missing_exports,
+                        file,
+                        import,
+                        entities,
+                        dialect,
+                    );
                 }
-                crate::ImportBinding::Refused => {
-                    counts.refused += 1;
-                    continue;
-                }
-                crate::ImportBinding::NoCandidate => continue,
+                continue;
             };
+            counts.bound += 1;
             for binding in &import.bindings {
                 if binding.type_only {
                     continue;
@@ -427,17 +720,23 @@ pub(super) fn resolve_contract_imports(
                             .and_then(|exports| exports.get(imported.as_str()))
                             .cloned()
                         else {
-                            missing_exports.push(StaticDefect {
-                                kind: StaticDefectKind::PackageContractExportMissing {
-                                    module: import.module.to_string(),
-                                    export: imported,
-                                    reexported: false,
-                                },
-                                location: location(file.path.shared(), member.property),
-                                analysis_context: String::new(),
-                                fixes: vec![],
-                                uncertain: false,
-                            });
+                            if missing_accepted_export_needs_obligation(
+                                dialect,
+                                &import.module,
+                                &imported,
+                            ) {
+                                missing_exports.push(StaticDefect {
+                                    kind: StaticDefectKind::PackageContractExportMissing {
+                                        module: import.module.to_string(),
+                                        export: imported,
+                                        reexported: false,
+                                    },
+                                    location: location(file.path.shared(), member.property),
+                                    analysis_context: String::new(),
+                                    fixes: vec![],
+                                    uncertain: false,
+                                });
+                            }
                             continue;
                         };
                         let member_location = location(file.path.shared(), member.property);
@@ -446,38 +745,23 @@ pub(super) fn resolve_contract_imports(
                         };
                         let native =
                             native_vocabulary_outranks_contract(dialect, &import.module, &imported);
-                        let Some(mut summary) = selected_contract_export(
-                            contract,
-                            &import.module,
-                            summary,
-                            environment,
-                        ) else {
-                            if native {
-                                continue;
-                            }
-                            push_environment_dependent_export(
-                                &mut missing_exports,
-                                &import.module,
-                                &imported,
-                                false,
-                                member_location,
-                            );
-                            continue;
-                        };
+                        let mut summary = summary;
                         if native {
                             let Some(overlay) = native_callback_overlay(&summary) else {
                                 continue;
                             };
                             summary = overlay;
                         }
-                        push_unknown_contract_claims(
-                            &mut missing_exports,
-                            &summary,
-                            &import.module,
-                            &imported,
-                            false,
-                            member_location.clone(),
-                        );
+                        if !summary.open_claims.is_empty() {
+                            push_unknown_contract_claims(
+                                &mut missing_exports,
+                                &summary,
+                                &import.module,
+                                &imported,
+                                false,
+                                member_location.clone(),
+                            );
+                        }
                         let resolved = ResolvedContractBinding {
                             local_name: imported.clone(),
                             imported_name: imported.clone(),
@@ -532,49 +816,39 @@ pub(super) fn resolve_contract_imports(
                         // reactivity and therefore needs no export summary.
                         continue;
                     }
-                    missing_exports.push(StaticDefect {
-                        kind: StaticDefectKind::PackageContractExportMissing {
-                            module: import.module.to_string(),
-                            export: imported.to_owned(),
-                            reexported: false,
-                        },
-                        location: binding_location,
-                        analysis_context: String::new(),
-                        fixes: vec![],
-                        uncertain: false,
-                    });
+                    if missing_accepted_export_needs_obligation(dialect, &import.module, imported) {
+                        missing_exports.push(StaticDefect {
+                            kind: StaticDefectKind::PackageContractExportMissing {
+                                module: import.module.to_string(),
+                                export: imported.to_owned(),
+                                reexported: false,
+                            },
+                            location: binding_location,
+                            analysis_context: String::new(),
+                            fixes: vec![],
+                            uncertain: false,
+                        });
+                    }
                     continue;
                 };
                 let native = native_vocabulary_outranks_contract(dialect, &import.module, imported);
-                let Some(mut summary) =
-                    selected_contract_export(contract, &import.module, summary, environment)
-                else {
-                    if native {
-                        continue;
-                    }
-                    push_environment_dependent_export(
-                        &mut missing_exports,
-                        &import.module,
-                        imported,
-                        false,
-                        binding_location,
-                    );
-                    continue;
-                };
+                let mut summary = summary;
                 if native {
                     let Some(overlay) = native_callback_overlay(&summary) else {
                         continue;
                     };
                     summary = overlay;
                 }
-                push_unknown_contract_claims(
-                    &mut missing_exports,
-                    &summary,
-                    &import.module,
-                    imported,
-                    false,
-                    binding_location.clone(),
-                );
+                if !summary.open_claims.is_empty() {
+                    push_unknown_contract_claims(
+                        &mut missing_exports,
+                        &summary,
+                        &import.module,
+                        imported,
+                        false,
+                        binding_location.clone(),
+                    );
+                }
                 let resolved = ResolvedContractBinding {
                     local_name: file
                         .source_text(binding.local.span)
@@ -607,23 +881,10 @@ pub(super) fn resolve_contract_imports(
             let Some(module) = export.module.as_deref() else {
                 continue;
             };
-            let contract = match PackageContract::bind_import(
-                contracts,
-                facts,
-                file.path.as_str(),
-                export.span,
-                module,
-            ) {
-                crate::ImportBinding::Bound(contract) => {
-                    counts.bound += 1;
-                    contract
-                }
-                crate::ImportBinding::Refused => {
-                    counts.refused += 1;
-                    continue;
-                }
-                crate::ImportBinding::NoCandidate => continue,
+            let Some(contract) = exact.get(&(file.path.to_string(), module.to_owned())) else {
+                continue;
             };
+            counts.bound += 1;
             for specifier in &export.specifiers {
                 if specifier.type_only {
                     continue;
@@ -638,49 +899,39 @@ pub(super) fn resolve_contract_imports(
                     .and_then(|exports| exports.get(imported))
                     .cloned()
                 else {
-                    missing_exports.push(StaticDefect {
-                        kind: StaticDefectKind::PackageContractExportMissing {
-                            module: module.to_owned(),
-                            export: imported.to_owned(),
-                            reexported: true,
-                        },
-                        location: specifier_location,
-                        analysis_context: String::new(),
-                        fixes: vec![],
-                        uncertain: false,
-                    });
+                    if missing_accepted_export_needs_obligation(dialect, module, imported) {
+                        missing_exports.push(StaticDefect {
+                            kind: StaticDefectKind::PackageContractExportMissing {
+                                module: module.to_owned(),
+                                export: imported.to_owned(),
+                                reexported: true,
+                            },
+                            location: specifier_location,
+                            analysis_context: String::new(),
+                            fixes: vec![],
+                            uncertain: false,
+                        });
+                    }
                     continue;
                 };
                 let native = native_vocabulary_outranks_contract(dialect, module, imported);
-                let Some(mut summary) =
-                    selected_contract_export(contract, module, summary, environment)
-                else {
-                    if native {
-                        continue;
-                    }
-                    push_environment_dependent_export(
-                        &mut missing_exports,
-                        module,
-                        imported,
-                        true,
-                        specifier_location,
-                    );
-                    continue;
-                };
+                let mut summary = summary;
                 if native {
                     let Some(overlay) = native_callback_overlay(&summary) else {
                         continue;
                     };
                     summary = overlay;
                 }
-                push_unknown_contract_claims(
-                    &mut missing_exports,
-                    &summary,
-                    module,
-                    imported,
-                    true,
-                    specifier_location.clone(),
-                );
+                if !summary.open_claims.is_empty() {
+                    push_unknown_contract_claims(
+                        &mut missing_exports,
+                        &summary,
+                        module,
+                        imported,
+                        true,
+                        specifier_location.clone(),
+                    );
+                }
                 let resolved = ResolvedContractBinding {
                     local_name: specifier.exported.to_string(),
                     imported_name: imported.to_owned(),
@@ -714,6 +965,77 @@ pub(super) fn resolve_contract_imports(
     }
 }
 
+fn push_missing_accepted_import(
+    missing: &mut Vec<StaticDefect>,
+    file: &solid_facts::FileFacts,
+    import: &solid_facts::ast::ImportFact,
+    entities: &EntitySymbols,
+    dialect: &dyn Dialect,
+) {
+    for binding in &import.bindings {
+        if binding.type_only || !binding.runtime_referenced {
+            continue;
+        }
+        if binding.kind == solid_facts::ast::ImportKind::Namespace {
+            let namespace_location = location(file.path.shared(), binding.local.span);
+            let Some(namespace_symbol) = entities.get(&namespace_location) else {
+                continue;
+            };
+            for member in file.ast.members.iter().filter(|member| {
+                file.ast
+                    .computed_members
+                    .binary_search(&member.span)
+                    .is_err()
+                    && entities.get(&location(file.path.shared(), member.object))
+                        == Some(namespace_symbol)
+            }) {
+                let export = file.source_text(member.property).unwrap_or_default();
+                if !native_vocabulary_outranks_contract(dialect, &import.module, export) {
+                    push_missing_accepted_export(
+                        missing,
+                        &import.module,
+                        export,
+                        location(file.path.shared(), member.property),
+                    );
+                }
+            }
+            continue;
+        }
+        let Some(export) = binding.imported.as_deref().or_else(|| {
+            (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+        }) else {
+            continue;
+        };
+        if !native_vocabulary_outranks_contract(dialect, &import.module, export) {
+            push_missing_accepted_export(
+                missing,
+                &import.module,
+                export,
+                location(file.path.shared(), import.span),
+            );
+        }
+    }
+}
+
+fn push_missing_accepted_export(
+    missing: &mut Vec<StaticDefect>,
+    module: &str,
+    export: &str,
+    location: Location,
+) {
+    missing.push(StaticDefect {
+        kind: StaticDefectKind::PackageContractExportMissing {
+            module: module.into(),
+            export: export.into(),
+            reexported: false,
+        },
+        location,
+        analysis_context: "no receipt-accepted contract matches this exact import".into(),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
 pub(super) struct ContractSemantics<'a> {
     pub(super) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
@@ -734,7 +1056,7 @@ pub(super) struct ContractAnalysis<'a> {
     pub(super) callbacks: &'a [Vec<ContractCallback>],
     /// Per node, the parameters whose caller-supplied value the analysis never
     /// accounted for. Any one of them makes this export's `callbacks` domain
-    /// the unknown sentinel — see
+    /// its callback domain open — see
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(super) escaped_parameters: &'a [Vec<usize>],
     pub(super) invoked_parameter_members: &'a [Vec<(usize, String)>],
@@ -794,7 +1116,6 @@ fn contract_export_function(
                         || read.display.to_string(),
                         |returned| returned.label.clone(),
                     ),
-                evidence: None,
                 parameter: None,
                 member: None,
             };
@@ -818,7 +1139,6 @@ fn contract_export_function(
                 parameter: Some(parameter),
                 member: (members.len() == 1)
                     .then(|| members.into_iter().next().unwrap().to_owned()),
-                evidence: None,
             });
         }
     }
@@ -850,7 +1170,6 @@ fn contract_export_function(
             parameter: None,
             elements: Vec::new(),
             properties: BTreeMap::new(),
-            evidence: None,
         })
     });
     let mut callback_summary = callbacks.to_vec();
@@ -863,12 +1182,10 @@ fn contract_export_function(
     {
         callback_summary.into()
     } else {
-        ContractClaim::Unknown(ContractUnknownClaim::new())
+        ContractClaim::Open
     };
     ContractExport {
         kind: "function".into(),
-        evidence: None,
-        variants: Vec::new(),
         reactive_reads: reactive_reads.into(),
         callbacks,
         owner_requirements: Vec::new().into(),
@@ -878,6 +1195,7 @@ fn contract_export_function(
         } else {
             String::new().into()
         },
+        open_claims: BTreeSet::new(),
     }
 }
 
@@ -889,7 +1207,7 @@ fn contract_export_function(
 /// `callbacks[2]` as `deferred` and as `tracked` in the same summary. Schema v1
 /// has one execution axis per parameter, and the runtime has one behavior, so
 /// at least one of the two rows is false and a consumer choosing either is
-/// guessing. The per-export sentinel is the encoding schema v1 has for that.
+/// guessing. The generator-local knowledge state stays open for that domain.
 ///
 /// Rows that agree on `execution` and differ elsewhere (argument descriptors,
 /// owner) are *not* contradictory: those are additional facts about the same
@@ -1495,7 +1813,6 @@ fn path_within_project(path: &Path, directory: &Path) -> bool {
 fn value_contract_export() -> ContractExport {
     ContractExport {
         kind: "value".into(),
-        variants: Vec::new(),
         ..ContractExport::default()
     }
 }
@@ -1528,23 +1845,20 @@ fn entity_at<'a>(facts: &'a ProjectFacts, target: &Location) -> Option<&'a typef
 ///   domains absent here certified "invokes no caller-supplied callback" for a
 ///   body this run never read.
 ///
-/// The sentinel is demand-sensitive at the consumer: constructing or calling
+/// The open callback domain is demand-sensitive at the consumer: constructing or calling
 /// with no callable argument stays clean.
 pub fn raised_function_export(mut summary: ContractExport) -> ContractExport {
     summary.kind = "function".into();
-    summary.callbacks = ContractClaim::Unknown(ContractUnknownClaim::new());
+    summary.callbacks = ContractClaim::Open;
     summary
 }
 
 /// What this analysis can prove about an exported binding's runtime `kind`.
 ///
-/// `kind` is the one field of an export summary schema v1 gives no unknown
-/// sentinel, and `validate_export` bars a `kind: "value"` summary from
-/// carrying *any* claim domain. A `value` summary is therefore the maximal
-/// certified negative — reads nothing reactive, returns nothing reactive,
-/// invokes no caller-supplied callback, requires no owner — so publishing one
-/// demands a proof that the export is not a function, not merely the absence
-/// of a proof that it is.
+/// `kind` is a structural inference premise, and `validate_export` bars a
+/// `kind: "value"` summary from carrying any function claim. A value summary
+/// therefore demands a proof that the export is not a function, not merely
+/// the absence of a proof that it is.
 ///
 /// Two facts decide it, and only together. Neither
 /// [`typefacts::Callability`] nor [`typefacts::Constructability`] answers "is
@@ -1723,63 +2037,12 @@ fn promote_callable_export(
 }
 
 #[cfg(test)]
-mod variant_selection_tests {
-    use super::{ContractExport, ContractExportVariant, native_callback_overlay, selected_variant};
+mod native_overlay_tests {
+    use super::{
+        ContractExport, missing_accepted_export_needs_obligation, native_callback_overlay,
+    };
     use crate::{ContractCallback, ContractClaim, ContractReturn};
-
-    fn variant(conditions: &[&str], precedence: Option<u32>) -> ContractExportVariant {
-        ContractExportVariant {
-            conditions: conditions.iter().map(|value| (*value).to_owned()).collect(),
-            summary: Box::new(ContractExport {
-                kind: conditions.join("+"),
-                ..ContractExport::default()
-            }),
-            precedence,
-        }
-    }
-
-    #[test]
-    fn generated_variants_resolve_by_export_map_order() {
-        // Both branches match a development environment once `default` is
-        // satisfiable; `precedence` is the export map's own first-match-wins
-        // order, so the earlier `development` branch wins.
-        let development = variant(&["development"], Some(0));
-        let fallback = variant(&["default"], Some(1));
-        let matching = [&fallback, &development];
-        assert_eq!(
-            selected_variant(&matching).map(|winner| winner.summary.kind.as_str()),
-            Some("development")
-        );
-    }
-
-    #[test]
-    fn a_handwritten_named_branch_beats_the_unconditional_fallback() {
-        // No `precedence` anywhere: the only thing provable without inventing
-        // an order is that an explicitly named branch is more specific than
-        // the unconditional fallback.
-        let browser = variant(&["browser"], None);
-        let fallback = variant(&["default"], None);
-        let matching = [&fallback, &browser];
-        assert_eq!(
-            selected_variant(&matching).map(|winner| winner.summary.kind.as_str()),
-            Some("browser")
-        );
-    }
-
-    #[test]
-    fn ambiguity_with_no_recorded_order_stays_fail_closed() {
-        // Two named branches and nothing that says which one the resolver
-        // picks, and a tie in `precedence`, both stay undetermined.
-        let browser = variant(&["browser"], None);
-        let node = variant(&["node"], None);
-        let matching = [&browser, &node];
-        assert!(selected_variant(&matching).is_none());
-
-        let left = variant(&["browser"], Some(2));
-        let right = variant(&["node"], Some(2));
-        let tied = [&left, &right];
-        assert!(selected_variant(&tied).is_none());
-    }
+    use solid_dialect::Solid2;
 
     #[test]
     fn native_overlay_keeps_only_exact_callback_timing() {
@@ -1790,20 +2053,43 @@ mod variant_selection_tests {
                 execution: "inline".into(),
                 arguments: Vec::new(),
                 owner: None,
-                evidence: None,
             }]),
             returns: ContractClaim::Known(Some(ContractReturn {
                 kind: "accessor".into(),
                 label: "package return".into(),
                 ..ContractReturn::default()
             })),
-            async_behavior: ContractClaim::Unknown(crate::ContractUnknownClaim::new()),
+            async_behavior: ContractClaim::Open,
             ..ContractExport::default()
         };
         let overlay = native_callback_overlay(&summary).expect("known callback row");
         assert_eq!(overlay.callbacks, summary.callbacks);
         assert_eq!(overlay.returns, ContractClaim::Known(None));
         assert_eq!(overlay.async_behavior, ContractClaim::Known(String::new()));
+    }
+
+    #[test]
+    fn partial_accepted_contract_does_not_reopen_dialect_owned_primitives() {
+        assert!(!missing_accepted_export_needs_obligation(
+            &Solid2,
+            "solid-js",
+            "createSignal"
+        ));
+        assert!(missing_accepted_export_needs_obligation(
+            &Solid2,
+            "@solidjs/signals",
+            "isEqual"
+        ));
+        assert!(missing_accepted_export_needs_obligation(
+            &Solid2,
+            "solid-js",
+            "notAPrimitive"
+        ));
+        assert!(missing_accepted_export_needs_obligation(
+            &Solid2,
+            "some-other-package",
+            "createSignal"
+        ));
     }
 }
 
@@ -1817,7 +2103,6 @@ mod callback_contradiction_tests {
             execution: execution.into(),
             arguments: Vec::new(),
             owner: None,
-            evidence: None,
         }
     }
 
@@ -2295,6 +2580,6 @@ mod export_kind_proof_tests {
             ..ContractExport::default()
         });
         assert_eq!(raised.kind, "function");
-        assert!(matches!(raised.callbacks, ContractClaim::Unknown(_)));
+        assert!(matches!(raised.callbacks, ContractClaim::Open));
     }
 }

@@ -756,7 +756,7 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
 }
 
 #[test]
-fn unknown_callback_diagnostic_contains_actionable_contract_stub() {
+fn unknown_callback_diagnostic_contains_actionable_open_claim_context() {
     let Some(findings) = diagnostic_fixture("package-unknown-callback-producer") else {
         return;
     };
@@ -767,7 +767,9 @@ fn unknown_callback_diagnostic_contains_actionable_contract_stub() {
     let hint = finding["hint"].as_str().unwrap_or_default();
     assert!(message.contains("current project.:schedule"), "{message}");
     assert!(message.contains("parameter 0 (() => void)"), "{message}");
-    assert!(hint.contains("schemaVersion\":1"), "{hint}");
+    assert!(hint.contains("solid-checker-open-contract-claim"), "{hint}");
+    assert!(hint.contains("semanticModelVersion\":1"), "{hint}");
+    assert!(!hint.contains("schemaVersion\":1"), "{hint}");
     assert!(hint.contains("choose exactly one audited mode"), "{hint}");
     assert!(hint.contains("solid-checker contract generate"), "{hint}");
 }

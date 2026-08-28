@@ -1,0 +1,1 @@
+solid-checker: solid-checker-rust: package contract error: runtime selection contains contradictory runtime target conditions: browser, node

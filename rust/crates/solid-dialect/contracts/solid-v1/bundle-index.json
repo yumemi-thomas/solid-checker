@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 2,
+  "format": "solid-checker-temporary-v2-bundle-index",
+  "contracts": [
+    {
+      "package": "@solid-primitives/debounce",
+      "artifactCase": "artifact-case:58598090e0e0b4e6cc193fc7a970faa27fba9ec77557dd996606fd0bd0a18e95",
+      "selector": {},
+      "document": "debounce-root-default.json",
+      "receipt": "debounce-root-default.receipt.json"
+    },
+    {
+      "package": "@solid-primitives/rootless",
+      "artifactCase": "artifact-case:dec0cf6bd3fb6c93a0016f3f2a8cc076f89626a3895080a99ce54999f430929c",
+      "selector": {},
+      "document": "rootless-root-default.json",
+      "receipt": "rootless-root-default.receipt.json"
+    },
+    {
+      "package": "@solid-primitives/scheduled",
+      "artifactCase": "artifact-case:898913ab6e8a774f6bb9c15e0cbc732660c2361efbbeacd3606e082c0a0e38ad",
+      "selector": {
+        "target": "browser"
+      },
+      "document": "scheduled-root-browser.json",
+      "receipt": "scheduled-root-browser.receipt.json"
+    },
+    {
+      "package": "@solid-primitives/scheduled",
+      "artifactCase": "artifact-case:898913ab6e8a774f6bb9c15e0cbc732660c2361efbbeacd3606e082c0a0e38ad",
+      "selector": {
+        "target": "node"
+      },
+      "document": "scheduled-root-node.json",
+      "receipt": "scheduled-root-node.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:53b5b87886e559c6b6df1247ff53c4bafe91c4c0ade026bce3e3b6b24aec8bcd",
+      "selector": {},
+      "document": "solid-h-jsx-dev-runtime-default.json",
+      "receipt": "solid-h-jsx-dev-runtime-default.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:02e9530adda923c671c8c1b288db0153661f678a9976674e9e69b62bfe5544af",
+      "selector": {},
+      "document": "solid-h-jsx-runtime-default.json",
+      "receipt": "solid-h-jsx-runtime-default.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:a1f9a363ceb88a4ebab9cab977081534e95a23ff7343ab375b2b0609d330093b",
+      "selector": {
+        "target": "browser",
+        "build": "development"
+      },
+      "document": "solid-root-browser-development.json",
+      "receipt": "solid-root-browser-development.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:236b2257c7f43cd4fe5b955a2d260e75997f8cfcaf3f890776db7431f3d1508e",
+      "selector": {
+        "target": "browser",
+        "build": "production"
+      },
+      "document": "solid-root-browser-production.json",
+      "receipt": "solid-root-browser-production.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:fe631e741ea8258a3c0fc64d8391b4c8a4b89c83851acd9115be54f635abe591",
+      "selector": {
+        "target": "node"
+      },
+      "document": "solid-root-node.json",
+      "receipt": "solid-root-node.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:60c071e97e7bc7d480953cb80660af6a0ebac883d859af77eb9776187291bb15",
+      "selector": {
+        "target": "browser",
+        "build": "development"
+      },
+      "document": "solid-store-browser-development.json",
+      "receipt": "solid-store-browser-development.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:c75e0bfc2dc711b18ddba25651534bd90198d537e1a55d762e3d1d6c96fdcca6",
+      "selector": {
+        "target": "browser",
+        "build": "production"
+      },
+      "document": "solid-store-browser-production.json",
+      "receipt": "solid-store-browser-production.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:7088d5ea9f71682617eeec03526249f3777ec160edb43d51a3242cb2394ab188",
+      "selector": {
+        "target": "node"
+      },
+      "document": "solid-store-node.json",
+      "receipt": "solid-store-node.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:01565a83b9bfbae49d69563d1225c2a87703bf161779cca890039c24d494adc5",
+      "selector": {
+        "build": "development"
+      },
+      "document": "solid-universal-development.json",
+      "receipt": "solid-universal-development.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:459702bbcc2aae7cca8305bbcab7ccbf498e1dbffdd3e02da5e2ca7d8929ce39",
+      "selector": {
+        "build": "production"
+      },
+      "document": "solid-universal-production.json",
+      "receipt": "solid-universal-production.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:2dab05befa05ac33a9a40d1d220c444b6b16a962ab59ca0503f93e96aeca22df",
+      "selector": {
+        "target": "browser",
+        "build": "development"
+      },
+      "document": "solid-web-browser-development.json",
+      "receipt": "solid-web-browser-development.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:73822691fe8c44f0f56e83e9133c650eb4e8e9a5e80cba1ece10882ca14242a3",
+      "selector": {
+        "target": "browser",
+        "build": "production"
+      },
+      "document": "solid-web-browser-production.json",
+      "receipt": "solid-web-browser-production.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:d913ff29fa6558d45e14c57d85548b6fdec66383ac7649af27bbc51d6337ff35",
+      "selector": {
+        "target": "node"
+      },
+      "document": "solid-web-node.json",
+      "receipt": "solid-web-node.receipt.json"
+    },
+    {
+      "package": "solid-js",
+      "artifactCase": "artifact-case:758193194c4a3f5f0ecb1a1e25c8fde11f660567e70dd63ef09f7b4f9a837041",
+      "selector": {},
+      "document": "solid-web-storage-default.json",
+      "receipt": "solid-web-storage-default.receipt.json"
+    }
+  ]
+}

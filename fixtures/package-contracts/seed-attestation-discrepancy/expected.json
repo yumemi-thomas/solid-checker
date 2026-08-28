@@ -1,29 +1,45 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8c5c933ad4981452bf05bcfc83a88b13d8a439bbb614c3367d90de3a1184b8da",
+            "path": "./index.js",
+            "sha256": "beef29a3459ff4fa25f75b08d3cced0f1f5c1fceb996a5655ab88da6c010443a"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "beef29a3459ff4fa25f75b08d3cced0f1f5c1fceb996a5655ab88da6c010443a"
+          },
+          "exports": {
+            "thing": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:d3c020631b3ee290196da70e8c04fbb93c6e390d637a878ae80fd54eab9a3a17",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d3c020631b3ee290196da70e8c04fbb93c6e390d637a878ae80fd54eab9a3a17"
+    },
     "name": "seed-attestation-discrepancy",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "value-1": [
-          "thing"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

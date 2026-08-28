@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     ArtifactCase, ArtifactIdentity, ClaimDomain, ContractProposal, Digest, ExportTargetIdentity,
-    NormalizedContract,
+    NormalizedContract, PackageIdentity, ResolutionStep, StabilityKnowledge,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -144,6 +144,21 @@ pub struct ClosureHazard {
     pub affected_domains: Vec<AffectedClaimDomain>,
 }
 
+/// Exact published package instance included in a finite dependency census.
+///
+/// This is distinct from an accepted semantic dependency edge: it proves the
+/// bytes that were classified even when no behavior from that dependency is
+/// queried. `files_manifest_digest` hashes the sorted `sha256  path` manifest
+/// of every regular file in the installed package.
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ClosurePackageIdentity {
+    pub name: String,
+    pub version: String,
+    pub integrity: String,
+    pub files_manifest_digest: String,
+}
+
 /// Canonical, replayable identity of one artifact case's local files,
 /// accepted external edges, and exact open frontiers.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -154,6 +169,8 @@ pub struct ClosureManifest {
     pub dependencies: Vec<AcceptedDependencyEdge>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hazards: Vec<ClosureHazard>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub packages: Vec<ClosurePackageIdentity>,
     pub digest: String,
 }
 
@@ -318,16 +335,62 @@ impl ClosureManifest {
             entries,
             dependencies,
             hazards,
+            packages: Vec::new(),
+            digest,
+        })
+    }
+
+    /// Builds the exact finite published-package closure used by first-party
+    /// conformance. It cannot be mixed with a file-edge closure: the two
+    /// shapes have different independently replayable census authorities.
+    pub fn from_package_census(
+        mut packages: Vec<ClosurePackageIdentity>,
+    ) -> Result<Self, ArtifactResolutionFailure> {
+        if packages.is_empty() {
+            return invalid_resolution("package closure census must not be empty");
+        }
+        for package in &mut packages {
+            validate_identifier(&package.name, "closure package name")?;
+            validate_identifier(&package.version, "closure package version")?;
+            if !package.integrity.starts_with("sha512-") {
+                return invalid_resolution("closure package integrity must be an exact SRI");
+            }
+            package.files_manifest_digest = normalize_digest(&package.files_manifest_digest)?;
+        }
+        // Preserve the checked Phase 13 census ordering exactly: the authority
+        // sorts the complete rendered identity line, not the package-name
+        // field in isolation (notably `seroval-plugins` sorts before
+        // `seroval` because `-` precedes `@`).
+        packages.sort_by_cached_key(package_census_line);
+        if packages.windows(2).any(|pair| pair[0].name == pair[1].name) {
+            return invalid_resolution("package closure census repeats a package name");
+        }
+        let digest = package_census_digest(&packages);
+        Ok(Self {
+            entries: Vec::new(),
+            dependencies: Vec::new(),
+            hazards: Vec::new(),
+            packages,
             digest,
         })
     }
 
     pub fn validate(&self) -> Result<(), ArtifactResolutionFailure> {
-        let rebuilt = Self::new(
-            self.entries.clone(),
-            self.dependencies.clone(),
-            self.hazards.clone(),
-        )?;
+        let rebuilt = if self.packages.is_empty() {
+            Self::new(
+                self.entries.clone(),
+                self.dependencies.clone(),
+                self.hazards.clone(),
+            )?
+        } else {
+            if !self.entries.is_empty() || !self.dependencies.is_empty() || !self.hazards.is_empty()
+            {
+                return invalid_resolution(
+                    "package closure census cannot be mixed with file, dependency, or hazard rows",
+                );
+            }
+            Self::from_package_census(self.packages.clone())?
+        };
         if rebuilt.digest != normalize_digest(&self.digest)? {
             return Err(ArtifactResolutionFailure::Invalid {
                 reason: "dependency closure digest does not match its canonical manifest".into(),
@@ -336,6 +399,7 @@ impl ClosureManifest {
         if rebuilt.entries != self.entries
             || rebuilt.dependencies != self.dependencies
             || rebuilt.hazards != self.hazards
+            || rebuilt.packages != self.packages
         {
             return Err(ArtifactResolutionFailure::Invalid {
                 reason: "dependency closure manifest is not in canonical order".into(),
@@ -360,6 +424,28 @@ impl ClosureManifest {
             .flat_map(|hazard| hazard.affected_domains.iter().copied().map(Into::into))
             .collect()
     }
+}
+
+fn package_census_digest(packages: &[ClosurePackageIdentity]) -> String {
+    let mut input = String::from("solid-checker:phase13-rc3-closure:v1\n");
+    for package in packages {
+        input.push_str(&package_census_line(package));
+        input.push('\n');
+    }
+    format!("sha256:{:x}", Sha256::digest(input.as_bytes()))
+}
+
+fn package_census_line(package: &ClosurePackageIdentity) -> String {
+    format!(
+        "{}@{}\t{}\t{}",
+        package.name,
+        package.version,
+        package.integrity,
+        package
+            .files_manifest_digest
+            .strip_prefix("sha256:")
+            .expect("package census digests are normalized")
+    )
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -599,6 +685,88 @@ pub(crate) fn select_and_bind(
         })
 }
 
+/// Creates the exact package and empty artifact-case identities used by the
+/// Rust proposal generator. Export semantics are added by the analysis owner
+/// and rebound through [`select_and_bind`] before emission.
+pub(crate) fn proposal_identity(
+    resolved: &ResolvedImport,
+) -> Result<(PackageIdentity, ArtifactCase), ContractFailure> {
+    resolved
+        .validate()
+        .map_err(|error| invalid_identity(error.to_string()))?;
+    let manifest = semantic_artifact(&resolved.package_manifest, resolved)?;
+    let runtime = semantic_artifact(&resolved.runtime, resolved)?;
+    let declarations = semantic_artifact(&resolved.declarations, resolved)?;
+    let transform = resolved
+        .transform
+        .as_ref()
+        .map(|file| semantic_artifact(file, resolved))
+        .transpose()?;
+    let resolution_trace = if resolved.runtime_trace.branch.is_empty()
+        && resolved.declaration_trace.branch.is_empty()
+    {
+        Vec::new()
+    } else {
+        if resolved.runtime_trace.branch.is_empty() || resolved.declaration_trace.branch.is_empty()
+        {
+            return Err(invalid_identity(
+                "runtime and declaration resolution branches must both be present",
+            ));
+        }
+        vec![
+            ResolutionStep {
+                condition: "runtime".into(),
+                target: resolved.runtime_trace.branch.clone(),
+            },
+            ResolutionStep {
+                condition: "types".into(),
+                target: resolved.declaration_trace.branch.clone(),
+            },
+        ]
+    };
+    let identity = format!(
+        "proposal:{}:{}:{}",
+        resolved.package_name,
+        resolved.requested_entrypoint,
+        resolved.closure.digest.trim_start_matches("sha256:")
+    );
+    Ok((
+        PackageIdentity {
+            name: resolved.package_name.clone(),
+            version: resolved.package_version.clone(),
+            integrity: resolved.package_integrity.clone(),
+            manifest,
+        },
+        ArtifactCase {
+            id: identity,
+            entrypoint: resolved.requested_entrypoint.clone(),
+            resolution_trace,
+            runtime,
+            declarations,
+            dependency_closure: Digest::parse(&resolved.closure.digest)
+                .map_err(|error| invalid_identity(error.to_string()))?,
+            transform,
+            stability: StabilityKnowledge::Unknown,
+            exports: BTreeMap::new(),
+        },
+    ))
+}
+
+fn semantic_artifact(
+    file: &ResolvedFile,
+    resolved: &ResolvedImport,
+) -> Result<ArtifactIdentity, ContractFailure> {
+    let path = package_relative_path(file, resolved)
+        .ok_or_else(|| invalid_identity("resolved artifact is outside its package root"))?;
+    Ok(ArtifactIdentity {
+        path,
+        digest: Digest::parse(
+            normalize_digest(&file.digest).map_err(|error| invalid_identity(error.to_string()))?,
+        )
+        .map_err(|error| invalid_identity(error.to_string()))?,
+    })
+}
+
 fn validate_package_identity(
     contract: &NormalizedContract,
     resolved: &ResolvedImport,
@@ -709,7 +877,14 @@ fn bind_export_target(
     };
     let is_root = package_relative_path(root, resolved).as_deref() == Some(path.as_str())
         && normalize_digest(&root.digest).ok().as_deref() == Some(digest.as_str());
-    if !is_root && !resolved.closure.contains(role, &path, &digest) {
+    // A checked whole-package census binds every regular file in the exact
+    // published closure, so re-export targets do not need duplicate per-file
+    // rows. File-edge closures still require every non-root binding to appear
+    // explicitly.
+    if !is_root
+        && resolved.closure.packages.is_empty()
+        && !resolved.closure.contains(role, &path, &digest)
+    {
         return Err(invalid_identity(format!(
             "{role:?} target for export {public_name:?} is not present in the canonical closure"
         )));

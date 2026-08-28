@@ -1,51 +1,82 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "70bef8f8d8cf60a6f0bf6e285d72fee84cc570882aea3046c76aa19852c843af",
+            "path": "./index.js",
+            "sha256": "b0c8374975de104c79283473cb384b619bc3a55ed0ff3dc8ef9f0ab76c413e0b"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "fd8c543a00b385f47a924a91aaff2df91e7ca506e6d5c6f0b81cd5d45ff03e71"
+          },
+          "exports": {
+            "mapParam": "summary-795bbcc8450aee6d59910746e914d18b66c5c32e8a43e8856a19ce4064db0c85",
+            "noMember": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:d9b727b9cb55f6e89d43884aea5590efc9b8982d522772d1ed787bed8d2cc031",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d9b727b9cb55f6e89d43884aea5590efc9b8982d522772d1ed787bed8d2cc031"
+    },
     "name": "unresolved-callee-callback-package",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "reactiveReads": [
-        {
-          "kind": "parameter-member",
-          "parameter": 0,
-          "member": "map",
-          "evidence": {
-            "kind": "inferred"
+    "summary-795bbcc8450aee6d59910746e914d18b66c5c32e8a43e8856a19ce4064db0c85": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "map"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
           }
-        }
-      ],
-      "callbacks": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
-    }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-2": [
-          "mapParam"
         ],
-        "function-1": [
-          "noMember"
+        "reads": [
+          "read-0"
         ]
-      }
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

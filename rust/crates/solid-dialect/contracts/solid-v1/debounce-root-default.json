@@ -1,0 +1,127 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "ba12f52ff6ff1ea368ec4d40d58993735ce387dc64a7f6460077225a4b059b32",
+            "path": "./dist/index.js",
+            "sha256": "b772f925ca55d55a6ef84c3277ab85f9bff2018c30c4269817327e267c76efe1"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "4fe1834060a02e3a3df804927e4fd7b73eab9496cd6a5e2624dd14f1d2ec382c"
+          },
+          "exports": {
+            "createDebounce": "summary-921a1a0f6ed5571ab96284fb9a76ae01194f2b93d8a00ef81894d6bdf15334b0",
+            "default": "summary-921a1a0f6ed5571ab96284fb9a76ae01194f2b93d8a00ef81894d6bdf15334b0"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./import"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-Cen4ccCPTuEtQM7o9aEKuOJ0LRlAnzKvN7loEBBOQ+zKdu7/7kYKr7HHE/WS8JAI3QeQr5v2ModYRIZLERw5zw==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "19e4b7c252d2650e1d291af601e9fa26cc35cc2f370b14d1c5861cdd008012ab"
+    },
+    "name": "@solid-primitives/debounce",
+    "version": "1.3.0"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "e49bbb46a908c3d4bd25c615263524d3f5fd94527992006385ef823fa75064bd"
+    }
+  },
+  "summaries": {
+    "summary-921a1a0f6ed5571ab96284fb9a76ae01194f2b93d8a00ef81894d6bdf15334b0": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "owner": {
+              "children": "forbidden",
+              "cleanup": "forbidden",
+              "closed": [
+                "productions"
+              ],
+              "lifetime": "call",
+              "productions": [],
+              "requires": "forbidden",
+              "source": "none"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "create",
+            "owner": {
+              "closed": [
+                "productions"
+              ],
+              "productions": [],
+              "requires": "required",
+              "requiresCleanup": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

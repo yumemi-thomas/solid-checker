@@ -147,6 +147,65 @@ pub struct AcceptanceRequest {
     pub verifier: VerifierIdentity,
 }
 
+/// Proof inputs before any main-document bytes exist. Verification closes the
+/// authorized leaves and returns a typestate that can be encoded but cannot be
+/// consumed by analysis until those exact bytes receive a receipt.
+pub struct ClosureVerificationRequest {
+    pub contract: NormalizedContract,
+    pub selected_artifact_case: String,
+    pub closed_claims: Vec<SemanticClaimSubject>,
+    pub proofs: Vec<ReplayedProof>,
+    pub contradictions: Vec<ProofContradiction>,
+    pub verifier: VerifierIdentity,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VerifiedContract {
+    contract: NormalizedContract,
+    selected_artifact_case: String,
+    proof_root: Digest,
+    closed_claims_root: Digest,
+    verifier: VerifierIdentity,
+}
+
+impl VerifiedContract {
+    #[must_use]
+    pub const fn contract(&self) -> &NormalizedContract {
+        &self.contract
+    }
+
+    /// Issues the receipt only after the proof-finalized model has been
+    /// encoded. This ordering removes the old caller-supplied-final-bytes
+    /// cycle while keeping [`AcceptedContract`] proof-only.
+    pub fn issue(self, wire_bytes: &[u8]) -> Result<AcceptedContract, ProofError> {
+        if wire_bytes.is_empty() || wire_bytes.len() > MAX_WIRE_BYTES {
+            return Err(ProofError::InvalidWireDocument);
+        }
+        let package = self.contract.package().clone();
+        let selected_case = self
+            .contract
+            .artifact_case(&self.selected_artifact_case)
+            .expect("verified artifact case survives normalization")
+            .clone();
+        let receipt = AcceptanceReceipt {
+            receipt_version: ACCEPTANCE_RECEIPT_VERSION,
+            wire_digest: Digest::from_sha256(Sha256::digest(wire_bytes).into()),
+            semantic_model_version: self.contract.semantic_model_version(),
+            semantic_digest: self.contract.semantic_digest().clone(),
+            artifacts_digest: artifacts_digest(&package, &selected_case),
+            closure_digest: selected_case.dependency_closure.clone(),
+            proof_root: self.proof_root,
+            closed_claims_root: self.closed_claims_root,
+            verifier: self.verifier,
+        };
+        Ok(AcceptedContract {
+            package,
+            selected_case,
+            receipt,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum ProofError {
     #[error("proof names an invalid semantic claim: {0}")]
@@ -325,11 +384,9 @@ pub fn replay_proof_rule(
     })
 }
 
-/// The sole constructor of accepted normalized typestate.
-pub fn verify_and_accept(request: AcceptanceRequest) -> Result<AcceptedContract, ProofError> {
-    if request.wire_bytes.is_empty() || request.wire_bytes.len() > MAX_WIRE_BYTES {
-        return Err(ProofError::InvalidWireDocument);
-    }
+/// Replays every closure proof and returns the selected, proof-finalized
+/// one-case model for wire emission.
+pub fn verify_closure(request: ClosureVerificationRequest) -> Result<VerifiedContract, ProofError> {
     if request.verifier.build.is_empty() {
         return Err(ProofError::EmptyVerifierBuild);
     }
@@ -439,22 +496,29 @@ pub fn verify_and_accept(request: AcceptanceRequest) -> Result<AcceptedContract,
         .artifact_case(&request.selected_artifact_case)
         .expect("selected case survives normalization")
         .clone();
-    let receipt = AcceptanceReceipt {
-        receipt_version: ACCEPTANCE_RECEIPT_VERSION,
-        wire_digest: Digest::from_sha256(Sha256::digest(&request.wire_bytes).into()),
-        semantic_model_version: finalized.semantic_model_version(),
-        semantic_digest: finalized.semantic_digest().clone(),
-        artifacts_digest: artifacts_digest(&package, &selected_case),
-        closure_digest: selected_case.dependency_closure.clone(),
+    let selected = ContractProposal::new(package, vec![selected_case]).normalize()?;
+    Ok(VerifiedContract {
+        contract: selected,
+        selected_artifact_case: request.selected_artifact_case,
         proof_root: proof_root(&proofs),
         closed_claims_root: closed_claims_root(closed.keys()),
         verifier: request.verifier,
-    };
-    Ok(AcceptedContract {
-        package,
-        selected_case,
-        receipt,
     })
+}
+
+/// Compatibility wrapper for callers that already have final wire bytes. New
+/// producers must call [`verify_closure`], encode `VerifiedContract::contract`,
+/// and then call [`VerifiedContract::issue`].
+pub fn verify_and_accept(request: AcceptanceRequest) -> Result<AcceptedContract, ProofError> {
+    let verified = verify_closure(ClosureVerificationRequest {
+        contract: request.contract,
+        selected_artifact_case: request.selected_artifact_case,
+        closed_claims: request.closed_claims,
+        proofs: request.proofs,
+        contradictions: request.contradictions,
+        verifier: request.verifier,
+    })?;
+    verified.issue(&request.wire_bytes)
 }
 
 /// Validates a stored verifier-issued receipt and exposes accepted typestate.

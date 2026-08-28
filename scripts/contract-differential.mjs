@@ -1,17 +1,19 @@
 #!/usr/bin/env bun
 
-// Differential contract audit:
+// Temporary-v2 differential audit:
 //   1. analyze a package implementation as project source;
-//   2. generate its contract;
-//   3. analyze the same consumer against only the published runtime artifact,
-//      declarations, and generated contract;
-//   4. compare the semantic findings at the consumer call site.
+//   2. generate an unaccepted normalized proposal and proposal plan;
+//   3. replay the repository-owned source census as a complete proof
+//      transcript, producing a receipt-issued contract;
+//   4. bind that exact contract to the installed artifact through an accepted
+//      catalog and compare consumer findings with the source findings.
 //
-// This is deliberately a small, executable parity probe rather than a second
-// contract implementation. A new contract claim must survive this boundary,
-// or the probe fails with the source/consumer outcomes side by side.
+// JavaScript only orchestrates exact artifacts and opaque workflow documents.
+// Rust owns proposal semantics, closure, proof replay, receipt issuance, and
+// the accepted analyzer index.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
@@ -25,16 +27,40 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
+import { resolvePackageArtifacts } from "../packages/cli/scripts/artifact-resolution.mjs";
+
 const root = resolve(import.meta.dirname, "..");
 const checker = process.env.SOLID_CHECKER_NATIVE_BIN ?? join(root, "rust/target/debug/solid-checker-rust");
 const typeFacts = process.env.SOLID_TYPEFACTS_BIN ?? join(root, "bin/solid-typefacts");
 const auditedSolid = join(root, "rust/target/tsc-oracle/v2/node_modules/solid-js");
+const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 
 if (!existsSync(checker) || !existsSync(typeFacts) || !existsSync(auditedSolid)) {
   throw new Error(
     `contract differential needs checker, TypeFacts, and the provisioned v2 solid-js package (${checker}, ${typeFacts}, ${auditedSolid})`
   );
 }
+
+const PROOF_FAMILIES = [
+  "package-identity",
+  "manifest-entrypoint",
+  "export-resolution",
+  "artifact-declarations",
+  "export-identity",
+  "module-closure",
+  "selected-signature",
+  "argument-binding",
+  "rest-spread-coverage",
+  "callable-path",
+  "operation-reachability",
+  "operation-cardinality",
+  "recursive-value-shape",
+  "guard-partition",
+  "compiler-reconciliation",
+  "accepted-dependency-composition",
+  "domain-exhaustiveness",
+  "probe-consistency"
+];
 
 function write(path, contents) {
   mkdirSync(dirname(path), { recursive: true });
@@ -48,6 +74,19 @@ function writeJson(path, value) {
 function linkSolid(projectRoot) {
   mkdirSync(join(projectRoot, "node_modules"), { recursive: true });
   symlinkSync(auditedSolid, join(projectRoot, "node_modules/solid-js"), "dir");
+}
+
+function runCli(arguments_, cwd) {
+  return execFileSync(process.execPath, [cli, ...arguments_], {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      SOLID_CHECKER_NATIVE_BIN: checker,
+      SOLID_TYPEFACTS_BIN: typeFacts
+    },
+    maxBuffer: 32 * 1024 * 1024
+  });
 }
 
 function analyze(project) {
@@ -73,33 +112,8 @@ function analyze(project) {
     .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
 
-function generateContract(packageRoot, output) {
-  execFileSync(
-    process.execPath,
-    [
-      join(root, "packages/cli/bin/solid-checker.mjs"),
-      "contract",
-      "generate",
-      "--package-root",
-      packageRoot,
-      "--output",
-      output
-    ],
-    {
-      cwd: root,
-      env: {
-        ...process.env,
-        SOLID_CHECKER_NATIVE_BIN: checker,
-        SOLID_TYPEFACTS_BIN: typeFacts
-      },
-      stdio: "pipe"
-    }
-  );
-}
-
-function createSourceProject(directory) {
-  linkSolid(directory);
-  writeJson(join(directory, "tsconfig.json"), {
+function projectConfig(include) {
+  return {
     compilerOptions: {
       allowJs: true,
       checkJs: true,
@@ -110,84 +124,81 @@ function createSourceProject(directory) {
       strict: true,
       target: "ES2022"
     },
-    include: ["*.ts", "*.tsx"]
-  });
-  write(
-    join(directory, "implementation.ts"),
-    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback: () => unknown) {\n  callback();\n  queueMicrotask(callback);\n}\n\nfunction ownedEffectImplementation() {\n  createEffect(() => 0, () => {});\n}\nexport { ownedEffectImplementation as ownedEffect };\n`
-  );
-  write(
-    join(directory, "implementation.js"),
-    `export function runMixed(callback) {\n  callback();\n  queueMicrotask(callback);\n}\n`
-  );
-  write(
-    join(directory, "App.tsx"),
-    `import { createSignal } from "solid-js";\nimport { ownedEffect, runMixed } from "./implementation";\n\nconst [count] = createSignal(0);\nfunction readCount() {\n  return count();\n}\n\nownedEffect();\nrunMixed(readCount);\n`
-  );
+    include
+  };
 }
 
-function createContractProject(directory, contract) {
+function applicationSource(importPath) {
+  return `import { createSignal } from "solid-js";\nimport { runInline } from ${JSON.stringify(importPath)};\n\nconst [count] = createSignal(0);\nfunction readCount() {\n  return count();\n}\n\nrunInline(readCount);\n`;
+}
+
+function createSourceProject(directory) {
   linkSolid(directory);
-  const packageRoot = join(directory, "node_modules/differential-package");
-  mkdirSync(packageRoot, { recursive: true });
+  writeJson(join(directory, "tsconfig.json"), projectConfig(["*.ts", "*.tsx"]));
+  write(
+    join(directory, "implementation.ts"),
+    `export function runInline(callback: () => unknown) {\n  callback();\n}\n`
+  );
+  write(join(directory, "App.tsx"), applicationSource("./implementation"));
+}
+
+function createPackage(packageRoot, solidVersion) {
   writeJson(join(packageRoot, "package.json"), {
     name: "differential-package",
     version: "1.0.0",
     type: "module",
-    exports: "./index.js",
-    types: "./index.d.ts"
+    exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+    dependencies: { "solid-js": solidVersion }
   });
   write(
     join(packageRoot, "index.js"),
-    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback) {\n  callback();\n  queueMicrotask(callback);\n}\n\nfunction ownedEffectImplementation() {\n  createEffect(() => 0, () => {});\n}\nexport { ownedEffectImplementation as ownedEffect };\n`
+    `export function runInline(callback) {\n  callback();\n}\n`
   );
   write(
     join(packageRoot, "index.d.ts"),
-    "export declare function runMixed(callback: () => unknown): void;\nexport declare function ownedEffect(): void;\n"
-  );
-  writeJson(join(packageRoot, "solid-reactivity.json"), contract);
-  writeJson(join(directory, "tsconfig.json"), {
-    compilerOptions: {
-      jsx: "preserve",
-      module: "ESNext",
-      moduleResolution: "Bundler",
-      skipLibCheck: true,
-      strict: true,
-      target: "ES2022"
-    },
-    files: ["App.tsx"]
-  });
-  write(
-    join(directory, "App.tsx"),
-    `import { createSignal } from "solid-js";\nimport { ownedEffect, runMixed } from "differential-package";\n\nconst [count] = createSignal(0);\nfunction readCount() {\n  return count();\n}\n\nownedEffect();\nrunMixed(readCount);\n`
+    "export declare function runInline(callback: () => unknown): void;\n"
   );
 }
 
-function promoteReviewed(contract) {
-  const reviewed = structuredClone(contract);
-  reviewed.evidence = { ...(reviewed.evidence ?? {}), kind: "reviewed" };
-  const visit = summary => {
-    if (summary.evidence) summary.evidence = { ...summary.evidence, kind: "reviewed" };
-    for (const callback of summary.callbacks ?? []) {
-      if (callback.evidence) callback.evidence = { ...callback.evidence, kind: "reviewed" };
-    }
-    for (const requirement of summary.ownerRequirements ?? []) {
-      requirement.evidence = { kind: "reviewed" };
-    }
-    if (summary.returns) visitReturn(summary.returns);
-    for (const variant of summary.variants ?? []) visit(variant.summary);
+function assertProposalSemantics(document) {
+  assert.equal(document.schemaVersion, 2);
+  assert.equal(document.semanticModelVersion, 1);
+  const artifact = document.entrypoints?.["."]?.cases?.[0];
+  const summary = document.summaries?.[artifact?.exports?.runInline];
+  assert.ok(summary, "proposal must preserve exact runInline export identity");
+  const operations = new Map((summary.call?.operations ?? []).map(operation => [operation.id, operation]));
+  const schedules = (summary.call?.callbacks ?? [])
+    .filter(callback => callback.from?.arg === 0 && callback.from?.path?.length === 0)
+    .map(callback => operations.get(callback.operation)?.at?.schedule)
+    .sort();
+  assert.deepEqual(
+    schedules,
+    ["same-stack"],
+    "proposal must retain the same-stack callback operation"
+  );
+}
+
+function proofFor(plan, sourceCensus) {
+  return {
+    format: "solid-checker-contract-proof-transcript",
+    proofVersion: 1,
+    semanticModelVersion: plan.semanticModelVersion,
+    semanticDigest: plan.semanticDigest,
+    verifierBuild: "solid-checker-contract-differential-v2",
+    claims: plan.closureCandidates.map(claim => ({
+      claimId: claim.claimId,
+      subject: claim.subject,
+      families: PROOF_FAMILIES.map(family => ({
+        family,
+        transcript: `repository differential source census ${sourceCensus}; ${claim.claimId}; ${family}`,
+        enumerated: [sourceCensus],
+        classified: [sourceCensus],
+        unresolved: [],
+        complete: true
+      }))
+    })),
+    probeContradictions: []
   };
-  const visitReturn = returned => {
-    if (returned.evidence) returned.evidence = { ...returned.evidence, kind: "reviewed" };
-    for (const element of returned.elements ?? []) if (element) visitReturn(element);
-    for (const property of Object.values(returned.properties ?? {})) visitReturn(property);
-  };
-  // Normalized contracts store summaries once at the document root;
-  // entrypoint exports contain summary-id -> export-name arrays. Visiting
-  // those arrays left every generated row inferred while the harness claimed
-  // to have promoted it.
-  for (const summary of Object.values(reviewed.summaries ?? {})) visit(summary);
-  return reviewed;
 }
 
 const temporary = mkdtempSync(join(tmpdir(), "solid-checker-contract-differential-"));
@@ -195,57 +206,96 @@ try {
   const source = join(temporary, "source");
   const consumer = join(temporary, "consumer");
   const packageRoot = join(temporary, "package-artifact");
-  const contractPath = join(temporary, "solid-reactivity.json");
-  writeJson(join(packageRoot, "package.json"), {
-    name: "differential-package",
-    version: "1.0.0",
-    type: "module",
-    exports: "./index.js",
-    dependencies: { "solid-js": "2.0.0-rc.0" }
-  });
-  linkSolid(packageRoot);
-  write(
-    join(packageRoot, "index.js"),
-    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback) {\n  callback();\n  queueMicrotask(callback);\n}\n\nfunction ownedEffectImplementation() {\n  createEffect(() => 0, () => {});\n}\nexport { ownedEffectImplementation as ownedEffect };\n\nexport default function () {\n  createEffect(() => 0, () => {});\n}\n`
-  );
+  const workflow = join(temporary, "workflow");
+  const proposalPath = join(workflow, "proposal.json");
+  const planPath = `${proposalPath}.proposal.json`;
+  const proofPath = join(workflow, "proof.json");
+  const acceptedDirectory = join(consumer, ".solid-checker");
+  const acceptedPath = join(acceptedDirectory, "differential.accepted.json");
+  const receiptPath = join(acceptedDirectory, "differential.receipt.json");
+  const solidVersion = JSON.parse(readFileSync(join(auditedSolid, "package.json"), "utf8")).version;
+  const integrity = `sha512-${createHash("sha512").update("solid-checker differential package v2").digest("base64")}`;
+
   createSourceProject(source);
-  generateContract(packageRoot, contractPath);
-  const contract = JSON.parse(readFileSync(contractPath, "utf8"));
-  assert.deepEqual(
-    contract.summaries?.["function-1"]?.callbacks,
+  createPackage(packageRoot, solidVersion);
+  linkSolid(packageRoot);
+  runCli(
     [
-      { parameter: 0, execution: "inline", evidence: { kind: "inferred" } },
-      { parameter: 0, execution: "deferred", evidence: { kind: "inferred" } }
+      "contract",
+      "generate",
+      "--package-root",
+      packageRoot,
+      "--integrity",
+      integrity,
+      "--output",
+      proposalPath
     ],
-    "the generated contract must retain both runtime callback paths"
+    packageRoot
   );
-  const ownedEffectSummary = Object.entries(contract.entrypoints?.["."]?.exports ?? {})
-    .find(([, names]) => names.includes("ownedEffect"))?.[0];
-  assert.ok(ownedEffectSummary, "the generated contract must retain ownedEffect");
-  assert.deepEqual(
-    contract.summaries?.[ownedEffectSummary]?.ownerRequirements?.map(row => row.operation),
-    ["effect"],
-    "the generated contract must retain the exported owner requirement"
+
+  const proposal = JSON.parse(readFileSync(proposalPath, "utf8"));
+  const plan = JSON.parse(readFileSync(planPath, "utf8"));
+  assertProposalSemantics(proposal);
+  assert.ok(plan.closureCandidates.length > 0, "differential proposal must expose proof candidates");
+  const artifactCases = new Set(plan.closureCandidates.map(claim => claim.subject.artifactCase));
+  assert.equal(artifactCases.size, 1, "differential package must resolve one exact artifact case");
+  const sourceCensus = `sha256:${createHash("sha256")
+    .update(readFileSync(join(source, "implementation.ts")))
+    .digest("hex")}`;
+  writeJson(proofPath, proofFor(plan, sourceCensus));
+  mkdirSync(acceptedDirectory, { recursive: true });
+  runCli(
+    [
+      "contract",
+      "verify",
+      proposalPath,
+      "--plan",
+      planPath,
+      "--proof",
+      proofPath,
+      "--artifact-case",
+      [...artifactCases][0],
+      "--output",
+      acceptedPath,
+      "--receipt",
+      receiptPath
+    ],
+    packageRoot
   );
-  const defaultSummary = Object.entries(contract.entrypoints?.["."]?.exports ?? {})
-    .find(([, names]) => names.includes("default"))?.[0];
-  assert.ok(defaultSummary, "the generated contract must retain the anonymous default export");
-  assert.deepEqual(
-    contract.summaries?.[defaultSummary]?.ownerRequirements?.map(row => row.operation),
-    ["effect"],
-    "the generated contract must attach the anonymous default owner requirement by exact export identity"
-  );
-  createContractProject(consumer, promoteReviewed(contract));
+
+  linkSolid(consumer);
+  symlinkSync(packageRoot, join(consumer, "node_modules/differential-package"), "dir");
+  writeJson(join(consumer, "tsconfig.json"), projectConfig(["App.tsx"]));
+  write(join(consumer, "App.tsx"), applicationSource("differential-package"));
+  const resolvedImport = resolvePackageArtifacts({
+    importer: join(consumer, "App.tsx"),
+    specifier: "differential-package",
+    packageRoot: join(consumer, "node_modules/differential-package"),
+    conditions: ["import"],
+    resolutionKind: "import",
+    integrity
+  });
+  writeJson(join(acceptedDirectory, "accepted-contracts.json"), {
+    format: "solid-checker-accepted-contract-catalog",
+    catalogVersion: 1,
+    contracts: [
+      {
+        document: ".solid-checker/differential.accepted.json",
+        receipt: ".solid-checker/differential.receipt.json",
+        import: resolvedImport
+      }
+    ]
+  });
 
   const sourceFindings = analyze(source);
   const consumerFindings = analyze(consumer);
   assert.deepEqual(
     consumerFindings,
     sourceFindings,
-    `contract boundary changed semantic findings\nsource: ${JSON.stringify(sourceFindings)}\nconsumer: ${JSON.stringify(consumerFindings)}`
+    `accepted temporary-v2 boundary changed semantic findings\nsource: ${JSON.stringify(sourceFindings)}\nconsumer: ${JSON.stringify(consumerFindings)}`
   );
   console.log(
-    `contract differential: source and reviewed-contract consumers agree (${sourceFindings.length} finding${sourceFindings.length === 1 ? "" : "s"})`
+    `contract differential: source and receipt-issued temporary-v2 consumers agree (${sourceFindings.length} finding${sourceFindings.length === 1 ? "" : "s"})`
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });

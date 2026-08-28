@@ -43,7 +43,7 @@ answer; it must not switch on an API spelling itself.
 | Rule projection and wording | `solid-reactive-ir::projection` owns typed finding seeds, shared selection, and finding assembly | `dialects/solid-v1/rules` declares capabilities and maps every supported seed to 1.x identity, severity, message, hint, and evidence | `dialects/solid-v2/rules` declares capabilities and maps every supported seed to 2.0 identity, severity, message, hint, and evidence |
 | ESLint-era file-local checks | fact helpers live in `solid-reactive-ir::upstream_compat` | `solid1x_*` modules; executed only for `Version::V1` | Not executed |
 | Shared static and fine-grained defects | `StaticDefectKind`, populated by static analysis and `upstream_compat::shared_reactivity`; contains no rule prose | Projected and worded by the 1.x catalog | Projected and worded by the 2.0 catalog; the async-tracked-scope check is omitted |
-| Package contracts | legacy shared schema/resolver plus the wire-independent normalized model in `solid-reactive-ir::contract_semantics`; every modeled package is declared in the dialect's `dialect.json` | review: `contracts/solid-v1/solid-js.json`; bundled: `bundled/solid-v1/solid-js.json`, package `solid-js@1.9.14`, plus the hand-authored `@solid-primitives/scheduled@1.5.3` overlay | current bundled legacy contracts remain unchanged; the version-2 authority and normalized model target exact `solid-js@2.0.0-rc.3` and related `@solidjs/*` artifacts |
+| Package contracts | temporary-v2 wire decode, receipt validation, and exact artifact acquisition terminate in `solid-facts-backend`; the wire-independent model and accepted semantic index live in `solid-reactive-ir::contract_semantics`; every bundled package is declared in the dialect manifest | receipt-issued exact `solid-js@1.9.14` plus scheduled, debounce, and rootless artifact cases | receipt-issued exact `solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and `@solidjs/signals@2.0.0-rc.3` artifact cases |
 
 At runtime the stable dialect ids are `solid-v1` and `solid-v2`. In Rust,
 `Version::V1` always means Solid 1.x and `Version::V2` always means Solid 2.0;
@@ -167,9 +167,9 @@ proof-issued receipt after exact artifact selection and is the only ordinary
 analysis constructor of accepted typestate. `AcceptedContractIndex` retains
 the exact importer/specifier binding, resolves exports through full runtime and
 declaration identity, instantiates restricted guards from demand-shaped call
-facts, and exposes only local normalized claim answers. Analyzer findings and
-bundled legacy contracts remain unchanged until the atomic Phase 14 public
-input migration.
+facts, and exposes only local normalized claim answers. Phase 14 removed the
+legacy decoder and public contract types: ordinary native and WASM analysis now
+accept only receipt-issued temporary-v2 inputs.
 
 `solid-facts-backend::artifact_resolution` owns the Phase 7 selection seam.
 Host, Type Facts, and standalone acquisition all produce one exact
@@ -187,28 +187,26 @@ and transform identity, accepted dependency-contract edges, and explicit
 opaque hazards. A hazard weakens only its named exports and immediate claim
 domains; it cannot erase known positives or open an unrelated recursive leaf.
 Ordinary Type Facts and WASM-host attestation preserve included paths, symlink
-spellings, extensions, and both owning/resolver package versions. The Phase 12
-accepted index consumes those exact resolutions; public discovery and legacy
-process fixtures remain on their existing path until the scheduled Phase 14
-cutover.
+spellings, extensions, and both owning/resolver package versions. Native
+discovery reads `.solid-checker/accepted-contracts.json`; WASM transports the
+same exact document text, receipt text, and host resolution through
+`acceptedContracts`.
 
 `solid-facts-backend::proposal_generation` owns the Phase 8 replacement
 generator seam. Exact Phase 7 resolutions select and bind every analyzed
 artifact case before construction. The module withdraws every locally complete
 knowledge set: positive items remain partial, negative candidates become
-unknown, and each withdrawn leaf is retained as a proof obligation. It then
-derives local unresolved edges, positive-operation candidates, and witness-only
-probe candidates in separate stages and emits a deterministic proposal plan
-whose acceptance is always `unaccepted`. The emission has no main contract
-wire bytes, receipt, evidence sidecar, or accepted `closed` field.
+unknown, and each withdrawn leaf is retained as a proof obligation. It derives
+local unresolved edges, positive-operation candidates, and witness-only probe
+candidates in separate stages. `inferred_contract_v2` and `contract_workflow`
+then normalize, merge artifact cases, encode deterministic temporary-v2
+proposal bytes, and emit a proof plan whose acceptance is always unaccepted.
 
-`packages/cli/scripts/contract-proposal-pipeline.mjs` is the matching Node
-orchestration seam. It calls package discovery, Phase 7 standalone resolution,
-Rust analysis, Rust proposal construction, Rust proof planning, Rust probe
-planning, and byte emission as seven explicit stages. It passes exact products
-through by identity and never collapses variants or mutates summaries. The
-legacy public generator remains intact until the scheduled Phase 14 producer
-migration.
+`packages/cli/scripts/generate-package-contract-v2.mjs` is the matching Node
+orchestration seam. It acquires exact package artifacts and finite condition
+partitions, invokes Rust for inference and normalization, and manages files and
+processes without reading or rewriting semantic summaries. External dependency
+proposals are never fed back as trusted closure.
 
 `solid-reactive-ir::contract_semantics` also owns version-1 semantic claim
 identity. A claim ID hashes exact package identity, artifact-case selection and
@@ -238,10 +236,9 @@ exposed to analyzer consumers; the Phase 11 verifier consumes bounded proof
 material while issuing a receipt, and ordinary analysis remains offline after
 those inputs are deleted.
 
-`solid-facts-backend::runtime_probes` owns the Phase 10 semantic probe seam.
-Node will remain responsible for package acquisition, worker process launch,
-and raw runtime interaction when the Phase 14 migration switches the public
-probe pipeline. Rust already owns every judgement over those observations:
+`solid-facts-backend::runtime_probes` owns the semantic probe seam. Node is
+responsible for package acquisition, worker process launch, and raw runtime
+interaction; Rust owns every judgement over those observations:
 exact artifact-case/mode planning, bounded time and semantic queue drains,
 fresh process/realm/module identities, isolated deterministic repeats, event
 and lifecycle validation, transcript identity, and authority classification.

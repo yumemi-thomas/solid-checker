@@ -1,0 +1,82 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/reactive-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:c415da825c55d57ed24a8e194d58cfef953b9734553a9f607276a33b12cc4542",
+          "entries": [
+            {
+              "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+          "path": "node_modules/reactive-package/package.json"
+        },
+        "exports": {
+          "createState": {
+            "declarations": {
+              "exportName": "createState",
+              "module": {
+                "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+                "path": "node_modules/reactive-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "createState",
+              "module": {
+                "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+                "path": "node_modules/reactive-package/package.json"
+              }
+            }
+          },
+          "drop": {
+            "declarations": {
+              "exportName": "drop",
+              "module": {
+                "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+                "path": "node_modules/reactive-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "drop",
+              "module": {
+                "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+                "path": "node_modules/reactive-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.tsx",
+        "packageIntegrity": "fixture:sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+        "packageManifest": {
+          "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+          "path": "node_modules/reactive-package/package.json"
+        },
+        "packageName": "reactive-package",
+        "packageRoot": "node_modules/reactive-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:8e5aa62128bb39c9b07c86352e02ce41cdd3e20aab658128f7c019632742ca24",
+          "path": "node_modules/reactive-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "reactive-package"
+      },
+      "receipt": "node_modules/reactive-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

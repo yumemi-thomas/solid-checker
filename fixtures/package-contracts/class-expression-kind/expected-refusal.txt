@@ -1,0 +1,2 @@
+solid-checker: solid-checker:unresolved-dependency-module=bundled-dependency
+solid-checker-rust: emit package contract: cannot statically expand external export-all "bundled-dependency" from <repository>/fixtures/package-contracts/class-expression-kind/index.ts; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts

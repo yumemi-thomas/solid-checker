@@ -428,8 +428,7 @@ impl Dialect for Solid1x {
         }
     }
 
-    /// Source: the reviewed `SOLID_1X` semantics table in
-    /// `solid-contract-gen`, held to it by
+    /// Source: the checked Solid 1 normalized authority, held to it by
     /// `the_callback_executions_agree_with_the_bundled_contract`.
     ///
     /// The entry that matters most is `createEffect`: **one** tracked callback,
@@ -471,7 +470,7 @@ impl Dialect for Solid1x {
             // the runtime restores the captured Listener around the callback,
             // so reads inside it subscribe exactly as at the call site and it
             // never re-runs. Probed in
-            // scripts/contract-probes-solid-v1-core.mjs.
+            // the receipt-issued Solid 1 normalized authority corpus.
             | Primitive::StartTransition
             | Primitive::From
             | Primitive::Hydrate
@@ -563,8 +562,8 @@ impl Dialect for Solid1x {
         argument_count: usize,
     ) -> Option<Execution> {
         // `mergeProps(...sources)` checks every source and wraps each function
-        // in `createMemo`. Keep this call-shape fact native: schema v1 package
-        // contracts only support fixed callback parameters, not variadics.
+        // in `createMemo`. Keep this call-shape fact native because inferred
+        // summaries support fixed callback parameters, not variadics.
         if primitive == Primitive::MergeProps && argument < argument_count {
             return Some(Execution::Tracked);
         }
@@ -1136,14 +1135,10 @@ mod tests {
 
     #[test]
     fn every_callback_taking_export_is_modelled_or_excluded() {
-        let contract = include_str!("../contracts/solid-v1/solid-js.json");
-        let exports = serde_json::from_str::<serde_json::Value>(contract).unwrap()["exports"]
-            .as_object()
-            .unwrap()
-            .clone();
+        let exports = crate::callback_exports_from_bundles("solid-v1", &["solid-js"]);
         let mut unmodelled = exports
             .iter()
-            .filter(|(_, entry)| entry.get("callbacks").is_some())
+            .filter(|(_, callbacks)| !callbacks.is_empty())
             .filter_map(|(name, _)| {
                 (Solid1x.primitive(name).is_none()
                     && !UNMODELLED_CALLBACK_TAKERS.contains(&name.as_str()))

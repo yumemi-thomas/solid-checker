@@ -1,49 +1,58 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "695896d96d393ec3345eb2b1cf4c2998ff0dfc4314d8302215a227953da32da0",
+            "path": "./index.ts",
+            "sha256": "4fe9c2b17a14ca09c95f1860ac20d38301c82815e9f797c11649de81d988518b"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "4fe9c2b17a14ca09c95f1860ac20d38301c82815e9f797c11649de81d988518b"
+          },
+          "exports": {
+            "alias": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "bag": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "branded": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "callable": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "empty": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "extended": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "newable": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "raw": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "retries": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "table": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:ef8082eaccf6c5aa2ace6e0a127deefe71ebf908ab6f9b8eae8735474abaa087",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "ef8082eaccf6c5aa2ace6e0a127deefe71ebf908ab6f9b8eae8735474abaa087"
+    },
     "name": "function-supertype-kind",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     },
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-1": [
-          "alias",
-          "branded",
-          "callable",
-          "extended",
-          "newable",
-          "raw"
-        ],
-        "value-1": [
-          "bag",
-          "empty",
-          "retries",
-          "table"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

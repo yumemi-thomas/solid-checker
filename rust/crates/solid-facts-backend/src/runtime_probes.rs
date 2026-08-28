@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     ArtifactCase, ClaimIdentityError, Digest, NormalizedContract, OperationId, ResourceId,
@@ -130,7 +130,7 @@ pub enum DrainStep {
     Macrotasks { max_turns: u16 },
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProbeEventClass {
     Call,
@@ -286,7 +286,7 @@ impl RuntimeProbePlan {
         )
     }
 
-    fn build(
+    pub(crate) fn build(
         contract: NormalizedContract,
         witness_subjects: BTreeSet<SemanticClaimSubject>,
         closure_subjects: BTreeSet<SemanticClaimSubject>,
@@ -436,14 +436,14 @@ pub struct IsolationIdentity {
     pub module_instance: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BoundaryPhase {
     Enter,
     Exit,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CleanupPhase {
     Registered,
@@ -452,7 +452,7 @@ pub enum CleanupPhase {
     Disposed,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SettlementState {
     Settled,
@@ -460,7 +460,7 @@ pub enum SettlementState {
     Cancelled,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TransitionState {
     Active,
@@ -468,14 +468,14 @@ pub enum TransitionState {
     Reverted,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ResponseState {
     Uncommitted,
     Committed,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum StreamState {
     Opened,

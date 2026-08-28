@@ -1,44 +1,46 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "9734cf1f6d2b86cc879fde29da0db6b189bf5c84e25e653c0a1ae3b120910ac4",
+            "path": "./index.js",
+            "sha256": "1f733be26cbaac826b5d611d3ec37f5c5422a03d1b1289b3b21ed7529371e446"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "c0d84fa06d769ef701d23e804ede3db7ba2bcf1e1f8cf3982b35c0b82e93baf7"
+          },
+          "exports": {
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Reaches": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:3ea41164157d85a3a1bd2c45b7943c55ad32b641d51c28175f8c4cafd8de490a",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "3ea41164157d85a3a1bd2c45b7943c55ad32b641d51c28175f8c4cafd8de490a"
+    },
     "name": "unresolved-dispatch-reachability",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "reactiveReads": {
-        "status": "unknown"
-      },
-      "returns": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-1": [
-          "Isolated"
-        ],
-        "function-2": [
-          "Reaches"
-        ]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

@@ -1,138 +1,256 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "9aafb5664c522c863660b418ab42a54818f7872c263b98338a16b00f39af0261",
+            "path": "./index.ts",
+            "sha256": "ab730c4fc65a7fc4137cd28037f5e9c6b3f9dd249f4155d57d00ce6df378e1f9"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "ab730c4fc65a7fc4137cd28037f5e9c6b3f9dd249f4155d57d00ce6df378e1f9"
+          },
+          "exports": {
+            "contradictOnZeroOnly": "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b",
+            "inlineAndReturned": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "inlineAndTracked": "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b",
+            "oneInlineSite": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
+            "oneTrackedSite": "summary-02b8ad26348d6d48a7ba21c5276e9da50e32898ee72b92ff2d731dd243913e74",
+            "twoParameters": "summary-b4397a14c6c77351822f84416113d58eec44f24bba4aef57c2d039d31237ed89",
+            "twoTrackedSites": "summary-02b8ad26348d6d48a7ba21c5276e9da50e32898ee72b92ff2d731dd243913e74"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:4312df2be3442e76f4cb50ce134eed51db3a44fd25e5e29e244a759039d2a800",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "4312df2be3442e76f4cb50ce134eed51db3a44fd25e5e29e244a759039d2a800"
+    },
     "name": "multi-role-callback-parameter",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
+    "summary-02b8ad26348d6d48a7ba21c5276e9da50e32898ee72b92ff2d731dd243913e74": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
           }
-        },
-        {
-          "parameter": 1,
-          "execution": "tracked",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "ownerRequirements": [
-        {
-          "operation": "effect",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-2": {
-      "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "tracked",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "ownerRequirements": [
-        {
-          "operation": "effect",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-3": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-4": {
-      "kind": "function",
-      "callbacks": {
-        "status": "unknown"
-      },
-      "ownerRequirements": [
-        {
-          "operation": "effect",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    },
-    "function-5": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "memo result",
-        "evidence": {
-          "kind": "inferred"
-        }
-      },
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
-      "evidence": {
-        "kind": "inferred"
-      }
-    }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "function-4": [
-          "contradictOnZeroOnly",
-          "inlineAndTracked"
         ],
-        "function-3": [
-          "inlineAndReturned"
+        "creates": [
+          "owner-requirement-0"
         ],
-        "function-5": [
-          "oneInlineSite"
-        ],
-        "function-2": [
-          "oneTrackedSite",
-          "twoTrackedSites"
-        ],
-        "function-1": [
-          "twoParameters"
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "create",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
         ]
-      }
+      },
+      "shape": "callable"
+    },
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b": {
+      "call": {
+        "creates": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "create",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-b4397a14c6c77351822f84416113d58eec44f24bba4aef57c2d039d31237ed89": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          },
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-1"
+          }
+        ],
+        "creates": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-1",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "create",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

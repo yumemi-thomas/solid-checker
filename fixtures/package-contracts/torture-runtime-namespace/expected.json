@@ -1,34 +1,50 @@
 {
-  "schemaVersion": 1,
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8d2d3e8708cc55eb77f3053eda1e9c29ae18c7a67b183601ef5a1d6d2c9c3b0e",
+            "path": "./index.js",
+            "sha256": "6c1564d2d4b4b92017293dd29a858028daf7ce5d50bd623fa656ba72141bfb50"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "6c1564d2d4b4b92017293dd29a858028daf7ce5d50bd623fa656ba72141bfb50"
+          },
+          "exports": {
+            "runtimeNamespace": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "stable": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
   "package": {
+    "integrity": "fixture:sha256:eb5b7a07703f6668b4838d33f58b36cd095890a13e9b8e0bff9ac25f9edade9b",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "eb5b7a07703f6668b4838d33f58b36cd095890a13e9b8e0bff9ac25f9edade9b"
+    },
     "name": "torture-runtime-namespace-package",
     "version": "1.0.0"
   },
-  "compilerFactsProtocol": 1,
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
   "summaries": {
-    "function-1": {
-      "kind": "function",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
     },
-    "value-1": {
-      "kind": "value",
-      "evidence": {
-        "kind": "inferred"
-      }
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
     }
-  },
-  "entrypoints": {
-    ".": {
-      "exports": {
-        "value-1": ["runtimeNamespace"],
-        "function-1": ["stable"]
-      }
-    }
-  },
-  "evidence": {
-    "kind": "inferred",
-    "generator": "solid-checker package generator"
   }
 }

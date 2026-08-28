@@ -7,9 +7,10 @@ import {
 
 declare const opaqueFactory: () => () => number;
 
-// createSubRoot returns exactly the value produced by its callback. The
-// relational return contract must therefore preserve this memo as a reactive
-// source rather than treating the generic T as an opaque value.
+// These reduced local package bytes deliberately do not match the published
+// rootless artifact. Local source inference preserves the exact returned memo
+// where it can; the checker must not borrow missing relations from the
+// first-party bundle by package name.
 export const Rootless: Component = () => {
   const [count] = createSignal(0);
   const doubled = createSubRoot(() => createMemo(() => count() * 2));

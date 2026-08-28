@@ -968,7 +968,7 @@ impl From<&ProbeOutcome> for WireProbeOutcome {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WireSemanticClaimSubject {
+pub(crate) struct WireSemanticClaimSubject {
     artifact_case: String,
     export: String,
     path: WireSemanticClaimPath,

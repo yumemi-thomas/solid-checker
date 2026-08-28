@@ -61,6 +61,13 @@ impl AcceptedContractUse<'_> {
         &self.identity
     }
 
+    #[must_use]
+    pub fn export(&self) -> &ExportSemantics {
+        self.contract
+            .export(&self.identity.public_name)
+            .expect("accepted use was resolved from this export")
+    }
+
     pub fn instantiate<'contract, 'facts>(
         &'contract self,
         facts: &'facts CallSiteFacts,
@@ -74,6 +81,7 @@ impl AcceptedContractUse<'_> {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AcceptedContractIndex {
     imports: BTreeMap<(String, String), Vec<AcceptedContract>>,
+    uncertifiable_imports: BTreeSet<(String, String)>,
     identity: Vec<AcceptedImportIdentity>,
 }
 
@@ -103,7 +111,58 @@ impl AcceptedContractIndex {
             });
         }
         identity.sort();
-        Ok(Self { imports, identity })
+        Ok(Self {
+            imports,
+            uncertifiable_imports: BTreeSet::new(),
+            identity,
+        })
+    }
+
+    #[must_use]
+    pub fn with_uncertifiable_imports(
+        mut self,
+        imports: impl IntoIterator<Item = (String, String)>,
+    ) -> Self {
+        self.uncertifiable_imports.extend(imports);
+        self.uncertifiable_imports
+            .retain(|key| !self.imports.contains_key(key));
+        self
+    }
+
+    #[must_use]
+    pub fn is_uncertifiable(&self, importer: &str, specifier: &str) -> bool {
+        self.uncertifiable_imports
+            .contains(&(importer.to_owned(), specifier.to_owned()))
+    }
+
+    /// Adds fallback accepted imports without replacing an exact host entry.
+    /// This is the only supported composition rule for project catalogs and
+    /// receipt-issued built-ins: project acquisition wins per importer and
+    /// specifier, while a built-in may fill only a genuinely absent key.
+    pub fn with_fallback(mut self, fallback: Self) -> Self {
+        for (key, contracts) in fallback.imports {
+            self.imports.entry(key).or_insert(contracts);
+        }
+        self.identity = self
+            .imports
+            .iter()
+            .filter_map(|((importer, specifier), contracts)| {
+                let [contract] = contracts.as_slice() else {
+                    return None;
+                };
+                Some(AcceptedImportIdentity {
+                    importer: importer.clone(),
+                    specifier: specifier.clone(),
+                    semantics: contract.semantic_identity(),
+                })
+            })
+            .collect();
+        self.identity.sort();
+        self.uncertifiable_imports
+            .extend(fallback.uncertifiable_imports);
+        self.uncertifiable_imports
+            .retain(|key| !self.imports.contains_key(key));
+        self
     }
 
     #[must_use]
@@ -138,6 +197,11 @@ impl AcceptedContractIndex {
             hash_text(&mut hash, &semantic.verifier.build);
             hash.update(semantic.verifier.policy.to_be_bytes());
         }
+        hash.update((self.uncertifiable_imports.len() as u64).to_be_bytes());
+        for (importer, specifier) in &self.uncertifiable_imports {
+            hash_text(&mut hash, importer);
+            hash_text(&mut hash, specifier);
+        }
         hash.finalize().into()
     }
 
@@ -160,6 +224,44 @@ impl AcceptedContractIndex {
             contract,
             identity: identity.clone(),
         })
+    }
+
+    /// Resolves one public spelling only after the exact importer/specifier
+    /// pair has already selected a single receipt-validated artifact case.
+    /// The returned use retains the full runtime/declaration export identity;
+    /// this is not package-name or export-name-only contract selection.
+    pub fn resolve_name<'a>(
+        &'a self,
+        importer: &str,
+        specifier: &str,
+        public_name: &str,
+    ) -> Result<AcceptedContractUse<'a>, SemanticQueryError> {
+        let contract = self.contract(importer, specifier)?;
+        let export =
+            contract
+                .export(public_name)
+                .ok_or_else(|| SemanticQueryError::MissingExport {
+                    export: public_name.into(),
+                })?;
+        contract.resolve_export(&export.identity)?;
+        Ok(AcceptedContractUse {
+            contract,
+            identity: export.identity.clone(),
+        })
+    }
+
+    pub fn contract(
+        &self,
+        importer: &str,
+        specifier: &str,
+    ) -> Result<&AcceptedContract, SemanticQueryError> {
+        self.imports
+            .get(&(importer.to_owned(), specifier.to_owned()))
+            .and_then(|contracts| contracts.first())
+            .ok_or_else(|| SemanticQueryError::MissingImport {
+                importer: importer.into(),
+                specifier: specifier.into(),
+            })
     }
 }
 

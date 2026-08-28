@@ -28,7 +28,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement, SourceChange, SourceFile,
-    TypeFactsSession, discovered_contract_paths, imported_package_roots,
+    TypeFactsSession, accepted_contract_catalog_members, bundled_first_party_contract_index,
+    discovered_contract_paths, imported_package_roots, read_accepted_contract_catalog,
     semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
@@ -43,7 +44,7 @@ use crate::idle_memory;
 struct CheckRequest {
     project_id: String,
     #[serde(default)]
-    contract_paths: Vec<String>,
+    accepted_contract_catalog: String,
     #[serde(default)]
     presets: Vec<String>,
     #[serde(default)]
@@ -603,14 +604,31 @@ fn answer(
     } else {
         state.session.edit(changes, None)?
     };
+    let directory = state
+        .project
+        .parent()
+        .ok_or("tsconfig has no parent directory")?;
+    let bundled =
+        bundled_first_party_contract_index(state.dialect.id, directory, &facts, &check.runtime)?;
+    let catalog = if check.accepted_contract_catalog.is_empty() {
+        let candidate = directory.join(".solid-checker/accepted-contracts.json");
+        candidate.is_file().then_some(candidate)
+    } else {
+        Some(PathBuf::from(&check.accepted_contract_catalog))
+    };
+    let contracts = catalog
+        .as_deref()
+        .map(read_accepted_contract_catalog)
+        .transpose()?
+        .unwrap_or_default()
+        .with_fallback(bundled);
     let analysis = state
         .diagnostics
-        .analyze_measured_with_enablement(
+        .analyze_accepted_measured_with_enablement(
             &state.project,
             &state.sources,
             &facts,
-            &check.contract_paths,
-            None,
+            &contracts,
             RequestedRuleEnablement {
                 presets: &check.presets,
                 rules: &check.enable_rules,
@@ -632,8 +650,8 @@ fn answer(
     let modules = imported_package_roots(&facts);
     state.last = Some(CachedAnswer {
         generation: state.session.generation(),
-        explicit: check.contract_paths.clone(),
-        contract_files: contract_files(state, &modules, &check.contract_paths)?,
+        explicit: vec![check.accepted_contract_catalog.clone()],
+        contract_files: contract_files(state, &modules, &check.accepted_contract_catalog)?,
         presets: check.presets.clone(),
         enable_rules: check.enable_rules.clone(),
         runtime: check.runtime.clone(),
@@ -661,10 +679,10 @@ fn cached_answer(
     let Some(cached) = &state.last else {
         return Ok(None);
     };
-    let current = contract_files(state, &cached.modules, &check.contract_paths)?;
+    let current = contract_files(state, &cached.modules, &check.accepted_contract_catalog)?;
     Ok(cached.snapshot_if_current(
         state.session.generation(),
-        &check.contract_paths,
+        std::slice::from_ref(&check.accepted_contract_catalog),
         &current,
         &check.presets,
         &check.enable_rules,
@@ -678,7 +696,7 @@ fn cached_answer(
 fn contract_files(
     state: &State,
     modules: &[String],
-    explicit: &[String],
+    accepted_catalog: &str,
 ) -> Result<Vec<ContractFile>, Box<dyn Error>> {
     let directory = state
         .project
@@ -693,7 +711,16 @@ fn contract_files(
     if let Some(path) = solid_facts_backend::discovered_rule_options_path(directory) {
         paths.push(path);
     }
-    paths.extend(explicit.iter().map(PathBuf::from));
+    let catalog = if accepted_catalog.is_empty() {
+        let candidate = directory.join(".solid-checker/accepted-contracts.json");
+        candidate.is_file().then_some(candidate)
+    } else {
+        Some(PathBuf::from(accepted_catalog))
+    };
+    if let Some(catalog) = catalog {
+        paths.extend(accepted_contract_catalog_members(&catalog)?);
+        paths.push(catalog);
+    }
     paths.sort();
     paths.dedup();
     let mut files = Vec::with_capacity(paths.len());
@@ -722,7 +749,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     };
     let payload = serde_json::to_vec(&CheckRequest {
         project_id: request.project_id.clone(),
-        contract_paths: request.contract_paths.clone(),
+        accepted_contract_catalog: request.accepted_contract_catalog.clone(),
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
         runtime: request.runtime.clone(),
@@ -903,7 +930,7 @@ mod tests {
     fn daemon_enablement_order_and_duplicates_normalize_to_one_key() {
         let mut repeated = CheckRequest {
             project_id: "project".into(),
-            contract_paths: Vec::new(),
+            accepted_contract_catalog: String::new(),
             presets: vec!["z".into(), "preferences".into(), "z".into()],
             enable_rules: vec![
                 "prefer-show".into(),

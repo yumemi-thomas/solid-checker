@@ -213,7 +213,7 @@
         },
         "cases": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 0,
           "maxItems": 256,
           "items": { "$ref": "#/$defs/guardedCase" }
         }
@@ -421,8 +421,10 @@
       "properties": {
         "when": { "$ref": "#/$defs/guard" },
         "otherwise": { "const": true },
-        "operations": { "$ref": "#/$defs/operationIds" }
+        "operations": { "$ref": "#/$defs/operationIds" },
+        "operationsOpen": { "const": true }
       },
+      "dependentRequired": { "operationsOpen": ["operations"] },
       "oneOf": [
         { "required": ["when"], "not": { "required": ["otherwise"] } },
         { "required": ["otherwise"], "not": { "required": ["when"] } }

@@ -409,7 +409,7 @@ fn callback_source(operation: &Operation) -> ValueSource {
             path: vec![],
         },
         "delegated-event" => ValueSource::Resource {
-            resource: ResourceId("render-root".into()),
+            resource: ResourceId("browser-root".into()),
             path: vec!["listeners".into()],
         },
         "invoke-reference" | "transport" => ValueSource::Resource {
@@ -1365,8 +1365,11 @@ fn refs_directives() -> ConformanceCase {
 fn event_delegation() -> ConformanceCase {
     let authority = Authority::WebBrowser;
     let mut case = authority.case("web-browser-development");
+    // This is the same owner resource modeled by the browser-rendering row.
+    // Keep its local identity stable across independently checked matrix rows
+    // so Phase 14 can monotonically aggregate the rows into one artifact case.
     let root = resource(
-        "render-root",
+        "browser-root",
         ResourceKind::Owner,
         vec![ResourceState::OwnerActive, ResourceState::OwnerDisposed],
     );
@@ -1376,19 +1379,19 @@ fn event_delegation() -> ConformanceCase {
         Event::Render,
         1,
     );
-    register.owner = owner_leaf("render-root", true);
-    register.resources.insert(ResourceId("render-root".into()));
+    register.owner = owner_leaf("browser-root", true);
+    register.resources.insert(ResourceId("browser-root".into()));
     let mut event = operation("delegated-event", OperationKind::Invoke, Event::External, 0);
     event.schedule = Some(Schedule::External);
-    event.owner = owner_ambient(OwnerSource::Captured(ResourceId("render-root".into())));
+    event.owner = owner_ambient(OwnerSource::Captured(ResourceId("browser-root".into())));
     let mut dispose = operation("unregister-root", OperationKind::Dispose, Event::Cleanup, 0);
-    dispose.resources.insert(ResourceId("render-root".into()));
+    dispose.resources.insert(ResourceId("browser-root".into()));
     let export = semantic_export(
         &case,
         "render",
         ValueShape::Cleanup {
             resource: None,
-            lifetime: Some(Lifetime::Owner(ResourceId("render-root".into()))),
+            lifetime: Some(Lifetime::Owner(ResourceId("browser-root".into()))),
         },
         vec![register, event, dispose],
         vec![
@@ -1868,6 +1871,31 @@ pub fn conformance_corpus() -> Vec<ConformanceCase> {
     ]
 }
 
+/// Reviewed RC.3 semantics that preserve an existing contract-driven product
+/// guarantee but are not themselves rows in the Solid conformance matrix.
+///
+/// Keep these exports separate from [`conformance_corpus`]: the matrix census
+/// and its sixteen rows must remain exact. The Phase 14 bundle authority binds
+/// these semantics to an independently checked source/declaration record
+/// before the ordinary proof-and-receipt workflow can accept them.
+#[must_use]
+pub fn reviewed_support_corpus() -> Vec<ContractProposal> {
+    let authority = Authority::SignalsDevelopment;
+    let mut case = authority.case("signals-development");
+    let export = semantic_export(
+        &case,
+        "isEqual",
+        ValueShape::Plain,
+        vec![],
+        vec![],
+        vec![],
+        KnowledgeSet::Complete(vec![]),
+        &[],
+    );
+    insert(&mut case, export);
+    vec![ContractProposal::new(authority.package(), vec![case])]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1902,6 +1930,33 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn reviewed_supporting_is_equal_is_exact_and_inert_without_widening_other_exports() {
+        let [proposal] = reviewed_support_corpus().try_into().unwrap();
+        let contract = proposal.normalize().unwrap();
+        let [artifact] = contract.artifact_cases() else {
+            panic!("supporting authority must select exactly one artifact")
+        };
+        assert_eq!(contract.package().name, "@solidjs/signals");
+        assert_eq!(contract.package().version, SOLID_RC3_VERSION);
+        assert_eq!(artifact.id, "signals-development");
+        assert_eq!(artifact.runtime.path, "dist/dev.js");
+        assert_eq!(
+            artifact.runtime.digest.as_str(),
+            "sha256:cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79"
+        );
+        assert_eq!(artifact.declarations.path, "dist/types/index.d.ts");
+        assert_eq!(artifact.exports.keys().collect::<Vec<_>>(), vec!["isEqual"]);
+        let export = &artifact.exports["isEqual"];
+        assert_eq!(export.shape, ValueShape::Plain);
+        assert!(
+            ClaimDomain::ALL
+                .into_iter()
+                .all(|domain| { export.claim_state(domain) == KnowledgeState::CompleteNegative })
+        );
+        assert!(export.unresolved_claims().is_empty());
     }
 
     #[test]

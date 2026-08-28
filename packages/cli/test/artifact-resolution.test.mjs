@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -15,7 +16,8 @@ import {
   canonicalClosure,
   materializedGeneratedClosureEntry,
   resolvePackageArtifacts,
-  resolvePackageExport
+  resolvePackageExport,
+  selectTypeScriptApi
 } from "../scripts/artifact-resolution.mjs";
 
 const roots = [];
@@ -371,4 +373,25 @@ describe("exact artifact records and closure", () => {
       "sha256:fc5aa068103c10e1e89193af111113541668254cd82440497dbe8cb72e48f961"
     );
   });
+});
+
+test("accepts direct and default-wrapped TypeScript CommonJS namespaces", () => {
+  const api = {
+    ScriptTarget: { Latest: 99 },
+    createProgram() {}
+  };
+
+  expect(selectTypeScriptApi(api)).toBe(api);
+  expect(selectTypeScriptApi({ default: api })).toBe(api);
+});
+
+test("loads the TypeScript compiler API from a repository-root Bun process", () => {
+  const repositoryRoot = join(import.meta.dirname, "../../..");
+  const result = spawnSync(
+    process.execPath,
+    ["--eval", 'await import("./packages/cli/scripts/artifact-resolution.mjs")'],
+    { cwd: repositoryRoot, encoding: "utf8" }
+  );
+
+  expect(result.status, result.stderr).toBe(0);
 });

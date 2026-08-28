@@ -1,0 +1,1 @@
+solid-checker: solid-checker-rust: emit package contract: entry file <repository>/fixtures/package-contracts/legacy-dual-root/dist/node.cjs has no runtime ESM exports

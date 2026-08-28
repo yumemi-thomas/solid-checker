@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-checker-phase14-reviewed-supporting-authority",
+  "package": {
+    "name": "@solidjs/signals",
+    "version": "2.0.0-rc.3",
+    "integrity": "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==",
+    "manifestSha256": "22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76"
+  },
+  "artifact": {
+    "entrypoint": ".",
+    "runtime": {
+      "path": "dist/dev.js",
+      "sha256": "cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79"
+    },
+    "declarations": {
+      "path": "dist/types/index.d.ts",
+      "sha256": "e4157c4caba48476db4e7649b5a50827687c2d90c0a09fa091f0e65d0a63cfb4"
+    },
+    "closureSha256": "f14cb312787bee8c09948a5beb8cf35956519c5846e36857daf1c6609ad7462c"
+  },
+  "exports": {
+    "isEqual": {
+      "runtimeExport": "isEqual",
+      "declarationExport": "isEqual",
+      "runtimeWitness": {
+        "path": "dist/dev.js",
+        "startByte": 154704,
+        "endByte": 154748,
+        "sha256": "e941391506366f49841420afbcad7fb05c4bb853ace8c279f64fac120b52da5a"
+      },
+      "declarationWitness": {
+        "path": "dist/types/core/core.d.ts",
+        "fileSha256": "a93e5f0dabb178543f77595ca4f7d3d06017adf857c9402af7107522d0065c15",
+        "startByte": 3267,
+        "endByte": 3323,
+        "sha256": "b37dc708cc589dc1616d960164eafccc2a186bfed057f477e5ffd708d2f57c97"
+      },
+      "semantics": {
+        "returnShape": "plain",
+        "completeNegativeCallDomains": [
+          "callbacks",
+          "reads",
+          "writes",
+          "creates",
+          "invalidates",
+          "throws",
+          "returns",
+          "cleanups",
+          "disposals"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "previousReviewedAuthority": "pkg/contracts/bundled/solid-v2/solidjs-signals.json at origin/main before the Phase 14 cut",
+    "review": "The exact RC.3 runtime witness returns a === b and cannot invoke, retain, read through, write through, or dispose either argument. Only isEqual is closed; no sibling export inherits this claim."
+  }
+}

@@ -4,6 +4,7 @@ import { test } from "vitest";
 
 const ci = readFileSync(".github/workflows/ci.yml", "utf8");
 const publish = readFileSync(".github/workflows/publish-npm.yml", "utf8");
+const contractCorpus = readFileSync(".github/workflows/contract-corpus.yml", "utf8");
 
 function jobBody(workflow, name) {
   const lines = workflow.split("\n");
@@ -73,4 +74,16 @@ test("native caches do not restore macOS target executables", () => {
   assert.equal(sharedKey(release), sharedKey(main));
   assert.equal(actionInput(main, "cache-targets"), safeTargetPolicy);
   assert.equal(actionInput(release, "cache-targets"), safeTargetPolicy);
+});
+
+test("the contract corpus installs and watches its temporary-v2 producer", () => {
+  const install = contractCorpus.indexOf(
+    "bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile"
+  );
+  const run = contractCorpus.indexOf("run: make contract-corpus");
+
+  assert.ok(install >= 0, "contract-corpus must install the producer's runtime dependencies");
+  assert.ok(install < run, "producer dependencies must be installed before contract generation");
+  assert.match(contractCorpus, /- "packages\/cli\/scripts\/\*\*"/);
+  assert.doesNotMatch(contractCorpus, /generate-package-contract\.mjs/);
 });

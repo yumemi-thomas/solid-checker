@@ -13,13 +13,15 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     BackendError, ImportIdentityMeasurement, RequestedRuleEnablement, SemanticDemandOptions,
-    SourceFile, TypeFactsProvider, TypeFactsSession, analyze_project_measured_with_enablement,
-    attest_import_identities, build_project_native_measured_with_demands, contract_identity_scope,
-    default_typefacts_executable, dialect, encode_package_contract, package_contract_statuses,
-    read_package_contract, semantic_demand_options_for_enablement,
+    SourceFile, TypeFactsProvider, TypeFactsSession, accepted_package_contract_statuses,
+    analyze_project_accepted_measured_with_enablement, attest_import_identities,
+    build_project_native_measured_with_demands, bundled_first_party_contract_index,
+    contract_identity_scope, default_typefacts_executable, dialect,
+    encode_inferred_contract_workflow, merge_contract_proposals, merge_plans,
+    read_accepted_contract_catalog, review_contract_document,
+    semantic_demand_options_for_enablement, validate_contract_document, verify_contract_proposal,
 };
 use solid_reactive_ir::{RuntimeBuild, RuntimeEnvironment, RuntimeRendering, RuntimeTarget};
 
@@ -36,20 +38,10 @@ struct Request {
     typefacts_executable: String,
     #[serde(default)]
     typefacts_args: Vec<String>,
+    /// Host-acquired exact imports paired with temporary-v2 main documents
+    /// and proof-issued receipts.
     #[serde(default)]
-    contract_paths: Vec<String>,
-    /// The subset of [`Request::contract_paths`] that *this generation run*
-    /// produced itself, from the dependency's own installed sources.
-    ///
-    /// Passed as `--generated-contract` by the package generator's
-    /// `ensureGeneratedDependencyContract`. It is provenance the document
-    /// cannot carry, and it is what
-    /// `PackageContract::kind_claims_are_trusted` needs: a contract merely
-    /// discovered at `node_modules/<dep>/solid-reactivity.json` may have been
-    /// written by any earlier solid-checker, so its `kind` is re-decided here
-    /// unless its evidence says a human or a verifier stood behind it.
-    #[serde(default)]
-    generated_contract_paths: BTreeSet<String>,
+    accepted_contract_catalog: String,
     #[serde(default)]
     presets: Vec<String>,
     #[serde(default)]
@@ -66,8 +58,6 @@ struct Request {
     emit_contract: String,
     /// Private, non-contract input recipes for the runtime probe. This is a
     /// sidecar because constructing an argument is not evidence of behavior.
-    #[serde(default)]
-    emit_probe_plan: String,
     /// Generator-owned declaration query used only to derive and validate
     /// probe construction recipes. It never enters contract inference.
     #[serde(default)]
@@ -90,14 +80,51 @@ struct Request {
     /// Empty outside package-contract generation.
     #[serde(default)]
     runtime_module_resolutions: String,
+    /// Full Phase-7 exact package resolution for the artifact being emitted.
+    #[serde(default)]
+    contract_resolution: String,
+    #[serde(default)]
+    emit_proposal_plan: String,
+    #[serde(default)]
+    merge_contract_paths: Vec<String>,
+    #[serde(default)]
+    merge_contract_output: String,
+    #[serde(default)]
+    merge_proposal_plan_paths: Vec<String>,
+    #[serde(default)]
+    merge_proposal_plan_output: String,
+    #[serde(default)]
+    review_contract: String,
+    #[serde(default)]
+    review_output: String,
+    #[serde(default)]
+    verify_proposal: String,
+    #[serde(default)]
+    verify_plan: String,
+    #[serde(default)]
+    verify_proof: String,
+    #[serde(default)]
+    verify_artifact_case: String,
+    #[serde(default)]
+    accepted_output: String,
+    #[serde(default)]
+    receipt_output: String,
+    #[serde(default)]
+    runtime_probe_proposal: String,
+    #[serde(default)]
+    runtime_probe_proposal_plan: String,
+    #[serde(default)]
+    runtime_probe_request: String,
+    #[serde(default)]
+    runtime_probe_plan_output: String,
+    #[serde(default)]
+    runtime_probe_runs: String,
+    #[serde(default)]
+    runtime_probe_evaluation_output: String,
     #[serde(default)]
     package_name: String,
     #[serde(default)]
     package_version: String,
-    #[serde(default)]
-    declaration_artifact: String,
-    #[serde(default)]
-    implementation_artifact: String,
     #[serde(default)]
     contract_entry_file: String,
     #[serde(default)]
@@ -156,14 +183,18 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if !request.emit_module_inventory.is_empty() && request.emit_contract.is_empty() {
         return Err("--emit-module-inventory requires --emit-contract".into());
     }
-    if !request.emit_probe_plan.is_empty() && request.emit_contract.is_empty() {
-        return Err("--emit-probe-plan requires --emit-contract".into());
-    }
     if !request.runtime_module_resolutions.is_empty() && request.emit_contract.is_empty() {
         return Err("--runtime-module-resolutions requires --emit-contract".into());
     }
     if !request.runtime_module_resolutions.is_empty() && request.contract_package_root.is_empty() {
         return Err("--runtime-module-resolutions requires --contract-package-root".into());
+    }
+    if !request.emit_contract.is_empty()
+        && (request.contract_resolution.is_empty() || request.emit_proposal_plan.is_empty())
+    {
+        return Err(
+            "--emit-contract requires --contract-resolution and --emit-proposal-plan".into(),
+        );
     }
     let dialect = match request.dialect.as_deref() {
         Some(id) => dialect::by_id(id).ok_or_else(|| {
@@ -184,7 +215,123 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     };
     if !request.validate_contract_paths.is_empty() {
         for path in &request.validate_contract_paths {
-            read_package_contract(Path::new(path))?;
+            validate_contract_document(&fs::read(path)?)?;
+        }
+        return Ok(0);
+    }
+    if !request.merge_contract_paths.is_empty() || !request.merge_contract_output.is_empty() {
+        if request.merge_contract_paths.is_empty() || request.merge_contract_output.is_empty() {
+            return Err(
+                "--merge-contract and --merge-contract-output are required together".into(),
+            );
+        }
+        let documents = request
+            .merge_contract_paths
+            .iter()
+            .map(fs::read)
+            .collect::<Result<Vec<_>, _>>()?;
+        let merged = merge_contract_proposals(documents.iter().map(Vec::as_slice), true)?;
+        fs::write(&request.merge_contract_output, &merged)?;
+        if request.merge_proposal_plan_paths.is_empty()
+            || request.merge_proposal_plan_output.is_empty()
+        {
+            return Err(
+                "proposal merge requires --merge-proposal-plan and --merge-proposal-plan-output"
+                    .into(),
+            );
+        }
+        let plans = request
+            .merge_proposal_plan_paths
+            .iter()
+            .map(fs::read)
+            .collect::<Result<Vec<_>, _>>()?;
+        fs::write(
+            &request.merge_proposal_plan_output,
+            merge_plans(&merged, plans)?,
+        )?;
+        return Ok(0);
+    }
+    if !request.review_contract.is_empty() || !request.review_output.is_empty() {
+        if request.review_contract.is_empty() || request.review_output.is_empty() {
+            return Err("--review-contract and --review-output are required together".into());
+        }
+        fs::write(
+            &request.review_output,
+            review_contract_document(&fs::read(&request.review_contract)?)?,
+        )?;
+        return Ok(0);
+    }
+    if !request.verify_proposal.is_empty()
+        || !request.verify_plan.is_empty()
+        || !request.verify_proof.is_empty()
+        || !request.verify_artifact_case.is_empty()
+        || !request.accepted_output.is_empty()
+        || !request.receipt_output.is_empty()
+    {
+        if [
+            &request.verify_proposal,
+            &request.verify_plan,
+            &request.verify_proof,
+            &request.verify_artifact_case,
+            &request.accepted_output,
+            &request.receipt_output,
+        ]
+        .iter()
+        .any(|value| value.is_empty())
+        {
+            return Err("contract verification requires --verify-proposal, --verify-plan, --verify-proof, --verify-artifact-case, --accepted-output, and --receipt-output".into());
+        }
+        let accepted = verify_contract_proposal(
+            &fs::read(&request.verify_proposal)?,
+            &fs::read(&request.verify_plan)?,
+            &fs::read(&request.verify_proof)?,
+            &request.verify_artifact_case,
+            true,
+        )?;
+        fs::write(&request.accepted_output, accepted.document)?;
+        fs::write(&request.receipt_output, accepted.receipt)?;
+        return Ok(0);
+    }
+    if !request.runtime_probe_proposal.is_empty()
+        || !request.runtime_probe_proposal_plan.is_empty()
+        || !request.runtime_probe_request.is_empty()
+        || !request.runtime_probe_plan_output.is_empty()
+        || !request.runtime_probe_runs.is_empty()
+        || !request.runtime_probe_evaluation_output.is_empty()
+    {
+        if [
+            &request.runtime_probe_proposal,
+            &request.runtime_probe_proposal_plan,
+            &request.runtime_probe_request,
+            &request.runtime_probe_plan_output,
+        ]
+        .iter()
+        .any(|value| value.is_empty())
+        {
+            return Err("runtime probe planning requires --runtime-probe-proposal, --runtime-probe-proposal-plan, --runtime-probe-request, and --runtime-probe-plan-output".into());
+        }
+        if request.runtime_probe_runs.is_empty()
+            != request.runtime_probe_evaluation_output.is_empty()
+        {
+            return Err(
+                "--runtime-probe-runs and --runtime-probe-evaluation-output are required together"
+                    .into(),
+            );
+        }
+        let planned = solid_facts_backend::plan_runtime_probes(
+            &fs::read(&request.runtime_probe_proposal)?,
+            &fs::read(&request.runtime_probe_proposal_plan)?,
+            &fs::read(&request.runtime_probe_request)?,
+        )?;
+        fs::write(&request.runtime_probe_plan_output, planned.bytes())?;
+        if !request.runtime_probe_runs.is_empty() {
+            fs::write(
+                &request.runtime_probe_evaluation_output,
+                solid_facts_backend::evaluate_runtime_probe_runs(
+                    &planned,
+                    &fs::read(&request.runtime_probe_runs)?,
+                )?,
+            )?;
         }
         return Ok(0);
     }
@@ -231,14 +378,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let sidecar_spawn_ns = started.elapsed().as_nanos();
     let mut sources_bytes = 0usize;
     let sources_wire_bytes = 0u64;
-    let mut preloaded_bundled = None;
     if request.sources.is_empty() {
-        // Decode the bundled solid-js contract first: it is the only cold work
-        // that needs nothing from the producer, so it overlaps the program
-        // build that the source fetch is about to wait on.
-        if diagnostics {
-            preloaded_bundled = (dialect.bundled_contract)("solid-js")?;
-        }
         request.sources = typescript.configured_sources()?;
         sources_bytes = request.sources.iter().map(|s| s.source.len()).sum();
     }
@@ -314,12 +454,27 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         .as_nanos()
         .saturating_sub(facts_complete_ns);
     if diagnostics && request.check_contracts {
-        let statuses = package_contract_statuses(
-            dialect,
-            Path::new(&facts.project_id),
-            &facts,
-            &request.contract_paths,
-        )?;
+        let project = Path::new(&facts.project_id);
+        let directory = if project.is_dir() {
+            project
+        } else {
+            project.parent().unwrap_or_else(|| Path::new("."))
+        };
+        let bundled =
+            bundled_first_party_contract_index(dialect.id, directory, &facts, &request.runtime)?;
+        let catalog = if request.accepted_contract_catalog.is_empty() {
+            let candidate = directory.join(".solid-checker/accepted-contracts.json");
+            candidate.is_file().then_some(candidate)
+        } else {
+            Some(PathBuf::from(&request.accepted_contract_catalog))
+        };
+        let contracts = catalog
+            .as_deref()
+            .map(read_accepted_contract_catalog)
+            .transpose()?
+            .unwrap_or_default()
+            .with_fallback(bundled);
+        let statuses = accepted_package_contract_statuses(dialect, project, &facts, &contracts)?;
         let actionable = statuses
             .iter()
             .filter(|status| status.needs_action())
@@ -382,17 +537,41 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Ok(i32::from(!actionable.is_empty()));
     }
     if diagnostics {
-        let (analysis, diagnostic_timings) = analyze_project_measured_with_enablement(
+        let discovered_catalog = if request.accepted_contract_catalog.is_empty() {
+            let project = Path::new(&facts.project_id);
+            let directory = if project.is_dir() {
+                project
+            } else {
+                project.parent().unwrap_or_else(|| Path::new("."))
+            };
+            let candidate = directory.join(".solid-checker/accepted-contracts.json");
+            candidate.is_file().then_some(candidate)
+        } else {
+            Some(PathBuf::from(&request.accepted_contract_catalog))
+        };
+        let project = Path::new(&facts.project_id);
+        let directory = if project.is_dir() {
+            project
+        } else {
+            project.parent().unwrap_or_else(|| Path::new("."))
+        };
+        let bundled =
+            bundled_first_party_contract_index(dialect.id, directory, &facts, &request.runtime)?;
+        let contracts = discovered_catalog
+            .as_deref()
+            .map(read_accepted_contract_catalog)
+            .transpose()?
+            .unwrap_or_default()
+            .with_fallback(bundled);
+        let (analysis, diagnostic_timings) = analyze_project_accepted_measured_with_enablement(
             dialect,
             Path::new(&facts.project_id),
             &request.sources,
             &facts,
-            &request.contract_paths,
-            preloaded_bundled,
+            &contracts,
             requested_enablement,
         )?;
         let contract_emission_ns = Cell::new(0_u128);
-        let probe_plan_emission_ns = Cell::new(0_u128);
         let module_inventory_ns = Cell::new(0_u128);
         let report_timings = || {
             if std::env::var_os("SOLID_CHECKER_TIMINGS").is_none() {
@@ -426,7 +605,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     "irNs": diagnostic_timings.reactive_ir.as_nanos(),
                     "solveAndSnapshotNs": diagnostic_timings.solve_and_snapshot.as_nanos(),
                     "contractEmissionNs": contract_emission_ns.get(),
-                    "probePlanEmissionNs": probe_plan_emission_ns.get(),
                     "moduleInventoryNs": module_inventory_ns.get(),
                     "totalNs": started.elapsed().as_nanos(),
                 })
@@ -434,13 +612,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         };
         if !request.emit_contract.is_empty() {
             let phase_started = Instant::now();
-            emit_package_contract(dialect, &request, &analysis.program, &facts)?;
+            emit_package_contract(&request, &analysis.program, &facts)?;
             contract_emission_ns.set(phase_started.elapsed().as_nanos());
-            if !request.emit_probe_plan.is_empty() {
-                let phase_started = Instant::now();
-                emit_probe_plan(&request, &facts)?;
-                probe_plan_emission_ns.set(phase_started.elapsed().as_nanos());
-            }
             // After the contract, not before: a run that cannot emit a
             // contract has no closure record to attest, and writing the
             // inventory first would leave an attestation of a generation that
@@ -485,8 +658,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut project = PathBuf::from("tsconfig.json");
     let mut typefacts = default_typefacts_executable();
     let mut dialect_id: Option<String> = None;
-    let mut contract_paths = Vec::new();
-    let mut generated_contract_paths = BTreeSet::new();
+    let mut accepted_contract_catalog = String::new();
     let mut presets = Vec::new();
     let mut enable_rules = Vec::new();
     let mut format = "default".to_owned();
@@ -494,14 +666,31 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut check_contracts = false;
     let mut validate_contract_paths = Vec::new();
     let mut emit_contract = String::new();
-    let mut emit_probe_plan = String::new();
     let mut declaration_probe_plan = String::new();
     let mut emit_module_inventory = String::new();
     let mut runtime_module_resolutions = String::new();
+    let mut contract_resolution = String::new();
+    let mut emit_proposal_plan = String::new();
+    let mut merge_contract_paths = Vec::new();
+    let mut merge_contract_output = String::new();
+    let mut merge_proposal_plan_paths = Vec::new();
+    let mut merge_proposal_plan_output = String::new();
+    let mut review_contract = String::new();
+    let mut review_output = String::new();
+    let mut verify_proposal = String::new();
+    let mut verify_plan = String::new();
+    let mut verify_proof = String::new();
+    let mut verify_artifact_case = String::new();
+    let mut accepted_output = String::new();
+    let mut receipt_output = String::new();
+    let mut runtime_probe_proposal = String::new();
+    let mut runtime_probe_proposal_plan = String::new();
+    let mut runtime_probe_request = String::new();
+    let mut runtime_probe_plan_output = String::new();
+    let mut runtime_probe_runs = String::new();
+    let mut runtime_probe_evaluation_output = String::new();
     let mut package_name = String::new();
     let mut package_version = String::new();
-    let mut declaration_artifact = String::new();
-    let mut implementation_artifact = String::new();
     let mut contract_entry_file = String::new();
     let mut contract_package_root = String::new();
     let mut runtime = RuntimeEnvironment::default();
@@ -521,13 +710,8 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             typefacts = value.into();
             continue;
         }
-        if let Some(value) = argument.strip_prefix("--contract=") {
-            contract_paths.push(value.into());
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--generated-contract=") {
-            contract_paths.push(value.into());
-            generated_contract_paths.insert(value.into());
+        if let Some(value) = argument.strip_prefix("--accepted-contracts=") {
+            accepted_contract_catalog = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--preset=") {
@@ -550,10 +734,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             emit_contract = value.into();
             continue;
         }
-        if let Some(value) = argument.strip_prefix("--emit-probe-plan=") {
-            emit_probe_plan = value.into();
-            continue;
-        }
         if let Some(value) = argument.strip_prefix("--declaration-probe-plan=") {
             declaration_probe_plan = value.into();
             continue;
@@ -566,20 +746,92 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             runtime_module_resolutions = value.into();
             continue;
         }
+        if let Some(value) = argument.strip_prefix("--contract-resolution=") {
+            contract_resolution = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--emit-proposal-plan=") {
+            emit_proposal_plan = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--merge-contract=") {
+            merge_contract_paths.push(value.into());
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--merge-contract-output=") {
+            merge_contract_output = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--merge-proposal-plan=") {
+            merge_proposal_plan_paths.push(value.into());
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--merge-proposal-plan-output=") {
+            merge_proposal_plan_output = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--review-contract=") {
+            review_contract = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--review-output=") {
+            review_output = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--verify-proposal=") {
+            verify_proposal = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--verify-plan=") {
+            verify_plan = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--verify-proof=") {
+            verify_proof = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--verify-artifact-case=") {
+            verify_artifact_case = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--accepted-output=") {
+            accepted_output = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--receipt-output=") {
+            receipt_output = value.into();
+            continue;
+        }
         if let Some(value) = argument.strip_prefix("--package-name=") {
             package_name = value.into();
             continue;
         }
+        if let Some(value) = argument.strip_prefix("--runtime-probe-proposal=") {
+            runtime_probe_proposal = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-probe-proposal-plan=") {
+            runtime_probe_proposal_plan = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-probe-request=") {
+            runtime_probe_request = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-probe-plan-output=") {
+            runtime_probe_plan_output = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-probe-runs=") {
+            runtime_probe_runs = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-probe-evaluation-output=") {
+            runtime_probe_evaluation_output = value.into();
+            continue;
+        }
         if let Some(value) = argument.strip_prefix("--package-version=") {
             package_version = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--declaration-artifact=") {
-            declaration_artifact = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--implementation-artifact=") {
-            implementation_artifact = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--contract-entry-file=") {
@@ -626,11 +878,9 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             }
             "--typefacts" => typefacts = args.next().ok_or("--typefacts needs a path")?,
             "--dialect" => dialect_id = Some(args.next().ok_or("--dialect needs an id")?),
-            "--contract" => contract_paths.push(args.next().ok_or("--contract needs a path")?),
-            "--generated-contract" => {
-                let path = args.next().ok_or("--generated-contract needs a path")?;
-                contract_paths.push(path.clone());
-                generated_contract_paths.insert(path);
+            "--accepted-contracts" => {
+                accepted_contract_catalog =
+                    args.next().ok_or("--accepted-contracts needs a path")?
             }
             "--preset" => presets.push(args.next().ok_or("--preset needs a name")?),
             "--enable-rule" => {
@@ -647,9 +897,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--emit-contract" => {
                 emit_contract = args.next().ok_or("--emit-contract needs a path")?
             }
-            "--emit-probe-plan" => {
-                emit_probe_plan = args.next().ok_or("--emit-probe-plan needs a path")?
-            }
             "--declaration-probe-plan" => {
                 declaration_probe_plan =
                     args.next().ok_or("--declaration-probe-plan needs a path")?
@@ -662,17 +909,73 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                     .next()
                     .ok_or("--runtime-module-resolutions needs a path")?
             }
+            "--contract-resolution" => {
+                contract_resolution = args.next().ok_or("--contract-resolution needs a path")?
+            }
+            "--emit-proposal-plan" => {
+                emit_proposal_plan = args.next().ok_or("--emit-proposal-plan needs a path")?
+            }
+            "--merge-contract" => {
+                merge_contract_paths.push(args.next().ok_or("--merge-contract needs a path")?)
+            }
+            "--merge-contract-output" => {
+                merge_contract_output = args.next().ok_or("--merge-contract-output needs a path")?
+            }
+            "--merge-proposal-plan" => merge_proposal_plan_paths
+                .push(args.next().ok_or("--merge-proposal-plan needs a path")?),
+            "--merge-proposal-plan-output" => {
+                merge_proposal_plan_output = args
+                    .next()
+                    .ok_or("--merge-proposal-plan-output needs a path")?
+            }
+            "--review-contract" => {
+                review_contract = args.next().ok_or("--review-contract needs a path")?
+            }
+            "--review-output" => {
+                review_output = args.next().ok_or("--review-output needs a path")?
+            }
+            "--verify-proposal" => {
+                verify_proposal = args.next().ok_or("--verify-proposal needs a path")?
+            }
+            "--verify-plan" => verify_plan = args.next().ok_or("--verify-plan needs a path")?,
+            "--verify-proof" => verify_proof = args.next().ok_or("--verify-proof needs a path")?,
+            "--verify-artifact-case" => {
+                verify_artifact_case = args.next().ok_or("--verify-artifact-case needs a value")?
+            }
+            "--accepted-output" => {
+                accepted_output = args.next().ok_or("--accepted-output needs a path")?
+            }
+            "--receipt-output" => {
+                receipt_output = args.next().ok_or("--receipt-output needs a path")?
+            }
+            "--runtime-probe-proposal" => {
+                runtime_probe_proposal =
+                    args.next().ok_or("--runtime-probe-proposal needs a path")?
+            }
+            "--runtime-probe-proposal-plan" => {
+                runtime_probe_proposal_plan = args
+                    .next()
+                    .ok_or("--runtime-probe-proposal-plan needs a path")?
+            }
+            "--runtime-probe-request" => {
+                runtime_probe_request = args.next().ok_or("--runtime-probe-request needs a path")?
+            }
+            "--runtime-probe-plan-output" => {
+                runtime_probe_plan_output = args
+                    .next()
+                    .ok_or("--runtime-probe-plan-output needs a path")?
+            }
+            "--runtime-probe-runs" => {
+                runtime_probe_runs = args.next().ok_or("--runtime-probe-runs needs a path")?
+            }
+            "--runtime-probe-evaluation-output" => {
+                runtime_probe_evaluation_output = args
+                    .next()
+                    .ok_or("--runtime-probe-evaluation-output needs a path")?
+            }
             "--package-name" => package_name = args.next().ok_or("--package-name needs a value")?,
             "--package-version" => {
                 package_version = args.next().ok_or("--package-version needs a value")?
-            }
-            "--declaration-artifact" => {
-                declaration_artifact = args.next().ok_or("--declaration-artifact needs a path")?
-            }
-            "--implementation-artifact" => {
-                implementation_artifact = args
-                    .next()
-                    .ok_or("--implementation-artifact needs a path")?
             }
             "--contract-entry-file" => {
                 contract_entry_file = args.next().ok_or("--contract-entry-file needs a path")?
@@ -723,7 +1026,14 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             unknown => return Err(format!("unknown argument {unknown:?}").into()),
         }
     }
-    let project = if !help && validate_contract_paths.is_empty() {
+    let project = if !help
+        && validate_contract_paths.is_empty()
+        && merge_contract_paths.is_empty()
+        && merge_contract_output.is_empty()
+        && review_contract.is_empty()
+        && verify_proposal.is_empty()
+        && runtime_probe_proposal.is_empty()
+    {
         project.canonicalize()?
     } else {
         project
@@ -739,8 +1049,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         sources: vec![],
         typefacts_executable: typefacts,
         typefacts_args: vec!["-project".into(), project.to_string_lossy().into_owned()],
-        contract_paths,
-        generated_contract_paths,
+        accepted_contract_catalog,
         presets,
         enable_rules,
         format,
@@ -748,14 +1057,31 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         check_contracts,
         validate_contract_paths,
         emit_contract,
-        emit_probe_plan,
         declaration_probe_plan,
         emit_module_inventory,
         runtime_module_resolutions,
+        contract_resolution,
+        emit_proposal_plan,
+        merge_contract_paths,
+        merge_contract_output,
+        merge_proposal_plan_paths,
+        merge_proposal_plan_output,
+        review_contract,
+        review_output,
+        verify_proposal,
+        verify_plan,
+        verify_proof,
+        verify_artifact_case,
+        accepted_output,
+        receipt_output,
+        runtime_probe_proposal,
+        runtime_probe_proposal_plan,
+        runtime_probe_request,
+        runtime_probe_plan_output,
+        runtime_probe_runs,
+        runtime_probe_evaluation_output,
         package_name,
         package_version,
-        declaration_artifact,
-        implementation_artifact,
         contract_entry_file,
         contract_package_root,
         help,
@@ -816,12 +1142,8 @@ fn print_help() {
            --check-contracts            Report imported Solid packages whose contract is\n\
                                         missing, unverified, or stale (audited against a\n\
                                         version this project no longer installs)\n\
-           --contract <PATH>            Override/discover a package contract (repeatable)\n\
-           --generated-contract <PATH>  Same, for a contract this generation run produced\n\
-                                        itself from the dependency's own sources. Only such\n\
-                                        a contract, or one whose evidence records a review,\n\
-                                        may carry an export `kind` across the boundary\n\
-                                        without it being re-proved here (repeatable)\n\
+           --accepted-contracts <PATH>  Load a host-acquired catalog of temporary-v2\n\
+                                        documents, proof receipts, and exact resolved imports\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
            --enable-rule <NAME>         Explicitly enable one rule (repeatable)\n\
            --runtime-target <browser|node>\n\
@@ -848,10 +1170,11 @@ fn print_help() {
            --runtime-module-resolutions <PATH>\n\
                                         Exact package-local ESM resolution map used to seed\n\
                                         contract analysis. Requires --emit-contract\n\
+           --contract-resolution <PATH> Full exact package/artifact resolution record used\n\
+                                        to bind a temporary-v2 proposal. Required by\n\
+                                        --emit-contract\n\
            --package-name <NAME>        Package name used by --emit-contract\n\
            --package-version <VERSION>  Exact package version used by --emit-contract\n\
-           --declaration-artifact <PATH> Hash a declaration artifact into the contract\n\
-           --implementation-artifact <PATH> Hash an implementation artifact into the contract\n\
            --typefacts <PATH>           TypeFacts service executable\n\
            --serve                      Run the retained per-project check daemon (Unix only).\n\
                                         Release checks use it by default; set\n\
@@ -984,9 +1307,6 @@ fn mark_summary_claims_unknown(
     domains: UnresolvedClaimDomains,
 ) -> bool {
     let mut marked = false;
-    for variant in &mut summary.variants {
-        marked |= mark_summary_claims_unknown(&mut variant.summary, domains);
-    }
     if summary.kind != "function" {
         return marked;
     }
@@ -1014,7 +1334,7 @@ fn mark_summary_claims_unknown(
 }
 
 fn unknown_contract_claim<T>() -> solid_reactive_ir::ContractClaim<T> {
-    solid_reactive_ir::ContractClaim::Unknown(solid_reactive_ir::ContractUnknownClaim::new())
+    solid_reactive_ir::ContractClaim::Open
 }
 
 #[derive(Clone, Copy)]
@@ -1043,7 +1363,7 @@ struct UnresolvedExportIndex<'a> {
     obligation_reach: &'a [solid_reactive_ir::ObligationReach],
 }
 
-/// How an unknown claim was attributed to the exports it was written onto.
+/// How an open semantic leaf was attributed to the exports it affects.
 ///
 /// The rungs are ordered by how directly they tie the obligation to a name,
 /// and every rung above the last is exact: a lexical containment or a Type
@@ -1427,7 +1747,7 @@ fn parameter_member_row_covers(
     !names.is_empty()
         && names.iter().all(|name| {
             exports.get(name).is_some_and(|summary| {
-                summary.reactive_reads.is_unknown()
+                summary.reactive_reads.is_open()
                     || summary.reactive_reads.known().is_some_and(|reads| {
                         reads.iter().any(|read| read.kind == "parameter-member")
                     })
@@ -1460,22 +1780,11 @@ fn mark_unresolved_export_claims(
     );
 }
 
-/// The machine-readable half of an unknown-claim decision.
+/// Machine-readable context for a locally unresolved proposal domain.
 ///
-/// Schema v1's `unknownClaim` is `additionalProperties: false`, and a loader
-/// that predates a new field hard-fails on the document rather than ignoring
-/// it -- which is why RFC 0002 rejected recording attribution in the contract.
-/// So the reason travels the same way the dependency-boundary refusal does: one
-/// stable line of this process's stderr, addressed to
-/// `generate-package-contract.mjs`, which records it on the matching
-/// `unknown-sentinel` item of `<contract>.review.json` and strips the line from
-/// anything a human reads.
-///
-/// One line per decision, JSON so the fields can grow without a parser change.
-/// Both sides pin the pairing:
-/// `unknown_claim_attribution_markers_reach_the_review_plan` in
-/// rust/crates/solid-facts-backend/tests/contracts_process.rs feeds this
-/// binary's real stderr to the generator's real parser.
+/// The normalized proposal remains the authority; this stderr record explains
+/// why attribution widened or found no export when a generation run refuses.
+/// It is diagnostic provenance only and is never decoded as contract semantics.
 const UNKNOWN_CLAIM_ATTRIBUTION_MARKER: &str = "solid-checker:unknown-claim-attribution=";
 
 fn report_unknown_claim_attribution(
@@ -1487,14 +1796,14 @@ fn report_unknown_claim_attribution(
     exports: &[String],
 ) {
     // An empty `exports` is still reported. Nothing was marked, so no
-    // `unknown-sentinel` item will carry it -- but "the ladder resolved this
-    // obligation to no export at all" is a narrowing decision, and the review
-    // plan is where a narrowing decision has to be visible. Leaving it silent
+    // proposal claim will carry it -- but "the ladder resolved this obligation
+    // to no export at all" is a narrowing decision, and the proposal plan is
+    // where a narrowing decision has to be visible. Leaving it silent
     // made the interesting case (reachability proving no export reaches the
     // obligation) indistinguishable from the analyzer never having seen the
     // obligation, and the reviewer had nothing to check the narrowing against.
-    // `generate-package-contract.mjs` turns the empty-export notes into their
-    // own review-plan notes rather than attaching them to an item.
+    // would make that refusal indistinguishable from an analysis that never
+    // observed the obligation.
     let note = serde_json::json!({
         "obligation": obligation,
         "analysisContext": analysis_context,
@@ -1793,7 +2102,6 @@ fn write_module_inventory(
 }
 
 fn emit_package_contract(
-    dialect: &'static dialect::Dialect,
     request: &Request,
     program: &solid_reactive_ir::Program,
     facts: &solid_facts::ProjectFacts,
@@ -1807,41 +2115,10 @@ fn emit_package_contract(
     // SC9 findings are proof obligations, not permission to discard every
     // independently known export. After resolving the requested entrypoint we
     // attribute each one to the narrowest claim domain it can invalidate and
-    // emit that claim as explicitly unknown. Consumers then fail closed only
+    // keep that exact semantic leaf open. Consumers then fail closed only
     // when they demand that claim. Proven violations remain diagnostics, but
     // they do not alter the package's descriptive runtime contract.
     let output = Path::new(&request.emit_contract);
-    let artifacts = solid_reactive_ir::ContractArtifacts {
-        declaration: (!request.declaration_artifact.is_empty())
-            .then(|| artifact_for_file(output, Path::new(&request.declaration_artifact)))
-            .transpose()?,
-        implementation: (!request.implementation_artifact.is_empty())
-            .then(|| artifact_for_file(output, Path::new(&request.implementation_artifact)))
-            .transpose()?,
-    };
-    let mut dependency_contracts = request
-        .contract_paths
-        .iter()
-        .map(|path| {
-            let mut contract = read_package_contract(Path::new(path))?;
-            // Provenance the document cannot carry, stamped where the argv
-            // that carries it is still in scope. See `Request::
-            // generated_contract_paths` and `kind_claims_are_trusted`.
-            contract.run_generated = request.generated_contract_paths.contains(path);
-            Ok(contract)
-        })
-        .collect::<Result<Vec<_>, BackendError>>()?;
-    for package in dialect.bundled_packages {
-        if dependency_contracts
-            .iter()
-            .any(|contract| contract.package.name == *package)
-        {
-            continue;
-        }
-        if let Some(contract) = (dialect.bundled_contract)(package)? {
-            dependency_contracts.push(contract);
-        }
-    }
     let entities_by_location = facts
         .typescript
         .entities()
@@ -1854,7 +2131,6 @@ fn emit_package_contract(
             facts,
             program,
             Path::new(&request.contract_entry_file),
-            &dependency_contracts,
             &entities_by_location,
         )?
     };
@@ -1952,9 +2228,7 @@ fn emit_package_contract(
             // The obligation proves only that the callback list is
             // incomplete. Preserve every independently known claim and make
             // the uncertainty explicit instead of refusing the whole export.
-            summary.callbacks = solid_reactive_ir::ContractClaim::Unknown(
-                solid_reactive_ir::ContractUnknownClaim::new(),
-            );
+            summary.callbacks = solid_reactive_ir::ContractClaim::Open;
             marked.push(name);
         }
         report_unknown_claim_attribution(
@@ -1994,35 +2268,24 @@ fn emit_package_contract(
         );
     }
     let contract = solid_reactive_ir::PackageContract {
-        schema_version: 1,
         package: solid_reactive_ir::ContractPackage {
             name: request.package_name.clone(),
             version: request.package_version.clone(),
             integrity: String::new(),
         },
-        compiler_facts_protocol: 1,
-        artifacts,
         entrypoints: [(
             ".".into(),
-            solid_reactive_ir::ContractEntrypoint {
-                exports,
-                conditions: Vec::new(),
-            },
+            solid_reactive_ir::ContractEntrypoint { exports },
         )]
         .into(),
-        evidence: solid_reactive_ir::ContractEvidence {
-            kind: "inferred".into(),
-            generator: "solid-checker".into(),
-        },
-        contract_hash: String::new(),
         source_path: String::new(),
-        run_generated: false,
-        installed_root: None,
     };
     contract.validate().map_err(|error| error.to_string())?;
-    let mut encoded = encode_package_contract(&contract, true)?;
-    encoded.push(b'\n');
-    fs::write(output, encoded)?;
+    let resolution: solid_facts_backend::ResolvedImport =
+        serde_json::from_slice(&fs::read(&request.contract_resolution)?)?;
+    let proposal = encode_inferred_contract_workflow(&contract, &resolution, true)?;
+    fs::write(output, proposal.document)?;
+    fs::write(&request.emit_proposal_plan, proposal.plan)?;
     Ok(())
 }
 
@@ -2298,178 +2561,15 @@ struct ProbePlanFragment {
     exports: BTreeMap<String, BTreeMap<usize, Vec<serde_json::Value>>>,
 }
 
-/// Writes probe-only argument recipes proven by Type Facts.
-///
-/// This file is deliberately not part of the package-contract schema. A valid
-/// input helps a probe reach package behavior; it is never evidence that the
-/// behavior is correct. Recipes are emitted only for exact singleton values or
-/// structurally valid empty standard-library containers proven by Type Facts.
-/// Everything else stays absent and the driver keeps its existing fail-closed
-/// synthesis.
-fn emit_probe_plan(
-    request: &Request,
-    facts: &solid_facts::ProjectFacts,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
-    let contract = read_package_contract(Path::new(&request.emit_contract))?;
-    let names = contract
-        .entrypoints
-        .get(".")
-        .map(|entry| entry.exports.keys().cloned().collect::<Vec<_>>())
-        .unwrap_or_default();
-    let aliases = canonical_symbol_aliases(facts);
-    // One exact-location index for the whole plan. The former implementation
-    // searched the complete Type Facts entity table for every exported
-    // function, every candidate declaration, and every parameter. A wide
-    // package made that exports × functions × entities work, even though the
-    // complete fact table was already resident and immutable.
-    let entities_by_location = facts
-        .typescript
-        .entities()
-        .map(|entity| (entity.location.clone(), entity))
-        .collect::<HashMap<_, _>>();
-    let mut functions_by_symbol = HashMap::new();
-    for file in &facts.files {
-        for function in &file.ast.functions {
-            let Some(name) = &function.name else {
-                continue;
-            };
-            let location = typefacts::Location {
-                path: file.path.to_string().into(),
-                start_byte: u64::from(name.span.start),
-                end_byte: u64::from(name.span.end),
-            };
-            let Some(entity) = entities_by_location.get(&location) else {
-                continue;
-            };
-            let symbol = canonical_symbol(&entity.symbol, &aliases);
-            if !symbol.is_empty() {
-                functions_by_symbol
-                    .entry(symbol)
-                    .or_insert_with(Vec::new)
-                    .push((file, function));
-            }
-        }
-    }
-    let mut exports = BTreeMap::new();
-    for export_name in names {
-        let Some(export_entity) = entry_export_entity_indexed(
-            facts,
-            &entities_by_location,
-            &entry_file,
-            &export_name,
-            &mut HashSet::new(),
-        ) else {
-            continue;
-        };
-        let export_symbol = canonical_symbol(&export_entity.symbol, &aliases);
-        if export_symbol.is_empty() {
-            continue;
-        }
-        // Ambiguous identity is no construction proof.
-        let Some([(file, function)]) = functions_by_symbol.get(&export_symbol).map(Vec::as_slice)
-        else {
-            continue;
-        };
-        let mut parameters = BTreeMap::new();
-        for (index, parameter) in function.parameters.iter().enumerate() {
-            let [name] = parameter.names.as_slice() else {
-                continue;
-            };
-            let location = typefacts::Location {
-                path: file.path.to_string().into(),
-                start_byte: u64::from(name.span.start),
-                end_byte: u64::from(name.span.end),
-            };
-            let Some(entity) = entities_by_location.get(&location) else {
-                continue;
-            };
-            let mut recipes = Vec::new();
-            if let Some(primitive) = entity
-                .primitive_value_domain
-                .present()
-                .filter(|domain| !domain.unknown())
-            {
-                if primitive.may_be_null() {
-                    recipes.push(serde_json::Value::String("null".to_owned()));
-                }
-                if primitive.may_be_undefined() {
-                    recipes.push(serde_json::Value::String("undefined".to_owned()));
-                }
-            }
-            if entity.array_shape == Some(typefacts::ArrayShape::Array)
-                && entity.tuple_shape.is_none()
-            {
-                recipes.push(serde_json::Value::String("empty-array".to_owned()));
-            }
-            if let Some(types) = entity.library_types.as_deref() {
-                if types.iter().any(|name| name.as_ref() == "Map") {
-                    recipes.push(serde_json::Value::String("empty-map".to_owned()));
-                }
-                if types.iter().any(|name| name.as_ref() == "Set") {
-                    recipes.push(serde_json::Value::String("empty-set".to_owned()));
-                }
-                // These names are compiler-resolved default-library identities,
-                // not spelling heuristics. A div is a concrete inhabitant of
-                // each type and the probe report already labels the browser
-                // shim as weaker than a real-browser observation.
-                if types.iter().any(|name| {
-                    matches!(
-                        name.as_ref(),
-                        "EventTarget" | "Node" | "Element" | "HTMLElement" | "HTMLDivElement"
-                    )
-                }) {
-                    recipes.push(serde_json::Value::String("dom-element".to_owned()));
-                }
-            }
-            if let Some(candidates) = entity.primitive_literal_candidates.as_deref() {
-                for candidate in candidates.iter().take(8) {
-                    let value = match candidate.kind {
-                        typefacts::PrimitiveLiteralKind::String => {
-                            serde_json::Value::String(candidate.string.to_string())
-                        }
-                        typefacts::PrimitiveLiteralKind::Number => {
-                            serde_json::Number::from_f64(candidate.number)
-                                .map(serde_json::Value::Number)
-                                .ok_or("Type Facts returned a non-finite primitive literal")?
-                        }
-                        typefacts::PrimitiveLiteralKind::Boolean => {
-                            serde_json::Value::Bool(candidate.boolean)
-                        }
-                    };
-                    recipes.push(serde_json::json!({ "kind": "literal", "value": value }));
-                }
-            }
-            if !recipes.is_empty() {
-                parameters.insert(index, recipes);
-            }
-        }
-        if !parameters.is_empty() {
-            exports.insert(export_name, parameters);
-        }
-    }
-    let fragment = ProbePlanFragment {
-        schema_version: 2,
-        source: "typescript-value-domain",
-        exports,
-    };
-    fs::write(
-        &request.emit_probe_plan,
-        format!("{}\n", serde_json::to_string_pretty(&fragment)?),
-    )?;
-    Ok(())
-}
-
 fn contract_exports_for_entry_file(
     facts: &solid_facts::ProjectFacts,
     program: &solid_reactive_ir::Program,
     entry_file: &Path,
-    dependency_contracts: &[solid_reactive_ir::PackageContract],
     entities_by_location: &HashMap<typefacts::Location, &typefacts::EntityFact>,
 ) -> Result<BTreeMap<String, solid_reactive_ir::ContractExport>, Box<dyn std::error::Error>> {
     let entry_file = entry_file.canonicalize()?;
     let mut visiting = HashSet::new();
-    let names = exported_names_for_file(facts, &entry_file, dependency_contracts, &mut visiting)?;
+    let names = exported_names_for_file(facts, &entry_file, &mut visiting)?;
     let entry_entities_by_name = names
         .iter()
         .filter_map(|name| {
@@ -2488,22 +2588,7 @@ fn contract_exports_for_entry_file(
         generated_owner_requirements_by_symbol(facts, program, &symbol_aliases);
     let mut exports = BTreeMap::new();
     for name in names {
-        // `trusted_kind` says the summary's `kind` came from a dependency
-        // contract whose provenance licenses carrying it across the boundary,
-        // rather than from this project's analysis of its own files. A
-        // dependency contract with neither provenance carries every other
-        // claim and has its `kind` re-decided here, exactly like a local one.
-        // See `promote_entry_callable` and `kind_claims_are_trusted`.
-        let (summary, trusted_kind) = external_export_summary_for_file(
-            facts,
-            &entry_file,
-            dependency_contracts,
-            &name,
-            &mut HashSet::new(),
-        )
-        .or_else(|| {
-            program.contract_exports.get(&name).cloned().map(|summary| (summary, false))
-        }).ok_or_else(|| {
+        let summary = program.contract_exports.get(&name).cloned().ok_or_else(|| {
             format!(
                 "emit package contract: entry file {} exports {name:?}, but no semantic summary was produced",
                 entry_file.display()
@@ -2515,7 +2600,6 @@ fn contract_exports_for_entry_file(
             &name,
             entry_entities_by_name.get(&name).copied(),
             summary,
-            trusted_kind,
         )?;
         let summary = attach_generated_owner_requirements(
             facts,
@@ -2740,7 +2824,6 @@ fn attach_generated_owner_requirements(
         {
             owner_requirements.push(solid_reactive_ir::ContractOwnerRequirement {
                 operation: *operation,
-                evidence: None,
             });
         }
     }
@@ -2756,7 +2839,7 @@ fn attach_generated_owner_requirements(
 /// Decides the `kind` of one entry-file export, or refuses the entrypoint.
 ///
 /// A bare `kind: "value"` summary is the maximal certified negative claim —
-/// `validate_export` bars it from carrying even an unknown domain — so it is
+/// `validate_export` bars it from carrying even an open function domain — so it is
 /// publishable only against a proof that the export is not a function.
 /// [`solid_reactive_ir::export_kind_proof`] holds the whole rule; only its two
 /// closed answers publish anything here. `Unknown` (an `any`, `unknown`,
@@ -2769,32 +2852,17 @@ fn attach_generated_owner_requirements(
 /// See docs/package-contracts.md "Refused entrypoints versus failed
 /// generation".
 ///
-/// `trusted_kind` marks a summary whose `kind` came from a *dependency
-/// contract* this analysis is entitled to take that one claim from unproved.
-/// The entitlement is about provenance and nothing else — see
-/// [`solid_reactive_ir::PackageContract::kind_claims_are_trusted`]: either this
-/// run generated the contract itself from the dependency's own sources under
-/// this exact rule, or its evidence records that a human or a verifier stood
-/// behind its claims. Re-deciding such a `kind` here — with the dependency's
-/// implementation outside the project and its specifier therefore typed `any` —
-/// would refuse exactly the entrypoints that already have the better answer.
-///
-/// A dependency contract with *neither* provenance is a document of unknown
-/// origin found on disk; its `kind` goes through this decision like any local
-/// claim, because it may have been generated by an earlier solid-checker whose
-/// `Unknown ⇒ value` defect is the one this rule exists to close. Any carried
-/// summary can still be *raised* by a local signature fact.
+/// No dependency proposal is consulted here. A proposal is not accepted proof
+/// for another proposal, so an external boundary remains a local open claim or
+/// an entrypoint refusal until an independently proof-checked document and
+/// receipt are supplied to the analyzer.
 fn promote_entry_callable(
     facts: &solid_facts::ProjectFacts,
     entry_file: &Path,
     name: &str,
     export_entity: Option<&typefacts::EntityFact>,
     summary: solid_reactive_ir::ContractExport,
-    trusted_kind: bool,
 ) -> Result<solid_reactive_ir::ContractExport, Box<dyn std::error::Error>> {
-    if trusted_kind && summary.kind != "value" {
-        return Ok(summary);
-    }
     let Some(entity) = export_entity else {
         return Ok(summary);
     };
@@ -2829,9 +2897,7 @@ fn promote_entry_callable(
                 ..solid_reactive_ir::ContractExport::default()
             })
         }
-        solid_reactive_ir::ExportKindProof::Unresolvable(callability, constructability)
-            if !trusted_kind =>
-        {
+        solid_reactive_ir::ExportKindProof::Unresolvable(callability, constructability) => {
             refuse(format!(
                 "whose runtime kind no closed type answers ({callability:?}, {constructability:?})"
             ))
@@ -2842,12 +2908,10 @@ fn promote_entry_callable(
         // Absence is the producer finding no node to classify, so it is
         // missing evidence about this export rather than an answer about its
         // type — and `kind: "value"` is a claim, not a default.
-        solid_reactive_ir::ExportKindProof::Unanswered if !trusted_kind => {
+        solid_reactive_ir::ExportKindProof::Unanswered => {
             refuse("whose runtime kind no fact covers at all".into())
         }
-        solid_reactive_ir::ExportKindProof::NonCallable
-        | solid_reactive_ir::ExportKindProof::Unresolvable(_, _)
-        | solid_reactive_ir::ExportKindProof::Unanswered => Ok(summary),
+        solid_reactive_ir::ExportKindProof::NonCallable => Ok(summary),
     }
 }
 
@@ -3034,11 +3098,10 @@ fn unify_runtime_alias_summaries(
                         }
                     }
                 }
-                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
-                    merged.reactive_reads =
-                        solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
+                (_, solid_reactive_ir::ContractClaim::Open) => {
+                    merged.reactive_reads = solid_reactive_ir::ContractClaim::Open;
                 }
-                (solid_reactive_ir::ContractClaim::Unknown(_), _) => {}
+                (solid_reactive_ir::ContractClaim::Open, _) => {}
             }
             match (&mut merged.callbacks, &summary.callbacks) {
                 (
@@ -3051,18 +3114,18 @@ fn unify_runtime_alias_summaries(
                         }
                     }
                 }
-                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
-                    merged.callbacks = solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
+                (_, solid_reactive_ir::ContractClaim::Open) => {
+                    merged.callbacks = solid_reactive_ir::ContractClaim::Open;
                 }
-                (solid_reactive_ir::ContractClaim::Unknown(_), _) => {}
+                (solid_reactive_ir::ContractClaim::Open, _) => {}
             }
             match (&mut merged.returns, &summary.returns) {
                 (
                     solid_reactive_ir::ContractClaim::Known(merged_return),
                     solid_reactive_ir::ContractClaim::Known(returned),
                 ) if merged_return.is_none() => *merged_return = returned.clone(),
-                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
-                    merged.returns = solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
+                (_, solid_reactive_ir::ContractClaim::Open) => {
+                    merged.returns = solid_reactive_ir::ContractClaim::Open;
                 }
                 _ => {}
             }
@@ -3071,9 +3134,8 @@ fn unify_runtime_alias_summaries(
                     solid_reactive_ir::ContractClaim::Known(merged_behavior),
                     solid_reactive_ir::ContractClaim::Known(behavior),
                 ) if merged_behavior.is_empty() => *merged_behavior = behavior.clone(),
-                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
-                    merged.async_behavior =
-                        solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
+                (_, solid_reactive_ir::ContractClaim::Open) => {
+                    merged.async_behavior = solid_reactive_ir::ContractClaim::Open;
                 }
                 _ => {}
             }
@@ -3096,169 +3158,14 @@ fn unify_runtime_alias_summaries(
     }
 }
 
-/// One dependency contract's summary for `name`, and whether its `kind` claim
-/// may be carried across the boundary without being re-proved.
-///
-/// The second half is the contract's provenance, not the summary's content:
-/// see [`solid_reactive_ir::PackageContract::kind_claims_are_trusted`]. Every
-/// other claim in the summary is used regardless — a contract is the only
-/// evidence there is about a package this project cannot see into.
-///
-/// **This lookup binds by module *name*, not by attested identity, and that is
-/// deliberate — but it is a weaker rule than the one analysis uses.** The
-/// obligations of the package under generation are computed through
-/// `resolve_contract_imports`, which binds by identity; these emitted
-/// *dependency* claims are computed here, by name. The two can only disagree
-/// for a package whose own tsconfig shadows one of its declared dependencies
-/// with a `paths` entry, which is a shape no corpus package has and which no
-/// generator flow produces: `ensureGeneratedDependencyContract`
-/// (packages/cli/scripts/generate-package-contract.mjs) generates these
-/// contracts from the dependency's *installed* sources in this same run, and
-/// the specifiers consulted here are the package's own imports of those
-/// declared dependencies. Threading the declaration span through both call
-/// sites would move generation-side answers, so the divergence is recorded in
-/// docs/precision-backlog.md instead of narrowed here.
-fn dependency_export_summary(
-    dependency_contracts: &[solid_reactive_ir::PackageContract],
-    module: &str,
-    name: &str,
-) -> Option<(solid_reactive_ir::ContractExport, bool)> {
-    let contract = solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)?;
-    let summary = contract.exports_for_module(module)?.get(name)?.clone();
-    Some((summary, contract.kind_claims_are_trusted()))
-}
-
-/// The summary a *dependency contract* supplies for the export `name` of
-/// `path`, following this project's own re-export and import chains to reach
-/// the boundary, and whether that contract's `kind` claim is carried unproved.
-fn external_export_summary_for_file(
-    facts: &solid_facts::ProjectFacts,
-    path: &Path,
-    dependency_contracts: &[solid_reactive_ir::PackageContract],
-    name: &str,
-    visiting: &mut HashSet<PathBuf>,
-) -> Option<(solid_reactive_ir::ContractExport, bool)> {
-    let path = path.canonicalize().ok()?;
-    if !visiting.insert(path.clone()) {
-        return None;
-    }
-    let file = facts
-        .files
-        .iter()
-        .find(|file| same_canonical_path(Path::new(file.path.as_str()), &path))?;
-    // `module_level_exports`, not `exports`: an `export` nested in a
-    // `namespace`, `declare module`, or `declare global` body binds a member
-    // of that namespace object, not a name this module publishes. See
-    // `AstFacts::module_level_exports`.
-    for export in file
-        .ast
-        .module_level_exports()
-        .filter(|export| !export.type_only)
-    {
-        for specifier in export
-            .specifiers
-            .iter()
-            .chain(export.declarations.iter())
-            .filter(|specifier| !specifier.type_only && specifier.exported.as_str() == name)
-        {
-            let local_name = file
-                .source_text(specifier.local.span)
-                .unwrap_or(specifier.exported.as_str());
-            if let Some(module) = export.module.as_deref() {
-                if module.starts_with('.') {
-                    let target = resolve_relative_export(facts, &path, module).ok()?;
-                    if let Some(summary) = external_export_summary_for_file(
-                        facts,
-                        &target,
-                        dependency_contracts,
-                        local_name,
-                        visiting,
-                    ) {
-                        return Some(summary);
-                    }
-                } else if let Some(summary) =
-                    dependency_export_summary(dependency_contracts, module, local_name)
-                {
-                    return Some(summary);
-                }
-            } else {
-                for import in file.ast.imports.iter().filter(|import| !import.type_only) {
-                    for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
-                        if file.source_text(binding.local.span) != Some(local_name) {
-                            continue;
-                        }
-                        let imported = binding.imported.as_deref().or_else(|| {
-                            (binding.kind == solid_facts::ast::ImportKind::Default)
-                                .then_some("default")
-                        })?;
-                        if import.module.starts_with('.') {
-                            let target =
-                                resolve_relative_export(facts, &path, &import.module).ok()?;
-                            if let Some(summary) = external_export_summary_for_file(
-                                facts,
-                                &target,
-                                dependency_contracts,
-                                imported,
-                                visiting,
-                            ) {
-                                return Some(summary);
-                            }
-                        } else if let Some(summary) = dependency_export_summary(
-                            dependency_contracts,
-                            &import.module,
-                            imported,
-                        ) {
-                            return Some(summary);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    for export in file
-        .ast
-        .exports
-        .iter()
-        .filter(|export| !export.type_only && export.kind == solid_facts::ast::ExportKind::All)
-    {
-        let module = export.module.as_deref()?;
-        if module.starts_with('.') {
-            let target = resolve_relative_export(facts, &path, module).ok()?;
-            if let Some(summary) = external_export_summary_for_file(
-                facts,
-                &target,
-                dependency_contracts,
-                name,
-                visiting,
-            ) {
-                return Some(summary);
-            }
-            continue;
-        }
-        if let Some(summary) = dependency_export_summary(dependency_contracts, module, name) {
-            return Some(summary);
-        }
-    }
-    None
-}
-
 /// The machine-readable half of a missing-dependency refusal.
 ///
-/// Contract generation is demand-driven across package boundaries: when this
-/// entrypoint re-exports a package whose contract was not supplied, the
-/// generator (`ensureGeneratedDependencyContract` in
-/// packages/cli/scripts/generate-package-contract.mjs) generates exactly that
-/// installed dependency and retries. It needs the module specifier, and the
-/// only channel it has is this process's stderr.
+/// Contract generation is fail-closed across package boundaries. When this
+/// entrypoint re-exports a package with no exact accepted contract, this stable
+/// stderr record identifies the unresolved module for the refusal report.
 ///
-/// Parsing that specifier back out of the human sentence couples the generator
-/// to prose: reword the message and the recursion silently stops, which
-/// surfaces only as an entrypoint the generator "refused" -- an outcome that
-/// exits 0. So the boundary emits one stable line of its own, in addition to
-/// the unchanged human message. Both sides pin the pairing:
-/// `package_generator_dependency_boundary_marker_drives_recursion` in
-/// rust/crates/solid-facts-backend/tests/contracts_process.rs feeds this
-/// binary's real stderr to the generator's real parser.
+/// Parsing a specifier back out of human prose would couple automation to
+/// wording, so the boundary emits one stable line in addition to the message.
 const UNRESOLVED_DEPENDENCY_MODULE_MARKER: &str = "solid-checker:unresolved-dependency-module=";
 
 /// Refuse emission at a package boundary this process cannot cross, naming the
@@ -3277,7 +3184,7 @@ fn refuse_unresolved_dependency_module<T>(
 ) -> Result<T, Box<dyn std::error::Error>> {
     eprintln!("{UNRESOLVED_DEPENDENCY_MODULE_MARKER}{module}");
     Err(format!(
-        "emit package contract: cannot statically expand external export-all {module:?} from {}; generate and pass its dependency contract with --contract",
+        "emit package contract: cannot statically expand external export-all {module:?} from {}; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts",
         from.display()
     )
     .into())
@@ -3286,7 +3193,6 @@ fn refuse_unresolved_dependency_module<T>(
 fn exported_names_for_file(
     facts: &solid_facts::ProjectFacts,
     path: &Path,
-    dependency_contracts: &[solid_reactive_ir::PackageContract],
     visiting: &mut HashSet<PathBuf>,
 ) -> Result<BTreeSet<String>, Box<dyn std::error::Error>> {
     let path = path.canonicalize()?;
@@ -3320,40 +3226,10 @@ fn exported_names_for_file(
                 .as_deref()
                 .ok_or("export-all declaration has no module")?;
             if !module.starts_with('.') {
-                // Name binding, for the same reason as
-                // `dependency_export_summary`: a generated dependency contract
-                // describes the dependency's installed sources as this run
-                // generated them, and the specifier is the package's own
-                // re-export of a dependency it declares. A `paths`-shadowed
-                // dependency inside a package under generation would diverge
-                // from the identity-bound answer analysis uses, which is the
-                // residue recorded in docs/precision-backlog.md.
-                let Some(contract) =
-                    solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)
-                else {
-                    return refuse_unresolved_dependency_module(module, &path);
-                };
-                let exports = contract.exports_for_module(module).ok_or_else(|| {
-                    format!(
-                        "emit package contract: dependency contract for {} has no entrypoint matching {module:?}",
-                        contract.package.name
-                    )
-                })?;
-                names.extend(
-                    exports
-                        .keys()
-                        .filter(|name| name.as_str() != "default")
-                        .cloned(),
-                );
-                continue;
+                return refuse_unresolved_dependency_module(module, &path);
             }
             let target = resolve_relative_export(facts, &path, module)?;
-            names.extend(exported_names_for_file(
-                facts,
-                &target,
-                dependency_contracts,
-                visiting,
-            )?);
+            names.extend(exported_names_for_file(facts, &target, visiting)?);
             continue;
         }
         if export.kind == solid_facts::ast::ExportKind::Default {
@@ -3404,10 +3280,10 @@ fn exported_names_for_file(
 /// existence to describe.
 ///
 /// This project's own syntax at the *declaring* file does separate them.
-/// Walking the same relative re-export and import chain
-/// `external_export_summary_for_file` walks, a name whose every export is
-/// marked `type_only` somewhere along it binds nothing at runtime, so omitting
-/// it is exactly right — and exactly what the marked spelling already gets.
+/// Walking the relative re-export and import chain, a name whose every export
+/// is marked `type_only` somewhere along it binds nothing at runtime, so
+/// omitting it is exactly right — and exactly what the marked spelling already
+/// gets.
 ///
 /// Fail-closed by construction: a chain that leaves this project (a bare
 /// specifier, an unresolvable relative path) or that this walk cannot see (a
@@ -3532,30 +3408,6 @@ fn resolve_relative_export(
 
 fn same_canonical_path(left: &Path, right: &Path) -> bool {
     left == right || left.canonicalize().is_ok_and(|left| left == right)
-}
-
-fn artifact_for_file(
-    contract_path: &Path,
-    artifact_path: &Path,
-) -> Result<solid_reactive_ir::ContractArtifact, Box<dyn std::error::Error>> {
-    let contract_directory = contract_path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .canonicalize()?;
-    let artifact = artifact_path.canonicalize()?;
-    let relative = artifact
-        .strip_prefix(&contract_directory)
-        .map_err(|_| "package contract artifact must be a file inside the contract directory")?;
-    if relative.as_os_str().is_empty() || !artifact.is_file() {
-        return Err(
-            "package contract artifact must be a file inside the contract directory".into(),
-        );
-    }
-    let data = fs::read(&artifact)?;
-    Ok(solid_reactive_ir::ContractArtifact {
-        path: relative.to_string_lossy().replace('\\', "/"),
-        hash: format!("sha256:{:x}", Sha256::digest(data)),
-    })
 }
 
 /// A per-project daemon holding the retained `NativeIncrementalSession` behind

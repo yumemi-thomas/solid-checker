@@ -646,15 +646,38 @@ fn unresolved_guard_selection_joins_possible_cases_monotonically() {
 }
 
 #[test]
-fn open_guard_partition_cannot_claim_exhaustive_otherwise() {
+fn open_guard_partition_retains_fallback_only_as_possible_behavior() {
     let mut guarded = call(vec![], vec![]);
     guarded.guards.cases = KnowledgeSet::Partial(vec![GuardedCase::Otherwise {
         operations: KnowledgeSet::Complete(vec![]),
     }]);
+    let normalized = proposal_with(ValueShape::Plain, guarded)
+        .normalize()
+        .unwrap();
+    let partition = &normalized.artifact_cases()[0].exports["createResource"]
+        .call
+        .guards;
     assert!(matches!(
-        proposal_with(ValueShape::Plain, guarded).normalize(),
-        Err(ModelError::InvalidGuard { .. })
+        partition.select_operations(|_| GuardTruth::False),
+        KnowledgeSet::Unknown
     ));
+
+    let positive = GuardPartition {
+        cases: KnowledgeSet::Partial(vec![
+            GuardedCase::When {
+                guard: literal_guard(true),
+                operations: KnowledgeSet::Complete(vec![OperationId("read".into())]),
+            },
+            GuardedCase::Otherwise {
+                operations: KnowledgeSet::Complete(vec![OperationId("write".into())]),
+            },
+        ]),
+    }
+    .select_operations(|_| GuardTruth::True);
+    assert_eq!(
+        positive,
+        KnowledgeSet::Partial(vec![OperationId("read".into())])
+    );
 }
 
 #[test]

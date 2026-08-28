@@ -1,0 +1,82 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/partial-returns-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:32845f86590cf6dcf5da097a44505111ddcd044b50246ee55505c5b506317666",
+          "entries": [
+            {
+              "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+          "path": "node_modules/partial-returns-package/package.json"
+        },
+        "exports": {
+          "openPlain": {
+            "declarations": {
+              "exportName": "openPlain",
+              "module": {
+                "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+                "path": "node_modules/partial-returns-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "openPlain",
+              "module": {
+                "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+                "path": "node_modules/partial-returns-package/package.json"
+              }
+            }
+          },
+          "openSource": {
+            "declarations": {
+              "exportName": "openSource",
+              "module": {
+                "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+                "path": "node_modules/partial-returns-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "openSource",
+              "module": {
+                "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+                "path": "node_modules/partial-returns-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.ts",
+        "packageIntegrity": "fixture:sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+        "packageManifest": {
+          "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+          "path": "node_modules/partial-returns-package/package.json"
+        },
+        "packageName": "partial-returns-package",
+        "packageRoot": "node_modules/partial-returns-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:87734681e53ee9d429c4a50f37356617b61a8f1f50baba6edc88ab2ed0cc27ef",
+          "path": "node_modules/partial-returns-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "partial-returns-package"
+      },
+      "receipt": "node_modules/partial-returns-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

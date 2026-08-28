@@ -33,8 +33,8 @@ export function retainsInModuleBinding(fn: () => void): void {
 }
 
 // Positive: a rest parameter absorbs an unbounded argument tail that no
-// `callbacks` row can name, so any use of one of its elements is unstatable in
-// schema v1 as anything but the sentinel.
+// `callbacks` row can name, so use of one of its elements leaves the exact
+// callback claim locally open.
 export function absorbsRest(...handlers: Array<() => void>): number {
   const first = handlers[0];
   return first ? 1 : 0;

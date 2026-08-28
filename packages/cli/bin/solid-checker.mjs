@@ -5,7 +5,7 @@ import { launch, runNative } from "./launcher.mjs";
 if (process.argv[2] === "contract") {
   try {
     const { generatePackageContract, packageContractHelp } = await import(
-      "../scripts/generate-package-contract.mjs"
+      "../scripts/generate-package-contract-v2.mjs"
     );
     if (process.argv[3] === "generate") {
       const args = process.argv.slice(4);
@@ -45,8 +45,7 @@ if (process.argv[2] === "contract") {
     } else if (process.argv[3] === "check") {
       // The native checker owns contract discovery, so `contract check` is the
       // discoverable spelling of `--check-contracts` rather than a second
-      // implementation of it. Remaining arguments (--project, --format,
-      // --contract) pass straight through.
+      // implementation of it. Remaining arguments pass straight through.
       const child = runNative("solid-checker", [
         "--check-contracts",
         ...process.argv.slice(4)

@@ -7,10 +7,9 @@
 //! import from the wrong module, and answering that out of the vocabulary means
 //! ten of 1.x's `solid-js/web` names cannot be checked at all.
 //!
-//! The tables are generated from the installed packages by `solid-contract-gen`
-//! and checked by `make contracts-check`. Nothing here is hand-written; the
-//! defect that motivated the generator was seven exports that existed only in a
-//! hand-maintained list.
+//! These frozen declaration indices are audited against the same exact
+//! published package authorities as the receipt-issued bundles. They contain
+//! no contract semantics; behavior stays in normalized contracts.
 
 pub mod solid_v1_solid_js;
 pub mod solid_v2_solid_js;

@@ -9,7 +9,10 @@ use std::{
 };
 
 use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
-use crate::contracts::{ResolvedContractBinding, resolve_contract_imports};
+use crate::contract_semantics::AcceptedContractIndex;
+use crate::contracts::{
+    ResolvedContractBinding, accepted_bundled_returns, resolve_accepted_contract_imports,
+};
 use crate::identity::{SymbolId, SymbolName};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
 use crate::reachability::{ReachabilityInputs, reachability_stage};
@@ -19,9 +22,8 @@ use crate::timings::{ReactiveIrStage, StageClock};
 use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
     ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, ObligationReach,
-    OwnerRequirement, PackageContract, PrimitiveCreation, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, RuleOptions, Solid1xRuleOptions, StaticDefect,
-    StaticViolation, location_order,
+    OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
+    RuleOptions, Solid1xRuleOptions, StaticDefect, StaticViolation, location_order,
 };
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
@@ -189,29 +191,13 @@ pub(crate) struct AnalysisContext<'a> {
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
-    build_with_contracts(facts, dialect, &[])
-}
-
-pub fn build_with_contracts(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-    contracts: &[PackageContract],
-) -> Result<Program, BuildError> {
-    build_with_contracts_measured(facts, dialect, contracts).map(|(program, _)| program)
-}
-
-pub fn build_with_contracts_measured(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-    contracts: &[PackageContract],
-) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_contracts_measured_incremental(
+    build_with_accepted_contracts_measured(
         facts,
         dialect,
-        contracts,
+        &AcceptedContractIndex::default(),
         &RuleOptions::default(),
-        BuildCaches::default(),
     )
+    .map(|(program, _)| program)
 }
 
 /// The staged incremental pipeline. One stage per clock span, in order:
@@ -230,10 +216,41 @@ pub fn build_with_contracts_measured(
 /// and end their span on the [`StageClock`]; each late-stage cache sub-slot
 /// is handed to exactly one stage. See
 /// `docs/pipeline-orchestrator-redesign.md`.
-pub(crate) fn build_with_contracts_measured_incremental(
+pub fn build_with_accepted_contracts_measured(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
-    contracts: &[PackageContract],
+    contracts: &AcceptedContractIndex,
+    rule_options: &RuleOptions,
+) -> Result<(Program, BuildTimings), BuildError> {
+    build_with_accepted_contract_inputs_measured_incremental(
+        facts,
+        dialect,
+        contracts,
+        rule_options,
+        BuildCaches::default(),
+    )
+}
+
+pub(crate) fn build_with_accepted_contracts_measured_incremental(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    contracts: &AcceptedContractIndex,
+    rule_options: &RuleOptions,
+    caches: BuildCaches<'_>,
+) -> Result<(Program, BuildTimings), BuildError> {
+    build_with_accepted_contract_inputs_measured_incremental(
+        facts,
+        dialect,
+        contracts,
+        rule_options,
+        caches,
+    )
+}
+
+fn build_with_accepted_contract_inputs_measured_incremental(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+    contracts: &AcceptedContractIndex,
     rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
 ) -> Result<(Program, BuildTimings), BuildError> {
@@ -350,7 +367,8 @@ pub(crate) fn build_with_contracts_measured_incremental(
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
     let mut resolved_contracts =
-        resolve_contract_imports(facts, contracts, entities, dialect, &rule_options.runtime);
+        resolve_accepted_contract_imports(facts, contracts, entities, dialect);
+    let bundled_returns = accepted_bundled_returns(facts, contracts);
     build_timings.contract_resolution = substage_started.elapsed();
     let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(
@@ -388,7 +406,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         symbol_names: &symbol_names,
         semantic_lookup,
         resolved_contracts: &resolved_contracts,
-        contracts,
+        bundled_returns: &bundled_returns,
         runtime: &rule_options.runtime,
     };
     let discover = move || {

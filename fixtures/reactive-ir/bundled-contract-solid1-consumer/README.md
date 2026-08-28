@@ -1,18 +1,17 @@
-# Solid 1.x bundled-contract consumers
+# Solid 1.x first-party bundle identity control
 
-This fixture pins the consumer effects of two exact reviewed contracts.
+The fixture installs deliberately reduced `solid-js` and
+`@solid-primitives/debounce` package bytes. Their names and versions resemble
+the published packages, but their runtime/declaration/closure digests do not
+match the receipt-issued first-party artifact cases.
 
-- `solid-js@1.9.14` states `requestCallback.callbacks[0]=deferred`; the signal
-  read in its callback is attributed to the real deferred execution path
-  rather than a certified-negative "never invoked" callback claim.
-- `@solid-primitives/debounce@1.3.0` states that both its named and default
-  factories require a cleanup-capable caller owner and invoke callback
-  parameter 0 later without an owner. The component supplies the former; the
-  callback's signal read proves the latter.
+Phase 14 therefore refuses to borrow published bundle claims. Native v1 facts
+and the inspectable reduced debounce body still prove the delayed reads in
+`Scheduled` and `Debounced`, producing the two expected
+`v1/strict-read-untracked` violations. This is a positive refusal test: exact
+artifact identity prevents a name/version match from becoming proof.
 
-Both components are explicitly typed with Solid's published `Component` type,
-so the cleanup-capable owner is proven rather than guessed from capitalization.
-The expected result is fully certified with no findings: deferred callbacks are
-legitimate here, and the cleanup is registered in a component owner. The
-declarations reproduce the published signatures involved in these proofs, and
-`tsc --noEmit` accepts the project.
+The actual published `solid-js@1.9.14` and primitive bundles are regenerated
+and receipt-validated by the contract conformance gate. The fixture declarations
+retain the published signatures used here, and `tsc --noEmit` accepts the
+project.

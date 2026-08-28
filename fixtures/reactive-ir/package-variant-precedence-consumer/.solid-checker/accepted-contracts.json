@@ -1,0 +1,82 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/conditional-variant-package/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:cb1c646f505c9e6553f521eec0407c15efa13213698badbe6fd6d314c5bd7f45",
+          "entries": [
+            {
+              "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+          "path": "node_modules/conditional-variant-package/package.json"
+        },
+        "exports": {
+          "openAmbiguous": {
+            "declarations": {
+              "exportName": "openAmbiguous",
+              "module": {
+                "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+                "path": "node_modules/conditional-variant-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "openAmbiguous",
+              "module": {
+                "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+                "path": "node_modules/conditional-variant-package/package.json"
+              }
+            }
+          },
+          "openSelected": {
+            "declarations": {
+              "exportName": "openSelected",
+              "module": {
+                "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+                "path": "node_modules/conditional-variant-package/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "openSelected",
+              "module": {
+                "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+                "path": "node_modules/conditional-variant-package/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.tsx",
+        "packageIntegrity": "fixture:sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+        "packageManifest": {
+          "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+          "path": "node_modules/conditional-variant-package/package.json"
+        },
+        "packageName": "conditional-variant-package",
+        "packageRoot": "node_modules/conditional-variant-package",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:ee5fe145af5ef7f3d66db47b51a2952e9d69540ced5ac38bb9703989de1f3ea8",
+          "path": "node_modules/conditional-variant-package/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "conditional-variant-package"
+      },
+      "receipt": "node_modules/conditional-variant-package/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}

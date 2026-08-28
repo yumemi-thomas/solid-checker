@@ -1,0 +1,205 @@
+{
+  "entrypoints": {
+    "./store": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b09d44c19274f23e590de51fc1de4130e2906c69433495a29f6cc3620e2910f7",
+            "path": "./store/dist/dev.js",
+            "sha256": "bbb92914c5c4c8339193dbdf4789855fc8e2a4d180dbeab75ef51b1715e235fa"
+          },
+          "declarations": {
+            "path": "./store/types/index.d.ts",
+            "sha256": "92d5c79914ecc6f98e3c56bf55cadf3b03df0179b0c7462c4551fc600c815328"
+          },
+          "exports": {
+            "$RAW": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "DEV": "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803",
+            "createMutable": "summary-9d11910b2f45fd9825c36c66cbe65a363055520054637fecbd7a16eb425ac9bb",
+            "createStore": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "modifyMutable": "summary-ff67434379978ce3690be1e2d799d07ff64e507070a2457ddb072e59c558fd62",
+            "produce": "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e",
+            "reconcile": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd",
+            "unwrap": "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1store/browser/development/import",
+            "typesBranch": "/exports/.~1store/browser/development/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "52ee61ea826e59a5ec36f6ce91bafb7d38bf99ab04b3a6217993fb17af6037c0"
+    },
+    "name": "solid-js",
+    "version": "1.9.14"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {
+    "proof": {
+      "sha256": "de1d6b9ed9d855a1fc2cf0ad61d2a441d87bb5f5eaa8637d1c47e237cb7db029"
+    }
+  },
+  "summaries": {
+    "summary-9d11910b2f45fd9825c36c66cbe65a363055520054637fecbd7a16eb425ac9bb": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-c0114a42c76120dbb93059e47ccf9458ca7373c7759a163c53298323b80bad6e": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-cdcdc1dda818b892079d9a3c4264f0d06e49511f80b3c887013908d3d1ec2cdd": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    },
+    "summary-de4c2e17adc9db231467e08f8a4855ef913c275e881d5376c23891b77d03a803": {
+      "call": {
+        "callbacks": [],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "plain"
+    },
+    "summary-ff67434379978ce3690be1e2d799d07ff64e507070a2457ddb072e59c558fd62": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 1,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "closed": [
+          "callbacks",
+          "reads",
+          "creates",
+          "returns"
+        ],
+        "creates": [],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [],
+        "returns": []
+      },
+      "shape": "callable"
+    }
+  }
+}

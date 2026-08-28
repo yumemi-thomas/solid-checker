@@ -91,7 +91,15 @@ function walkFiles(root) {
     }
   };
   visit(root);
-  return files.sort((left, right) => relative(root, left).localeCompare(relative(root, right)));
+  return files.sort((left, right) => comparePackagePath(relative(root, left), relative(root, right)));
+}
+
+function comparePackagePath(left, right) {
+  const foldedLeft = left.toLowerCase();
+  const foldedRight = right.toLowerCase();
+  if (foldedLeft < foldedRight) return -1;
+  if (foldedLeft > foldedRight) return 1;
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function git(repo, args, encoding = "utf8") {

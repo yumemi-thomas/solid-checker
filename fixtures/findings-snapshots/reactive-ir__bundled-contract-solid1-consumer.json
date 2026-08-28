@@ -1,4 +1,25 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bundled-contract-solid1-consumer/App.tsx",
+      "start": 557,
+      "end": 566,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bundled-contract-solid1-consumer/App.tsx",
+      "start": 975,
+      "end": 984,
+      "fixes": 0
+    }
+  ]
 }

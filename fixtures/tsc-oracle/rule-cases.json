@@ -491,7 +491,7 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
-      "why": "The exact reviewed `@solidjs/signals@2.0.0-rc.0` contract proves `isEqual` is an inert function that compares its arguments without invoking them. The prior uncertifiable result was a package-contract gap; the v2 bundled contract now closes it while the v1 case below remains open because the package is audited only for the v2 runtime.",
+      "why": "The receipt-issued exact-artifact `@solidjs/signals@2.0.0-rc.3` contract proves `isEqual` is an inert strict-identity comparison that cannot invoke either argument. The prior uncertifiable result was a package-contract gap; the v2 bundled contract closes only this reviewed export while the v1 case below remains open because the package is audited only for the v2 runtime.",
       "code": "import { createSignal } from \"solid-js\";\nimport { isEqual } from \"@solidjs/signals\";\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  const same = isEqual(count, count);\n  return <div>{same ? count() : 0}</div>;\n}\n"
     },
     {

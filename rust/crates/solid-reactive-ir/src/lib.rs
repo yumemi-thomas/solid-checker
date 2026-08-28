@@ -27,7 +27,7 @@ mod upstream_compat;
 
 pub use attribution::ObligationReach;
 pub use owners::function_binding_name;
-pub use pipeline::{build, build_with_contracts, build_with_contracts_measured};
+pub use pipeline::{build, build_with_accepted_contracts_measured};
 
 pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
 
@@ -43,10 +43,10 @@ pub use projection::{
 };
 
 use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
-use pipeline::build_with_contracts_measured_incremental;
+use pipeline::build_with_accepted_contracts_measured_incremental;
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -66,12 +66,9 @@ use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
 use indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
 use interproc::{SummaryNode, SummaryRead, SummaryReads};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use solid_dialect::{Dialect, Primitive};
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
-use solid_facts::resolution::{ImportResolution, SpecifierAttestation};
-use std::path::Path;
 use thiserror::Error;
 use typefacts::Location;
 
@@ -240,9 +237,8 @@ impl RuntimeEnvironment {
         Ok(())
     }
 
-    /// Conditions used to select an exact package-contract variant. The
-    /// explicit free-form set carries export-map conditions such as `import`;
-    /// the structured fields cover the host/runtime vocabulary used by rules.
+    /// Exact runtime premises used by native rules and passed to the backend
+    /// artifact/guard resolver. Contract branch mechanics never reach the IR.
     #[must_use]
     pub fn selected_conditions(&self) -> BTreeSet<String> {
         let mut conditions = self.conditions.clone();
@@ -276,78 +272,6 @@ impl RuntimeEnvironment {
         }
         conditions.extend(self.framework_transforms.iter().cloned());
         conditions
-    }
-
-    #[must_use]
-    pub fn matches_conditions(&self, required: &[String]) -> bool {
-        let selected = self.selected_conditions();
-        // With nothing selected there is no environment to match against, and
-        // picking any branch -- including the fallback -- would be a guess.
-        if selected.is_empty() {
-            return false;
-        }
-        !required.is_empty()
-            && required.iter().all(|condition| {
-                // `default` is the export map's unconditional branch: it names
-                // no host condition, and no selector ever produces it as a
-                // *selected* condition. Requiring it to appear in
-                // `selected_conditions` made every generated fallback variant
-                // unmatchable, so a consumer that had selected a real
-                // environment still fell through to an environment-dependent
-                // uncertifiable result. Which branch actually wins among
-                // several matches is `precedence`'s job, not this predicate's.
-                condition == "default" || selected.contains(condition)
-            })
-    }
-
-    pub fn matches_entrypoint_conditions(&self, supported: &[String]) -> bool {
-        let selected = self.selected_conditions();
-        if supported.is_empty() {
-            return false;
-        }
-        if selected.is_empty() {
-            // TypeScript's ESM resolver already selects the ordinary import
-            // path without a host selector. `default`/`import` describe that
-            // resolver choice, not an unknown browser-vs-node runtime. Host
-            // conditions remain blocked until the caller selects one.
-            return supported
-                .iter()
-                .all(|condition| matches!(condition.as_str(), "default" | "import" | "require"));
-        }
-        // An entrypoint's condition list is the *union of the export-map
-        // branches* it resolves through, not one environment's requirement
-        // set: the bundled solid-js root entrypoint records
-        // `browser, deno, development, import, node, worker` for a map no
-        // single environment satisfies at once. Requiring every recorded
-        // condition would make each such entrypoint unmatchable, so membership
-        // -- not containment -- is the base test, and variant selection
-        // (`matches_conditions`, which does require all of a variant's
-        // conditions) is what narrows an export afterwards.
-        //
-        // `--conditions` generation records the asserted selection into the
-        // same union field, where the list is scope rather than alternatives.
-        // The host target is the one dimension where the difference is
-        // decidable: an entrypoint that names host targets and not the
-        // consumer's was either scoped away from that environment or reaches
-        // it only through a branch this contract does not describe. Applying
-        // the summary anyway -- through a shared resolver condition such as
-        // `import` -- would be a guess, so it fails closed. `default` is the
-        // export map's unconditional branch and really is reachable from every
-        // environment, so recording it keeps the entrypoint open.
-        if !supported.iter().any(|condition| condition == "default")
-            && supported
-                .iter()
-                .any(|condition| HOST_TARGET_CONDITIONS.contains(&condition.as_str()))
-            && let Some(host) = HOST_TARGET_CONDITIONS
-                .iter()
-                .find(|condition| selected.contains(**condition))
-            && !supported.iter().any(|condition| condition == host)
-        {
-            return false;
-        }
-        supported
-            .iter()
-            .any(|condition| condition == "default" || selected.contains(condition))
     }
 }
 
@@ -612,8 +536,8 @@ pub enum StaticDefectKind {
     },
     /// An exported callback reached an external call whose execution timing
     /// is not certified. The fields are deliberately data, not a guessed
-    /// contract: the diagnostic can produce an editable stub while analysis
-    /// remains blocked until the package author chooses the audited timing.
+    /// contract: the diagnostic identifies the exact open semantic leaf while
+    /// analysis remains blocked until that leaf is proved and receipted.
     UnknownCallbackExecution {
         package: String,
         entrypoint: String,
@@ -621,7 +545,7 @@ pub enum StaticDefectKind {
         parameter: usize,
         parameter_type: String,
         required_execution: String,
-        contract_stub: String,
+        claim_context: String,
     },
     MissingEffectFunction,
     ReactiveSourceUncaptured {
@@ -913,7 +837,6 @@ const fn is_false(value: &bool) -> bool {
 }
 
 fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static str> {
-    validate_claim_evidence(returned.evidence.as_ref())?;
     match returned.kind.as_str() {
         "accessor" | "store-path" => {
             if returned.label.is_empty() || returned.parameter.is_some() {
@@ -958,49 +881,6 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
             }
         }
         _ => return Err("the return kind is unsupported"),
-    }
-    Ok(())
-}
-
-fn validate_claim_evidence(evidence: Option<&ContractClaimEvidence>) -> Result<(), &'static str> {
-    let Some(evidence) = evidence else {
-        return Ok(());
-    };
-    match evidence.kind.as_str() {
-        "inferred" | "reviewed" => {
-            if !evidence.modes.is_empty()
-                || evidence.calls.is_some()
-                || !evidence.package.is_empty()
-                || !evidence.version.is_empty()
-            {
-                return Err(
-                    "inferred or reviewed claim evidence cannot carry probe or inheritance details",
-                );
-            }
-        }
-        "probed" => {
-            if evidence.modes.is_empty()
-                || evidence.modes.iter().any(String::is_empty)
-                || evidence.modes.iter().collect::<HashSet<_>>().len() != evidence.modes.len()
-                || evidence.calls.is_none_or(|calls| calls == 0)
-                || !evidence.package.is_empty()
-                || !evidence.version.is_empty()
-            {
-                return Err(
-                    "probed claim evidence requires unique modes and a positive call count",
-                );
-            }
-        }
-        "inherited-from" => {
-            if evidence.package.is_empty()
-                || evidence.version.is_empty()
-                || !evidence.modes.is_empty()
-                || evidence.calls.is_some()
-            {
-                return Err("inherited claim evidence requires an exact package and version");
-            }
-        }
-        _ => return Err("claim evidence kind is unsupported"),
     }
     Ok(())
 }
@@ -1053,164 +933,38 @@ fn default_async_provenance() -> bool {
     true
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+/// Generator-local package summary accumulator. It is never decoded from or
+/// encoded to a public contract document; `solid-facts-backend` immediately
+/// normalizes it into the semantic model.
+#[derive(Clone, Debug)]
 pub struct PackageContract {
-    pub schema_version: u32,
     pub package: ContractPackage,
-    #[serde(default)]
-    pub compiler_facts_protocol: u32,
-    #[serde(default)]
-    pub artifacts: ContractArtifacts,
-    #[serde(default)]
     pub entrypoints: BTreeMap<String, ContractEntrypoint>,
-    #[serde(default)]
-    pub evidence: ContractEvidence,
-    #[serde(skip)]
-    pub contract_hash: String,
-    #[serde(skip)]
+    /// Diagnostic-only provenance for projected accepted semantics or local
+    /// generation. It has no wire meaning.
     pub source_path: String,
-    /// Whether the *same generation run* that is now reading this contract is
-    /// what produced it, from the dependency's own installed sources.
-    ///
-    /// Provenance, not evidence: nothing in the document says it, and nothing
-    /// in the document could — the field is set only for the paths the package
-    /// generator passes with `--generated-contract`, which are exactly the
-    /// contracts `ensureGeneratedDependencyContract` generated during this run
-    /// (packages/cli/scripts/generate-package-contract.mjs). Together with a
-    /// certifying evidence tier it is what
-    /// [`PackageContract::kind_claims_are_trusted`] answers, and it is the
-    /// only reason an `inferred` contract's `kind` may cross a package
-    /// boundary without being re-proved.
-    #[serde(skip)]
-    pub run_generated: bool,
-    /// The installed package directory this contract was classified against,
-    /// when the loader found one.
-    ///
-    /// Provenance, not evidence: it names *which install on disk* the name and
-    /// version comparison was made against, and it is what
-    /// [`PackageContract::for_import`] requires an import to have resolved into
-    /// before the contract may describe that import. `None` means
-    /// classification had no installed directory — an explicit `--contract`
-    /// for a package that is not installed under any `node_modules`, or a
-    /// bundled contract for a package whose manifest the project does not
-    /// carry — and the identity comparison is then the attested package name
-    /// *plus* the requirement that the resolution landed in a `node_modules`
-    /// tree at all, because a name alone cannot tell an install from the
-    /// analyzed project's own source (clause 5 of
-    /// [`PackageContract::for_import`]).
-    #[serde(skip)]
-    pub installed_root: Option<ContractInstallRoot>,
 }
 
-/// The installed package directory a contract was classified against, in both
-/// spellings the analyzed program may hold it under.
-///
-/// TypeScript takes a realpath only where resolution walked a symlink under
-/// `node_modules`, so a project reached through a symlinked path — every
-/// `/var/folders/...` temporary directory on macOS, and a pnpm or workspace
-/// link — holds some files under the spelled path and some under the canonical
-/// one. Both name the same directory, so accepting either is not a widening;
-/// accepting only one silently matched nothing. This mirrors the same
-/// two-spelling rule the attested closure applies in
-/// `solid-facts-backend`'s module inventory.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractInstallRoot {
-    /// The directory as the ancestor walk spelled it.
-    pub path: String,
-    /// The same directory's realpath, when it differs from `path`.
-    pub canonical: Option<String>,
-}
-
-impl ContractInstallRoot {
-    /// Whether `path` names a file inside this installed package directory.
-    ///
-    /// Component-wise containment, never a string prefix: `node_modules/pkg`
-    /// must not claim `node_modules/pkg-extra`.
-    #[must_use]
-    pub fn contains(&self, path: &str) -> bool {
-        let candidate = Path::new(path);
-        candidate.starts_with(&self.path)
-            || self
-                .canonical
-                .as_deref()
-                .is_some_and(|canonical| candidate.starts_with(canonical))
-    }
-}
-
-/// Whether a package contract may describe one import declaration's specifier.
-///
-/// [`PackageContract::bind_import`] answers this; [`PackageContract::for_import`]
-/// is the same answer with the two negative arms collapsed, because a rule
-/// treats them identically.
-#[derive(Clone, Copy, Debug)]
-pub enum ImportBinding<'a> {
-    /// No loaded contract's package name prefixes this specifier. The ordinary
-    /// case for every import in a project.
-    NoCandidate,
-    /// A contract named this specifier and the attested resolution confirmed
-    /// it.
-    Bound(&'a PackageContract),
-    /// A contract named this specifier and the attested resolution did not
-    /// confirm it: the specifier was unattested, or it resolved somewhere the
-    /// contract's package is not. The import is uncertifiable, exactly as an
-    /// unknown package's would be.
-    Refused,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ContractPackage {
     pub name: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub version: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub integrity: String,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ContractEntrypoint {
-    #[serde(default)]
     pub exports: BTreeMap<String, ContractExport>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub conditions: Vec<String>,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ContractEvidence {
-    #[serde(default)]
-    pub kind: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub generator: String,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ContractClaimEvidence {
-    pub kind: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub modes: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub calls: Option<usize>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub package: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub version: String,
-}
-
-/// A package-contract claim whose value is either known or explicitly
-/// unknown.
+/// Generator-local knowledge for one inferred summary domain.
 ///
-/// The wire representation is deliberately untagged. Existing schema-v1
-/// values retain their exact JSON shape, while `{ "status": "unknown" }`
-/// has the wrong type for every legacy claim field. Old readers therefore
-/// reject new unknown claims instead of silently interpreting them as empty.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+/// This is not a wire type. `Open` means the producer has not established an
+/// exhaustive answer; normalization maps it to the exact temporary-v2 open
+/// semantic leaf. No sentinel object is serialized.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContractClaim<T> {
-    Unknown(ContractUnknownClaim),
+    Open,
     Known(T),
 }
 
@@ -1231,7 +985,7 @@ impl<T> ContractClaim<T> {
     pub fn known(&self) -> Option<&T> {
         match self {
             Self::Known(value) => Some(value),
-            Self::Unknown(_) => None,
+            Self::Open => None,
         }
     }
 
@@ -1239,112 +993,43 @@ impl<T> ContractClaim<T> {
     pub fn known_mut(&mut self) -> Option<&mut T> {
         match self {
             Self::Known(value) => Some(value),
-            Self::Unknown(_) => None,
+            Self::Open => None,
         }
     }
 
     #[must_use]
-    pub const fn is_unknown(&self) -> bool {
-        matches!(self, Self::Unknown(_))
+    pub const fn is_open(&self) -> bool {
+        matches!(self, Self::Open)
     }
 }
 
-impl<T: Default + PartialEq> ContractClaim<T> {
-    #[must_use]
-    pub fn is_known_default(&self) -> bool {
-        matches!(self, Self::Known(value) if value == &T::default())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ContractUnknownClaim {
-    pub status: ContractUnknownStatus,
-}
-
-impl ContractUnknownClaim {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            status: ContractUnknownStatus::Unknown,
-        }
-    }
-}
-
-impl Default for ContractUnknownClaim {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ContractUnknownStatus {
-    #[serde(rename = "unknown")]
-    Unknown,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ContractExport {
-    #[serde(default)]
     pub kind: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub evidence: Option<ContractClaimEvidence>,
-    /// Complete summaries for conditional runtime targets whose behavior is
-    /// not identical. The top-level summary remains the conservative union
-    /// used by legacy readers; environment-unaware consumers must fail closed
-    /// when this field is present rather than apply that union as a guess.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub variants: Vec<ContractExportVariant>,
-    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
     pub reactive_reads: ContractClaim<Vec<ContractReactiveRead>>,
-    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
     pub returns: ContractClaim<Option<ContractReturn>>,
-    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
     pub callbacks: ContractClaim<Vec<ContractCallback>>,
-    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
     pub owner_requirements: ContractClaim<Vec<ContractOwnerRequirement>>,
-    #[serde(default, skip_serializing_if = "ContractClaim::is_known_default")]
     pub async_behavior: ContractClaim<String>,
+    /// Wire-independent open domains retained when normalized partial
+    /// knowledge is projected into the existing analysis indexes. This field
+    /// is never decoded from or encoded into a package-contract document.
+    pub open_claims: BTreeSet<contract_semantics::ClaimDomain>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ContractExportVariant {
-    pub conditions: Vec<String>,
-    pub summary: Box<ContractExport>,
-    /// Zero-based position of the branch in the export map that produced
-    /// this variant. `package.json#exports` is ordered and resolved
-    /// first-match-wins, so when multiple variants match the runtime
-    /// environment, the lowest `precedence` is the branch Node itself would
-    /// resolve. Optional: contracts generated before this field existed, or
-    /// generated for export maps whose overlapping branches could not be
-    /// ordered, carry no precedence and must stay fail-closed on ambiguity.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub precedence: Option<u32>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractReactiveRead {
-    #[serde(default)]
     pub kind: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameter: Option<usize>,
     /// Exact invoked property for a `parameter-member` read when every path
     /// contributing to the row names the same static member. Older contracts
     /// omit it and remain valid, but only a named member can be runtime-probed
     /// without guessing which property to instrument.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub member: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub evidence: Option<ContractClaimEvidence>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractCallback {
     pub parameter: usize,
     pub execution: String,
@@ -1352,155 +1037,30 @@ pub struct ContractCallback {
     /// preserves an unmodeled ordinary value at that position; a structured
     /// descriptor uses the same bounded accessor/store/tuple/object vocabulary
     /// as exported returns.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<Option<ContractReturn>>,
     /// The owner context in which the runtime invokes this callback. Missing
     /// means the package contract describes timing only; consumers must keep
     /// the existing fail-closed owner behavior for that callback.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub evidence: Option<ContractClaimEvidence>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractOwnerRequirement {
     pub operation: OwnerRequirementOperation,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub evidence: Option<ContractClaimEvidence>,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct ContractReturn {
     pub kind: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub evidence: Option<ContractClaimEvidence>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameter: Option<usize>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub elements: Vec<Option<ContractReturn>>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub properties: BTreeMap<String, ContractReturn>,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ContractArtifacts {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub declaration: Option<ContractArtifact>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub implementation: Option<ContractArtifact>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ContractArtifact {
-    pub path: String,
-    pub hash: String,
-}
-
 impl PackageContract {
-    /// Whether the document's evidence tier certifies its claims at all.
-    ///
-    /// `inferred` (what this CLI's generator writes) and the legacy
-    /// `generated` do not: their claims were never checked against the package
-    /// artifact. See docs/package-contracts.md "Evidence is enforced".
-    #[must_use]
-    pub fn evidence_is_certifiable(&self) -> bool {
-        matches!(
-            self.evidence.kind.as_str(),
-            "verified" | "reviewed" | "trusted" | "attested"
-        )
-    }
-
-    /// Whether this contract's `kind` claims may cross the package boundary
-    /// without being re-proved against the consuming project's own facts.
-    ///
-    /// The exemption exists because a re-exported dependency specifier is
-    /// typed `any` inside the consumer's project, so re-deciding `kind` there
-    /// would refuse exactly the entrypoints that already have the better
-    /// answer (see `promote_entry_callable`). It is an argument about
-    /// *provenance*, and only two provenances support it: a contract this run
-    /// generated from the dependency's own sources under this same rule, and a
-    /// contract whose evidence records that a human or a verifier stood behind
-    /// its claims.
-    ///
-    /// A contract merely *found* on disk — `dependencyContracts()` walks
-    /// `node_modules/<dep>/solid-reactivity.json` upward with no flag from the
-    /// user — supports neither. It may have been generated by any earlier
-    /// solid-checker, including one whose `Unknown ⇒ value` defect is what
-    /// this rule exists to fix, and trusting its `kind` would republish that
-    /// defect through the one door left open. Its other claims are unaffected:
-    /// this gates the `kind` decision only.
-    #[must_use]
-    pub fn kind_claims_are_trusted(&self) -> bool {
-        self.run_generated || self.evidence_is_certifiable()
-    }
-
-    /// Stable identity for every contract input that can affect analysis or
-    /// diagnostics.
-    ///
-    /// Decoded contracts normally carry the hash of their source document;
-    /// programmatically constructed contracts do not, so the canonical
-    /// serialized model is included as a fallback. The source path remains
-    /// part of the identity because it is observable in evidence locations.
-    #[must_use]
-    pub fn analysis_fingerprint(&self) -> [u8; 32] {
-        fn field(hasher: &mut Sha256, value: &[u8]) {
-            hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
-            hasher.update(value);
-        }
-
-        let mut hasher = Sha256::new();
-        field(&mut hasher, self.source_path.as_bytes());
-        // Which install this contract was classified against decides which
-        // imports it may describe ([`Self::for_import`]), so a retained
-        // analysis must not answer for a different one. Both spellings are
-        // hashed: containment accepts either, so a `node_modules/<name>`
-        // symlink retargeted to another store directory -- same spelled path,
-        // same name, same version, same contract bytes -- changes which files
-        // the contract covers and must not reuse the earlier answer.
-        field(
-            &mut hasher,
-            self.installed_root
-                .as_ref()
-                .map_or("", |root| root.path.as_str())
-                .as_bytes(),
-        );
-        field(
-            &mut hasher,
-            self.installed_root
-                .as_ref()
-                .and_then(|root| root.canonical.as_deref())
-                .unwrap_or("")
-                .as_bytes(),
-        );
-        field(&mut hasher, self.contract_hash.as_bytes());
-        if self.contract_hash.is_empty() {
-            let encoded = serde_json::to_vec(self)
-                .expect("PackageContract contains only infallibly serializable fields");
-            field(&mut hasher, &encoded);
-        }
-        hasher.finalize().into()
-    }
-
+    /// Validate the generator-local accumulator before normalization.
     pub fn validate(&self) -> Result<(), String> {
-        if self.schema_version != 1 {
-            return Err(format!(
-                "package contract schema version {} is unsupported",
-                self.schema_version
-            ));
-        }
-        if self.compiler_facts_protocol != 1 {
-            return Err(format!(
-                "package contract compiler facts protocol {} is unsupported",
-                self.compiler_facts_protocol
-            ));
-        }
         if self.package.name.is_empty() || self.package.version.is_empty() {
             return Err("package contract requires package.name and package.version".into());
         }
@@ -1512,34 +1072,11 @@ impl PackageContract {
                 (name != "." && !name.starts_with("./"))
                     || name == "./"
                     || entrypoint.exports.is_empty()
-                    || entrypoint.conditions.iter().any(String::is_empty)
-                    || entrypoint.conditions.iter().collect::<HashSet<_>>().len()
-                        != entrypoint.conditions.len()
             })
         {
             return Err(
-                "package contract entrypoints require exact package subpaths, exports, and unique nonempty conditions"
-                    .into(),
+                "inferred contract entrypoints require exact package subpaths and exports".into(),
             );
-        }
-        if !matches!(
-            self.evidence.kind.as_str(),
-            "generated" | "inferred" | "verified" | "reviewed" | "trusted" | "attested"
-        ) {
-            return Err(format!(
-                "package contract evidence kind {:?} is unsupported",
-                self.evidence.kind
-            ));
-        }
-        for (name, artifact) in [
-            ("declaration", self.artifacts.declaration.as_ref()),
-            ("implementation", self.artifacts.implementation.as_ref()),
-        ] {
-            if let Some(artifact) = artifact
-                && (artifact.path.is_empty() || !valid_sha256_hash(&artifact.hash))
-            {
-                return Err(format!("package contract {name} artifact is invalid"));
-            }
         }
         for (entrypoint, exports) in self.export_maps() {
             for (name, summary) in exports {
@@ -1547,72 +1084,6 @@ impl PackageContract {
             }
         }
         Ok(())
-    }
-
-    /// Whether every explicitly annotated claim has certifiable provenance.
-    ///
-    /// Legacy contracts have no row annotations and deliberately return true;
-    /// their existing contract-level evidence gate remains authoritative.
-    #[must_use]
-    pub fn claims_are_certifiable(&self) -> bool {
-        fn evidence_is_certifiable(evidence: Option<&ContractClaimEvidence>) -> bool {
-            evidence.is_none_or(|evidence| {
-                matches!(
-                    evidence.kind.as_str(),
-                    "probed" | "reviewed" | "inherited-from"
-                )
-            })
-        }
-        fn returned_is_certifiable(returned: &ContractReturn) -> bool {
-            evidence_is_certifiable(returned.evidence.as_ref())
-                && returned
-                    .elements
-                    .iter()
-                    .flatten()
-                    .all(returned_is_certifiable)
-                && returned.properties.values().all(returned_is_certifiable)
-        }
-
-        fn export_is_certifiable(summary: &ContractExport) -> bool {
-            evidence_is_certifiable(summary.evidence.as_ref())
-                && summary
-                    .reactive_reads
-                    .known()
-                    .into_iter()
-                    .flatten()
-                    .all(|read| evidence_is_certifiable(read.evidence.as_ref()))
-                && summary
-                    .callbacks
-                    .known()
-                    .into_iter()
-                    .flatten()
-                    .all(|callback| {
-                        evidence_is_certifiable(callback.evidence.as_ref())
-                            && callback
-                                .arguments
-                                .iter()
-                                .flatten()
-                                .all(returned_is_certifiable)
-                    })
-                && summary
-                    .owner_requirements
-                    .known()
-                    .into_iter()
-                    .flatten()
-                    .all(|requirement| evidence_is_certifiable(requirement.evidence.as_ref()))
-                && summary
-                    .returns
-                    .known()
-                    .is_none_or(|returned| returned.as_ref().is_none_or(returned_is_certifiable))
-                && summary
-                    .variants
-                    .iter()
-                    .all(|variant| export_is_certifiable(&variant.summary))
-        }
-
-        self.entrypoints
-            .values()
-            .all(|entrypoint| entrypoint.exports.values().all(export_is_certifiable))
     }
 
     fn validate_export(
@@ -1627,44 +1098,25 @@ impl PackageContract {
                 summary.kind
             ));
         }
-        validate_claim_evidence(summary.evidence.as_ref()).map_err(|reason| {
-            format!(
-                "package contract export {entrypoint}:{name} has invalid claim evidence: {reason}"
-            )
-        })?;
-        let mut variant_conditions = HashSet::new();
-        for variant in &summary.variants {
-            if variant.conditions.is_empty()
-                || variant.conditions.iter().any(String::is_empty)
-                || variant.conditions.iter().collect::<HashSet<_>>().len()
-                    != variant.conditions.len()
-                || !variant_conditions.insert(&variant.conditions)
-            {
-                return Err(format!(
-                    "package contract export {entrypoint}:{name} has invalid conditional summary conditions"
-                ));
-            }
-            self.validate_export(entrypoint, name, &variant.summary)?;
-        }
         if summary.kind == "value"
-            && (summary.reactive_reads.is_unknown()
+            && (summary.reactive_reads.is_open()
                 || summary
                     .reactive_reads
                     .known()
                     .is_some_and(|reads| !reads.is_empty())
-                || summary.returns.is_unknown()
+                || summary.returns.is_open()
                 || summary.returns.known().is_some_and(Option::is_some)
-                || summary.callbacks.is_unknown()
+                || summary.callbacks.is_open()
                 || summary
                     .callbacks
                     .known()
                     .is_some_and(|callbacks| !callbacks.is_empty())
-                || summary.owner_requirements.is_unknown()
+                || summary.owner_requirements.is_open()
                 || summary
                     .owner_requirements
                     .known()
                     .is_some_and(|requirements| !requirements.is_empty())
-                || summary.async_behavior.is_unknown()
+                || summary.async_behavior.is_open()
                 || summary
                     .async_behavior
                     .known()
@@ -1691,11 +1143,6 @@ impl PackageContract {
                     "package contract export {entrypoint}:{name} has an invalid reactive read"
                 ));
             }
-            validate_claim_evidence(read.evidence.as_ref()).map_err(|reason| {
-                format!(
-                    "package contract export {entrypoint}:{name} has invalid reactive-read evidence: {reason}"
-                )
-            })?;
         }
         if let Some(returned) = summary.returns.known().and_then(Option::as_ref) {
             validate_contract_return(returned).map_err(|reason| {
@@ -1731,11 +1178,6 @@ impl PackageContract {
                     "package contract export {entrypoint}:{name} has an invalid callback owner"
                 ));
             }
-            validate_claim_evidence(callback.evidence.as_ref()).map_err(|reason| {
-                format!(
-                    "package contract export {entrypoint}:{name} has invalid callback evidence: {reason}"
-                )
-            })?;
             for argument in callback.arguments.iter().flatten() {
                 validate_contract_return(argument).map_err(|reason| {
                     format!(
@@ -1743,13 +1185,6 @@ impl PackageContract {
                     )
                 })?;
             }
-        }
-        for requirement in summary.owner_requirements.known().into_iter().flatten() {
-            validate_claim_evidence(requirement.evidence.as_ref()).map_err(|reason| {
-                format!(
-                    "package contract export {entrypoint}:{name} has invalid owner requirement evidence: {reason}"
-                )
-            })?;
         }
         if let Some(async_behavior) = summary.async_behavior.known()
             && !async_behavior.is_empty()
@@ -1761,159 +1196,6 @@ impl PackageContract {
             ));
         }
         Ok(())
-    }
-
-    /// The contract governing an imported module specifier, if any.
-    ///
-    /// A specifier matches a contract whose package name it equals or extends
-    /// with a `/`-separated subpath. Scoped and nested package names can both
-    /// prefix the same specifier (`@scope/pkg` and `@scope/pkg-extra`), so the
-    /// longest matching name wins.
-    pub fn for_module<'a>(contracts: &'a [Self], module: &str) -> Option<&'a Self> {
-        contracts
-            .iter()
-            .filter(|contract| {
-                module == contract.package.name
-                    || module
-                        .strip_prefix(&contract.package.name)
-                        .is_some_and(|suffix| suffix.starts_with('/'))
-            })
-            .max_by_key(|contract| contract.package.name.len())
-    }
-
-    /// The contract governing one import or export-from declaration's module
-    /// specifier: the name-matched candidate, confirmed against the installed
-    /// package the specifier actually resolves to.
-    ///
-    /// [`Self::for_module`] can only over-approximate — it compares the
-    /// specifier's *text* against a package name, and a tsconfig `paths` entry,
-    /// a `baseUrl` mapping, or a project reimplementation can own a bare
-    /// specifier while a package of the same name is installed beside it.
-    /// Applying the installed package's contract there would drive
-    /// reactive-read, callback-timing, and owner-requirement conclusions about
-    /// code the contract's author never saw: a false certification, not a
-    /// missed one. So the name match is the prefilter and the attested
-    /// resolution is the confirmation.
-    ///
-    /// The confirmation, in order:
-    ///
-    /// 1. **No resolution facts at all** (`facts.resolved_imports` is `None`):
-    ///    the analysis was not configured to attest identities, so the older
-    ///    name-matched answer stands unchanged. This is the WASM adapter
-    ///    without the resolved-import field in its request — a documented
-    ///    limitation of that adapter, never a silent upgrade in either
-    ///    direction.
-    /// 2. **The specifier is not attested** — the answer did not cover this
-    ///    file, holds no row for this specifier, or holds more than one it
-    ///    could be: refuse. The import is then exactly as uncertifiable as an
-    ///    import of a package with no contract.
-    /// 3. **The compiler resolved nothing** for the specifier: apply. This is
-    ///    the honest answer for an untyped JavaScript package — which is
-    ///    precisely where a contract matters most — and for a specifier typed
-    ///    by an ambient `declare module`. Nothing resolved means nothing
-    ///    *else* claimed the specifier, so no shadowing package can be what
-    ///    the contract is describing.
-    /// 4. **The compiler resolved a file** and the contract was classified
-    ///    against an installed directory: the resolved file must lie inside
-    ///    that directory. This is the containment check the resolved module
-    ///    graph makes possible, and it is decided on realpaths on both sides,
-    ///    so a pnpm or workspace-linked install is not a mismatch.
-    /// 5. **The compiler resolved a file** and classification had no installed
-    ///    directory: the resolution must have walked into a `node_modules` tree,
-    ///    *and* the contract's package name must be the one that resolution
-    ///    recorded. Two package identities exist and they can disagree, so this
-    ///    says which: the nearest manifest above the resolved file, *or* the
-    ///    identity the resolver itself recorded. Either is accepted, because a
-    ///    published package routinely ships an unnamed nested `package.json`
-    ///    beside its output (the nearest manifest then declares no name) and a
-    ///    subpath resolution routinely records no resolver identity.
-    ///
-    ///    The `node_modules` requirement is what keeps a contract off the
-    ///    analyzed project's own source. A bare specifier that resolves
-    ///    *outside* every install tree is a `paths` or `baseUrl` mapping, a
-    ///    package self-name, or a project-reference redirect — the compiler
-    ///    records that as `NonRelative` and does not say which — and all three
-    ///    name source this project owns and the contract's author never saw.
-    ///    Name equality is no defense there: the manifest above that source can
-    ///    declare the contract's own package name, which is exactly what a
-    ///    monorepo package aliased to its own source looks like. With no
-    ///    install directory to compare against, the only remaining fact that a
-    ///    contract is describing installed bytes is that the resolution landed
-    ///    in an install tree, so that is required rather than inferred from the
-    ///    path's spelling. The clause still has work to do: a nested or
-    ///    unhoisted install (`packages/app/node_modules/pkg` under a
-    ///    root-level tsconfig) is one the ancestor walk never classified while
-    ///    the resolution reports it plainly.
-    ///
-    /// A refusal is deliberately silent and produces no finding of its own: the
-    /// import becomes uncertifiable exactly as an unknown package's would, and
-    /// the rules that needed the summary fail closed on their own terms. It is
-    /// counted, though — see [`ImportBinding`] and `Program::contract_binding`
-    /// — so a defect that refuses everything is visible instead of merely
-    /// quiet.
-    ///
-    /// Two consequences are accepted and pinned by fixtures rather than worked
-    /// around. A package typed through `@types/<name>` resolves into the
-    /// `@types` package, which is not the contract's install, so its contract
-    /// is refused; deriving "`@types/x` describes `x`" from the two names is
-    /// the name-only reasoning this method exists to remove. And a refusal does
-    /// not fall back to a shorter name-matching contract.
-    #[must_use]
-    pub fn for_import<'a>(
-        contracts: &'a [Self],
-        facts: &ProjectFacts,
-        file: &str,
-        declaration: Span,
-        module: &str,
-    ) -> Option<&'a Self> {
-        match Self::bind_import(contracts, facts, file, declaration, module) {
-            ImportBinding::Bound(contract) => Some(contract),
-            ImportBinding::NoCandidate | ImportBinding::Refused => None,
-        }
-    }
-
-    /// As [`Self::for_import`], distinguishing "no contract names this
-    /// specifier" from "a contract named it and the resolution refused it".
-    ///
-    /// The two are the same thing to a rule — both leave the import
-    /// uncertifiable — and different things to a maintainer: the second is the
-    /// only outcome a defect in the span join, the attestation scope, or a
-    /// host's offsets can manufacture, so it is the one worth counting.
-    #[must_use]
-    pub fn bind_import<'a>(
-        contracts: &'a [Self],
-        facts: &ProjectFacts,
-        file: &str,
-        declaration: Span,
-        module: &str,
-    ) -> ImportBinding<'a> {
-        let Some(contract) = Self::for_module(contracts, module) else {
-            return ImportBinding::NoCandidate;
-        };
-        let Some(index) = &facts.resolved_imports else {
-            return ImportBinding::Bound(contract);
-        };
-        let SpecifierAttestation::Attested(attested) = index.specifier(file, declaration, module)
-        else {
-            return ImportBinding::Refused;
-        };
-        let bound = match attested.resolution {
-            ImportResolution::Unresolved => true,
-            _ => match &contract.installed_root {
-                Some(root) => root.contains(&attested.resolved_path),
-                None => {
-                    let name = contract.package.name.as_str();
-                    attested.resolution == ImportResolution::NodeModules
-                        && (attested.package_name.as_deref() == Some(name)
-                            || attested.resolver_package_name.as_deref() == Some(name))
-                }
-            },
-        };
-        if bound {
-            ImportBinding::Bound(contract)
-        } else {
-            ImportBinding::Refused
-        }
     }
 
     pub fn exports_for_module(&self, module: &str) -> Option<&BTreeMap<String, ContractExport>> {
@@ -1956,15 +1238,6 @@ impl PackageContract {
     }
 }
 
-fn valid_sha256_hash(hash: &str) -> bool {
-    hash.strip_prefix("sha256:").is_some_and(|digest| {
-        digest.len() == 64
-            && digest
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    })
-}
-
 fn valid_sha512_integrity(integrity: &str) -> bool {
     integrity.strip_prefix("sha512-").is_some_and(|digest| {
         digest.len() == 88
@@ -1993,11 +1266,12 @@ pub struct Program {
     pub directive_creations: Vec<PrimitiveCreation>,
     pub missing_owners: Vec<OwnerRequirement>,
     pub async_reads: Vec<AsyncRead>,
+    #[serde(skip)]
     pub contract_exports: Arc<BTreeMap<String, ContractExport>>,
     pub contract_generation_obligations: Vec<ContractGenerationObligation>,
     /// Which project functions can reach each unresolved proof obligation.
     ///
-    /// Contract emission attributes an unknown claim to exactly the exports
+    /// Contract emission attributes an open claim to exactly the exports
     /// that can reach the obligation; see [`ObligationReach`]. Empty when the
     /// build produced no unresolved obligation, and empty for an obligation
     /// whose location is outside every function body.
@@ -2044,7 +1318,7 @@ pub struct ContractGenerationObligation {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub required_execution: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub contract_stub: String,
+    pub claim_context: String,
     pub location: Location,
     pub message: String,
 }
@@ -2147,7 +1421,13 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_contracts(facts, dialect, &[])
+        self.build_with_accepted_contracts_shared(
+            facts,
+            dialect,
+            &contract_semantics::AcceptedContractIndex::default(),
+            &RuleOptions::default(),
+        )
+        .map(|(program, timings)| ((*program).clone(), timings))
     }
 
     /// Build a program behind shared ownership. This is the preferred service
@@ -2158,25 +1438,22 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, &[], &RuleOptions::default())
+        self.build_with_accepted_contracts_shared(
+            facts,
+            dialect,
+            &contract_semantics::AcceptedContractIndex::default(),
+            &RuleOptions::default(),
+        )
     }
 
-    pub fn build_with_contracts(
+    /// Build from receipt-validated normalized semantics. The accepted index
+    /// supplies the complete cache identity, including exact import/artifact
+    /// bindings and the proof policy that authorized every closed claim.
+    pub fn build_with_accepted_contracts_shared(
         &mut self,
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
-        contracts: &[PackageContract],
-    ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, contracts, &RuleOptions::default())
-            .map(|(program, timings)| ((*program).clone(), timings))
-    }
-
-    /// Build a contract-aware program behind shared ownership.
-    pub fn build_with_contracts_shared(
-        &mut self,
-        facts: &ProjectFacts,
-        dialect: &dyn Dialect,
-        contracts: &[PackageContract],
+        contracts: &contract_semantics::AcceptedContractIndex,
         rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
         let total_started = Instant::now();
@@ -2185,10 +1462,7 @@ impl IncrementalBuilder {
             dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
-            contracts: contracts
-                .iter()
-                .map(PackageContract::analysis_fingerprint)
-                .collect(),
+            contracts: vec![contracts.cache_fingerprint()],
             rule_options: rule_options.clone(),
         };
         if self
@@ -2201,9 +1475,8 @@ impl IncrementalBuilder {
         if let Some(retained) = &self.retained
             && retained.identity == identity
         {
-            let program = Arc::clone(&retained.program);
             return Ok((
-                program,
+                Arc::clone(&retained.program),
                 BuildTimings {
                     total: total_started.elapsed(),
                     cache_lookup,
@@ -2212,7 +1485,7 @@ impl IncrementalBuilder {
                 },
             ));
         }
-        let (program, mut timings) = build_with_contracts_measured_incremental(
+        let (program, mut timings) = build_with_accepted_contracts_measured_incremental(
             facts,
             dialect,
             contracts,
@@ -2659,6 +1932,8 @@ fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::cache::{
         CachedTypeScriptIndexes, InterproceduralResultDependency,
         InterproceduralResultDependencyState, SourceDiscoveryIdentity,
@@ -2752,13 +2027,9 @@ mod tests {
                 "use-server".into()
             ])
         );
-        assert!(environment.matches_conditions(&["browser".into(), "import".into()]));
-        assert!(environment.matches_entrypoint_conditions(&["node".into(), "browser".into()]));
-        assert!(!environment.matches_conditions(&["node".into()]));
         // The program boundary is a build-wide premise, not a package export
-        // condition. It must never reach contract variant selection, or
-        // asserting a closed program would silently pick a different
-        // entrypoint.
+        // condition. Artifact/guard selection happens before the normalized
+        // accepted index reaches the analyzer.
         environment.program_boundary = Some(ProgramBoundary::Closed);
         assert!(environment.validate().is_ok());
         assert!(!environment.selected_conditions().contains("closed"));
@@ -2767,23 +2038,8 @@ mod tests {
         assert!(!environment.program_is_closed());
         environment.program_boundary = None;
         assert!(!environment.program_is_closed());
-        let unselected = RuntimeEnvironment::default();
-        assert!(unselected.matches_entrypoint_conditions(&["default".into(), "import".into()]));
-        assert!(!unselected.matches_entrypoint_conditions(&["browser".into(), "import".into()]));
-
-        // `default` is the export map's unconditional branch. No selector ever
-        // produces it as a selected condition, so requiring it to appear in
-        // `selected_conditions` made every generated fallback variant
-        // unmatchable and sent consumers that *had* selected an environment to
-        // an environment-dependent uncertifiable result.
+        // Resolver-only condition labels do not get synthesized here.
         assert!(!environment.selected_conditions().contains("default"));
-        assert!(environment.matches_conditions(&["default".into()]));
-        assert!(environment.matches_entrypoint_conditions(&["default".into()]));
-        // With nothing selected there is no environment to match against, so
-        // even the fallback stays unmatched rather than being guessed at.
-        assert!(!unselected.matches_conditions(&["default".into()]));
-        // `default` never rescues a named condition the environment lacks.
-        assert!(!environment.matches_conditions(&["default".into(), "node".into()]));
 
         environment.target = Some(RuntimeTarget::Node);
         assert!(environment.validate().is_err());
@@ -2798,708 +2054,8 @@ mod tests {
         assert!(environment.validate().is_err());
     }
 
-    /// An entrypoint's `conditions` are a union of the export-map branches it
-    /// resolves through, so membership is the base test — with the host target
-    /// read as scope, which is the one dimension a `--conditions`-scoped
-    /// contract makes decidable.
     #[test]
-    fn entrypoint_conditions_are_alternatives_except_for_the_host_target() {
-        let browser = RuntimeEnvironment {
-            target: Some(RuntimeTarget::Browser),
-            build: Some(RuntimeBuild::Production),
-            rendering: Some(RuntimeRendering::Csr),
-            conditions: BTreeSet::from(["import".into()]),
-            framework_transforms: BTreeSet::default(),
-            program_boundary: None,
-        };
-        assert!(browser.validate().is_ok());
-        // The bundled solid-js root entrypoint, verbatim. No environment
-        // satisfies all of it at once, so requiring containment would make the
-        // contract this checker ships unmatchable — and a production consumer
-        // still resolves it even though only `development` is recorded.
-        let bundled_root = [
-            "browser".to_owned(),
-            "deno".to_owned(),
-            "development".to_owned(),
-            "import".to_owned(),
-            "node".to_owned(),
-            "worker".to_owned(),
-        ];
-        assert!(browser.matches_entrypoint_conditions(&bundled_root));
-        // An entrypoint that names no host target at all stays open: `import`
-        // and `development` are resolver/build branches, not scope.
-        assert!(browser.matches_entrypoint_conditions(&["development".into(), "import".into()]));
-        assert!(browser.matches_entrypoint_conditions(&["import".into()]));
-        // A `--conditions node,import` contract records exactly that scope. A
-        // browser consumer must not reach it through the shared `import` leg.
-        assert!(!browser.matches_entrypoint_conditions(&["import".into(), "node".into()]));
-        // ... and the unconditional branch keeps the entrypoint reachable even
-        // beside a host target the consumer did not select.
-        assert!(browser.matches_entrypoint_conditions(&["default".into(), "node".into()]));
-        // A consumer that selected no host target is not scoped away by one.
-        let untargeted = RuntimeEnvironment {
-            target: None,
-            build: None,
-            rendering: None,
-            conditions: BTreeSet::from(["import".into()]),
-            framework_transforms: BTreeSet::default(),
-            program_boundary: None,
-        };
-        assert!(untargeted.validate().is_ok());
-        assert!(untargeted.matches_entrypoint_conditions(&["import".into(), "node".into()]));
-        // Membership still gates: nothing here is selected, and no `default`
-        // makes the entrypoint unconditional.
-        assert!(!browser.matches_entrypoint_conditions(&["require".into()]));
-    }
-
-    /// The declaration span an import fact would carry, and the specifier span
-    /// inside it, for `import { x } from "<module>";`.
-    fn spans(module: &str) -> (Span, Span) {
-        let prefix = "import { x } from ".len() as u32;
-        let specifier = Span::new(prefix, prefix + module.len() as u32 + 2);
-        (Span::new(0, specifier.end + 1), specifier)
-    }
-
-    fn contract_named(name: &str, installed_root: Option<ContractInstallRoot>) -> PackageContract {
-        PackageContract {
-            schema_version: 1,
-            package: ContractPackage {
-                name: name.to_owned(),
-                version: "1.0.0".into(),
-                integrity: String::new(),
-            },
-            compiler_facts_protocol: 1,
-            artifacts: ContractArtifacts::default(),
-            entrypoints: BTreeMap::new(),
-            evidence: ContractEvidence::default(),
-            contract_hash: String::new(),
-            source_path: format!("node_modules/{name}/solid-reactivity.json"),
-            run_generated: false,
-            installed_root,
-        }
-    }
-
-    fn attested(
-        module: &str,
-        resolution: solid_facts::ImportResolution,
-        resolved_path: &str,
-        package_name: Option<&str>,
-        resolver_package_name: Option<&str>,
-    ) -> ProjectFacts {
-        let (_, specifier) = spans(module);
-        let mut index = solid_facts::AttestedImportIndex::default();
-        index.insert_file(
-            "/p/App.ts",
-            vec![solid_facts::AttestedImport {
-                span: specifier,
-                text: module.into(),
-                resolution,
-                resolved_path: resolved_path.into(),
-                included_path: "".into(),
-                symlink_path: "".into(),
-                extension: "".into(),
-                package_name: package_name.map(Into::into),
-                package_version: None,
-                package_manifest: None,
-                resolver_package_name: resolver_package_name.map(Into::into),
-                resolver_package_version: None,
-            }],
-        );
-        let mut facts = empty_project(1);
-        facts.resolved_imports = Some(index);
-        facts
-    }
-
-    fn binds(contracts: &[PackageContract], facts: &ProjectFacts, module: &str) -> bool {
-        let (declaration, _) = spans(module);
-        PackageContract::for_import(contracts, facts, "/p/App.ts", declaration, module).is_some()
-    }
-
-    #[test]
-    fn an_analysis_with_no_resolution_facts_keeps_name_matched_contracts() {
-        let contracts = [contract_named("pkg", None)];
-        // The WASM adapter without the resolved-import field: unchanged
-        // behavior, not a weaker one.
-        assert!(binds(&contracts, &empty_project(1), "pkg"));
-        assert!(binds(&contracts, &empty_project(1), "pkg/sub"));
-        assert!(!binds(&contracts, &empty_project(1), "pkg-extra"));
-    }
-
-    #[test]
-    fn an_unattested_specifier_refuses_the_contract() {
-        let contracts = [contract_named("pkg", None)];
-        // The answer covered another file entirely.
-        let mut facts = empty_project(1);
-        let mut index = solid_facts::AttestedImportIndex::default();
-        index.insert_file("/p/Other.ts", vec![]);
-        facts.resolved_imports = Some(index);
-        assert!(!binds(&contracts, &facts, "pkg"));
-
-        // The answer covered this file and holds no row for the specifier.
-        let mut facts = empty_project(1);
-        let mut index = solid_facts::AttestedImportIndex::default();
-        index.insert_file("/p/App.ts", vec![]);
-        facts.resolved_imports = Some(index);
-        assert!(!binds(&contracts, &facts, "pkg"));
-    }
-
-    #[test]
-    fn a_specifier_the_compiler_resolved_nothing_for_keeps_its_contract() {
-        // The untyped-JavaScript and ambient-`declare module` shapes. Nothing
-        // resolved, so no other package can be what the contract describes.
-        let contracts = [contract_named(
-            "pkg",
-            Some(ContractInstallRoot {
-                path: "/p/node_modules/pkg".into(),
-                canonical: None,
-            }),
-        )];
-        let facts = attested(
-            "pkg",
-            solid_facts::ImportResolution::Unresolved,
-            "",
-            None,
-            None,
-        );
-        assert!(binds(&contracts, &facts, "pkg"));
-    }
-
-    #[test]
-    fn a_resolved_specifier_must_land_inside_the_classified_install() {
-        let contracts = [contract_named(
-            "pkg",
-            Some(ContractInstallRoot {
-                path: "/p/node_modules/pkg".into(),
-                canonical: None,
-            }),
-        )];
-        let inside = attested(
-            "pkg",
-            solid_facts::ImportResolution::NodeModules,
-            "/p/node_modules/pkg/index.d.ts",
-            Some("pkg"),
-            Some("pkg"),
-        );
-        assert!(binds(&contracts, &inside, "pkg"));
-
-        // The shadow shape: a `paths` entry owns the specifier while the
-        // package is still installed. The name matches and the resolution does
-        // not.
-        let shadowed = attested(
-            "pkg",
-            solid_facts::ImportResolution::NonRelative,
-            "/p/src/local-impl.ts",
-            Some("my-app"),
-            None,
-        );
-        assert!(!binds(&contracts, &shadowed, "pkg"));
-
-        // A sibling install whose directory name merely begins with the
-        // contract's: containment is component-wise, never a string prefix.
-        let sibling = attested(
-            "pkg",
-            solid_facts::ImportResolution::NodeModules,
-            "/p/node_modules/pkg-extra/index.d.ts",
-            Some("pkg-extra"),
-            Some("pkg-extra"),
-        );
-        assert!(!binds(&contracts, &sibling, "pkg"));
-    }
-
-    #[test]
-    fn either_spelling_of_the_install_directory_is_accepted() {
-        // A symlinked or realpath-normalized program holds the same directory
-        // under the other spelling; accepting one alone matched nothing.
-        let contracts = [contract_named(
-            "pkg",
-            Some(ContractInstallRoot {
-                path: "/p/node_modules/pkg".into(),
-                canonical: Some("/store/.pnpm/pkg@1.0.0/node_modules/pkg".into()),
-            }),
-        )];
-        let through_realpath = attested(
-            "pkg",
-            solid_facts::ImportResolution::NodeModules,
-            "/store/.pnpm/pkg@1.0.0/node_modules/pkg/index.d.ts",
-            Some("pkg"),
-            Some("pkg"),
-        );
-        assert!(binds(&contracts, &through_realpath, "pkg"));
-    }
-
-    #[test]
-    fn with_no_classified_install_a_resolution_outside_every_install_tree_refuses() {
-        // The shadow shape with the install removed, which is the one clause
-        // where there is no directory to compare against: a monorepo package
-        // aliased to its own source through `paths`, with a project-owned
-        // contract for its published name. The nearest manifest above that
-        // source declares the contract's own package name, so name equality
-        // agrees -- and the contract's author still never saw the file. The
-        // compiler reports the resolution as landing outside every install
-        // tree, and that is what refuses it.
-        let contracts = [contract_named("pkg", None)];
-        let own_source = attested(
-            "pkg",
-            solid_facts::ImportResolution::NonRelative,
-            "/p/src/local-impl.ts",
-            Some("pkg"),
-            Some("pkg"),
-        );
-        assert!(!binds(&contracts, &own_source, "pkg"));
-
-        // Same shape reported as a relative resolution, which a bare specifier
-        // cannot legitimately be: refused rather than accepted on the name.
-        let relative = attested(
-            "pkg",
-            solid_facts::ImportResolution::Relative,
-            "/p/src/local-impl.ts",
-            Some("pkg"),
-            Some("pkg"),
-        );
-        assert!(!binds(&contracts, &relative, "pkg"));
-    }
-
-    #[test]
-    fn with_no_classified_install_either_attested_package_identity_answers() {
-        // An explicit `--contract` for a package the ancestor walk never
-        // classified -- a nested or unhoisted install under a root-level
-        // tsconfig -- resolving into an install tree all the same. There is no
-        // directory to compare, so the two identities the producer records are
-        // what is left.
-        let contracts = [contract_named("pkg", None)];
-        let by_manifest = attested(
-            "pkg",
-            solid_facts::ImportResolution::NodeModules,
-            "/p/packages/app/node_modules/pkg/index.d.ts",
-            Some("pkg"),
-            None,
-        );
-        assert!(binds(&contracts, &by_manifest, "pkg"));
-
-        // The nearest manifest declares no name -- the `{"type":"module"}` file
-        // a published package ships beside its output -- and the resolver's own
-        // record answers instead.
-        let by_resolver = attested(
-            "pkg",
-            solid_facts::ImportResolution::NodeModules,
-            "/p/packages/app/node_modules/pkg/esm/index.d.ts",
-            None,
-            Some("pkg"),
-        );
-        assert!(binds(&contracts, &by_resolver, "pkg"));
-
-        // Neither identity is the contract's package.
-        let other = attested(
-            "pkg",
-            solid_facts::ImportResolution::NodeModules,
-            "/elsewhere/@types/pkg/index.d.ts",
-            Some("@types/pkg"),
-            Some("@types/pkg"),
-        );
-        assert!(!binds(&contracts, &other, "pkg"));
-    }
-
-    #[test]
-    fn the_install_directory_is_part_of_the_analysis_fingerprint() {
-        let here = contract_named(
-            "pkg",
-            Some(ContractInstallRoot {
-                path: "/p/node_modules/pkg".into(),
-                canonical: None,
-            }),
-        );
-        let hoisted = contract_named(
-            "pkg",
-            Some(ContractInstallRoot {
-                path: "/node_modules/pkg".into(),
-                canonical: None,
-            }),
-        );
-        assert_ne!(here.analysis_fingerprint(), hoisted.analysis_fingerprint());
-
-        // Both spellings are load-bearing: a retargeted `node_modules/<name>`
-        // symlink keeps the spelled path and changes the realpath, and
-        // containment accepts either, so the answer cannot be reused.
-        let retargeted = contract_named(
-            "pkg",
-            Some(ContractInstallRoot {
-                path: "/p/node_modules/pkg".into(),
-                canonical: Some("/store/pkg@1.0.0/node_modules/pkg".into()),
-            }),
-        );
-        assert_ne!(
-            here.analysis_fingerprint(),
-            retargeted.analysis_fingerprint()
-        );
-    }
-
-    #[test]
-    fn package_contract_validation_enforces_release_identity_and_surface() {
-        let valid = PackageContract {
-            schema_version: 1,
-            package: ContractPackage {
-                name: "reactive-package".into(),
-                version: "1.0.0".into(),
-                integrity: String::new(),
-            },
-            compiler_facts_protocol: 1,
-            artifacts: ContractArtifacts::default(),
-            entrypoints: BTreeMap::from([(
-                ".".into(),
-                ContractEntrypoint {
-                    exports: BTreeMap::from([(
-                        "createValue".into(),
-                        ContractExport {
-                            kind: "function".into(),
-                            ..ContractExport::default()
-                        },
-                    )]),
-                    conditions: Vec::new(),
-                },
-            )]),
-            evidence: ContractEvidence {
-                kind: "verified".into(),
-                generator: String::new(),
-            },
-            contract_hash: String::new(),
-            source_path: String::new(),
-            run_generated: false,
-            installed_root: None,
-        };
-        assert!(valid.validate().is_ok());
-
-        let mut no_version = valid.clone();
-        no_version.package.version.clear();
-        assert!(no_version.validate().is_err());
-
-        let mut no_entrypoints = valid.clone();
-        no_entrypoints.entrypoints.clear();
-        assert!(no_entrypoints.validate().is_err());
-
-        let mut malformed_hash = valid;
-        malformed_hash.artifacts.declaration = Some(ContractArtifact {
-            path: "index.d.ts".into(),
-            hash: "sha256:not-a-digest".into(),
-        });
-        assert!(malformed_hash.validate().is_err());
-    }
-
-    #[test]
-    fn contract_claims_distinguish_legacy_none_from_explicit_unknown() {
-        let legacy_json = r#"{"kind":"function"}"#;
-        let legacy: ContractExport = serde_json::from_str(legacy_json).unwrap();
-        assert!(legacy.reactive_reads.is_known_default());
-        assert!(legacy.returns.is_known_default());
-        assert!(legacy.callbacks.is_known_default());
-        assert!(legacy.owner_requirements.is_known_default());
-        assert!(legacy.async_behavior.is_known_default());
-        assert_eq!(serde_json::to_string(&legacy).unwrap(), legacy_json);
-
-        let unknown_json = r#"{
-            "kind":"function",
-            "reactiveReads":{"status":"unknown"},
-            "returns":{"status":"unknown"},
-            "callbacks":{"status":"unknown"},
-            "ownerRequirements":{"status":"unknown"},
-            "asyncBehavior":{"status":"unknown"}
-        }"#;
-        let unknown: ContractExport = serde_json::from_str(unknown_json).unwrap();
-        assert!(unknown.reactive_reads.is_unknown());
-        assert!(unknown.returns.is_unknown());
-        assert!(unknown.callbacks.is_unknown());
-        assert!(unknown.owner_requirements.is_unknown());
-        assert!(unknown.async_behavior.is_unknown());
-        assert_eq!(
-            serde_json::to_value(&unknown).unwrap(),
-            serde_json::from_str::<serde_json::Value>(unknown_json).unwrap()
-        );
-        assert!(
-            serde_json::from_str::<ContractExport>(
-                r#"{"kind":"function","callbacks":{"status":"maybe"}}"#
-            )
-            .is_err()
-        );
-        assert!(
-            serde_json::from_str::<ContractExport>(
-                r#"{"kind":"function","callbacks":{"status":"unknown","reason":"opaque"}}"#
-            )
-            .is_err()
-        );
-
-        let contract_with = |name: &str, summary: ContractExport| PackageContract {
-            schema_version: 1,
-            package: ContractPackage {
-                name: "claim-test".into(),
-                version: "1.0.0".into(),
-                integrity: String::new(),
-            },
-            compiler_facts_protocol: 1,
-            artifacts: ContractArtifacts::default(),
-            entrypoints: BTreeMap::from([(
-                ".".into(),
-                ContractEntrypoint {
-                    exports: BTreeMap::from([(name.into(), summary)]),
-                    conditions: Vec::new(),
-                },
-            )]),
-            evidence: ContractEvidence {
-                kind: "reviewed".into(),
-                generator: String::new(),
-            },
-            contract_hash: String::new(),
-            source_path: String::new(),
-            run_generated: false,
-            installed_root: None,
-        };
-        assert!(contract_with("partial", unknown).validate().is_ok());
-
-        let value_with_unknown: ContractExport =
-            serde_json::from_str(r#"{"kind":"value","callbacks":{"status":"unknown"}}"#).unwrap();
-        assert!(
-            contract_with("value", value_with_unknown)
-                .validate()
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn claim_evidence_is_optional_but_certification_rejects_inferred_rows() {
-        let mut contract = PackageContract {
-            schema_version: 1,
-            package: ContractPackage {
-                name: "reactive-package".into(),
-                version: "1.0.0".into(),
-                integrity: String::new(),
-            },
-            compiler_facts_protocol: 1,
-            artifacts: ContractArtifacts::default(),
-            entrypoints: BTreeMap::from([(
-                ".".into(),
-                ContractEntrypoint {
-                    exports: BTreeMap::from([(
-                        "createValue".into(),
-                        ContractExport {
-                            kind: "function".into(),
-                            callbacks: vec![ContractCallback {
-                                parameter: 0,
-                                execution: "tracked".into(),
-                                arguments: Vec::new(),
-                                owner: None,
-                                evidence: Some(ContractClaimEvidence {
-                                    kind: "inferred".into(),
-                                    ..ContractClaimEvidence::default()
-                                }),
-                            }]
-                            .into(),
-                            ..ContractExport::default()
-                        },
-                    )]),
-                    conditions: Vec::new(),
-                },
-            )]),
-            evidence: ContractEvidence {
-                kind: "verified".into(),
-                generator: String::new(),
-            },
-            contract_hash: String::new(),
-            source_path: String::new(),
-            run_generated: false,
-            installed_root: None,
-        };
-        assert!(contract.validate().is_ok());
-        assert!(!contract.claims_are_certifiable());
-
-        contract
-            .entrypoints
-            .get_mut(".")
-            .unwrap()
-            .exports
-            .get_mut("createValue")
-            .unwrap()
-            .callbacks
-            .known_mut()
-            .unwrap()[0]
-            .evidence = Some(ContractClaimEvidence {
-            kind: "probed".into(),
-            modes: vec!["browser".into(), "server".into()],
-            calls: Some(2),
-            ..ContractClaimEvidence::default()
-        });
-        assert!(contract.validate().is_ok());
-        assert!(contract.claims_are_certifiable());
-
-        let mut malformed = contract.clone();
-        malformed
-            .entrypoints
-            .get_mut(".")
-            .unwrap()
-            .exports
-            .get_mut("createValue")
-            .unwrap()
-            .callbacks
-            .known_mut()
-            .unwrap()[0]
-            .evidence = Some(ContractClaimEvidence {
-            kind: "inherited-from".into(),
-            package: "solid-js".into(),
-            ..ContractClaimEvidence::default()
-        });
-        assert!(malformed.validate().is_err());
-
-        let mut conditional = contract.clone();
-        conditional
-            .entrypoints
-            .get_mut(".")
-            .unwrap()
-            .exports
-            .get_mut("createValue")
-            .unwrap()
-            .variants = vec![ContractExportVariant {
-            conditions: vec!["browser".into()],
-            summary: Box::new(ContractExport {
-                kind: "function".into(),
-                callbacks: vec![ContractCallback {
-                    parameter: 0,
-                    execution: "tracked".into(),
-                    arguments: Vec::new(),
-                    owner: None,
-                    evidence: Some(ContractClaimEvidence {
-                        kind: "probed".into(),
-                        modes: vec!["client".into()],
-                        calls: Some(2),
-                        ..ContractClaimEvidence::default()
-                    }),
-                }]
-                .into(),
-                ..ContractExport::default()
-            }),
-            precedence: None,
-        }];
-        assert!(conditional.validate().is_ok());
-        assert!(conditional.claims_are_certifiable());
-
-        conditional
-            .entrypoints
-            .get_mut(".")
-            .unwrap()
-            .exports
-            .get_mut("createValue")
-            .unwrap()
-            .callbacks
-            .known_mut()
-            .unwrap()[0]
-            .owner = Some("leaf".into());
-        assert!(conditional.validate().is_ok());
-
-        conditional
-            .entrypoints
-            .get_mut(".")
-            .unwrap()
-            .exports
-            .get_mut("createValue")
-            .unwrap()
-            .variants[0]
-            .conditions
-            .clear();
-        assert!(conditional.validate().is_err());
-
-        let mut owner_claim = PackageContract {
-            schema_version: 1,
-            package: ContractPackage {
-                name: "reactive-package".into(),
-                version: "1.0.0".into(),
-                integrity: String::new(),
-            },
-            compiler_facts_protocol: 1,
-            artifacts: ContractArtifacts::default(),
-            entrypoints: BTreeMap::from([(
-                ".".into(),
-                ContractEntrypoint {
-                    exports: BTreeMap::from([(
-                        "requiresOwner".into(),
-                        ContractExport {
-                            kind: "function".into(),
-                            owner_requirements: vec![ContractOwnerRequirement {
-                                operation: OwnerRequirementOperation::Effect,
-                                evidence: Some(ContractClaimEvidence {
-                                    kind: "inferred".into(),
-                                    ..ContractClaimEvidence::default()
-                                }),
-                            }]
-                            .into(),
-                            ..ContractExport::default()
-                        },
-                    )]),
-                    conditions: Vec::new(),
-                },
-            )]),
-            evidence: ContractEvidence {
-                kind: "reviewed".into(),
-                generator: String::new(),
-            },
-            contract_hash: String::new(),
-            source_path: String::new(),
-            run_generated: false,
-            installed_root: None,
-        };
-        assert!(owner_claim.validate().is_ok());
-        assert!(!owner_claim.claims_are_certifiable());
-        owner_claim
-            .entrypoints
-            .get_mut(".")
-            .unwrap()
-            .exports
-            .get_mut("requiresOwner")
-            .unwrap()
-            .owner_requirements
-            .known_mut()
-            .unwrap()[0]
-            .evidence
-            .as_mut()
-            .unwrap()
-            .kind = "reviewed".into();
-        assert!(owner_claim.claims_are_certifiable());
-
-        let mut invalid_owner = contract;
-        invalid_owner
-            .entrypoints
-            .get_mut(".")
-            .unwrap()
-            .exports
-            .get_mut("createValue")
-            .unwrap()
-            .callbacks
-            .known_mut()
-            .unwrap()[0]
-            .owner = Some("unknown".into());
-        assert!(invalid_owner.validate().is_err());
-    }
-
-    #[test]
-    fn export_variant_without_precedence_reserializes_byte_identically() {
-        // No `precedence` key: the field must round-trip as absent, not as
-        // `null`, so every contract generated before this field existed
-        // re-serializes identically.
-        let json = r#"{"conditions":["browser"],"summary":{"kind":"function"}}"#;
-        let variant: ContractExportVariant = serde_json::from_str(json).unwrap();
-        assert_eq!(variant.precedence, None);
-        assert_eq!(serde_json::to_string(&variant).unwrap(), json);
-
-        // A declared `precedence` round-trips too, and is not silently
-        // dropped.
-        let json_with_precedence =
-            r#"{"conditions":["browser"],"summary":{"kind":"function"},"precedence":1}"#;
-        let variant_with_precedence: ContractExportVariant =
-            serde_json::from_str(json_with_precedence).unwrap();
-        assert_eq!(variant_with_precedence.precedence, Some(1));
-        assert_eq!(
-            serde_json::to_string(&variant_with_precedence).unwrap(),
-            json_with_precedence
-        );
-    }
-
-    #[test]
-    fn schema_one_accepts_structured_returns_and_rejects_mixed_shapes() {
+    fn inferred_structured_returns_reject_mixed_shapes() {
         let leaf = ContractReturn {
             kind: "accessor".into(),
             label: "active".into(),

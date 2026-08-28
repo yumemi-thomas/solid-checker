@@ -15,9 +15,6 @@ import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { expandContract } from "../packages/cli/scripts/contract-document.mjs";
-import { buildProbePlan } from "../packages/cli/scripts/contract-probe-driver.mjs";
-
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = join(ROOT, "packages/cli/bin/solid-checker.mjs");
 const DEFAULT_NATIVE = join(ROOT, "rust/target/debug/solid-checker-rust");
@@ -120,59 +117,37 @@ function timingRecord(stderr) {
   return undefined;
 }
 
-function sibling(path, suffix) {
-  return path.endsWith(".json") ? `${path.slice(0, -5)}${suffix}` : `${path}${suffix}`;
-}
-
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-function assertSlowShape({ contract, timing, probe, verify, verifyResult }) {
-  const expanded = expandContract(contract);
-  assert.equal(contract.package.name, "solid-recharts");
-  assert.equal(contract.package.version, "1.0.1");
-  assert.equal(Object.keys(expanded.entrypoints["."].exports).length, 109);
-  assert.equal(buildProbePlan(expanded).claims.length, 140);
-
-  assert.ok(timing, "generation emitted no structured timing record");
-  assert.ok(timing.targets.length >= 2);
-  assert.equal(new Set(timing.targets.map(target => target.target)).size, 2);
-  const targets = timing.targets.toSorted((left, right) => left.conditions.join().localeCompare(right.conditions.join()));
-  assert.ok(targets.some(target => target.conditions.includes("browser")));
-  assert.ok(targets.some(target => target.conditions.includes("node")));
-  for (const target of targets) {
-    assert.ok(target.runtimeFiles >= 200 && target.runtimeFiles <= 300, JSON.stringify(target));
-    assert.ok(target.runtimeBytes >= 700_000 && target.runtimeBytes <= 1_000_000, JSON.stringify(target));
+function proposalStats(contract, plan) {
+  assert.equal(contract.format, "solid-reactivity-contract");
+  assert.equal(contract.schemaVersion, 2);
+  assert.equal(contract.semanticModelVersion, 1);
+  assert.equal(plan.format, "solid-checker-contract-proposal-plan");
+  assert.equal(plan.planVersion, 1);
+  let exports = 0;
+  let artifactCases = 0;
+  for (const entrypoint of Object.values(contract.entrypoints ?? {})) {
+    const cases = Array.isArray(entrypoint.cases) ? entrypoint.cases : [entrypoint];
+    for (const artifactCase of cases) {
+      artifactCases += 1;
+      exports += Object.keys(artifactCase.exports ?? {}).length;
+    }
   }
-
-  assert.equal(probe.summary.claims, 140);
-  assert.equal(probe.summary.passed + probe.summary.failed + probe.summary.undriven, 140);
-  assert.equal(probe.summary.failed, 0);
-  assert.deepEqual(probe.modes, ["client", "server", "development", "production"]);
-  assert.ok(probe.sessions.chains >= 4, JSON.stringify(probe.sessions));
-  assert.ok(probe.sessions.started >= 100, JSON.stringify(probe.sessions));
-  assert.ok(probe.sessions.restarts >= 90, JSON.stringify(probe.sessions));
-  assert.ok(Object.values(probe.sessions.byMode).every(mode => mode.chains >= 1));
-
-  assert.equal(verifyResult.status, 1, verifyResult.stderr);
-  assert.equal(verify.outcome, "refused");
-  const blockers = (verify.blockers?.raised ?? []).join("\n");
-  for (const name of ["Dot", "LabelList", "Pie"]) assert.match(blockers, new RegExp(`\\b${name}\\b`));
-  assert.match(blockers, /kind/);
+  return { exports, artifactCases, closureCandidates: plan.closureCandidates?.length ?? 0 };
 }
 
-function assertGenerationShape(contract, timing, directory) {
-  const expanded = expandContract(contract);
+function assertGenerationShape(contract, plan, timing, directory) {
+  const stats = proposalStats(contract, plan);
   assert.equal(contract.package.name, "solid-recharts");
   assert.equal(contract.package.version, "1.0.1");
-  assert.equal(
-    Object.keys(expanded.entrypoints["."].exports).length,
-    109,
-    `generated artifacts kept for inspection at ${directory}`
-  );
-  assert.equal(buildProbePlan(expanded).claims.length, 140);
+  assert.equal(stats.exports, 109, `generated artifacts kept for inspection at ${directory}`);
+  assert.ok(stats.closureCandidates > 0, "proposal plan carried no local closure candidates");
   assert.ok(timing, "generation emitted no structured timing record");
+  assert.ok(timing.targets.length >= 2);
+  return stats;
 }
 
 function sample(packageRoot, index, env, keep) {
@@ -193,48 +168,19 @@ function sample(packageRoot, index, env, keep) {
       `${generated.error?.message ?? ""}\n${generated.signal ?? ""}\n${generated.stderr}\n${generated.stdout}`
     );
     const contract = readJson(contractFile);
+    const plan = readJson(`${contractFile}.proposal.json`);
     const timing = timingRecord(generated.stderr);
-    assertGenerationShape(contract, timing, directory);
-
-    const probed = run(
-      process.execPath,
-      [
-        CLI,
-        "contract",
-        "probe",
-        contractFile,
-        "--package-root",
-        packageRoot,
-        "--timeout",
-        "160000"
-      ],
-      { cwd: ROOT, env, timeout: 160_000 }
-    );
-    assert.equal(probed.status, 0, probed.stderr);
-    const probe = readJson(sibling(contractFile, ".probe.json"));
-
-    const verified = run(
-      process.execPath,
-      [CLI, "contract", "verify", contractFile],
-      { cwd: ROOT, env, timeout: 30_000 }
-    );
-    const verify = readJson(sibling(contractFile, ".verify.json"));
-    assertSlowShape({ contract, timing, probe, verify, verifyResult: verified });
-
-    const result = {
+    const proposal = assertGenerationShape(contract, plan, timing, directory);
+    completed = true;
+    return {
       sample: index,
       generateMs: generated.wallMs,
-      probeMs: probed.wallMs,
-      verifyMs: verified.wallMs,
-      totalMs: generated.wallMs + probed.wallMs + verified.wallMs,
+      totalMs: generated.wallMs,
       generation: timing,
-      claims: probe.summary,
-      sessions: probe.sessions,
-      outcome: verify.outcome,
+      proposal,
+      outcome: "proposal",
       artifacts: keep ? relative(ROOT, directory) : undefined
     };
-    completed = true;
-    return result;
   } finally {
     if (!keep && completed) rmSync(directory, { recursive: true, force: true });
   }

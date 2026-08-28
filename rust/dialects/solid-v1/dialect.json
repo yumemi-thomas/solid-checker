@@ -1,20 +1,12 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "solid-v1",
   "ruleManifest": "packages/cli/lib/rules-solid-v1.json",
+  "bundleIndex": "pkg/contracts/bundled/solid-v1/bundle-index.json",
+  "reviewBundleIndex": "rust/crates/solid-dialect/contracts/solid-v1/bundle-index.json",
   "contracts": [
     {
       "package": "solid-js",
-      "packagePathEnv": "SOLID_V1_SOLID_JS_PACKAGE",
-      "defaultPackagePath": "node_modules/solid-js-1x",
-      "generatorTarget": "solid-v1/solid-js",
-      "reviewContract": "rust/crates/solid-dialect/contracts/solid-v1/solid-js.json",
-      "exportsIndex": "rust/crates/solid-dialect/src/exports/solid_v1_solid_js.rs",
-      "bundledContract": "pkg/contracts/bundled/solid-v1/solid-js.json",
-      "composeScript": "scripts/generate-bundled-solid1-contract.mjs",
-      "composeInputs": [
-        "pkg/contracts/bundled/solid-v1/solid-js-runtime-surface.json"
-      ],
       "probeRuntime": true,
       "probeModes": [
         "client",
@@ -24,20 +16,14 @@
     },
     {
       "package": "@solid-primitives/scheduled",
-      "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json",
-      "generated": false,
       "probeRuntime": true
     },
     {
       "package": "@solid-primitives/debounce",
-      "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-debounce.json",
-      "generated": false,
       "probeRuntime": true
     },
     {
       "package": "@solid-primitives/rootless",
-      "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-rootless.json",
-      "generated": false,
       "probeRuntime": true
     }
   ]

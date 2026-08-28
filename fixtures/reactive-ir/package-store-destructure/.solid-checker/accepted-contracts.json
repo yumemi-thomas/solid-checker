@@ -1,0 +1,66 @@
+{
+  "catalogVersion": 1,
+  "contracts": [
+    {
+      "document": "node_modules/reactive-router/solid-reactivity.json",
+      "import": {
+        "authority": "host",
+        "closure": {
+          "digest": "sha256:526eca19ec1d47d7fb7a66883f5663dbc4bbd902b0c623fb895db2cfa1189eef",
+          "entries": [
+            {
+              "digest": "sha256:378baabb327be72148b134d1927b15b84457b91336205e2c71e1e8f208a938ce",
+              "path": "./package.json",
+              "role": "manifest"
+            }
+          ]
+        },
+        "declarationTrace": {
+          "branch": ""
+        },
+        "declarations": {
+          "digest": "sha256:378baabb327be72148b134d1927b15b84457b91336205e2c71e1e8f208a938ce",
+          "path": "node_modules/reactive-router/package.json"
+        },
+        "exports": {
+          "useParams": {
+            "declarations": {
+              "exportName": "useParams",
+              "module": {
+                "digest": "sha256:378baabb327be72148b134d1927b15b84457b91336205e2c71e1e8f208a938ce",
+                "path": "node_modules/reactive-router/package.json"
+              }
+            },
+            "runtime": {
+              "exportName": "useParams",
+              "module": {
+                "digest": "sha256:378baabb327be72148b134d1927b15b84457b91336205e2c71e1e8f208a938ce",
+                "path": "node_modules/reactive-router/package.json"
+              }
+            }
+          }
+        },
+        "importer": "App.tsx",
+        "packageIntegrity": "fixture:sha256:378baabb327be72148b134d1927b15b84457b91336205e2c71e1e8f208a938ce",
+        "packageManifest": {
+          "digest": "sha256:378baabb327be72148b134d1927b15b84457b91336205e2c71e1e8f208a938ce",
+          "path": "node_modules/reactive-router/package.json"
+        },
+        "packageName": "reactive-router",
+        "packageRoot": "node_modules/reactive-router",
+        "packageVersion": "1.0.0",
+        "requestedEntrypoint": ".",
+        "runtime": {
+          "digest": "sha256:378baabb327be72148b134d1927b15b84457b91336205e2c71e1e8f208a938ce",
+          "path": "node_modules/reactive-router/package.json"
+        },
+        "runtimeTrace": {
+          "branch": ""
+        },
+        "specifier": "reactive-router"
+      },
+      "receipt": "node_modules/reactive-router/solid-reactivity.receipt.json"
+    }
+  ],
+  "format": "solid-checker-accepted-contract-catalog"
+}
