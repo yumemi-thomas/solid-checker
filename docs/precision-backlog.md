@@ -7869,3 +7869,46 @@ unbounded exports, ambiguous artifact selection, closure hazards, stale
 evidence, unresolved guards, and recursive open leaves remain locally
 uncertifiable. The explicit resource limits may refuse an otherwise meaningful
 oversized document; that is an intentional bounded failure, not negative proof.
+
+## 2026-08-28 — Phase 16 measures generatability without promoting coverage to proof
+
+The exact release-binary ecosystem run now covers 418 official probe rows. It
+produced 40 structurally complete proposals, 318 partial proposals, and 60
+fail-closed rows: **85.65% generatable**. The Solid Primitives subset produced
+6 complete, 268 partial, and 17 refused rows across 291 probes: **94.16%
+generatable**. “Complete” here means no artifact-case refusal in generator
+orchestration; it does not mean semantically closed or accepted. Every emitted
+proposal still requires checked proof and a receipt.
+
+The partial rows preserve independently known cases and record 1,458 exact
+artifact-case refusals. The remaining full-row refusals are 20 accepted-
+dependency obligations, 14 unresolved export-kind censuses, 8 legitimately
+empty runtime export surfaces, 2 missing exact package exports, 1 unresolved
+parameter-behavior case, and 15 exact package/artifact shapes that remain
+unsupported or unresolved (including wildcard-only censuses and missing or
+non-file published targets). The proposal corpus keeps all nine call domains
+open on 4,788 exports and keeps recursive uncertainty local to 13 exact leaves.
+The 36 Phase 13 RC.3 open rows remain separately named in the Phase 16 refusal
+artifact.
+
+Compactness and performance are now checked by
+`scripts/package-contract-v2-phase16.mjs`. Across 358 emitted ecosystem
+proposals, canonical main bytes are 1,599 p50, 4,813 p95, and 43,055 max;
+proposal-plan bytes are 49,172 p50, 303,349 p95, and 3,676,782 max. Across the
+24 receipt-issued cases, canonical main bytes are 3,342 p50, 16,202 p95, and
+21,538 max; raw proof evidence is 348,386 p50, 3,122,474 p95, and 3,209,546
+max, while every receipt is 669 bytes. Ordinary analysis retains none of that
+raw evidence and performs no package execution, network access, or query-time
+file reads.
+
+Generation cost over the 418 rows is recorded rather than hidden: 1,568 ms
+p50, 25,439 ms p95, and 434,856 ms max. The current temporary-v2 fresh-process
+probe driver costs 20.13 ms p50, 21.16 ms p95, and 21.73 ms max per isolated
+session; it remains non-authoritative for acceptance. The accepted 24-case
+corpus loads in about 15.9 ms p50/16.2 ms p95; normalized export lookup is 31
+ns p50/32 ns p95 in the checked release run. The 31,232 KiB peak-RSS delta is
+explicitly a whole-process upper bound including checked-corpus construction,
+not a retained analyzer-heap claim. Phase 16 adds no compression transform
+because the current main documents already pass the 8 KiB p50, 32 KiB p95, and
+1 MiB maximum gates; compression remains allowed only when normalized semantics
+and proof identity are unchanged.

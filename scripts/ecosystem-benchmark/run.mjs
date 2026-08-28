@@ -303,6 +303,7 @@ function buildResult({
   declaredEntrypoints,
   generatedEntrypoints,
   refusedEntrypoints = null,
+  refusedArtifactCases = null,
   checklistItems,
   // What the emitted contract actually claims, as opposed to whether it was
   // emitted. Null for every probe that never wrote one; see
@@ -334,6 +335,7 @@ function buildResult({
     declaredEntrypoints,
     generatedEntrypoints,
     refusedEntrypoints,
+    refusedArtifactCases,
     checklistItems,
     contractContent,
     outcome,
@@ -462,6 +464,7 @@ async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
         packageRoot,
         outputPath,
         timeoutMs,
+        integrity: row.integrity,
         entrypoints: probe.entrypoints ?? []
       });
     } catch (error) {
@@ -499,7 +502,14 @@ async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
       integrityVerified: true,
       declaredEntrypoints,
       generatedEntrypoints,
-      refusedEntrypoints: genClass.detail?.refusedEntrypoints ?? null,
+      refusedEntrypoints:
+        genClass.detail?.refusalUnit === "entrypoint"
+          ? genClass.detail.refusedCases
+          : null,
+      refusedArtifactCases:
+        genClass.detail?.refusalUnit === "artifact-case"
+          ? genClass.detail.refusedCases
+          : null,
       checklistItems,
       contractContent,
       outcome: probeOutcome(genClass.class),
@@ -694,7 +704,7 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
       return { ...result, installedVersions, integrity };
     },
 
-    generateContract: ({ packageRoot, outputPath, timeoutMs, entrypoints = [] }) =>
+    generateContract: ({ packageRoot, outputPath, timeoutMs, integrity, entrypoints = [] }) =>
       new Promise(resolvePromise => {
         const child = spawn(
           process.execPath,
@@ -704,6 +714,8 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
             "generate",
             "--package-root",
             packageRoot,
+            "--integrity",
+            integrity,
             "--output",
             outputPath,
             ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])

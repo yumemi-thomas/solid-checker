@@ -17,8 +17,8 @@ inventory below remains the audit ledger, including retired filenames: the old
 JavaScript document/closure/verification helpers and Rust generator were
 deleted, their temporary-v2 replacements are live, native and WASM consumers
 accept only receipt-issued normalized inputs, and both bundle locations and all
-fixtures were regenerated. The stable `2` → `1` renumber remains Phase 17 and
-must still be atomic.
+fixtures were regenerated. Version-2 convergence remains Phase 17; the stable
+`2` → `1` renumber remains Phase 18 and must still be atomic.
 
 Phase 15 completed the adversarial gate on 2026-08-28. All contract JSON
 families now share explicit byte, depth, node, and string bounds; file-backed
@@ -26,6 +26,16 @@ catalog, document, and receipt inputs are bounded before allocation. The seeded
 mutation suite must reject every false-closure mutation, and any fuzz input that
 survives decode and normalization must re-encode deterministically to identical
 semantics. The stable-version cut remains unchanged.
+
+Phase 16 completed the corpus, compactness, and performance gate on 2026-08-28.
+The exact 418-row ecosystem run produced 40 structurally complete and 318
+partial proposals: 85.65% generatable overall. Solid Primitives produced 6
+complete and 268 partial proposals across 291 rows: 94.16% generatable. These
+rates do not mean accepted closure: all proposal claim domains remain open
+until checked proof issues a receipt. The checked 24-case accepted corpus
+preserved every prior receipt-issued row, and the ordinary analyzer boundary
+retained zero raw evidence bytes and performed no package execution, network
+access, or query-time file reads.
 
 ## Document-version namespaces
 
@@ -240,6 +250,19 @@ export, and bytes per operation.
 Ordinary analysis must remain linear in selected document size plus normalized
 operation edges. It must not execute package code, read sidecars, or access the
 network.
+
+`scripts/package-contract-v2-phase16.mjs` is the reproducible Phase 16 gate. It
+binds the exact ecosystem, historical isolated-probe reference, manifest,
+synthetic corpus, and RC.3 conformance inputs by SHA-256. The Rust benchmark
+measures proposal/proof construction, verification/receipt issuance, accepted
+load, normalized export query, and process peak RSS over all 24 receipt-issued
+cases. A deterministic current-protocol recipe separately measures the fresh-
+process runtime-probe driver without granting that observation acceptance
+authority. The checked report also records ecosystem proposal main/plan
+bytes, accepted canonical/pretty main bytes, normalized debug size, raw proof
+evidence, receipts, bytes per export, and bytes per operation. Peak RSS is a
+whole-process upper bound that includes checked-corpus construction; it is not
+reported as retained analyzer heap.
 
 ## Version-2 convergence audit
 

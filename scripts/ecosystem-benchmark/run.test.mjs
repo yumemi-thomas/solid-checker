@@ -146,6 +146,13 @@ test("probe entrypoint scopes reach contract generation", async () => {
   assert.deepEqual(generateCalls[0].entrypoints, ["./solid"]);
 });
 
+test("the manifest's exact registry integrity reaches contract generation", async () => {
+  const manifest = fourProbeManifest();
+  const generateCalls = [];
+  await runBenchmark({ manifest, hooks: successHooks({ generateCalls }) });
+  assert.equal(generateCalls[0].integrity, manifest.rows[0].integrity);
+});
+
 test("a timeout during generation produces a timeout result and the run continues", async () => {
   const manifest = fourProbeManifest();
   const cleanupCalls = [];

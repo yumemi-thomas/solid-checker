@@ -5,6 +5,7 @@
 //! proof verification so JavaScript never becomes a second normalizer.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest as _, Sha256};
@@ -56,6 +57,20 @@ pub struct AcceptedArtifacts {
     pub receipt: Vec<u8>,
 }
 
+pub(crate) struct CheckedCorpusAcceptance {
+    pub accepted: AcceptedArtifacts,
+    pub measurements: CheckedCorpusMeasurements,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CheckedCorpusMeasurements {
+    pub proposal_bytes: usize,
+    pub plan_bytes: usize,
+    pub proof_bytes: usize,
+    pub generation_ns: u128,
+    pub verification_ns: u128,
+}
+
 /// Runs the ordinary proof checker for one repository-owned, independently
 /// replayed semantic corpus. The caller supplies the checked corpus bytes as
 /// the census identity; arbitrary CLI input cannot reach this helper.
@@ -64,7 +79,8 @@ pub(crate) fn accept_checked_corpus_case(
     verifier_build: &str,
     checked_corpus_bytes: &[u8],
     pretty: bool,
-) -> Result<AcceptedArtifacts, ContractWorkflowError> {
+) -> Result<CheckedCorpusAcceptance, ContractWorkflowError> {
+    let generation_started = Instant::now();
     let canonical_complete_bytes =
         contract_document_v2::encode(complete, &SidecarDigests::default(), false)?;
     let canonical_complete =
@@ -130,12 +146,24 @@ pub(crate) fn accept_checked_corpus_case(
         probe_sidecar: None,
     })?;
     let selected = proposal.contract.artifact_cases()[0].id.clone();
+    let generation_ns = generation_started.elapsed().as_nanos();
+    let verification_started = Instant::now();
     let accepted = verify(&proposal.document, &plan_bytes, &proof, &selected, pretty)?;
     let finalized = contract_document_v2::decode(&accepted.document)?.normalize()?;
     if finalized.semantic_digest() != canonical_complete.semantic_digest() {
         return invalid("proof finalization did not reproduce checked corpus semantics");
     }
-    Ok(accepted)
+    let verification_ns = verification_started.elapsed().as_nanos();
+    Ok(CheckedCorpusAcceptance {
+        measurements: CheckedCorpusMeasurements {
+            proposal_bytes: proposal.document.len(),
+            plan_bytes: plan_bytes.len(),
+            proof_bytes: proof.len(),
+            generation_ns,
+            verification_ns,
+        },
+        accepted,
+    })
 }
 
 pub(crate) struct CanonicalProposal {

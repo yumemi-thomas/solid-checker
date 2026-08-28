@@ -23,7 +23,9 @@ use thiserror::Error;
 
 use crate::{
     artifact_resolution::{ClosureManifest, ClosurePackageIdentity},
-    contract_workflow::{AcceptedArtifacts, ContractWorkflowError, accept_checked_corpus_case},
+    contract_workflow::{
+        CheckedCorpusAcceptance, ContractWorkflowError, accept_checked_corpus_case,
+    },
     diagnostics::installed_package_integrity,
 };
 
@@ -56,6 +58,11 @@ pub struct FirstPartyBundle {
     pub selector: Option<BundleSelector>,
     pub document: Vec<u8>,
     pub receipt: Vec<u8>,
+}
+
+pub(crate) struct MeasuredFirstPartyBundle {
+    pub bundle: FirstPartyBundle,
+    pub measurements: crate::contract_workflow::CheckedCorpusMeasurements,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, serde::Serialize)]
@@ -264,6 +271,14 @@ struct AuditTarget {
 /// packages. One document/receipt pair owns one artifact case because receipt
 /// roots are selected-case identities.
 pub fn solid2_rc3_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleError> {
+    Ok(solid2_rc3_bundles_with_measurements()?
+        .into_iter()
+        .map(|measured| measured.bundle)
+        .collect())
+}
+
+pub(crate) fn solid2_rc3_bundles_with_measurements()
+-> Result<Vec<MeasuredFirstPartyBundle>, FirstPartyBundleError> {
     let report: ConformanceReport = serde_json::from_slice(CONFORMANCE_BYTES)?;
     let audit: PublishedAudit = serde_json::from_slice(AUDIT_BYTES)?;
     let closures = closure_manifests(report)?;
@@ -360,7 +375,10 @@ pub fn solid2_rc3_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleErr
             // publishing it as an accepted analyzer input would grant no fact.
             continue;
         }
-        let AcceptedArtifacts { document, receipt } = accept_checked_corpus_case(
+        let CheckedCorpusAcceptance {
+            accepted,
+            measurements,
+        } = accept_checked_corpus_case(
             &complete,
             "solid-checker-phase14-rc3-bundle-authority",
             &checked_authority,
@@ -371,7 +389,7 @@ pub fn solid2_rc3_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleErr
                 "cannot issue {package_name}:{artifact_id} from checked corpus: {error}"
             ))
         })?;
-        let accepted_case = crate::contract_document_v2::decode(&document)
+        let accepted_case = crate::contract_document_v2::decode(&accepted.document)
             .and_then(|proposal| proposal.normalize())
             .map_err(|error| {
                 inconsistent(format!("generated accepted document is invalid: {error}"))
@@ -379,16 +397,19 @@ pub fn solid2_rc3_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleErr
             .artifact_cases()[0]
             .id
             .clone();
-        bundles.push(FirstPartyBundle {
-            file_stem: bundle_stem(&package_name, &artifact_id),
-            package: package_name,
-            artifact_case: accepted_case,
-            selector: None,
-            document,
-            receipt,
+        bundles.push(MeasuredFirstPartyBundle {
+            bundle: FirstPartyBundle {
+                file_stem: bundle_stem(&package_name, &artifact_id),
+                package: package_name,
+                artifact_case: accepted_case,
+                selector: None,
+                document: accepted.document,
+                receipt: accepted.receipt,
+            },
+            measurements,
         });
     }
-    bundles.sort_by(|left, right| left.file_stem.cmp(&right.file_stem));
+    bundles.sort_by(|left, right| left.bundle.file_stem.cmp(&right.bundle.file_stem));
     Ok(bundles)
 }
 
@@ -397,6 +418,14 @@ pub fn solid2_rc3_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleErr
 /// already use the internal semantic model and temporary-v2 wire format; no
 /// legacy summary IDs, variants, evidence tiers, or unknown sentinels are read.
 pub fn solid1_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleError> {
+    Ok(solid1_bundles_with_measurements()?
+        .into_iter()
+        .map(|measured| measured.bundle)
+        .collect())
+}
+
+pub(crate) fn solid1_bundles_with_measurements()
+-> Result<Vec<MeasuredFirstPartyBundle>, FirstPartyBundleError> {
     let authority: Solid1Authority = serde_json::from_slice(SOLID1_AUTHORITY_INDEX_BYTES)?;
     if authority.schema_version != 2
         || authority.format != "solid-checker-phase14-solid1-normalized-authority"
@@ -462,7 +491,10 @@ pub fn solid1_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleError> 
             // has nothing a receipt may authorize for analysis.
             continue;
         }
-        let AcceptedArtifacts { document, receipt } = accept_checked_corpus_case(
+        let CheckedCorpusAcceptance {
+            accepted,
+            measurements,
+        } = accept_checked_corpus_case(
             &normalized,
             "solid-checker-phase14-solid1-normalized-authority",
             source,
@@ -474,13 +506,16 @@ pub fn solid1_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleError> 
                 case.document
             ))
         })?;
-        bundles.push(FirstPartyBundle {
-            file_stem: case.stem,
-            package: case.package,
-            artifact_case: artifact.id.clone(),
-            selector: Some(case.selector),
-            document,
-            receipt,
+        bundles.push(MeasuredFirstPartyBundle {
+            bundle: FirstPartyBundle {
+                file_stem: case.stem,
+                package: case.package,
+                artifact_case: artifact.id.clone(),
+                selector: Some(case.selector),
+                document: accepted.document,
+                receipt: accepted.receipt,
+            },
+            measurements,
         });
     }
     if seen.len() != sources.len() {
@@ -488,7 +523,7 @@ pub fn solid1_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleError> 
             "Solid 1 authority carries an unindexed document",
         ));
     }
-    bundles.sort_by(|left, right| left.file_stem.cmp(&right.file_stem));
+    bundles.sort_by(|left, right| left.bundle.file_stem.cmp(&right.bundle.file_stem));
     Ok(bundles)
 }
 

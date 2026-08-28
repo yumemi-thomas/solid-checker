@@ -169,6 +169,7 @@ function buildFamilySection(family, results) {
     // generate contracts for every package and still leave entrypoints
     // uncertifiable.
     refusedEntrypoints: sumField(partials, "refusedEntrypoints"),
+    refusedArtifactCases: sumField(partials, "refusedArtifactCases"),
     successCount: successes.length,
     partialCount: partials.length,
     failureCount: failures.length,
@@ -189,6 +190,7 @@ function buildTotals(results) {
     declaredEntrypoints: sumField(results, "declaredEntrypoints"),
     generatedEntrypoints: sumField(contractProducing(results), "generatedEntrypoints"),
     refusedEntrypoints: sumField(partials, "refusedEntrypoints"),
+    refusedArtifactCases: sumField(partials, "refusedArtifactCases"),
     successCount: successes.length,
     partialCount: partials.length,
     failureCount: failures.length,
@@ -210,7 +212,8 @@ function buildPartialContracts(results) {
       version: result.version,
       family: result.family,
       generatedEntrypoints: result.generatedEntrypoints ?? null,
-      refusedEntrypoints: result.refusedEntrypoints ?? null
+      refusedEntrypoints: result.refusedEntrypoints ?? null,
+      refusedArtifactCases: result.refusedArtifactCases ?? null
     }))
     .sort(comparePackageThenProbe);
 }
@@ -415,6 +418,18 @@ function percentageOf(part, whole) {
   return whole > 0 ? Math.round((part / whole) * 10000) / 100 : null;
 }
 
+function distribution(values) {
+  const sorted = values.filter(Number.isFinite).slice().sort((left, right) => left - right);
+  if (sorted.length === 0) return { count: 0, p50: null, p95: null, max: null };
+  const at = percentile => sorted[Math.max(0, Math.ceil(sorted.length * percentile) - 1)];
+  return {
+    count: sorted.length,
+    p50: at(0.5),
+    p95: at(0.95),
+    max: sorted.at(-1)
+  };
+}
+
 // The single claim domain most responsible for a contract's unknowns — or the
 // honest refusal to name one.
 //
@@ -450,6 +465,7 @@ function emptyContentAccumulator() {
     probesWithClosureNotes: 0,
     entrypointsEmitted: 0,
     entrypointsRefused: 0,
+    artifactCasesRefused: 0,
     exportsTotal: 0,
     exportsProven: 0,
     exportsWithUnknown: 0,
@@ -461,7 +477,14 @@ function emptyContentAccumulator() {
     behavioralRows: emptyBehavioralRows(),
     closureNotes: 0,
     attestedRuntimeNotes: 0,
-    packageStates: new Map()
+    packageStates: new Map(),
+    wireSamples: {
+      prettyMain: [],
+      canonicalMain: [],
+      proposalPlan: [],
+      perExport: [],
+      perOperation: []
+    }
   };
 }
 
@@ -470,6 +493,7 @@ function accumulateContent(accumulator, result) {
   accumulator.probesMeasured += 1;
   accumulator.entrypointsEmitted += content.entrypointsEmitted ?? 0;
   accumulator.entrypointsRefused += content.entrypointsRefused ?? 0;
+  accumulator.artifactCasesRefused += content.artifactCasesRefused ?? 0;
   accumulator.exportsTotal += content.exportsTotal ?? 0;
   accumulator.exportsProven += content.exportsProven ?? 0;
   accumulator.exportsWithUnknown += content.exportsWithUnknown ?? 0;
@@ -481,9 +505,16 @@ function accumulateContent(accumulator, result) {
   addBehavioralRows(accumulator.behavioralRows, content.behavioralRows);
   accumulator.closureNotes += content.closureNotes ?? 0;
   accumulator.attestedRuntimeNotes += content.attestedRuntimeNotes ?? 0;
+  for (const field of Object.keys(accumulator.wireSamples)) {
+    const value = content.wireBytes?.[field];
+    if (Number.isFinite(value)) accumulator.wireSamples[field].push(value);
+  }
   if (content.fullyProven) accumulator.probesFullyProven += 1;
   if ((content.exportsWithUnknown ?? 0) > 0) accumulator.probesWithUnknowns += 1;
-  if ((content.entrypointsRefused ?? 0) > 0) accumulator.probesWithRefusals += 1;
+  if (
+    (content.entrypointsRefused ?? 0) > 0 ||
+    (content.artifactCasesRefused ?? 0) > 0
+  ) accumulator.probesWithRefusals += 1;
   if ((content.closureNotes ?? 0) > 0) accumulator.probesWithClosureNotes += 1;
 
   // A package is only fully proven when EVERY probe that produced a contract
@@ -496,9 +527,12 @@ function accumulateContent(accumulator, result) {
 
 function finalizeContentAccumulator(accumulator) {
   const packages = [...accumulator.packageStates.values()];
-  const { packageStates, ...counts } = accumulator;
+  const { packageStates, wireSamples, ...counts } = accumulator;
   return {
     ...counts,
+    wireBytes: Object.fromEntries(
+      Object.entries(wireSamples).map(([field, values]) => [field, distribution(values)])
+    ),
     packagesMeasured: packages.length,
     packagesFullyProven: packages.filter(Boolean).length,
     exportsProvenPercentage: percentageOf(accumulator.exportsProven, accumulator.exportsTotal),
@@ -628,9 +662,10 @@ function buildUnavailableMetadata({ checker, manifest, results }) {
   const missingRefused = results.filter(
     result =>
       result.outcome === "partial-success" &&
-      (result.refusedEntrypoints === null || result.refusedEntrypoints === undefined)
+      (result.refusedEntrypoints === null || result.refusedEntrypoints === undefined) &&
+      (result.refusedArtifactCases === null || result.refusedArtifactCases === undefined)
   ).length;
-  if (missingRefused > 0) notes.push(`${missingRefused} partial probe(s) missing refusedEntrypoints`);
+  if (missingRefused > 0) notes.push(`${missingRefused} partial probe(s) missing a refusal count`);
 
   return notes.sort(compareStrings);
 }
@@ -851,6 +886,7 @@ function renderFamilySection(section) {
   lines.push(`- Declared entrypoints: ${section.declaredEntrypoints}`);
   lines.push(`- Generated entrypoints: ${section.generatedEntrypoints}`);
   lines.push(`- Refused entrypoints (partial contracts): ${section.refusedEntrypoints ?? 0}`);
+  lines.push(`- Refused artifact cases (partial contracts): ${section.refusedArtifactCases ?? 0}`);
   lines.push(`- Success (complete contracts): ${formatRate(section.successRate)}`);
   lines.push(`- Partial contracts: ${section.partialCount ?? 0}`);
   lines.push(`- Failures: ${section.failureCount}`);
@@ -879,7 +915,10 @@ function renderFamilySection(section) {
     for (const result of failing) {
       const { text, truncated } = truncateForMarkdown(result.stderr);
       const truncatedNote = truncated ? " _(stderr truncated for readability)_" : "";
-      lines.push(`- **${result.package}@${result.version}** (${result.probeKind}, ${result.class}): ${text}${truncatedNote}`);
+      lines.push(
+        `- **${result.package}@${result.version}** (${result.probeKind}, ${result.class}): ` +
+          `${text || "(no stderr captured)"}${truncatedNote}`
+      );
     }
     lines.push("");
   }
@@ -970,13 +1009,14 @@ function renderContractContentSection(content) {
       ` (with unknown: ${content.exportsWithUnknown}, without a summary: ${content.exportsWithoutSummary})`
   );
   lines.push(
-    `- Of those unknown exports: ${content.exportsAllDomainsUnknown} unknown in ALL five domains ` +
+    `- Of those unknown exports: ${content.exportsAllDomainsUnknown} unknown in every measured domain ` +
       `(the generator said nothing about them at all), ` +
       `${content.exportsUnknownOnlyInVariants} unknown only inside a conditional variant ` +
       "(the default resolution is fully claimed)"
   );
   lines.push(
-    `- Entrypoints: ${content.entrypointsEmitted} emitted, ${content.entrypointsRefused} refused`
+    `- Entrypoints: ${content.entrypointsEmitted} emitted, ${content.entrypointsRefused} refused; ` +
+      `${content.artifactCasesRefused ?? 0} artifact cases refused`
   );
   lines.push(`- Closure notes (block byte-attested verification): ${content.closureNotes}`);
   // Counted apart from the line above because the two say different things: a
@@ -985,6 +1025,30 @@ function renderContractContentSection(content) {
   // block, and merging them would make attestation's effect unmeasurable.
   lines.push(
     `- Attested closure notes (record complete, runtime unbounded): ${content.attestedRuntimeNotes}`
+  );
+  lines.push("");
+
+  lines.push("### Proposal wire size");
+  lines.push("");
+  lines.push("| Artifact | Samples | p50 bytes | p95 bytes | max bytes |");
+  lines.push("| --- | ---: | ---: | ---: | ---: |");
+  for (const [label, field] of [
+    ["Pretty main", "prettyMain"],
+    ["Canonical minified main", "canonicalMain"],
+    ["Proposal plan (not evidence)", "proposalPlan"],
+    ["Canonical bytes per export", "perExport"],
+    ["Canonical bytes per operation", "perOperation"]
+  ]) {
+    const sizes = content.wireBytes?.[field] ?? {};
+    lines.push(
+      `| ${label} | ${sizes.count ?? 0} | ${sizes.p50 ?? "n/a"} | ` +
+        `${sizes.p95 ?? "n/a"} | ${sizes.max ?? "n/a"} |`
+    );
+  }
+  lines.push("");
+  lines.push(
+    "Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. " +
+      "Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate."
   );
   lines.push("");
 
@@ -998,9 +1062,9 @@ function renderContractContentSection(content) {
   lines.push(`| **total** | **${content.unknownTotal}** |`);
   lines.push("");
   lines.push(
-    "Read the five columns together, not separately: " +
+    "Read the domain columns together, not separately: " +
       `${content.exportsAllDomainsUnknown} of the ${content.exportsWithUnknown} unknown exports are unknown in ` +
-      "every domain at once, so most of each column is the same exports counted five times."
+      "every measured domain at once, so the same export can contribute to several columns."
   );
   lines.push("");
 
@@ -1096,7 +1160,8 @@ function renderCombinedSection(combined) {
   else {
     for (const entry of combined.partialContracts) {
       lines.push(
-        `- ${entry.package}@${entry.version} (${entry.family}): ${entry.generatedEntrypoints ?? "unknown"} entrypoint(s) generated, ${entry.refusedEntrypoints ?? "unknown"} refused`
+        `- ${entry.package}@${entry.version} (${entry.family}): ${entry.generatedEntrypoints ?? "unknown"} entrypoint(s) generated, ` +
+          `${entry.refusedEntrypoints ?? 0} entrypoint(s) and ${entry.refusedArtifactCases ?? 0} artifact case(s) refused`
       );
     }
   }
@@ -1215,7 +1280,9 @@ export function renderMarkdown(report) {
 }
 
 // Threshold rules recognized:
-//   { global: { minSuccessCount }, families: { <familyId>: { minSuccessCount } } }
+//   { global: { minSuccessCount, minSuccessPercentage, minGeneratablePercentage },
+//     families: { <familyId>: { minSuccessCount, minSuccessPercentage,
+//                               minGeneratablePercentage } } }
 // A family absent from `thresholds.families` has no threshold at all — it is
 // simply never visited by the loop below, so it can never contribute a
 // failure. That is deliberate: a threshold file only expresses opinions
@@ -1230,11 +1297,52 @@ export function evaluateThresholds(report, thresholds = {}) {
       failures.push({ scope: "global", metric: "successCount", actual, minimum: globalMinimum });
     }
   }
+  const globalPercentage = thresholds?.global?.minSuccessPercentage;
+  if (typeof globalPercentage === "number") {
+    const successes =
+      (report.solid1?.totals?.successCount ?? 0) + (report.solid2?.totals?.successCount ?? 0);
+    const total =
+      (report.solid1?.totals?.probeCount ?? 0) + (report.solid2?.totals?.probeCount ?? 0);
+    const actual = percentageOf(successes, total) ?? 0;
+    if (actual < globalPercentage) {
+      failures.push({
+        scope: "global",
+        metric: "successPercentage",
+        actual,
+        minimum: globalPercentage
+      });
+    }
+  }
+  const globalGeneratable = thresholds?.global?.minGeneratablePercentage;
+  if (typeof globalGeneratable === "number") {
+    const produced =
+      (report.solid1?.totals?.successCount ?? 0) +
+      (report.solid1?.totals?.partialCount ?? 0) +
+      (report.solid2?.totals?.successCount ?? 0) +
+      (report.solid2?.totals?.partialCount ?? 0);
+    const total =
+      (report.solid1?.totals?.probeCount ?? 0) + (report.solid2?.totals?.probeCount ?? 0);
+    const actual = percentageOf(produced, total) ?? 0;
+    if (actual < globalGeneratable) {
+      failures.push({
+        scope: "global",
+        metric: "generatablePercentage",
+        actual,
+        minimum: globalGeneratable
+      });
+    }
+  }
 
   const familyThresholds = thresholds?.families ?? {};
   for (const [familyId, rule] of Object.entries(familyThresholds)) {
     const minimum = rule?.minSuccessCount;
-    if (typeof minimum !== "number") continue;
+    const percentage = rule?.minSuccessPercentage;
+    const generatable = rule?.minGeneratablePercentage;
+    if (
+      typeof minimum !== "number" &&
+      typeof percentage !== "number" &&
+      typeof generatable !== "number"
+    ) continue;
 
     const comparison = report.combined?.familyComparison?.find(entry => entry.family === familyId);
     if (!comparison) {
@@ -1243,20 +1351,54 @@ export function evaluateThresholds(report, thresholds = {}) {
       // silence — it must not be treated the same as "no threshold".
       failures.push({
         scope: `family:${familyId}`,
-        metric: "successCount",
+        metric: typeof minimum === "number"
+          ? "successCount"
+          : typeof percentage === "number"
+            ? "successPercentage"
+            : "generatablePercentage",
         actual: 0,
-        minimum,
+        minimum: minimum ?? percentage ?? generatable,
         note: "family not present in report"
       });
       continue;
     }
 
-    const actual = (comparison.solid1?.successCount ?? 0) + (comparison.solid2?.successCount ?? 0);
-    if (actual < minimum) {
-      failures.push({ scope: `family:${familyId}`, metric: "successCount", actual, minimum });
+    const successes =
+      (comparison.solid1?.successCount ?? 0) + (comparison.solid2?.successCount ?? 0);
+    const total =
+      (comparison.solid1?.probeCount ?? 0) + (comparison.solid2?.probeCount ?? 0);
+    if (typeof minimum === "number" && successes < minimum) {
+      failures.push({
+        scope: `family:${familyId}`,
+        metric: "successCount",
+        actual: successes,
+        minimum
+      });
+    }
+    const actualPercentage = percentageOf(successes, total) ?? 0;
+    if (typeof percentage === "number" && actualPercentage < percentage) {
+      failures.push({
+        scope: `family:${familyId}`,
+        metric: "successPercentage",
+        actual: actualPercentage,
+        minimum: percentage
+      });
+    }
+    const partials =
+      (comparison.solid1?.partialCount ?? 0) + (comparison.solid2?.partialCount ?? 0);
+    const actualGeneratable = percentageOf(successes + partials, total) ?? 0;
+    if (typeof generatable === "number" && actualGeneratable < generatable) {
+      failures.push({
+        scope: `family:${familyId}`,
+        metric: "generatablePercentage",
+        actual: actualGeneratable,
+        minimum: generatable
+      });
     }
   }
 
-  failures.sort((left, right) => compareStrings(left.scope, right.scope));
+  failures.sort((left, right) =>
+    compareStrings(`${left.scope}:${left.metric}`, `${right.scope}:${right.metric}`)
+  );
   return { ok: failures.length === 0, failures };
 }

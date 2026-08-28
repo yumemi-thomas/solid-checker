@@ -16,6 +16,7 @@ pub mod dialect;
 mod evidence_sidecars;
 mod first_party_bundles;
 mod inferred_contract_v2;
+mod phase16_benchmark;
 mod proof_checker;
 mod proposal_generation;
 mod runtime_probe_wire;
@@ -58,6 +59,7 @@ pub use first_party_bundles::{
     BundleSelector, FirstPartyBundle, FirstPartyBundleError, bundled_first_party_contract_index,
     solid1_bundles, solid2_rc3_bundles,
 };
+pub use phase16_benchmark::phase16_benchmark_report;
 pub use proof_checker::{
     ProposalProofRequest, ProposalVerificationError, ProposalVerificationRequest,
     VerifiedContractArtifact, verify_and_encode_planned_proposal, verify_planned_proposal,

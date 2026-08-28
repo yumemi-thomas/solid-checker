@@ -6,6 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import {
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -66,20 +67,25 @@ function parseArguments(arguments_) {
   return options;
 }
 
-function finiteEntrypoints(manifest, requested) {
-  if (requested.length) return [...new Set(requested)].sort();
+export function finiteEntrypoints(manifest, requested) {
+  if (requested.length) {
+    return { entrypoints: [...new Set(requested)].sort(), wildcardRefusals: [] };
+  }
   const exports_ = manifest.exports;
-  if (!exports_ || typeof exports_ !== "object" || Array.isArray(exports_)) return ["."];
+  if (!exports_ || typeof exports_ !== "object" || Array.isArray(exports_)) {
+    return { entrypoints: ["."], wildcardRefusals: [] };
+  }
   const keys = Object.keys(exports_);
   const subpaths = keys.filter(key => key.startsWith("."));
-  if (!subpaths.length) return ["."];
-  const wildcard = subpaths.find(key => key.includes("*"));
-  if (wildcard) {
+  if (!subpaths.length) return { entrypoints: ["."], wildcardRefusals: [] };
+  const wildcardRefusals = subpaths.filter(key => key.includes("*")).sort();
+  const entrypoints = subpaths.filter(key => !key.includes("*")).sort();
+  if (!entrypoints.length) {
     throw new Error(
-      `package exports ${wildcard}; pass each finite --entrypoint explicitly so generation does not guess the public surface`
+      `package exports ${wildcardRefusals.join(", ")}; pass each finite --entrypoint explicitly so generation does not guess the public surface`
     );
   }
-  return subpaths.sort();
+  return { entrypoints, wildcardRefusals };
 }
 
 function specifierFor(packageName, entrypoint) {
@@ -140,6 +146,27 @@ function projectFiles(resolution) {
     files.add(resolve(resolution.packageRoot, entry.path));
   }
   return [...files].sort();
+}
+
+function stableRefusalReason(error, { packageRoot, scratch }) {
+  return (error?.message ?? String(error))
+    .replaceAll(packageRoot, "<package-root>")
+    .replaceAll(scratch, "<scratch>");
+}
+
+export async function retainIndependentlyMergeableProposals(proposals, attemptMerge) {
+  let merged = null;
+  let acceptedCount = 0;
+  const rejected = [];
+  for (const [index, candidate] of proposals.entries()) {
+    try {
+      merged = await attemptMerge(merged, candidate, index);
+      acceptedCount += 1;
+    } catch (error) {
+      rejected.push({ candidate, error });
+    }
+  }
+  return { merged, acceptedCount, rejected };
 }
 
 async function analyzeArtifact({
@@ -215,6 +242,8 @@ async function analyzeArtifact({
   return {
     document: output,
     plan,
+    entrypoint,
+    conditions,
     identity: JSON.stringify({
       entrypoint,
       runtime: resolution.runtime,
@@ -243,41 +272,113 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
   if (!manifest.name || !manifest.version) {
     throw new Error(`${manifestPath} must declare exact name and version`);
   }
-  const entrypoints = finiteEntrypoints(manifest, options.entrypoints);
+  const { entrypoints, wildcardRefusals } = finiteEntrypoints(
+    manifest,
+    options.entrypoints
+  );
   const output = resolve(options.output || join(packageRoot, "solid-reactivity.json"));
   const scratch = mkdtempSync(join(tmpdir(), "solid-checker-contract-v2-"));
   const proposals = [];
+  let emittedArtifactCases = 0;
+  const refusals = wildcardRefusals.map(entrypoint => ({
+    entrypoint,
+    conditions: null,
+    stage: "entrypoint-census",
+    reason: "wildcard export requires an explicit finite --entrypoint census"
+  }));
   try {
     const seenCases = new Set();
     const partitions = finiteConditionPartitions(manifest, options.conditions);
     for (const entrypoint of entrypoints) {
       for (const conditions of partitions) {
-        const proposal = await analyzeArtifact({
-          packageRoot,
-          manifest,
-          integrity: options.integrity,
-          entrypoint,
-          conditions,
-          scratch
-        });
+        let proposal;
+        try {
+          proposal = await analyzeArtifact({
+            packageRoot,
+            manifest,
+            integrity: options.integrity,
+            entrypoint,
+            conditions,
+            scratch
+          });
+        } catch (error) {
+          refusals.push({
+            entrypoint,
+            conditions,
+            stage: "artifact-case",
+            reason: stableRefusalReason(error, { packageRoot, scratch })
+          });
+          continue;
+        }
         if (seenCases.has(proposal.identity)) continue;
         seenCases.add(proposal.identity);
         proposals.push(proposal);
       }
     }
+    if (proposals.length === 0) {
+      const first = refusals[0];
+      throw new Error(
+        `no certifiable artifact case; ${refusals.length} case(s) refused` +
+          (first ? `; first refusal: ${first.entrypoint}: ${first.reason}` : "")
+      );
+    }
     mkdirSync(dirname(output), { recursive: true });
-    await checked(
-      [
-        ...proposals.flatMap(proposal => ["--merge-contract", proposal.document]),
-        "--merge-contract-output",
-        output,
-        ...proposals.flatMap(proposal => ["--merge-proposal-plan", proposal.plan]),
-        "--merge-proposal-plan-output",
-        `${output}.proposal.json`
-      ],
-      packageRoot
-    );
+    const merge = async (inputs, document, plan) =>
+      checked(
+        [
+          ...inputs.flatMap(proposal => ["--merge-contract", proposal.document]),
+          "--merge-contract-output",
+          document,
+          ...inputs.flatMap(proposal => ["--merge-proposal-plan", proposal.plan]),
+          "--merge-proposal-plan-output",
+          plan
+        ],
+        packageRoot
+      );
+    try {
+      await merge(proposals, output, `${output}.proposal.json`);
+      emittedArtifactCases = proposals.length;
+    } catch {
+      // One contradictory proposal must not erase unrelated exact cases. The
+      // fallback greedily replays Rust's merge boundary and refuses only the
+      // candidate that makes the normalized document/plan inconsistent.
+      const fallback = await retainIndependentlyMergeableProposals(
+        proposals,
+        async (merged, candidate, index) => {
+          const nextDocument = join(scratch, `merge-${index}.json`);
+          const nextPlan = `${nextDocument}.proposal.json`;
+          const inputs = merged ? [merged, candidate] : [candidate];
+          await merge(inputs, nextDocument, nextPlan);
+          return { document: nextDocument, plan: nextPlan };
+        }
+      );
+      for (const { candidate, error } of fallback.rejected) {
+        refusals.push({
+          entrypoint: candidate.entrypoint,
+          conditions: candidate.conditions,
+          stage: "proposal-merge",
+          reason: stableRefusalReason(error, { packageRoot, scratch })
+        });
+      }
+      if (!fallback.merged) throw new Error("no independently mergeable artifact case remains");
+      emittedArtifactCases = fallback.acceptedCount;
+      copyFileSync(fallback.merged.document, output);
+      copyFileSync(fallback.merged.plan, `${output}.proposal.json`);
+    }
     await checked(["--validate-contract", output], packageRoot);
+    writeFileSync(
+      `${output}.refusals.json`,
+      `${JSON.stringify(
+        {
+          format: "solid-checker-contract-proposal-refusals",
+          refusalVersion: 1,
+          package: { name: manifest.name, version: manifest.version },
+          refusals
+        },
+        null,
+        2
+      )}\n`
+    );
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -288,12 +389,17 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     plan: `${output}.proposal.json`,
     schemaVersion: 2,
     entrypoints: entrypoints.length,
-    artifactCases: proposals.length,
+    artifactCases: emittedArtifactCases,
+    refusedArtifactCases: refusals.length,
     accepted: false
   };
   if (!quiet) {
     process.stdout.write(
-      `generated unaccepted temporary-v2 proposal for ${manifest.name}@${manifest.version} at ${output}; proof verification must issue its receipt\n`
+      `generated unaccepted temporary-v2 proposal for ${manifest.name}@${manifest.version} at ${output}` +
+        (refusals.length
+          ? `; ${refusals.length} artifact case(s) refused and omitted`
+          : "") +
+        "; proof verification must issue its receipt\n"
     );
   }
   return result;

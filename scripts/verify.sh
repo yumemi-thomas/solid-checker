@@ -188,6 +188,12 @@ bun run --cwd packages/cli test
 step phase0-baseline
 bun scripts/package-contract-v2-phase0.mjs --check
 
+# Phase 16 pins full-corpus reachability/refusals and the accepted-corpus
+# compactness/load/query measurements. Expensive ecosystem generation is a
+# separately refreshed authority; this check refuses drift in any of its inputs.
+step phase16-corpus
+bun scripts/package-contract-v2-phase16.mjs --check
+
 # AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
 # `tsc` error against the real published Solid typings. Provisioning installs
 # the audited package versions and verifies them, so a drifted install fails

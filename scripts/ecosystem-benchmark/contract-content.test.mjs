@@ -9,6 +9,7 @@ import {
   CLAIM_DOMAINS,
   isUnknownClaim,
   readContractContent,
+  refusalPathFor,
   reviewPlanPathFor,
   summarizeContract,
   summarizeContractDocument,
@@ -75,7 +76,12 @@ test("legacy schema-version-1 documents are not measured", () => {
 
 test("proposal plans remain distinct from proof acceptance", () => {
   assert.equal(summarizeReviewPlan(plan()).checklistItems, 2);
-  assert.equal(summarizeContract({ contract: document(), reviewPlan: plan() }).fullyProven, false);
+  const summary = summarizeContract({ contract: document(), reviewPlan: plan() });
+  assert.equal(summary.fullyProven, false);
+  assert.equal(summary.wireBytes.canonicalMain, Buffer.byteLength(`${JSON.stringify(document())}\n`));
+  assert.equal(summary.wireBytes.proposalPlan, null);
+  assert.ok(summary.wireBytes.perExport > 0);
+  assert.ok(summary.wireBytes.perOperation > 0);
 });
 
 test("readContractContent uses the proposal-plan sibling", () => {
@@ -84,10 +90,22 @@ test("readContractContent uses the proposal-plan sibling", () => {
   try {
     writeFileSync(path, JSON.stringify(document()));
     writeFileSync(reviewPlanPathFor(path), JSON.stringify(plan()));
+    writeFileSync(
+      refusalPathFor(path),
+      JSON.stringify({
+        format: "solid-checker-contract-proposal-refusals",
+        refusalVersion: 1,
+        refusals: [{ entrypoint: "./types/*", stage: "entrypoint-census", reason: "open" }]
+      })
+    );
     const content = readContractContent(path, 0);
     assert.equal(content.measured, true);
     assert.equal(content.reviewPlanItems, 2);
     assert.equal(content.fullyProven, false);
+    assert.equal(content.wireBytes.prettyMain, Buffer.byteLength(JSON.stringify(document())));
+    assert.equal(content.wireBytes.proposalPlan, Buffer.byteLength(JSON.stringify(plan())));
+    assert.equal(content.artifactCasesRefused, 1);
+    assert.equal(content.artifactCaseRefusals[0].entrypoint, "./types/*");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

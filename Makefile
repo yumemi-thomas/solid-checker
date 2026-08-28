@@ -7,7 +7,7 @@ BUN ?= bun
 # compare with `make CARGO_TEST_RUNNER='nextest run' test-rust` when available.
 CARGO_TEST_RUNNER ?= test
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -51,6 +51,15 @@ verify:
 
 phase0-baseline:
 	$(BUN) scripts/package-contract-v2-phase0.mjs --check
+
+phase16-report:
+	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
+	  -p solid-facts-backend --bin solid-contract-phase16-bench
+	$(BUN) scripts/package-contract-v2-phase16.mjs --write \
+	  rust/target/release/solid-contract-phase16-bench
+
+phase16-check:
+	$(BUN) scripts/package-contract-v2-phase16.mjs --check
 
 compiler-facts-identity:
 	$(BUN) scripts/check-compiler-facts-identity.mjs
@@ -173,6 +182,7 @@ ecosystem-sentinel:
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 \
+	  --thresholds scripts/ecosystem-benchmark/phase16-thresholds.json
 
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark

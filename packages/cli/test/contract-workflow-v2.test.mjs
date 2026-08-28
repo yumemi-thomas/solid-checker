@@ -5,6 +5,10 @@ import { createRuntimeProbeHarness } from "../scripts/contract-probe-harness.mjs
 import { parseProbeArguments } from "../scripts/probe-contract.mjs";
 import { parseReviewArguments } from "../scripts/review-contract.mjs";
 import { parseVerifyArguments } from "../scripts/verify-contract.mjs";
+import {
+  finiteEntrypoints,
+  retainIndependentlyMergeableProposals
+} from "../scripts/generate-package-contract-v2.mjs";
 
 test("review exposes only temporary-v2 proposal inspection", () => {
   assert.deepEqual(parseReviewArguments(["proposal.json", "--output", "review.json"]), {
@@ -61,4 +65,38 @@ test("worker harness transports sequenced events and bounded drain counts", asyn
   assert.equal(harness.drainedMicrotasks(), 2);
   assert.equal(harness.drainedMacrotasks(), 1);
   assert.equal(flushed, 1);
+});
+
+test("finite entrypoint discovery keeps exact rows while refusing wildcard coverage", () => {
+  assert.deepEqual(
+    finiteEntrypoints(
+      { exports: { ".": "./index.js", "./web": "./web.js", "./types/*": "./types/*.d.ts" } },
+      []
+    ),
+    { entrypoints: [".", "./web"], wildcardRefusals: ["./types/*"] }
+  );
+  assert.throws(
+    () => finiteEntrypoints({ exports: { "./*": "./dist/*.js" } }, []),
+    /pass each finite --entrypoint/
+  );
+});
+
+test("a merge contradiction refuses only its exact artifact candidate", async () => {
+  const candidates = ["known-a", "contradictory-b", "known-c"].map(entrypoint => ({
+    entrypoint
+  }));
+  const attempts = [];
+  const result = await retainIndependentlyMergeableProposals(
+    candidates,
+    async (merged, candidate) => {
+      attempts.push({ merged: merged?.members ?? [], candidate: candidate.entrypoint });
+      if (candidate.entrypoint === "contradictory-b") throw new Error("invalid graph");
+      return { members: [...(merged?.members ?? []), candidate.entrypoint] };
+    }
+  );
+
+  assert.equal(result.acceptedCount, 2);
+  assert.deepEqual(result.merged.members, ["known-a", "known-c"]);
+  assert.deepEqual(result.rejected.map(item => item.candidate.entrypoint), ["contradictory-b"]);
+  assert.deepEqual(attempts[2], { merged: ["known-a"], candidate: "known-c" });
 });

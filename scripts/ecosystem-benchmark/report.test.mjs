@@ -101,6 +101,7 @@ function makeResult(overrides) {
         : outcome === "partial-success"
           ? 1
           : null,
+    refusedArtifactCases: overrides.refusedArtifactCases ?? null,
     checklistItems: overrides.checklistItems !== undefined ? overrides.checklistItems : producedContract ? 10 : null,
     outcome,
     class: overrides.class,
@@ -647,7 +648,8 @@ test("a partial contract is never counted as a success, and its refusals are rep
       class: "partial-success",
       declaredEntrypoints: 44,
       generatedEntrypoints: 28,
-      refusedEntrypoints: 16
+      refusedEntrypoints: 16,
+      refusedArtifactCases: null
     }),
     makeResult({
       package: "@kobalte/utils",
@@ -689,7 +691,8 @@ test("a partial contract is never counted as a success, and its refusals are rep
       version: "0.13.13",
       family: "kobalte",
       generatedEntrypoints: 28,
-      refusedEntrypoints: 16
+      refusedEntrypoints: 16,
+      refusedArtifactCases: null
     }
   ]);
   assert.equal(
@@ -704,7 +707,7 @@ test("a partial contract is never counted as a success, and its refusals are rep
   assert.match(markdown, /### Partial contracts/);
   assert.match(
     markdown,
-    /- @kobalte\/core@0\.13\.13 \(kobalte\): 28 entrypoint\(s\) generated, 16 refused/
+    /- @kobalte\/core@0\.13\.13 \(kobalte\): 28 entrypoint\(s\) generated, 16 entrypoint\(s\) and 0 artifact case\(s\) refused/
   );
 });
 
@@ -876,6 +879,28 @@ test("evaluateThresholds fails a regressed family, passes when met, and ignores 
   const globalCheck = evaluateThresholds(report, { global: { minSuccessCount: 100 } });
   assert.equal(globalCheck.ok, false);
   assert.equal(globalCheck.failures[0].scope, "global");
+
+  const percentageCheck = evaluateThresholds(report, {
+    global: { minSuccessPercentage: 85 },
+    families: { kobalte: { minSuccessPercentage: 75 } }
+  });
+  assert.equal(percentageCheck.ok, false);
+  assert.deepEqual(
+    percentageCheck.failures.map(failure => [failure.scope, failure.metric]),
+    [
+      ["family:kobalte", "successPercentage"],
+      ["global", "successPercentage"]
+    ]
+  );
+
+  const generatableCheck = evaluateThresholds(report, {
+    global: { minGeneratablePercentage: 1 },
+    families: { kobalte: { minGeneratablePercentage: 90 } }
+  });
+  assert.equal(generatableCheck.ok, false);
+  assert.deepEqual(generatableCheck.failures.map(failure => failure.metric), [
+    "generatablePercentage"
+  ]);
 });
 
 test("discovery limitations are copied into the combined section verbatim", () => {
