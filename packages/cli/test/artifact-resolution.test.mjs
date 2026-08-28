@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -382,4 +383,15 @@ test("accepts direct and default-wrapped TypeScript CommonJS namespaces", () => 
 
   expect(selectTypeScriptApi(api)).toBe(api);
   expect(selectTypeScriptApi({ default: api })).toBe(api);
+});
+
+test("loads the TypeScript compiler API from a repository-root Bun process", () => {
+  const repositoryRoot = join(import.meta.dirname, "../../..");
+  const result = spawnSync(
+    process.execPath,
+    ["--eval", 'await import("./packages/cli/scripts/artifact-resolution.mjs")'],
+    { cwd: repositoryRoot, encoding: "utf8" }
+  );
+
+  expect(result.status, result.stderr).toBe(0);
 });

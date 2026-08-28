@@ -10,10 +10,8 @@ import {
   realpathSync,
   statSync
 } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
-
-const require = createRequire(import.meta.url);
+import tsNamespace from "typescript";
 
 export function selectTypeScriptApi(namespace) {
   for (const candidate of [namespace, namespace?.default]) {
@@ -27,7 +25,7 @@ export function selectTypeScriptApi(namespace) {
   throw new TypeError("typescript module does not expose the compiler API");
 }
 
-const ts = selectTypeScriptApi(require("typescript"));
+const ts = selectTypeScriptApi(tsNamespace);
 
 const RUNTIME_EXTENSIONS = [".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"];
 const DECLARATION_EXTENSIONS = [".d.ts", ".d.mts", ".d.cts"];
