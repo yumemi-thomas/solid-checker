@@ -5,7 +5,7 @@ import { launch, runNative } from "./launcher.mjs";
 if (process.argv[2] === "contract") {
   try {
     const { generatePackageContract, packageContractHelp } = await import(
-      "../scripts/generate-package-contract-v2.mjs"
+      "../scripts/generate-package-contract.mjs"
     );
     if (process.argv[3] === "generate") {
       const args = process.argv.slice(4);

@@ -1,4 +1,4 @@
-// Temporary-v2 review orchestration. Rust expands and inspects normalized
+// Stable-v1 review orchestration. Rust expands and inspects normalized
 // semantics; JavaScript owns only CLI parsing and process lifecycle.
 
 import { resolve } from "node:path";
@@ -9,7 +9,7 @@ import { runNative } from "../bin/launcher.mjs";
 export const contractReviewHelp = `Usage:
   solid-checker contract review <PROPOSAL> [--output <FILE>]
 
-Writes a deterministic review document for an unaccepted temporary-v2
+Writes a deterministic review document for an unaccepted stable-v1
 proposal. The review lists exact artifact cases, exports, and recursively open
 semantic claims. It does not edit the proposal, close a claim, or issue an
 acceptance receipt.
@@ -63,6 +63,6 @@ export async function reviewContract(arguments_) {
   if (child.status !== 0) {
     throw new Error(child.stderr?.trim() || child.stdout?.trim() || `native checker exited ${child.status}`);
   }
-  process.stdout.write(`wrote temporary-v2 contract review to ${output}\n`);
+  process.stdout.write(`wrote stable-v1 contract review to ${output}\n`);
   return { proposal, output, schemaVersion: 2 };
 }

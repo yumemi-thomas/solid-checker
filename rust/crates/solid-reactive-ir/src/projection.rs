@@ -97,7 +97,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                         if *reexported { "re-exported" } else { "imported" }
                     ),
                     format!(
-                        "Audit {module} export {export} against the exact selected runtime artifact. Prove the open semantic leaves, issue a receipt for the finalized temporary-v2 document, and register that exact document/receipt pair in .solid-checker/accepted-contracts.json. An open leaf is not negative proof. See docs/package-contracts.md for the workflow."
+                        "Audit {module} export {export} against the exact selected runtime artifact. Prove the open semantic leaves, issue a receipt for the finalized stable-v1 document, and register that exact document/receipt pair in .solid-checker/accepted-contracts.json. An open leaf is not negative proof. See docs/package-contracts.md for the workflow."
                     ),
                 )
             } else {
@@ -108,7 +108,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                     ),
                     (terms.removed_export_hint)(module, export).unwrap_or_else(|| {
                         format!(
-                            "Generate a temporary-v2 proposal for the exact installed artifact, prove export {export}'s required semantic leaves (including any complete-negative claims), issue its receipt, and register the exact document/receipt pair in .solid-checker/accepted-contracts.json. See docs/package-contracts.md for the workflow."
+                            "Generate a stable-v1 proposal for the exact installed artifact, prove export {export}'s required semantic leaves (including any complete-negative claims), issue its receipt, and register the exact document/receipt pair in .solid-checker/accepted-contracts.json. See docs/package-contracts.md for the workflow."
                         )
                     }),
                 )
@@ -140,7 +140,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "callback parameter {parameter} ({parameter_type}) of {package}{entrypoint}:{function} reaches a call whose execution timing is unknown; this callback cannot be certified"
             ),
             format!(
-                "Audit the implementation for {package}{entrypoint} export {function}, callback parameter {parameter}. Required behavior: {required_execution}. Generate an exact temporary-v2 proposal with `solid-checker contract generate --package-root <package-root> --integrity <SRI> --entrypoint {entrypoint}`, prove the local open claim, issue a receipt, and register it in .solid-checker/accepted-contracts.json. Open-claim context: {claim_context}"
+                "Audit the implementation for {package}{entrypoint} export {function}, callback parameter {parameter}. Required behavior: {required_execution}. Generate an exact stable-v1 proposal with `solid-checker contract generate --package-root <package-root> --integrity <SRI> --entrypoint {entrypoint}`, prove the local open claim, issue a receipt, and register it in .solid-checker/accepted-contracts.json. Open-claim context: {claim_context}"
             ),
         ),
         StaticDefectKind::MissingEffectFunction => {
@@ -181,7 +181,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
             ),
             format!(
-                "If {callee} comes from a package, add a receipt-issued temporary-v2 contract for its exact artifact and callback operation. Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit. See docs/package-contracts.md."
+                "If {callee} comes from a package, add a receipt-issued stable-v1 contract for its exact artifact and callback operation. Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit. See docs/package-contracts.md."
             ),
         ),
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (

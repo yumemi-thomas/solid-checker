@@ -67,7 +67,7 @@ function request(root, acceptedContracts) {
 }
 
 function project() {
-  const root = mkdtempSync(join(tmpdir(), "solid-checker-wasm-v2-"));
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-wasm-"));
   const packageRoot = join(root, "node_modules/reactive-package");
   mkdirSync(packageRoot, { recursive: true });
   writeFileSync(join(packageRoot, "package.json"), PACKAGE_MANIFEST);
@@ -87,7 +87,7 @@ test("omitting acceptedContracts leaves external behavior unaccepted", () => {
   }
 });
 
-test("a receipt-issued temporary-v2 document crosses the WASM boundary", () => {
+test("a receipt-issued stable-v1 document crosses the WASM boundary", () => {
   const root = project();
   try {
     const snapshot = check(
@@ -124,13 +124,28 @@ test("a receipt mismatch is refused before analysis", () => {
   }
 });
 
+test("temporary schema-version-2 documents have no compatibility decoder", () => {
+  const root = project();
+  try {
+    const document = JSON.stringify({ ...JSON.parse(DOCUMENT), schemaVersion: 2 });
+    assert.throws(
+      () => check(request(root, [{ document, receipt: RECEIPT, import: rebaseImport(root) }])),
+      /schema version 2.*expected 1/i
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("legacy schema-version-1 documents have no compatibility decoder", () => {
   const root = project();
   try {
-    const document = JSON.stringify({ ...JSON.parse(DOCUMENT), schemaVersion: 1 });
+    const legacy = JSON.parse(DOCUMENT);
+    delete legacy.format;
+    const document = JSON.stringify(legacy);
     assert.throws(
       () => check(request(root, [{ document, receipt: RECEIPT, import: rebaseImport(root) }])),
-      /schema version 1.*expected 2/i
+      /contract document cannot be decoded.*missing field.*format/i
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

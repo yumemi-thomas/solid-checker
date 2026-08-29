@@ -38,7 +38,7 @@ struct Request {
     typefacts_executable: String,
     #[serde(default)]
     typefacts_args: Vec<String>,
-    /// Host-acquired exact imports paired with temporary-v2 main documents
+    /// Host-acquired exact imports paired with stable-v1 main documents
     /// and proof-issued receipts.
     #[serde(default)]
     accepted_contract_catalog: String,
@@ -1142,7 +1142,7 @@ fn print_help() {
            --check-contracts            Report imported Solid packages whose contract is\n\
                                         missing, unverified, or stale (audited against a\n\
                                         version this project no longer installs)\n\
-           --accepted-contracts <PATH>  Load a host-acquired catalog of temporary-v2\n\
+           --accepted-contracts <PATH>  Load a host-acquired catalog of stable-v1\n\
                                         documents, proof receipts, and exact resolved imports\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
            --enable-rule <NAME>         Explicitly enable one rule (repeatable)\n\
@@ -1171,7 +1171,7 @@ fn print_help() {
                                         Exact package-local ESM resolution map used to seed\n\
                                         contract analysis. Requires --emit-contract\n\
            --contract-resolution <PATH> Full exact package/artifact resolution record used\n\
-                                        to bind a temporary-v2 proposal. Required by\n\
+                                        to bind a stable-v1 proposal. Required by\n\
                                         --emit-contract\n\
            --package-name <NAME>        Package name used by --emit-contract\n\
            --package-version <VERSION>  Exact package version used by --emit-contract\n\

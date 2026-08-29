@@ -27,7 +27,7 @@ struct CheckRequest {
     generation: u64,
     sources: Vec<SourceFile>,
     type_facts: TypeScriptTable,
-    /// Receipt-validated temporary-v2 contracts paired with the host's full
+    /// Receipt-validated stable-v1 contracts paired with the host's full
     /// exact artifact-resolution records. Missing entries remain
     /// uncertifiable; this boundary has no name-only compatibility path.
     #[serde(default)]

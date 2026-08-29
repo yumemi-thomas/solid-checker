@@ -29,7 +29,7 @@ export interface SolidCheckerSettings {
   command?: string;
   /** Arguments placed before solid-checker's generated CLI arguments. */
   commandArgs?: string[];
-  /** Receipt-issued temporary-v2 contract catalog for exact imports. */
+  /** Receipt-issued stable-v1 contract catalog for exact imports. */
   acceptedContracts?: string;
   /** Force a dialect instead of detecting it from the project. */
   dialect?: "solid-v1" | "solid-v2" | (string & {});

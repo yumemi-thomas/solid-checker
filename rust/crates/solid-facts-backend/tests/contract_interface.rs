@@ -69,7 +69,7 @@ fn digest(bytes: &[u8]) -> String {
 fn development_document() -> Vec<u8> {
     let closure = resolved().closure.digest;
     format!(
-        "{{\"format\":\"solid-reactivity-contract\",\"schemaVersion\":2,\"semanticModelVersion\":1,\"package\":{{\"name\":\"solid-js\",\"version\":\"2.0.0-rc.3\",\"integrity\":\"sha512:test\",\"manifest\":{{\"path\":\"package.json\",\"sha256\":\"{}\"}}}},\"summaries\":{{\"plain\":{{\"shape\":\"plain\"}}}},\"entrypoints\":{{\".\":{{\"artifact\":{{\"path\":\"dist/solid.js\",\"sha256\":\"{}\",\"closureSha256\":\"{}\"}},\"declarations\":{{\"path\":\"types/index.d.ts\",\"sha256\":\"{}\"}},\"exports\":{{\"version\":\"plain\"}}}}}},\"sidecars\":{{}}}}",
+        "{{\"format\":\"solid-reactivity-contract\",\"schemaVersion\":1,\"semanticModelVersion\":1,\"package\":{{\"name\":\"solid-js\",\"version\":\"2.0.0-rc.3\",\"integrity\":\"sha512:test\",\"manifest\":{{\"path\":\"package.json\",\"sha256\":\"{}\"}}}},\"summaries\":{{\"plain\":{{\"shape\":\"plain\"}}}},\"entrypoints\":{{\".\":{{\"artifact\":{{\"path\":\"dist/solid.js\",\"sha256\":\"{}\",\"closureSha256\":\"{}\"}},\"declarations\":{{\"path\":\"types/index.d.ts\",\"sha256\":\"{}\"}},\"exports\":{{\"version\":\"plain\"}}}}}},\"sidecars\":{{}}}}",
         "a".repeat(64),
         "b".repeat(64),
         closure.trim_start_matches("sha256:"),
@@ -87,7 +87,7 @@ fn malformed_documents_fail_through_the_single_loading_interface() {
 }
 
 #[test]
-fn normalized_development_schema_refuses_a_receipt_not_issued_for_its_semantics() {
+fn normalized_stable_schema_refuses_a_receipt_not_issued_for_its_semantics() {
     let document = development_document();
     let receipt = format!(
         "{{\"receiptVersion\":1,\"wireDigest\":\"{}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-2-test\",\"policy\":1}}}}",
@@ -106,7 +106,7 @@ fn normalized_development_schema_refuses_a_receipt_not_issued_for_its_semantics(
 
 #[test]
 fn replacement_contract_requires_the_format_discriminator() {
-    let document = br#"{"schemaVersion":2,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test"},"entrypoints":{".":{"artifact":{},"exports":{}}}}"#;
+    let document = br#"{"schemaVersion":1,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test"},"entrypoints":{".":{"artifact":{},"exports":{}}}}"#;
     let receipt = format!(
         "{{\"receiptVersion\":1,\"wireDigest\":\"{}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-6-test\",\"policy\":1}}}}",
         digest(document),

@@ -38,7 +38,7 @@
     "name": "retained-callback-parameter",
     "version": "1.0.0"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {

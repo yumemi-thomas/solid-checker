@@ -34,11 +34,11 @@
     "name": "@solid-primitives/debounce",
     "version": "1.3.0"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {
     "proof": {
-      "sha256": "e49bbb46a908c3d4bd25c615263524d3f5fd94527992006385ef823fa75064bd"
+      "sha256": "5eadb9af8d94b5fb899d9755c376df459f78565a9473b2c8fd20096b9708ed47"
     }
   },
   "summaries": {

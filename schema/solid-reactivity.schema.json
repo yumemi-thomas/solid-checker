@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yumemi-thomas/solid-checker/schema/solid-reactivity-contract-v2.schema.json",
-  "title": "Temporary Solid Reactivity Contract v2",
+  "$id": "https://github.com/yumemi-thomas/solid-checker/schema/solid-reactivity.schema.json",
+  "title": "Solid Reactivity Contract",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "format": { "const": "solid-reactivity-contract" },
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": 1 },
     "semanticModelVersion": { "const": 1 },
     "package": { "$ref": "#/$defs/package" },
     "summaries": {

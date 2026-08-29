@@ -34,7 +34,7 @@
     "name": "@solid-primitives/debounce",
     "version": "1.3.0"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {

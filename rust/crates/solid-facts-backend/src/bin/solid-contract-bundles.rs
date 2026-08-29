@@ -1,4 +1,4 @@
-//! Regenerates receipt-issued temporary-v2 first-party contract bundles.
+//! Regenerates receipt-issued stable-v1 first-party contract bundles.
 
 use std::{
     env, fs,
@@ -85,8 +85,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
             let index = serde_json::to_vec_pretty(&BundleIndex {
-                schema_version: 2,
-                format: "solid-checker-temporary-v2-bundle-index",
+                schema_version: 1,
+                format: "solid-checker-package-contract-bundle-index",
                 contracts: entries,
             })?;
             let mut index_with_newline = index;
@@ -99,12 +99,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     if check {
-        println!("checked {} receipt-issued temporary-v2 bundle cases", count);
+        println!("checked {} receipt-issued stable-v1 bundle cases", count);
     } else {
-        println!(
-            "generated {} receipt-issued temporary-v2 bundle cases",
-            count
-        );
+        println!("generated {} receipt-issued stable-v1 bundle cases", count);
     }
     Ok(())
 }

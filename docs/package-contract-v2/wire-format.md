@@ -1,7 +1,7 @@
 # Compact wire format
 
-Status: **implemented for temporary `schemaVersion: 2` on 2026-08-27**. The
-checked-in [temporary JSON Schema](../../schema/solid-reactivity-contract-v2.schema.json)
+Status: **stable public `schemaVersion: 1` since 2026-08-29**. The checked-in
+[stable JSON Schema](../../schema/solid-reactivity.schema.json)
 is the structural authority; cross-field, normalization, and proof invariants
 remain Rust validation responsibilities. Shorter aliases are not permitted
 unless a later corpus measurement changes this document, schema, and decoder
@@ -12,7 +12,7 @@ atomically.
 ```json
 {
   "format": "solid-reactivity-contract",
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "package": {
     "name": "example-package",
@@ -32,8 +32,8 @@ atomically.
 }
 ```
 
-`format` distinguishes the replacement from the legacy schema that also uses
-stable version 1 after the final renumber. There is no `schemaStatus`.
+`format` distinguishes the stable model from the retired legacy shape that
+also used version 1. There is no `schemaStatus`.
 
 The root intentionally excludes generator identity, review status,
 `compilerFactsProtocol`, embedded claim evidence, and trust labels.

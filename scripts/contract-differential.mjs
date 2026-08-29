@@ -292,10 +292,10 @@ try {
   assert.deepEqual(
     consumerFindings,
     sourceFindings,
-    `accepted temporary-v2 boundary changed semantic findings\nsource: ${JSON.stringify(sourceFindings)}\nconsumer: ${JSON.stringify(consumerFindings)}`
+    `accepted stable-v1 boundary changed semantic findings\nsource: ${JSON.stringify(sourceFindings)}\nconsumer: ${JSON.stringify(consumerFindings)}`
   );
   console.log(
-    `contract differential: source and receipt-issued temporary-v2 consumers agree (${sourceFindings.length} finding${sourceFindings.length === 1 ? "" : "s"})`
+    `contract differential: source and receipt-issued stable-v1 consumers agree (${sourceFindings.length} finding${sourceFindings.length === 1 ? "" : "s"})`
   );
 } finally {
   rmSync(temporary, { recursive: true, force: true });

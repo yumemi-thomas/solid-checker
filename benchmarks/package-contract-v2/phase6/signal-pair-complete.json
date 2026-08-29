@@ -1,6 +1,6 @@
 {
   "format": "solid-reactivity-contract",
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "package": {
     "name": "solid-js",

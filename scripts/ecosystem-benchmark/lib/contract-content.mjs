@@ -1,4 +1,4 @@
-// Wire-level measurements for temporary-schema-v2 generator proposals.
+// Wire-level measurements for stable-schema-v1 generator proposals.
 //
 // This module deliberately does not normalize contract semantics. Rust owns
 // that boundary. The benchmark counts only explicit wire rows: public export
@@ -74,7 +74,7 @@ export function summarizeContractDocument(contract) {
     !contract ||
     typeof contract !== "object" ||
     contract.format !== "solid-reactivity-contract" ||
-    contract.schemaVersion !== 2 ||
+    contract.schemaVersion !== 1 ||
     contract.semanticModelVersion !== 1 ||
     !contract.entrypoints ||
     !contract.summaries
@@ -179,7 +179,7 @@ export function summarizeContract({
 }) {
   const document = summarizeContractDocument(contract);
   if (!document) {
-    return { measured: false, note: "temporary-v2 proposal missing or unparsable", fullyProven: null };
+    return { measured: false, note: "stable-v1 proposal missing or unparsable", fullyProven: null };
   }
   const plan = summarizeReviewPlan(reviewPlan);
   const refusedEntrypoints = refusedEntrypointsFromStdout ?? 0;

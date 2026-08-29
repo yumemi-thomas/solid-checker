@@ -7,7 +7,7 @@ BUN ?= bun
 # compare with `make CARGO_TEST_RUNNER='nextest run' test-rust` when available.
 CARGO_TEST_RUNNER ?= test
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase17-audit compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -61,8 +61,8 @@ phase16-report:
 phase16-check:
 	$(BUN) scripts/package-contract-v2-phase16.mjs --check
 
-phase17-audit:
-	$(BUN) scripts/package-contract-v2-phase17.mjs
+phase18-audit:
+	$(BUN) scripts/package-contract-phase18.mjs
 
 compiler-facts-identity:
 	$(BUN) scripts/check-compiler-facts-identity.mjs

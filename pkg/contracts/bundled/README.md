@@ -1,7 +1,7 @@
 # Receipt-issued first-party contracts
 
-Each dialect directory contains a `bundle-index.json` plus normalized
-temporary-schema-v2 main documents and their proof-issued receipts. The same
+Each dialect directory contains a `bundle-index.json` plus normalized stable-v1
+main documents and their proof-issued receipts. The same
 bytes are generated under `rust/crates/solid-dialect/contracts/` so the runtime
 and review locations cannot drift.
 

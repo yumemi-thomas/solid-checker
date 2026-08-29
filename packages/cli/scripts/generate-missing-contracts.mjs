@@ -6,7 +6,7 @@ import { runNative } from "../bin/launcher.mjs";
 import {
   generatePackageContract,
   packageContractHelp
-} from "./generate-package-contract-v2.mjs";
+} from "./generate-package-contract.mjs";
 
 // Every other `contract generate` option describes one package. Accepting one
 // beside `--missing` would apply a package-scoped assertion -- an entrypoint,

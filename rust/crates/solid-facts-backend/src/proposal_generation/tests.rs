@@ -325,7 +325,7 @@ fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradict
 }
 
 #[test]
-fn proof_finalization_precedes_v2_emission_and_receipt_issuance() {
+fn proof_finalization_precedes_stable_v1_emission_and_receipt_issuance() {
     let analysis = analysis();
     let resolved = analysis.resolutions[0].clone();
     let proposal = plan_probes(plan_proofs(construct_proposal(analysis).unwrap()));
@@ -344,7 +344,7 @@ fn proof_finalization_precedes_v2_emission_and_receipt_issuance() {
     })
     .unwrap();
     let document: serde_json::Value = serde_json::from_slice(&artifact.document).unwrap();
-    assert_eq!(document["schemaVersion"], 2);
+    assert_eq!(document["schemaVersion"], 1);
     assert_eq!(
         artifact.contract.receipt().wire_digest,
         Digest::parse(format!(
@@ -353,7 +353,7 @@ fn proof_finalization_precedes_v2_emission_and_receipt_issuance() {
         ))
         .unwrap()
     );
-    let normalized = crate::contract_document_v2::decode(&artifact.document)
+    let normalized = crate::contract_document::decode(&artifact.document)
         .unwrap()
         .normalize()
         .unwrap();

@@ -123,7 +123,7 @@ export const CHECKS = {
     command: ["cargo", TOOLCHAIN, "fmt", "--manifest-path", MANIFEST, "--all", "--", "--check"],
   },
   "whitespace-check": { command: ["git", "diff", "--check"] },
-  "schema-json": { command: ["jq", "empty", "schema/solid-reactivity-contract-v2.schema.json"] },
+  "schema-json": { command: ["jq", "empty", "schema/solid-reactivity.schema.json"] },
   "dialect-manifests": { command: ["bun", "scripts/dialect-manifests.mjs", "validate"] },
   clippy: {
     command: [

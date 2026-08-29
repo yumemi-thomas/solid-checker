@@ -168,7 +168,7 @@ impl CatalogWording for Catalog {
                             "has a reactivity contract for version {contract_version}, but version {installed_version} is installed"
                         ),
                         format!(
-                            "The accepted document is evidence about a release this project no longer installs. Generate a temporary-v2 proposal for node_modules/{package} with its exact registry integrity, prove the open claims, issue a new receipt, and update .solid-checker/accepted-contracts.json.",
+                            "The accepted document is evidence about a release this project no longer installs. Generate a stable-v1 proposal for node_modules/{package} with its exact registry integrity, prove the open claims, issue a new receipt, and update .solid-checker/accepted-contracts.json.",
                             package = issue.package
                         ),
                     ),
@@ -199,19 +199,19 @@ impl CatalogWording for Catalog {
                             )
                         } else {
                             format!(
-                                "A version string is not a pin: the installed bytes were republished, patched, or overridden, so the accepted document is evidence about a tarball this project does not have. Generate a temporary-v2 proposal for node_modules/{package} with its exact registry integrity, prove it, issue a receipt, and update .solid-checker/accepted-contracts.json.",
+                                "A version string is not a pin: the installed bytes were republished, patched, or overridden, so the accepted document is evidence about a tarball this project does not have. Generate a stable-v1 proposal for node_modules/{package} with its exact registry integrity, prove it, issue a receipt, and update .solid-checker/accepted-contracts.json.",
                                 package = issue.package
                             )
                         },
                     ),
                     PackageContractIssueKind::Unverified => (
-                        "has only an unaccepted temporary-v2 reactivity proposal".to_owned(),
+                        "has only an unaccepted stable-v1 reactivity proposal".to_owned(),
                         "Replay the proposal's required proof plan against the exact artifact. Only the Rust verifier may finalize closed claims and issue the receipt referenced by .solid-checker/accepted-contracts.json; probes may falsify but cannot accept closure.".into(),
                     ),
                     PackageContractIssueKind::Missing => (
                         "has no reactivity contract".to_owned(),
                         format!(
-                            "Generate a temporary-v2 proposal for {} at {}, verify its required proofs, and add the proof-issued receipt plus exact import identity to .solid-checker/accepted-contracts.json. Missing evidence remains uncertifiable. See docs/package-contracts.md for the workflow.",
+                            "Generate a stable-v1 proposal for {} at {}, verify its required proofs, and add the proof-issued receipt plus exact import identity to .solid-checker/accepted-contracts.json. Missing evidence remains uncertifiable. See docs/package-contracts.md for the workflow.",
                             issue.package, issue.contract_path
                         ),
                     ),

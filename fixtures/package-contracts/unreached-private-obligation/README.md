@@ -4,7 +4,7 @@
 and reachability therefore attribute its unresolved member dispatch to zero
 public exports. `Steady` retains its independently known semantics.
 
-The temporary-v2 proposal plan records unresolved semantic subjects and closure
+The stable-v1 proposal plan records unresolved semantic subjects and closure
 candidates rather than placing attribution notes or inline evidence in the main
 document. A zero-export decision must remain visible to the review/proof
 workflow, but it must not open `Steady` or synthesize a negative claim for the

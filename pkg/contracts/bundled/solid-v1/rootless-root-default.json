@@ -40,11 +40,11 @@
     "name": "@solid-primitives/rootless",
     "version": "1.5.4"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {
     "proof": {
-      "sha256": "86c7e22965a993f1c05f4f37ff2a167a4afae93b17c1640694e40ecd88669d4f"
+      "sha256": "4ab8db269d5fe0b6e88feb62cc35f2038baec03c87bd81fd456f0ca039cab511"
     }
   },
   "summaries": {

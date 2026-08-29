@@ -1,5 +1,5 @@
-//! Decoder and normalization boundary for the temporary package-contract v2
-//! development wire format.
+//! Decoder and normalization boundary for the stable package-contract wire
+//! format.
 //!
 //! Everything in this module is crate-private on purpose. Summary IDs,
 //! closure lists, omission rules, and schema spellings terminate here; the
@@ -28,7 +28,7 @@ use solid_reactive_ir::contract_semantics::{
 use crate::contract_interface::ContractFailure;
 
 const FORMAT: &str = "solid-reactivity-contract";
-const DEVELOPMENT_SCHEMA_VERSION: u16 = 2;
+const SCHEMA_VERSION: u16 = 1;
 const MAX_DOCUMENT_BYTES: usize = 1024 * 1024;
 const MAX_RECURSIVE_DEPTH: usize = 32;
 const MAX_JSON_DEPTH: usize = 128;
@@ -110,9 +110,9 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedContractDocument, ContractFa
             document.format
         ));
     }
-    if document.schema_version != DEVELOPMENT_SCHEMA_VERSION {
+    if document.schema_version != SCHEMA_VERSION {
         return Err(ContractFailure::UnsupportedSchemaVersion {
-            expected: DEVELOPMENT_SCHEMA_VERSION,
+            expected: SCHEMA_VERSION,
             actual: document.schema_version,
         });
     }
@@ -125,7 +125,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedContractDocument, ContractFa
     Ok(DecodedContractDocument { document })
 }
 
-/// Canonical temporary-v2 emission. This is the inverse of [`decode`] for a
+/// Canonical stable-v1 emission. This is the inverse of [`decode`] for a
 /// normalized contract that originated at this boundary. Compact summary IDs
 /// and local operation/resource spellings are created here and nowhere else.
 pub(crate) fn encode(
@@ -249,7 +249,7 @@ fn compact(
 
     Ok(json!({
         "format": FORMAT,
-        "schemaVersion": DEVELOPMENT_SCHEMA_VERSION,
+        "schemaVersion": SCHEMA_VERSION,
         "semanticModelVersion": contract.semantic_model_version(),
         "package": {
             "name": package.name,
@@ -3290,10 +3290,28 @@ mod tests {
 
     #[test]
     fn minimal_document_normalizes() {
-        let bytes = br#"{"format":"solid-reactivity-contract","schemaVersion":2,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test","manifest":{"path":"package.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"summaries":{"plain":{"shape":"plain"}},"entrypoints":{".":{"artifact":{"path":"dist/solid.js","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","closureSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"declarations":{"path":"types/index.d.ts","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},"exports":{"version":"plain"}}},"sidecars":{}}"#;
+        let bytes = br#"{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test","manifest":{"path":"package.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"summaries":{"plain":{"shape":"plain"}},"entrypoints":{".":{"artifact":{"path":"dist/solid.js","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","closureSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"declarations":{"path":"types/index.d.ts","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},"exports":{"version":"plain"}}},"sidecars":{}}"#;
         let contract = decode(bytes).unwrap().normalize().unwrap();
         assert_eq!(contract.semantic_model_version(), SEMANTIC_MODEL_VERSION);
         assert_eq!(contract.artifact_cases().len(), 1);
+    }
+
+    #[test]
+    fn stable_decoder_rejects_temporary_v2_and_legacy_v1() {
+        let temporary = br#"{"format":"solid-reactivity-contract","schemaVersion":2,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test","manifest":{"path":"package.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"summaries":{"plain":{"shape":"plain"}},"entrypoints":{".":{"artifact":{"path":"dist/solid.js","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","closureSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"declarations":{"path":"types/index.d.ts","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},"exports":{"version":"plain"}}},"sidecars":{}}"#;
+        assert!(matches!(
+            decode(temporary),
+            Err(ContractFailure::UnsupportedSchemaVersion {
+                actual: 2,
+                expected: 1
+            })
+        ));
+
+        let legacy = br#"{"schemaVersion":1,"package":{"name":"example","version":"1.0.0"},"entrypoints":{}}"#;
+        assert!(matches!(
+            decode(legacy),
+            Err(ContractFailure::DocumentDecode { .. })
+        ));
     }
 
     #[test]
@@ -3673,10 +3691,10 @@ mod tests {
     }
 
     #[test]
-    fn checked_in_schema_pins_the_temporary_envelope() {
+    fn checked_in_schema_pins_the_stable_envelope() {
         let schema: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../../schema/solid-reactivity-contract-v2.schema.json"
+            "/../../../schema/solid-reactivity.schema.json"
         )))
         .unwrap();
         assert_eq!(
@@ -3685,7 +3703,7 @@ mod tests {
         );
         assert_eq!(
             schema["properties"]["schemaVersion"]["const"],
-            serde_json::json!(DEVELOPMENT_SCHEMA_VERSION)
+            serde_json::json!(SCHEMA_VERSION)
         );
         assert_eq!(
             schema["properties"]["semanticModelVersion"]["const"],

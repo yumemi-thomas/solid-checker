@@ -1,4 +1,4 @@
-//! Process boundary for temporary-v2 runtime-probe orchestration.
+//! Process boundary for runtime-probe orchestration over stable main schema version 1.
 //!
 //! JavaScript launches isolated workers and transports events. This module
 //! owns every semantic read: proposal-plan authorization, exact mode binding,
@@ -15,7 +15,7 @@ use crate::{
     EnvironmentIdentity, IsolationIdentity, ProbeAuthority, ProbeEvent, ProbeEventClass,
     ProbeEventKind, ProbeEventMatch, ProbeMode, ProbeOutcome, ProbePolicy, ProbeRecipe, ProbeRun,
     ProbeRunOutcome, ProbeScenario, RuntimeProbePlan, SandboxIdentity, SandboxKind, ToolIdentity,
-    contract_document_v2,
+    contract_document,
     contract_workflow::{ContractWorkflowError, planned_probe_subjects},
     evaluate_runtime_probes,
     evidence_sidecars::WireSemanticClaimSubject,
@@ -226,7 +226,7 @@ pub fn plan_runtime_probes(
     proposal_plan_bytes: &[u8],
     request_bytes: &[u8],
 ) -> Result<PlannedRuntimeProbes, RuntimeProbeWireError> {
-    let contract = contract_document_v2::decode(proposal_bytes)?.normalize()?;
+    let contract = contract_document::decode(proposal_bytes)?.normalize()?;
     let authorized = planned_probe_subjects(&contract, proposal_plan_bytes)?;
     let request: WireRequest = decode(request_bytes)?;
     if request.format != REQUEST_FORMAT || request.schema_version != SCHEMA_VERSION {
@@ -928,13 +928,13 @@ mod tests {
     use crate::contract_workflow::encode_proposal_artifacts;
 
     #[test]
-    fn temporary_v2_plan_and_evaluation_keep_semantic_judgement_in_rust() {
+    fn runtime_probe_v2_plan_and_evaluation_keep_semantic_judgement_in_rust() {
         let bundle = crate::first_party_bundles::solid2_rc3_bundles()
             .unwrap()
             .into_iter()
             .find(|bundle| bundle.file_stem == "solid-js")
             .unwrap();
-        let contract = contract_document_v2::decode(&bundle.document)
+        let contract = contract_document::decode(&bundle.document)
             .unwrap()
             .normalize()
             .unwrap();

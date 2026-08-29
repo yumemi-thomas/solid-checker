@@ -7950,3 +7950,34 @@ protocol domains remain open. Wildcard-only surfaces, missing or non-file
 targets, unresolved callable kinds, external export-all without accepted
 dependency semantics, closure hazards, stale receipts, and unsupported
 artifact shapes continue to fail closed.
+
+## 2026-08-29 — Phase 18 cuts stable-v1 without changing semantic closure
+
+The sole main-document owner now emits and accepts stable public
+`schemaVersion: 1` only at `schema/solid-reactivity.schema.json`. The required
+`format: "solid-reactivity-contract"` discriminator separates it from the
+retired legacy-v1 shape; temporary-v2 is rejected. All 130 mains were re-
+emitted and all 73 acceptance receipts were reissued over their exact stable
+bytes. First-party proof transcripts and their wire-only sidecar/proof roots
+were regenerated where the stable encoding changed their inputs. Semantic,
+artifact, closure, closed-claim, verifier, and semantic-model identities did
+not change.
+
+The Phase 18 convergence authority inventories those documents plus 69
+independently versioned neighboring documents and 15 source owners. Runtime-
+probe, review, dialect-manifest, runtime-lock, receipt, catalog, sidecar, Type
+Facts, and compiler-facts versions remain in their own namespaces. Gate-cache
+and registry-memo formats moved to 3 so no pre-cut verdict crosses the widened
+input closure. No Type Facts producer/client/schema/protocol or Solid compiler
+fact/pin changed.
+
+The uncached 418-row ecosystem authority remains exactly 40 complete
+proposals, 318 partial proposals, and 60 full-row refusals, with 1,458 local
+artifact-case refusals. Every emitted proposal remains unaccepted without
+proof and receipt issuance; 43,106 open domain/recursive observations remain
+local across the measured proposal corpus. The Phase 13 browser,
+request/transport, serialization, dynamic-leaf, TypeScript-owned declaration,
+and unstable-protocol domains remain open. Wildcard-only surfaces, missing or
+non-file targets, unresolved callable kinds, external export-all without
+accepted dependency semantics, closure hazards, stale receipts, and
+unsupported artifact shapes continue to fail closed.

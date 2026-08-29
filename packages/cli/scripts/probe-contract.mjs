@@ -83,13 +83,13 @@ export async function probeContract(arguments_) {
   const base = ["--runtime-probe-proposal", proposal, "--runtime-probe-proposal-plan", proposalPlan, "--runtime-probe-request", request, "--runtime-probe-plan-output", planPath];
   native(base);
   if (options.planOnly) {
-    process.stdout.write(`wrote temporary-v2 runtime probe plan to ${planPath}\n`);
+    process.stdout.write(`wrote runtime-probe-v2 plan for stable-v1 proposal to ${planPath}\n`);
     return { proposal, plan: planPath, schemaVersion: 2, executed: false };
   }
   const plan = JSON.parse(readFileSync(planPath, "utf8"));
   const runs = await runProbeSessions(plan, request);
   writeFileSync(runsPath, `${JSON.stringify({ format: "solid-checker-runtime-probe-runs", schemaVersion: 2, planDigest: plan.planDigest, producer: producer(), runs }, null, 2)}\n`);
   native([...base, "--runtime-probe-runs", runsPath, "--runtime-probe-evaluation-output", report]);
-  process.stdout.write(`wrote Rust-classified temporary-v2 runtime probe evaluation to ${report}\n`);
+  process.stdout.write(`wrote Rust-classified runtime-probe-v2 evaluation to ${report}\n`);
   return { proposal, plan: planPath, runs: runsPath, report, schemaVersion: 2, executed: true, os: platform(), architecture: arch() };
 }

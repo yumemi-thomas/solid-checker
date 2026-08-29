@@ -149,7 +149,7 @@ fn proof_transcript_is_the_only_workflow_path_to_receipt_bytes() {
     let artifacts = encode_proposal_artifacts(&proposal, candidates, false).unwrap();
     let document = artifacts.document;
     let plan_bytes = artifacts.plan;
-    let proposal = contract_document_v2::decode(&document)
+    let proposal = contract_document::decode(&document)
         .unwrap()
         .normalize()
         .unwrap();
@@ -182,7 +182,7 @@ fn proof_transcript_is_the_only_workflow_path_to_receipt_bytes() {
     };
     let proof_bytes = emit(&proof).unwrap();
     let accepted = verify(&document, &plan_bytes, &proof_bytes, &selected, false).unwrap();
-    contract_document_v2::decode(&accepted.document)
+    contract_document::decode(&accepted.document)
         .unwrap()
         .normalize()
         .unwrap();

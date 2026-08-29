@@ -1,7 +1,7 @@
 # An export name present in only one conditional branch
 
 `observe` exists in the `browser` branch and not in the `node` one. The
-temporary-v2 model keeps those selections as separate exact artifact cases, so
+stable-v1 model keeps those selections as separate exact artifact cases, so
 the node case omits `observe` without turning that local absence into a global
 negative. A node consumer therefore cannot inherit the browser branch's
 callback semantics.

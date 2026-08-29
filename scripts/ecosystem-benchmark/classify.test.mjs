@@ -18,8 +18,8 @@ const SUCCESS_LINE =
 // NOT describe.
 const PARTIAL_SUCCESS_LINE =
   "generated @kobalte/core@0.13.13 contract with 28 entrypoints at /tmp/out/kobalte.json; 16 entrypoint(s) refused and omitted; review plan /tmp/out/kobalte.review.md (91 checklist items)";
-const TEMPORARY_V2_PARTIAL_SUCCESS_LINE =
-  "generated unaccepted temporary-v2 proposal for solid-js@2.0.0-rc.3 at /tmp/out/solid.json; 93 artifact case(s) refused and omitted; proof verification must issue its receipt";
+const STABLE_V1_PARTIAL_SUCCESS_LINE =
+  "generated unaccepted stable contract proposal for solid-js@2.0.0-rc.3 at /tmp/out/solid.json; 93 artifact case(s) refused and omitted; proof verification must issue its receipt";
 const EXPORT_KIND_UNRESOLVED_LINE =
   'solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "isApple", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify it invokes no caller-supplied callback';
 const EXPORT_KIND_CONFLICT_LINE =
@@ -271,10 +271,10 @@ test("ordering: the most specific marker wins when a message contains two marker
   assert.notEqual(result.class, "reactive-dispatch-unresolved");
 });
 
-test("temporary-v2 localized artifact refusals are partial success", () => {
+test("stable-v1 localized artifact refusals are partial success", () => {
   const result = classifyResult({
     status: 0,
-    stdout: TEMPORARY_V2_PARTIAL_SUCCESS_LINE,
+    stdout: STABLE_V1_PARTIAL_SUCCESS_LINE,
     stderr: "",
     phase: "generate"
   });

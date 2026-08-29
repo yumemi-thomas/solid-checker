@@ -4,7 +4,7 @@
 `queueMicrotask` in the default artifact. Both are known positives, but they
 belong to different exact artifact cases.
 
-The temporary-v2 proposal represents each callback as an operation with
+The stable-v1 proposal represents each callback as an operation with
 independent schedule, tracking, ownership, trigger, and cardinality axes. It
 does not union mutually exclusive callback rows into an environment-unaware
 summary. Exact selection returns one case; unresolved selection monotonically

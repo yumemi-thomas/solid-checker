@@ -127,7 +127,7 @@ async function benchmarkCurrentProbeExecution(iterations = 25) {
     samples.push(Math.round(elapsed * 100) / 100);
   }
   return {
-    authority: "current temporary-v2 fresh-process probe driver with a deterministic witness recipe",
+    authority: "current stable-v1 fresh-process probe driver with a deterministic witness recipe",
     semanticAcceptance: false,
     iterations,
     sessionsPerIteration: sessions.length,
@@ -393,7 +393,7 @@ Raw proof evidence retained by ordinary analysis: **${report.compactness.rawEvid
 | Accepted corpus load | ${performance.acceptedCorpusLoadNs.p50} | ${performance.acceptedCorpusLoadNs.p95} | ${performance.acceptedCorpusLoadNs.max} | ns / 24 cases |
 | Normalized export query | ${performance.normalizedQueryNsPerExport.p50} | ${performance.normalizedQueryNsPerExport.p95} | ${performance.normalizedQueryNsPerExport.max} | ns / lookup |
 
-The current probe row measures the temporary-v2 driver with a deterministic witness in a fresh process, realm, and module instance. The Phase 0 418-row distribution remains a historical ecosystem execution-envelope reference. Neither measurement is acceptance authority, and temporary-v2 proposals are never promoted by coverage or probe non-observation.
+The current probe row measures the stable-v1 driver with a deterministic witness in a fresh process, realm, and module instance. The Phase 0 418-row distribution remains a historical ecosystem execution-envelope reference. Neither measurement is acceptance authority, and stable-v1 proposals are never promoted by coverage or probe non-observation.
 
 ## Offline ordinary analysis
 

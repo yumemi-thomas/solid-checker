@@ -91,10 +91,10 @@ resolver adapters. Those seams do not become analyzer interfaces.
 ### Contract document module
 
 Owned by `solid-facts-backend`. The only live main-document implementation is
-`rust/crates/solid-facts-backend/src/contract_document_v2.rs`. It reads and
-emits temporary schema version 2; there is no stable-v1 compatibility adapter.
-The Phase 18 cut changes this one owner and every byte-bound artifact
-atomically, then gives the stable schema its final public path.
+`rust/crates/solid-facts-backend/src/contract_document.rs`. It reads and emits
+stable schema version 1; there is no temporary-v2 or legacy-v1 compatibility
+adapter. Phase 18 changed this one owner and every byte-bound artifact
+atomically and gave the stable schema its final public path.
 
 Responsibilities:
 

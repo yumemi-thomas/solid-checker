@@ -960,7 +960,7 @@ pub struct ContractEntrypoint {
 /// Generator-local knowledge for one inferred summary domain.
 ///
 /// This is not a wire type. `Open` means the producer has not established an
-/// exhaustive answer; normalization maps it to the exact temporary-v2 open
+/// exhaustive answer; normalization maps it to the exact stable-v1 open
 /// semantic leaf. No sentinel object is serialized.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContractClaim<T> {

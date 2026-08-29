@@ -107,7 +107,7 @@ function registryIntegrity(name, version) {
 const MEMO = join(root, "rust/target/registry-integrity.json");
 
 /** Bumped when a stored entry's *meaning* changes; older entries stop being readable. */
-export const MEMO_FORMAT_VERSION = 2;
+export const MEMO_FORMAT_VERSION = 3;
 
 const MEMO_FIELDS = ["formatVersion", "inputDigest", "entries"];
 // `name@version`, scoped names included. A key this does not match is a key
@@ -281,11 +281,11 @@ function main() {
   for (const manifest of manifests) {
     const index = JSON.parse(readFileSync(join(root, manifest.bundleIndex), "utf8"));
     if (
-      index.schemaVersion !== 2 ||
-      index.format !== "solid-checker-temporary-v2-bundle-index" ||
+      index.schemaVersion !== 1 ||
+      index.format !== "solid-checker-package-contract-bundle-index" ||
       !Array.isArray(index.contracts)
     ) {
-      fail(`${manifest.id}: ${manifest.bundleIndex} is not a temporary-v2 bundle index`);
+      fail(`${manifest.id}: ${manifest.bundleIndex} is not a stable-v1 bundle index`);
       continue;
     }
     const declared = new Set(manifest.contracts.map(contract => contract.package));

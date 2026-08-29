@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-// Phase 17 repository-wide temporary-v2 convergence authority.
+// Phase 18 repository-wide stable-v1 convergence authority.
 //
 // This gate inventories active main documents and every code boundary allowed
 // to encode, decode, transport, or inspect them. It intentionally treats each
@@ -15,16 +15,16 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const MAIN_FORMAT = "solid-reactivity-contract";
-export const MAIN_SCHEMA_VERSION = 2;
+export const MAIN_SCHEMA_VERSION = 1;
 export const SEMANTIC_MODEL_VERSION = 1;
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const VERSIONED_FORMATS = new Map([
-  [MAIN_FORMAT, { field: "schemaVersion", version: 2, semanticModel: true, main: true }],
-  ["solid-checker-temporary-v2-bundle-index", { field: "schemaVersion", version: 2 }],
+  [MAIN_FORMAT, { field: "schemaVersion", version: 1, semanticModel: true, main: true }],
+  ["solid-checker-package-contract-bundle-index", { field: "schemaVersion", version: 1 }],
   ["solid-checker-package-runtime-lock", { field: "schemaVersion", version: 2 }],
-  ["solid-checker-temporary-v2-generator-corpus", { field: "schemaVersion", version: 2 }],
+  ["solid-checker-package-contract-generator-corpus", { field: "schemaVersion", version: 1 }],
   ["solid-checker-contract-proposal-plan", { field: "planVersion", version: 1, semanticModel: true }],
   ["solid-checker-contract-proposal-refusals", { field: "refusalVersion", version: 1 }],
   ["solid-checker-contract-proof-transcript", { field: "proofVersion", version: 1, semanticModel: true }],
@@ -63,13 +63,15 @@ const ACTIVE_JSON_FILES = new Set([
 ]);
 
 const FORBIDDEN_ACTIVE_PATHS = [
-  "schema/solid-reactivity.schema.json",
-  "packages/cli/scripts/generate-package-contract.mjs",
+  "schema/solid-reactivity-contract-v2.schema.json",
+  "packages/cli/scripts/generate-package-contract-v2.mjs",
   "packages/cli/scripts/contract-document.mjs",
   "packages/cli/scripts/contract-verification.mjs",
   "packages/cli/scripts/runtime-module-closure.mjs",
-  "rust/crates/solid-facts-backend/src/contract_document.rs",
-  "rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs"
+  "rust/crates/solid-facts-backend/src/contract_document_v2.rs",
+  "rust/crates/solid-facts-backend/src/inferred_contract_v2.rs",
+  "rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs",
+  "scripts/package-contract-v2-phase17.mjs"
 ];
 
 const ACTIVE_TEXT_FILES = [
@@ -91,10 +93,10 @@ const ACTIVE_TEXT_FILES = [
 
 const SOURCE_OWNERS = [
   {
-    path: "rust/crates/solid-facts-backend/src/contract_document_v2.rs",
+    path: "rust/crates/solid-facts-backend/src/contract_document.rs",
     markers: [
       'const FORMAT: &str = "solid-reactivity-contract";',
-      "const DEVELOPMENT_SCHEMA_VERSION: u16 = 2;",
+      "const SCHEMA_VERSION: u16 = 1;",
       "pub(crate) fn decode(",
       "pub(crate) fn encode("
     ]
@@ -103,49 +105,49 @@ const SOURCE_OWNERS = [
     path: "rust/crates/solid-facts-backend/src/lib.rs",
     markers: [
       "pub fn validate_contract_document(",
-      "contract_document_v2::decode(bytes)?.normalize()?;",
-      "contract_document_v2::encode(&proposal"
+      "contract_document::decode(bytes)?.normalize()?;",
+      "contract_document::encode(&proposal"
     ]
   },
   {
     path: "rust/crates/solid-facts-backend/src/contract_interface.rs",
     markers: [
       "pub fn load_accepted_contract(",
-      "let document = contract_document_v2::decode(document_bytes)?;",
+      "let document = contract_document::decode(document_bytes)?;",
       "const ACCEPTED_CATALOG_VERSION: u16 = 1;"
     ]
   },
   {
     path: "rust/crates/solid-facts-backend/src/contract_workflow.rs",
     markers: [
-      "contract_document_v2::encode(",
+      "contract_document::encode(",
       "const PLAN_VERSION: u16 = 1;",
       "const PROOF_VERSION: u16 = 1;"
     ]
   },
   {
     path: "rust/crates/solid-facts-backend/src/proposal_generation.rs",
-    markers: ["contract_document_v2::encode(", "contract_document_v2::decode("]
+    markers: ["contract_document::encode(", "contract_document::decode("]
   },
   {
     path: "rust/crates/solid-facts-backend/src/evidence_sidecars.rs",
-    markers: ["pub const EVIDENCE_SIDECAR_VERSION: u16 = 1;", "contract_document_v2::decode("]
+    markers: ["pub const EVIDENCE_SIDECAR_VERSION: u16 = 1;", "contract_document::decode("]
   },
   {
     path: "rust/crates/solid-facts-backend/src/runtime_probe_wire.rs",
-    markers: ["const SCHEMA_VERSION: u16 = 2;", "contract_document_v2::decode("]
+    markers: ["const SCHEMA_VERSION: u16 = 2;", "contract_document::decode("]
   },
   {
     path: "rust/crates/solid-facts-backend/src/first_party_bundles.rs",
-    markers: ["contract_document_v2::decode("]
+    markers: ["contract_document::decode("]
   },
   {
     path: "rust/crates/solid-checker-wasm/src/lib.rs",
     markers: ["accepted_contracts: Vec<HostAcceptedContract>", "load_accepted_contract_index("]
   },
   {
-    path: "packages/cli/scripts/generate-package-contract-v2.mjs",
-    markers: ["Temporary-v2 package proposal producer.", "This file never reads a summary."]
+    path: "packages/cli/scripts/generate-package-contract.mjs",
+    markers: ["Stable package-contract proposal producer.", "This file never reads a summary."]
   },
   {
     path: "packages/cli/scripts/review-contract.mjs",
@@ -157,15 +159,29 @@ const SOURCE_OWNERS = [
   },
   {
     path: "packages/cli/scripts/contract-probe-driver.mjs",
-    markers: ["temporary schema version 2"]
+    markers: ["stable main schema version 1"]
   },
   {
     path: "scripts/check-bundled-contracts.mjs",
-    markers: ["receipt-issued temporary-v2 bundles", "document.schemaVersion !== 2"]
+    markers: ["receipt-issued stable-v1 bundles", "document.schemaVersion !== 1"]
   },
   {
     path: "scripts/contract-corpus.mjs",
-    markers: ["solid-checker-temporary-v2-generator-corpus", 'assertEnvelope(output, "solid-reactivity-contract"']
+    markers: ["solid-checker-package-contract-generator-corpus", 'assertEnvelope(output, "solid-reactivity-contract"']
+  }
+];
+
+const STABLE_BOUNDARY_TESTS = [
+  {
+    path: "packages/wasm/test/resolved-imports.test.mjs",
+    required: [
+      "temporary schema-version-2 documents have no compatibility decoder",
+      "/schema version 2.*expected 1/i",
+      "legacy schema-version-1 documents have no compatibility decoder",
+      "delete legacy.format;",
+      "/contract document cannot be decoded.*missing field.*format/i"
+    ],
+    forbidden: ["solid-checker-wasm-v2-", "/schema version 1.*expected 2/i"]
   }
 ];
 
@@ -181,9 +197,9 @@ const INDEPENDENT_JSON_VERSIONS = [
 
 const INDEPENDENT_SOURCE_VERSIONS = [
   ["rust/crates/solid-facts-backend/src/main.rs", "if document.schema_version != 1"],
-  ["packages/cli/scripts/generate-package-contract-v2.mjs", "{\"schemaVersion\":1,\"resolutions\":[]}"],
-  ["scripts/lib/gate-cache.mjs", "export const CACHE_FORMAT_VERSION = 2;"],
-  ["scripts/check-contract-pins.mjs", "export const MEMO_FORMAT_VERSION = 2;"],
+  ["packages/cli/scripts/generate-package-contract.mjs", "{\"schemaVersion\":1,\"resolutions\":[]}"],
+  ["scripts/lib/gate-cache.mjs", "export const CACHE_FORMAT_VERSION = 3;"],
+  ["scripts/check-contract-pins.mjs", "export const MEMO_FORMAT_VERSION = 3;"],
   ["rust/crates/solid-reactive-ir/src/contract_semantics.rs", "pub const SEMANTIC_MODEL_VERSION: u16 = 1;"],
   ["rust/crates/solid-reactive-ir/src/contract_semantics.rs", 'pub const SEMANTIC_DIGEST_ALGORITHM: &str = "sha256";'],
   ["rust/crates/solid-reactive-ir/src/contract_semantics.rs", 'pub const SEMANTIC_DIGEST_DOMAIN: &str = "solid-checker:normalized-package-contract";']
@@ -294,6 +310,25 @@ function readText(root, path) {
   return readFileSync(join(root, path), "utf8");
 }
 
+export function auditStableBoundaryTestEntries(entries) {
+  const byPath = new Map(entries.map(entry => [entry.path, String(entry.source)]));
+  for (const test of STABLE_BOUNDARY_TESTS) {
+    const source = byPath.get(test.path);
+    if (source === undefined) throw new Error(`stable boundary test is missing: ${test.path}`);
+    for (const marker of test.required) {
+      if (!source.includes(marker)) {
+        throw new Error(`${test.path} is missing stable boundary assertion ${marker}`);
+      }
+    }
+    for (const marker of test.forbidden) {
+      if (source.includes(marker)) {
+        throw new Error(`${test.path} retains temporary-v2 assertion ${marker}`);
+      }
+    }
+  }
+  return STABLE_BOUNDARY_TESTS.length;
+}
+
 function auditSourceInventory(root) {
   for (const path of FORBIDDEN_ACTIVE_PATHS) {
     if (existsSync(join(root, path))) throw new Error(`retired legacy path still exists: ${path}`);
@@ -321,10 +356,15 @@ function auditSourceInventory(root) {
     }
   }
 
+  const stableBoundaryTests = auditStableBoundaryTestEntries(
+    STABLE_BOUNDARY_TESTS.map(test => ({ path: test.path, source: readText(root, test.path) }))
+  );
+
   const javascriptMainReaders = [...new Set([
     ...trackedFiles(root, "*.mjs"),
-    "scripts/package-contract-v2-phase17.mjs"
+    "scripts/package-contract-phase18.mjs"
   ])]
+    .filter(path => existsSync(join(root, path)))
     .filter(path => !path.endsWith(".test.mjs"))
     .filter(path => new RegExp(`["']${MAIN_FORMAT}["']`).test(readText(root, path)))
     .sort();
@@ -332,7 +372,7 @@ function auditSourceInventory(root) {
     "scripts/check-bundled-contracts.mjs",
     "scripts/contract-corpus.mjs",
     "scripts/ecosystem-benchmark/lib/contract-content.mjs",
-    "scripts/package-contract-v2-phase17.mjs",
+    "scripts/package-contract-phase18.mjs",
     "scripts/solid-recharts-performance.mjs"
   ];
   if (JSON.stringify(javascriptMainReaders) !== JSON.stringify(allowedReaders)) {
@@ -341,11 +381,14 @@ function auditSourceInventory(root) {
     );
   }
 
-  return SOURCE_OWNERS.length;
+  return { sourceOwners: SOURCE_OWNERS.length, stableBoundaryTests };
 }
 
 export function auditRepository(root = repositoryRoot) {
-  const jsonPaths = trackedFiles(root, "*.json")
+  const jsonPaths = [...new Set([
+    ...trackedFiles(root, "*.json"),
+    "schema/solid-reactivity.schema.json"
+  ])]
     .filter(activeJsonPath)
     .filter(path => existsSync(join(root, path)))
     .sort();
@@ -359,11 +402,11 @@ export function auditRepository(root = repositoryRoot) {
     requireVersion(path, document, field, expected);
   }
 
-  const sourceOwners = auditSourceInventory(root);
+  const sourceInventory = auditSourceInventory(root);
   return {
     ...documents,
     auditedJsonFiles: entries.length,
-    sourceOwners,
+    ...sourceInventory,
     semanticModelVersion: SEMANTIC_MODEL_VERSION,
     semanticDigestAlgorithm: "sha256"
   };
@@ -372,7 +415,7 @@ export function auditRepository(root = repositoryRoot) {
 function main() {
   const result = auditRepository();
   console.log(
-    `phase17 convergence: ${result.mainDocuments} temporary-v2 mains, ` +
+    `phase18 convergence: ${result.mainDocuments} stable-v1 mains, ` +
       `${result.receipts} byte-bound receipts, ${result.independentVersionedDocuments} ` +
       `independent versioned documents, ${result.sourceOwners} source owners, ` +
       `${result.auditedJsonFiles} JSON files audited; semantic model v1 / sha256 frozen`
