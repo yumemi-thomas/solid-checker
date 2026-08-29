@@ -144,6 +144,12 @@ below the external five-minute job boundary observed in CI.
 reproduction. Lower the timeout elsewhere only after confirming every probe,
 not just the expected timeout, keeps the same classification.
 
+The CLI writes a progress-only heartbeat to stderr every 30 seconds while
+probes are active because child output is deliberately buffered into the final
+report. Heartbeats never enter result rows, report files, semantic digests, or
+threshold evaluation; they only bound how long an operator or CI runner sees
+no output.
+
 Do not hand-invent a probe id — always copy it from a manifest row's `probes`
 array, since the id encodes the exact package version, Solid target, and
 probe kind the manifest actually selected.
