@@ -1,0 +1,16 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "torture-environment-conditions-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./bare",
+      "conditions": [],
+      "stage": "artifact-case",
+      "reason": "solid-checker-rust: normalized operation graph is invalid: inference has no entrypoint \"./bare\""
+    }
+  ]
+}

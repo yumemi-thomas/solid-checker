@@ -1,6 +1,7 @@
 # Next package-contract design
 
-Status: **approved design; not yet the behavior of the current analyzer**.
+Status: **implemented on temporary schema version 2; stable public version 1
+cut pending**.
 
 This documentation set specifies the machine-first replacement for the current
 package-contract schema. The current implementation, bundled contracts, and
@@ -8,10 +9,11 @@ public documentation continue to describe the legacy schema until the migration
 plan reaches its atomic cut. Do not use this directory as evidence that an
 existing contract has already been accepted under the new proof policy.
 
-The replacement has one overriding objective: certify package behavior
-accurately while allowing the checker to verify a large package corpus without
-human review. Incomplete behavior remains locally open; no coverage target may
-weaken proof requirements.
+Phase 14 made the replacement the only producer and analyzer path, Phase 15
+bounded and adversarially hardened it, and Phase 16 measured its corpus,
+compactness, and performance gates. The stable public version-1 cut remains a
+later atomic phase. Incomplete behavior remains locally open; no coverage
+target may weaken proof requirements.
 
 ## Authority
 
@@ -80,6 +82,15 @@ RC.0 bundled examples cannot override those bytes.
   — sixteen exact-artifact normalized cases, finite dependency-closure
   censuses, proof/probe expectations, six-way fixture coverage, and replayed
   published declarations/runtime bytes without the Phase 14 public cutover.
+- [Phase 14 atomic migration completion](phase14/2026-08-28-producer-consumer-migration.md)
+  — temporary-v2 producer/consumer cutover, receipt-only analyzer loading,
+  regenerated bundles and fixtures, and removal of legacy normalization.
+- [Phase 15 adversarial-hardening completion](phase15/2026-08-28-adversarial-hardening.md)
+  — bounded document families, false-closure mutation gates, graph and path
+  attacks, and deterministic semantic fuzzing.
+- [Phase 16 corpus, compactness, and performance completion](phase16/2026-08-28-corpus-compactness-performance.md)
+  — exact RC.3 and ecosystem coverage, local refusal records, wire/evidence
+  size distributions, accepted load/query costs, and offline-analysis gates.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

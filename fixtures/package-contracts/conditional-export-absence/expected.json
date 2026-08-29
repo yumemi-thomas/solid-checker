@@ -1,0 +1,97 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "67c59af2731e23a062ef06a442721e3af5fa694b1bccfc6cb4c3d60f72a46a60",
+            "path": "./browser.js",
+            "sha256": "fa74b1e412723e250711ee693bf9a7d573c56b66f273f42ffe6e95f9f5c7470a"
+          },
+          "declarations": {
+            "path": "./browser.js",
+            "sha256": "fa74b1e412723e250711ee693bf9a7d573c56b66f273f42ffe6e95f9f5c7470a"
+          },
+          "exports": {
+            "observe": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
+            "shared": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser",
+            "typesBranch": "/exports/./browser"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "97f2d2c0dd887a5eb283b853fe5866b43a5dd77495117a5f8860e83861c68f50",
+            "path": "./node.js",
+            "sha256": "82b40360d811a664d6203f13b541ad87b6cee6a0b9d5313537476eb01640ffa8"
+          },
+          "declarations": {
+            "path": "./node.js",
+            "sha256": "82b40360d811a664d6203f13b541ad87b6cee6a0b9d5313537476eb01640ffa8"
+          },
+          "exports": {
+            "shared": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./node",
+            "typesBranch": "/exports/./node"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:8cc540141f09161a3b57e3396b01d8601daddfcf76daa88588cce818367663a3",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "8cc540141f09161a3b57e3396b01d8601daddfcf76daa88588cce818367663a3"
+    },
+    "name": "conditional-export-absence-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    }
+  }
+}

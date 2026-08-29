@@ -1,0 +1,10 @@
+{
+  "global": {
+    "minGeneratablePercentage": 85
+  },
+  "families": {
+    "solid-primitives": {
+      "minGeneratablePercentage": 90
+    }
+  }
+}

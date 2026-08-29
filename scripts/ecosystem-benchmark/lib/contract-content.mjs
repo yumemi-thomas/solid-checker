@@ -165,13 +165,35 @@ export function summarizeReviewPlan(plan) {
   };
 }
 
-export function summarizeContract({ contract, reviewPlan, refusedEntrypointsFromStdout = null }) {
+function byteLength(value) {
+  return Buffer.byteLength(value);
+}
+
+export function summarizeContract({
+  contract,
+  reviewPlan,
+  refusals = null,
+  refusedEntrypointsFromStdout = null,
+  mainBytes = null,
+  planBytes = null
+}) {
   const document = summarizeContractDocument(contract);
   if (!document) {
     return { measured: false, note: "temporary-v2 proposal missing or unparsable", fullyProven: null };
   }
   const plan = summarizeReviewPlan(reviewPlan);
   const refusedEntrypoints = refusedEntrypointsFromStdout ?? 0;
+  const refusedArtifactCases =
+    refusals?.format === "solid-checker-contract-proposal-refusals" &&
+    refusals?.refusalVersion === 1 &&
+    Array.isArray(refusals.refusals)
+      ? refusals.refusals
+      : [];
+  const operationCount = Object.values(document.behavioralRows).reduce(
+    (total, count) => total + count,
+    0
+  );
+  const canonicalMainBytes = byteLength(`${JSON.stringify(contract)}\n`);
   return {
     measured: true,
     // A generator output is a proposal. Even an entirely closed candidate is
@@ -180,6 +202,8 @@ export function summarizeContract({ contract, reviewPlan, refusedEntrypointsFrom
     entrypointsEmitted: document.entrypointsEmitted,
     artifactCasesTotal: document.artifactCasesTotal,
     entrypointsRefused: refusedEntrypoints,
+    artifactCasesRefused: refusedArtifactCases.length,
+    artifactCaseRefusals: refusedArtifactCases,
     refusedEntrypointNames: [],
     exportsTotal: document.exportsTotal,
     exportsProven: document.exportsProven,
@@ -196,6 +220,19 @@ export function summarizeContract({ contract, reviewPlan, refusedEntrypointsFrom
     attestedRuntimeNoteSamples: [],
     reviewPlanItems: plan?.checklistItems ?? null,
     reviewPlanItemsByKind: plan?.itemsByKind ?? null,
+    wireBytes: {
+      prettyMain: mainBytes ?? canonicalMainBytes,
+      canonicalMain: canonicalMainBytes,
+      proposalPlan: planBytes,
+      perExport:
+        document.exportsTotal > 0
+          ? Math.round((canonicalMainBytes / document.exportsTotal) * 100) / 100
+          : null,
+      perOperation:
+        operationCount > 0
+          ? Math.round((canonicalMainBytes / operationCount) * 100) / 100
+          : null
+    },
     ...(plan === null ? { note: "proposal plan missing or unparsable" } : {})
   };
 }
@@ -204,18 +241,29 @@ export function reviewPlanPathFor(contractPath) {
   return `${contractPath}.proposal.json`;
 }
 
-function readJsonOrNull(path) {
+export function refusalPathFor(contractPath) {
+  return `${contractPath}.refusals.json`;
+}
+
+function readJsonBytesOrNull(path) {
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    const bytes = readFileSync(path);
+    return { value: JSON.parse(bytes.toString("utf8")), bytes: bytes.length };
   } catch {
     return null;
   }
 }
 
 export function readContractContent(contractPath, refusedEntrypointsFromStdout = null) {
+  const contract = readJsonBytesOrNull(contractPath);
+  const reviewPlan = readJsonBytesOrNull(reviewPlanPathFor(contractPath));
+  const refusals = readJsonBytesOrNull(refusalPathFor(contractPath));
   return summarizeContract({
-    contract: readJsonOrNull(contractPath),
-    reviewPlan: readJsonOrNull(reviewPlanPathFor(contractPath)),
-    refusedEntrypointsFromStdout
+    contract: contract?.value ?? null,
+    reviewPlan: reviewPlan?.value ?? null,
+    refusals: refusals?.value ?? null,
+    refusedEntrypointsFromStdout,
+    mainBytes: contract?.bytes ?? null,
+    planBytes: reviewPlan?.bytes ?? null
   });
 }

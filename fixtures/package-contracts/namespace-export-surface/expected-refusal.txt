@@ -1,1 +1,1 @@
-solid-checker: solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export "Config"
+solid-checker: no certifiable artifact case; 1 case(s) refused; first refusal: .: solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export "Config"

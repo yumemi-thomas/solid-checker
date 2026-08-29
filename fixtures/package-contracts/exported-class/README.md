@@ -15,8 +15,9 @@ entrypoint; omission is never interpreted as “inert value.” Callback behavio
 for a proven constructor stays independently open because function kind does
 not prove what its constructor does with callable arguments.
 
-The Phase 14 generator refuses the overall package at an unsupported exported
-class surface and records the exact reason in `expected-refusal.txt`. Unit tests
-retain the positive/negative kind matrix and the rule that raising function
-kind cannot close callbacks. The fixture no longer expects a flat schema-1
-summary or inline unknown sentinel.
+The root artifact case is certifiable and remains in `expected.json`. Contract
+inference does not yet expose the four class-only subpaths as inference
+entrypoints, so each is locally refused in `expected-refusals.json` without
+erasing the independently known root case. Unit tests retain the
+positive/negative kind matrix and the rule that raising function kind cannot
+close callbacks.

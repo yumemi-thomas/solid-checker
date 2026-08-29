@@ -1,0 +1,123 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa",
+            "path": "./node.js",
+            "sha256": "fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444"
+          },
+          "declarations": {
+            "path": "./node.js",
+            "sha256": "fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444"
+          },
+          "exports": {
+            "Show": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./default"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "c1e358e47e5e016e555d536b3d54613d31932a296084d03190b7030ca92a9caa",
+            "path": "./node.js",
+            "sha256": "fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444"
+          },
+          "declarations": {
+            "path": "./node.js",
+            "sha256": "fcefb04a3038e2295d73b31ec50c3274fc25608fd5c31a05ca5e9c14f24dc444"
+          },
+          "exports": {
+            "Show": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./node",
+            "typesBranch": "/exports/./node"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "d3f8f6c409d33d287b3befb372724348d080ecdcee938de26116b196402445cc",
+            "path": "./browser.js",
+            "sha256": "c761a6fa07acb2dd2c3046c1591a4c72316a059d42795d260bcefaceebf8666a"
+          },
+          "declarations": {
+            "path": "./browser.js",
+            "sha256": "c761a6fa07acb2dd2c3046c1591a4c72316a059d42795d260bcefaceebf8666a"
+          },
+          "exports": {
+            "Show": "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933",
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser",
+            "typesBranch": "/exports/./browser"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:eeaaddac08570928efbdd683c7882239cd60a20512371e96b422e89639426b03",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "eeaaddac08570928efbdd683c7882239cd60a20512371e96b422e89639426b03"
+    },
+    "name": "conditional-returns-divergence-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "view",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

@@ -10,7 +10,8 @@ Temporary-v2 generation keeps each exact artifact case independent. There is
 no environment-unaware base summary: unresolved selection joins possible
 recursive shapes without turning either into a guarantee. The synthetic export
 map also admits the contradictory `browser,node` condition set, so generation
-refuses that case rather than inventing precedence; `expected-refusal.txt` pins
-the refusal.
+refuses that exact case rather than inventing precedence. The default and
+browser cases remain in `expected.json`; the contradictory selection and the
+independently conflicting node merge are pinned in `expected-refusals.json`.
 
 `Steady` is the equivalent-return control in both fixtures.

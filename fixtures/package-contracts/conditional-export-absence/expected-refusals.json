@@ -1,0 +1,25 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "conditional-export-absence-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "artifact-case",
+      "reason": ". selects no active package-export condition"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [
+        "browser",
+        "node"
+      ],
+      "stage": "artifact-case",
+      "reason": "solid-checker-rust: package contract error: runtime selection contains contradictory runtime target conditions: browser, node"
+    }
+  ]
+}

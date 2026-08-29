@@ -131,11 +131,26 @@ probe ids (`<package>@<version>|<solidTarget>|<kind>`) drawn from the current
 
 Note on runtime: the pinned set keeps a `timeout`-class probe, which by
 definition burns the full `--timeout` budget (300s by default) every run. That
-one probe dominates the sentinel's wall clock -- 27 probes take a little over
+one probe dominates the sentinel's wall clock -- 23 probes take a little over
 five minutes, almost all of it waiting for that one. It is kept deliberately:
 dropping it would leave the `timeout` path unexercised, and a classification
-regression there would go unnoticed. Lower `--timeout` only if you accept that
-the probe may then be classified from a different failure point.
+regression there would go unnoticed. The PR workflow runs one matrix shard per
+pinned family with `--timeout 120`: 120 seconds keeps every probe on its
+expected classification, while the family boundary limits each process tree
+to 1–6 related probes. Motion and Solid Recharts serialize their two measured
+heavy probes with `--concurrency 1`; the other six families use four workers.
+A final aggregate job retains the stable `sentinel` check name and passes only
+when every pinned family passed. Each shard uploads its own
+`report-sentinel-family-<family>.{json,md}` artifact.
+`make ecosystem-sentinel` deliberately keeps the 300-second default for local
+reproduction. Lower the timeout elsewhere only after confirming every probe,
+not just the expected timeout, keeps the same classification.
+
+The CLI also writes a progress-only heartbeat to stderr every 30 seconds while
+probes are active because child output is deliberately buffered into the final
+report. Heartbeats never enter result rows, report files, semantic digests, or
+threshold evaluation; they only bound how long an operator or CI runner sees
+no output.
 
 Do not hand-invent a probe id — always copy it from a manifest row's `probes`
 array, since the id encodes the exact package version, Solid target, and

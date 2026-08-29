@@ -307,3 +307,27 @@ census, exact TypeScript observations, and selected runtime traces. This is a
 certification input, not a second normalizer: Rust remains the sole semantic
 owner, and Phase 14 alone may connect the corpus to public producers, bundles,
 and analysis discovery.
+
+## Corpus and performance gate seam
+
+The Phase 16 benchmark is outside ordinary analysis. The ecosystem runner owns
+isolated exact-version installation and generator wall time. Rust owns the
+receipt-issued 24-case measurements and builds them through the ordinary proof
+checker before timing accepted loads and normalized export queries. A private
+measured-bundle wrapper carries proposal, plan, proof, and timing scalars only
+inside the benchmark path; `FirstPartyBundle` and `AcceptedContractIndex` do
+not expose benchmark or raw-evidence state.
+
+One artifact case that fails acquisition or normalized merge is recorded as an
+exact refusal while independently mergeable cases remain in a partial proposal.
+A structurally complete or partial proposal is still unaccepted. Corpus
+coverage and runtime-probe non-observation cannot close any claim; only the
+proof checker and matching receipt can create analyzer input.
+
+The checked Phase 16 artifacts bind their source reports by digest and record
+canonical and pretty main bytes, proposal-plan and raw proof-evidence bytes,
+receipt bytes, bytes per export/operation, generation, proof verification,
+accepted load, normalized query, and whole-process peak RSS. The source gate
+also confirms the analyzer-facing index has no filesystem, process, network,
+document-byte, receipt-byte, or sidecar field. Ordinary queries therefore stay
+closed over normalized semantics after acquisition inputs are dropped.

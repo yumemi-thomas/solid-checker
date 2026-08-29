@@ -14,7 +14,8 @@ import {
   recommendedConcurrency,
   resolveProbeIdFilter,
   runBenchmark,
-  runScope
+  runScope,
+  startProgressHeartbeat
 } from "./run.mjs";
 
 // ---------------------------------------------------------------------------
@@ -144,6 +145,13 @@ test("probe entrypoint scopes reach contract generation", async () => {
   const generateCalls = [];
   await runBenchmark({ manifest, hooks: successHooks({ generateCalls }) });
   assert.deepEqual(generateCalls[0].entrypoints, ["./solid"]);
+});
+
+test("the manifest's exact registry integrity reaches contract generation", async () => {
+  const manifest = fourProbeManifest();
+  const generateCalls = [];
+  await runBenchmark({ manifest, hooks: successHooks({ generateCalls }) });
+  assert.equal(generateCalls[0].integrity, manifest.rows[0].integrity);
 });
 
 test("a timeout during generation produces a timeout result and the run continues", async () => {
@@ -404,6 +412,35 @@ test("recommendedConcurrency follows available CPUs but caps process fan-out at 
   assert.equal(recommendedConcurrency(4), 4);
   assert.equal(recommendedConcurrency(12), 8);
   assert.equal(recommendedConcurrency(Number.NaN), 4);
+});
+
+test("the CLI progress heartbeat bounds silent runs without changing benchmark results", () => {
+  const lines = [];
+  let scheduled = null;
+  let cleared = null;
+  const timer = Symbol("progress timer");
+  const stop = startProgressHeartbeat({
+    intervalMs: 30_000,
+    writeLine: line => lines.push(line),
+    schedule: (callback, delay) => {
+      scheduled = { callback, delay };
+      return timer;
+    },
+    cancel: value => {
+      cleared = value;
+    }
+  });
+
+  assert.equal(scheduled.delay, 30_000);
+  scheduled.callback();
+  scheduled.callback();
+  assert.deepEqual(lines, [
+    "solid-checker-ecosystem-benchmark: still running (30s heartbeat; reports follow all probes)",
+    "solid-checker-ecosystem-benchmark: still running (60s heartbeat; reports follow all probes)"
+  ]);
+
+  stop();
+  assert.equal(cleared, timer);
 });
 
 test("resolveProbeIdFilter narrows to a sentinel subset intersected with family/solid filters", () => {

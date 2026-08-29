@@ -188,6 +188,21 @@ bun run --cwd packages/cli test
 step phase0-baseline
 bun scripts/package-contract-v2-phase0.mjs --check
 
+# Phase 16 pins full-corpus reachability/refusals and the accepted-corpus
+# compactness/load/query measurements. Expensive ecosystem generation is a
+# separately refreshed authority; this check refuses drift in any of its inputs.
+step phase16-corpus
+bun scripts/package-contract-v2-phase16.mjs --check
+
+# Proposal orchestration can change a refusal envelope without changing the
+# normalized Rust model. Keep the exact generator corpus in the local handoff
+# authority as well as its dedicated CI workflow so snapshot drift cannot hide
+# behind library and CLI unit coverage.
+step contract-corpus
+SOLID_CHECKER_NATIVE_BIN="$checker_bin" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
+  bun scripts/contract-corpus.mjs
+
 # AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
 # `tsc` error against the real published Solid typings. Provisioning installs
 # the audited package versions and verifies them, so a drifted install fails

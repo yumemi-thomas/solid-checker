@@ -1,1 +1,0 @@
-solid-checker: solid-checker-rust: normalized operation graph is invalid: inference has no entrypoint "./anonymous-default"

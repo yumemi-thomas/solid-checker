@@ -1,0 +1,34 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "exported-class",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./anonymous-default",
+      "conditions": [],
+      "stage": "artifact-case",
+      "reason": "solid-checker-rust: normalized operation graph is invalid: inference has no entrypoint \"./anonymous-default\""
+    },
+    {
+      "entrypoint": "./anonymous-extends",
+      "conditions": [],
+      "stage": "artifact-case",
+      "reason": "solid-checker-rust: normalized operation graph is invalid: inference has no entrypoint \"./anonymous-extends\""
+    },
+    {
+      "entrypoint": "./class-expression-default",
+      "conditions": [],
+      "stage": "artifact-case",
+      "reason": "solid-checker-rust: normalized operation graph is invalid: inference has no entrypoint \"./class-expression-default\""
+    },
+    {
+      "entrypoint": "./named-default",
+      "conditions": [],
+      "stage": "artifact-case",
+      "reason": "solid-checker-rust: normalized operation graph is invalid: inference has no entrypoint \"./named-default\""
+    }
+  ]
+}

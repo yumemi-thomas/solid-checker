@@ -91,6 +91,7 @@ async function generate(directory) {
   }
   const expected = join(directory, "expected.json");
   const expectedPlan = join(directory, "expected-proposal.json");
+  const expectedRefusals = join(directory, "expected-refusals.json");
   const expectedRefusal = join(directory, "expected-refusal.txt");
   if (failure) {
     const rendered = `${failure}\n`;
@@ -98,24 +99,52 @@ async function generate(directory) {
       writeFileSync(expectedRefusal, rendered);
       rmSync(expected, { force: true });
       rmSync(expectedPlan, { force: true });
+      rmSync(expectedRefusals, { force: true });
     } else if (!existsSync(expectedRefusal) || readFileSync(expectedRefusal, "utf8") !== rendered) {
       throw new Error(`${name} temporary-v2 refusal differs; inspect and run --update intentionally\n${failure}`);
     }
-    return { name, refused: true, cases: 0, closureCandidates: 0, unresolvedClaims: 0, positiveOperations: 0 };
+    return {
+      name,
+      refused: true,
+      refusedArtifactCases: 0,
+      cases: 0,
+      closureCandidates: 0,
+      unresolvedClaims: 0,
+      positiveOperations: 0
+    };
   }
   if (update) rmSync(expectedRefusal, { force: true });
   const plan = `${output}.proposal.json`;
+  const refusalOutput = `${output}.refusals.json`;
   const contract = assertEnvelope(output, "solid-reactivity-contract", "schemaVersion", 2);
   const planned = assertEnvelope(plan, "solid-checker-contract-proposal-plan", "planVersion", 1);
+  const refusals = assertEnvelope(
+    refusalOutput,
+    "solid-checker-contract-proposal-refusals",
+    "refusalVersion",
+    1
+  );
   if (contract.package.integrity !== integrity) {
     throw new Error(`${name} lost exact fixture package identity`);
   }
   if (planned.semanticDigest === "" || !Array.isArray(planned.unresolvedClaims)) {
     throw new Error(`${name} produced an incomplete proposal plan`);
   }
+  if (
+    refusals.package?.name !== contract.package.name ||
+    refusals.package?.version !== contract.package.version ||
+    !Array.isArray(refusals.refusals)
+  ) {
+    throw new Error(`${name} produced an invalid artifact-case refusal sidecar`);
+  }
   if (update) {
     copyFileSync(output, expected);
     copyFileSync(plan, expectedPlan);
+    if (refusals.refusals.length > 0) {
+      copyFileSync(refusalOutput, expectedRefusals);
+    } else {
+      rmSync(expectedRefusals, { force: true });
+    }
   } else {
     if (!existsSync(expectedPlan)) throw new Error(`${name} has no expected-proposal.json snapshot`);
     if (!readFileSync(output).equals(readFileSync(expected))) {
@@ -124,10 +153,21 @@ async function generate(directory) {
     if (!readFileSync(plan).equals(readFileSync(expectedPlan))) {
       throw new Error(`${name} temporary-v2 proposal-plan snapshot differs; inspect and run --update intentionally`);
     }
+    if (refusals.refusals.length > 0) {
+      if (!existsSync(expectedRefusals)) {
+        throw new Error(`${name} has no expected-refusals.json snapshot`);
+      }
+      if (!readFileSync(refusalOutput).equals(readFileSync(expectedRefusals))) {
+        throw new Error(`${name} artifact-case refusal snapshot differs; inspect and run --update intentionally`);
+      }
+    } else if (existsSync(expectedRefusals)) {
+      throw new Error(`${name} retains a stale expected-refusals.json snapshot`);
+    }
   }
   return {
     name,
     refused: false,
+    refusedArtifactCases: refusals.refusals.length,
     cases: Object.values(contract.entrypoints).reduce((count, entrypoint) => count + entrypoint.cases.length, 0),
     closureCandidates: planned.closureCandidates.length,
     unresolvedClaims: planned.unresolvedClaims.length,
@@ -140,16 +180,24 @@ try {
   const aggregate = rows.reduce(
     (result, row) => {
       result.cases += row.cases;
+      result.refusedArtifactCases += row.refusedArtifactCases;
       result.closureCandidates += row.closureCandidates;
       result.unresolvedClaims += row.unresolvedClaims;
       result.positiveOperations += row.positiveOperations;
       return result;
     },
-    { refusals: 0, cases: 0, closureCandidates: 0, unresolvedClaims: 0, positiveOperations: 0 }
+    {
+      refusedArtifactCases: 0,
+      cases: 0,
+      closureCandidates: 0,
+      unresolvedClaims: 0,
+      positiveOperations: 0
+    }
   );
   console.log(
     `${update ? "updated" : "checked"} ${rows.length} temporary-v2 generator fixtures: ` +
       `${rows.filter(row => row.refused).length} exact fail-closed refusals, ` +
+      `${aggregate.refusedArtifactCases} local artifact-case refusals, ` +
       `${aggregate.cases} artifact cases, ${aggregate.positiveOperations} possible operations, ` +
       `${aggregate.closureCandidates} proof candidates, ${aggregate.unresolvedClaims} local open claims`
   );

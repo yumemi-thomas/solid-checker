@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-checker-package-contract-phase16-report",
+  "generatedAt": "2026-08-28T08:05:13.515Z",
+  "authority": {
+    "solid": "2.0.0-rc.3",
+    "proofRule": "coverage never closes a claim; only checked proof and a receipt authorize analysis",
+    "inputs": {
+      "ecosystem": {
+        "path": "benchmarks/ecosystem/report.json",
+        "sha256": "2dea3aa0cf6d8f7e026b30cfa88f7f0d2efa87f4658c22808a3a9fe8a75a3bda"
+      },
+      "historicalVerification": {
+        "path": "benchmarks/ecosystem/verification-report.json",
+        "sha256": "8d127c2a44416a1be768dfee354dc65eb71f5feb40f6d47c984084775ff1708e"
+      },
+      "manifest": {
+        "path": "scripts/ecosystem-benchmark/manifest.json",
+        "sha256": "5c6fe39403bca959f281a087524beae9920fd9f0e3925b8d6cecc4f8dfaa0e09"
+      },
+      "syntheticCorpus": {
+        "path": "fixtures/package-contracts/corpus.json",
+        "sha256": "a1bc5a6f1e3d0c85430f29bc39f42d1c9322ec0e0cc363305a11d3a09364b997"
+      },
+      "phase13": {
+        "path": "benchmarks/package-contract-v2/phase13/conformance.json",
+        "sha256": "df7dc5662ccf647193a772be05635d138ae19bb80cf0f20f38c19137449b795b"
+      },
+      "currentProbeRecipe": {
+        "path": "scripts/package-contract-v2-phase16-probe-recipe.mjs",
+        "sha256": "f925a984343ac48af7c42ed91acb19e3c13c37b15e12a68d56b7d40a897dfc80"
+      }
+    }
+  },
+  "corpus": {
+    "officialRc3Packages": [
+      "solid-js@2.0.0-rc.3",
+      "@solidjs/signals@2.0.0-rc.3",
+      "@solidjs/web@2.0.0-rc.3"
+    ],
+    "ecosystemFamilies": [
+      "corvu",
+      "kobalte",
+      "motion-solidjs",
+      "official-solid",
+      "solid-devtools",
+      "solid-primitives",
+      "solid-recharts",
+      "tanstack"
+    ],
+    "ecosystem": {
+      "rows": 418,
+      "complete": 40,
+      "partial": 318,
+      "refused": 60,
+      "completePercentage": 9.57,
+      "generatablePercentage": 85.65
+    },
+    "solidPrimitives": {
+      "rows": 291,
+      "complete": 6,
+      "partial": 268,
+      "refused": 17,
+      "completePercentage": 2.06,
+      "generatablePercentage": 94.16
+    },
+    "syntheticGeneratorFixtures": 39,
+    "solid2ConformanceRows": 16,
+    "preservedReceiptIssuedRows": 24,
+    "refusalCounts": {
+      "generatedFailures": 60,
+      "partialEntrypoints": 0,
+      "partialArtifactCases": 1458,
+      "locallyOpenClaimDomains": 10,
+      "conformanceOpenRows": 36
+    }
+  },
+  "compactness": {
+    "acceptanceReceiptBytes": {
+      "count": 24,
+      "max": 669,
+      "p50": 669,
+      "p95": 669
+    },
+    "canonicalBytesPerExport": {
+      "count": 24,
+      "max": 4014,
+      "p50": 496.83,
+      "p95": 3142
+    },
+    "canonicalBytesPerOperation": {
+      "count": 19,
+      "max": 1114,
+      "p50": 833.38,
+      "p95": 1114
+    },
+    "canonicalMainBytes": {
+      "count": 24,
+      "max": 21538,
+      "p50": 3342,
+      "p95": 16202
+    },
+    "normalizedSemanticDebugBytes": {
+      "count": 24,
+      "max": 77687,
+      "p50": 12514,
+      "p95": 77601
+    },
+    "prettyMainBytes": {
+      "count": 24,
+      "max": 44703,
+      "p50": 5943,
+      "p95": 27772
+    },
+    "proofEvidenceBytes": {
+      "count": 24,
+      "max": 3209546,
+      "p50": 348386,
+      "p95": 3122474
+    },
+    "proposalBytes": {
+      "count": 24,
+      "max": 35080,
+      "p50": 5253,
+      "p95": 24893
+    },
+    "proposalPlanBytes": {
+      "count": 24,
+      "max": 671831,
+      "p50": 85545,
+      "p95": 652838
+    },
+    "rawEvidenceRetainedByOrdinaryAnalysis": 0,
+    "ecosystemProposalWireBytes": {
+      "prettyMain": {
+        "count": 358,
+        "p50": 2080,
+        "p95": 7364,
+        "max": 50378
+      },
+      "canonicalMain": {
+        "count": 358,
+        "p50": 1599,
+        "p95": 4813,
+        "max": 43055
+      },
+      "proposalPlan": {
+        "count": 358,
+        "p50": 49172,
+        "p95": 303349,
+        "max": 3676782
+      },
+      "perExport": {
+        "count": 358,
+        "p50": 332.25,
+        "p95": 1074,
+        "max": 1936
+      },
+      "perOperation": {
+        "count": 63,
+        "p50": 712.4,
+        "p95": 2138,
+        "max": 3349
+      }
+    }
+  },
+  "performance": {
+    "ecosystemGenerationMs": {
+      "count": 418,
+      "p50": 1568,
+      "p95": 25439,
+      "max": 434856
+    },
+    "currentAcceptedCorpus": {
+      "acceptedCorpusLoadNs": {
+        "count": 25,
+        "max": 16240875,
+        "p50": 15886458,
+        "p95": 16152208
+      },
+      "loadIterations": 25,
+      "memory": {
+        "baselinePeakResidentKiB": 1536,
+        "method": "getrusage-peak-rss",
+        "observedPeakDeltaKiB": 31232,
+        "postLoadPeakResidentKiB": 32768,
+        "scope": "whole benchmark process; includes checked-corpus construction and accepted loading; not a retained-heap measurement"
+      },
+      "normalizedQueryNsPerExport": {
+        "count": 250,
+        "max": 58,
+        "p50": 31,
+        "p95": 32
+      },
+      "proofVerificationAndReceiptNs": {
+        "count": 24,
+        "max": 207305125,
+        "p50": 22744667,
+        "p95": 206064250
+      },
+      "proposalAndProofInputGenerationNs": {
+        "count": 24,
+        "max": 15047792,
+        "p50": 1923458,
+        "p95": 14881292
+      },
+      "queryIterations": 250
+    },
+    "currentRuntimeProbeProcessExecution": {
+      "authority": "current temporary-v2 fresh-process probe driver with a deterministic witness recipe",
+      "semanticAcceptance": false,
+      "iterations": 25,
+      "sessionsPerIteration": 2,
+      "millisecondsPerIsolatedSession": {
+        "count": 25,
+        "p50": 20.13,
+        "p95": 21.16,
+        "max": 21.73
+      }
+    },
+    "runtimeProbeExecutionReference": {
+      "authority": "Phase 0 exact 418-row isolated-process run; execution-envelope reference only",
+      "currentSemanticAcceptance": false,
+      "distribution": {
+        "count": 399,
+        "medianMs": 118,
+        "p90Ms": 516,
+        "maxMs": 24180,
+        "meanMs": 458
+      }
+    }
+  },
+  "ordinaryAnalysis": {
+    "input": "AcceptedContractIndex / receipt-validated normalized semantics",
+    "networkAccess": false,
+    "packageCodeExecution": false,
+    "queryFileReads": false,
+    "rawSidecarBytes": 0,
+    "sourceGate": "solid-reactive-ir AcceptedContractIndex has no filesystem, process, network, document-byte, receipt-byte, or sidecar field"
+  }
+}

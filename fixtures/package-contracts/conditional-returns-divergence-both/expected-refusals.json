@@ -1,0 +1,27 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "conditional-returns-divergence-both-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [
+        "browser",
+        "node"
+      ],
+      "stage": "artifact-case",
+      "reason": "solid-checker-rust: package contract error: runtime selection contains contradictory runtime target conditions: browser, node"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [
+        "node"
+      ],
+      "stage": "proposal-merge",
+      "reason": "solid-checker-rust: contract workflow document is invalid: semantic claim subject does not exist for export Show in artifact case artifact-case:424dcdf963e3f88611c9becd1f8062eec8c46962d52379654787bbb5695ec071"
+    }
+  ]
+}

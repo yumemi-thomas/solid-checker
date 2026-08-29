@@ -63,16 +63,16 @@ export const FAILURE_CLASSES = [
 ];
 
 const SUCCESS_PATTERN =
-  /^(?:generated unaccepted temporary-v2 proposal for .+ at .+; proof verification must issue its receipt|generated .+ contract with \d+ entrypoints at .+; review plan .+ \(\d+ checklist items\))$/m;
+  /^(?:generated unaccepted temporary-v2 proposal for .+ at .+(?:; \d+ artifact case\(s\) refused and omitted)?; proof verification must issue its receipt|generated .+ contract with \d+ entrypoints at .+(?:; \d+ entrypoint\(s\) refused and omitted)?; review plan .+ \(\d+ checklist items\))$/m;
 
 // Historical schema-v1 benchmark logs may carry the old generator's own note
 // for a partial contract. Read it from the recorded statement rather than
 // inferred by comparing declared and generated entrypoint counts: a wildcard
 // subpath is one declared pattern expanding to many generated entrypoints, and
 // `sameAs` aliases collapse, so those two counts legitimately disagree on a
-// complete contract. The temporary-v2 generator refuses such cases locally
-// and never emits this suffix.
-const REFUSED_ENTRYPOINTS_PATTERN = /;\s*(\d+) entrypoint\(s\) refused and omitted/;
+// complete contract. The temporary-v2 generator records finer-grained
+// artifact-case refusals with the same explicit suffix.
+const REFUSED_CASES_PATTERN = /;\s*(\d+) (entrypoint|artifact case)\(s\) refused and omitted/;
 
 const INTEGRITY_PATTERN = /EINTEGRITY|integrity checksum failed|integrity mismatch|sha512 integrity/i;
 
@@ -331,13 +331,17 @@ function classifyGeneratePhase({ status, stdout, stderr, raw }) {
   if (status === 0) {
     const successMatch = SUCCESS_PATTERN.exec(stdout);
     if (successMatch) {
-      const refused = REFUSED_ENTRYPOINTS_PATTERN.exec(successMatch[0]);
+      const refused = REFUSED_CASES_PATTERN.exec(successMatch[0]);
       const detail = extractSuccessDetail(successMatch[0]);
       if (refused) {
         return {
           class: "partial-success",
           signature: normalizeSignature(successMatch[0]),
-          detail: { ...detail, refusedEntrypoints: Number(refused[1]) },
+          detail: {
+            ...detail,
+            refusedCases: Number(refused[1]),
+            refusalUnit: refused[2] === "entrypoint" ? "entrypoint" : "artifact-case"
+          },
           raw
         };
       }

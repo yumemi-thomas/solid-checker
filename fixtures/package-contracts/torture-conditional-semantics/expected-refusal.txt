@@ -1,1 +1,0 @@
-solid-checker: . selects no active package-export condition

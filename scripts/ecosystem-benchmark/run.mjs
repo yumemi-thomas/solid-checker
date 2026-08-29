@@ -54,6 +54,7 @@ const DEFAULT_MANIFEST = join(ROOT, "scripts/ecosystem-benchmark/manifest.json")
 const DEFAULT_SENTINEL = join(ROOT, "scripts/ecosystem-benchmark/sentinel.json");
 const DEFAULT_CLI = join(ROOT, "packages/cli/bin/solid-checker.mjs");
 const DEFAULT_TIMEOUT_SECONDS = 300;
+const PROGRESS_HEARTBEAT_INTERVAL_MS = 30_000;
 
 // Each probe launches Bun and the native checker, so unconstrained fan-out
 // can exhaust memory on large hosts. Eight kept all cores busy on the measured
@@ -67,6 +68,37 @@ export function recommendedConcurrency(parallelism = availableParallelism()) {
 }
 
 const DEFAULT_CONCURRENCY = recommendedConcurrency();
+
+// The real runner intentionally buffers each probe's child output so package
+// diagnostics become report data rather than interleaved console noise. Keep
+// the CLI visibly alive while that bounded work runs; this is operational
+// progress only and never enters a result, report, digest, or threshold.
+export function startProgressHeartbeat({
+  intervalMs = PROGRESS_HEARTBEAT_INTERVAL_MS,
+  writeLine = line => console.error(line),
+  schedule = (callback, delay) => setInterval(callback, delay),
+  cancel = timer => clearInterval(timer)
+} = {}) {
+  let beats = 0;
+  let stopped = false;
+  const timer = schedule(() => {
+    beats += 1;
+    try {
+      writeLine(
+        `solid-checker-ecosystem-benchmark: still running (${beats * intervalMs / 1000}s heartbeat; reports follow all probes)`
+      );
+    } catch {
+      // Losing a progress-only sink must not turn completed semantic work into
+      // a harness failure. The final report write remains authoritative.
+    }
+  }, intervalMs);
+
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    cancel(timer);
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for direct unit testing).
@@ -303,6 +335,7 @@ function buildResult({
   declaredEntrypoints,
   generatedEntrypoints,
   refusedEntrypoints = null,
+  refusedArtifactCases = null,
   checklistItems,
   // What the emitted contract actually claims, as opposed to whether it was
   // emitted. Null for every probe that never wrote one; see
@@ -334,6 +367,7 @@ function buildResult({
     declaredEntrypoints,
     generatedEntrypoints,
     refusedEntrypoints,
+    refusedArtifactCases,
     checklistItems,
     contractContent,
     outcome,
@@ -462,6 +496,7 @@ async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
         packageRoot,
         outputPath,
         timeoutMs,
+        integrity: row.integrity,
         entrypoints: probe.entrypoints ?? []
       });
     } catch (error) {
@@ -499,7 +534,14 @@ async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
       integrityVerified: true,
       declaredEntrypoints,
       generatedEntrypoints,
-      refusedEntrypoints: genClass.detail?.refusedEntrypoints ?? null,
+      refusedEntrypoints:
+        genClass.detail?.refusalUnit === "entrypoint"
+          ? genClass.detail.refusedCases
+          : null,
+      refusedArtifactCases:
+        genClass.detail?.refusalUnit === "artifact-case"
+          ? genClass.detail.refusedCases
+          : null,
       checklistItems,
       contractContent,
       outcome: probeOutcome(genClass.class),
@@ -694,7 +736,7 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
       return { ...result, installedVersions, integrity };
     },
 
-    generateContract: ({ packageRoot, outputPath, timeoutMs, entrypoints = [] }) =>
+    generateContract: ({ packageRoot, outputPath, timeoutMs, integrity, entrypoints = [] }) =>
       new Promise(resolvePromise => {
         const child = spawn(
           process.execPath,
@@ -704,6 +746,8 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
             "generate",
             "--package-root",
             packageRoot,
+            "--integrity",
+            integrity,
             "--output",
             outputPath,
             ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
@@ -864,6 +908,7 @@ async function main(argv = process.argv.slice(2)) {
 
   const startedAt = new Date().toISOString();
   let results;
+  const stopProgressHeartbeat = startProgressHeartbeat();
   try {
     results = await runBenchmark({
       manifest,
@@ -882,6 +927,8 @@ async function main(argv = process.argv.slice(2)) {
     // for.
     fail(`benchmark harness crashed: ${error?.stack ?? error}`);
     return;
+  } finally {
+    stopProgressHeartbeat();
   }
   const finishedAt = new Date().toISOString();
 

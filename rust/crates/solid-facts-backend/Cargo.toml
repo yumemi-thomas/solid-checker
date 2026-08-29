@@ -16,6 +16,7 @@ dialect-v2 = ["dep:solid-v2-compiler", "dep:solid-v2-rules"]
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+libc.workspace = true
 sha2.workspace = true
 oxc_diagnostics.workspace = true
 oxc_miette.workspace = true
@@ -48,6 +49,10 @@ path = "src/bin/solid-checker-cold-start-bench.rs"
 [[bin]]
 name = "solid-contract-bundles"
 path = "src/bin/solid-contract-bundles.rs"
+
+[[bin]]
+name = "solid-contract-phase16-bench"
+path = "src/bin/solid-contract-phase16-bench.rs"
 
 # Keep the two focused process boundaries addressable by the verification
 # matrix, but link the remaining integration modules once. Each root-level

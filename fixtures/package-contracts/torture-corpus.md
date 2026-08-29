@@ -1,13 +1,13 @@
 # Package-contract torture corpus
 
 These five packages are deliberately small release blockers for contract
-generation. Their `expected.json` files are normalized output pins; the corpus
-runner never updates them automatically.
+generation. Their main, proposal-plan, and localized-refusal files are exact
+output pins; the corpus runner never updates them automatically.
 
 | Fixture | Shape under test | Safety assertion |
 | --- | --- | --- |
 | `torture-runtime-namespace` | runtime-mutated object namespace and getter | the mutable namespace remains an unstructured value |
-| `torture-conditional-semantics` | browser and node exports with different callback timing | both conditional callback behaviors are retained |
+| `torture-conditional-semantics` | browser and node exports with different callback timing | both exact branches are retained; empty and contradictory selections are locally refused |
 | `torture-getter-exports` | getter-backed object/function exports | getter syntax does not fabricate a reactive claim; the real memo return stays explicit |
 | `torture-deep-barrel` | two-level `export *` and named re-export barrel | the exact deep declaration is followed once |
 | `torture-dts-disagreement` | declarations disagree with the runtime module | runtime exports win; declaration-only names never become claims |
@@ -21,6 +21,12 @@ The corpus runner registers more than these five (see `scripts/contract-corpus.m
 for the list and why each one is there), and a fixture may pin a second file:
 
 - `expected.json` — the normalized contract document.
+- `expected-proposal.json` — the proof candidates and exact local open claims
+  bound to that document.
+- `expected-refusals.json` — only for a partial proposal; every omitted exact
+  entrypoint/condition case, refusal stage, and stable reason.
+- `expected-refusal.txt` — only when no artifact case is certifiable and the
+  whole package must fail closed.
 - `expected-generation.json` — *optional*, and the review plan's closure record
   rather than the contract: per entrypoint, its `targets`, its modules as
   package-relative paths, and its `notes`/`runtimeNotes`. Module hashes are not
