@@ -114,5 +114,6 @@ the Phase 18 stable schema-version cut.
 ## Handoff
 
 - Branch: `codex/phase17-temporary-version2-convergence`
-- Implementation commit and pull request: recorded after the green handoff
-  commit is pushed.
+- Implementation commit: `77d66157` (`feat: complete package contract phase 17
+  convergence`)
+- Pull request: <https://github.com/yumemi-thomas/solid-checker/pull/59>
