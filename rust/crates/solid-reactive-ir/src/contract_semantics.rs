@@ -7,6 +7,7 @@
 //! uncertainty, and canonical semantic identity stay inside this deep module.
 
 mod canonical;
+pub mod certification;
 mod consumer;
 mod guards;
 pub mod proof;

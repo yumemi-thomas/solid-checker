@@ -1,0 +1,208 @@
+{
+  "format": "solid-checker-contract-proof-policy",
+  "policyVersion": 2,
+  "proofVersion": 2,
+  "receiptVersion": 2,
+  "semanticModelVersion": 1,
+  "status": "internal-not-active",
+  "canonicalEncoding": {
+    "name": "utf8-minified-ordered-json",
+    "version": 1
+  },
+  "digests": [
+    {
+      "purpose": "policy",
+      "algorithm": "sha256",
+      "domain": "solid-checker:contract-proof-policy:v2",
+      "framing": "u64be-length-prefixed-domain-and-payload"
+    },
+    {
+      "purpose": "demand-id",
+      "algorithm": "sha256",
+      "domain": "solid-checker:contract-proof-demand:v2",
+      "framing": "typed-length-prefixed-fields"
+    },
+    {
+      "purpose": "evidence-root",
+      "algorithm": "sha256",
+      "domain": "solid-checker:contract-proof-evidence:v2",
+      "framing": "typed-length-prefixed-fields"
+    },
+    {
+      "purpose": "receipt-payload",
+      "algorithm": "sha256",
+      "domain": "solid-checker:acceptance-receipt:v2",
+      "framing": "typed-length-prefixed-fields"
+    }
+  ],
+  "coverage": {
+    "positiveFacts": "all-analyzer-visible-candidates",
+    "closures": "all-proposed-closures",
+    "inapplicability": "verifier-derived",
+    "unprovedPositive": "remove-or-refuse",
+    "unprovedClosure": "leave-open-or-refuse"
+  },
+  "applicability": {
+    "artifactPrerequisites": [
+      {
+        "family": "package-identity",
+        "authority": "package-artifacts",
+        "appliesTo": "artifact-case"
+      },
+      {
+        "family": "manifest-entrypoint",
+        "authority": "package-artifacts",
+        "appliesTo": "artifact-case"
+      },
+      {
+        "family": "export-resolution",
+        "authority": "package-artifacts",
+        "appliesTo": "artifact-case"
+      },
+      {
+        "family": "artifact-declarations",
+        "authority": "package-artifacts",
+        "appliesTo": "artifact-case"
+      },
+      {
+        "family": "export-identity",
+        "authority": "package-artifacts",
+        "appliesTo": "artifact-case"
+      },
+      {
+        "family": "module-closure",
+        "authority": "package-artifacts",
+        "appliesTo": "artifact-case"
+      }
+    ],
+    "claimFamilies": [
+      {
+        "family": "selected-signature",
+        "authority": "type-facts",
+        "appliesTo": "selected-call-signature"
+      },
+      {
+        "family": "argument-binding",
+        "authority": "type-facts",
+        "appliesTo": "argument-or-callback-binding"
+      },
+      {
+        "family": "rest-spread-coverage",
+        "authority": "type-facts",
+        "appliesTo": "rest-or-spread-site"
+      },
+      {
+        "family": "callable-path",
+        "authority": "type-facts",
+        "appliesTo": "callable-value-path"
+      },
+      {
+        "family": "operation-reachability",
+        "authority": "type-facts",
+        "appliesTo": "operation-or-operation-edge"
+      },
+      {
+        "family": "operation-cardinality",
+        "authority": "type-facts",
+        "appliesTo": "operation-cardinality"
+      },
+      {
+        "family": "recursive-value-shape",
+        "authority": "type-facts",
+        "appliesTo": "recursive-value-item"
+      },
+      {
+        "family": "guard-partition",
+        "authority": "type-facts",
+        "appliesTo": "guard-or-partition"
+      },
+      {
+        "family": "domain-exhaustiveness",
+        "authority": "type-facts",
+        "appliesTo": "proposed-domain-closure"
+      }
+    ],
+    "compilerReconciliation": {
+      "family": "compiler-reconciliation",
+      "authority": "compiler-execution-facts",
+      "appliesTo": "compiler-owned-site"
+    },
+    "dependencyComposition": {
+      "family": "accepted-dependency-composition",
+      "authority": "accepted-dependency-contract",
+      "appliesTo": "relevant-external-dependency-edge"
+    },
+    "probeConsistency": {
+      "family": "probe-consistency",
+      "authority": "runtime-probe",
+      "mode": "separate-veto",
+      "appliesTo": "verifier-scheduled-probe",
+      "missingRequiredProbe": "refuse",
+      "absenceProvesNegative": false,
+      "successfulObservation": "possible-positive-only"
+    }
+  },
+  "producerConstraints": {
+    "packageArtifacts": {
+      "session": "immutable-snapshot",
+      "registryOrLockProvenanceRequired": true,
+      "lifecycleScriptsAllowed": false,
+      "callerSerializedAuthorityAccepted": false
+    },
+    "typeFacts": {
+      "session": "direct-fresh-process",
+      "executableDigestRequired": true,
+      "runtimeDigestRequired": true,
+      "buildAndProtocolIdentityRequired": true,
+      "callerSerializedAuthorityAccepted": false
+    },
+    "compilerExecutionFacts": {
+      "session": "direct-fresh-process",
+      "executableDigestRequired": true,
+      "runtimeDigestRequired": true,
+      "buildAndProtocolIdentityRequired": true,
+      "callerSerializedAuthorityAccepted": false
+    },
+    "acceptedDependencyContract": {
+      "receipt": "authenticated-policy-2",
+      "exactDependencyEdgeBindingRequired": true
+    },
+    "runtimeProbe": {
+      "harness": "isolated-bounded",
+      "harnessDigestRequired": true,
+      "environmentIdentityRequired": true,
+      "contradictionIsVeto": true
+    }
+  },
+  "resourceBudgets": {
+    "contractDocumentBytes": 1048576,
+    "proofDocumentBytes": 16777216,
+    "receiptBytes": 65536,
+    "jsonDepth": 128,
+    "jsonNodes": 1000000,
+    "stringBytes": 16384,
+    "demands": 65536,
+    "witnessItemsPerDemand": 16384,
+    "archiveBytes": 268435456,
+    "expandedArchiveBytes": 1073741824,
+    "archiveMembers": 100000,
+    "packagePathBytes": 4096
+  },
+  "receiptTrust": {
+    "canonicalMainEncodingRequired": true,
+    "policyDigestConstraintRequired": true,
+    "receiptCarriedKeyIsTrustRoot": false,
+    "builtIn": {
+      "provenance": "binary-embedded",
+      "externalSignatureRequired": false
+    },
+    "persistentLocal": {
+      "algorithm": "ed25519",
+      "configuredIssuerAndTrustRootRequired": true
+    },
+    "portable": {
+      "algorithm": "ed25519",
+      "explicitTrustStoreChainRequired": true
+    }
+  }
+}

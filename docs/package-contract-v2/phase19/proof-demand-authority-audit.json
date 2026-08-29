@@ -1,0 +1,400 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-checker-package-contract-phase19-demand-authority-audit",
+  "capturedAt": "2026-08-29",
+  "certificationReady": false,
+  "statusMeaning": {
+    "already exact": "The named producer field and its local completeness state already carry the stated fact exactly; policy 2 may consume it only after every separately listed snapshot or session binding demand succeeds.",
+    "producer extension required": "A nearby producer owns the fact, but the named binding or completeness guarantee does not yet exist and must be added before certification.",
+    "unsupported": "No current authoritative producer can prove this demand; the exact subject remains open or is refused."
+  },
+  "demands": [
+    {
+      "id": "package-identity/registry-publication-provenance",
+      "family": "package-identity",
+      "status": "producer extension required",
+      "producerField": "ResolvedImport.packageName/packageVersion/packageIntegrity",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "The selected resolver returns one exact package tuple.",
+      "policy2Gap": "Registry origin, independently selected metadata, archive SRI, and immutable snapshot identity are not bound."
+    },
+    {
+      "id": "package-identity/lock-pinned-provenance",
+      "family": "package-identity",
+      "status": "producer extension required",
+      "producerField": "ResolvedImport.packageName/packageVersion/packageIntegrity",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "The resolver preserves the selected package tuple.",
+      "policy2Gap": "There is no distinct lock-entry provenance type or binding to exact lockfile bytes."
+    },
+    {
+      "id": "package-identity/local-artifact-provenance",
+      "family": "package-identity",
+      "status": "unsupported",
+      "producerField": null,
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "none",
+      "policy2Gap": "Semantic-model version 1 cannot safely overload registry integrity with workspace or link provenance."
+    },
+    {
+      "id": "manifest-entrypoint/selected-entrypoint",
+      "family": "manifest-entrypoint",
+      "status": "already exact",
+      "producerField": "ResolvedImport.requestedEntrypoint/runtimeTrace/declarationTrace",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "The resolved import carries the exact requested entrypoint and selected resolution branches.",
+      "policy2Gap": "The exact field remains conditional on the separate snapshot-binding demand."
+    },
+    {
+      "id": "manifest-entrypoint/immutable-manifest-binding",
+      "family": "manifest-entrypoint",
+      "status": "producer extension required",
+      "producerField": "ResolvedImport.packageManifest",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "The manifest path and digest are validated at resolution time.",
+      "policy2Gap": "Later reads are not constrained to immutable snapshot bytes."
+    },
+    {
+      "id": "export-resolution/runtime-declaration-target-pair",
+      "family": "export-resolution",
+      "status": "already exact",
+      "producerField": "ResolvedImport.exports",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Each supplied public export binding carries exact runtime and declaration targets.",
+      "policy2Gap": "The target pair remains conditional on the separate snapshot replay demand."
+    },
+    {
+      "id": "export-resolution/snapshot-replay",
+      "family": "export-resolution",
+      "status": "producer extension required",
+      "producerField": "ResolvedImport.runtimeTrace/declarationTrace",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Trace validation rejects malformed branches and targets.",
+      "policy2Gap": "Resolution is not independently rerun against immutable snapshot topology."
+    },
+    {
+      "id": "artifact-declarations/runtime-and-declaration-digests",
+      "family": "artifact-declarations",
+      "status": "already exact",
+      "producerField": "ResolvedFile.digest",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Each selected runtime and declaration file carries a validated digest.",
+      "policy2Gap": "Digest authority remains conditional on immutable acquisition."
+    },
+    {
+      "id": "artifact-declarations/immutable-file-bytes",
+      "family": "artifact-declarations",
+      "status": "producer extension required",
+      "producerField": "ClosureInput.File",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Closure materialization hashes canonicalized local files.",
+      "policy2Gap": "Paths can mutate between materialization, proof planning, and issuance."
+    },
+    {
+      "id": "export-identity/resolved-target-identity",
+      "family": "export-identity",
+      "status": "already exact",
+      "producerField": "ResolvedExportBinding",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Runtime and declaration export names are bound to exact resolved modules.",
+      "policy2Gap": "Identity remains conditional on the snapshot and package provenance demands."
+    },
+    {
+      "id": "export-identity/snapshot-mixed-package-rejection",
+      "family": "export-identity",
+      "status": "producer extension required",
+      "producerField": "ResolvedImport.packageRoot/packageRealRoot",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Current validation constrains resolved paths to the selected package root.",
+      "policy2Gap": "The root itself is mutable and is not a provenance-separated snapshot identity."
+    },
+    {
+      "id": "module-closure/canonical-entry-census",
+      "family": "module-closure",
+      "status": "already exact",
+      "producerField": "ClosureManifest.entries/dependencies/hazards/packages/digest",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Materialization sorts, validates, and hashes the supplied closure census.",
+      "policy2Gap": "Completeness remains conditional on snapshot acquisition and the resolver input census."
+    },
+    {
+      "id": "module-closure/immutable-topology-root",
+      "family": "module-closure",
+      "status": "producer extension required",
+      "producerField": "ClosureManifest.digest",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Equivalent supplied closure entries produce one deterministic digest.",
+      "policy2Gap": "Archive topology, duplicate members, case folding, links, and post-plan mutation are not part of this root."
+    },
+    {
+      "id": "module-closure/opaque-dynamic-hazards",
+      "family": "module-closure",
+      "status": "unsupported",
+      "producerField": "ClosureHazardKind",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Known dynamic-loading, eval, native-code, opaque-WASM, and mutable-global hazards are explicit.",
+      "policy2Gap": "These hazards have no exact finite module-closure producer and remain refusals."
+    },
+    {
+      "id": "selected-signature/overload-identity",
+      "family": "selected-signature",
+      "status": "already exact",
+      "producerField": "InvocationTranscript.selectedSignature",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "The transcript names exact declaration identity, overload ordinal, arity, parameters, and result.",
+      "policy2Gap": "The field remains conditional on the direct Type Facts session-binding demand."
+    },
+    {
+      "id": "selected-signature/direct-session-binding",
+      "family": "selected-signature",
+      "status": "producer extension required",
+      "producerField": "InvocationEnvelope",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "The envelope binds project generation, demand, module graph, schema, build, and source digests.",
+      "policy2Gap": "It does not bind the launched executable, runtime image, process epoch, or policy demand ID as receipt authority."
+    },
+    {
+      "id": "argument-binding/formal-actual-map",
+      "family": "argument-binding",
+      "status": "already exact",
+      "producerField": "InvocationTranscript.bindings/omittedParameters",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Bindings preserve disposition, expanded slots, formal ranges, omissions, and unresolved reasons.",
+      "policy2Gap": "The field remains conditional on the direct Type Facts session-binding demand."
+    },
+    {
+      "id": "argument-binding/direct-session-binding",
+      "family": "argument-binding",
+      "status": "producer extension required",
+      "producerField": "InvocationEnvelope",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Demand and source identities are present in the envelope.",
+      "policy2Gap": "Serialized caller responses are not yet excluded as authority by an opaque live-session witness."
+    },
+    {
+      "id": "rest-spread-coverage/disposition-and-range",
+      "family": "rest-spread-coverage",
+      "status": "already exact",
+      "producerField": "ArgumentBinding.disposition/slots/possible and SelectedSignature.hasRest",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Direct, exact-tuple, unknown-length, and unmapped spreads are distinct closed tags.",
+      "policy2Gap": "The field remains conditional on the direct Type Facts session-binding demand."
+    },
+    {
+      "id": "rest-spread-coverage/unknown-length-spread",
+      "family": "rest-spread-coverage",
+      "status": "unsupported",
+      "producerField": "ArgumentBindingDisposition.UnknownLengthSpread",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "The producer identifies the uncertainty exactly.",
+      "policy2Gap": "An unknown-length spread cannot establish a complete formal-argument census."
+    },
+    {
+      "id": "callable-path/finite-result-paths",
+      "family": "callable-path",
+      "status": "already exact",
+      "producerField": "SelectedSignature.resultCallablePaths",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Finite callable result paths retain path segments and exact value facts.",
+      "policy2Gap": "The field remains conditional on transcript completeness and session binding."
+    },
+    {
+      "id": "callable-path/dynamic-or-unknown-path",
+      "family": "callable-path",
+      "status": "unsupported",
+      "producerField": "InvocationCompleteness/openReasons",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "The producer reports when the path census is open.",
+      "policy2Gap": "Open or dynamically indexed callable paths cannot be promoted to a finite proof."
+    },
+    {
+      "id": "callable-path/direct-session-binding",
+      "family": "callable-path",
+      "status": "producer extension required",
+      "producerField": "InvocationEnvelope",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "The envelope binds the current source and demand digests.",
+      "policy2Gap": "The callable-path result is not yet carried by an authority-bearing live-session witness."
+    },
+    {
+      "id": "operation-reachability/control-flow-census",
+      "family": "operation-reachability",
+      "status": "already exact",
+      "producerField": "InvocationTranscript.controlFlow",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Return, throw, and branch sites distinguish reachable, unreachable, and unknown outcomes.",
+      "policy2Gap": "The field remains conditional on transcript completeness and direct session binding."
+    },
+    {
+      "id": "operation-reachability/normalized-operation-mapping",
+      "family": "operation-reachability",
+      "status": "producer extension required",
+      "producerField": "InvocationTranscript.parameterUses/controlFlow",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Exact source sites and parameter uses are available where resolved.",
+      "policy2Gap": "There is no opaque witness mapping every analyzer-visible normalized operation and edge to those sites."
+    },
+    {
+      "id": "operation-cardinality/exact-runtime-bound",
+      "family": "operation-cardinality",
+      "status": "unsupported",
+      "producerField": null,
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "none",
+      "policy2Gap": "Current Type Facts control-flow data does not prove exact package-runtime lower and upper bounds for arbitrary loops or reentry."
+    },
+    {
+      "id": "recursive-value-shape/finite-value-facts",
+      "family": "recursive-value-shape",
+      "status": "already exact",
+      "producerField": "InvocationValueFact/CallablePathFact",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Finite value protocols, construction shapes, callable paths, and path presence are explicit.",
+      "policy2Gap": "The field remains conditional on transcript completeness and direct session binding."
+    },
+    {
+      "id": "recursive-value-shape/dynamic-recursive-leaf",
+      "family": "recursive-value-shape",
+      "status": "unsupported",
+      "producerField": "InvocationCompleteness/openReasons",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Unknown recursive leaves are represented without closing siblings.",
+      "policy2Gap": "A dynamic or unresolved leaf has no exact finite witness and remains locally open."
+    },
+    {
+      "id": "recursive-value-shape/normalized-path-witness",
+      "family": "recursive-value-shape",
+      "status": "producer extension required",
+      "producerField": "InvocationValueFact/CallablePathFact",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Producer paths are source- and declaration-addressed.",
+      "policy2Gap": "There is no demand-ID-bound mapping to every retained normalized recursive positive."
+    },
+    {
+      "id": "guard-partition/finite-discriminants-and-branches",
+      "family": "guard-partition",
+      "status": "already exact",
+      "producerField": "ControlFlowCensus.branches/FinitePartition",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Finite branch partitions preserve exact literal discriminants and reachability.",
+      "policy2Gap": "The field remains conditional on transcript completeness and direct session binding."
+    },
+    {
+      "id": "guard-partition/normalized-exhaustiveness-mapping",
+      "family": "guard-partition",
+      "status": "producer extension required",
+      "producerField": "ControlFlowCensus.branches",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "Unsupported partitions and unknown reachability remain explicit.",
+      "policy2Gap": "No witness currently proves that the normalized guard cases are exactly the complete producer partition."
+    },
+    {
+      "id": "compiler-reconciliation/normalized-operation-census",
+      "family": "compiler-reconciliation",
+      "status": "already exact",
+      "producerField": "CompilerSemanticModel.sourceOperationsComplete/generatedOperationsComplete/operations/generatedOperations",
+      "source": "rust/crates/solid-facts/src/compiler.rs",
+      "completenessGuarantee": "Compiler execution facts carry separate source and generated operation completeness flags and validate unique sites.",
+      "policy2Gap": "The field remains conditional on direct compiler-session and output bindings."
+    },
+    {
+      "id": "compiler-reconciliation/direct-session-binding",
+      "family": "compiler-reconciliation",
+      "status": "producer extension required",
+      "producerField": "CompilerProducerIdentity",
+      "source": "rust/crates/solid-facts/src/compiler.rs",
+      "completenessGuarantee": "Trace, implementation, package, upstream revision, configuration, and identity completeness are validated.",
+      "policy2Gap": "The evidence does not bind the directly launched compiler image, runtime, session epoch, and policy demand ID."
+    },
+    {
+      "id": "compiler-reconciliation/generated-output-binding",
+      "family": "compiler-reconciliation",
+      "status": "producer extension required",
+      "producerField": "CompilerSemanticModel.generatedOperations",
+      "source": "rust/crates/solid-facts/src/compiler.rs",
+      "completenessGuarantee": "Generated operations are separately censused and source-addressed.",
+      "policy2Gap": "The complete generated output bytes and output-neutrality result are not part of a certification witness."
+    },
+    {
+      "id": "accepted-dependency-composition/exact-edge-identity",
+      "family": "accepted-dependency-composition",
+      "status": "already exact",
+      "producerField": "AcceptedDependencyEdge",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Each edge names specifier, package, artifact case, and accepted contract digest.",
+      "policy2Gap": "The field remains conditional on authenticated policy-2 receipt validation."
+    },
+    {
+      "id": "accepted-dependency-composition/authenticated-claim",
+      "family": "accepted-dependency-composition",
+      "status": "producer extension required",
+      "producerField": "AcceptanceReceipt/AcceptedContractIndex",
+      "source": "rust/crates/solid-reactive-ir/src/contract_semantics.rs",
+      "completenessGuarantee": "Current accepted typestate binds one exact selected artifact and semantic identity.",
+      "policy2Gap": "Policy-1 receipts are unauthenticated and cannot authorize dependency composition under policy 2."
+    },
+    {
+      "id": "accepted-dependency-composition/canonical-cycle-queue",
+      "family": "accepted-dependency-composition",
+      "status": "producer extension required",
+      "producerField": "ClosureManifest.dependencies",
+      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
+      "completenessGuarantee": "Dependency edges are available in canonical closure material.",
+      "policy2Gap": "There is no bottom-up certification queue with cycle detection and canonical first-refusal ordering."
+    },
+    {
+      "id": "domain-exhaustiveness/invocation-completeness",
+      "family": "domain-exhaustiveness",
+      "status": "already exact",
+      "producerField": "InvocationTranscript.completeness/openReasons and InvocationEnvelope.openReasons",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "The producer distinguishes a complete invocation census from exact open reasons.",
+      "policy2Gap": "The field remains conditional on source-census and direct session binding."
+    },
+    {
+      "id": "domain-exhaustiveness/package-source-census",
+      "family": "domain-exhaustiveness",
+      "status": "producer extension required",
+      "producerField": "InvocationEnvelope.sources/moduleGraphSha256",
+      "source": "rust/crates/typefacts/src/invocation.rs",
+      "completenessGuarantee": "The envelope binds the analyzed source and module graph digests.",
+      "policy2Gap": "No opaque witness proves that every applicable normalized claim site is demanded and classified for the snapshot."
+    },
+    {
+      "id": "probe-consistency/contradiction-evaluation",
+      "family": "probe-consistency",
+      "status": "already exact",
+      "producerField": "evaluate_runtime_probes",
+      "source": "rust/crates/solid-facts-backend/src/runtime_probes.rs",
+      "completenessGuarantee": "The evaluator binds planned observations, rejects inconsistent repeats, and emits exact contradictions.",
+      "policy2Gap": "The result remains conditional on mandatory scheduling and harness identity."
+    },
+    {
+      "id": "probe-consistency/verifier-mandatory-scheduling",
+      "family": "probe-consistency",
+      "status": "producer extension required",
+      "producerField": "RuntimeProbePlan",
+      "source": "rust/crates/solid-facts-backend/src/runtime_probes.rs",
+      "completenessGuarantee": "Current plans enumerate scenarios, policies, recipes, and claims.",
+      "policy2Gap": "The policy-2 demand graph does not yet derive when a probe is mandatory or refuse a missing gate."
+    },
+    {
+      "id": "probe-consistency/harness-image-and-runtime-binding",
+      "family": "probe-consistency",
+      "status": "producer extension required",
+      "producerField": "ToolIdentity/EnvironmentIdentity/IsolationIdentity",
+      "source": "rust/crates/solid-facts-backend/src/runtime_probes.rs",
+      "completenessGuarantee": "Probe evidence records tool, environment, sandbox, isolation, recipe, and session identities.",
+      "policy2Gap": "The executable image and Node runtime bytes are not independently hashed and launched by an authority-bearing adapter."
+    },
+    {
+      "id": "probe-consistency/nonobservation-as-negative-proof",
+      "family": "probe-consistency",
+      "status": "unsupported",
+      "producerField": null,
+      "source": "rust/crates/solid-facts-backend/src/runtime_probes.rs",
+      "completenessGuarantee": "none",
+      "policy2Gap": "Finite runtime nonobservation cannot prove semantic absence or domain closure."
+    }
+  ]
+}
