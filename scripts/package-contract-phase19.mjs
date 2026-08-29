@@ -24,6 +24,7 @@ const PATHS = Object.freeze({
   demandAuthorityAudit:
     "docs/package-contract-v2/phase19/proof-demand-authority-audit.json",
   receiptMigration: "docs/package-contract-v2/phase19/receipt-migration.json",
+  phase19Report: "benchmarks/package-contract-v2/phase19/report.json",
   proofAuthority: "rust/crates/solid-reactive-ir/src/contract_semantics/proof.rs",
   checkedCorpusAuthority: "rust/crates/solid-facts-backend/src/contract_workflow.rs",
   callerProofAuthority: "packages/cli/scripts/verify-contract.mjs",
@@ -337,11 +338,48 @@ export function auditPhase19Cut(root = repositoryRoot) {
   };
 }
 
+export function auditPhase19Report(root = repositoryRoot) {
+  const report = readJson(root, PATHS.phase19Report);
+  if (
+    report.schemaVersion !== 1 ||
+    report.documentKind !== "solid-checker-package-contract-phase19-report" ||
+    report.artifactStatus?.denominator !== 418 ||
+    report.policy2Issuance?.activeReceiptDocuments?.issued !== 0 ||
+    report.policyStrengthRefusals?.pending !== 0 ||
+    report.verifiedExportLeverage?.totalUnlocked !== 0
+  ) {
+    throw new Error(`${PATHS.phase19Report} has an invalid measurement envelope`);
+  }
+  const categories = new Set(report.refusalCategories?.map(row => row.category));
+  for (const category of [
+    "artifact-provenance",
+    "producer-session",
+    "probe-gate",
+    "resource-limit",
+    "trust",
+    "authentication",
+    "semantic"
+  ]) {
+    if (!categories.has(category)) {
+      throw new Error(`${PATHS.phase19Report} omits refusal category ${category}`);
+    }
+  }
+  return {
+    ecosystemRows: report.artifactStatus.denominator,
+    structurallyCompleteRows: report.certificationAttempts.structurallyCompleteRows,
+    attemptedRows: report.certificationAttempts.attempted,
+    policy2Receipts: report.policy2Issuance.activeReceiptDocuments.issued,
+    verifiedExports: report.verifiedSemantics.policy2VerifiedExports,
+    unlockedExports: report.verifiedExportLeverage.totalUnlocked
+  };
+}
+
 function main() {
   const baseline = auditPhase19Baseline();
   const policy = auditPhase19Policy();
   const demandAuthority = auditPhase19DemandAuthority();
   const cut = auditPhase19Cut();
+  const report = auditPhase19Report();
   console.log(
     `phase19 cut: ${cut.stableMainDocuments} stable-v1 mains, ` +
       `${cut.activePolicy1Receipts} policy-1 receipts, ` +
@@ -352,7 +390,9 @@ function main() {
       `${demandAuthority.demands} authority demands audited ` +
       `(${demandAuthority.alreadyExact} exact / ` +
       `${demandAuthority.producerExtensionRequired} extensions / ` +
-      `${demandAuthority.unsupported} unsupported)`
+      `${demandAuthority.unsupported} unsupported); ` +
+      `${report.attemptedRows}/${report.structurallyCompleteRows} complete rows attempted, ` +
+      `${report.policy2Receipts} receipts / ${report.verifiedExports} verified exports`
   );
 }
 

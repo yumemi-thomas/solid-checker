@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
@@ -216,6 +223,34 @@ test("finite entrypoint discovery keeps exact rows while refusing wildcard cover
     () => finiteEntrypoints({ exports: { "./*": "./dist/*.js" } }, []),
     /pass each finite --entrypoint/
   );
+});
+
+test("finite wildcard entrypoints are enumerated from exact package files", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-wildcard-test-"));
+  mkdirSync(join(root, "dist", "components"), { recursive: true });
+  writeFileSync(join(root, "dist", "components", "button.js"), "export const Button = 1;\n");
+  writeFileSync(join(root, "dist", "components", "menu.js"), "export const Menu = 1;\n");
+  try {
+    assert.deepEqual(
+      finiteEntrypoints(
+        {
+          exports: {
+            ".": "./dist/index.js",
+            "./components/*": "./dist/components/*.js",
+            "./opaque/*": "./generated/no-star.js"
+          }
+        },
+        [],
+        root
+      ),
+      {
+        entrypoints: [".", "./components/button", "./components/menu"],
+        wildcardRefusals: ["./opaque/*"]
+      }
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("a merge contradiction refuses only its exact artifact candidate", async () => {

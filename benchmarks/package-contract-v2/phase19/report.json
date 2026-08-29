@@ -1,0 +1,430 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-checker-package-contract-phase19-report",
+  "generatedAt": "2026-08-30",
+  "authority": {
+    "policyVersion": 2,
+    "receiptVersion": 2,
+    "policyDigest": "sha256:23d11125ffeb3c57cace0f898f46895dfb383113ff3637d409eb719eaaf088fd",
+    "proofRule": "no row, export, fact, closure, or receipt is counted as verified without authenticated policy-2 authority",
+    "inputs": {
+      "ecosystem": {
+        "path": "benchmarks/ecosystem/report.json",
+        "sha256": "ed8123852939c56ce2f7f93b9f77acebc96fe4d24989ee8c471bc74b7dda843b"
+      },
+      "phase16Refusals": {
+        "path": "benchmarks/package-contract-v2/phase16/refusals.json",
+        "sha256": "abe8ad2e060278ede9ce54a8973d06799d293a9f697154533e0a82adf9497471"
+      },
+      "baseline": {
+        "path": "docs/package-contract-v2/phase19/policy1-baseline.json",
+        "sha256": "f9643a4c34c914ea32ce8640bb3d48ed60f12e5998bee0b40e5e8855d833b63f"
+      },
+      "migration": {
+        "path": "docs/package-contract-v2/phase19/receipt-migration.json",
+        "sha256": "4435ce0ea32166bf5de73666b3ee404eb6a3e14d7ef7e45b90159161ff19db71"
+      },
+      "demandAuthority": {
+        "path": "docs/package-contract-v2/phase19/proof-demand-authority-audit.json",
+        "sha256": "3d91cf9fb62ebc1176e054a59982201c67d492d389c087d922ea58fb81e563b7"
+      },
+      "policy": {
+        "path": "docs/package-contract-v2/phase19/proof-policy-v2.json",
+        "sha256": "a163c72767b22d4c94be46fdbc1c813fd0bc504e056638778e75f585174485f5"
+      }
+    }
+  },
+  "artifactStatus": {
+    "denominator": 418,
+    "denominatorMeaning": "official ecosystem rows",
+    "completeProposal": 40,
+    "partialProposal": 318,
+    "fullRefusal": 60,
+    "notApplicable": 0
+  },
+  "policy2Issuance": {
+    "packages": {
+      "issued": 0,
+      "denominator": 177,
+      "denominatorMeaning": "ecosystem packages with a generated proposal"
+    },
+    "artifactCases": {
+      "issued": 0,
+      "denominator": 24,
+      "denominatorMeaning": "artifact cases previously issued under policy 1"
+    },
+    "activeReceiptDocuments": {
+      "issued": 0,
+      "denominator": 73,
+      "denominatorMeaning": "active policy-1 receipt documents at the Phase 19 baseline"
+    }
+  },
+  "certificationAttempts": {
+    "structurallyCompleteRows": 40,
+    "attempted": 0,
+    "newlyCertified": 0,
+    "reason": "no complete authenticated live producer set exists; running a partial attempt cannot issue authority"
+  },
+  "verifiedSemantics": {
+    "proposalExports": 4788,
+    "policy2VerifiedExports": 0,
+    "proposalPositiveFacts": 522,
+    "analyzerVisiblePolicy2PositiveFacts": 0,
+    "locallyClosedClaimDomains": 0,
+    "openClaims": [
+      {
+        "owner": "type-facts/call-target-and-callback-execution",
+        "recursivePath": "/exports/*/callbacks",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/reactive-read-reachability",
+        "recursivePath": "/exports/*/reads",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/reactive-write-reachability",
+        "recursivePath": "/exports/*/writes",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/resource-creation-and-ownership",
+        "recursivePath": "/exports/*/creates",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/invalidation-reachability",
+        "recursivePath": "/exports/*/invalidates",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/error-edge-and-throw-census",
+        "recursivePath": "/exports/*/throws",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/recursive-return-value",
+        "recursivePath": "/exports/*/returns",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/cleanup-edge-and-lifetime",
+        "recursivePath": "/exports/*/cleanups",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/resource-disposal-and-lifetime",
+        "recursivePath": "/exports/*/disposals",
+        "count": 4788,
+        "status": "open-proposal-claim"
+      },
+      {
+        "owner": "type-facts/exact-recursive-value-leaf",
+        "recursivePath": "/exports/*/recursiveValue",
+        "count": 14,
+        "status": "open-proposal-claim"
+      }
+    ]
+  },
+  "verifiedExportLeverage": {
+    "totalUnlocked": 0,
+    "byNewFactOrDependencyReceipt": [],
+    "finiteWildcardCensus": {
+      "historicalRows": 5,
+      "otherArtifactShapeRows": 10,
+      "implementationStatus": "implemented-remeasurement-pending",
+      "verifiedExportsUnlocked": 0
+    }
+  },
+  "refusalOwnerQueue": [
+    {
+      "order": 1,
+      "owner": "accepted-dependency-composition",
+      "rows": 20,
+      "disposition": "open-no-policy2-dependency-receipts"
+    },
+    {
+      "order": 2,
+      "owner": "type-facts/export-kind-census",
+      "rows": 14,
+      "disposition": "open-producer-evidence-required"
+    },
+    {
+      "order": 3,
+      "owner": "type-facts/parameter-behavior",
+      "rows": 1,
+      "disposition": "open-producer-evidence-required"
+    },
+    {
+      "order": 4,
+      "owner": "artifact-resolver/export-identity",
+      "rows": 2,
+      "disposition": "open-resolution-repair-required"
+    },
+    {
+      "order": 5,
+      "owner": "artifact-resolver/finite-wildcard-census",
+      "rows": 15,
+      "disposition": "finite-wildcard-subset-implemented-remeasurement-pending; other artifact shapes open"
+    },
+    {
+      "order": 6,
+      "owner": "artifact-model/no-esm-surface",
+      "rows": 8,
+      "disposition": "retained-refusal"
+    }
+  ],
+  "policyStrengthRefusals": {
+    "baselinePolicy1Receipts": 73,
+    "reissued": 0,
+    "retiredOrDemoted": 73,
+    "pending": 0,
+    "introducedByPolicy2": 73,
+    "owner": "probe-gate",
+    "reason": "mandatory policy-2 probe harness binding unavailable"
+  },
+  "refusalCategories": [
+    {
+      "category": "artifact-provenance",
+      "count": 0,
+      "scope": "policy2 certification attempts",
+      "note": "no complete-row certification attempt was started"
+    },
+    {
+      "category": "producer-session",
+      "count": 12,
+      "scope": "policy2 authority-demand definitions",
+      "note": "producer gaps; not multiplied by ecosystem rows"
+    },
+    {
+      "category": "probe-gate",
+      "count": 73,
+      "scope": "baseline policy1 receipt documents",
+      "note": "exact retirement owner"
+    },
+    {
+      "category": "resource-limit",
+      "count": 0,
+      "scope": "policy2 certification attempts",
+      "note": "no observed attempt-level resource refusal"
+    },
+    {
+      "category": "trust",
+      "count": 0,
+      "scope": "policy2 certification attempts",
+      "note": "issuance was not reached"
+    },
+    {
+      "category": "authentication",
+      "count": 73,
+      "scope": "obsolete policy1 receipt documents",
+      "note": "policy1 cannot authenticate policy2 analyzer semantics"
+    },
+    {
+      "category": "semantic",
+      "count": 43106,
+      "scope": "open claim leaves in generatable ecosystem proposals",
+      "note": "open is not negative proof"
+    }
+  ],
+  "demandEvidence": {
+    "denominatorMeaning": "authority-demand definitions, not ecosystem demand instances",
+    "families": [
+      {
+        "family": "accepted-dependency-composition",
+        "applicableAuthorityDemands": 3,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 1,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "argument-binding",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "artifact-declarations",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "callable-path",
+        "applicableAuthorityDemands": 3,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 1,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "compiler-reconciliation",
+        "applicableAuthorityDemands": 3,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 1,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "domain-exhaustiveness",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "export-identity",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "export-resolution",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "guard-partition",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 1,
+        "producerExtensionRequired": 1,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "manifest-entrypoint",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "module-closure",
+        "applicableAuthorityDemands": 3,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 1,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "operation-cardinality",
+        "applicableAuthorityDemands": 1,
+        "alreadyExact": 0,
+        "producerExtensionRequired": 0,
+        "unsupported": 1,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "operation-reachability",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 1,
+        "producerExtensionRequired": 1,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "package-identity",
+        "applicableAuthorityDemands": 3,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 1,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "probe-consistency",
+        "applicableAuthorityDemands": 4,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 1,
+        "unsupported": 1,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "recursive-value-shape",
+        "applicableAuthorityDemands": 3,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 1,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "rest-spread-coverage",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 1,
+        "producerExtensionRequired": 0,
+        "unsupported": 1,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      },
+      {
+        "family": "selected-signature",
+        "applicableAuthorityDemands": 2,
+        "alreadyExact": 2,
+        "producerExtensionRequired": 0,
+        "unsupported": 0,
+        "observedCertificationDemands": 0,
+        "authenticatedEvidenceBytes": 0,
+        "observationStatus": "not-attempted-no-complete-live-producer-set"
+      }
+    ]
+  },
+  "ordinaryAnalysis": {
+    "networkAccess": false,
+    "packageCodeExecution": false,
+    "rawEvidenceBytes": 0,
+    "acceptsAuditTranscript": false,
+    "acceptsOpenProposal": false
+  }
+}

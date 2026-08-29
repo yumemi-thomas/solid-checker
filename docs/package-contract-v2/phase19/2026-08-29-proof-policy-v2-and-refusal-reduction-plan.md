@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: implementation in progress (Slices 0–10 implemented; Slice 11 next)
+Status: implementation complete (Slices 0–11 implemented; final verification pending)
 
 Review status: adversarially revised
 
@@ -727,6 +727,21 @@ Work through refusal owners in this order:
 Attempt policy-2 certification for the 40 structurally complete ecosystem
 proposals first. No acceptance-count target is allowed to weaken proof. A
 newly discovered deeper refusal is a valid result.
+
+Implemented with the refusal boundary preserved. The generator now expands
+single-pattern wildcard entrypoints from a bounded exact package-file census;
+ambiguous patterns remain local refusals. The Phase 19 report records all 418
+historical rows, the six-owner queue, all 43 audited authority demands,
+evidence bytes, recursive open-claim paths, and separate provenance/session/
+probe/resource/trust/authentication/semantic refusal scopes. No export is
+counted as unlocked until the ecosystem corpus is rerun, and no row is counted
+as a certification attempt without the exact archive and a complete
+authenticated live producer set. Consequently the honest result is 0/40 live
+attempts, zero policy-2 receipts, and zero verified exports; the 73 policy-1
+receipts remain retired under the exact probe-gate refusal. The five historical
+finite-wildcard rows are marked implementation-complete but
+remeasurement-pending, the other ten heterogeneous artifact-shape rows remain
+open, and all eight no-ESM rows remain refusals.
 
 ## Measurement and reporting
 

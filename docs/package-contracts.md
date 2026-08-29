@@ -86,8 +86,10 @@ solid-checker contract generate \
 
 `--integrity` is required because exact registry identity must not be inferred
 from a package manifest. `--entrypoint ./subpath` is repeatable. Without it the
-generator enumerates a finite export map; wildcard exports are refused until
-the caller supplies finite entrypoints. `--conditions browser,development`
+generator enumerates a finite export map. A wildcard whose export key and
+target each have one statically enumerable `*` is expanded from the exact
+package file census; ambiguous, empty, symlinked, or oversized wildcard
+surfaces remain local refusals. `--conditions browser,development`
 selects one exact runtime environment. When no condition list is supplied, the
 generator enumerates a bounded finite partition and refuses an unbounded one.
 
