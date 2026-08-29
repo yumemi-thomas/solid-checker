@@ -7981,3 +7981,40 @@ and unstable-protocol domains remain open. Wildcard-only surfaces, missing or
 non-file targets, unresolved callable kinds, external export-all without
 accepted dependency semantics, closure hazards, stale receipts, and
 unsupported artifact shapes continue to fail closed.
+
+## 2026-08-30 — Phase 19 authenticates policy 2 and remeasures every complete proposal
+
+The active loader now requires receipt version 2 and authenticated built-in,
+persistent-local, or portable issuer provenance. Caller proof-file issuance,
+the checked-corpus acceptance shortcut, and policy-1 loading are removed. All
+73 baseline policy-1 receipt documents have final retired/demoted dispositions
+with zero pending; both first-party bundle indexes remain empty because no case
+has yet reconstructed the complete policy-2 demand graph. This is a deliberate
+loss of accepted coverage, not a demotion of proof into warnings or guesses.
+
+The uncached 418-row generator remeasurement produced 44 structurally complete
+proposals, 314 partial proposals, and 60 full refusals: 358/418 (85.65%) remain
+generatable. Compatible condition axes and finite wildcard resolution moved
+four formerly partial rows to structurally complete without accepting any
+semantics. The same census removes four synthetic `browser,node` artifact-case
+refusals from the focused contract corpus while retaining every real empty-case
+or merge refusal. One `@kobalte/core` source wildcard would require 1,120
+entrypoint/condition candidates and is refused against the Rust-owned 1,024
+candidate budget; its independently bounded root surface remains generatable.
+The five historical wildcard full-row failures were remeasured and now name
+deeper export, dependency, no-surface, or artifact owners. They unlock zero
+verified exports. Dynamic and opaque shapes remain open at their exact leaf.
+
+All 44 structurally complete rows then underwent real policy-2 attempts against
+exact registry bytes. Five stopped during snapshot/provenance or closure replay
+(one duplicate archive member and four closure digest mismatches). Thirty-nine
+reached witness acquisition and exposed 1,456 exact Type Facts-owned demand
+instances; no attempt reached semantic certification or receipt issuance.
+Across the attempted graphs, 71 instances of each artifact-wide family were
+reconstructed from immutable snapshots, but serialized artifact evidence is
+not treated as authority and no surrounding claim domain closed. The current
+proposal corpus contains 4,562 exports and 41,072 open claim leaves; policy-2
+verified exports, verified analyzer-visible positive facts, locally closed
+domains, receipts, accepted-load samples, and accepted-query samples all remain
+zero. Null cost/byte percentiles in the Phase 19 report mean “stage not
+reached,” never zero-cost verification.

@@ -188,7 +188,7 @@ ecosystem-sentinel:
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
 	  --thresholds scripts/ecosystem-benchmark/phase16-thresholds.json
 
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark

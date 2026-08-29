@@ -58,7 +58,36 @@ function countsBy(items, key) {
   );
 }
 
-function demandFamilies(audit) {
+function unobservedDistribution(unit, reason) {
+  return {
+    count: 0,
+    p50: null,
+    p95: null,
+    max: null,
+    unit,
+    observationStatus: reason
+  };
+}
+
+function observedDistribution(values, unit, emptyReason) {
+  const sorted = values.filter(Number.isFinite).slice().sort((left, right) => left - right);
+  if (sorted.length === 0) return unobservedDistribution(unit, emptyReason);
+  const at = fraction => sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)];
+  return {
+    count: sorted.length,
+    p50: at(0.5),
+    p95: at(0.95),
+    max: sorted.at(-1),
+    unit,
+    observationStatus: "observed"
+  };
+}
+
+function sumNamedCounts(attempts, field, name) {
+  return attempts.reduce((total, attempt) => total + (attempt[field]?.[name] ?? 0), 0);
+}
+
+function demandFamilies(audit, attempts) {
   return [...new Set(audit.demands.map(demand => demand.family))]
     .sort()
     .map(family => {
@@ -70,9 +99,26 @@ function demandFamilies(audit) {
         alreadyExact: statuses["already exact"] ?? 0,
         producerExtensionRequired: statuses["producer extension required"] ?? 0,
         unsupported: statuses.unsupported ?? 0,
-        observedCertificationDemands: 0,
+        observedCertificationDemands: sumNamedCounts(
+          attempts,
+          "demandCountsByFamily",
+          family
+        ),
+        artifactSnapshotSatisfiedDemands: sumNamedCounts(
+          attempts,
+          "artifactSatisfiedDemandsByFamily",
+          family
+        ),
+        refusedDemandInstances: sumNamedCounts(
+          attempts,
+          "refusalCountsByFamily",
+          family
+        ),
         authenticatedEvidenceBytes: 0,
-        observationStatus: "not-attempted-no-complete-live-producer-set"
+        observationStatus:
+          sumNamedCounts(attempts, "demandCountsByFamily", family) > 0
+            ? "attempted-opaque-authority-no-serialized-evidence-bytes"
+            : "not-applicable-to-attempted-rows"
       };
     });
 }
@@ -82,19 +128,40 @@ export function buildPhase19Report(sources) {
   const official = ecosystem.results.filter(result => result.status !== "supplemental");
   const status = countsBy(official, "outcome");
   const content = ecosystem.combined.contractContent;
+  const attempts = official.flatMap(result =>
+    result.certificationAttempt?.attempted ? [result.certificationAttempt] : []
+  );
+  const attemptStatuses = countsBy(attempts, "status");
+  const attemptOwners = countsBy(attempts, "owner");
   const failureClasses = countsBy(phase16Refusals.generatedProposalFailures, "class");
-  const finiteWildcardRows = phase16Refusals.generatedProposalFailures.filter(
+  const finiteWildcardBaselineRows = phase16Refusals.generatedProposalFailures.filter(
     row =>
       row.class === "unclassified" &&
       (/wildcard export/.test(row.reason) || /package exports .*\*/.test(row.reason))
-  ).length;
+  );
+  const currentByProbe = new Map(official.map(result => [result.probeId, result]));
+  const finiteWildcardRemeasurement = finiteWildcardBaselineRows.map(row => {
+    const current = currentByProbe.get(row.probeId);
+    assert.ok(current, `finite-wildcard baseline row ${row.probeId} is missing from the current corpus`);
+    return {
+      probeId: row.probeId,
+      outcome: current.outcome,
+      class: current.class,
+      verifiedExportsUnlocked: 0
+    };
+  });
+  const finiteWildcardOutcomes = countsBy(finiteWildcardRemeasurement, "outcome");
+  const resourceLimitRefusals = official.flatMap(
+    result => result.contractContent?.artifactCaseRefusals ?? []
+  ).filter(refusal => /resource limit/.test(refusal.reason));
   const cut = auditPhase19Cut(root);
   const authority = auditPhase19DemandAuthority(root);
 
   assert.equal(official.length, 418);
-  assert.equal(status.success, 40);
-  assert.equal(status["partial-success"], 318);
+  assert.equal(status.success + status["partial-success"] + status.failure, official.length);
+  assert.ok(status.success + status["partial-success"] >= 355);
   assert.equal(status.failure, 60);
+  assert.equal(attempts.length, status.success);
   assert.equal(migration.rows.length, 73);
   assert.equal(migration.pending, 0);
   assert.equal(cut.activePolicy2Receipts, 0);
@@ -154,10 +221,12 @@ export function buildPhase19Report(sources) {
     },
     certificationAttempts: {
       structurallyCompleteRows: status.success,
-      attempted: 0,
-      newlyCertified: 0,
+      attempted: attempts.length,
+      outcomes: attemptStatuses,
+      firstRefusalOwners: attemptOwners,
+      newlyCertified: attemptStatuses.certified ?? 0,
       reason:
-        "no complete authenticated live producer set exists; running a partial attempt cannot issue authority"
+        "every structurally complete row reached snapshot-bound certification planning; exact missing live authorities refused issuance"
     },
     verifiedSemantics: {
       proposalExports: content.exportsTotal,
@@ -171,11 +240,16 @@ export function buildPhase19Report(sources) {
       totalUnlocked: 0,
       byNewFactOrDependencyReceipt: [],
       finiteWildcardCensus: {
-        historicalRows: finiteWildcardRows,
+        historicalRows: finiteWildcardBaselineRows.length,
         otherArtifactShapeRows:
-          (failureClasses.unclassified ?? 0) - finiteWildcardRows,
-        implementationStatus: "implemented-remeasurement-pending",
-        verifiedExportsUnlocked: 0
+          (failureClasses.unclassified ?? 0) - finiteWildcardBaselineRows.length,
+        implementationStatus: "implemented-and-remeasured",
+        currentOutcomes: finiteWildcardOutcomes,
+        rows: finiteWildcardRemeasurement,
+        verifiedExportsUnlocked: finiteWildcardRemeasurement.reduce(
+          (total, row) => total + row.verifiedExportsUnlocked,
+          0
+        )
       }
     },
     refusalOwnerQueue: [
@@ -208,7 +282,7 @@ export function buildPhase19Report(sources) {
         owner: "artifact-resolver/finite-wildcard-census",
         rows: failureClasses.unclassified ?? 0,
         disposition:
-          "finite-wildcard-subset-implemented-remeasurement-pending; other artifact shapes open"
+          "finite-wildcard-subset-remeasured-with-deeper-exact-refusals; other artifact shapes open"
       },
       {
         order: 6,
@@ -229,31 +303,39 @@ export function buildPhase19Report(sources) {
     refusalCategories: [
       {
         category: "artifact-provenance",
-        count: 0,
+        count: attemptOwners["artifact-provenance"] ?? 0,
         scope: "policy2 certification attempts",
-        note: "no complete-row certification attempt was started"
+        note: "attempts that did not reach an authenticated immutable snapshot and demand graph"
       },
       {
         category: "producer-session",
-        count: authority.producerExtensionRequired + authority.unsupported,
-        scope: "policy2 authority-demand definitions",
-        note: "producer gaps; not multiplied by ecosystem rows"
+        count:
+          sumNamedCounts(attempts, "refusalCountsByOwner", "type-facts") +
+          sumNamedCounts(attempts, "refusalCountsByOwner", "compiler-facts"),
+        scope: "policy2 certification demand instances",
+        authorityDefinitionsOpen: authority.producerExtensionRequired + authority.unsupported,
+        note: "exact live producer demands refused across attempted rows"
       },
       {
         category: "probe-gate",
         count: migration.retired,
         scope: "baseline policy1 receipt documents",
-        note: "exact retirement owner"
+        attemptedDemandRefusals: sumNamedCounts(
+          attempts,
+          "refusalCountsByOwner",
+          "probe-gate"
+        ),
+        note: "exact retirement owner; attempted demand refusals are reported separately"
       },
       {
         category: "resource-limit",
-        count: 0,
-        scope: "policy2 certification attempts",
-        note: "no observed attempt-level resource refusal"
+        count: resourceLimitRefusals.length,
+        scope: "ecosystem proposal artifact-case censuses",
+        note: "finite surfaces beyond the Rust-owned candidate budget remain explicit local refusals"
       },
       {
         category: "trust",
-        count: 0,
+        count: attemptOwners.trust ?? 0,
         scope: "policy2 certification attempts",
         note: "issuance was not reached"
       },
@@ -271,8 +353,62 @@ export function buildPhase19Report(sources) {
       }
     ],
     demandEvidence: {
-      denominatorMeaning: "authority-demand definitions, not ecosystem demand instances",
-      families: demandFamilies(demandAuthority)
+      denominatorMeaning:
+        "authority-demand definitions plus exact demand instances derived for structurally complete rows",
+      families: demandFamilies(demandAuthority, attempts)
+    },
+    costs: {
+      proofInput: observedDistribution(
+        attempts.map(attempt =>
+          (attempt.stageDurationsMs?.proposalGeneration ?? Number.NaN) +
+          (attempt.stageDurationsMs?.demandPlanning ?? Number.NaN)
+        ),
+        "milliseconds per policy2 certification attempt",
+        "not-observed-no-policy2-certification-attempt"
+      ),
+      verification: observedDistribution(
+        attempts.map(attempt => attempt.stageDurationsMs?.certification ?? Number.NaN),
+        "milliseconds per policy2 certification attempt",
+        "not-observed-no-attempt-reached-certification"
+      ),
+      receipt: observedDistribution(
+        attempts.map(attempt => attempt.stageDurationsMs?.receiptIssuance ?? Number.NaN),
+        "milliseconds per policy2 receipt issuance",
+        "not-observed-no-policy2-receipt-issued"
+      ),
+      load: unobservedDistribution(
+        "nanoseconds per accepted policy2 catalog load",
+        "not-observed-no-active-policy2-receipt"
+      ),
+      query: unobservedDistribution(
+        "nanoseconds per accepted policy2 export query",
+        "not-observed-no-active-policy2-receipt"
+      )
+    },
+    byteDistributions: {
+      proposalArtifacts: {
+        main: content.wireBytes.canonicalMain,
+        demandPlan: content.wireBytes.proposalPlan,
+        authorityStatus: "open-proposal-not-accepted-policy2-artifact"
+      },
+      acceptedPolicy2Artifacts: {
+        main: unobservedDistribution(
+          "bytes",
+          "not-observed-no-active-policy2-receipt"
+        ),
+        proof: unobservedDistribution(
+          "bytes",
+          "not-observed-no-attempt-reached-certification"
+        ),
+        sidecar: unobservedDistribution(
+          "bytes",
+          "not-observed-no-attempt-reached-certification"
+        ),
+        receipt: unobservedDistribution(
+          "bytes",
+          "not-observed-no-policy2-receipt-issued"
+        )
+      }
     },
     ordinaryAnalysis: {
       networkAccess: false,
@@ -303,7 +439,11 @@ No acceptance target weakens proof. The current zero issuance count is a result:
 | ---: | --- | ---: | --- |
 ${report.refusalOwnerQueue.map(row => `| ${row.order} | ${row.owner} | ${row.rows} | ${row.disposition} |`).join("\n")}
 
-Finite wildcard census support is implemented but deliberately reports zero unlocked exports until the 418-row corpus is rerun. The eight no-ESM rows remain refusals.
+Finite wildcard census support was remeasured across the 418-row corpus. Its five historical rows now expose deeper exact refusals and unlock zero verified exports; the eight no-ESM rows remain refusals.
+
+## Measurement availability
+
+Open proposal main bytes are measured (${report.byteDistributions.proposalArtifacts.main.count} samples), and proof-input cost is measured for ${report.costs.proofInput.count} snapshot-bound certification attempts. Verification, receipt, accepted-load, accepted-query, accepted main, proof, sidecar, and receipt distributions retain zero samples where the exact missing live authority stopped the transaction; null percentiles are reported instead of fabricated zero costs.
 
 ## Trust boundary
 

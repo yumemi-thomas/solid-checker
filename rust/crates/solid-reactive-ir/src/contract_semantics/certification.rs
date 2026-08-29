@@ -201,6 +201,16 @@ impl ProofPolicy2 {
         65_536
     }
 
+    /// Maximum number of entrypoint/condition candidates one certification
+    /// transaction may send through artifact analysis. The stable contract
+    /// format independently caps retained artifact cases at the same value;
+    /// applying the bound before analysis prevents a finite but excessively
+    /// broad wildcard from consuming unbounded producer work.
+    #[must_use]
+    pub const fn artifact_case_candidate_limit(&self) -> usize {
+        1_024
+    }
+
     #[must_use]
     pub const fn witness_items_per_demand_limit(&self) -> usize {
         16_384
@@ -1440,6 +1450,7 @@ struct ResourceBudgets {
     contract_document_bytes: usize,
     proof_document_bytes: usize,
     receipt_bytes: usize,
+    artifact_case_candidates: usize,
     json_depth: usize,
     json_nodes: usize,
     string_bytes: usize,
@@ -1693,6 +1704,7 @@ const fn manifest() -> PolicyManifest {
             contract_document_bytes: 1024 * 1024,
             proof_document_bytes: 16 * 1024 * 1024,
             receipt_bytes: 64 * 1024,
+            artifact_case_candidates: 1_024,
             json_depth: 128,
             json_nodes: 1_000_000,
             string_bytes: 16 * 1024,
@@ -1751,7 +1763,7 @@ mod tests {
         assert_eq!(policy.semantic_model_version(), SEMANTIC_MODEL_VERSION);
         assert_eq!(
             policy.digest().as_str(),
-            "sha256:23d11125ffeb3c57cace0f898f46895dfb383113ff3637d409eb719eaaf088fd"
+            "sha256:43d68db58d35311234c4d11bb0331b71aa9ad621532c26360c20415150e74f53"
         );
         // Policy-1 replay types remain only for historical internal tests;
         // the backend loader no longer accepts their receipts.

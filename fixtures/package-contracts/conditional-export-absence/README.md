@@ -7,6 +7,8 @@ negative. A node consumer therefore cannot inherit the browser branch's
 callback semantics.
 
 `shared` is the negative control: it exists in both branches with the same
-semantics. The browser and node cases are retained in `expected.json`; the
-empty and contradictory condition selections stay local in
-`expected-refusals.json` rather than refusing the whole package.
+semantics. The browser and node cases are retained in `expected.json`. The
+condition census treats them as mutually exclusive values on one runtime-target
+axis, so it never invents a contradictory combined selection; only the empty
+selection stays local in `expected-refusals.json` rather than refusing the
+whole package.

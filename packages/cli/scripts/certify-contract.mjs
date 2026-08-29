@@ -296,7 +296,7 @@ function unavailableWitnessRefusal(plans) {
   });
 }
 
-function writeAudit(path, manifest, refusal, demandPlans) {
+function writeAudit(path, manifest, refusal, demandPlans, stageDurationsMs) {
   if (!path) return;
   const output = resolve(path);
   mkdirSync(dirname(output), { recursive: true });
@@ -317,6 +317,7 @@ function writeAudit(path, manifest, refusal, demandPlans) {
           family: refusal.family ?? null,
           reason: refusal.reason ?? refusal.message
         },
+        stageDurationsMs,
         refusals: refusal.refusals ?? [],
         demandPlans: demandPlans.map(plan => ({
           policyDigest: plan.policyDigest,
@@ -349,15 +350,28 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   }
   const scratch = mkdtempSync(join(tmpdir(), "solid-checker-certify-"));
   const demandPlans = [];
+  const stageDurationsMs = {};
+  const measure = async (stage, operation) => {
+    const started = process.hrtime.bigint();
+    try {
+      return await operation();
+    } finally {
+      stageDurationsMs[stage] = Math.round(
+        Number(process.hrtime.bigint() - started) / 10_000
+      ) / 100;
+    }
+  };
   try {
     await runContractCertificationPipeline({
       request: options,
       acquisition: {
         acquireArtifacts: async () =>
-          acquirePublishedArtifact({ options, manifest, scratch, fetch_ })
+          measure("artifactAcquisition", () =>
+            acquirePublishedArtifact({ options, manifest, scratch, fetch_ })
+          )
       },
       proposal: {
-        generate: async () => {
+        generate: async () => measure("proposalGeneration", async () => {
           const generationArguments = [
             "--package-root",
             options.packageRoot,
@@ -372,10 +386,11 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           }
           const generated = await generatePackageContract(generationArguments, { quiet: true });
           return { authority: "rust", generated };
-        }
+        })
       },
       rust: {
-        planDemands: async ({ artifactSnapshot, openProposal }) => {
+        planDemands: async ({ artifactSnapshot, openProposal }) =>
+          measure("demandPlanning", async () => {
           const plans = await planDemands({
             options,
             generated: openProposal.generated,
@@ -384,34 +399,35 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
           });
           demandPlans.push(...plans);
           return { authority: "rust", plans };
-        },
-        certify: async () => {
+        }),
+        certify: async () => measure("certification", async () => {
           throw new CertificationRefusal({
             stage: "certification",
             owner: "certifier",
             reason: "the complete authenticated witness set was not constructed"
           });
-        }
+        })
       },
       evidence: {
         // Artifact-wide bindings were constructed inside Rust's opaque plan.
         // The remaining adapters fail closed until each can return live
         // authenticated typestate instead of caller-authored JSON.
-        obtainWitnesses: async ({ demandPlan }) => unavailableWitnessRefusal(demandPlan.plans)
+        obtainWitnesses: async ({ demandPlan }) =>
+          measure("witnessAcquisition", () => unavailableWitnessRefusal(demandPlan.plans))
       },
       issuer: {
-        issue: async () => {
+        issue: async () => measure("receiptIssuance", async () => {
           throw new CertificationRefusal({
             stage: "receipt-issuance",
             owner: "trust",
             reason: "no configured policy-2 receipt issuer is available"
           });
-        }
+        })
       },
       publication: {
-        commit: async () => {
+        commit: async () => measure("catalogPublication", async () => {
           throw new Error("catalog publication was reached without a complete policy-2 result");
-        }
+        })
       }
     });
   } catch (error) {
@@ -423,7 +439,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
             owner: demandPlans.length ? "certifier" : "artifact-provenance",
             reason: error instanceof Error ? error.message : String(error)
           });
-    writeAudit(options.auditOutput, manifest, refusal, demandPlans);
+    writeAudit(options.auditOutput, manifest, refusal, demandPlans, stageDurationsMs);
     throw refusal;
   } finally {
     rmSync(scratch, { recursive: true, force: true });

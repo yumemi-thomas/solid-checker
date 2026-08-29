@@ -9,15 +9,6 @@
     {
       "entrypoint": ".",
       "conditions": [
-        "browser",
-        "node"
-      ],
-      "stage": "artifact-case",
-      "reason": "solid-checker-rust: package contract error: runtime selection contains contradictory runtime target conditions: browser, node"
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [
         "node"
       ],
       "stage": "proposal-merge",

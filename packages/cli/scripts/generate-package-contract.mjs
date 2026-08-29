@@ -121,20 +121,49 @@ function expandWildcardEntrypoint(key, target, files) {
   return matches;
 }
 
-export function finiteEntrypoints(manifest, requested, packageRoot = null) {
+// This is a compiled adapter copy of proof policy 2's Rust-owned
+// resourceBudgets.artifactCaseCandidates value. The workflow test pins it to
+// the generated audit manifest so a policy change cannot silently drift.
+export const ARTIFACT_CASE_CANDIDATE_LIMIT = 1_024;
+
+export function finiteEntrypoints(
+  manifest,
+  requested,
+  packageRoot = null,
+  {
+    conditionPartitionCount = 1,
+    artifactCaseCandidateLimit = ARTIFACT_CASE_CANDIDATE_LIMIT
+  } = {}
+) {
+  const withinBudget = entrypointCount =>
+    entrypointCount * conditionPartitionCount <= artifactCaseCandidateLimit;
   if (requested.length) {
-    return { entrypoints: [...new Set(requested)].sort(), wildcardRefusals: [] };
+    const entrypoints = [...new Set(requested)].sort();
+    if (!withinBudget(entrypoints.length)) {
+      throw new Error(
+        `${entrypoints.length * conditionPartitionCount} artifact-case candidates exceed the proof-policy resource limit of ${artifactCaseCandidateLimit}`
+      );
+    }
+    return { entrypoints, wildcardRefusals: [], wildcardResourceRefusals: [] };
   }
   const exports_ = manifest.exports;
   if (!exports_ || typeof exports_ !== "object" || Array.isArray(exports_)) {
-    return { entrypoints: ["."], wildcardRefusals: [] };
+    return { entrypoints: ["."], wildcardRefusals: [], wildcardResourceRefusals: [] };
   }
   const keys = Object.keys(exports_);
   const subpaths = keys.filter(key => key.startsWith("."));
-  if (!subpaths.length) return { entrypoints: ["."], wildcardRefusals: [] };
+  if (!subpaths.length) {
+    return { entrypoints: ["."], wildcardRefusals: [], wildcardResourceRefusals: [] };
+  }
   const wildcardKeys = subpaths.filter(key => key.includes("*")).sort();
   const wildcardRefusals = [];
+  const wildcardResourceRefusals = [];
   const entrypoints = subpaths.filter(key => !key.includes("*"));
+  if (!withinBudget(new Set(entrypoints).size)) {
+    throw new Error(
+      `${new Set(entrypoints).size * conditionPartitionCount} explicit artifact-case candidates exceed the proof-policy resource limit of ${artifactCaseCandidateLimit}`
+    );
+  }
   const files = packageRoot && wildcardKeys.length ? packageFiles(packageRoot) : [];
   for (const key of wildcardKeys) {
     const targets = terminalExportTargets(exports_[key]);
@@ -148,7 +177,17 @@ export function finiteEntrypoints(manifest, requested, packageRoot = null) {
       wildcardRefusals.push(key);
       continue;
     }
-    entrypoints.push(...expanded.flat());
+    const additions = expanded.flat();
+    const candidateCount = new Set([...entrypoints, ...additions]).size;
+    if (!withinBudget(candidateCount)) {
+      wildcardResourceRefusals.push({
+        entrypoint: key,
+        candidates: candidateCount * conditionPartitionCount,
+        limit: artifactCaseCandidateLimit
+      });
+      continue;
+    }
+    entrypoints.push(...additions);
   }
   entrypoints.sort();
   if (!entrypoints.length) {
@@ -156,7 +195,11 @@ export function finiteEntrypoints(manifest, requested, packageRoot = null) {
       `package exports ${wildcardRefusals.join(", ")}; pass each finite --entrypoint explicitly so generation does not guess the public surface`
     );
   }
-  return { entrypoints: [...new Set(entrypoints)], wildcardRefusals };
+  return {
+    entrypoints: [...new Set(entrypoints)],
+    wildcardRefusals,
+    wildcardResourceRefusals
+  };
 }
 
 function specifierFor(packageName, entrypoint) {
@@ -167,7 +210,13 @@ function specifierFor(packageName, entrypoint) {
   return `${packageName}/${entrypoint.slice(2)}`;
 }
 
-function finiteConditionPartitions(manifest, requested) {
+const mutuallyExclusiveConditionAxes = Object.freeze([
+  Object.freeze(["browser", "node", "deno", "worker"]),
+  Object.freeze(["development", "production"]),
+  Object.freeze(["csr", "string-ssr", "streaming-ssr"])
+]);
+
+export function finiteConditionPartitions(manifest, requested) {
   if (requested.length) return [[...new Set(requested)].sort()];
   const conditions = new Set();
   const visit = value => {
@@ -188,14 +237,31 @@ function finiteConditionPartitions(manifest, requested) {
   };
   visit(manifest.exports);
   const names = [...conditions].sort();
-  if (names.length > 8) {
+  const grouped = new Set(mutuallyExclusiveConditionAxes.flat());
+  const axes = [
+    ...mutuallyExclusiveConditionAxes
+      .map(axis => axis.filter(condition => conditions.has(condition)))
+      .filter(axis => axis.length > 0)
+      .map(axis => [null, ...axis]),
+    ...names.filter(condition => !grouped.has(condition)).map(condition => [null, condition])
+  ];
+  const partitionCount = axes.reduce((count, axis) => count * axis.length, 1);
+  if (partitionCount > 256) {
     throw new Error(
-      `package exports contain ${names.length} independent conditions; pass an exact --conditions list because the finite partition would exceed 256 cases`
+      `package exports select ${partitionCount} valid condition partitions; pass an exact --conditions list because the finite partition would exceed 256 cases`
     );
   }
-  return Array.from({ length: 2 ** names.length }, (_, mask) =>
-    names.filter((_, index) => (mask & (1 << index)) !== 0)
-  );
+  let partitions = [[]];
+  for (const axis of axes) {
+    partitions = partitions.flatMap(partition =>
+      axis.map(condition => condition === null ? partition : [...partition, condition])
+    );
+  }
+  // Preserve the Cartesian census order with the empty/default selection
+  // first. Besides being stable, this keeps the unconditioned package branch
+  // as the representative when an explicitly conditioned branch resolves to
+  // identical bytes and the semantic merge can retain only one of them.
+  return partitions.map(partition => partition.sort());
 }
 
 async function checked(args, cwd) {
@@ -219,6 +285,22 @@ function projectFiles(resolution) {
   return [...files].sort();
 }
 
+const ARTIFACT_ANALYSIS_CONCURRENCY = 4;
+
+async function mapConcurrent(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await worker(items[index], index);
+      }
+    })
+  );
+  return results;
+}
+
 function stableRefusalReason(error, { packageRoot, scratch }) {
   return (error?.message ?? String(error))
     .replaceAll(packageRoot, "<package-root>")
@@ -240,13 +322,43 @@ export async function retainIndependentlyMergeableProposals(proposals, attemptMe
   return { merged, acceptedCount, rejected };
 }
 
-async function analyzeArtifact({
+export async function retainIndependentlyMergeableProposalBatches(
+  proposals,
+  attemptMerge,
+  rootFailure = null
+) {
+  let merged = null;
+  const accepted = [];
+  const rejected = [];
+  const consider = async (start, end, knownFailure = null) => {
+    const candidates = proposals.slice(start, end);
+    if (knownFailure === null) {
+      try {
+        merged = await attemptMerge(accepted, candidates, { start, end });
+        accepted.push(...candidates);
+        return;
+      } catch (error) {
+        knownFailure = error;
+      }
+    }
+    if (candidates.length === 1) {
+      rejected.push({ candidate: candidates[0], error: knownFailure });
+      return;
+    }
+    const middle = start + Math.floor(candidates.length / 2);
+    await consider(start, middle);
+    await consider(middle, end);
+  };
+  if (proposals.length > 0) await consider(0, proposals.length, rootFailure);
+  return { merged, acceptedCount: accepted.length, rejected };
+}
+
+function prepareArtifact({
   packageRoot,
   manifest,
   integrity,
   entrypoint,
-  conditions,
-  scratch
+  conditions
 }) {
   const specifier = specifierFor(manifest.name, entrypoint);
   const importer = join(dirname(packageRoot), `.solid-checker-acquisition-${randomUUID()}.mjs`);
@@ -258,6 +370,23 @@ async function analyzeArtifact({
     resolutionKind: "import",
     integrity
   });
+  return {
+    entrypoint,
+    conditions,
+    resolution,
+    identity: JSON.stringify({
+      entrypoint,
+      runtime: resolution.runtime,
+      declarations: resolution.declarations,
+      runtimeTrace: resolution.runtimeTrace,
+      declarationTrace: resolution.declarationTrace,
+      closure: resolution.closure.digest
+    })
+  };
+}
+
+async function analyzeArtifact({ packageRoot, manifest, prepared, scratch }) {
+  const { entrypoint, conditions, resolution, identity } = prepared;
   const id = randomUUID();
   const project = join(scratch, `${id}-tsconfig.json`);
   const resolutionPath = join(scratch, `${id}-resolution.json`);
@@ -316,14 +445,7 @@ async function analyzeArtifact({
     entrypoint,
     conditions,
     resolution,
-    identity: JSON.stringify({
-      entrypoint,
-      runtime: resolution.runtime,
-      declarations: resolution.declarations,
-      runtimeTrace: resolution.runtimeTrace,
-      declarationTrace: resolution.declarationTrace,
-      closure: resolution.closure.digest
-    })
+    identity
   };
 }
 
@@ -344,10 +466,12 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
   if (!manifest.name || !manifest.version) {
     throw new Error(`${manifestPath} must declare exact name and version`);
   }
-  const { entrypoints, wildcardRefusals } = finiteEntrypoints(
+  const partitions = finiteConditionPartitions(manifest, options.conditions);
+  const { entrypoints, wildcardRefusals, wildcardResourceRefusals } = finiteEntrypoints(
     manifest,
     options.entrypoints,
-    packageRoot
+    packageRoot,
+    { conditionPartitionCount: partitions.length }
   );
   const output = resolve(options.output || join(packageRoot, "solid-reactivity.json"));
   const scratch = mkdtempSync(join(tmpdir(), "solid-checker-contract-"));
@@ -360,33 +484,80 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     stage: "entrypoint-census",
     reason: "wildcard export requires an explicit finite --entrypoint census"
   }));
+  refusals.push(...wildcardResourceRefusals.map(({ entrypoint, candidates, limit }) => ({
+    entrypoint,
+    conditions: null,
+    stage: "entrypoint-census",
+    reason: `finite wildcard expansion would require ${candidates} artifact-case candidates, exceeding the proof-policy resource limit of ${limit}`
+  })));
   try {
-    const seenCases = new Set();
-    const partitions = finiteConditionPartitions(manifest, options.conditions);
+    const preparedCases = [];
+    const preparationOutcomes = [];
+    let caseIndex = 0;
     for (const entrypoint of entrypoints) {
       for (const conditions of partitions) {
-        let proposal;
         try {
-          proposal = await analyzeArtifact({
-            packageRoot,
-            manifest,
-            integrity: options.integrity,
-            entrypoint,
-            conditions,
-            scratch
+          preparedCases.push({
+            index: caseIndex,
+            prepared: prepareArtifact({
+              packageRoot,
+              manifest,
+              integrity: options.integrity,
+              entrypoint,
+              conditions
+            })
           });
         } catch (error) {
-          refusals.push({
-            entrypoint,
-            conditions,
-            stage: "artifact-case",
-            reason: stableRefusalReason(error, { packageRoot, scratch })
+          preparationOutcomes.push({
+            index: caseIndex,
+            candidate: { entrypoint, conditions },
+            error
           });
-          continue;
         }
-        if (seenCases.has(proposal.identity)) continue;
-        seenCases.add(proposal.identity);
-        proposals.push(proposal);
+        caseIndex += 1;
+      }
+    }
+    const groups = new Map();
+    for (const candidate of preparedCases) {
+      const group = groups.get(candidate.prepared.identity) ?? [];
+      group.push(candidate);
+      groups.set(candidate.prepared.identity, group);
+    }
+    const analyzedGroups = await mapConcurrent(
+      [...groups.values()],
+      ARTIFACT_ANALYSIS_CONCURRENCY,
+      async group => {
+        const outcomes = [];
+        for (const candidate of group) {
+          try {
+            const proposal = await analyzeArtifact({
+              packageRoot,
+              manifest,
+              prepared: candidate.prepared,
+              scratch
+            });
+            outcomes.push({ index: candidate.index, proposal });
+            break;
+          } catch (error) {
+            outcomes.push({ index: candidate.index, candidate: candidate.prepared, error });
+          }
+        }
+        return outcomes;
+      }
+    );
+    const outcomes = [...preparationOutcomes, ...analyzedGroups.flat()]
+      .sort((left, right) => left.index - right.index);
+    for (const outcome of outcomes) {
+      if (outcome.proposal) {
+        proposals.push(outcome.proposal);
+      } else {
+        const { entrypoint, conditions } = outcome.candidate;
+        refusals.push({
+          entrypoint,
+          conditions,
+          stage: "artifact-case",
+          reason: stableRefusalReason(outcome.error, { packageRoot, scratch })
+        });
       }
     }
     if (proposals.length === 0) {
@@ -413,24 +584,25 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
       await merge(proposals, output, `${output}.proposal.json`);
       emittedArtifactCases = proposals.length;
       certificationProposals = proposals;
-    } catch {
+    } catch (rootFailure) {
       // One contradictory proposal must not erase unrelated exact cases. The
-      // fallback greedily replays Rust's merge boundary and refuses only the
-      // candidate that makes the normalized document/plan inconsistent.
-      const fallback = await retainIndependentlyMergeableProposals(
+      // fallback preserves greedy input-order semantics, but accepts a whole
+      // valid interval at once and bisects only failed intervals. This avoids
+      // reparsing an ever-growing prefix once per wildcard entrypoint.
+      const fallback = await retainIndependentlyMergeableProposalBatches(
         proposals,
-        async (merged, candidate, index) => {
-          const nextDocument = join(scratch, `merge-${index}.json`);
+        async (accepted, candidates, { start, end }) => {
+          const nextDocument = join(scratch, `merge-${start}-${end}.json`);
           const nextPlan = `${nextDocument}.proposal.json`;
-          const inputs = merged ? [merged, candidate] : [candidate];
-          const proposalsToMerge = inputs.flatMap(input => input.certificationProposals ?? [input]);
+          const proposalsToMerge = [...accepted, ...candidates];
           await merge(proposalsToMerge, nextDocument, nextPlan);
           return {
             document: nextDocument,
             plan: nextPlan,
             certificationProposals: proposalsToMerge
           };
-        }
+        },
+        rootFailure
       );
       for (const { candidate, error } of fallback.rejected) {
         refusals.push({

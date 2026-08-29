@@ -154,6 +154,70 @@ test("the manifest's exact registry integrity reaches contract generation", asyn
   assert.equal(generateCalls[0].integrity, manifest.rows[0].integrity);
 });
 
+test("complete proposals retain an exact policy-2 certification refusal when attempts are enabled", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-certification-attempt-"));
+  const hooks = successHooks();
+  hooks.mkProject = async () => {
+    const projectDir = join(temporary, "project");
+    const outputDir = join(temporary, "output");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    return { projectDir, outputDir };
+  };
+  hooks.attemptCertification = async ({ auditPath }) => {
+    writeFileSync(
+      auditPath,
+      JSON.stringify({
+        authoritative: false,
+        replayable: false,
+        status: "refused",
+        stage: "witness-acquisition",
+        refusal: {
+          owner: "type-facts",
+          demandId: "sha256:missing",
+          family: "selected-signature",
+          reason: "the automatic type-facts witness adapter is unavailable"
+        },
+        refusals: [{ demandId: "sha256:missing" }],
+        demandPlans: [{
+          demands: [
+            { family: "package-identity", satisfiedByArtifactSnapshot: true },
+            { family: "selected-signature", satisfiedByArtifactSnapshot: false }
+          ]
+        }],
+        stageDurationsMs: { artifactAcquisition: 1, demandPlanning: 2 }
+      })
+    );
+    return { status: 1, stdout: "", stderr: "refused", timedOut: false };
+  };
+  try {
+    const [result] = await runBenchmark({
+      manifest,
+      hooks,
+      options: { concurrency: 1, attemptCertification: true }
+    });
+    assert.deepEqual(result.certificationAttempt, {
+      attempted: true,
+      status: "refused",
+      stage: "witness-acquisition",
+      owner: "type-facts",
+      demandId: "sha256:missing",
+      family: "selected-signature",
+      reason: "the automatic type-facts witness adapter is unavailable",
+      refusalCount: 1,
+      durationMs: 0,
+      stageDurationsMs: { artifactAcquisition: 1, demandPlanning: 2 },
+      demandCountsByFamily: { "package-identity": 1, "selected-signature": 1 },
+      artifactSatisfiedDemandsByFamily: { "package-identity": 1 },
+      refusalCountsByFamily: {},
+      refusalCountsByOwner: {}
+    });
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 test("a timeout during generation produces a timeout result and the run continues", async () => {
   const manifest = fourProbeManifest();
   const cleanupCalls = [];

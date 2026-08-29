@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: implementation complete (Slices 0–11 implemented; final verification pending)
+Status: complete (Slices 0–11 implemented and verified)
 
 Review status: adversarially revised
 
@@ -521,7 +521,13 @@ duplicate, unknown, incomplete, and contradictory outcomes. Successful finite
 non-observation remains explicitly non-authoritative, and the gate refuses
 authentication until a directly launched harness binds its executable and Node
 runtime images.
-Receipt authentication and the atomic cut are still pending. Run
+Receipt authentication and the atomic cut are implemented. Receipt version 2,
+configured Ed25519 trust, built-in provenance, canonical accepted-main bytes,
+and atomic content-addressed publication are active; policy 1 is refusal-only,
+all 73 baseline receipts have final retired dispositions, and no receipt was
+grandfathered. The Rust-owned resource policy now also caps one certification
+transaction at 1,024 artifact-case candidates so finite wildcard discovery
+cannot consume unbounded producer work. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
 artifact and digest with the compiled definition.
@@ -736,20 +742,26 @@ Attempt policy-2 certification for the 40 structurally complete ecosystem
 proposals first. No acceptance-count target is allowed to weaken proof. A
 newly discovered deeper refusal is a valid result.
 
-Implemented with the refusal boundary preserved. The generator now expands
-single-pattern wildcard entrypoints from a bounded exact package-file census;
-ambiguous patterns remain local refusals. The Phase 19 report records all 418
-historical rows, the six-owner queue, all 43 audited authority demands,
-evidence bytes, recursive open-claim paths, and separate provenance/session/
-probe/resource/trust/authentication/semantic refusal scopes. No export is
-counted as unlocked until the ecosystem corpus is rerun, and no row is counted
-as a certification attempt without the exact archive and a complete
-authenticated live producer set. Consequently the honest result is 0/40 live
-attempts, zero policy-2 receipts, and zero verified exports; the 73 policy-1
-receipts remain retired under the exact probe-gate refusal. The five historical
-finite-wildcard rows are marked implementation-complete but
-remeasurement-pending, the other ten heterogeneous artifact-shape rows remain
-open, and all eight no-ESM rows remain refusals.
+Implemented with the refusal boundary preserved. The generator expands
+single-pattern wildcard entrypoints from a bounded exact package-file census,
+enumerates only mutually compatible condition axes, deduplicates identical
+resolution cases before analysis, and isolates contradictory merge intervals;
+ambiguous or over-budget patterns remain local refusals. The uncached 418-row
+remeasurement produced 44 structurally complete proposals, 314 partial
+proposals, and 60 full refusals (358/418, 85.65% generatable).
+
+All 44 structurally complete rows were then attempted through exact registry
+reacquisition, immutable snapshot replay, and Rust-derived policy-2 demand
+planning. Five exposed artifact/provenance or closure-replay mismatches and 39
+reached witness acquisition before exact Type Facts demands refused; none
+reached receipt issuance. The honest result is therefore 44/44 attempts, zero
+policy-2 receipts, zero verified exports, and 73 retired policy-1 receipts.
+The five historical finite-wildcard rows were remeasured and now expose deeper
+exact refusal owners rather than wildcard-census guesses; they unlock zero
+verified exports. One broad source wildcard exceeds the 1,024-candidate policy
+budget and remains an explicit resource refusal. The other ten heterogeneous
+artifact-shape rows and all eight no-ESM rows remain open or refused as named
+in the machine-readable report.
 
 ## Measurement and reporting
 
@@ -886,6 +898,15 @@ that report:
 SOLID_CHECKER_GATE_CACHE=0 make ecosystem-benchmark
 SOLID_CHECKER_GATE_CACHE=0 make verify
 ```
+
+Completion evidence (2026-08-30): the uncached ecosystem refresh completed all
+418 probes at 44 complete proposals, 314 partial proposals, and 60 full-row
+refusals; all 44 complete proposals entered the policy-2 certification workflow
+and none issued a receipt. The subsequent uncached `make verify` passed every
+step in 142.29 seconds, including the 39-fixture stable-v1 contract corpus (5
+whole-package and 10 local artifact-case refusals), 94-project coverage, the
+289-case ownership gate with zero pending ledger rows, the 161-case TypeScript
+oracle, performance, policy-cut audit, conformance, native, and WASM checks.
 
 Do not separately rerun contract corpus, conformance, TypeScript oracle,
 ownership, coverage, performance, CLI, or WASM gates immediately before the

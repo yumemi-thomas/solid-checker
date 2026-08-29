@@ -34,6 +34,17 @@ preserved every prior receipt-issued row, and the ordinary analyzer boundary
 retained zero raw evidence bytes and performed no package execution, network
 access, or query-time file reads.
 
+Phase 19 completed the proof-policy cut on 2026-08-30. Receipt version 2 and
+explicit issuer provenance are now required; all 73 policy-1 receipts are
+retired with zero pending, and caller-authored proof files cannot issue
+authority. The current 418-row remeasurement is 44 complete proposals, 314
+partial proposals, and 60 full refusals. All 44 complete proposals were
+reacquired from exact registry bytes and attempted against an immutable
+snapshot: five stopped on artifact/closure replay and 39 on exact missing Type
+Facts witnesses. No attempt reached receipt issuance, so active policy-2
+receipts and verified exports remain zero. This zero is an authenticated
+refusal result, not a coverage regression hidden by migration.
+
 ## Document-version namespaces
 
 The following are independent and must never be changed by a global

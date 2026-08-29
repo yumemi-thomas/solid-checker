@@ -349,10 +349,11 @@ function buildResult({
   durationMs,
   installDurationMs,
   generationDurationMs,
+  certificationAttempt = null,
   stdout,
   stderr
 }) {
-  return {
+  const result = {
     probeId: probe.id,
     family: row.family,
     status: row.status,
@@ -382,6 +383,67 @@ function buildResult({
     stdout,
     stderr
   };
+  if (certificationAttempt !== null) result.certificationAttempt = certificationAttempt;
+  return result;
+}
+
+function readCertificationAttempt(result, auditPath, durationMs) {
+  let audit = null;
+  if (existsSync(auditPath)) {
+    try {
+      audit = JSON.parse(readFileSync(auditPath, "utf8"));
+    } catch {
+      audit = null;
+    }
+  }
+  if (result.status === 0) {
+    return {
+      attempted: true,
+      status: "certified",
+      stage: "catalog-publication",
+      owner: "configured-issuer",
+      demandId: null,
+      family: null,
+      reason: null,
+      durationMs,
+      stageDurationsMs: audit?.stageDurationsMs ?? {},
+      demandCountsByFamily: {},
+      artifactSatisfiedDemandsByFamily: {},
+      refusalCountsByFamily: {},
+      refusalCountsByOwner: {}
+    };
+  }
+  const countBy = (items, key) => {
+    const counts = {};
+    for (const item of items) {
+      const value = item?.[key];
+      if (typeof value === "string" && value) counts[value] = (counts[value] ?? 0) + 1;
+    }
+    return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)));
+  };
+  const demands = (audit?.demandPlans ?? []).flatMap(plan => plan.demands ?? []);
+  const artifactSatisfied = demands.filter(demand => demand.satisfiedByArtifactSnapshot);
+  const refusals = audit?.refusals ?? [];
+  return {
+    attempted: true,
+    status: audit?.status === "refused" ? "refused" : "infrastructure-failure",
+    stage: audit?.stage ?? (result.timedOut ? "timeout" : "orchestration"),
+    owner: audit?.refusal?.owner ?? "orchestration",
+    demandId: audit?.refusal?.demandId ?? null,
+    family: audit?.refusal?.family ?? null,
+    reason:
+      audit?.refusal?.reason ??
+      (result.timedOut
+        ? "policy-2 certification attempt timed out"
+        : result.stderr?.trim() || result.stdout?.trim() || `certification exited ${result.status}`),
+    refusalCount: refusals.length,
+    durationMs,
+    stageDurationsMs: audit?.stageDurationsMs ?? {},
+    demandCountsByFamily: countBy(demands, "family"),
+    artifactSatisfiedDemandsByFamily: countBy(artifactSatisfied, "family"),
+    refusalCountsByFamily: countBy(refusals, "family"),
+    refusalCountsByOwner: countBy(refusals, "owner")
+  };
 }
 
 // A hook throwing (rather than resolving with a status/stderr shape) is
@@ -410,7 +472,11 @@ function buildInfraFailureResult({ row, probe, error, phase, durationMs }) {
   });
 }
 
-async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
+async function runProbe(
+  { row, probe },
+  { timeoutMs, keepTemp, attemptCertification },
+  hooks
+) {
   const now = hooks.now ?? Date.now;
   const overallStart = now();
   const specs = buildSpecs(row, probe);
@@ -527,6 +593,36 @@ async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
       ? readContractContent(outputPath, genClass.detail?.refusedEntrypoints ?? 0)
       : null;
 
+    let certificationAttempt = null;
+    if (attemptCertification && genClass.class === "success") {
+      const certificationStart = now();
+      const auditPath = `${outputPath}.certification-audit.json`;
+      const catalogPath = `${outputPath}.accepted-catalog`;
+      let certificationResult;
+      try {
+        certificationResult = await hooks.attemptCertification({
+          packageRoot,
+          catalogPath,
+          auditPath,
+          timeoutMs,
+          integrity: row.integrity,
+          entrypoints: probe.entrypoints ?? []
+        });
+      } catch (error) {
+        certificationResult = {
+          status: 1,
+          stdout: "",
+          stderr: error?.stack ?? String(error),
+          timedOut: false
+        };
+      }
+      certificationAttempt = readCertificationAttempt(
+        certificationResult,
+        auditPath,
+        now() - certificationStart
+      );
+    }
+
     return buildResult({
       row,
       probe,
@@ -551,6 +647,7 @@ async function runProbe({ row, probe }, { timeoutMs, keepTemp }, hooks) {
       durationMs: now() - overallStart,
       installDurationMs,
       generationDurationMs,
+      certificationAttempt,
       stdout: genResult.stdout ?? "",
       stderr: genResult.stderr ?? ""
     });
@@ -579,13 +676,20 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
   const timeoutMs = (options.timeoutMs ?? DEFAULT_TIMEOUT_SECONDS * 1000) | 0;
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
   const keepTemp = options.keepTemp ?? false;
+  const attemptCertification = options.attemptCertification ?? false;
+
+  if (attemptCertification && typeof hooks.attemptCertification !== "function") {
+    throw new TypeError("attemptCertification requires an attemptCertification hook");
+  }
 
   const idFilter = probeIds ? new Set(probeIds) : null;
   const tasks = collectProbeTasks(manifest, idFilter, {
     includeSupplemental: Boolean(options.includeSupplemental)
   });
 
-  return mapConcurrent(tasks, concurrency, task => runProbe(task, { timeoutMs, keepTemp }, hooks));
+  return mapConcurrent(tasks, concurrency, task =>
+    runProbe(task, { timeoutMs, keepTemp, attemptCertification }, hooks)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +715,9 @@ function usage() {
   --thresholds <FILE>    threshold mode: exit 1 when a threshold regresses
   --timeout <SECONDS>    per-probe generation timeout, default 300
   --concurrency <N>      default min(available CPUs, 8), currently ${DEFAULT_CONCURRENCY}
+  --attempt-certification
+                         attempt policy-2 certification for every structurally
+                         complete proposal and retain its exact first refusal
   --keep-temp            keep the temporary install directories
   --include-supplemental run the unofficial fork rows too (off by default:
                          forks are listed for review, not part of the corpus)
@@ -638,6 +745,7 @@ function parseArgs(argv) {
     thresholds: null,
     timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
     concurrency: DEFAULT_CONCURRENCY,
+    attemptCertification: false,
     keepTemp: false,
     includeSupplemental: false,
     help: false
@@ -686,6 +794,9 @@ function parseArgs(argv) {
         break;
       case "--concurrency":
         options.concurrency = Number(takeValue(argv, index++, arg));
+        break;
+      case "--attempt-certification":
+        options.attemptCertification = true;
         break;
       case "--keep-temp":
         options.keepTemp = true;
@@ -754,6 +865,61 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
           ],
           {
             env: { ...process.env, SOLID_CHECKER_NATIVE_BIN: nativeBin, SOLID_TYPEFACTS_BIN: typeFactsBin },
+            stdio: ["ignore", "pipe", "pipe"]
+          }
+        );
+        let stdout = "";
+        let stderr = "";
+        let timedOut = false;
+        const timer = timeoutMs
+          ? setTimeout(() => {
+              timedOut = true;
+              child.kill("SIGKILL");
+            }, timeoutMs)
+          : null;
+        child.stdout.on("data", chunk => {
+          stdout += chunk;
+        });
+        child.stderr.on("data", chunk => {
+          stderr += chunk;
+        });
+        child.on("close", status => {
+          if (timer) clearTimeout(timer);
+          resolvePromise({ status, stdout, stderr, timedOut });
+        });
+      }),
+
+    attemptCertification: ({
+      packageRoot,
+      catalogPath,
+      auditPath,
+      timeoutMs,
+      integrity,
+      entrypoints = []
+    }) =>
+      new Promise(resolvePromise => {
+        const child = spawn(
+          process.execPath,
+          [
+            cliPath,
+            "contract",
+            "certify",
+            "--package-root",
+            packageRoot,
+            "--integrity",
+            integrity,
+            "--catalog",
+            catalogPath,
+            "--audit-output",
+            auditPath,
+            ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
+          ],
+          {
+            env: {
+              ...process.env,
+              SOLID_CHECKER_NATIVE_BIN: nativeBin,
+              SOLID_TYPEFACTS_BIN: typeFactsBin
+            },
             stdio: ["ignore", "pipe", "pipe"]
           }
         );
@@ -916,6 +1082,7 @@ async function main(argv = process.argv.slice(2)) {
       options: {
         timeoutMs: options.timeoutSeconds * 1000,
         concurrency: options.concurrency,
+        attemptCertification: options.attemptCertification,
         keepTemp: options.keepTemp
       },
       hooks

@@ -11,15 +11,6 @@
       "conditions": [],
       "stage": "artifact-case",
       "reason": ". selects no active package-export condition"
-    },
-    {
-      "entrypoint": ".",
-      "conditions": [
-        "browser",
-        "node"
-      ],
-      "stage": "artifact-case",
-      "reason": "solid-checker-rust: package contract error: runtime selection contains contradictory runtime target conditions: browser, node"
     }
   ]
 }

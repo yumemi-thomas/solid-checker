@@ -221,6 +221,7 @@
     "contractDocumentBytes": 1048576,
     "proofDocumentBytes": 16777216,
     "receiptBytes": 65536,
+    "artifactCaseCandidates": 1024,
     "jsonDepth": 128,
     "jsonNodes": 1000000,
     "stringBytes": 16384,
