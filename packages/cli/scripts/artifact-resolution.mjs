@@ -370,6 +370,56 @@ function hasModifier(node, kind) {
   return node.modifiers?.some(modifier => modifier.kind === kind) ?? false;
 }
 
+function isLocallyBoundIdentifier(node, checker, sourceFile) {
+  const symbol = checker.getSymbolAtLocation(node);
+  return symbol?.declarations?.some(declaration => declaration.getSourceFile() === sourceFile) ?? false;
+}
+
+function mutationTargetHasUnboundIdentifier(node, checker) {
+  while (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isTypeAssertionExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  ) {
+    node = node.expression;
+  }
+  if (ts.isIdentifier(node)) return !checker.getSymbolAtLocation(node);
+  if (ts.isArrayLiteralExpression(node)) {
+    return node.elements.some(element =>
+      ts.isOmittedExpression(element)
+        ? false
+        : mutationTargetHasUnboundIdentifier(
+            ts.isSpreadElement(element) ? element.expression : element,
+            checker
+          )
+    );
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    return node.properties.some(property => {
+      if (ts.isShorthandPropertyAssignment(property)) {
+        return !checker.getShorthandAssignmentValueSymbol(property);
+      }
+      if (ts.isPropertyAssignment(property)) {
+        return mutationTargetHasUnboundIdentifier(property.initializer, checker);
+      }
+      if (ts.isSpreadAssignment(property)) {
+        return mutationTargetHasUnboundIdentifier(property.expression, checker);
+      }
+      return false;
+    });
+  }
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+    node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+  ) {
+    return mutationTargetHasUnboundIdentifier(node.left, checker);
+  }
+  return false;
+}
+
 function localModuleTarget(importer, specifier, axis, packageRoot) {
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) return undefined;
   const base = specifier.startsWith("/") ? specifier : resolve(dirname(importer), specifier);
@@ -496,7 +546,9 @@ function moduleDescription(path, axis, packageRoot, cache) {
     if (
       ts.isCallExpression(node) &&
       (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(node.expression) && node.expression.text === "require")) &&
+        (ts.isIdentifier(node.expression) &&
+          node.expression.text === "require" &&
+          !isLocallyBoundIdentifier(node.expression, checker, file))) &&
       node.arguments.length === 1 &&
       ts.isStringLiteralLike(node.arguments[0])
     ) {
@@ -588,23 +640,50 @@ function syntaxHazards(path, sourceFile, checker) {
         if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
           add("nonliteral-dynamic-loading", node);
         }
-      } else if (ts.isIdentifier(node.expression) && node.expression.text === "eval") {
+      } else if (
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "require" &&
+        !isLocallyBoundIdentifier(node.expression, checker, sourceFile)
+      ) {
+        if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
+          add("nonliteral-dynamic-loading", node);
+        }
+      } else if (
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "eval" &&
+        !isLocallyBoundIdentifier(node.expression, checker, sourceFile)
+      ) {
         add("eval", node);
       }
     }
     if (
       ts.isPropertyAccessExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      node.expression.text === "WebAssembly"
+      node.expression.text === "WebAssembly" &&
+      !isLocallyBoundIdentifier(node.expression, checker, sourceFile)
     ) {
       add("opaque-wasm", node);
     }
     if (
       ts.isBinaryExpression(node) &&
-      ts.isIdentifier(node.left) &&
-      !checker.getSymbolAtLocation(node.left) &&
       node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      mutationTargetHasUnboundIdentifier(node.left, checker)
+    ) {
+      add("mutable-unbound-global", node);
+    }
+    if (
+      (ts.isForInStatement(node) || ts.isForOfStatement(node)) &&
+      !ts.isVariableDeclarationList(node.initializer) &&
+      mutationTargetHasUnboundIdentifier(node.initializer, checker)
+    ) {
+      add("mutable-unbound-global", node.initializer);
+    }
+    if (
+      (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) &&
+      ts.isIdentifier(node.operand) &&
+      !checker.getSymbolAtLocation(node.operand)
     ) {
       add("mutable-unbound-global", node);
     }

@@ -313,7 +313,7 @@ describe("exact artifact records and closure", () => {
     };
     const root = fixture(manifest, {
       "index.js":
-        'require("./addon.node"); import("./module.wasm"); let local = 0; local = 1; escaped = 1; export const value = local;\n',
+        'require("./addon.node"); import("./module.wasm"); let local = 0; local = 1; local++; escaped = 1; advanced++; ({ destructured } = source); for (iterated of values) {} { let destructured = 0, iterated = 0; ({ destructured } = source); for (iterated of values) {} } export const value = local;\n',
       "index.d.ts": "export declare const value: number;\n"
     });
     const record = resolvePackageArtifacts({
@@ -326,7 +326,38 @@ describe("exact artifact records and closure", () => {
     expect(kinds).toEqual(
       expect.arrayContaining(["native-code", "opaque-wasm", "mutable-unbound-global"])
     );
-    expect(kinds.filter(kind => kind === "mutable-unbound-global")).toHaveLength(1);
+    expect(kinds.filter(kind => kind === "mutable-unbound-global")).toHaveLength(4);
+  });
+
+  test("scope-resolves require, eval, and WebAssembly before opening a frontier", () => {
+    const manifest = {
+      name: "scope-frontier",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": `
+        require(dynamicName);
+        function local(require, eval) {
+          require("./not-a-module.js");
+          eval("not-global-eval");
+          const WebAssembly = { instantiate() {} };
+          WebAssembly.instantiate(bytes);
+        }
+        export const value = 1;
+      `,
+      "index.d.ts": "export declare const value: number;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "scope-frontier",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    const kinds = record.closure.hazards.map(hazard => hazard.kind);
+    expect(kinds.filter(kind => kind === "nonliteral-dynamic-loading")).toHaveLength(1);
+    expect(kinds).not.toContain("eval");
+    expect(kinds).not.toContain("opaque-wasm");
   });
 
   test("same bytes under a different closure path have different digests", () => {

@@ -28,7 +28,8 @@ pub use cache::{CacheStats, FactsCache};
 pub use contract_certification::{
     ArtifactSnapshot, ArtifactSnapshotError, CertificationPlan, CertificationPlanningError,
     CertificationRequest, LocalArtifact, LockPinnedArchive, PublishedArchive, SnapshotLimits,
-    SnapshotVerifiedResolution, UntrustedArtifactEnvelope, plan_certification,
+    SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
+    UntrustedArtifactEnvelope, plan_certification,
 };
 pub use contract_document::SidecarDigests;
 pub use contract_interface::{

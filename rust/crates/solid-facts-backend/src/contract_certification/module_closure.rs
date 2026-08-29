@@ -1,0 +1,440 @@
+//! Snapshot-owned replay of one package's finite module closure.
+//!
+//! Paths and bytes come only from [`ArtifactSnapshot`]. The caller's closure
+//! is comparison material: accepted dependency identities are retained only
+//! when an observed external edge names them, and every local file, edge, and
+//! syntax hazard is rebuilt before equality is checked.
+
+use std::collections::BTreeSet;
+
+use sha2::{Digest as _, Sha256};
+use solid_facts::ast::{ModuleHazardKind, ModuleLoadKind, extract};
+
+use crate::artifact_resolution::{
+    AcceptedDependencyEdge, AffectedClaimDomain, ClosureEntry, ClosureFileRole, ClosureHazard,
+    ClosureHazardKind, ClosureManifest,
+};
+
+use super::{ArtifactSnapshot, ArtifactSnapshotError, SnapshotVerifiedResolution};
+
+const RUNTIME_EXTENSIONS: [&str; 8] =
+    [".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"];
+const DECLARATION_EXTENSIONS: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
+
+#[derive(Clone, Debug)]
+pub struct SnapshotVerifiedClosure {
+    snapshot_root: String,
+    manifest: ClosureManifest,
+}
+
+impl SnapshotVerifiedClosure {
+    #[must_use]
+    pub fn snapshot_root(&self) -> &str {
+        &self.snapshot_root
+    }
+
+    #[must_use]
+    pub const fn manifest(&self) -> &ClosureManifest {
+        &self.manifest
+    }
+}
+
+pub(super) fn verify_snapshot_closure(
+    snapshot: &ArtifactSnapshot,
+    resolution: &SnapshotVerifiedResolution,
+    supplied: &ClosureManifest,
+) -> Result<SnapshotVerifiedClosure, ArtifactSnapshotError> {
+    if !supplied.packages.is_empty() {
+        return closure_mismatch(
+            "a package census cannot stand in for the selected artifact's file-edge closure",
+        );
+    }
+    if supplied
+        .entries
+        .iter()
+        .any(|entry| entry.role == ClosureFileRole::Generated)
+    {
+        return closure_mismatch(
+            "generated closure bytes cannot be reconstructed from the package snapshot",
+        );
+    }
+
+    let rebuilt = replay_snapshot_closure(snapshot, resolution, &supplied.dependencies)?;
+    if &rebuilt != supplied {
+        return closure_mismatch(format!(
+            "supplied closure {} does not equal snapshot replay {}",
+            supplied.digest, rebuilt.digest
+        ));
+    }
+    Ok(SnapshotVerifiedClosure {
+        snapshot_root: snapshot.root().into(),
+        manifest: rebuilt,
+    })
+}
+
+pub(super) fn replay_snapshot_closure(
+    snapshot: &ArtifactSnapshot,
+    resolution: &SnapshotVerifiedResolution,
+    supplied_dependencies: &[AcceptedDependencyEdge],
+) -> Result<ClosureManifest, ArtifactSnapshotError> {
+    let mut replay = ClosureReplay {
+        snapshot,
+        supplied_dependencies,
+        entries: Vec::new(),
+        dependencies: Vec::new(),
+        hazards: Vec::new(),
+        visited: BTreeSet::new(),
+    };
+    replay.add_entry(ClosureFileRole::Manifest, "package.json")?;
+    replay.add_entry(ClosureFileRole::ResolutionInput, "package.json")?;
+    replay.visit(
+        resolution.runtime_path(),
+        ModuleAxis::Runtime,
+        ClosureFileRole::Runtime,
+    )?;
+    replay.visit(
+        resolution.declarations_path(),
+        ModuleAxis::Declarations,
+        ClosureFileRole::Declaration,
+    )?;
+
+    ClosureManifest::new(replay.entries, replay.dependencies, replay.hazards)
+        .map_err(|error| ArtifactSnapshotError::ModuleClosure(error.to_string()))
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(super) enum ModuleAxis {
+    Runtime,
+    Declarations,
+}
+
+struct ClosureReplay<'a> {
+    snapshot: &'a ArtifactSnapshot,
+    supplied_dependencies: &'a [AcceptedDependencyEdge],
+    entries: Vec<ClosureEntry>,
+    dependencies: Vec<AcceptedDependencyEdge>,
+    hazards: Vec<ClosureHazard>,
+    visited: BTreeSet<(ModuleAxis, ClosureFileRole, String)>,
+}
+
+impl ClosureReplay<'_> {
+    fn visit(
+        &mut self,
+        path: &str,
+        axis: ModuleAxis,
+        role: ClosureFileRole,
+    ) -> Result<(), ArtifactSnapshotError> {
+        if !self.visited.insert((axis, role, path.into())) {
+            return Ok(());
+        }
+        self.add_entry(role, path)?;
+        let bytes = self.snapshot.read(path).ok_or_else(|| {
+            ArtifactSnapshotError::ModuleClosure(format!(
+                "reachable module {path:?} is absent from the snapshot"
+            ))
+        })?;
+        let source = std::str::from_utf8(bytes).map_err(|_| {
+            ArtifactSnapshotError::ModuleClosure(format!(
+                "reachable module {path:?} is not valid UTF-8"
+            ))
+        })?;
+        let facts = extract(format!("./{path}"), source).map_err(|error| {
+            ArtifactSnapshotError::ModuleClosure(format!(
+                "reachable module {path:?} cannot be parsed: {error}"
+            ))
+        })?;
+
+        for hazard in facts.module_hazards {
+            self.hazards.push(ClosureHazard {
+                kind: match hazard.kind {
+                    ModuleHazardKind::NonliteralDynamicLoading => {
+                        ClosureHazardKind::NonliteralDynamicLoading
+                    }
+                    ModuleHazardKind::Eval => ClosureHazardKind::Eval,
+                    ModuleHazardKind::OpaqueWasm => ClosureHazardKind::OpaqueWasm,
+                    ModuleHazardKind::MutableUnboundGlobal => {
+                        ClosureHazardKind::MutableUnboundGlobal
+                    }
+                },
+                source: format!("./{path}:{}-{}", hazard.span.start, hazard.span.end),
+                affected_exports: Vec::new(),
+                affected_domains: all_domains(),
+            });
+        }
+
+        let static_specifiers = facts
+            .imports
+            .into_iter()
+            .map(|fact| fact.module.into_string())
+            .chain(
+                facts
+                    .exports
+                    .into_iter()
+                    .filter_map(|fact| fact.module.map(|module| module.into_string())),
+            )
+            .collect::<Vec<_>>();
+        for specifier in static_specifiers {
+            self.visit_specifier(path, axis, role, &specifier, false)?;
+        }
+        for load in facts.module_loads {
+            let Some(specifier) = load.specifier else {
+                continue;
+            };
+            self.visit_specifier(
+                path,
+                axis,
+                role,
+                &specifier,
+                load.kind == ModuleLoadKind::DynamicImport,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn visit_specifier(
+        &mut self,
+        importer: &str,
+        axis: ModuleAxis,
+        current_role: ClosureFileRole,
+        specifier: &str,
+        dynamic_import: bool,
+    ) -> Result<(), ArtifactSnapshotError> {
+        if dynamic_import && (specifier.ends_with(".node") || specifier.ends_with(".wasm")) {
+            self.hazards.push(ClosureHazard {
+                kind: if specifier.ends_with(".node") {
+                    ClosureHazardKind::NativeCode
+                } else {
+                    ClosureHazardKind::OpaqueWasm
+                },
+                source: format!("./{importer}:{specifier}"),
+                affected_exports: Vec::new(),
+                affected_domains: all_domains(),
+            });
+            return Ok(());
+        }
+
+        match resolve_local(self.snapshot, importer, specifier, axis)? {
+            LocalResolution::Module(target) => {
+                let role = if dynamic_import && axis == ModuleAxis::Runtime {
+                    ClosureFileRole::LiteralDynamicChunk
+                } else {
+                    current_role
+                };
+                self.visit(&target, axis, role)
+            }
+            LocalResolution::Asset(target) => {
+                self.add_entry(ClosureFileRole::ResolutionInput, &target)
+            }
+            LocalResolution::External => self.record_external(importer, specifier),
+            LocalResolution::Missing => closure_mismatch(format!(
+                "local closure module {specifier:?} from {importer:?} was not found"
+            )),
+        }
+    }
+
+    fn record_external(
+        &mut self,
+        importer: &str,
+        specifier: &str,
+    ) -> Result<(), ArtifactSnapshotError> {
+        let matches = self
+            .supplied_dependencies
+            .iter()
+            .filter(|dependency| dependency.specifier == specifier)
+            .collect::<Vec<_>>();
+        match matches.as_slice() {
+            [dependency] => self.dependencies.push((*dependency).clone()),
+            [] => self.hazards.push(ClosureHazard {
+                kind: ClosureHazardKind::UnacceptedExternalDependency,
+                source: format!("./{importer}:{specifier}"),
+                affected_exports: Vec::new(),
+                affected_domains: all_domains(),
+            }),
+            _ => {
+                return closure_mismatch(format!(
+                    "external specifier {specifier:?} has more than one supplied dependency identity"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn add_entry(
+        &mut self,
+        role: ClosureFileRole,
+        path: &str,
+    ) -> Result<(), ArtifactSnapshotError> {
+        let bytes = self.snapshot.read(path).ok_or_else(|| {
+            ArtifactSnapshotError::ModuleClosure(format!(
+                "closure file {path:?} is absent from the snapshot"
+            ))
+        })?;
+        self.entries.push(ClosureEntry {
+            role,
+            path: format!("./{path}"),
+            digest: format!("sha256:{:x}", Sha256::digest(bytes)),
+            transform_digest: None,
+        });
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum LocalResolution {
+    Module(String),
+    Asset(String),
+    External,
+    Missing,
+}
+
+pub(super) fn resolve_local(
+    snapshot: &ArtifactSnapshot,
+    importer: &str,
+    specifier: &str,
+    axis: ModuleAxis,
+) -> Result<LocalResolution, ArtifactSnapshotError> {
+    if !specifier.starts_with('.') && !specifier.starts_with('/') {
+        return Ok(LocalResolution::External);
+    }
+    if specifier.starts_with('/') {
+        return Ok(LocalResolution::Missing);
+    }
+    let base = join_package_path(importer, specifier)?;
+    let extension = module_extension(&base);
+    let allowed = extension.is_none_or(|extension| match axis {
+        ModuleAxis::Runtime => RUNTIME_EXTENSIONS.contains(&extension),
+        ModuleAxis::Declarations => {
+            RUNTIME_EXTENSIONS.contains(&extension) || DECLARATION_EXTENSIONS.contains(&extension)
+        }
+    });
+    if !allowed {
+        return Ok(if snapshot.read(&base).is_some() {
+            LocalResolution::Asset(base)
+        } else {
+            LocalResolution::Missing
+        });
+    }
+
+    let substitutions = source_substitutions(&base);
+    let candidates = match (axis, extension) {
+        (ModuleAxis::Runtime, Some(_)) => std::iter::once(base.clone())
+            .chain(substitutions)
+            .collect::<Vec<_>>(),
+        (ModuleAxis::Runtime, None) => std::iter::once(base.clone())
+            .chain(
+                RUNTIME_EXTENSIONS
+                    .iter()
+                    .map(|extension| format!("{base}{extension}")),
+            )
+            .chain(
+                RUNTIME_EXTENSIONS
+                    .iter()
+                    .map(|extension| format!("{base}/index{extension}")),
+            )
+            .collect(),
+        (ModuleAxis::Declarations, Some(_)) => super::declaration_candidate(snapshot, &base)
+            .into_iter()
+            .chain(substitutions)
+            .collect(),
+        (ModuleAxis::Declarations, None) => DECLARATION_EXTENSIONS
+            .iter()
+            .map(|extension| format!("{base}{extension}"))
+            .chain(
+                DECLARATION_EXTENSIONS
+                    .iter()
+                    .map(|extension| format!("{base}/index{extension}")),
+            )
+            .collect(),
+    };
+    if let Some(path) = candidates
+        .into_iter()
+        .find(|candidate| snapshot.read(candidate).is_some())
+    {
+        return Ok(LocalResolution::Module(path));
+    }
+    Ok(if snapshot.read(&base).is_some() {
+        LocalResolution::Asset(base)
+    } else {
+        LocalResolution::Missing
+    })
+}
+
+fn join_package_path(importer: &str, specifier: &str) -> Result<String, ArtifactSnapshotError> {
+    let mut parts = importer
+        .rsplit_once('/')
+        .map_or(Vec::new(), |(directory, _)| {
+            directory.split('/').map(str::to_owned).collect()
+        });
+    for part in specifier.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.pop().is_none() {
+                    return closure_mismatch(format!(
+                        "module specifier {specifier:?} escapes the package snapshot"
+                    ));
+                }
+            }
+            part if part.contains('\\') => {
+                return closure_mismatch(format!(
+                    "module specifier {specifier:?} is not canonical"
+                ));
+            }
+            part => parts.push(part.into()),
+        }
+    }
+    if parts.is_empty() {
+        return closure_mismatch(format!(
+            "module specifier {specifier:?} does not name a package file"
+        ));
+    }
+    Ok(parts.join("/"))
+}
+
+fn module_extension(path: &str) -> Option<&str> {
+    let filename = path.rsplit('/').next()?;
+    if filename.ends_with(".d.ts") {
+        Some(".d.ts")
+    } else if filename.ends_with(".d.mts") {
+        Some(".d.mts")
+    } else if filename.ends_with(".d.cts") {
+        Some(".d.cts")
+    } else {
+        filename.rfind('.').map(|dot| &filename[dot..])
+    }
+}
+
+fn source_substitutions(base: &str) -> Vec<String> {
+    for (extension, replacements) in [
+        (".js", &[".ts", ".tsx", ".d.ts"][..]),
+        (".jsx", &[".tsx", ".d.ts"][..]),
+        (".mjs", &[".mts", ".d.mts"][..]),
+        (".cjs", &[".cts", ".d.cts"][..]),
+    ] {
+        if let Some(stem) = base.strip_suffix(extension) {
+            return replacements
+                .iter()
+                .map(|replacement| format!("{stem}{replacement}"))
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
+fn all_domains() -> Vec<AffectedClaimDomain> {
+    vec![
+        AffectedClaimDomain::Callbacks,
+        AffectedClaimDomain::Reads,
+        AffectedClaimDomain::Writes,
+        AffectedClaimDomain::Creates,
+        AffectedClaimDomain::Invalidates,
+        AffectedClaimDomain::Throws,
+        AffectedClaimDomain::Returns,
+        AffectedClaimDomain::Cleanups,
+        AffectedClaimDomain::Disposals,
+    ]
+}
+
+fn closure_mismatch<T>(reason: impl Into<String>) -> Result<T, ArtifactSnapshotError> {
+    Err(ArtifactSnapshotError::ModuleClosure(reason.into()))
+}

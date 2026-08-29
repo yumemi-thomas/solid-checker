@@ -27,6 +27,12 @@ use crate::artifact_resolution::{
 };
 use crate::contract_interface::ContractFailure;
 
+mod export_bindings;
+mod module_closure;
+
+pub use export_bindings::SnapshotVerifiedExports;
+pub use module_closure::SnapshotVerifiedClosure;
+
 const SNAPSHOT_HASH_DOMAIN: &[u8] = b"solid-checker:artifact-snapshot:v1\0";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -187,6 +193,8 @@ impl CertificationRequest {
 pub struct CertificationPlan {
     snapshot: ArtifactSnapshot,
     verified_resolution: SnapshotVerifiedResolution,
+    verified_closure: SnapshotVerifiedClosure,
+    verified_exports: SnapshotVerifiedExports,
     candidates: CertificationCandidates,
     demand_graph: ProofDemandGraph,
 }
@@ -211,6 +219,16 @@ impl CertificationPlan {
     pub fn verified_resolution(&self) -> &SnapshotVerifiedResolution {
         &self.verified_resolution
     }
+
+    #[must_use]
+    pub const fn verified_closure(&self) -> &SnapshotVerifiedClosure {
+        &self.verified_closure
+    }
+
+    #[must_use]
+    pub const fn verified_exports(&self) -> &SnapshotVerifiedExports {
+        &self.verified_exports
+    }
 }
 
 pub fn plan_certification(
@@ -231,6 +249,16 @@ pub fn plan_certification(
     };
     let verified_resolution =
         snapshot.verify_resolved_import(&request.import_request, &request.resolved_import)?;
+    let verified_closure = module_closure::verify_snapshot_closure(
+        &snapshot,
+        &verified_resolution,
+        &request.resolved_import.closure,
+    )?;
+    let verified_exports = export_bindings::verify_snapshot_exports(
+        &snapshot,
+        &verified_resolution,
+        &request.resolved_import,
+    )?;
     let selected =
         crate::artifact_resolution::select_and_bind(&request.candidate, &request.resolved_import)?;
     let policy = proof_policy_2();
@@ -242,6 +270,8 @@ pub fn plan_certification(
     Ok(CertificationPlan {
         snapshot,
         verified_resolution,
+        verified_closure,
+        verified_exports,
         candidates,
         demand_graph,
     })
@@ -717,6 +747,11 @@ impl ArtifactSnapshot {
                 "supplied resolution is structurally invalid: {error}"
             ))
         })?;
+        if resolved.transform.is_some() {
+            return resolution_mismatch(
+                "policy 2 cannot certify a transform without snapshot-owned output and tool bytes",
+            );
+        }
         if resolved.specifier != request.specifier || resolved.importer != request.importer {
             return resolution_mismatch("supplied resolution does not answer the exact request");
         }
@@ -833,6 +868,10 @@ pub enum ArtifactSnapshotError {
     ManifestIdentity(String),
     #[error("artifact resolution mismatch: {0}")]
     ResolutionMismatch(String),
+    #[error("artifact module closure mismatch: {0}")]
+    ModuleClosure(String),
+    #[error("artifact export binding mismatch: {0}")]
+    ExportBindings(String),
 }
 
 fn requested_entrypoint(
@@ -1559,12 +1598,13 @@ fn archive_error(error: impl std::fmt::Display) -> ArtifactSnapshotError {
 mod tests {
     use super::{
         ArtifactSnapshot, ArtifactSnapshotError, CertificationRequest, LocalArtifact,
-        LockPinnedArchive, PublishedArchive, SnapshotLimits, UntrustedArtifactEnvelope,
-        plan_certification,
+        LockPinnedArchive, PublishedArchive, SnapshotLimits, SnapshotVerifiedResolution,
+        UntrustedArtifactEnvelope, plan_certification,
     };
     use crate::artifact_resolution::{
-        ClosureEntry, ClosureFileRole, ClosureManifest, ImportRequest, ResolutionAuthority,
-        ResolutionTrace, ResolutionTraceStep, ResolvedFile, ResolvedImport,
+        ClosureEntry, ClosureFileRole, ClosureHazardKind, ClosureManifest, ImportRequest,
+        ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
+        ResolvedExportTarget, ResolvedFile, ResolvedImport,
     };
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use flate2::{Compression, write::GzEncoder};
@@ -1677,6 +1717,15 @@ mod tests {
             path: format!("{root}/{path}"),
             real_path: None,
             digest: format!("sha256:{:x}", Sha256::digest(bytes)),
+        }
+    }
+
+    fn closure_entry(role: ClosureFileRole, path: &str, bytes: &[u8]) -> ClosureEntry {
+        ClosureEntry {
+            role,
+            path: format!("./{path}"),
+            digest: format!("sha256:{:x}", Sha256::digest(bytes)),
+            transform_digest: None,
         }
     }
 
@@ -1938,6 +1987,12 @@ mod tests {
                     transform_digest: None,
                 },
                 ClosureEntry {
+                    role: ClosureFileRole::ResolutionInput,
+                    path: "./package.json".into(),
+                    digest: package_manifest.digest.clone(),
+                    transform_digest: None,
+                },
+                ClosureEntry {
                     role: ClosureFileRole::Runtime,
                     path: "./dist/dev.js".into(),
                     digest: runtime_file.digest.clone(),
@@ -1959,6 +2014,19 @@ mod tests {
             importer: "/project/src/app.ts".into(),
             export_conditions: vec!["import".into(), "development".into()],
         };
+        let exports = BTreeMap::from([(
+            "mode".into(),
+            ResolvedExportBinding {
+                runtime: ResolvedExportTarget {
+                    module: runtime_file.clone(),
+                    export_name: "mode".into(),
+                },
+                declarations: ResolvedExportTarget {
+                    module: declaration_file.clone(),
+                    export_name: "mode".into(),
+                },
+            },
+        )]);
         let resolved = ResolvedImport {
             specifier: request.specifier.clone(),
             importer: request.importer.clone(),
@@ -2007,7 +2075,7 @@ mod tests {
             },
             closure,
             transform: None,
-            exports: BTreeMap::new(),
+            exports,
             authority: ResolutionAuthority::Host,
         };
 
@@ -2032,6 +2100,17 @@ mod tests {
             Err(ArtifactSnapshotError::ResolutionMismatch(_))
         ));
 
+        let mut unmaterialized_transform = resolved.clone();
+        unmaterialized_transform.transform = Some(resolved_file(
+            "/toolchain",
+            "loader.js",
+            b"untrusted loader bytes",
+        ));
+        assert!(matches!(
+            snapshot.verify_resolved_import(&request, &unmaterialized_transform),
+            Err(ArtifactSnapshotError::ResolutionMismatch(_))
+        ));
+
         let (package, artifact_case) =
             crate::artifact_resolution::proposal_identity(&resolved).unwrap();
         let candidate = ContractProposal::new(package, vec![artifact_case])
@@ -2044,6 +2123,8 @@ mod tests {
         .unwrap();
         assert_eq!(plan.snapshot_root(), snapshot.root());
         assert_eq!(plan.demand_graph().demands().len(), 6);
+        assert_eq!(plan.verified_closure().manifest(), &resolved.closure);
+        assert_eq!(plan.verified_exports().binding_count(), 1);
 
         let request_without_development = ImportRequest {
             export_conditions: vec!["import".into()],
@@ -2051,6 +2132,383 @@ mod tests {
         };
         assert!(matches!(
             snapshot.verify_resolved_import(&request_without_development, &resolved),
+            Err(ArtifactSnapshotError::ResolutionMismatch(_))
+        ));
+    }
+
+    #[test]
+    fn module_closure_is_recomputed_with_exact_roles_edges_and_hazards() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let runtime = br#"
+            import "./shared.js";
+            import "./asset.json";
+            import "external-package";
+            import(dynamicName);
+            import("./chunk.js");
+            eval(source);
+            WebAssembly.instantiate(bytes);
+            leaked = 1;
+        "#;
+        let shared = b"export const shared = true;";
+        let chunk = b"export const chunk = true;";
+        let asset = br#"{"value":true}"#;
+        let declarations = b"export * from './surface.js';";
+        let surface = b"export declare const shared: boolean;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", runtime),
+            ("package/dist/shared.js", shared),
+            ("package/dist/shared-copy.js", shared),
+            ("package/dist/chunk.js", chunk),
+            ("package/dist/asset.json", asset),
+            ("package/types/index.d.ts", declarations),
+            ("package/types/surface.d.ts", surface),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "dist/index.js".into(),
+            declarations_path: "types/index.d.ts".into(),
+        };
+
+        let replayed =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        for expected in [
+            closure_entry(ClosureFileRole::Manifest, "package.json", manifest),
+            closure_entry(ClosureFileRole::ResolutionInput, "package.json", manifest),
+            closure_entry(ClosureFileRole::Runtime, "dist/index.js", runtime),
+            closure_entry(ClosureFileRole::Runtime, "dist/shared.js", shared),
+            closure_entry(ClosureFileRole::LiteralDynamicChunk, "dist/chunk.js", chunk),
+            closure_entry(ClosureFileRole::ResolutionInput, "dist/asset.json", asset),
+            closure_entry(
+                ClosureFileRole::Declaration,
+                "types/index.d.ts",
+                declarations,
+            ),
+            closure_entry(ClosureFileRole::Declaration, "types/surface.d.ts", surface),
+        ] {
+            assert!(replayed.entries.contains(&expected), "missing {expected:?}");
+        }
+        assert!(
+            !replayed
+                .entries
+                .iter()
+                .any(|entry| entry.path == "./dist/shared-copy.js")
+        );
+        assert_eq!(
+            replayed
+                .hazards
+                .iter()
+                .map(|hazard| hazard.kind)
+                .collect::<std::collections::BTreeSet<_>>(),
+            [
+                ClosureHazardKind::NonliteralDynamicLoading,
+                ClosureHazardKind::Eval,
+                ClosureHazardKind::OpaqueWasm,
+                ClosureHazardKind::MutableUnboundGlobal,
+                ClosureHazardKind::UnacceptedExternalDependency,
+            ]
+            .into_iter()
+            .collect()
+        );
+        let verified =
+            super::module_closure::verify_snapshot_closure(&snapshot, &resolution, &replayed)
+                .unwrap();
+        assert_eq!(verified.manifest(), &replayed);
+
+        let mut missing_edge_entries = replayed.entries.clone();
+        missing_edge_entries.retain(|entry| entry.path != "./dist/shared.js");
+        let missing_edge = ClosureManifest::new(
+            missing_edge_entries,
+            replayed.dependencies.clone(),
+            replayed.hazards.clone(),
+        )
+        .unwrap();
+        assert!(matches!(
+            super::module_closure::verify_snapshot_closure(&snapshot, &resolution, &missing_edge),
+            Err(ArtifactSnapshotError::ModuleClosure(_))
+        ));
+
+        let mut stale_entries = replayed.entries.clone();
+        stale_entries
+            .iter_mut()
+            .find(|entry| entry.path == "./dist/shared.js")
+            .unwrap()
+            .digest = format!("sha256:{:064x}", 0);
+        let stale = ClosureManifest::new(
+            stale_entries,
+            replayed.dependencies.clone(),
+            replayed.hazards.clone(),
+        )
+        .unwrap();
+        assert!(matches!(
+            super::module_closure::verify_snapshot_closure(&snapshot, &resolution, &stale),
+            Err(ArtifactSnapshotError::ModuleClosure(_))
+        ));
+
+        let mut aliased_entries = replayed.entries.clone();
+        aliased_entries
+            .iter_mut()
+            .find(|entry| entry.path == "./dist/shared.js")
+            .unwrap()
+            .path = "./dist/shared-copy.js".into();
+        let same_bytes_different_path =
+            ClosureManifest::new(aliased_entries, replayed.dependencies, replayed.hazards).unwrap();
+        assert!(matches!(
+            super::module_closure::verify_snapshot_closure(
+                &snapshot,
+                &resolution,
+                &same_bytes_different_path
+            ),
+            Err(ArtifactSnapshotError::ModuleClosure(_))
+        ));
+    }
+
+    #[test]
+    fn export_bindings_are_replayed_across_reexports_stars_and_namespaces() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let runtime = br#"
+            export { runtimeName as publicName } from "./runtime.js";
+            export * from "./star.js";
+            export * as ns from "./namespace.js";
+        "#;
+        let runtime_target = b"export const runtimeName = 1;";
+        let runtime_star = b"export const shared = 1;";
+        let runtime_namespace = b"export const inner = 1;";
+        let declarations = br#"
+            export { declarationName as publicName } from "./surface.js";
+            export * from "./star.js";
+            export * as ns from "./namespace.js";
+        "#;
+        let declaration_target = b"export declare const declarationName: number;";
+        let declaration_star = b"export declare const shared: number;";
+        let declaration_namespace = b"export declare const inner: number;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", runtime),
+            ("package/dist/runtime.js", runtime_target),
+            ("package/dist/runtime-copy.js", runtime_target),
+            ("package/dist/star.js", runtime_star),
+            ("package/dist/namespace.js", runtime_namespace),
+            ("package/types/index.d.ts", declarations),
+            ("package/types/surface.d.ts", declaration_target),
+            ("package/types/star.d.ts", declaration_star),
+            ("package/types/namespace.d.ts", declaration_namespace),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let root = "/project/node_modules/fixture-package";
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "dist/index.js".into(),
+            declarations_path: "types/index.d.ts".into(),
+        };
+        let closure =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        let binding = |runtime_path: &str,
+                       runtime_bytes: &[u8],
+                       runtime_name: &str,
+                       declaration_path: &str,
+                       declaration_bytes: &[u8],
+                       declaration_name: &str| ResolvedExportBinding {
+            runtime: ResolvedExportTarget {
+                module: resolved_file(root, runtime_path, runtime_bytes),
+                export_name: runtime_name.into(),
+            },
+            declarations: ResolvedExportTarget {
+                module: resolved_file(root, declaration_path, declaration_bytes),
+                export_name: declaration_name.into(),
+            },
+        };
+        let exports = BTreeMap::from([
+            (
+                "ns".into(),
+                binding(
+                    "dist/namespace.js",
+                    runtime_namespace,
+                    "*",
+                    "types/namespace.d.ts",
+                    declaration_namespace,
+                    "*",
+                ),
+            ),
+            (
+                "publicName".into(),
+                binding(
+                    "dist/runtime.js",
+                    runtime_target,
+                    "runtimeName",
+                    "types/surface.d.ts",
+                    declaration_target,
+                    "declarationName",
+                ),
+            ),
+            (
+                "shared".into(),
+                binding(
+                    "dist/star.js",
+                    runtime_star,
+                    "shared",
+                    "types/star.d.ts",
+                    declaration_star,
+                    "shared",
+                ),
+            ),
+        ]);
+        let resolved = ResolvedImport {
+            specifier: "fixture-package".into(),
+            importer: "/project/src/app.ts".into(),
+            requested_entrypoint: ".".into(),
+            package_name: "fixture-package".into(),
+            package_version: "1.2.3".into(),
+            package_integrity: snapshot.package_integrity().into(),
+            package_root: root.into(),
+            package_real_root: None,
+            package_manifest: resolved_file(root, "package.json", manifest),
+            runtime: resolved_file(root, "dist/index.js", runtime),
+            declarations: resolved_file(root, "types/index.d.ts", declarations),
+            runtime_trace: ResolutionTrace::default(),
+            declaration_trace: ResolutionTrace::default(),
+            closure,
+            transform: None,
+            exports,
+            authority: ResolutionAuthority::Host,
+        };
+
+        let verified =
+            super::export_bindings::verify_snapshot_exports(&snapshot, &resolution, &resolved)
+                .unwrap();
+        assert_eq!(verified.binding_count(), 3);
+
+        let mut omitted = resolved.clone();
+        omitted.exports.remove("shared");
+        assert!(matches!(
+            super::export_bindings::verify_snapshot_exports(&snapshot, &resolution, &omitted),
+            Err(ArtifactSnapshotError::ExportBindings(_))
+        ));
+
+        let mut aliased = resolved.clone();
+        aliased
+            .exports
+            .get_mut("publicName")
+            .unwrap()
+            .runtime
+            .module = resolved_file(root, "dist/runtime-copy.js", runtime_target);
+        assert!(matches!(
+            super::export_bindings::verify_snapshot_exports(&snapshot, &resolution, &aliased),
+            Err(ArtifactSnapshotError::ResolutionMismatch(_))
+        ));
+
+        let mut renamed = resolved;
+        renamed
+            .exports
+            .get_mut("publicName")
+            .unwrap()
+            .declarations
+            .export_name = "runtimeName".into();
+        assert!(matches!(
+            super::export_bindings::verify_snapshot_exports(&snapshot, &resolution, &renamed),
+            Err(ArtifactSnapshotError::ExportBindings(_))
+        ));
+    }
+
+    #[test]
+    fn wildcard_entrypoint_and_condition_order_are_replayed_from_manifest_bytes() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{"./features/*":{"types":"./types/*.d.ts","import":"./dist/*.js","default":"./dist/default.js"}}}"#;
+        let runtime = b"export const feature = true;";
+        let declarations = b"export declare const feature: true;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/a.js", runtime),
+            ("package/dist/default.js", b"export const feature = false;"),
+            ("package/types/a.d.ts", declarations),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let root = "/project/node_modules/fixture-package";
+        let package_manifest = resolved_file(root, "package.json", manifest);
+        let runtime_file = resolved_file(root, "dist/a.js", runtime);
+        let declaration_file = resolved_file(root, "types/a.d.ts", declarations);
+        let closure = ClosureManifest::new(
+            vec![
+                closure_entry(ClosureFileRole::Manifest, "package.json", manifest),
+                closure_entry(ClosureFileRole::Runtime, "dist/a.js", runtime),
+                closure_entry(ClosureFileRole::Declaration, "types/a.d.ts", declarations),
+            ],
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        let request = ImportRequest {
+            specifier: "fixture-package/features/a".into(),
+            importer: "/project/src/app.ts".into(),
+            export_conditions: vec!["import".into()],
+        };
+        let resolved = ResolvedImport {
+            specifier: request.specifier.clone(),
+            importer: request.importer.clone(),
+            requested_entrypoint: "./features/a".into(),
+            package_name: "fixture-package".into(),
+            package_version: "1.2.3".into(),
+            package_integrity: snapshot.package_integrity().into(),
+            package_root: root.into(),
+            package_real_root: None,
+            package_manifest,
+            runtime: runtime_file,
+            declarations: declaration_file,
+            runtime_trace: ResolutionTrace {
+                branch: "/exports/.~1features~1*/import".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: "./features/a".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "import".into(),
+                        target: "/exports/.~1features~1*".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./dist/a.js".into(),
+                    },
+                ],
+            },
+            declaration_trace: ResolutionTrace {
+                branch: "/exports/.~1features~1*/types".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: "./features/a".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "types".into(),
+                        target: "/exports/.~1features~1*".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./types/a.d.ts".into(),
+                    },
+                ],
+            },
+            closure,
+            transform: None,
+            exports: BTreeMap::new(),
+            authority: ResolutionAuthority::Host,
+        };
+
+        let verified = snapshot
+            .verify_resolved_import(&request, &resolved)
+            .unwrap();
+        assert_eq!(verified.runtime_path(), "dist/a.js");
+        assert_eq!(verified.declarations_path(), "types/a.d.ts");
+
+        let mut reordered = resolved;
+        reordered.runtime_trace.steps.swap(1, 2);
+        assert!(matches!(
+            snapshot.verify_resolved_import(&request, &reordered),
             Err(ArtifactSnapshotError::ResolutionMismatch(_))
         ));
     }

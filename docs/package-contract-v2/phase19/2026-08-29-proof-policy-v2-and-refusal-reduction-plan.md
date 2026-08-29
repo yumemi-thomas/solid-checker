@@ -469,12 +469,19 @@ proof documents, and receipts remain policy 1. The producer-field authority
 audit is now executable, and Slice 2 adds distinct published, lock-pinned, and
 refused-local provenance; bounded archive/SRI and registry-metadata
 verification; immutable order-independent snapshots; and Rust-owned replay of
-runtime/declaration entrypoint resolution. Full export and module-closure
-verification remain pending. Slice 3 now inventories normalized operations,
+runtime/declaration entrypoint resolution. Slice 3 now inventories normalized operations,
 edges, resources, guards, callbacks, and recursive values, then derives opaque
 snapshot/policy-bound demand IDs plus a demand-graph root without accepting a
-caller-supplied plan. Authority-bearing witnesses, receipt authentication, and
-the atomic cut are still pending. Run
+caller-supplied plan. Slice 4 now recomputes the complete local runtime and
+declaration module graph from snapshot bytes, including literal dynamic chunks,
+resolution-input assets, accepted-edge subjects, and scope-resolved open
+frontiers; independently replays exact export bindings through named, star,
+namespace, wildcard, and divergent runtime/declaration targets; and rejects a
+caller closure or export table on any path, role, edge, hash, condition trace,
+or target mismatch. Transformed output remains explicitly uncertifiable until
+both output and tool bytes can be materialized inside the snapshot authority.
+Authority-bearing witnesses, receipt authentication, and the atomic cut are
+still pending. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
 artifact and digest with the compiled definition.
