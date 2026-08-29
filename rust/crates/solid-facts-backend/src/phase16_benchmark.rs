@@ -203,6 +203,7 @@ fn resident_delta(before: Option<u64>, after: Option<u64>) -> Option<u64> {
     Some(after?.saturating_sub(before?))
 }
 
+#[cfg(unix)]
 fn resident_kib() -> Option<u64> {
     // SAFETY: `usage` points to a valid writable `rusage`, and RUSAGE_SELF
     // requires no caller-owned lifetime. The OS initializes the full value.
@@ -219,6 +220,11 @@ fn resident_kib() -> Option<u64> {
     } else {
         Some(peak)
     }
+}
+
+#[cfg(not(unix))]
+fn resident_kib() -> Option<u64> {
+    None
 }
 
 #[cfg(test)]
@@ -259,5 +265,11 @@ mod tests {
                 assert!(contract.export(&name).is_some());
             }
         }
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn resident_memory_is_explicitly_unavailable_without_getrusage() {
+        assert_eq!(resident_kib(), None);
     }
 }

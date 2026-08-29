@@ -1,0 +1,74 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "abdf7a2260ef593427b6f0408677883a2a9aebfd5232702d4a6f755195f70c53",
+            "path": "./index.js",
+            "sha256": "fd4beec037e751637a6704266d0f9f3bf00fdcd28457e8a2b5eb5888775c06e5"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "f00ec9dee9b20271247e05fbd703fdb9ce60135b6cbc1925b138147436c0ccf6"
+          },
+          "exports": {
+            "forwardEnvironmentDependent": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:fafcc88817f267675a6dd628d2d0962110f59e224872bc60f5cbd326443e7ec0",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "fafcc88817f267675a6dd628d2d0962110f59e224872bc60f5cbd326443e7ec0"
+    },
+    "name": "torture-environment-conditions-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

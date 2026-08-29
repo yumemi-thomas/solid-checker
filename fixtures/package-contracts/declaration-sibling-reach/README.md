@@ -41,12 +41,13 @@ name-only fallback is involved.
 
 - `.` — only `forwarded` goes unknown, by the exact `reachability` rung.
   `Isolated` reaches nothing and retains its independently proven summary.
-- `./direct` — the control, and the half that stays exact. Its entry file *is*
-  `channel.js`, so `channelFor` resolves to an export name and the module
-  surface question never arises: the export publishes its exact
-  `parameter-member` row and carries no unknown claim, exactly as in
-  `parameter-member-forwarded`. A regression that widened unconditionally would
-  break here.
+- `./direct` — the source-level control. Its entry file *is* `channel.js`, so
+  focused inference proves the exact `parameter-member` row without a module
+  surface fallback. Package-contract inference does not yet expose this
+  subpath as an inference entrypoint, however, so temporary-v2 generation
+  refuses only `./direct` in `expected-refusals.json` while retaining `.`.
+  Missing that entrypoint remains an explicit open premise, not a negative
+  claim about `channelFor`.
 
 ## The closure record is part of this fixture's claim
 
@@ -57,9 +58,11 @@ sits beside it. A record that dropped declaration files would erase the evidence
 for the very finding this fixture is about, and one that reported the pair as a
 seeding gap would double-report it (see `attestedClosure`).
 
-`./direct` pins the mirror: its entry file *is* `channel.js`, and its record
-names that file alone. The sibling target `./index.js` is excluded from it
-exactly as the analysis excludes it, so the two records cannot silently merge.
+`./direct` pins the closure-record mirror: its entry file *is* `channel.js`, and
+its record names that file alone. The sibling target `./index.js` is excluded
+from it exactly as the analysis excludes it. That closure evidence remains
+valid even though contract inference currently refuses the subpath before
+emission.
 
 Neither record names anything under `node_modules/`. The solid-js stub is a
 dependency's bytes: excluded from the record deliberately, because hashing it

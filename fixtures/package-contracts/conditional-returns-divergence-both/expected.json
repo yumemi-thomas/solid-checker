@@ -1,0 +1,143 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "a277e1b0244a38424cee4c0348cf64505f8075580706018d929f7d8154fb2b7e",
+            "path": "./node.js",
+            "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
+          },
+          "declarations": {
+            "path": "./node.js",
+            "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
+          },
+          "exports": {
+            "Show": "summary-746e4490245bde8e30d3c9ab495553b39f388e3c5a6be62c3479e69692368a87",
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./default"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "d81fc65c5a22c69570c481290fbfae34839813646ebf03ee75986b8b07d759e9",
+            "path": "./browser.js",
+            "sha256": "415c2986a3d355234653761c114ea0d250aad072d462d5c3a52067b1ccf63042"
+          },
+          "declarations": {
+            "path": "./browser.js",
+            "sha256": "415c2986a3d355234653761c114ea0d250aad072d462d5c3a52067b1ccf63042"
+          },
+          "exports": {
+            "Show": "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933",
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser",
+            "typesBranch": "/exports/./browser"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:3f07e6a71e1d6f3e5740c66077804778d019fce8b3122b5fbe3c1747a3a13609",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "3f07e6a71e1d6f3e5740c66077804778d019fce8b3122b5fbe3c1747a3a13609"
+    },
+    "name": "conditional-returns-divergence-both-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 2,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-746e4490245bde8e30d3c9ab495553b39f388e3c5a6be62c3479e69692368a87": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "other",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-b1f6ccac9babff33cf223de3d0a7f152567b6ceb57ca4a0bbc8c341490a85933": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "view",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

@@ -5,8 +5,8 @@ An exported helper that invokes a member of one of its own parameters
 analysis keeps the obligation explicit. Contract emission may discharge it,
 because `contract_export_function` serializes the same provenance as a
 `parameter-member` reactive read and a consumer resolves that row against the
-argument it actually passes — that is the discharge, and `./direct` is it:
-`channelFor` publishes
+argument it actually passes. Focused inference proves that discharge for
+`./direct`: `channelFor` publishes
 `reactiveReads: [{ parameter-member, parameter 0, member: "getThing" }]` and
 carries no unknown claim. The exact static member also gives the generic probe
 a property it can instrument without guessing.
@@ -22,8 +22,11 @@ depends entirely on what it is handed.
 
 So the discharge is asked of the exports the attribution ladder actually
 resolves the obligation to, and holds only when every one of them publishes the
-row. `.` fails that test and `forwarded` is marked; `./direct` passes it and
-`channelFor` keeps its exact row.
+row. `.` fails that test and `forwarded` is marked. The package-contract
+inference boundary does not yet expose `./direct`, so temporary-v2 generation
+retains `.` and records only that subpath as locally uncertifiable in
+`expected-refusals.json`; it does not reinterpret the missing entrypoint as a
+negative about `channelFor`.
 
 `Isolated` reaches nothing and stays certified.
 

@@ -7912,3 +7912,13 @@ not a retained analyzer-heap claim. Phase 16 adds no compression transform
 because the current main documents already pass the 8 KiB p50, 32 KiB p95, and
 1 MiB maximum gates; compression remains allowed only when normalized semantics
 and proof identity are unchanged.
+
+The post-handoff CI audit closed two gate gaps without closing any semantic
+premise. Peak RSS now calls `getrusage` only on Unix; Windows and WASI expose
+that measurement as unavailable instead of failing to compile. The 39-fixture
+generator corpus now pins refusal sidecars for partial proposals and is part of
+`make verify`: 40 retained artifact cases coexist with 14 exact local refusals,
+while 5 packages remain full fail-closed refusals. Eight fixtures that formerly
+stored only the first whole-package error now retain their known cases and name
+the unsupported condition, merge, or inference-entrypoint leaf separately.
+Those local refusals remain uncertifiable; snapshot migration is not proof.

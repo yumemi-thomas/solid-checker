@@ -1,10 +1,12 @@
 # An export name present in only one conditional branch
 
-`observe` exists in the `browser` branch and not in the `node` one. Schema v1
-cannot say "not exported here", so the generator must keep the branch it *was*
-proven for as a variant rather than publishing it as an unconditional summary.
-A node consumer then fails closed on `observe` instead of inheriting the
-browser branch's callback semantics.
+`observe` exists in the `browser` branch and not in the `node` one. The
+temporary-v2 model keeps those selections as separate exact artifact cases, so
+the node case omits `observe` without turning that local absence into a global
+negative. A node consumer therefore cannot inherit the browser branch's
+callback semantics.
 
 `shared` is the negative control: it exists in both branches with the same
-semantics, so it stays unconditional and gains no variant.
+semantics. The browser and node cases are retained in `expected.json`; the
+empty and contradictory condition selections stay local in
+`expected-refusals.json` rather than refusing the whole package.
