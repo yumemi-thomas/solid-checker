@@ -48,6 +48,33 @@
     "unprovedPositive": "remove-or-refuse",
     "unprovedClosure": "leave-open-or-refuse"
   },
+  "witnessEnvelope": {
+    "variants": [
+      "package-identity",
+      "manifest-entrypoint",
+      "export-resolution",
+      "artifact-declarations",
+      "export-identity",
+      "module-closure",
+      "selected-signature",
+      "argument-binding",
+      "rest-spread-coverage",
+      "callable-path",
+      "operation-reachability",
+      "operation-cardinality",
+      "recursive-value-shape",
+      "guard-partition",
+      "compiler-reconciliation",
+      "accepted-dependency-composition",
+      "domain-exhaustiveness"
+    ],
+    "exactlyOnePerDemand": true,
+    "concreteSiteIdentitiesRequired": true,
+    "emptyWitnessAllowed": false,
+    "duplicateSitesAllowed": false,
+    "unknownVariantsAllowed": false,
+    "serializedAuthority": false
+  },
   "applicability": {
     "artifactPrerequisites": [
       {

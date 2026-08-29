@@ -58,7 +58,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       artifactPrerequisiteFamilies: 6,
       claimFamilies: 9,
       policyDigest:
-        "sha256:15f26bd9e71ea6ba5a65a1b87be356c85fad7b98e8457825d75a61c5959e42e6"
+        "sha256:9fcc7bf98dc9af6bc97e7dda52d9201de4c11dd4654a5c417e5ba8ce80b4da78"
     });
   });
 

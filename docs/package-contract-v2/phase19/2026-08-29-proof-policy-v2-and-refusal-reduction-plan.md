@@ -472,16 +472,22 @@ verification; immutable order-independent snapshots; and Rust-owned replay of
 runtime/declaration entrypoint resolution. Slice 3 now inventories normalized operations,
 edges, resources, guards, callbacks, and recursive values, then derives opaque
 snapshot/policy-bound demand IDs plus a demand-graph root without accepting a
-caller-supplied plan. Slice 4 now recomputes the complete local runtime and
-declaration module graph from snapshot bytes, including literal dynamic chunks,
+caller-supplied plan. Its closed witness envelope now binds concrete site
+identities and evidence roots to exactly one derived demand, rejects unknown
+wire variants and fields plus missing, extra, duplicate, empty, oversized, or
+family-swapped evidence, and computes an order-independent evidence root. This
+is structural coverage, not evidence authority: serialized documents remain
+non-authoritative, while the six artifact-family bindings are constructed only
+from the opaque snapshot-verified plan. Slice 4 now recomputes the complete
+local runtime and declaration module graph from snapshot bytes, including literal dynamic chunks,
 resolution-input assets, accepted-edge subjects, and scope-resolved open
 frontiers; independently replays exact export bindings through named, star,
 namespace, wildcard, and divergent runtime/declaration targets; and rejects a
 caller closure or export table on any path, role, edge, hash, condition trace,
 or target mismatch. Transformed output remains explicitly uncertifiable until
 both output and tool bytes can be materialized inside the snapshot authority.
-Authority-bearing witnesses, receipt authentication, and the atomic cut are
-still pending. Run
+Authority-bearing Type Facts, compiler, dependency, and probe adapters, receipt
+authentication, and the atomic cut are still pending. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
 artifact and digest with the compiled definition.

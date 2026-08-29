@@ -11,7 +11,8 @@ use sha2::{Digest as _, Sha256, Sha512};
 use solid_reactive_ir::contract_semantics::{
     NormalizedContract,
     certification::{
-        CertificationCandidates, DemandPlanningError, ProofDemandGraph, proof_policy_2,
+        CertificationCandidates, DemandPlanningError, ProofDemandGraph, ProofFamily,
+        ProofWitnessVariant, WitnessBinding, WitnessCoverage, proof_policy_2,
     },
 };
 use std::{
@@ -29,9 +30,11 @@ use crate::contract_interface::ContractFailure;
 
 mod export_bindings;
 mod module_closure;
+mod witness_wire;
 
 pub use export_bindings::SnapshotVerifiedExports;
 pub use module_closure::SnapshotVerifiedClosure;
+pub use witness_wire::WitnessWireError;
 
 const SNAPSHOT_HASH_DOMAIN: &[u8] = b"solid-checker:artifact-snapshot:v1\0";
 
@@ -197,6 +200,7 @@ pub struct CertificationPlan {
     verified_exports: SnapshotVerifiedExports,
     candidates: CertificationCandidates,
     demand_graph: ProofDemandGraph,
+    artifact_witnesses: Vec<WitnessBinding>,
 }
 
 impl CertificationPlan {
@@ -228,6 +232,24 @@ impl CertificationPlan {
     #[must_use]
     pub const fn verified_exports(&self) -> &SnapshotVerifiedExports {
         &self.verified_exports
+    }
+
+    /// Snapshot-derived bindings for the six artifact-wide demands. These are
+    /// generated inside the opaque plan and are never accepted from proof
+    /// wire. Other family adapters must still satisfy every remaining demand.
+    #[must_use]
+    pub fn artifact_witness_bindings(&self) -> &[WitnessBinding] {
+        &self.artifact_witnesses
+    }
+
+    /// Decodes and checks a proof-v2 audit document against this exact plan.
+    /// The returned value proves structural coverage only; it cannot replace
+    /// direct family-adapter authentication.
+    pub fn inspect_witness_document(
+        &self,
+        bytes: &[u8],
+    ) -> Result<WitnessCoverage, WitnessWireError> {
+        witness_wire::decode_witness_coverage(bytes, &self.demand_graph)
     }
 }
 
@@ -267,6 +289,13 @@ pub fn plan_certification(
         .map_err(|error| CertificationPlanningError::InvalidCandidate(error.to_string()))?;
     let demand_graph =
         policy.derive_demand_graph(&candidates, snapshot.root(), snapshot.provenance_root())?;
+    let artifact_witnesses = artifact_witness_bindings(
+        &snapshot,
+        &verified_resolution,
+        &verified_closure,
+        &verified_exports,
+        &demand_graph,
+    );
     Ok(CertificationPlan {
         snapshot,
         verified_resolution,
@@ -274,6 +303,7 @@ pub fn plan_certification(
         verified_exports,
         candidates,
         demand_graph,
+        artifact_witnesses,
     })
 }
 
@@ -481,6 +511,7 @@ pub struct SnapshotVerifiedResolution {
     provenance_root: String,
     runtime_path: String,
     declarations_path: String,
+    evidence_root: String,
 }
 
 impl SnapshotVerifiedResolution {
@@ -503,6 +534,201 @@ impl SnapshotVerifiedResolution {
     pub fn declarations_path(&self) -> &str {
         &self.declarations_path
     }
+
+    #[must_use]
+    pub fn evidence_root(&self) -> &str {
+        &self.evidence_root
+    }
+}
+
+fn artifact_witness_bindings(
+    snapshot: &ArtifactSnapshot,
+    resolution: &SnapshotVerifiedResolution,
+    closure: &SnapshotVerifiedClosure,
+    exports: &SnapshotVerifiedExports,
+    graph: &ProofDemandGraph,
+) -> Vec<WitnessBinding> {
+    let runtime_digest = snapshot
+        .read(resolution.runtime_path())
+        .map(|bytes| format!("sha256:{:x}", Sha256::digest(bytes)))
+        .expect("verified runtime path belongs to the snapshot");
+    let declaration_digest = snapshot
+        .read(resolution.declarations_path())
+        .map(|bytes| format!("sha256:{:x}", Sha256::digest(bytes)))
+        .expect("verified declaration path belongs to the snapshot");
+    graph
+        .demands()
+        .iter()
+        .filter_map(|demand| {
+            let (variant, root, sites) = match demand.family() {
+                ProofFamily::PackageIdentity => (
+                    ProofWitnessVariant::PackageIdentity,
+                    certification_evidence_root(
+                        "package-identity",
+                        [
+                            snapshot.package_name(),
+                            snapshot.package_version(),
+                            snapshot.package_integrity(),
+                            snapshot.root(),
+                            snapshot.provenance_root(),
+                        ],
+                    ),
+                    vec![
+                        format!("package:{}", snapshot.package_name()),
+                        format!("version:{}", snapshot.package_version()),
+                        format!("integrity:{}", snapshot.package_integrity()),
+                        format!("snapshot:{}", snapshot.root()),
+                        format!("provenance:{}", snapshot.provenance_root()),
+                    ],
+                ),
+                ProofFamily::ManifestEntrypoint => (
+                    ProofWitnessVariant::ManifestEntrypoint,
+                    certification_evidence_root(
+                        "manifest-entrypoint",
+                        [resolution.evidence_root()],
+                    ),
+                    vec![
+                        format!("runtime-entrypoint:{}", resolution.runtime_path()),
+                        format!("declaration-entrypoint:{}", resolution.declarations_path()),
+                    ],
+                ),
+                ProofFamily::ExportResolution => (
+                    ProofWitnessVariant::ExportResolution,
+                    certification_evidence_root(
+                        "export-resolution",
+                        [
+                            resolution.runtime_path(),
+                            resolution.declarations_path(),
+                            resolution.evidence_root(),
+                        ],
+                    ),
+                    vec![
+                        format!("runtime-resolution:{}", resolution.runtime_path()),
+                        format!("declaration-resolution:{}", resolution.declarations_path()),
+                    ],
+                ),
+                ProofFamily::ArtifactDeclarations => (
+                    ProofWitnessVariant::ArtifactDeclarations,
+                    certification_evidence_root(
+                        "artifact-declarations",
+                        [
+                            resolution.runtime_path(),
+                            runtime_digest.as_str(),
+                            resolution.declarations_path(),
+                            declaration_digest.as_str(),
+                        ],
+                    ),
+                    vec![
+                        format!(
+                            "runtime-artifact:{}:{runtime_digest}",
+                            resolution.runtime_path()
+                        ),
+                        format!(
+                            "declaration-artifact:{}:{declaration_digest}",
+                            resolution.declarations_path()
+                        ),
+                    ],
+                ),
+                ProofFamily::ExportIdentity => (
+                    ProofWitnessVariant::ExportIdentity,
+                    certification_evidence_root("export-identity", [exports.evidence_root()]),
+                    {
+                        let sites = exports.site_ids();
+                        if sites.is_empty() {
+                            vec!["export-set:empty".into()]
+                        } else {
+                            sites
+                        }
+                    },
+                ),
+                ProofFamily::ModuleClosure => (
+                    ProofWitnessVariant::ModuleClosure,
+                    certification_evidence_root(
+                        "module-closure",
+                        [closure.manifest().digest.as_str()],
+                    ),
+                    {
+                        let mut sites = closure
+                            .manifest()
+                            .entries
+                            .iter()
+                            .map(|entry| {
+                                format!("file:{:?}:{}:{}", entry.role, entry.path, entry.digest)
+                            })
+                            .chain(
+                                closure
+                                    .manifest()
+                                    .dependencies
+                                    .iter()
+                                    .map(|dependency| dependency.specifier.clone()),
+                            )
+                            .chain(
+                                closure
+                                    .manifest()
+                                    .hazards
+                                    .iter()
+                                    .map(|hazard| hazard.source.clone()),
+                            )
+                            .collect::<Vec<_>>();
+                        if sites.is_empty() {
+                            sites.push("module-closure:empty".into());
+                        }
+                        sites
+                    },
+                ),
+                _ => return None,
+            };
+            Some(WitnessBinding::new(
+                variant,
+                demand.id().as_str(),
+                root,
+                sites,
+            ))
+        })
+        .collect()
+}
+
+fn resolution_evidence_root(
+    entrypoint: &str,
+    conditions: &BTreeSet<&str>,
+    runtime: &ResolutionTrace,
+    declarations: &ResolutionTrace,
+) -> String {
+    let mut fields = vec![entrypoint.to_owned()];
+    fields.extend(
+        conditions
+            .iter()
+            .map(|condition| format!("condition:{condition}")),
+    );
+    for (axis, trace) in [("runtime", runtime), ("declarations", declarations)] {
+        fields.push(format!("{axis}:branch:{}", trace.branch));
+        fields.extend(
+            trace
+                .steps
+                .iter()
+                .map(|step| format!("{axis}:{}:{}", step.condition, step.target)),
+        );
+    }
+    certification_evidence_root("resolution", fields.iter().map(String::as_str))
+}
+
+pub(super) fn certification_evidence_root<'a>(
+    family: &str,
+    fields: impl IntoIterator<Item = &'a str>,
+) -> String {
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:contract-proof-family-evidence:v2");
+    hash.update(
+        u64::try_from(family.len())
+            .unwrap_or(u64::MAX)
+            .to_be_bytes(),
+    );
+    hash.update(family.as_bytes());
+    for field in fields {
+        hash.update(u64::try_from(field.len()).unwrap_or(u64::MAX).to_be_bytes());
+        hash.update(field.as_bytes());
+    }
+    format!("sha256:{:x}", hash.finalize())
 }
 
 impl<'de> Deserialize<'de> for RegistryVersions {
@@ -830,11 +1056,18 @@ impl ArtifactSnapshot {
             );
         }
 
+        let evidence_root = resolution_evidence_root(
+            &expected_entrypoint,
+            &conditions,
+            &runtime.trace,
+            &declarations.trace,
+        );
         Ok(SnapshotVerifiedResolution {
             snapshot_root: self.root.clone(),
             provenance_root: self.provenance_root.clone(),
             runtime_path: runtime.path,
             declarations_path: declarations.path,
+            evidence_root,
         })
     }
 
@@ -2125,6 +2358,12 @@ mod tests {
         assert_eq!(plan.demand_graph().demands().len(), 6);
         assert_eq!(plan.verified_closure().manifest(), &resolved.closure);
         assert_eq!(plan.verified_exports().binding_count(), 1);
+        assert_eq!(plan.artifact_witness_bindings().len(), 6);
+        assert!(
+            plan.demand_graph()
+                .verify_witness_coverage(plan.artifact_witness_bindings().iter().cloned())
+                .is_ok()
+        );
 
         let request_without_development = ImportRequest {
             export_conditions: vec!["import".into()],
@@ -2171,6 +2410,7 @@ mod tests {
             provenance_root: snapshot.provenance_root().into(),
             runtime_path: "dist/index.js".into(),
             declarations_path: "types/index.d.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
         };
 
         let replayed =
@@ -2305,6 +2545,7 @@ mod tests {
             provenance_root: snapshot.provenance_root().into(),
             runtime_path: "dist/index.js".into(),
             declarations_path: "types/index.d.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
         };
         let closure =
             super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();

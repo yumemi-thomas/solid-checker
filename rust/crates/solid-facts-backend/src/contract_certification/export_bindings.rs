@@ -15,6 +15,7 @@ use super::{
 #[derive(Clone, Debug)]
 pub struct SnapshotVerifiedExports {
     snapshot_root: String,
+    evidence_root: String,
     bindings: BTreeMap<String, VerifiedExportBinding>,
 }
 
@@ -27,6 +28,16 @@ impl SnapshotVerifiedExports {
     #[must_use]
     pub fn binding_count(&self) -> usize {
         self.bindings.len()
+    }
+
+    #[must_use]
+    pub fn evidence_root(&self) -> &str {
+        &self.evidence_root
+    }
+
+    #[must_use]
+    pub fn site_ids(&self) -> Vec<String> {
+        self.bindings.keys().cloned().collect()
     }
 
     #[must_use]
@@ -113,8 +124,23 @@ pub(super) fn verify_snapshot_exports(
             },
         );
     }
+    let mut evidence_fields = vec![snapshot.root().to_owned()];
+    for (name, binding) in &bindings {
+        evidence_fields.extend([
+            name.clone(),
+            binding.runtime_path.clone(),
+            binding.runtime_export.clone(),
+            binding.declarations_path.clone(),
+            binding.declarations_export.clone(),
+        ]);
+    }
+    let evidence_root = super::certification_evidence_root(
+        "export-bindings",
+        evidence_fields.iter().map(String::as_str),
+    );
     Ok(SnapshotVerifiedExports {
         snapshot_root: snapshot.root().into(),
+        evidence_root,
         bindings,
     })
 }
