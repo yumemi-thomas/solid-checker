@@ -131,11 +131,15 @@ probe ids (`<package>@<version>|<solidTarget>|<kind>`) drawn from the current
 
 Note on runtime: the pinned set keeps a `timeout`-class probe, which by
 definition burns the full `--timeout` budget (300s by default) every run. That
-one probe dominates the sentinel's wall clock -- 27 probes take a little over
+one probe dominates the sentinel's wall clock -- 23 probes take a little over
 five minutes, almost all of it waiting for that one. It is kept deliberately:
 dropping it would leave the `timeout` path unexercised, and a classification
-regression there would go unnoticed. Lower `--timeout` only if you accept that
-the probe may then be classified from a different failure point.
+regression there would go unnoticed. The PR workflow passes `--timeout 120`:
+the pinned probe still reaches the same `timeout during generate` path, while
+the workflow finishes below the external runner-shutdown window observed with
+the 300-second operator default. `make ecosystem-sentinel` deliberately keeps
+that default for local reproduction. Lower the timeout elsewhere only after
+confirming the probe still times out in the same phase.
 
 Do not hand-invent a probe id — always copy it from a manifest row's `probes`
 array, since the id encodes the exact package version, Solid target, and

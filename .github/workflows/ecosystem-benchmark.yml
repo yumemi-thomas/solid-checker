@@ -89,12 +89,15 @@ jobs:
       # this commit rather than whatever a stale packaged binary happens to
       # contain. SOLID_TYPEFACTS_BIN must also be set explicitly: run.mjs
       # fails closed with exit 2 rather than silently skipping analysis when
-      # either binary is missing.
+      # either binary is missing. The CI-only timeout remains long enough to
+      # exercise the pinned generate-time timeout classification, but bounds
+      # this PR job below the runner shutdown window seen with the 300-second
+      # operator default.
       - name: Run the pinned sentinel subset
         env:
           SOLID_CHECKER_NATIVE_BIN: ${{ github.workspace }}/rust/target/debug/solid-checker-rust
           SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
-        run: bun scripts/ecosystem-benchmark/run.mjs --sentinel
+        run: bun scripts/ecosystem-benchmark/run.mjs --sentinel --timeout 120
       - uses: actions/upload-artifact@v4
         if: always()
         with:

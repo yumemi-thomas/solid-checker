@@ -5,6 +5,7 @@ import { test } from "vitest";
 const ci = readFileSync(".github/workflows/ci.yml", "utf8");
 const publish = readFileSync(".github/workflows/publish-npm.yml", "utf8");
 const contractCorpus = readFileSync(".github/workflows/contract-corpus.yml", "utf8");
+const ecosystemBenchmark = readFileSync(".github/workflows/ecosystem-benchmark.yml", "utf8");
 
 function jobBody(workflow, name) {
   const lines = workflow.split("\n");
@@ -86,4 +87,13 @@ test("the contract corpus installs and watches its temporary-v2 producer", () =>
   assert.ok(install < run, "producer dependencies must be installed before contract generation");
   assert.match(contractCorpus, /- "packages\/cli\/scripts\/\*\*"/);
   assert.doesNotMatch(contractCorpus, /generate-package-contract\.mjs/);
+});
+
+test("the PR ecosystem sentinel keeps its real timeout probe within the CI runner envelope", () => {
+  const sentinel = jobBody(ecosystemBenchmark, "sentinel");
+
+  assert.match(
+    sentinel,
+    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --timeout 120$/m,
+  );
 });

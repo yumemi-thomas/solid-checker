@@ -113,7 +113,7 @@ Focused checks completed while implementing the slices:
 | targeted backend Clippy (`--lib --bins`) | passed with `-D warnings` |
 | `make ecosystem-benchmark` | passed; 418 rows, 40 complete, 318 partial |
 | `make phase16-report && make phase16-check` | passed; 85.65% / 94.16% milestones |
-| `make verify` | passed in 207.95 seconds on the CI follow-up diff, including the generator corpus |
+| `make verify` | passed again in 169.11 seconds on the final CI workflow correction, including the generator corpus |
 
 The complete gate passed Go formatting, vet, and race tests; workspace Clippy;
 backend and WASM feature configurations; compiler identity and Type Facts stamp
@@ -121,8 +121,8 @@ checks; 61 facts, 85 backend, 189 IR, 35 Type Facts, and all dialect/process
 tests; 94 fixture projects with 542 findings; the 161-case TypeScript oracle and
 41 keystones; ownership with 289 cases and 465 ledger rows (none pending);
 performance certification; CLI and WASM tests; seven obligations and eleven
-closures; 24 receipt-issued bundle cases in both physical locations; all seven
-package pins; and composed conformance.
+closures; 18 script files with 108 tests; 24 receipt-issued bundle cases in
+both physical locations; all seven package pins; and composed conformance.
 
 Focused coverage pins finite-plus-wildcard entrypoint locality, independent
 merge retention, integrity handoff, artifact-case refusal classification,
@@ -137,11 +137,14 @@ The CI follow-up also reproduced and closed the two deterministic failures:
 | `cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --target wasm32-wasip1-threads` | passed; the non-Unix RSS path compiles without `getrusage` |
 | `cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --lib` | 85 passed |
 | `SOLID_CHECKER_GATE_CACHE=0 make contract-corpus` | 39 fixtures passed: 5 full refusals, 14 local refusals, 40 retained cases |
+| `bun scripts/ecosystem-benchmark/run.mjs --sentinel --timeout 120` (with fresh checker and Type Facts binaries; reports redirected to `/tmp`) | passed; 23 probes, 5 complete contracts, 7 partial; the pinned timeout probe remained `timeout during generate` |
 
-The failed ecosystem sentinel received an external runner shutdown signal
-while its documented 300-second timeout-class probe was running; its workflow
-budget is 30 minutes and no benchmark assertion failed. The corrective push
-therefore retries that job without weakening or removing the timeout sentinel.
+Two ecosystem sentinel attempts received an external `SIGTERM` while the
+documented 300-second timeout-class probe was running; the workflow budget is
+30 minutes and neither attempt reached a benchmark assertion. The PR workflow
+now caps that probe at 120 seconds. The same pinned probe remains classified as
+`timeout during generate`, while the benchmark runner and
+`make ecosystem-sentinel` retain the 300-second operator default.
 
 ## Type Facts, compiler facts, and generated artifacts
 
