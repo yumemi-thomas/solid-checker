@@ -28,11 +28,18 @@ use crate::artifact_resolution::{
 };
 use crate::contract_interface::ContractFailure;
 
+#[cfg(feature = "dialect-v2")]
+mod compiler_facts;
 mod export_bindings;
 mod module_closure;
 mod type_facts;
 mod witness_wire;
 
+#[cfg(feature = "dialect-v2")]
+pub use compiler_facts::{
+    CompilerCertificationConfiguration, CompilerCertificationError, CompilerCertificationSchedule,
+    LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
+};
 pub use export_bindings::SnapshotVerifiedExports;
 pub use module_closure::SnapshotVerifiedClosure;
 pub use type_facts::{
@@ -281,6 +288,44 @@ impl CertificationPlan {
     ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
         type_facts::verify_live_answer(self, schedule, answer)
     }
+
+    /// Launches a fresh private verifier child for every fully materialized
+    /// compiler demand and retains authority only in opaque live-session
+    /// tokens. Current schema-v1 transform cases are refused by schedule
+    /// construction until the output/tool materialization sidecar exists.
+    #[cfg(feature = "dialect-v2")]
+    pub fn acquire_compiler_facts(
+        &self,
+        schedule: &CompilerCertificationSchedule,
+    ) -> Result<LiveCompilerEvidenceBatch, CompilerCertificationError> {
+        compiler_facts::acquire(self, schedule)
+    }
+
+    /// Reconciles live compiler sessions with exact materialized source/output
+    /// bytes and the complete normalized source-site census.
+    #[cfg(feature = "dialect-v2")]
+    pub fn verify_compiler_facts(
+        &self,
+        schedule: &CompilerCertificationSchedule,
+        evidence: &LiveCompilerEvidenceBatch,
+    ) -> Result<VerifiedCompilerEvidence, CompilerCertificationError> {
+        compiler_facts::verify(self, schedule, evidence)
+    }
+}
+
+/// Hidden child-mode entrypoint used only by the policy-2 compiler adapter.
+#[doc(hidden)]
+#[cfg(feature = "dialect-v2")]
+pub fn serve_compiler_certification_session() -> Result<(), CompilerCertificationError> {
+    compiler_facts::serve_compiler_certification_session()
+}
+
+/// Exact argv discriminator for the hidden compiler child. Keeping the test in
+/// the backend avoids teaching public CLI parsing about this protocol.
+#[doc(hidden)]
+#[cfg(feature = "dialect-v2")]
+pub fn is_compiler_certification_session_argument(argument: &str) -> bool {
+    argument == compiler_facts::SESSION_ARGUMENT
 }
 
 pub fn plan_certification(
@@ -1005,7 +1050,7 @@ impl ArtifactSnapshot {
         })?;
         if resolved.transform.is_some() {
             return resolution_mismatch(
-                "policy 2 cannot certify a transform without snapshot-owned output and tool bytes",
+                "policy 2 cannot certify a transform without separately bound output and tool bytes",
             );
         }
         if resolved.specifier != request.specifier || resolved.importer != request.importer {
@@ -1859,6 +1904,8 @@ fn archive_error(error: impl std::fmt::Display) -> ArtifactSnapshotError {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "dialect-v2")]
+    use super::CompilerCertificationSchedule;
     use super::{
         ArtifactSnapshot, ArtifactSnapshotError, CertificationRequest, LocalArtifact,
         LockPinnedArchive, PublishedArchive, SnapshotLimits, SnapshotVerifiedResolution,
@@ -2389,6 +2436,14 @@ mod tests {
         assert_eq!(plan.verified_closure().manifest(), &resolved.closure);
         assert_eq!(plan.verified_exports().binding_count(), 1);
         assert_eq!(plan.artifact_witness_bindings().len(), 6);
+        #[cfg(feature = "dialect-v2")]
+        assert_eq!(
+            CompilerCertificationSchedule::new(&plan, [])
+                .unwrap()
+                .demand_count(),
+            0,
+            "an artifact with no compiler-owned site must not fabricate an empty witness"
+        );
         assert!(
             plan.demand_graph()
                 .verify_witness_coverage(plan.artifact_witness_bindings().iter().cloned())

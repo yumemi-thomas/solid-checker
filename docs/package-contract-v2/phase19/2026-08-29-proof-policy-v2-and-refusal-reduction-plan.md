@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: implementation in progress (Slices 0–5 implemented; Slice 6 next)
+Status: implementation in progress (Slices 0–6 implemented; Slice 7 next)
 
 Review status: adversarially revised
 
@@ -497,8 +497,21 @@ domain completeness against the snapshot declaration census. Unknown spreads,
 unresolved generics, escaped callbacks, composite dispatch, open guards, and
 multi-overload closure remain typed refusals; operation cardinality remains
 unsupported because the producer has no exact arbitrary loop/reentry bound.
-Compiler, dependency, and probe adapters, receipt authentication, and the
-atomic cut are still pending. Run
+Slice 6 adds the direct compiler-session authority without widening current
+claims. The certification adapter copies and re-hashes the running verifier
+image into a private directory, launches one fresh hidden compiler child per
+demand, and binds the compiler source manifest, child PID, nonce, canonical
+request, snapshot, demand graph, and exact demand ID in a non-serializable
+token. The child keeps generated output and source-map bytes, recompiles with
+tracing disabled, and refuses any output-neutrality drift. The adversarial
+review found that schema-v1 `transform` identifies the tool, not the virtual
+generated output; therefore transformed artifact cases remain refused until a
+neighboring immutable materialization sidecar binds those two byte sets
+separately. Trace-v3 generated rows remain exact positives, while missing
+generated wrappers remain open because the producer lacks an independent
+wrapper census.
+Dependency and probe adapters, receipt authentication, and the atomic cut are
+still pending. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
 artifact and digest with the compiled definition.

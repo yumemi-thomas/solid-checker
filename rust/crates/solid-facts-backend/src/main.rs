@@ -158,6 +158,16 @@ fn json_format() -> String {
 
 fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let started = Instant::now();
+    #[cfg(feature = "dialect-v2")]
+    {
+        let arguments = std::env::args().collect::<Vec<_>>();
+        if arguments.len() == 2
+            && solid_facts_backend::is_compiler_certification_session_argument(&arguments[1])
+        {
+            solid_facts_backend::serve_compiler_certification_session()?;
+            return Ok(0);
+        }
+    }
     // A JSON request arrives on stdin only when the caller passed no
     // arguments; argv invocations must not block waiting for stdin EOF.
     let mut encoded = String::new();

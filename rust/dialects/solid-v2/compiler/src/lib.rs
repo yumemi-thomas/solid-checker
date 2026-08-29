@@ -28,12 +28,19 @@ const READS_TRACE_VERSION: u32 = 3;
 /// producer constants: otherwise a typo in the producer could certify itself.
 const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "a10cf1a147209d8da50697896742d2b1d4afad75";
 const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str = "7f4e1135943c1fb01231d1bda707b4a1856a5607";
+pub const COMPILER_DISTRIBUTION_REVISION: &str = "9f9a84b2f08bdf7a67049f16bc56b05af6ca49d4";
 
 /// Stable cache identity for the exact semantic producer this adapter reads.
 /// Keep this synchronized with the pinned compiler revision and trace
 /// implementation when either changes.
 pub const COMPILER_FACTS_IDENTITY: &str =
     "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607";
+
+/// Digest of the exact Git-owned semantic compiler source identity consumed by
+/// this adapter. The independent identity gate recomputes this value from the
+/// upstream, implementation, distribution, trace, and protocol pins.
+pub const COMPILER_SOURCE_MANIFEST_SHA256: &str =
+    "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0";
 
 /// A pin move that changes the producer's schema version fails the build here
 /// instead of silently making the runtime refusal below unreachable again. The
@@ -50,48 +57,108 @@ impl CompilerFactsProvider for NativeCompilerFacts {
         &mut self,
         request: &AnalysisRequest,
     ) -> Result<ExecutionMap, CompilerProviderError> {
-        use solidjs_compiler::{CompileOptions, Generate, Wrapper, compile};
-
-        let requested = &request.compiler_options;
-        // `None` leaves the compiler's own default wrapper in place; an
-        // explicitly empty name is how the checker asks for no wrapper at all.
-        let effect_wrapper = match requested.effect_wrapper.as_deref() {
-            None => Wrapper::Default,
-            Some("") => Wrapper::Disabled,
-            Some(name) => Wrapper::Name(name.to_owned()),
-        };
-        let generate = match requested.generate.as_str() {
-            "dom" => Generate::Dom,
-            "ssr" => Generate::Ssr,
-            other => {
-                return Err(CompilerProviderError::Native(format!(
-                    "semantic tracing supports DOM or SSR output only, not `{other}`"
-                )));
-            }
-        };
-        let options = CompileOptions {
-            filename: Some(request.path.clone()),
-            module_name: requested.module_name.clone(),
-            generate,
-            hydratable: requested.hydratable,
-            dev: requested.dev,
-            effect_wrapper,
-            wrap_conditionals: requested.wrap_conditionals.unwrap_or(true),
-            static_marker: requested
-                .static_marker
-                .clone()
-                .unwrap_or_else(|| CompileOptions::default().static_marker),
-            built_ins: requested.built_ins.clone(),
-            semantic_trace: true,
-            ..CompileOptions::default()
-        };
-        let output = compile(&request.source, &options)
-            .map_err(|error| CompilerProviderError::Native(format!("{}: {error}", request.path)))?;
-        let trace = output
-            .semantic_trace
-            .ok_or(CompilerProviderError::MissingExecutionMap)?;
-        execution_map_from_trace(&trace, &request.source, output.code, output.source_map)
+        analyze_traced(request).map(|compilation| compilation.execution_map)
     }
+}
+
+/// One compiler run retained for policy-2 certification.
+///
+/// This is deliberately ordinary data, not proof authority. The backend only
+/// treats it as evidence after obtaining it from its directly launched private
+/// compiler session and wrapping that response in a non-serializable token.
+pub struct MaterializedCompilation {
+    pub execution_map: ExecutionMap,
+    pub output: String,
+    pub source_map: Option<String>,
+}
+
+/// Compiles the exact request twice and requires semantic tracing to be output
+/// neutral before returning the trace-bearing run.
+///
+/// The compiler fork stays semantic-facts-only: this is a consumer-side replay
+/// of the existing trace-on/trace-off invariant and does not add or alter a
+/// lowering hook.
+pub fn analyze_with_materialized_output(
+    request: &AnalysisRequest,
+) -> Result<MaterializedCompilation, CompilerProviderError> {
+    use solidjs_compiler::compile;
+
+    let traced = analyze_traced(request)?;
+    let untraced = compile(&request.source, &compile_options(request, false)?)
+        .map_err(|error| CompilerProviderError::Native(format!("{}: {error}", request.path)))?;
+    if traced.output != untraced.code || traced.source_map != untraced.source_map {
+        return Err(CompilerProviderError::Native(
+            "semantic tracing changed generated output or source-map bytes".into(),
+        ));
+    }
+    if untraced.semantic_trace.is_some() {
+        return Err(CompilerProviderError::Native(
+            "trace-disabled compiler run unexpectedly returned a semantic trace".into(),
+        ));
+    }
+    Ok(traced)
+}
+
+fn analyze_traced(
+    request: &AnalysisRequest,
+) -> Result<MaterializedCompilation, CompilerProviderError> {
+    use solidjs_compiler::compile;
+
+    let traced = compile(&request.source, &compile_options(request, true)?)
+        .map_err(|error| CompilerProviderError::Native(format!("{}: {error}", request.path)))?;
+    let trace = traced
+        .semantic_trace
+        .ok_or(CompilerProviderError::MissingExecutionMap)?;
+    let output = traced.code;
+    let source_map = traced.source_map;
+    let execution_map =
+        execution_map_from_trace(&trace, &request.source, output.clone(), source_map.clone())?;
+    Ok(MaterializedCompilation {
+        execution_map,
+        output,
+        source_map,
+    })
+}
+
+fn compile_options(
+    request: &AnalysisRequest,
+    semantic_trace: bool,
+) -> Result<solidjs_compiler::CompileOptions, CompilerProviderError> {
+    use solidjs_compiler::{CompileOptions, Generate, Wrapper};
+
+    let requested = &request.compiler_options;
+    // `None` leaves the compiler's own default wrapper in place; an explicitly
+    // empty name is how the checker asks for no wrapper at all.
+    let effect_wrapper = match requested.effect_wrapper.as_deref() {
+        None => Wrapper::Default,
+        Some("") => Wrapper::Disabled,
+        Some(name) => Wrapper::Name(name.to_owned()),
+    };
+    let generate = match requested.generate.as_str() {
+        "dom" => Generate::Dom,
+        "ssr" => Generate::Ssr,
+        other => {
+            return Err(CompilerProviderError::Native(format!(
+                "semantic tracing supports DOM or SSR output only, not `{other}`"
+            )));
+        }
+    };
+    Ok(CompileOptions {
+        filename: Some(request.path.clone()),
+        module_name: requested.module_name.clone(),
+        generate,
+        hydratable: requested.hydratable,
+        dev: requested.dev,
+        effect_wrapper,
+        wrap_conditionals: requested.wrap_conditionals.unwrap_or(true),
+        static_marker: requested
+            .static_marker
+            .clone()
+            .unwrap_or_else(|| CompileOptions::default().static_marker),
+        built_ins: requested.built_ins.clone(),
+        semantic_trace,
+        ..CompileOptions::default()
+    })
 }
 
 /// Projects the compiler's semantic trace onto the checker's execution map.
@@ -306,6 +373,42 @@ mod tests {
         NativeCompilerFacts
             .analyze(&request)
             .expect("compiler facts")
+    }
+
+    #[test]
+    fn certification_replay_retains_the_exact_output_and_is_trace_neutral() {
+        let request = AnalysisRequest::new(
+            "App.tsx",
+            "const view = <div>{count()}</div>;",
+            CompilerOptions::default(),
+        );
+        let compilation =
+            analyze_with_materialized_output(&request).expect("materialized compilation");
+        let producer = compilation
+            .execution_map
+            .semantic_model
+            .producer
+            .as_ref()
+            .expect("complete producer identity");
+        assert_eq!(
+            producer.output_sha256,
+            solid_facts::core::SourceHash::of(&compilation.output)
+                .as_str()
+                .strip_prefix("sha256:")
+                .expect("canonical source hash")
+        );
+        assert!(
+            compilation
+                .execution_map
+                .semantic_model
+                .source_operations_complete
+        );
+        assert!(
+            !compilation
+                .execution_map
+                .semantic_model
+                .generated_operations_complete
+        );
     }
 
     // The projection this adapter exists to get right, and the one it got wrong:

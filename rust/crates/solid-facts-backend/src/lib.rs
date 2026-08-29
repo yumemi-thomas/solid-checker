@@ -32,6 +32,12 @@ pub use contract_certification::{
     TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
     UntrustedArtifactEnvelope, VerifiedTypeFactsEvidence, WitnessWireError, plan_certification,
 };
+#[cfg(feature = "dialect-v2")]
+pub use contract_certification::{
+    CompilerCertificationConfiguration, CompilerCertificationError, CompilerCertificationSchedule,
+    LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
+    is_compiler_certification_session_argument, serve_compiler_certification_session,
+};
 pub use contract_document::SidecarDigests;
 pub use contract_interface::{
     AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
