@@ -113,7 +113,9 @@ Focused checks completed while implementing the slices:
 | targeted backend Clippy (`--lib --bins`) | passed with `-D warnings` |
 | `make ecosystem-benchmark` | passed; 418 rows, 40 complete, 318 partial |
 | `make phase16-report && make phase16-check` | passed; 85.65% / 94.16% milestones |
-| `make verify` | passed again in 164.20 seconds with the progress heartbeat and classification-preserving CI configuration, including the generator corpus |
+| `make ecosystem-benchmark-test` | 10 files, 173 tests passed, including heartbeat and exact sentinel-family matrix coverage |
+| Ruby YAML parse of `.github/workflows/ecosystem-benchmark.yml` | passed |
+| `make verify` | passed again in 164.44 seconds with the family-sharded, classification-preserving CI configuration, including the generator corpus |
 
 The complete gate passed Go formatting, vet, and race tests; workspace Clippy;
 backend and WASM feature configurations; compiler identity and Type Facts stamp
@@ -140,18 +142,23 @@ The CI follow-up also reproduced and closed the two deterministic failures:
 | `bun scripts/ecosystem-benchmark/run.mjs --sentinel --timeout 120` (with fresh checker and Type Facts binaries; reports redirected to `/tmp`; local default resolved to the workflow's 8 workers) | passed; 23 probes, 5 complete contracts, 7 partial; the pinned timeout probe remained `timeout during generate` |
 | focused workflow and heartbeat Vitest | 2 files, 33 tests passed; heartbeat scheduling, deterministic progress, and cancellation are pinned |
 
-Four ecosystem sentinel attempts received an external `SIGTERM` without
-reaching a benchmark assertion. One ended after 5m11s overall and the next
-eight-worker attempt after 4m0s, so a stable job-duration ceiling was falsified.
-A 60-second local run was also rejected because it changed four unrelated
-Kobalte, Motion, and Solid RC.3 classifications to timeouts. The final workflow
-therefore keeps 120 seconds and the runner's designed eight-worker cap, while
-the CLI emits a progress-only stderr heartbeat every 30 seconds during its
-otherwise fully buffered probe run. Heartbeats are canceled in `finally` and
-never enter results, reports, digests, or threshold decisions. This removes
-long silence as a termination condition and makes any further external
-preemption diagnosable without weakening classifications. The benchmark runner
-and `make ecosystem-sentinel` retain the 300-second operator default.
+Five ecosystem sentinel attempts received an external `SIGTERM` without
+reaching a benchmark assertion. Runs ended after varying 2m53s, 4m0s, and 5m11s
+overall, falsifying a stable job-duration ceiling. The fifth log contained
+heartbeats at 30, 60, and 90 seconds immediately before termination, also
+falsifying silence as the cause. A 60-second local run was rejected because it
+changed four unrelated Kobalte, Motion, and Solid RC.3 classifications to
+timeouts.
+
+The final workflow therefore shards the pinned set by its eight manifest-owned
+families. Every shard keeps the classification-preserving 120-second timeout
+and runs at most 1–6 related probes with four workers; a data-driven test proves
+that every sentinel ID belongs to exactly one listed matrix family. Per-family
+reports are uploaded independently, and a fast aggregate job retains the
+stable `sentinel` verdict and requires every shard to pass. The progress
+heartbeat remains operational-only, is canceled in `finally`, and never enters
+results, reports, digests, or threshold decisions. The benchmark runner and
+`make ecosystem-sentinel` retain the 300-second operator default.
 
 ## Type Facts, compiler facts, and generated artifacts
 

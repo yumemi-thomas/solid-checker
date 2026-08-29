@@ -6,6 +6,8 @@ const ci = readFileSync(".github/workflows/ci.yml", "utf8");
 const publish = readFileSync(".github/workflows/publish-npm.yml", "utf8");
 const contractCorpus = readFileSync(".github/workflows/contract-corpus.yml", "utf8");
 const ecosystemBenchmark = readFileSync(".github/workflows/ecosystem-benchmark.yml", "utf8");
+const ecosystemManifest = JSON.parse(readFileSync("scripts/ecosystem-benchmark/manifest.json", "utf8"));
+const ecosystemSentinel = JSON.parse(readFileSync("scripts/ecosystem-benchmark/sentinel.json", "utf8"));
 
 function jobBody(workflow, name) {
   const lines = workflow.split("\n");
@@ -44,6 +46,20 @@ function sharedKey(body) {
 function actionInput(body, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return body.match(new RegExp(`^\\s+${escaped}:\\s*(.+)$`, "m"))?.[1].trim();
+}
+
+function matrixValues(body, name) {
+  const lines = body.split("\n");
+  const start = lines.findIndex(line => line === `        ${name}:`);
+  assert.notEqual(start, -1, `missing ${name} matrix`);
+
+  const values = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const value = lines[index].match(/^          - (.+)$/)?.[1];
+    if (!value) break;
+    values.push(value);
+  }
+  return values;
 }
 
 test("main warms every native Rust cache consumed while publishing", () => {
@@ -89,11 +105,28 @@ test("the contract corpus installs and watches its temporary-v2 producer", () =>
   assert.doesNotMatch(contractCorpus, /generate-package-contract\.mjs/);
 });
 
-test("the PR ecosystem sentinel keeps its real timeout probe within the CI runner envelope", () => {
-  const sentinel = jobBody(ecosystemBenchmark, "sentinel");
+test("the PR ecosystem sentinel shards every pinned family without weakening timeouts", () => {
+  const shards = jobBody(ecosystemBenchmark, "sentinel-family");
+  const sentinelIds = new Set(ecosystemSentinel.probes);
+  const foundIds = new Set();
+  const families = new Set();
+  for (const row of ecosystemManifest.rows) {
+    for (const probe of row.probes) {
+      if (!sentinelIds.has(probe.id)) continue;
+      foundIds.add(probe.id);
+      families.add(row.family);
+    }
+  }
 
+  assert.deepEqual([...foundIds].sort(), [...sentinelIds].sort());
+  assert.deepEqual(matrixValues(shards, "family"), [...families].sort());
   assert.match(
-    sentinel,
-    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --timeout 120 --concurrency 8$/m,
+    shards,
+    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --family "\$\{\{ matrix\.family \}\}" --timeout 120 --concurrency 4$/m,
   );
+  assert.match(shards, /name: ecosystem-benchmark-sentinel-\$\{\{ matrix\.family \}\}-report/);
+
+  const aggregate = jobBody(ecosystemBenchmark, "sentinel");
+  assert.match(aggregate, /^\s+needs: sentinel-family$/m);
+  assert.match(aggregate, /^\s+SHARD_RESULT: \$\{\{ needs\.sentinel-family\.result \}\}$/m);
 });

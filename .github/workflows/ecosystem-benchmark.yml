@@ -59,10 +59,23 @@ jobs:
   # manifest rather than the registry, but it still installs each probe's
   # exact package version, so it needs network access -- what it must never
   # do is install or analyze the full discovered corpus.
-  sentinel:
+  sentinel-family:
+    name: sentinel family (${{ matrix.family }})
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        family:
+          - corvu
+          - kobalte
+          - motion-solidjs
+          - official-solid
+          - solid-devtools
+          - solid-primitives
+          - solid-recharts
+          - tanstack
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
@@ -89,22 +102,33 @@ jobs:
       # this commit rather than whatever a stale packaged binary happens to
       # contain. SOLID_TYPEFACTS_BIN must also be set explicitly: run.mjs
       # fails closed with exit 2 rather than silently skipping analysis when
-      # either binary is missing. The CI-only timeout remains long enough for
-      # every non-timeout probe to retain its expected classification. Eight
-      # workers are the runner's designed cap and avoid stretching the pinned
-      # set across extra waves on a smaller CI machine.
-      - name: Run the pinned sentinel subset
+      # either binary is missing. Each family keeps the same 120-second
+      # per-probe budget that preserves every pinned classification, while a
+      # four-worker family shard bounds each process tree independently.
+      - name: Run the pinned sentinel family
         env:
           SOLID_CHECKER_NATIVE_BIN: ${{ github.workspace }}/rust/target/debug/solid-checker-rust
           SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
-        run: bun scripts/ecosystem-benchmark/run.mjs --sentinel --timeout 120 --concurrency 8
+        run: bun scripts/ecosystem-benchmark/run.mjs --sentinel --family "${{ matrix.family }}" --timeout 120 --concurrency 4
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ecosystem-benchmark-sentinel-report
+          name: ecosystem-benchmark-sentinel-${{ matrix.family }}-report
           path: |
-            benchmarks/ecosystem/report-sentinel.json
-            benchmarks/ecosystem/report-sentinel.md
+            benchmarks/ecosystem/report-sentinel-family-${{ matrix.family }}.json
+            benchmarks/ecosystem/report-sentinel-family-${{ matrix.family }}.md
+
+  # Keep one stable aggregate check name for branch protection while the
+  # family jobs above isolate process lifetime and memory pressure.
+  sentinel:
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'push') }}
+    needs: sentinel-family
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every sentinel family
+        env:
+          SHARD_RESULT: ${{ needs.sentinel-family.result }}
+        run: test "$SHARD_RESULT" = success
 
   # The full discovered corpus: every family, every selected probe, installed
   # from the live registry. Manual dispatch or a weekly schedule only — never

@@ -134,17 +134,17 @@ definition burns the full `--timeout` budget (300s by default) every run. That
 one probe dominates the sentinel's wall clock -- 23 probes take a little over
 five minutes, almost all of it waiting for that one. It is kept deliberately:
 dropping it would leave the `timeout` path unexercised, and a classification
-regression there would go unnoticed. The PR workflow passes
-`--timeout 120 --concurrency 8`: 120 seconds keeps every non-timeout probe on
-its expected classification, and the runner's designed eight-worker cap avoids
-stretching the set across extra waves on a smaller CI machine. The pinned
-timeout probe still reaches `timeout during generate`, while the workflow stays
-below the external five-minute job boundary observed in CI.
+regression there would go unnoticed. The PR workflow runs one matrix shard per
+pinned family with `--timeout 120 --concurrency 4`: 120 seconds keeps every
+probe on its expected classification, while the family boundary limits each
+process tree to 1–6 related probes. A final aggregate job retains the stable
+`sentinel` check name and passes only when every pinned family passed. Each
+shard uploads its own `report-sentinel-family-<family>.{json,md}` artifact.
 `make ecosystem-sentinel` deliberately keeps the 300-second default for local
 reproduction. Lower the timeout elsewhere only after confirming every probe,
 not just the expected timeout, keeps the same classification.
 
-The CLI writes a progress-only heartbeat to stderr every 30 seconds while
+The CLI also writes a progress-only heartbeat to stderr every 30 seconds while
 probes are active because child output is deliberately buffered into the final
 report. Heartbeats never enter result rows, report files, semantic digests, or
 threshold evaluation; they only bound how long an operator or CI runner sees
