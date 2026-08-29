@@ -26,15 +26,20 @@ mod wire;
 
 pub use cache::{CacheStats, FactsCache};
 pub use contract_certification::{
-    ArtifactSnapshot, ArtifactSnapshotError, CertificationPlan, CertificationPlanningError,
-    CertificationRequest, DependencyCertificationQueue, DependencyCompositionError,
-    DependencyCompositionRequirement, DependencyCompositionSchedule, DependencyNodeIdentity,
-    DependencyQueueNode, InspectedProbeGateBatch, LocalArtifact, LockPinnedArchive, ProbeGate,
+    ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt, BuiltInReceiptEntry,
+    CertificationPlan, CertificationPlanningError, CertificationRequest, ConfiguredReceiptIssuer,
+    DependencyCertificationQueue, DependencyCompositionError, DependencyCompositionRequirement,
+    DependencyCompositionSchedule, DependencyNodeIdentity, DependencyQueueNode,
+    InspectedProbeGateBatch, LocalArtifact, LockPinnedArchive, Policy2ReceiptBindings,
+    Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustEntry, Policy2TrustStore, ProbeGate,
     ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind, ProbeGateSchedule, PublishedArchive,
-    SnapshotLimits, SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
+    PublishedPolicy2Catalog, ReceiptIssuerKind, ReceiptPublicationError, SnapshotLimits,
+    SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
     TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
     UntrustedArtifactEnvelope, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence, WitnessWireError,
-    plan_certification,
+    authenticate_policy2_receipt, canonicalize_policy2_main, issue_builtin_policy2_receipt,
+    issue_policy2_receipt, plan_certification, policy2_main_semantic_digest, policy2_policy_digest,
+    publish_policy2_catalog,
 };
 #[cfg(feature = "dialect-v2")]
 pub use contract_certification::{

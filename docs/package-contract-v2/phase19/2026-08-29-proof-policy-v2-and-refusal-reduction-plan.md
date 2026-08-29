@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: implementation in progress (Slices 0–7 implemented; Slice 8 next)
+Status: implementation in progress (Slices 0–8 implemented; Slice 9 next)
 
 Review status: adversarially revised
 
@@ -514,12 +514,13 @@ Slice 7 derives one dependency-composition demand for every snapshot-replayed
 external edge and proposed parent closure. A bounded canonical queue rejects
 duplicate nodes and cycles, orders a batch dependency-first, and reports the
 first missing receipt by package, artifact, export, and claim. Policy-1 receipt
-digests still cannot satisfy those demands; authenticated policy-2 receipt
-authority arrives in Slice 8. Mandatory probe vetoes are now derived for every
-proposed closure and reject missing, duplicate, unknown, incomplete, and
-contradictory outcomes. Successful finite non-observation remains explicitly
-non-authoritative, and the gate refuses authentication until a directly
-launched harness binds its executable and Node runtime images.
+digests still cannot satisfy those demands; only the internal authenticated
+policy-2 receipt loader can establish that authority now. Mandatory probe
+vetoes are now derived for every proposed closure and reject missing,
+duplicate, unknown, incomplete, and contradictory outcomes. Successful finite
+non-observation remains explicitly non-authoritative, and the gate refuses
+authentication until a directly launched harness binds its executable and Node
+runtime images.
 Receipt authentication and the atomic cut are still pending. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
@@ -639,6 +640,21 @@ artifact, changed closure, changed facts, changed verifier, changed policy
 digest, policy downgrade, wrong/revoked issuer, algorithm/key confusion,
 noncanonical signature, noncanonical accepted-main encoding, provenance
 copying, and receipt replay tests in native and WASM loaders.
+
+Implemented. Receipt v2 authenticates a domain-separated, typed-length-framed
+payload that binds the canonical compact stable-v1 main, the compiled policy
+digest, every artifact/provenance/certification root, exact verifier source and
+build digests, and issuer kind/scope/key/algorithm. Configured local and
+portable receipts use strict Ed25519 verification against an external trust
+store whose policy/build/scope constraints, digest, and revocation epoch are
+part of the accepted identity. Built-ins authenticate only through an
+independently compiled entry digest; copying their bytes through a project
+catalog is refused. Receipt JSON, base64 signatures, and accepted-main bytes
+must be canonical. Content-addressed main and receipt blobs are synchronized
+before one catalog-pointer rename publishes them. Native adversarial tests and
+a non-exported WASM boundary test cover stale/replayed bindings, downgrade,
+key/algorithm confusion, revocation, provenance copying, and canonicality.
+The active product loader remains policy 1 until Slice 9's atomic cut.
 
 ### Slice 9 — Replace shortcuts, reissue, and cut atomically
 

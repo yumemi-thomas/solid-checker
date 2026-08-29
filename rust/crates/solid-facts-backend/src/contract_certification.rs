@@ -33,6 +33,7 @@ mod compiler_facts;
 mod dependencies;
 mod export_bindings;
 mod module_closure;
+mod policy2_receipt;
 mod probe_gates;
 mod type_facts;
 mod witness_wire;
@@ -48,6 +49,15 @@ pub use dependencies::{
 };
 pub use export_bindings::SnapshotVerifiedExports;
 pub use module_closure::SnapshotVerifiedClosure;
+#[doc(hidden)]
+pub use policy2_receipt::{
+    AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, ConfiguredReceiptIssuer,
+    Policy2ReceiptBindings, Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustEntry,
+    Policy2TrustStore, PublishedPolicy2Catalog, ReceiptIssuerKind, ReceiptPublicationError,
+    authenticate_policy2_receipt, canonicalize_policy2_main, issue_builtin_policy2_receipt,
+    issue_policy2_receipt, policy2_main_semantic_digest, policy2_policy_digest,
+    publish_policy2_catalog,
+};
 pub use probe_gates::{
     InspectedProbeGateBatch, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
     ProbeGateSchedule, VerifiedProbeGateBatch,

@@ -15,7 +15,7 @@ dialect-v2 = ["solid-facts-backend/dialect-v2"]
 
 [lib]
 crate-type = ["cdylib", "lib"]
-test = false
+test = true
 doctest = false
 
 [dependencies]

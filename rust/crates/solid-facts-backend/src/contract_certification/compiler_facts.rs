@@ -22,9 +22,11 @@ use solid_facts::compiler::{
 use solid_reactive_ir::contract_semantics::certification::{
     ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
 };
+#[cfg(unix)]
+use std::fs::OpenOptions;
 use std::{
     collections::BTreeMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -39,6 +41,7 @@ const SESSION_PROTOCOL: u32 = 1;
 pub(crate) const SESSION_ARGUMENT: &str = "--internal-compiler-certification-session";
 const MAX_SESSION_BYTES: u64 = 64 * 1024 * 1024;
 static SESSION_NONCE_COUNTER: AtomicU64 = AtomicU64::new(1);
+#[cfg(unix)]
 static EXECUTION_IMAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// Policy-owned configuration for one transformed artifact case.
