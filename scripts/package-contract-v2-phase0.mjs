@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,25 +36,6 @@ const FROZEN_FIXTURES = {
   "torture-runtime-namespace": "over-refusal guard: runtime namespace export identity"
 };
 
-const INPUTS = [
-  "schema/solid-reactivity.schema.json",
-  "rust/Cargo.toml",
-  "rust/dialects/solid-v2/compiler/src/lib.rs",
-  "bin/solid-typefacts.buildinfo",
-  "scripts/ecosystem-benchmark/manifest.json",
-  "benchmarks/ecosystem/report.json",
-  "benchmarks/ecosystem/verification-report.json",
-  "benchmarks/package-contract-v2/phase0/rc3/audit.json",
-  "benchmarks/package-contract-v2/phase0/measurements/ecosystem-generation.json",
-  "benchmarks/package-contract-v2/phase0/measurements/ecosystem-verification.json",
-  "benchmarks/package-contract-v2/phase0/measurements/contract-corpus.json",
-  ...CONTRACTS
-];
-
-function bytes(value) {
-  return Buffer.byteLength(value);
-}
-
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -68,71 +48,9 @@ function json(relativePath) {
   return JSON.parse(read(relativePath));
 }
 
-function percentile(values, fraction) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
-}
-
 function round(value, digits = 3) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
-}
-
-export function schemaMetrics(schema) {
-  const metrics = {
-    definitions: Object.keys(schema.$defs ?? {}).length,
-    namedProperties: 0,
-    requiredNames: 0,
-    refs: 0,
-    oneOf: 0,
-    anyOf: 0,
-    allOf: 0,
-    enumDeclarations: 0,
-    enumValues: 0,
-    maximumObjectDepth: 0
-  };
-  const visit = (value, depth) => {
-    if (!value || typeof value !== "object") return;
-    metrics.maximumObjectDepth = Math.max(metrics.maximumObjectDepth, depth);
-    if (Array.isArray(value)) {
-      for (const child of value) visit(child, depth + 1);
-      return;
-    }
-    metrics.namedProperties += Object.keys(value.properties ?? {}).length;
-    metrics.requiredNames += value.required?.length ?? 0;
-    metrics.refs += "$ref" in value ? 1 : 0;
-    metrics.oneOf += value.oneOf?.length ? 1 : 0;
-    metrics.anyOf += value.anyOf?.length ? 1 : 0;
-    metrics.allOf += value.allOf?.length ? 1 : 0;
-    if (value.enum) {
-      metrics.enumDeclarations += 1;
-      metrics.enumValues += value.enum.length;
-    }
-    for (const child of Object.values(value)) visit(child, depth + 1);
-  };
-  visit(schema, 1);
-  return metrics;
-}
-
-function stripEvidence(value) {
-  if (Array.isArray(value)) return value.map(stripEvidence);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key !== "evidence")
-      .map(([key, child]) => [key, stripEvidence(child)])
-  );
-}
-
-function evidenceNodeBytes(value) {
-  if (Array.isArray(value)) return value.reduce((total, child) => total + evidenceNodeBytes(child), 0);
-  if (!value || typeof value !== "object") return 0;
-  return Object.entries(value).reduce(
-    (total, [key, child]) =>
-      total + (key === "evidence" ? bytes(JSON.stringify(child)) : evidenceNodeBytes(child)),
-    0
-  );
 }
 
 export function measureContract(relativePath) {
@@ -311,60 +229,6 @@ function classifyGenerationAnomalies(generation) {
     });
 }
 
-function benchmarkContracts(loadIterations, queryIterations) {
-  throw new Error("Phase 0 measurements are immutable and cannot be recaptured after migration");
-  const raw = CONTRACTS.map(path => read(path));
-  const loadSamples = [];
-  for (let index = 0; index < loadIterations; index += 1) {
-    const started = performance.now();
-    for (const value of raw) expandContract(JSON.parse(value));
-    loadSamples.push(performance.now() - started);
-  }
-  const expanded = raw.map(value => expandContract(JSON.parse(value)));
-  const lookups = expanded.flatMap(contract =>
-    Object.values(contract.entrypoints).flatMap(entrypoint =>
-      Object.keys(entrypoint.exports).map(name => [entrypoint.exports, name])
-    )
-  );
-  let sink = 0;
-  const batchSize = Math.max(1000, Math.ceil(queryIterations / 20));
-  const querySamples = [];
-  let completed = 0;
-  while (completed < queryIterations) {
-    const count = Math.min(batchSize, queryIterations - completed);
-    const started = performance.now();
-    for (let offset = 0; offset < count; offset += 1) {
-      const [exports, name] = lookups[(completed + offset) % lookups.length];
-      if (exports[name]) sink += 1;
-    }
-    querySamples.push(((performance.now() - started) * 1_000_000) / count);
-    completed += count;
-  }
-  if (sink !== queryIterations) throw new Error("contract query benchmark lost an export lookup");
-  return {
-    method: "JavaScript legacy decoder path; parse plus expand all bundled contracts, then direct normalized export lookup",
-    limitation: "The current Rust consumer has no isolated contract-query benchmark seam; end-to-end Rust cost is represented by the uncached corpus measurements.",
-    load: {
-      contractsPerIteration: CONTRACTS.length,
-      iterations: loadIterations,
-      p50Ms: round(percentile(loadSamples, 0.5)),
-      p95Ms: round(percentile(loadSamples, 0.95)),
-      maxMs: round(Math.max(...loadSamples))
-    },
-    query: {
-      availableExports: lookups.length,
-      operations: queryIterations,
-      p50NsPerLookup: round(percentile(querySamples, 0.5)),
-      p95NsPerLookup: round(percentile(querySamples, 0.95)),
-      maxNsPerLookup: round(Math.max(...querySamples))
-    }
-  };
-}
-
-function git(...args) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
-}
-
 function pinFromCargo(name, cargo, required = true) {
   const expression = new RegExp(`${name.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\s*=\\s*\\{[^\\n]*rev\\s*=\\s*"([0-9a-f]+)"`);
   const match = cargo.match(expression);
@@ -389,37 +253,6 @@ export function typeFactsIdentityFromCargo(cargo, buildInfoRaw) {
     throw new Error("local Type Facts buildinfo has no source-manifest digest");
   }
   return `source-manifest-sha256:${buildInfo.sourceDigest}`;
-}
-
-function inputManifest(fixtures) {
-  const files = INPUTS.map(path => ({ path, bytes: read(path).byteLength, sha256: sha256(read(path)) }));
-  for (const fixture of fixtures) files.push(...fixture.files);
-  const deduplicated = [...new Map(files.map(file => [file.path, file])).values()].sort((a, b) =>
-    a.path.localeCompare(b.path)
-  );
-  return {
-    sha256: sha256(deduplicated.map(file => `${file.sha256}  ${file.path}\n`).join("")),
-    files: deduplicated
-  };
-}
-
-function binaryRecord(record) {
-  const path = record.path;
-  let current = null;
-  try {
-    const value = readFileSync(path);
-    current = { sha256: sha256(value), bytes: value.byteLength };
-  } catch {
-    // The durable evidence is the hash copied into the verifier report. The
-    // scratch binary is intentionally not a repository artifact.
-  }
-  return {
-    recordedPath: path,
-    sha256: record.sha256,
-    bytes: record.size,
-    presentAtReportGeneration: Boolean(current),
-    hashMatchedAtReportGeneration: current ? current.sha256 === record.sha256 : null
-  };
 }
 
 export function assertSuccessfulCacheDisabledMeasurements(measurements) {
@@ -517,124 +350,10 @@ export function assertFrozenBaseline(report) {
   );
 }
 
-export function buildBaseline({ loadIterations = 300, queryIterations = 200_000 } = {}) {
-  throw new Error("Phase 0 is immutable historical evidence; current producers cannot recapture it");
-  const generation = json("benchmarks/ecosystem/report.json");
-  const verification = json("benchmarks/ecosystem/verification-report.json");
-  const rc3 = json("benchmarks/package-contract-v2/phase0/rc3/audit.json");
-  const manifest = json("scripts/ecosystem-benchmark/manifest.json");
-  const measurements = {
-    ecosystemGeneration: json("benchmarks/package-contract-v2/phase0/measurements/ecosystem-generation.json"),
-    ecosystemVerification: json("benchmarks/package-contract-v2/phase0/measurements/ecosystem-verification.json"),
-    legacyContractCorpus: json("benchmarks/package-contract-v2/phase0/measurements/contract-corpus.json")
-  };
-  assertSuccessfulCacheDisabledMeasurements(measurements);
-  const rows = classifyVerificationRows(verification, generation);
-  const fixtures = Object.entries(FROZEN_FIXTURES).map(([name, purpose]) =>
-    freezeFixture(name, purpose)
+export function buildBaseline() {
+  throw new Error(
+    "Phase 0 is immutable historical evidence; current producers cannot recapture or decode it"
   );
-  const cargo = read("rust/Cargo.toml").toString();
-  const traceSource = read("rust/dialects/solid-v2/compiler/src/lib.rs").toString();
-  const traceVersion = Number(traceSource.match(/READS_TRACE_VERSION:\s*u32\s*=\s*(\d+)/)?.[1]);
-  if (!Number.isInteger(traceVersion)) throw new Error("could not read Solid 2 trace version");
-  const schemaRaw = read("schema/solid-reactivity.schema.json");
-  const schema = JSON.parse(schemaRaw);
-  const contracts = CONTRACTS.map(measureContract);
-  const checker = verification.checker;
-  const report = {
-    schemaVersion: 1,
-    documentKind: "solid-checker-package-contract-phase0-baseline",
-    capturedAt: new Date().toISOString(),
-    scope: {
-      phase: 0,
-      authority: "legacy package-contract comparison baseline",
-      caution: "Published RC.3 artifacts are package authority; current bundled Solid 2 contracts and checker dialect authority remain RC.0 until later migration phases."
-    },
-    repository: {
-      head: git("rev-parse", "HEAD"),
-      branch: git("branch", "--show-current"),
-      status: git("status", "--short").split("\n").filter(Boolean)
-    },
-    pins: {
-      solid2Compiler: pinFromCargo("solidjs-compiler", cargo),
-      solid1Compiler: pinFromCargo("solid1-dom-expressions-compiler", cargo),
-      typeFacts: typeFactsIdentityFromCargo(cargo, read("bin/solid-typefacts.buildinfo").toString()),
-      typeFactsBuildInfo: read("bin/solid-typefacts.buildinfo").toString().trim(),
-      solid2SemanticTraceVersion: traceVersion,
-      legacyContractSchemaVersion: schema.properties.schemaVersion.const,
-      legacyCompilerFactsProtocol: schema.properties.compilerFactsProtocol.const,
-      publishedSolidAuthority: {
-        version: manifest.auditedSolid2,
-        gitHead: rc3.gitHead,
-        packages: rc3.packages.map(value => ({
-          name: value.name,
-          version: value.version,
-          integrity: value.registry.integrity,
-          tarballSha256: value.tarball.sha256,
-          manifestSha256: value.manifest.sha256,
-          exportMapSha256: value.manifest.exportMapSha256,
-          fileManifestSha256: value.files.manifestSha256
-        }))
-      },
-      checkerBinaries: {
-        native: binaryRecord(checker.nativeBin),
-        typeFacts: binaryRecord(checker.typeFactsBin)
-      }
-    },
-    rc3Audit: {
-      path: "benchmarks/package-contract-v2/phase0/rc3/audit.json",
-      sha256: sha256(read("benchmarks/package-contract-v2/phase0/rc3/audit.json")),
-      integrityVerified: rc3.packages.every(value => value.integrity.verified),
-      allConcreteExportTargetsExist: rc3.packages.every(value =>
-        value.exportTargets.filter(target => !target.pattern).every(target => target.exists)
-      ),
-      exactTransitiveClosureRetained: false,
-      closureLimitation: "The RC.3 audit preserves exact package contents and export targets but not an isolated exact transitive dependency/declaration installation closure; Phase 7 owns that proof."
-    },
-    legacySchema: {
-      path: "schema/solid-reactivity.schema.json",
-      prettyBytes: schemaRaw.byteLength,
-      minifiedBytes: bytes(JSON.stringify(schema)),
-      ...schemaMetrics(schema)
-    },
-    legacyContracts: {
-      contracts,
-      aggregate: {
-        prettyBytes: contracts.reduce((total, value) => total + value.prettyBytes, 0),
-        minifiedBytes: contracts.reduce((total, value) => total + value.minifiedBytes, 0),
-        minifiedExpandedBytes: contracts.reduce((total, value) => total + value.minifiedExpandedBytes, 0),
-        inlineEvidenceDeltaBytes: contracts.reduce((total, value) => total + value.inlineEvidenceDeltaBytes, 0),
-        inlineEvidenceNodeBytes: contracts.reduce((total, value) => total + value.inlineEvidenceNodeBytes, 0),
-        sidecarEvidenceBytes: 0,
-        sidecarEvidenceStatus: "not applicable: legacy contracts store evidence inline"
-      },
-      performance: benchmarkContracts(loadIterations, queryIterations)
-    },
-    ecosystem: {
-      generation: {
-        rows: generation.results.length,
-        outcomes: generation.results.reduce((output, row) => {
-          output[row.outcome] = (output[row.outcome] ?? 0) + 1;
-          return output;
-        }, {}),
-        anomalies: classifyGenerationAnomalies(generation)
-      },
-      verification: verification.overall,
-      classifications: {
-        rows,
-        summary: summarizeClassifications(rows),
-        invariant: "Every verifier-selected row appears exactly once; unknown owner/failure classes abort report generation."
-      }
-    },
-    measurements,
-    fixtureFreeze: {
-      fixtureCount: fixtures.length,
-      fixtures,
-      invariant: "Each digest covers every regular file currently present below the fixture directory, including ignored node_modules inputs."
-    }
-  };
-  report.inputs = inputManifest(fixtures);
-  return report;
 }
 
 function gib(kib) {

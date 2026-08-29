@@ -8,7 +8,6 @@ import {
   classifyVerificationRows,
   freezeFixture,
   measureContract,
-  schemaMetrics,
   typeFactsIdentityFromCargo
 } from "./package-contract-v2-phase0.mjs";
 
@@ -33,8 +32,20 @@ describe("Phase 0 baseline", () => {
     );
   });
 
-  test("pins the legacy schema structure", () => {
-    assert.deepEqual(schemaMetrics(readJson("schema/solid-reactivity.schema.json")), {
+  test("pins the retired legacy schema structure inside immutable evidence", () => {
+    const { legacySchema } = readJson("benchmarks/package-contract-v2/phase0/baseline.json");
+    assert.deepEqual({
+      definitions: legacySchema.definitions,
+      namedProperties: legacySchema.namedProperties,
+      requiredNames: legacySchema.requiredNames,
+      refs: legacySchema.refs,
+      oneOf: legacySchema.oneOf,
+      anyOf: legacySchema.anyOf,
+      allOf: legacySchema.allOf,
+      enumDeclarations: legacySchema.enumDeclarations,
+      enumValues: legacySchema.enumValues,
+      maximumObjectDepth: legacySchema.maximumObjectDepth
+    }, {
       definitions: 6,
       namedProperties: 69,
       requiredNames: 47,

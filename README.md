@@ -190,11 +190,10 @@ Authoring a package contract (see [Publishing a Solid library?](#publishing-a-so
 
 ## Using a library that ships no contract
 
-`solid-checker` needs to know how a dependency's exports read reactive values.
-When that dependency's source isn't part of your project, it relies on a
-`solid-reactivity.json` **contract**. If an imported Solid-dependent package
-ships none, the check reports the uncertifiable `SC9005 package-contract-incomplete`
-finding and `--certify` fails.
+`solid-checker` needs proof of reactive behavior that package declarations do
+not express. When an imported package has no receipt-issued contract for its
+exact installed artifact, the checker reports the uncertifiable `SC9005
+package-contract-incomplete` finding and `--certify` fails.
 
 List which of your dependencies are missing a contract, and which have one
 that no longer matches the installed version:
@@ -203,77 +202,45 @@ that no longer matches the installed version:
 solid-checker contract check
 ```
 
-Each package is reported as `bundled`, `published`, `local`, `explicit`,
-`unverified`, `stale`, `unbound`, or `missing`, and every status that cannot
-certify prints the command that resolves it. `unbound` means the contract is
-fine and describes no import you actually have: every specifier carrying its
-name resolves somewhere else -- usually a tsconfig `paths` mapping, sometimes a
-typings entry pointing outside the package. The command exits non-zero when any
-package needs action, so it also works as a CI gate. A `stale` contract is one
-generated against a different version of the package than the one installed —
-after an upgrade, regenerate and re-review it. See
-[docs/package-contracts.md](docs/package-contracts.md#checking-contract-coverage-and-freshness).
-
-You don't have to wait for the maintainer. You can supply the contract yourself
-and `solid-checker` will pick it up automatically from
-`.solid-checker/contracts/<package>/solid-reactivity.json` (scoped names keep their
-directory, e.g. `.solid-checker/contracts/@scope/pkg/solid-reactivity.json`):
-
-- **Generate it** from the package's source, if you have it checked out with a
-  TypeScript project, using the same `--emit-contract` workflow below.
-- **Author it by hand** against the
-  [contract schema](schema/solid-reactivity.schema.json) and check it with
-  `solid-checker --validate-contract <path>`.
-
-A one-off `--contract <path>` on the command line takes precedence over a
-discovered contract. See [package contracts](docs/package-contracts.md) for the
-full workflow and trust boundary.
-
-## Publishing a Solid library?
-
-Generate every runtime entrypoint directly from the package export map:
-
-```sh
-solid-checker contract generate --package-root .
-```
-
-This derives the package name and exact version from `package.json`, expands
-exact and wildcard export subpaths, analyzes each ESM target independently, and
-writes `solid-reactivity.json`. Use `--conditions browser,import` to select one
-conditional export environment; without it, all supported ESM variants must
-produce compatible summaries. The generated document deduplicates effect
-summaries and identical subpath surfaces, so large packages do not repeat the
-same export metadata hundreds of times.
-
-Build a `solid-reactivity.json` contract candidate describing the reactive
-behavior of your exports:
-
-```sh
-solid-checker --project tsconfig.json \
-  --emit-contract solid-reactivity.json \
-  --package-name my-package \
-  --package-version 1.0.0
-```
-
-Emission is fail-closed when a parameter escapes into an uncontracted external
-call (including unresolved callback execution), and records
-`inferred` evidence. Inferred contracts are deliberately not sufficient for
-consumer certification: verify them against the exact package artifacts and
-behavior, then record `verified`, `reviewed`, or `attested` evidence. Contracts
-are entrypoint- and exact-version-aware, so include every published subpath.
-
-Published at your package root as `solid-reactivity.json`, it's discovered
-automatically from `node_modules`. See
-[package contracts](docs/package-contracts.md) for hashing artifacts and the
-trust boundary.
-
-Consumers can run the same generator without modifying the installed package:
+Each package is reported as `bundled`, `accepted`, `unverified`, `stale`,
+`unbound`, or `missing`. The command exits non-zero when a package cannot be
+certified, so it also works as a CI gate. Generate an unaccepted temporary-v2
+proposal for an exact registry-installed artifact with its integrity:
 
 ```sh
 solid-checker contract generate \
-  --package-root node_modules/solid-dnd \
-  --output .solid-checker/contracts/solid-dnd/solid-reactivity.json
+  --package-root node_modules/example-package \
+  --integrity 'sha512-…' \
+  --output .solid-checker/contracts/example-package/solid-reactivity.json
 ```
+
+Generation never grants acceptance. Review the proposal, satisfy its proof
+plan, and run `solid-checker contract verify` to issue a receipt. Register the
+accepted document, receipt, and full exact import resolution in
+`.solid-checker/accepted-contracts.json`. The analyzer does not discover an
+unreceipted file by package name and does not accept a hand-authored negative
+claim. See [package contracts](docs/package-contracts.md) for the complete
+workflow and trust boundary.
+
+## Publishing a Solid library?
+
+Generate an unaccepted proposal for every finite runtime entrypoint:
+
+```sh
+solid-checker contract generate --package-root . --integrity 'sha512-…'
+```
+
+Package name and exact version come from `package.json`; integrity remains an
+independent required input. Finite export subpaths and bounded condition
+partitions are analyzed as exclusive artifact cases. Wildcard-only surfaces
+remain uncertifiable until you pass each finite `--entrypoint` explicitly.
+Use `--conditions browser,development` for one exact environment.
+
+The current wire document is temporary `schemaVersion: 2` with semantic model
+version 1. Rust alone normalizes summaries, validates closure, and issues
+receipts. JavaScript orchestration manages artifact acquisition and processes;
+it does not interpret package semantics. The eventual stable schema-version-1
+cut is atomic and does not provide a legacy compatibility decoder.
 
 ## WASM
 

@@ -107,7 +107,7 @@ function registryIntegrity(name, version) {
 const MEMO = join(root, "rust/target/registry-integrity.json");
 
 /** Bumped when a stored entry's *meaning* changes; older entries stop being readable. */
-export const MEMO_FORMAT_VERSION = 1;
+export const MEMO_FORMAT_VERSION = 2;
 
 const MEMO_FIELDS = ["formatVersion", "inputDigest", "entries"];
 // `name@version`, scoped names included. A key this does not match is a key
