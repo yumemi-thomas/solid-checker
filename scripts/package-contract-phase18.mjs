@@ -171,6 +171,20 @@ const SOURCE_OWNERS = [
   }
 ];
 
+const STABLE_BOUNDARY_TESTS = [
+  {
+    path: "packages/wasm/test/resolved-imports.test.mjs",
+    required: [
+      "temporary schema-version-2 documents have no compatibility decoder",
+      "/schema version 2.*expected 1/i",
+      "legacy schema-version-1 documents have no compatibility decoder",
+      "delete legacy.format;",
+      "/contract document cannot be decoded.*missing field.*format/i"
+    ],
+    forbidden: ["solid-checker-wasm-v2-", "/schema version 1.*expected 2/i"]
+  }
+];
+
 const INDEPENDENT_JSON_VERSIONS = [
   ["packages/cli/lib/rules-solid-v1.json", "schemaVersion", 1],
   ["packages/cli/lib/rules-solid-v2.json", "schemaVersion", 1],
@@ -296,6 +310,25 @@ function readText(root, path) {
   return readFileSync(join(root, path), "utf8");
 }
 
+export function auditStableBoundaryTestEntries(entries) {
+  const byPath = new Map(entries.map(entry => [entry.path, String(entry.source)]));
+  for (const test of STABLE_BOUNDARY_TESTS) {
+    const source = byPath.get(test.path);
+    if (source === undefined) throw new Error(`stable boundary test is missing: ${test.path}`);
+    for (const marker of test.required) {
+      if (!source.includes(marker)) {
+        throw new Error(`${test.path} is missing stable boundary assertion ${marker}`);
+      }
+    }
+    for (const marker of test.forbidden) {
+      if (source.includes(marker)) {
+        throw new Error(`${test.path} retains temporary-v2 assertion ${marker}`);
+      }
+    }
+  }
+  return STABLE_BOUNDARY_TESTS.length;
+}
+
 function auditSourceInventory(root) {
   for (const path of FORBIDDEN_ACTIVE_PATHS) {
     if (existsSync(join(root, path))) throw new Error(`retired legacy path still exists: ${path}`);
@@ -323,6 +356,10 @@ function auditSourceInventory(root) {
     }
   }
 
+  const stableBoundaryTests = auditStableBoundaryTestEntries(
+    STABLE_BOUNDARY_TESTS.map(test => ({ path: test.path, source: readText(root, test.path) }))
+  );
+
   const javascriptMainReaders = [...new Set([
     ...trackedFiles(root, "*.mjs"),
     "scripts/package-contract-phase18.mjs"
@@ -344,7 +381,7 @@ function auditSourceInventory(root) {
     );
   }
 
-  return SOURCE_OWNERS.length;
+  return { sourceOwners: SOURCE_OWNERS.length, stableBoundaryTests };
 }
 
 export function auditRepository(root = repositoryRoot) {
@@ -365,11 +402,11 @@ export function auditRepository(root = repositoryRoot) {
     requireVersion(path, document, field, expected);
   }
 
-  const sourceOwners = auditSourceInventory(root);
+  const sourceInventory = auditSourceInventory(root);
   return {
     ...documents,
     auditedJsonFiles: entries.length,
-    sourceOwners,
+    ...sourceInventory,
     semanticModelVersion: SEMANTIC_MODEL_VERSION,
     semanticDigestAlgorithm: "sha256"
   };

@@ -5,6 +5,7 @@ import { describe, test } from "vitest";
 import {
   auditDocumentEntries,
   auditRepository,
+  auditStableBoundaryTestEntries,
   MAIN_FORMAT,
   MAIN_SCHEMA_VERSION,
   SEMANTIC_MODEL_VERSION
@@ -109,11 +110,34 @@ describe("Phase 18 stable schema-version-1 convergence", () => {
     );
   });
 
+  test("pins both retired wire shapes at the WASM boundary", () => {
+    const path = "packages/wasm/test/resolved-imports.test.mjs";
+    const stableAssertions = [
+      "temporary schema-version-2 documents have no compatibility decoder",
+      "/schema version 2.*expected 1/i",
+      "legacy schema-version-1 documents have no compatibility decoder",
+      "delete legacy.format;",
+      "/contract document cannot be decoded.*missing field.*format/i"
+    ].join("\n");
+    assert.equal(
+      auditStableBoundaryTestEntries([{ path, source: stableAssertions }]),
+      1
+    );
+    assert.throws(
+      () =>
+        auditStableBoundaryTestEntries([
+          { path, source: `${stableAssertions}\n/schema version 1.*expected 2/i` }
+        ]),
+      /retains temporary-v2 assertion/
+    );
+  });
+
   test("the checked repository is stable-only with semantic model 1", () => {
     const result = auditRepository();
     assert.ok(result.mainDocuments > 0);
     assert.ok(result.receipts > 0);
     assert.ok(result.sourceOwners > 0);
+    assert.equal(result.stableBoundaryTests, 1);
     assert.equal(result.semanticModelVersion, 1);
     assert.equal(result.semanticDigestAlgorithm, "sha256");
   });
