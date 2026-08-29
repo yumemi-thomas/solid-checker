@@ -4,9 +4,7 @@ const MAIN: &[u8] =
     include_bytes!("../../../../../../pkg/contracts/bundled/solid-v1/debounce-root-default.json");
 const OTHER_MAIN: &[u8] =
     include_bytes!("../../../../../../pkg/contracts/bundled/solid-v1/solid-root-node.json");
-const POLICY1_RECEIPT: &[u8] = include_bytes!(
-    "../../../../../../pkg/contracts/bundled/solid-v1/debounce-root-default.receipt.json"
-);
+const POLICY1_RECEIPT: &[u8] = include_bytes!("policy1-obsolete.json");
 
 fn canonical_main(input: &[u8]) -> Vec<u8> {
     let decoded = contract_document::decode(input).unwrap();
@@ -122,6 +120,41 @@ fn local_and_portable_receipts_require_configured_external_trust() {
             bindings.semantic_digest
         );
     }
+}
+
+#[test]
+fn authenticated_builtin_receipt_is_consumed_by_the_active_loader() {
+    let main = canonical_main(MAIN);
+    let normalized = contract_document::decode(&main)
+        .unwrap()
+        .normalize()
+        .unwrap();
+    let selected = &normalized.artifact_cases()[0].id;
+    let mut bindings = bindings(&main);
+    bindings.closed_claims_root =
+        solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(
+            &normalized,
+            selected,
+        )
+        .unwrap()
+        .as_str()
+        .into();
+    let receipt = issue_builtin_policy2_receipt(&main, &bindings, "solid-v1-bundled").unwrap();
+    let entry = BuiltInReceiptEntry {
+        entry_digest: digest_bytes(&receipt),
+        verifier_build_digest: bindings.verifier_build_digest.clone(),
+    };
+    let accepted = crate::contract_interface::load_authenticated_policy2_embedded_contract(
+        &main, &receipt, &bindings, &entry,
+    )
+    .unwrap();
+    assert_eq!(accepted.receipt().receipt_version, 2);
+    assert_eq!(accepted.receipt().verifier.policy, 2);
+    let authentication = accepted.receipt().authentication.as_ref().unwrap();
+    assert_eq!(
+        authentication.receipt_digest.as_str(),
+        digest_bytes(&receipt)
+    );
 }
 
 #[test]

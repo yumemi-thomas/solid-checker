@@ -1,25 +1,25 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/package-consumer/App.tsx",
-      "start": 161,
-      "end": 172,
+      "start": 0,
+      "end": 56,
       "fixes": 0
     },
     {
-      "rule": "prefer-for",
-      "code": "SC8014",
-      "kind": "violation",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/package-consumer/App.tsx",
-      "start": 249,
-      "end": 280,
-      "fixes": 1
+      "start": 0,
+      "end": 56,
+      "fixes": 0
     }
   ]
 }

@@ -5,11 +5,11 @@
 //! analyzer-loading interface exposes semantics only after validating a
 //! proof-issued receipt and exact artifact selection.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
-    AcceptanceReceipt, AcceptedContract, AcceptedContractIndex, AcceptedContractInput, Digest,
-    VerifierIdentity, proof::validate_receipt_and_accept,
+    AcceptedContract, AcceptedContractIndex, AcceptedContractInput, UncertifiableImportReason,
+    proof::{AuthenticatedPolicy2Acceptance, accept_authenticated_policy2},
 };
 use std::{
     collections::BTreeMap,
@@ -20,7 +20,13 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::{artifact_resolution::select_and_bind, contract_document};
+use crate::{
+    contract_certification::{
+        AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, Policy2ReceiptBindings,
+        Policy2ReceiptProvenance, authenticate_policy2_receipt, canonicalize_policy2_main,
+    },
+    contract_document,
+};
 
 const MAX_CONTRACT_DOCUMENT_BYTES: usize = 1024 * 1024;
 const MAX_RECEIPT_BYTES: usize = 64 * 1024;
@@ -221,6 +227,10 @@ pub enum ContractFailure {
     ReceiptDecode { message: String },
     #[error("unsupported acceptance receipt version {actual}; expected {expected}")]
     UnsupportedReceiptVersion { expected: u16, actual: u16 },
+    #[error("policy-2 acceptance receipt requires authenticated issuer provenance")]
+    ReceiptAuthenticationRequired,
+    #[error("policy-2 acceptance receipt authentication failed: {message}")]
+    ReceiptAuthentication { message: String },
     #[error("unsupported contract schema version {actual}; expected {expected}")]
     UnsupportedSchemaVersion { expected: u16, actual: u16 },
     #[error("no artifact case matches the exact resolved import")]
@@ -235,69 +245,6 @@ pub enum ContractFailure {
     InvalidSemanticModel { reason: String },
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WireReceipt {
-    receipt_version: u16,
-    wire_digest: String,
-    semantic_model_version: u16,
-    semantic_digest: String,
-    artifacts_digest: String,
-    closure_digest: String,
-    proof_root: String,
-    closed_claims_root: String,
-    verifier: WireVerifier,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct WireVerifier {
-    build: String,
-    policy: u32,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ReceiptDocument<'a> {
-    receipt_version: u16,
-    wire_digest: &'a str,
-    semantic_model_version: u16,
-    semantic_digest: &'a str,
-    artifacts_digest: &'a str,
-    closure_digest: &'a str,
-    proof_root: &'a str,
-    closed_claims_root: &'a str,
-    verifier: ReceiptVerifier<'a>,
-}
-
-#[derive(Serialize)]
-struct ReceiptVerifier<'a> {
-    build: &'a str,
-    policy: u32,
-}
-
-pub fn encode_acceptance_receipt(receipt: &AcceptanceReceipt) -> Result<Vec<u8>, ContractFailure> {
-    let mut bytes = serde_json::to_vec(&ReceiptDocument {
-        receipt_version: receipt.receipt_version,
-        wire_digest: receipt.wire_digest.as_str(),
-        semantic_model_version: receipt.semantic_model_version,
-        semantic_digest: receipt.semantic_digest.as_str(),
-        artifacts_digest: receipt.artifacts_digest.as_str(),
-        closure_digest: receipt.closure_digest.as_str(),
-        proof_root: receipt.proof_root.as_str(),
-        closed_claims_root: receipt.closed_claims_root.as_str(),
-        verifier: ReceiptVerifier {
-            build: &receipt.verifier.build,
-            policy: receipt.verifier.policy,
-        },
-    })
-    .map_err(|error| ContractFailure::ReceiptDecode {
-        message: error.to_string(),
-    })?;
-    bytes.push(b'\n');
-    Ok(bytes)
-}
-
 /// One contract document, proof-issued receipt, and exact host resolution to
 /// load at the analyzer boundary.
 #[derive(Clone, Copy, Debug)]
@@ -308,7 +255,7 @@ pub struct AcceptedContractSource<'a> {
 }
 
 const ACCEPTED_CATALOG_FORMAT: &str = "solid-checker-accepted-contract-catalog";
-const ACCEPTED_CATALOG_VERSION: u16 = 1;
+const ACCEPTED_CATALOG_VERSION: u16 = 2;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -322,8 +269,14 @@ struct AcceptedCatalogDocument {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AcceptedCatalogEntry {
     document: String,
-    receipt: String,
+    status: AcceptedCatalogStatus,
     import: ResolvedImport,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum AcceptedCatalogStatus {
+    ObsoletePolicy1,
 }
 
 /// Reads an explicit host-acquisition catalog and terminates every file and
@@ -333,38 +286,39 @@ pub fn read_accepted_contract_catalog(
     path: &Path,
 ) -> Result<AcceptedContractIndex, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
-    let mut loaded = Vec::with_capacity(catalog.contracts.len());
+    let mut uncertifiable = Vec::with_capacity(catalog.contracts.len());
     for mut entry in catalog.contracts {
         let document_path = catalog_member_path(&base, &entry.document)?;
-        let receipt_path = catalog_member_path(&base, &entry.receipt)?;
-        let document = read_boundary_file(
+        let _document = read_boundary_file(
             &document_path,
             MAX_CONTRACT_DOCUMENT_BYTES,
             "contract",
             false,
         )?;
-        let receipt = read_boundary_file(&receipt_path, MAX_RECEIPT_BYTES, "receipt", true)?;
         rebase_catalog_import(&base, &mut entry.import)?;
-        loaded.push((document, receipt, entry.import));
-    }
-    load_accepted_contract_index(loaded.iter().map(|(document, receipt, import)| {
-        AcceptedContractSource {
-            document,
-            receipt,
-            import,
+        match entry.status {
+            AcceptedCatalogStatus::ObsoletePolicy1 => uncertifiable.push((
+                entry.import.importer.clone(),
+                entry.import.specifier.clone(),
+            )),
         }
-    }))
+    }
+    Ok(
+        AcceptedContractIndex::default().with_uncertifiable_import_reasons(
+            uncertifiable
+                .into_iter()
+                .map(|key| (key, UncertifiableImportReason::ObsoletePolicy1)),
+        ),
+    )
 }
 
-/// Returns the exact main documents and receipts referenced by an accepted
-/// catalog. Retained hosts hash these paths together with the catalog so an
-/// in-place proof or semantic edit cannot reuse an older accepted analysis.
+/// Returns the exact proposal documents referenced by the catalog. Policy-1
+/// receipt bytes are deliberately absent after the atomic cut.
 pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
-    let mut paths = Vec::with_capacity(catalog.contracts.len() * 2);
+    let mut paths = Vec::with_capacity(catalog.contracts.len());
     for entry in catalog.contracts {
         paths.push(catalog_member_path(&base, &entry.document)?);
-        paths.push(catalog_member_path(&base, &entry.receipt)?);
     }
     paths.sort();
     paths.dedup();
@@ -520,13 +474,109 @@ pub fn load_accepted_contract(
     receipt: &[u8],
     import: &ResolvedImport,
 ) -> Result<AcceptedContract, ContractFailure> {
-    let document = contract_document::decode(document_bytes)?;
-    let receipt =
-        decode_and_validate_receipt(document_bytes, document.semantic_model_version(), receipt)?;
+    contract_document::decode(document_bytes)?;
+    require_policy2_receipt(receipt)?;
+    let _ = import;
+    Err(ContractFailure::ReceiptAuthenticationRequired)
+}
 
-    let normalized = document.normalize()?;
-    let selected = select_and_bind(&normalized, import)?;
-    accept_selected(selected, receipt)
+/// Loads one policy-2 contract after authenticating its exact signed binding
+/// set and issuer provenance. Ordinary discovery cannot infer either input and
+/// therefore uses [`load_accepted_contract`] only to report a typed refusal.
+pub fn load_authenticated_policy2_contract(
+    document_bytes: &[u8],
+    receipt_bytes: &[u8],
+    import: &ResolvedImport,
+    expected: &Policy2ReceiptBindings,
+    provenance: Policy2ReceiptProvenance<'_>,
+) -> Result<AcceptedContract, ContractFailure> {
+    let canonical_main = canonicalize_policy2_main(document_bytes).map_err(authentication_error)?;
+    if canonical_main != document_bytes {
+        return Err(ContractFailure::ReceiptMismatch {
+            field: "mainDigest",
+        });
+    }
+    let authenticated =
+        authenticate_policy2_receipt(&canonical_main, receipt_bytes, expected, provenance)
+            .map_err(authentication_error)?;
+    let selected = crate::artifact_resolution::select_and_bind(
+        &contract_document::decode(&canonical_main)?.normalize()?,
+        import,
+    )?;
+    accept_policy2_selected(selected, authenticated)
+}
+
+/// Loads an immutable compiled single-case bundle. Its receipt becomes
+/// authoritative only when its independently compiled entry digest matches.
+#[doc(hidden)]
+pub fn load_authenticated_policy2_embedded_contract(
+    document_bytes: &[u8],
+    receipt_bytes: &[u8],
+    expected: &Policy2ReceiptBindings,
+    entry: &BuiltInReceiptEntry,
+) -> Result<AcceptedContract, ContractFailure> {
+    let canonical_main = canonicalize_policy2_main(document_bytes).map_err(authentication_error)?;
+    if canonical_main != document_bytes {
+        return Err(ContractFailure::ReceiptMismatch {
+            field: "mainDigest",
+        });
+    }
+    let authenticated = authenticate_policy2_receipt(
+        &canonical_main,
+        receipt_bytes,
+        expected,
+        Policy2ReceiptProvenance::BuiltIn(entry),
+    )
+    .map_err(authentication_error)?;
+    let normalized = contract_document::decode(&canonical_main)?.normalize()?;
+    if normalized.artifact_cases().len() != 1 {
+        return Err(ContractFailure::MultipleArtifactCases);
+    }
+    accept_policy2_selected(normalized, authenticated)
+}
+
+fn accept_policy2_selected(
+    selected: solid_reactive_ir::contract_semantics::NormalizedContract,
+    authenticated: AuthenticatedPolicy2Receipt,
+) -> Result<AcceptedContract, ContractFailure> {
+    let selected_case = selected
+        .artifact_cases()
+        .first()
+        .expect("policy-2 selection retains exactly one artifact case")
+        .id
+        .clone();
+    accept_authenticated_policy2(
+        selected,
+        &selected_case,
+        AuthenticatedPolicy2Acceptance {
+            main_digest: solid_reactive_ir::contract_semantics::Digest::parse(
+                authenticated.main_digest(),
+            )
+            .expect("authenticated main digest is canonical"),
+            semantic_digest: authenticated.semantic_digest().clone(),
+            receipt_digest: solid_reactive_ir::contract_semantics::Digest::parse(
+                authenticated.receipt_digest(),
+            )
+            .expect("authenticated receipt digest is canonical"),
+            policy_digest: authenticated.policy_digest().clone(),
+            closed_claims_root: authenticated.closed_claims_root().clone(),
+            verifier_build_digest: authenticated.verifier_build_digest().clone(),
+            trust_store_digest: solid_reactive_ir::contract_semantics::Digest::parse(
+                authenticated.trust_store_digest(),
+            )
+            .expect("authenticated trust-store digest is canonical"),
+            revocation_epoch: authenticated.revocation_epoch(),
+        },
+    )
+    .map_err(|error| ContractFailure::ReceiptAuthentication {
+        message: error.to_string(),
+    })
+}
+
+fn authentication_error(error: impl std::fmt::Display) -> ContractFailure {
+    ContractFailure::ReceiptAuthentication {
+        message: error.to_string(),
+    }
 }
 
 /// Validates a compile-time embedded, already single-case bundle and its
@@ -537,25 +587,19 @@ pub(crate) fn load_receipt_issued_embedded_contract(
     document_bytes: &[u8],
     receipt_bytes: &[u8],
 ) -> Result<AcceptedContract, ContractFailure> {
-    let document = contract_document::decode(document_bytes)?;
-    let receipt = decode_and_validate_receipt(
-        document_bytes,
-        document.semantic_model_version(),
-        receipt_bytes,
-    )?;
-    let normalized = document.normalize()?;
-    if normalized.artifact_cases().len() != 1 {
-        return Err(ContractFailure::MultipleArtifactCases);
-    }
-    accept_selected(normalized, receipt)
+    contract_document::decode(document_bytes)?;
+    require_policy2_receipt(receipt_bytes)?;
+    Err(ContractFailure::ReceiptAuthenticationRequired)
 }
 
-fn decode_and_validate_receipt(
-    document_bytes: &[u8],
-    semantic_model_version: u16,
-    receipt_bytes: &[u8],
-) -> Result<AcceptanceReceipt, ContractFailure> {
-    let receipt: WireReceipt = crate::bounded_json::decode(
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceiptVersionProbe {
+    receipt_version: u16,
+}
+
+fn require_policy2_receipt(receipt_bytes: &[u8]) -> Result<(), ContractFailure> {
+    let receipt: ReceiptVersionProbe = crate::bounded_json::decode(
         receipt_bytes,
         crate::bounded_json::Limits {
             bytes: MAX_RECEIPT_BYTES,
@@ -565,83 +609,13 @@ fn decode_and_validate_receipt(
         },
     )
     .map_err(|message| ContractFailure::ReceiptDecode { message })?;
-
-    if receipt.receipt_version != 1 {
+    if receipt.receipt_version != 2 {
         return Err(ContractFailure::UnsupportedReceiptVersion {
-            expected: 1,
+            expected: 2,
             actual: receipt.receipt_version,
         });
     }
-    if receipt.wire_digest != sha256_digest(document_bytes) {
-        return Err(ContractFailure::ReceiptMismatch {
-            field: "wireDigest",
-        });
-    }
-    if receipt.semantic_model_version != semantic_model_version {
-        return Err(ContractFailure::ReceiptMismatch {
-            field: "semanticModelVersion",
-        });
-    }
-    for (field, digest) in [
-        ("semanticDigest", &receipt.semantic_digest),
-        ("artifactsDigest", &receipt.artifacts_digest),
-        ("closureDigest", &receipt.closure_digest),
-        ("proofRoot", &receipt.proof_root),
-        ("closedClaimsRoot", &receipt.closed_claims_root),
-    ] {
-        if !is_sha256_digest(digest) {
-            return Err(ContractFailure::ReceiptMismatch { field });
-        }
-    }
-
-    Ok(AcceptanceReceipt {
-        receipt_version: receipt.receipt_version,
-        wire_digest: parse_receipt_digest(receipt.wire_digest, "wireDigest")?,
-        semantic_model_version: receipt.semantic_model_version,
-        semantic_digest: parse_receipt_digest(receipt.semantic_digest, "semanticDigest")?,
-        artifacts_digest: parse_receipt_digest(receipt.artifacts_digest, "artifactsDigest")?,
-        closure_digest: parse_receipt_digest(receipt.closure_digest, "closureDigest")?,
-        proof_root: parse_receipt_digest(receipt.proof_root, "proofRoot")?,
-        closed_claims_root: parse_receipt_digest(receipt.closed_claims_root, "closedClaimsRoot")?,
-        verifier: VerifierIdentity {
-            build: receipt.verifier.build,
-            policy: receipt.verifier.policy,
-        },
-    })
-}
-
-fn accept_selected(
-    selected: solid_reactive_ir::contract_semantics::NormalizedContract,
-    receipt: AcceptanceReceipt,
-) -> Result<AcceptedContract, ContractFailure> {
-    let selected_case = selected
-        .artifact_cases()
-        .first()
-        .expect("artifact selection returns exactly one case")
-        .id
-        .clone();
-    validate_receipt_and_accept(selected, &selected_case, receipt).map_err(|error| {
-        use solid_reactive_ir::contract_semantics::proof::ReceiptValidationError;
-        match error {
-            ReceiptValidationError::ReceiptVersion { expected, actual } => {
-                ContractFailure::UnsupportedReceiptVersion { expected, actual }
-            }
-            ReceiptValidationError::Mismatch { field } => {
-                ContractFailure::ReceiptMismatch { field }
-            }
-            other => ContractFailure::ReceiptMismatch {
-                field: match other {
-                    ReceiptValidationError::EmptyVerifierBuild => "verifier.build",
-                    ReceiptValidationError::ProofPolicy { .. } => "verifier.policy",
-                    ReceiptValidationError::MissingArtifactCase { .. } => "selectedArtifactCase",
-                    ReceiptValidationError::NoClosedClaims => "closedClaimsRoot",
-                    ReceiptValidationError::Claim(_) => "closedClaimsRoot",
-                    ReceiptValidationError::ReceiptVersion { .. }
-                    | ReceiptValidationError::Mismatch { .. } => unreachable!(),
-                },
-            },
-        }
-    })
+    Ok(())
 }
 
 /// Loads the complete analyzer-facing index. The exact importer/specifier pair
@@ -669,195 +643,23 @@ pub(crate) fn invalid_identity(reason: impl Into<String>) -> ContractFailure {
     }
 }
 
-fn is_sha256_digest(value: &str) -> bool {
-    value.strip_prefix("sha256:").is_some_and(|payload| {
-        payload.len() == 64 && payload.bytes().all(|byte| byte.is_ascii_hexdigit())
-    })
-}
-
-fn parse_receipt_digest(value: String, field: &'static str) -> Result<Digest, ContractFailure> {
-    let digest = Digest::parse(&value).map_err(|_| ContractFailure::ReceiptMismatch { field })?;
-    if digest.as_str() == value {
-        Ok(digest)
-    } else {
-        Err(ContractFailure::ReceiptMismatch { field })
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use solid_reactive_ir::contract_semantics::{
-        ClaimDomain, ClaimPath, ContractProposal, SemanticClaimPath, SemanticClaimSubject,
-        proof::{
-            AcceptanceRequest, CLOSURE_PROOF_FAMILIES, CensusCompleteness, PROOF_POLICY_VERSION,
-            ProofRuleInput, family_authority, proof_scope_digest, replay_proof_rule,
-            verify_and_accept,
-        },
-    };
-
     use super::*;
 
-    fn resolved_import() -> ResolvedImport {
-        let root = "/project/node_modules/solid-js";
-        let runtime = ResolvedFile {
-            path: format!("{root}/dist/solid.js"),
-            real_path: None,
-            digest: format!("sha256:{}", "b".repeat(64)),
-        };
-        let declarations = ResolvedFile {
-            path: format!("{root}/types/index.d.ts"),
-            real_path: None,
-            digest: format!("sha256:{}", "d".repeat(64)),
-        };
-        ResolvedImport {
-            specifier: "solid-js".into(),
-            importer: "/project/src/app.tsx".into(),
-            requested_entrypoint: ".".into(),
-            package_name: "solid-js".into(),
-            package_version: "2.0.0-rc.3".into(),
-            package_integrity: "sha512:test".into(),
-            package_root: root.into(),
-            package_real_root: None,
-            package_manifest: ResolvedFile {
-                path: format!("{root}/package.json"),
-                real_path: None,
-                digest: format!("sha256:{}", "a".repeat(64)),
-            },
-            runtime: runtime.clone(),
-            declarations: declarations.clone(),
-            runtime_trace: ResolutionTrace::default(),
-            declaration_trace: ResolutionTrace::default(),
-            closure: ClosureManifest::new(vec![], vec![], vec![]).unwrap(),
-            transform: None,
-            exports: BTreeMap::from([(
-                "version".into(),
-                ResolvedExportBinding {
-                    runtime: ResolvedExportTarget {
-                        module: runtime,
-                        export_name: "version".into(),
-                    },
-                    declarations: ResolvedExportTarget {
-                        module: declarations,
-                        export_name: "version".into(),
-                    },
-                },
-            )]),
-            authority: ResolutionAuthority::Host,
-        }
+    #[test]
+    fn policy1_receipts_are_obsolete_at_the_active_boundary() {
+        assert!(matches!(
+            require_policy2_receipt(br#"{"receiptVersion":1}"#),
+            Err(ContractFailure::UnsupportedReceiptVersion {
+                expected: 2,
+                actual: 1
+            })
+        ));
     }
 
     #[test]
-    fn proof_issued_receipt_is_the_only_path_into_the_analyzer_index() {
-        let import = resolved_import();
-        let closure = import.closure.digest.as_str().trim_start_matches("sha256:");
-        let document = format!(
-            "{{\"format\":\"solid-reactivity-contract\",\"schemaVersion\":1,\"semanticModelVersion\":1,\"package\":{{\"name\":\"solid-js\",\"version\":\"2.0.0-rc.3\",\"integrity\":\"sha512:test\",\"manifest\":{{\"path\":\"package.json\",\"sha256\":\"{}\"}}}},\"summaries\":{{\"callable\":{{\"shape\":\"callable\",\"call\":{{\"closed\":[\"reads\"],\"reads\":[]}}}}}},\"entrypoints\":{{\".\":{{\"artifact\":{{\"path\":\"dist/solid.js\",\"sha256\":\"{}\",\"closureSha256\":\"{}\"}},\"declarations\":{{\"path\":\"types/index.d.ts\",\"sha256\":\"{}\"}},\"exports\":{{\"version\":\"callable\"}}}}}},\"sidecars\":{{}}}}",
-            "a".repeat(64),
-            "b".repeat(64),
-            closure,
-            "d".repeat(64),
-        );
-        let final_contract = contract_document::decode(document.as_bytes())
-            .unwrap()
-            .normalize()
-            .unwrap();
-        let selected = select_and_bind(&final_contract, &import).unwrap();
-        let selected_case = selected.artifact_cases()[0].id.clone();
-        let mut cases = selected.artifact_cases().to_vec();
-        let export_name = "version".to_owned();
-        cases[0]
-            .exports
-            .get_mut(&export_name)
-            .unwrap()
-            .open_proposed_closure();
-        let proposal = ContractProposal::new(selected.package().clone(), cases)
-            .normalize()
-            .unwrap();
-        let subject = SemanticClaimSubject {
-            artifact_case: selected_case.clone(),
-            export: export_name,
-            path: SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Reads)),
-        };
-        let proofs = CLOSURE_PROOF_FAMILIES
-            .into_iter()
-            .enumerate()
-            .map(|(index, family)| {
-                replay_proof_rule(
-                    &proposal,
-                    family,
-                    subject.clone(),
-                    ProofRuleInput {
-                        authority: family_authority(family),
-                        transcript: format!("phase-12 replay {index}").into_bytes(),
-                        observed_scope: proof_scope_digest(&proposal, family, &subject).unwrap(),
-                        enumerated: vec![],
-                        classified: vec![],
-                        unresolved: vec![],
-                        completeness: CensusCompleteness::Complete,
-                    },
-                )
-                .unwrap()
-            })
-            .collect();
-        let issued = verify_and_accept(AcceptanceRequest {
-            contract: proposal,
-            selected_artifact_case: selected_case,
-            wire_bytes: document.as_bytes().to_vec(),
-            closed_claims: vec![subject],
-            proofs,
-            contradictions: vec![],
-            verifier: VerifierIdentity {
-                build: "phase-12-test".into(),
-                policy: PROOF_POLICY_VERSION,
-            },
-        })
-        .unwrap();
-        let receipt = encode_acceptance_receipt(issued.receipt()).unwrap();
-
-        let index = load_accepted_contract_index([AcceptedContractSource {
-            document: document.as_bytes(),
-            receipt: &receipt,
-            import: &import,
-        }])
-        .unwrap();
-        let identity = issued.export("version").unwrap().identity.clone();
-        assert!(
-            index
-                .resolve(&import.importer, &import.specifier, &identity)
-                .is_ok()
-        );
-
-        let mut reformatted = document.as_bytes().to_vec();
-        reformatted.push(b' ');
-        assert!(matches!(
-            load_accepted_contract(&reformatted, &receipt, &import),
-            Err(ContractFailure::ReceiptMismatch {
-                field: "wireDigest"
-            })
-        ));
-
-        let mut noncanonical: serde_json::Value = serde_json::from_slice(&receipt).unwrap();
-        noncanonical["semanticDigest"] = serde_json::json!(
-            noncanonical["semanticDigest"]
-                .as_str()
-                .unwrap()
-                .to_ascii_uppercase()
-        );
-        assert!(matches!(
-            load_accepted_contract(
-                document.as_bytes(),
-                &serde_json::to_vec(&noncanonical).unwrap(),
-                &import,
-            ),
-            Err(ContractFailure::ReceiptMismatch {
-                field: "semanticDigest"
-            })
-        ));
-
-        let oversized = vec![b' '; MAX_RECEIPT_BYTES + 1];
-        assert!(matches!(
-            load_accepted_contract(document.as_bytes(), &oversized, &import),
-            Err(ContractFailure::ReceiptDecode { .. })
-        ));
+    fn policy2_receipts_require_authenticated_provenance() {
+        assert!(require_policy2_receipt(br#"{"receiptVersion":2}"#).is_ok());
     }
 }

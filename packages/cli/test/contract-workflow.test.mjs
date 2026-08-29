@@ -19,19 +19,12 @@ test("review exposes only stable proposal inspection", () => {
   assert.throws(() => parseReviewArguments(["proposal.json", "--promote", "reviewed"]), /unknown/);
 });
 
-test("verification requires separate plan, proof, and exact artifact case", () => {
-  const parsed = parseVerifyArguments([
-    "proposal.json",
-    "--plan=plan.json",
-    "--proof",
-    "proof.json",
-    "--artifact-case",
-    "case"
-  ]);
-  assert.equal(parsed.plan, "plan.json");
-  assert.equal(parsed.proof, "proof.json");
-  assert.equal(parsed.artifactCase, "case");
-  assert.throws(() => parseVerifyArguments(["proposal.json"]), /--plan is required/);
+test("policy-1 caller-proof verification is retired", () => {
+  assert.deepEqual(parseVerifyArguments(["--help"]), { help: true });
+  assert.throws(
+    () => parseVerifyArguments(["proposal.json"]),
+    /proof-file issuance was retired/
+  );
 });
 
 test("probe parsing has no write or negative-discovery compatibility mode", () => {

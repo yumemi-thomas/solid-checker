@@ -1,14 +1,14 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/package-return-consumer/App.tsx",
-      "start": 178,
-      "end": 185,
+      "start": 0,
+      "end": 47,
       "fixes": 0
     }
   ]

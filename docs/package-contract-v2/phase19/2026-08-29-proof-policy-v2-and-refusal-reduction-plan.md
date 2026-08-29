@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: implementation in progress (Slices 0–8 implemented; Slice 9 next)
+Status: implementation in progress (Slices 0–9 implemented; Slice 10 next)
 
 Review status: adversarially revised
 
@@ -673,6 +673,19 @@ locations, fixtures, catalogs, manifests, inventories, caches, and WASM/native
 expectations; and make policy-1 discovery report only an obsolete-policy
 refusal. No active policy-1 receipt or checked-corpus shortcut remains after
 this commit.
+
+Implemented. The active native loader, analyzer typestate, and WASM boundary
+now require receipt version 2 plus explicit built-in, persistent-local, or
+portable issuer provenance. Authenticated cache identity retains the receipt,
+policy, trust-store, verifier-build, and revocation identities. Policy-1
+proof-file issuance, its Rust proof checker, and the checked-corpus acceptance
+shortcut are removed. All 73 policy-1 receipts are retired with zero pending
+rows because the mandatory policy-2 probe harness binding is not yet
+available; none was grandfathered. The 21 affected fixture catalogs are
+version-2 refusal catalogs, so discovery produces an exact obsolete-policy-1
+uncertifiable result instead of silently losing the semantic demand. Both
+first-party bundle indexes are empty until a case can be reconstructed under
+policy 2. The migration is recorded in `receipt-migration.json`.
 
 ### Slice 10 — Add automatic certification orchestration
 

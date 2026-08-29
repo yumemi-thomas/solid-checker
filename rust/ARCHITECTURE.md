@@ -281,33 +281,26 @@ no negative, minimum, maximum, exhaustive, closure-acceptance, receipt, or
 `AcceptedContract` output. Phase 11 is the first consumer allowed to replay a
 contradiction record while proving closure.
 
-`solid-reactive-ir::contract_semantics::proof` is the Phase 11 acceptance
-authority and the only code that constructs `AcceptedContract`. Its public
-input is raw, bounded rule material; successful `ReplayedProof` fields and the
-accepted typestate remain private. Each replay binds one semantic claim to the
-open normalized digest and exact package/artifact/declaration/closure/export
-scope, requires a complete enumerated-versus-classified census with no
-unresolved premise, and enforces the fact authority assigned to that proof
-family. Package acquisition, Type Facts, compiler execution facts, accepted
-dependency contracts, and runtime probes cannot substitute for one another.
+`solid-reactive-ir::contract_semantics::certification` is the active policy-2
+demand authority. It derives the complete positive/closure demand graph from
+normalized meaning; callers cannot submit a success census. Backend producer
+sessions discharge only their assigned families, and the mandatory probe gate
+can veto but cannot establish closure.
 
-Acceptance receives closure subjects derived by
-`solid-facts-backend::proof_checker` from the Phase 8 `ProposalPlan`, never a
-generator-authored accepted list. It rejects stale, orphaned, duplicate, or
-missing family replays, policy downgrade, operation existence disguised as
-closure, and every Phase 10 contradiction for a selected claim. It then closes
-only the named call, operation-production, resource, guard, or recursive value
-knowledge leaf and reruns normalization. Unknown siblings stay unknown and
-partial siblings stay partial.
+`solid-facts-backend::contract_certification::policy2_receipt` authenticates
+receipt version 2 through immutable built-in provenance or configured
+persistent-local/portable Ed25519 trust. Analyzer typestate retains receipt,
+policy, trust-store, verifier-build, and revocation identity. The policy-1
+`proof_checker` and caller-proof issuance path were deleted in the Phase 19
+atomic cut. `load_accepted_contract` reports policy 1 as obsolete and refuses
+raw policy-2 bytes without provenance; only the authenticated policy-2 loader
+can construct `AcceptedContract`.
 
-The verifier derives receipt-version-1 semantic, artifact, closure, proof, and
-closed-claim roots with typed length-delimited SHA-256 domains. Proof and
-census input order is irrelevant; transcript bytes, family, authority, claim,
-scope, and policy remain identity. `BundledEvidenceStore` is immutable and
-rehashes compiled receipt bytes. `LocalEvidenceStore` adds atomic,
-content-addressed, idempotent receipt writes. Analyzer exposure through
-`load_accepted_contract` now requires those receipt bindings to replay exactly.
-The proof root remains opaque authority because raw proof material is outside
+All former policy-1 built-ins are currently retired, so both bundle indexes
+are empty. Catalog version 2 can retain an exact import as
+`obsolete-policy1`; that produces a claim-local uncertifiable result without
+loading the old receipt or supplying semantics. The proof root remains opaque
+authority because raw proof material is outside
 the analysis hot path; semantic, artifact, closure, and closed-claim roots plus
 verifier policy are checked before any normalized query is exposed.
 

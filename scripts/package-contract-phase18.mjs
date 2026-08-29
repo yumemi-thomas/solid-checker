@@ -27,9 +27,8 @@ const VERSIONED_FORMATS = new Map([
   ["solid-checker-package-contract-generator-corpus", { field: "schemaVersion", version: 1 }],
   ["solid-checker-contract-proposal-plan", { field: "planVersion", version: 1, semanticModel: true }],
   ["solid-checker-contract-proposal-refusals", { field: "refusalVersion", version: 1 }],
-  ["solid-checker-contract-proof-transcript", { field: "proofVersion", version: 1, semanticModel: true }],
   ["solid-checker-contract-review", { field: "schemaVersion", version: 2, semanticModel: true }],
-  ["solid-checker-accepted-contract-catalog", { field: "catalogVersion", version: 1 }],
+  ["solid-checker-accepted-contract-catalog", { field: "catalogVersion", version: 2 }],
   ["solid-checker-proof-evidence", { field: "sidecarVersion", version: 1, semanticModel: true }],
   ["solid-checker-runtime-probe-evidence", { field: "sidecarVersion", version: 1, semanticModel: true }],
   ["solid-checker-runtime-probe-request", { field: "schemaVersion", version: 2 }],
@@ -113,16 +112,16 @@ const SOURCE_OWNERS = [
     path: "rust/crates/solid-facts-backend/src/contract_interface.rs",
     markers: [
       "pub fn load_accepted_contract(",
-      "let document = contract_document::decode(document_bytes)?;",
-      "const ACCEPTED_CATALOG_VERSION: u16 = 1;"
+      "pub fn load_authenticated_policy2_contract(",
+      "authenticate_policy2_receipt(",
+      "const ACCEPTED_CATALOG_VERSION: u16 = 2;"
     ]
   },
   {
     path: "rust/crates/solid-facts-backend/src/contract_workflow.rs",
     markers: [
       "contract_document::encode(",
-      "const PLAN_VERSION: u16 = 1;",
-      "const PROOF_VERSION: u16 = 1;"
+      "const PLAN_VERSION: u16 = 1;"
     ]
   },
   {
@@ -155,7 +154,7 @@ const SOURCE_OWNERS = [
   },
   {
     path: "packages/cli/scripts/verify-contract.mjs",
-    markers: ["Rust proof checker is", "only component allowed to close claims"]
+    markers: ["Policy-1 proof-file issuance was removed", "contract certify"]
   },
   {
     path: "packages/cli/scripts/contract-probe-driver.mjs",
@@ -163,7 +162,7 @@ const SOURCE_OWNERS = [
   },
   {
     path: "scripts/check-bundled-contracts.mjs",
-    markers: ["receipt-issued stable-v1 bundles", "document.schemaVersion !== 1"]
+    markers: ["Checks active stable-v1 bundle indexes", "document.schemaVersion !== 1"]
   },
   {
     path: "scripts/contract-corpus.mjs",
@@ -272,8 +271,13 @@ export function auditDocumentEntries(entries) {
     }
 
     if (Object.hasOwn(document ?? {}, "receiptVersion")) {
-      requireVersion(entry.path, document, "receiptVersion", 1);
-      requireVersion(entry.path, document, "semanticModelVersion", SEMANTIC_MODEL_VERSION);
+      requireVersion(entry.path, document, "receiptVersion", 2);
+      requireVersion(
+        entry.path,
+        document.payload ?? {},
+        "semanticModelVersion",
+        SEMANTIC_MODEL_VERSION
+      );
       if (!entry.path.endsWith(".receipt.json")) {
         throw new Error(`${entry.path} is a receipt but does not use the .receipt.json suffix`);
       }
@@ -284,8 +288,8 @@ export function auditDocumentEntries(entries) {
       if (mainEntry.document.format !== MAIN_FORMAT) {
         throw new Error(`${entry.path} binds a non-main document ${mainPath}`);
       }
-      if (document.wireDigest !== sha256(mainEntry.bytes)) {
-        throw new Error(`${entry.path} wireDigest does not bind ${mainPath}'s exact bytes`);
+      if (document.payload?.mainDigest !== sha256(mainEntry.bytes)) {
+        throw new Error(`${entry.path} mainDigest does not bind ${mainPath}'s exact bytes`);
       }
       receipts += 1;
     }

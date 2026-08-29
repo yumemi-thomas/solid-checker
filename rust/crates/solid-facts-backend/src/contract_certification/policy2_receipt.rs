@@ -1,9 +1,8 @@
 //! Internal authenticated receipt-v2 protocol.
 //!
-//! This module deliberately does not feed the active analyzer loader. Policy 1
-//! remains the product authority until every receipt and loader moves in the
-//! atomic cut. The types here authenticate a policy-2 certification result;
-//! they do not manufacture the result or accept serialized proof evidence.
+//! Receipt bytes gain authority only through an explicit configured or
+//! immutable built-in provenance. The authenticated token is consumed by the
+//! analyzer loader; serialized proof evidence cannot manufacture it.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ed25519_dalek::{Signature, Signer as _, SigningKey, VerifyingKey};
@@ -292,6 +291,9 @@ pub struct AuthenticatedPolicy2Receipt {
     trust_store_digest: String,
     revocation_epoch: u64,
     semantic_digest: Digest,
+    policy_digest: Digest,
+    closed_claims_root: Digest,
+    verifier_build_digest: Digest,
 }
 
 impl AuthenticatedPolicy2Receipt {
@@ -318,6 +320,21 @@ impl AuthenticatedPolicy2Receipt {
     #[must_use]
     pub const fn semantic_digest(&self) -> &Digest {
         &self.semantic_digest
+    }
+
+    #[must_use]
+    pub const fn policy_digest(&self) -> &Digest {
+        &self.policy_digest
+    }
+
+    #[must_use]
+    pub const fn closed_claims_root(&self) -> &Digest {
+        &self.closed_claims_root
+    }
+
+    #[must_use]
+    pub const fn verifier_build_digest(&self) -> &Digest {
+        &self.verifier_build_digest
     }
 }
 
@@ -474,8 +491,7 @@ pub fn issue_builtin_policy2_receipt(
     })
 }
 
-/// Internal policy-2 loader shared by future native and WASM entry points.
-/// It is intentionally not called by `load_accepted_contract` yet.
+/// Policy-2 authentication boundary shared by native and WASM loaders.
 pub fn authenticate_policy2_receipt(
     canonical_main: &[u8],
     receipt_bytes: &[u8],
@@ -549,6 +565,12 @@ pub fn authenticate_policy2_receipt(
         revocation_epoch,
         semantic_digest: Digest::parse(semantic_digest)
             .expect("validated stable main has a canonical semantic digest"),
+        policy_digest: Digest::parse(document.payload.policy_digest)
+            .expect("validated policy digest is canonical"),
+        closed_claims_root: Digest::parse(document.payload.closed_claims_root)
+            .expect("validated closed-claims root is canonical"),
+        verifier_build_digest: Digest::parse(document.payload.verifier_build_digest)
+            .expect("validated verifier-build digest is canonical"),
     })
 }
 

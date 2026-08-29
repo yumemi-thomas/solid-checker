@@ -35,19 +35,19 @@ Generation acquires exact runtime, declaration, export, and closure identities
 without executing package code. It enumerates finite entrypoints and condition
 partitions, refuses wildcard/unbounded surfaces, and preserves unresolved
 semantic leaves as local open claims. The proposal cannot affect analysis
-until the Rust proof checker accepts its exact bytes and issues a receipt:
+until policy-2 certification verifies every demanded witness and issues an
+authenticated receipt. Policy-1 proof-file issuance is retired:
 
 ```sh
 solid-checker contract review solid-reactivity.json
-solid-checker contract verify solid-reactivity.json \
-  --plan solid-reactivity.json.proposal.json \
-  --proof proof-transcript.json \
-  --artifact-case artifact-case:…
+solid-checker contract verify # deterministic migration refusal
 ```
 
-Register the accepted document, its receipt, and the independently acquired
-full import resolution in `.solid-checker/accepted-contracts.json`. The native
-checker rejects name-only, stale, unreceipted, or artifact-mismatched inputs.
+The upcoming `solid-checker contract certify` command will own reacquisition,
+witness scheduling, issuer invocation, and atomic catalog publication. Until
+that workflow succeeds, the native checker reports the exact import as
+uncertifiable rather than accepting name-only, stale, unreceipted, or
+artifact-mismatched input.
 `solid-checker contract probe` is a separate opt-in falsification workflow;
 ordinary generation and analysis never execute dependency code, and a passing
 probe never closes a claim.

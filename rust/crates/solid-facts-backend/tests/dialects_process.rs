@@ -443,7 +443,7 @@ fn component_identity_combines_type_facts_with_dialect_compatibility() {
 }
 
 #[test]
-fn package_contract_async_behavior_reaches_async_sensitive_rules() {
+fn retired_policy1_async_contract_no_longer_supplies_behavior() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -452,14 +452,11 @@ fn package_contract_async_behavior_reaches_async_sensitive_rules() {
             .join("tests/fixtures/contract-async/tsconfig.json"),
         Some("solid-v2"),
     );
-    assert!(
-        findings.iter().any(|finding| finding["id"] == "SC7002"),
-        "the dependency contract's asyncBehavior did not classify the computation: {findings:#?}"
-    );
+    assert!(findings.iter().all(|finding| finding["id"] != "SC7002"));
 }
 
 #[test]
-fn package_contract_reactive_reads_reach_control_flow_preferences() {
+fn retired_policy1_reactive_reads_no_longer_supply_behavior() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -469,15 +466,7 @@ fn package_contract_reactive_reads_reach_control_flow_preferences() {
         Some("solid-v2"),
         &["--preset", "preferences"],
     );
-    assert!(
-        findings.iter().any(|finding| {
-            finding["id"] == "SC8014"
-                && finding["primaryLocation"]["path"]
-                    .as_str()
-                    .is_some_and(|path| path.ends_with("package-consumer/App.tsx"))
-        }),
-        "the package contract's reactiveReads summary did not reach prefer-for: {findings:#?}"
-    );
+    assert!(findings.iter().all(|finding| finding["id"] != "SC8014"));
 }
 
 #[test]

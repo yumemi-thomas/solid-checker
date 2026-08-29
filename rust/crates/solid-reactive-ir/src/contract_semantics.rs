@@ -18,7 +18,7 @@ pub use consumer::{
     AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,
     AcceptedSemanticIdentity, CallSiteFacts, FiniteFact, InstantiatedClaim, InstantiatedExport,
     OpenDomainDiagnostic, OpenDomainReason, PropertyFact, SemanticQueryError,
-    native_claim_precedence,
+    UncertifiableImportReason, native_claim_precedence,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -486,6 +486,17 @@ pub struct VerifierIdentity {
     pub policy: u32,
 }
 
+/// Authentication identity retained by policy-2 accepted typestate. The
+/// receipt digest binds every signed certification root; trust-store identity
+/// and revocation epoch prevent cache reuse across a trust-policy change.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ReceiptAuthenticationIdentity {
+    pub receipt_digest: Digest,
+    pub policy_digest: Digest,
+    pub trust_store_digest: Digest,
+    pub revocation_epoch: u64,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcceptanceReceipt {
     pub receipt_version: u16,
@@ -497,6 +508,7 @@ pub struct AcceptanceReceipt {
     pub proof_root: Digest,
     pub closed_claims_root: Digest,
     pub verifier: VerifierIdentity,
+    pub authentication: Option<ReceiptAuthenticationIdentity>,
 }
 
 /// Accepted typestate. It intentionally exposes no constructor: only
@@ -541,6 +553,7 @@ impl AcceptedContract {
             proof_root: self.receipt.proof_root.clone(),
             closed_claims_root: self.receipt.closed_claims_root.clone(),
             verifier: self.receipt.verifier.clone(),
+            authentication: self.receipt.authentication.clone(),
         }
     }
 

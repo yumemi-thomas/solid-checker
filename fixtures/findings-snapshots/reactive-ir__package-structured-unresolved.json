@@ -2,6 +2,36 @@
   "status": "uncertifiable",
   "findings": [
     {
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-structured-unresolved/App.ts",
+      "start": 103,
+      "end": 155,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-structured-unresolved/App.ts",
+      "start": 389,
+      "end": 399,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-structured-unresolved/App.ts",
+      "start": 614,
+      "end": 629,
+      "fixes": 0
+    },
+    {
       "rule": "v1/reactive-dispatch-unresolved",
       "code": "SC9012",
       "kind": "uncertifiable",

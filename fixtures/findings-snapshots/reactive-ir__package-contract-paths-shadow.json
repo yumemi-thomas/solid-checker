@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/package-contract-paths-shadow/App.ts",
-      "start": 1137,
-      "end": 1142,
+      "start": 45,
+      "end": 107,
       "fixes": 0
     }
   ]

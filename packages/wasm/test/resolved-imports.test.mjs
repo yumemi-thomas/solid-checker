@@ -15,14 +15,9 @@ const DOCUMENT = readFileSync(
   join(FIXTURE, "node_modules/reactive-package/solid-reactivity.json"),
   "utf8"
 );
-const RECEIPT = readFileSync(
-  join(FIXTURE, "node_modules/reactive-package/solid-reactivity.receipt.json"),
-  "utf8"
-);
-const RECEIPT_VALUE = JSON.parse(RECEIPT);
-const CATALOG = JSON.parse(
-  readFileSync(join(FIXTURE, ".solid-checker/accepted-contracts.json"), "utf8")
-);
+const DOCUMENT_VALUE = JSON.parse(DOCUMENT);
+const POLICY1_RECEIPT = JSON.stringify({ receiptVersion: 1 });
+const UNAUTHENTICATED_POLICY2_RECEIPT = JSON.stringify({ receiptVersion: 2 });
 const PACKAGE_MANIFEST = readFileSync(
   join(FIXTURE, "node_modules/reactive-package/package.json"),
   "utf8"
@@ -30,19 +25,40 @@ const PACKAGE_MANIFEST = readFileSync(
 const SOURCE = "export const answer = 42;\n";
 
 function rebaseImport(root) {
-  const input = structuredClone(CATALOG.contracts[0].import);
+  const contractPackage = DOCUMENT_VALUE.package;
+  const artifact = DOCUMENT_VALUE.entrypoints["."];
   const packageRoot = join(root, "node_modules/reactive-package");
   const manifest = join(packageRoot, "package.json");
-  input.importer = join(root, "App.ts");
-  input.packageRoot = packageRoot;
-  input.packageManifest.path = manifest;
-  input.runtime.path = manifest;
-  input.declarations.path = manifest;
-  for (const binding of Object.values(input.exports)) {
-    binding.runtime.module.path = manifest;
-    binding.declarations.module.path = manifest;
-  }
-  return input;
+  const digest = `sha256:${artifact.artifact.sha256}`;
+  const file = { path: manifest, digest };
+  return {
+    authority: "host",
+    closure: {
+      digest: `sha256:${artifact.artifact.closureSha256}`,
+      entries: [{ ...file, path: "./package.json", role: "manifest" }]
+    },
+    declarationTrace: { branch: "" },
+    declarations: file,
+    exports: Object.fromEntries(
+      Object.keys(artifact.exports).map(name => [
+        name,
+        {
+          declarations: { exportName: name, module: file },
+          runtime: { exportName: name, module: file }
+        }
+      ])
+    ),
+    importer: join(root, "App.ts"),
+    packageIntegrity: contractPackage.integrity,
+    packageManifest: file,
+    packageName: contractPackage.name,
+    packageRoot,
+    packageVersion: contractPackage.version,
+    requestedEntrypoint: ".",
+    runtime: file,
+    runtimeTrace: { branch: "" },
+    specifier: contractPackage.name
+  };
 }
 
 function request(root, acceptedContracts) {
@@ -87,37 +103,38 @@ test("omitting acceptedContracts leaves external behavior unaccepted", () => {
   }
 });
 
-test("a receipt-issued stable-v1 document crosses the WASM boundary", () => {
+test("policy-1 receipts are obsolete at the WASM boundary", () => {
   const root = project();
   try {
-    const snapshot = check(
-      request(root, [{ document: DOCUMENT, receipt: RECEIPT, import: rebaseImport(root) }])
+    assert.throws(
+      () =>
+        check(
+          request(root, [
+            { document: DOCUMENT, receipt: POLICY1_RECEIPT, import: rebaseImport(root) }
+          ])
+        ),
+      /unsupported acceptance receipt version 1.*expected 2/i
     );
-    assert.equal(snapshot.status, "certified");
-    assert.deepEqual(snapshot.packageSummaries, [
-      {
-        name: "reactive-package",
-        version: "1.0.0",
-        contractHash: RECEIPT_VALUE.semanticDigest,
-        evidence: "accepted",
-        exportsAnalyzed: 0
-      }
-    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("a receipt mismatch is refused before analysis", () => {
+test("policy-2 receipts without issuer provenance are refused before analysis", () => {
   const root = project();
   try {
-    const receipt = JSON.stringify({
-      ...RECEIPT_VALUE,
-      semanticDigest: `sha256:${"0".repeat(64)}`
-    });
     assert.throws(
-      () => check(request(root, [{ document: DOCUMENT, receipt, import: rebaseImport(root) }])),
-      /semanticDigest|semantic digest/i
+      () =>
+        check(
+          request(root, [
+            {
+              document: DOCUMENT,
+              receipt: UNAUTHENTICATED_POLICY2_RECEIPT,
+              import: rebaseImport(root)
+            }
+          ])
+        ),
+      /requires authenticated issuer provenance/i
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -129,7 +146,12 @@ test("temporary schema-version-2 documents have no compatibility decoder", () =>
   try {
     const document = JSON.stringify({ ...JSON.parse(DOCUMENT), schemaVersion: 2 });
     assert.throws(
-      () => check(request(root, [{ document, receipt: RECEIPT, import: rebaseImport(root) }])),
+      () =>
+        check(
+          request(root, [
+            { document, receipt: UNAUTHENTICATED_POLICY2_RECEIPT, import: rebaseImport(root) }
+          ])
+        ),
       /schema version 2.*expected 1/i
     );
   } finally {
@@ -144,7 +166,12 @@ test("legacy schema-version-1 documents have no compatibility decoder", () => {
     delete legacy.format;
     const document = JSON.stringify(legacy);
     assert.throws(
-      () => check(request(root, [{ document, receipt: RECEIPT, import: rebaseImport(root) }])),
+      () =>
+        check(
+          request(root, [
+            { document, receipt: UNAUTHENTICATED_POLICY2_RECEIPT, import: rebaseImport(root) }
+          ])
+        ),
       /contract document cannot be decoded.*missing field.*format/i
     );
   } finally {

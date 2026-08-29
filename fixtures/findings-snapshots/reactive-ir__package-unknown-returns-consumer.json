@@ -7,8 +7,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/package-unknown-returns-consumer/App.ts",
-      "start": 20,
-      "end": 30,
+      "start": 0,
+      "end": 64,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-unknown-returns-consumer/App.ts",
+      "start": 0,
+      "end": 64,
       "fixes": 0
     }
   ]

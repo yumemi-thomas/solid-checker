@@ -21,7 +21,7 @@ use solid_facts_backend::{
     contract_identity_scope, default_typefacts_executable, dialect,
     encode_inferred_contract_workflow, merge_contract_proposals, merge_plans,
     read_accepted_contract_catalog, review_contract_document,
-    semantic_demand_options_for_enablement, validate_contract_document, verify_contract_proposal,
+    semantic_demand_options_for_enablement, validate_contract_document,
 };
 use solid_reactive_ir::{RuntimeBuild, RuntimeEnvironment, RuntimeRendering, RuntimeTarget};
 
@@ -97,18 +97,6 @@ struct Request {
     review_contract: String,
     #[serde(default)]
     review_output: String,
-    #[serde(default)]
-    verify_proposal: String,
-    #[serde(default)]
-    verify_plan: String,
-    #[serde(default)]
-    verify_proof: String,
-    #[serde(default)]
-    verify_artifact_case: String,
-    #[serde(default)]
-    accepted_output: String,
-    #[serde(default)]
-    receipt_output: String,
     #[serde(default)]
     runtime_probe_proposal: String,
     #[serde(default)]
@@ -269,37 +257,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &request.review_output,
             review_contract_document(&fs::read(&request.review_contract)?)?,
         )?;
-        return Ok(0);
-    }
-    if !request.verify_proposal.is_empty()
-        || !request.verify_plan.is_empty()
-        || !request.verify_proof.is_empty()
-        || !request.verify_artifact_case.is_empty()
-        || !request.accepted_output.is_empty()
-        || !request.receipt_output.is_empty()
-    {
-        if [
-            &request.verify_proposal,
-            &request.verify_plan,
-            &request.verify_proof,
-            &request.verify_artifact_case,
-            &request.accepted_output,
-            &request.receipt_output,
-        ]
-        .iter()
-        .any(|value| value.is_empty())
-        {
-            return Err("contract verification requires --verify-proposal, --verify-plan, --verify-proof, --verify-artifact-case, --accepted-output, and --receipt-output".into());
-        }
-        let accepted = verify_contract_proposal(
-            &fs::read(&request.verify_proposal)?,
-            &fs::read(&request.verify_plan)?,
-            &fs::read(&request.verify_proof)?,
-            &request.verify_artifact_case,
-            true,
-        )?;
-        fs::write(&request.accepted_output, accepted.document)?;
-        fs::write(&request.receipt_output, accepted.receipt)?;
         return Ok(0);
     }
     if !request.runtime_probe_proposal.is_empty()
@@ -687,12 +644,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut merge_proposal_plan_output = String::new();
     let mut review_contract = String::new();
     let mut review_output = String::new();
-    let mut verify_proposal = String::new();
-    let mut verify_plan = String::new();
-    let mut verify_proof = String::new();
-    let mut verify_artifact_case = String::new();
-    let mut accepted_output = String::new();
-    let mut receipt_output = String::new();
     let mut runtime_probe_proposal = String::new();
     let mut runtime_probe_proposal_plan = String::new();
     let mut runtime_probe_request = String::new();
@@ -786,30 +737,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--review-output=") {
             review_output = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--verify-proposal=") {
-            verify_proposal = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--verify-plan=") {
-            verify_plan = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--verify-proof=") {
-            verify_proof = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--verify-artifact-case=") {
-            verify_artifact_case = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--accepted-output=") {
-            accepted_output = value.into();
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--receipt-output=") {
-            receipt_output = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--package-name=") {
@@ -944,20 +871,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--review-output" => {
                 review_output = args.next().ok_or("--review-output needs a path")?
             }
-            "--verify-proposal" => {
-                verify_proposal = args.next().ok_or("--verify-proposal needs a path")?
-            }
-            "--verify-plan" => verify_plan = args.next().ok_or("--verify-plan needs a path")?,
-            "--verify-proof" => verify_proof = args.next().ok_or("--verify-proof needs a path")?,
-            "--verify-artifact-case" => {
-                verify_artifact_case = args.next().ok_or("--verify-artifact-case needs a value")?
-            }
-            "--accepted-output" => {
-                accepted_output = args.next().ok_or("--accepted-output needs a path")?
-            }
-            "--receipt-output" => {
-                receipt_output = args.next().ok_or("--receipt-output needs a path")?
-            }
             "--runtime-probe-proposal" => {
                 runtime_probe_proposal =
                     args.next().ok_or("--runtime-probe-proposal needs a path")?
@@ -1041,7 +954,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         && merge_contract_paths.is_empty()
         && merge_contract_output.is_empty()
         && review_contract.is_empty()
-        && verify_proposal.is_empty()
         && runtime_probe_proposal.is_empty()
     {
         project.canonicalize()?
@@ -1078,12 +990,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         merge_proposal_plan_output,
         review_contract,
         review_output,
-        verify_proposal,
-        verify_plan,
-        verify_proof,
-        verify_artifact_case,
-        accepted_output,
-        receipt_output,
         runtime_probe_proposal,
         runtime_probe_proposal_plan,
         runtime_probe_request,

@@ -5,10 +5,7 @@ use solid_facts_backend::{
     ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
     ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
     ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
-    StandaloneResolutionAdapter, encode_acceptance_receipt, load_accepted_contract,
-};
-use solid_reactive_ir::contract_semantics::{
-    AcceptanceReceipt, Digest as SemanticDigest, VerifierIdentity,
+    StandaloneResolutionAdapter, load_accepted_contract,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -163,7 +160,7 @@ fn malformed_documents_fail_through_the_single_loading_interface() {
 }
 
 #[test]
-fn normalized_stable_schema_refuses_a_receipt_not_issued_for_its_semantics() {
+fn normalized_stable_schema_reports_policy1_receipts_as_obsolete() {
     let document = development_document();
     let receipt = format!(
         "{{\"receiptVersion\":1,\"wireDigest\":\"{}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-2-test\",\"policy\":1}}}}",
@@ -174,8 +171,9 @@ fn normalized_stable_schema_refuses_a_receipt_not_issued_for_its_semantics() {
     let result = load_accepted_contract(&document, receipt.as_bytes(), &resolved());
     assert!(matches!(
         result,
-        Err(ContractFailure::ReceiptMismatch {
-            field: "semanticDigest"
+        Err(ContractFailure::UnsupportedReceiptVersion {
+            expected: 2,
+            actual: 1
         })
     ));
 }
@@ -196,7 +194,7 @@ fn replacement_contract_requires_the_format_discriminator() {
 }
 
 #[test]
-fn a_stale_receipt_is_rejected_before_normalization() {
+fn policy1_stale_receipt_is_obsolete_before_any_binding_is_trusted() {
     let document = development_document();
     let zeros = "0".repeat(64);
     let receipt = format!(
@@ -205,8 +203,9 @@ fn a_stale_receipt_is_rejected_before_normalization() {
 
     assert!(matches!(
         load_accepted_contract(&document, receipt.as_bytes(), &resolved()),
-        Err(ContractFailure::ReceiptMismatch {
-            field: "wireDigest"
+        Err(ContractFailure::UnsupportedReceiptVersion {
+            expected: 2,
+            actual: 1
         })
     ));
 }
@@ -308,42 +307,4 @@ fn project_local_receipts_are_canonical_content_addressed_and_idempotent() {
     .unwrap();
     assert_eq!(uppercase, first);
     fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn acceptance_receipt_encoding_is_deterministic_and_complete() {
-    let semantic = |byte: char| {
-        SemanticDigest::parse(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
-    };
-    let receipt = AcceptanceReceipt {
-        receipt_version: 1,
-        wire_digest: semantic('1'),
-        semantic_model_version: 1,
-        semantic_digest: semantic('2'),
-        artifacts_digest: semantic('3'),
-        closure_digest: semantic('4'),
-        proof_root: semantic('5'),
-        closed_claims_root: semantic('6'),
-        verifier: VerifierIdentity {
-            build: "phase-11-test".into(),
-            policy: 1,
-        },
-    };
-    let first = encode_acceptance_receipt(&receipt).unwrap();
-    let second = encode_acceptance_receipt(&receipt).unwrap();
-    assert_eq!(first, second);
-    assert_eq!(first.last(), Some(&b'\n'));
-    let decoded: serde_json::Value = serde_json::from_slice(&first).unwrap();
-    assert_eq!(decoded["wireDigest"], receipt.wire_digest.as_str());
-    assert_eq!(decoded["semanticDigest"], receipt.semantic_digest.as_str());
-    assert_eq!(
-        decoded["artifactsDigest"],
-        receipt.artifacts_digest.as_str()
-    );
-    assert_eq!(decoded["closureDigest"], receipt.closure_digest.as_str());
-    assert_eq!(decoded["proofRoot"], receipt.proof_root.as_str());
-    assert_eq!(
-        decoded["closedClaimsRoot"],
-        receipt.closed_claims_root.as_str()
-    );
 }

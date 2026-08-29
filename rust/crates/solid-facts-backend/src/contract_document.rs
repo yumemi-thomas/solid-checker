@@ -59,10 +59,6 @@ pub struct SidecarDigests {
 }
 
 impl DecodedContractDocument {
-    pub(crate) const fn semantic_model_version(&self) -> u16 {
-        self.document.semantic_model_version
-    }
-
     pub(crate) fn normalize(self) -> Result<NormalizedContract, ContractFailure> {
         expand(self.document)
     }

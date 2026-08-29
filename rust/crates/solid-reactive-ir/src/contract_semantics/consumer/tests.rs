@@ -119,6 +119,7 @@ fn accepted() -> AcceptedContract {
                 build: "test".into(),
                 policy: 1,
             },
+            authentication: None,
         },
     }
 }

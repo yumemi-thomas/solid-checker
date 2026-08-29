@@ -4,7 +4,7 @@
   "proofVersion": 2,
   "receiptVersion": 2,
   "semanticModelVersion": 1,
-  "status": "internal-not-active",
+  "status": "active",
   "canonicalEncoding": {
     "name": "utf8-minified-ordered-json",
     "version": 1

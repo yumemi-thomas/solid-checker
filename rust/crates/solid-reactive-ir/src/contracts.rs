@@ -24,7 +24,8 @@ use super::{
 use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
 use crate::contract_semantics::{
     AcceptedContractIndex, AcceptedContractUse, ClaimDomain, KnowledgeSet, OperationKind,
-    OwnerSource, Requirement, Schedule, Tracking, ValueShape, ValueSource,
+    OwnerSource, Requirement, Schedule, Tracking, UncertifiableImportReason, ValueShape,
+    ValueSource,
 };
 use crate::identity::symbol_id;
 use crate::pipeline::parallel_slice_results;
@@ -682,13 +683,16 @@ fn resolve_contract_imports_inner(
             }
             let Some(contract) = exact.get(&(file.path.to_string(), import.module.to_string()))
             else {
-                if accepted.is_uncertifiable(file.path.as_str(), &import.module) {
+                if let Some(reason) =
+                    accepted.uncertifiable_reason(file.path.as_str(), &import.module)
+                {
                     push_missing_accepted_import(
                         &mut missing_exports,
                         file,
                         import,
                         entities,
                         dialect,
+                        reason,
                     );
                 }
                 continue;
@@ -971,6 +975,7 @@ fn push_missing_accepted_import(
     import: &solid_facts::ast::ImportFact,
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
+    reason: UncertifiableImportReason,
 ) {
     for binding in &import.bindings {
         if binding.type_only || !binding.runtime_referenced {
@@ -996,6 +1001,7 @@ fn push_missing_accepted_import(
                         &import.module,
                         export,
                         location(file.path.shared(), member.property),
+                        reason,
                     );
                 }
             }
@@ -1012,6 +1018,7 @@ fn push_missing_accepted_import(
                 &import.module,
                 export,
                 location(file.path.shared(), import.span),
+                reason,
             );
         }
     }
@@ -1022,6 +1029,7 @@ fn push_missing_accepted_export(
     module: &str,
     export: &str,
     location: Location,
+    reason: UncertifiableImportReason,
 ) {
     missing.push(StaticDefect {
         kind: StaticDefectKind::PackageContractExportMissing {
@@ -1030,7 +1038,15 @@ fn push_missing_accepted_export(
             reexported: false,
         },
         location,
-        analysis_context: "no receipt-accepted contract matches this exact import".into(),
+        analysis_context: match reason {
+            UncertifiableImportReason::Unspecified => {
+                "no receipt-accepted contract matches this exact import"
+            }
+            UncertifiableImportReason::ObsoletePolicy1 => {
+                "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+            }
+        }
+        .into(),
         fixes: vec![],
         uncertain: false,
     });

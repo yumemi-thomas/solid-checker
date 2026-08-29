@@ -13,7 +13,8 @@ use thiserror::Error;
 
 use super::{
     AcceptanceReceipt, AcceptedContract, ContractProposal, Digest, ModelError, NormalizedContract,
-    SemanticClaimId, SemanticClaimPath, SemanticClaimSubject, VerifierIdentity,
+    ReceiptAuthenticationIdentity, SemanticClaimId, SemanticClaimPath, SemanticClaimSubject,
+    VerifierIdentity,
 };
 
 pub const ACCEPTANCE_RECEIPT_VERSION: u16 = 1;
@@ -197,6 +198,7 @@ impl VerifiedContract {
             proof_root: self.proof_root,
             closed_claims_root: self.closed_claims_root,
             verifier: self.verifier,
+            authentication: None,
         };
         Ok(AcceptedContract {
             package,
@@ -608,6 +610,116 @@ pub fn validate_receipt_and_accept(
         selected_case,
         receipt,
     })
+}
+
+/// Receipt fields that remain authoritative only after the backend has
+/// authenticated a policy-2 issuer and its complete signed payload.
+#[doc(hidden)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthenticatedPolicy2Acceptance {
+    pub main_digest: Digest,
+    pub semantic_digest: Digest,
+    pub receipt_digest: Digest,
+    pub policy_digest: Digest,
+    pub closed_claims_root: Digest,
+    pub verifier_build_digest: Digest,
+    pub trust_store_digest: Digest,
+    pub revocation_epoch: u64,
+}
+
+/// Constructs analyzer typestate only from a backend-authenticated policy-2
+/// identity, while recomputing every contract-derived identity locally.
+#[doc(hidden)]
+pub fn accept_authenticated_policy2(
+    contract: NormalizedContract,
+    selected_artifact_case: &str,
+    authenticated: AuthenticatedPolicy2Acceptance,
+) -> Result<AcceptedContract, ReceiptValidationError> {
+    if authenticated.semantic_digest != *contract.semantic_digest() {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "semanticDigest",
+        });
+    }
+    let selected_case = contract
+        .artifact_case(selected_artifact_case)
+        .ok_or_else(|| ReceiptValidationError::MissingArtifactCase {
+            artifact_case: selected_artifact_case.into(),
+        })?
+        .clone();
+    if contract.artifact_cases().len() != 1 {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "selectedArtifactCase",
+        });
+    }
+    let actual_closed_claims_root = derive_closed_claims_root(&contract, &selected_case)?;
+    if authenticated.closed_claims_root != actual_closed_claims_root {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "closedClaimsRoot",
+        });
+    }
+    let receipt = AcceptanceReceipt {
+        receipt_version: 2,
+        wire_digest: authenticated.main_digest,
+        semantic_model_version: contract.semantic_model_version(),
+        semantic_digest: authenticated.semantic_digest,
+        artifacts_digest: artifacts_digest(contract.package(), &selected_case),
+        closure_digest: selected_case.dependency_closure.clone(),
+        proof_root: authenticated.receipt_digest.clone(),
+        closed_claims_root: authenticated.closed_claims_root,
+        verifier: VerifierIdentity {
+            build: authenticated.verifier_build_digest.as_str().into(),
+            policy: 2,
+        },
+        authentication: Some(ReceiptAuthenticationIdentity {
+            receipt_digest: authenticated.receipt_digest,
+            policy_digest: authenticated.policy_digest,
+            trust_store_digest: authenticated.trust_store_digest,
+            revocation_epoch: authenticated.revocation_epoch,
+        }),
+    };
+    Ok(AcceptedContract {
+        package: contract.package().clone(),
+        selected_case,
+        receipt,
+    })
+}
+
+/// Recomputes the closed-claim identity that a policy-2 receipt must bind.
+#[doc(hidden)]
+pub fn policy2_closed_claims_root(
+    contract: &NormalizedContract,
+    selected_artifact_case: &str,
+) -> Result<Digest, ReceiptValidationError> {
+    let selected_case = contract
+        .artifact_case(selected_artifact_case)
+        .ok_or_else(|| ReceiptValidationError::MissingArtifactCase {
+            artifact_case: selected_artifact_case.into(),
+        })?;
+    derive_closed_claims_root(contract, selected_case)
+}
+
+fn derive_closed_claims_root(
+    contract: &NormalizedContract,
+    selected_case: &super::ArtifactCase,
+) -> Result<Digest, ReceiptValidationError> {
+    let mut closed = BTreeSet::new();
+    for (export_name, export) in &selected_case.exports {
+        for path in super::validate::closed_claims(export) {
+            let subject = SemanticClaimSubject {
+                artifact_case: selected_case.id.clone(),
+                export: export_name.clone(),
+                path: SemanticClaimPath::Domain(path),
+            };
+            let claim = contract
+                .claim_id(&subject)
+                .map_err(|error| ReceiptValidationError::Claim(error.to_string()))?;
+            closed.insert(claim);
+        }
+    }
+    if closed.is_empty() {
+        return Err(ReceiptValidationError::NoClosedClaims);
+    }
+    Ok(closed_claims_root(closed.iter()))
 }
 
 fn canonicalize_digests(values: &mut Vec<Digest>) {

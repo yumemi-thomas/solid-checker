@@ -1,14 +1,14 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "no-destructure",
-      "code": "SC1003",
-      "kind": "violation",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/package-store-destructure/App.tsx",
-      "start": 80,
-      "end": 86,
+      "start": 0,
+      "end": 44,
       "fixes": 0
     }
   ]

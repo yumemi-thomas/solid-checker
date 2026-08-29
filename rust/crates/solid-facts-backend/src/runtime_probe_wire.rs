@@ -929,15 +929,12 @@ mod tests {
 
     #[test]
     fn runtime_probe_v2_plan_and_evaluation_keep_semantic_judgement_in_rust() {
-        let bundle = crate::first_party_bundles::solid2_rc3_bundles()
-            .unwrap()
-            .into_iter()
-            .find(|bundle| bundle.file_stem == "solid-js")
-            .unwrap();
-        let contract = contract_document::decode(&bundle.document)
-            .unwrap()
-            .normalize()
-            .unwrap();
+        let contract = contract_document::decode(include_bytes!(
+            "../../../../pkg/contracts/bundled/solid-v2/solid-js.json"
+        ))
+        .unwrap()
+        .normalize()
+        .unwrap();
         let proposal = encode_proposal_artifacts(&contract, Vec::new(), false).unwrap();
         let plan: serde_json::Value = serde_json::from_slice(&proposal.plan).unwrap();
         let positive = &plan["positiveOperations"][0];

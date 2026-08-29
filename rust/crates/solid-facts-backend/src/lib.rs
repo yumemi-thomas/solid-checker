@@ -18,7 +18,6 @@ mod evidence_sidecars;
 mod first_party_bundles;
 mod inferred_contract;
 mod phase16_benchmark;
-mod proof_checker;
 mod proposal_generation;
 mod runtime_probe_wire;
 mod runtime_probes;
@@ -56,12 +55,11 @@ pub use contract_interface::{
     ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
     ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
     StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
-    encode_acceptance_receipt, load_accepted_contract, load_accepted_contract_index,
-    read_accepted_contract_catalog,
+    load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
+    load_authenticated_policy2_embedded_contract, read_accepted_contract_catalog,
 };
 pub use contract_workflow::{
-    AcceptedArtifacts, ContractWorkflowError, ProposalArtifacts, merge_plans,
-    review as review_contract_document, verify as verify_contract_proposal,
+    ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
 };
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
@@ -83,10 +81,6 @@ pub use first_party_bundles::{
     solid1_bundles, solid2_rc3_bundles,
 };
 pub use phase16_benchmark::phase16_benchmark_report;
-pub use proof_checker::{
-    ProposalProofRequest, ProposalVerificationError, ProposalVerificationRequest,
-    VerifiedContractArtifact, verify_and_encode_planned_proposal, verify_planned_proposal,
-};
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
     ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,

@@ -1,0 +1,449 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-checker-package-contract-phase19-receipt-migration",
+  "cutAt": "2026-08-30",
+  "baselineReceipts": 73,
+  "reissued": 0,
+  "retired": 73,
+  "pending": 0,
+  "rows": [
+    {
+      "path": "fixtures/package-contracts/carried-value-kind/node_modules/laundered-dependency/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/package-contracts/carried-value-kind/node_modules/laundered-typed-dependency/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/package-contracts/torture-environment-conditions/node_modules/environment-dependent-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/package-contracts/uncaptured-source-return/node_modules/uncharted-helpers/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/package-contracts/unresolved-contract-export-attribution/node_modules/partial-contract-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-callback-arguments-consumer/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-callback-consumer/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-consumer/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-contract-install-shapes/node_modules/ambient-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-contract-install-shapes/node_modules/redirected-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-contract-install-shapes/node_modules/subpath-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-contract-paths-shadow/node_modules/other-reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-contract-paths-shadow/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-parameter-member-consumer/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-return-consumer/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-store-consumer/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-store-destructure/node_modules/reactive-router/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-structured-return/node_modules/structured-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-structured-unresolved/node_modules/bare-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-unknown-callback-consumer/node_modules/partial-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-unknown-export/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-unknown-returns-consumer/node_modules/partial-returns-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/package-variant-precedence-consumer/node_modules/conditional-variant-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "fixtures/reactive-ir/v1-reactivity/node_modules/uncharted-helpers/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/debounce-root-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/rootless-root-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/scheduled-root-browser.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/scheduled-root-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-h-jsx-dev-runtime-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-h-jsx-runtime-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-root-browser-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-root-browser-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-root-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-store-browser-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-store-browser-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-store-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-universal-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-universal-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-web-browser-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-web-browser-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-web-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v1/solid-web-storage-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v2/solid-js.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v2/solidjs-signals.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v2/solidjs-web--server-functions-browser-client.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v2/solidjs-web--server-functions-node-server.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "pkg/contracts/bundled/solid-v2/solidjs-web.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/debounce-root-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/rootless-root-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/scheduled-root-browser.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/scheduled-root-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-h-jsx-dev-runtime-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-h-jsx-runtime-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-root-browser-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-root-browser-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-root-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-store-browser-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-store-browser-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-store-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-universal-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-universal-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-web-browser-development.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-web-browser-production.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-web-node.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v1/solid-web-storage-default.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v2/solid-js.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v2/solidjs-signals.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v2/solidjs-web--server-functions-browser-client.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v2/solidjs-web--server-functions-node-server.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v2/solidjs-web--web-node-server.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-dialect/contracts/solid-v2/solidjs-web.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    },
+    {
+      "path": "rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/reactive-package/solid-reactivity.receipt.json",
+      "status": "retired",
+      "refusalOwner": "probe-gate",
+      "refusal": "mandatory policy-2 probe harness binding unavailable"
+    }
+  ]
+}

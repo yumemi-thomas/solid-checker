@@ -1,5 +1,5 @@
 {
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "contracts": [
     {
       "document": "node_modules/structured-package/solid-reactivity.json",
@@ -91,7 +91,7 @@
         },
         "specifier": "structured-package"
       },
-      "receipt": "node_modules/structured-package/solid-reactivity.receipt.json"
+      "status": "obsolete-policy1"
     }
   ],
   "format": "solid-checker-accepted-contract-catalog"

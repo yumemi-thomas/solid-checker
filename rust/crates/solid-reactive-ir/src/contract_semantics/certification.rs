@@ -17,8 +17,7 @@ const PROOF_VERSION: u16 = 2;
 const RECEIPT_VERSION: u16 = 2;
 const POLICY_DIGEST_DOMAIN: &str = "solid-checker:contract-proof-policy:v2";
 
-/// Internal policy-2 authority. The product loader remains on policy 1 until
-/// the receipts, catalogs, native loader, and WASM loader move atomically.
+/// Active policy-2 authority for package-contract certification and loading.
 pub struct ProofPolicy2;
 
 /// Archive budgets consumed by the backend snapshot boundary. These values
@@ -1598,7 +1597,7 @@ const fn manifest() -> PolicyManifest {
         proof_version: PROOF_VERSION,
         receipt_version: RECEIPT_VERSION,
         semantic_model_version: SEMANTIC_MODEL_VERSION,
-        status: "internal-not-active",
+        status: "active",
         canonical_encoding: CanonicalEncoding {
             name: "utf8-minified-ordered-json",
             version: 1,
@@ -1738,7 +1737,7 @@ mod tests {
     ));
 
     #[test]
-    fn policy_2_is_canonical_rust_owned_and_inactive() {
+    fn policy_2_is_canonical_rust_owned_and_active() {
         let policy = proof_policy_2();
 
         assert_eq!(policy.policy_version(), 2);
@@ -1747,8 +1746,10 @@ mod tests {
         assert_eq!(policy.semantic_model_version(), SEMANTIC_MODEL_VERSION);
         assert_eq!(
             policy.digest().as_str(),
-            "sha256:8b068528cdf58fb6a2dd0a8c8d38e7c880fced243cf250ac1723bc5fb32e5d58"
+            "sha256:23d11125ffeb3c57cace0f898f46895dfb383113ff3637d409eb719eaaf088fd"
         );
+        // Policy-1 replay types remain only for historical internal tests;
+        // the backend loader no longer accepts their receipts.
         assert_eq!(PROOF_POLICY_VERSION, 1);
         assert_eq!(ACCEPTANCE_RECEIPT_VERSION, 1);
 

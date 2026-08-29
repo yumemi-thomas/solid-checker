@@ -452,6 +452,7 @@ fn stored_receipt_cannot_invent_an_acceptance_with_no_closed_claim() {
             build: "phase-12-test".into(),
             policy: PROOF_POLICY_VERSION,
         },
+        authentication: None,
     };
     assert_eq!(
         validate_receipt_and_accept(contract, &selected.id, receipt),

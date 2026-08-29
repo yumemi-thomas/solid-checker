@@ -14,21 +14,26 @@ a temporary-v2 decoder nor compatibility with the retired legacy-v1 shape.
 
 ## Trust boundary
 
-One accepted input consists of three independently checked values:
+One accepted policy-2 input consists of four independently checked values:
 
 - the exact JSON text of a normalized stable-v1 main document;
-- the exact JSON text of a proof-issued receipt bound to those document bytes;
+- the exact canonical JSON text of a receipt-version-2 payload bound to those
+  document bytes and every certification root;
+- explicit immutable built-in provenance or a configured persistent-local or
+  portable Ed25519 trust-store entry, including policy/build constraints and
+  revocation epoch;
 - a `ResolvedImport` acquired by the host for one import occurrence, including
   exact package name, version, integrity, runtime and declaration artifacts,
   export identities, resolution traces, and the dependency-closure digest.
 
-The native CLI discovers project inputs through
-`.solid-checker/accepted-contracts.json`. WASM hosts pass the same three values
-through `acceptedContracts`. The analyzer validates the wire document and
-receipt, normalizes once, checks the exact import/artifact binding, and gives
-analysis consumers only a wire-independent semantic index. Package names,
-filenames, aliases, omitted fields, schema versions, and receipt structure stop
-at that boundary.
+The native CLI discovers project state through
+`.solid-checker/accepted-contracts.json`. During the Phase 19 atomic cut,
+catalog version 2 records retired policy-1 entries only as
+`status: "obsolete-policy1"`; those entries produce an explicit uncertifiable
+result and carry no receipt bytes. WASM `acceptedContracts` similarly refuses
+policy 1 and raw policy-2 bytes without issuer provenance. The authenticated
+loader normalizes once, checks exact import/artifact binding, and gives analysis
+consumers only a wire-independent semantic index.
 
 An installed `solid-reactivity.json` without a matching receipt and exact
 catalog entry is a proposal, not evidence. A same-named package, declaration
@@ -134,62 +139,47 @@ environment mismatch, inconsistent repetitions, or finite non-observation stay
 local refusals. A contradiction can block one proposed closed claim; a passing
 probe can never establish closure.
 
-## Proof verification and receipts
+## Policy-2 certification and receipts
 
-Only the Rust proof checker may turn proposed closure into accepted closure:
+Caller-authored proof transcripts no longer issue receipts. The former
+`contract verify --proof` route deterministically refuses, and receipt version
+1 is obsolete. Rust derives a policy-2 demand graph, verifies each applicable
+witness through its owning producer, treats mandatory probes only as a veto,
+and invokes a configured issuer only after the complete graph closes. A
+receipt-version-2 payload binds exact main/semantic identity; every artifact,
+producer, dependency, probe, witness, and closed-claim root; verifier
+source/build; and issuer kind, scope, key, algorithm, and signature.
 
-```sh
-solid-checker contract verify solid-reactivity.json \
-  --plan solid-reactivity.json.proposal.json \
-  --proof proof-transcript.json \
-  --artifact-case artifact-case:…
-```
-
-Verification replays every proof family demanded by each claim, checks complete
-censuses and probe contradictions, finalizes the selected artifact case, and
-writes an accepted document plus a receipt. The receipt binds at least:
-
-- exact main-document bytes and normalized semantic digest;
-- package, artifact-case, runtime/declaration, and closure identities;
-- proof policy, verifier identity, proof roots, and the exact closed-claim root.
-
-Changing document bytes, normalized semantics, artifact identity, closure,
-proof policy, or a closed claim invalidates replay. Canonical semantic digests
-sort unordered sets/maps, normalize equivalent restricted guards and numeric
-spellings, preserve recursive leaf boundaries and all four knowledge states,
-and exclude evidence-sidecar ordering or presentation. Semantically equivalent
-normalizations have one digest; sibling or artifact changes do not.
-
-Register accepted output explicitly rather than copying it into a magic
-directory:
+The automatic `solid-checker contract certify` orchestration is the next Phase
+19 slice. Until it is available and every required producer can answer, a
+proposal remains open and no catalog pointer is published. The current
+policy-1 migration catalog shape is deliberately refusal-only:
 
 ```json
 {
   "format": "solid-checker-accepted-contract-catalog",
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "contracts": [
     {
-      "document": "contracts/example.accepted.json",
-      "receipt": "contracts/example.receipt.json",
+      "document": "contracts/example/solid-reactivity.json",
+      "status": "obsolete-policy1",
       "import": { "specifier": "example-package", "…": "full ResolvedImport" }
     }
   ]
 }
 ```
 
-Paths are resolved relative to the catalog. Duplicate exact import bindings,
-missing files, byte drift, invalid receipts, unresolved exports, ambiguous
-artifact selection, or mismatched package identity fail closed.
+Paths are resolved relative to the catalog. An obsolete-policy entry supplies
+no semantics; it preserves the exact import demand and reports why the prior
+claim cannot be used.
 
 ## Bundled first-party contracts
 
-Receipt-issued Solid 1.x and Solid 2 RC.3 contracts live in both
-`pkg/contracts/bundled/` and
-`rust/crates/solid-dialect/contracts/`. Each dialect has a `bundle-index.json`;
-runtime locks and dialect manifests bind the exact published authority. Run
-`make contracts` to regenerate both physical sets and `make
-contract-conformance` to verify byte identity, receipt roots, closure census,
-and registry pins.
+The checked Solid 1.x and Solid 2 RC.3 main documents remain proposal/audit
+oracles in both `pkg/contracts/bundled/` and
+`rust/crates/solid-dialect/contracts/`. Their active bundle indexes are empty:
+all 24 former first-party artifact cases lost policy-1 authority at the atomic
+cut and none can be reissued before the mandatory probe harness is bound.
 
 The bundle is selected by exact installed artifact identity and environment,
 never by package name. Reduced fixture stubs and byte-different local copies are

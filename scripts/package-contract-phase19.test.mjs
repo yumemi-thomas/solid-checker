@@ -4,12 +4,13 @@ import { describe, test } from "vitest";
 import {
   auditPhase19Baseline,
   auditPhase19BaselineArtifact,
+  auditPhase19Cut,
   auditPhase19DemandAuthority,
   auditPhase19Policy
 } from "./package-contract-phase19.mjs";
 
 describe("Phase 19 authenticated proof-policy baseline", () => {
-  test("freezes the policy-1 authority and refusal envelope before replacement", () => {
+  test("retains the immutable policy-1 baseline as historical evidence", () => {
     assert.deepEqual(auditPhase19Baseline(), {
       stableMainDocuments: 130,
       activeReceiptDocuments: 73,
@@ -48,22 +49,42 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
     });
   });
 
-  test("pins the internal policy-2 audit rendering and golden digest", () => {
+  test("pins the active policy-2 audit rendering and golden digest", () => {
     assert.deepEqual(auditPhase19Policy(), {
       policyVersion: 2,
       proofVersion: 2,
       receiptVersion: 2,
       semanticModelVersion: 1,
-      status: "internal-not-active",
+      status: "active",
       artifactPrerequisiteFamilies: 6,
       claimFamilies: 9,
       policyDigest:
-        "sha256:8b068528cdf58fb6a2dd0a8c8d38e7c880fced243cf250ac1723bc5fb32e5d58"
+        "sha256:23d11125ffeb3c57cace0f898f46895dfb383113ff3637d409eb719eaaf088fd"
     });
   });
 
-  test("keeps the checked-in baseline inventory equal to the executable audit", () => {
+  test("reads the historical baseline without reinterpreting current source", () => {
     assert.deepEqual(auditPhase19BaselineArtifact(), auditPhase19Baseline());
+  });
+
+  test("closes every baseline receipt row in the policy-2 atomic cut", () => {
+    assert.deepEqual(auditPhase19Cut(), {
+      stableMainDocuments: 130,
+      activePolicy2Receipts: 0,
+      activePolicy1Receipts: 0,
+      baselineReceipts: 73,
+      reissuedReceipts: 0,
+      retiredReceipts: 73,
+      pendingReceipts: 0,
+      checkedCorpusShortcuts: 0,
+      callerProofIssuancePaths: 0,
+      obsoletePolicy1Catalogs: 21,
+      proofVersion: 2,
+      receiptVersion: 2,
+      policyStatus: "active",
+      policyDigest:
+        "sha256:23d11125ffeb3c57cace0f898f46895dfb383113ff3637d409eb719eaaf088fd"
+    });
   });
 
   test("classifies every policy-2 demand against an existing producer guarantee", () => {
