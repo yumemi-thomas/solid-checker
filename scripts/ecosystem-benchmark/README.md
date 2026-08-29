@@ -134,12 +134,15 @@ definition burns the full `--timeout` budget (300s by default) every run. That
 one probe dominates the sentinel's wall clock -- 23 probes take a little over
 five minutes, almost all of it waiting for that one. It is kept deliberately:
 dropping it would leave the `timeout` path unexercised, and a classification
-regression there would go unnoticed. The PR workflow passes `--timeout 120`:
-the pinned probe still reaches the same `timeout during generate` path, while
-the workflow finishes below the external runner-shutdown window observed with
-the 300-second operator default. `make ecosystem-sentinel` deliberately keeps
-that default for local reproduction. Lower the timeout elsewhere only after
-confirming the probe still times out in the same phase.
+regression there would go unnoticed. The PR workflow passes
+`--timeout 120 --concurrency 8`: 120 seconds keeps every non-timeout probe on
+its expected classification, and the runner's designed eight-worker cap avoids
+stretching the set across extra waves on a smaller CI machine. The pinned
+timeout probe still reaches `timeout during generate`, while the workflow stays
+below the external five-minute job boundary observed in CI.
+`make ecosystem-sentinel` deliberately keeps the 300-second default for local
+reproduction. Lower the timeout elsewhere only after confirming every probe,
+not just the expected timeout, keeps the same classification.
 
 Do not hand-invent a probe id — always copy it from a manifest row's `probes`
 array, since the id encodes the exact package version, Solid target, and

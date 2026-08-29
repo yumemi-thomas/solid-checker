@@ -94,6 +94,6 @@ test("the PR ecosystem sentinel keeps its real timeout probe within the CI runne
 
   assert.match(
     sentinel,
-    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --timeout 120$/m,
+    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --timeout 120 --concurrency 8$/m,
   );
 });
