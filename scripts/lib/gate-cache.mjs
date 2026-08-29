@@ -59,7 +59,7 @@ import process from "node:process";
  * Every existing entry becomes unreadable, which is the intent: a wrong entry
  * must never be replayed by a correct reader.
  */
-export const CACHE_FORMAT_VERSION = 2;
+export const CACHE_FORMAT_VERSION = 3;
 
 const bunVersion = globalThis.Bun?.version;
 export const runtimeIdentity = bunVersion

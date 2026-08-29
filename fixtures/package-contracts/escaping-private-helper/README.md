@@ -152,7 +152,7 @@ nothing here is widened.
 
 `JSX` is an `export namespace` inside the module, exactly as solid-js declares
 it — the published package contributes no *global* `JSX`, which is why a real
-Solid project sets `jsxImportSource: "solid-js"`. The temporary-v2 package
+Solid project sets `jsxImportSource: "solid-js"`. The stable-v1 package
 producer writes an isolated analysis config with `jsx: "preserve"` and no
 `jsxImportSource`, so during generation no `JSX` namespace is in scope at all.
 Two consequences, both recorded rather than papered over:

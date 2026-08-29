@@ -18,7 +18,7 @@ use solid_reactive_ir::contract_semantics::{
 };
 use thiserror::Error;
 
-use crate::{contract_document_v2, proposal_generation::PlannedProposal};
+use crate::{contract_document, proposal_generation::PlannedProposal};
 
 pub const PROOF_EVIDENCE_FORMAT: &str = "solid-checker-proof-evidence";
 pub const PROBE_EVIDENCE_FORMAT: &str = "solid-checker-runtime-probe-evidence";
@@ -357,7 +357,7 @@ pub fn validate_evidence_sidecars(
     proof_bytes: Option<&[u8]>,
     probe_bytes: Option<&[u8]>,
 ) -> Result<ValidatedEvidenceSidecars, EvidenceSidecarError> {
-    let decoded = contract_document_v2::decode(main_document)?;
+    let decoded = contract_document::decode(main_document)?;
     let references = decoded.sidecar_digests()?;
     let normalized = decoded.normalize()?;
     if normalized.semantic_model_version() != catalog.contract.semantic_model_version()

@@ -1,4 +1,4 @@
-// Temporary-v2 package proposal producer.
+// Stable package-contract proposal producer.
 //
 // Node owns exact artifact acquisition and process/file lifecycle. Rust owns
 // semantic inference, normalization, proposal closure weakening, compact
@@ -23,7 +23,7 @@ import { resolvePackageArtifacts } from "./artifact-resolution.mjs";
 export const packageContractHelp = `Usage:
   solid-checker contract generate --integrity <SRI> [OPTIONS]
 
-Generates an unaccepted temporary schema-version-2 proposal. Exact artifact
+Generates an unaccepted stable schema-version-1 proposal. Exact artifact
 identity is acquired independently and Rust owns all semantic normalization.
 The proposal does not become analyzer input until proof verification issues a
 receipt for its exact bytes.
@@ -277,7 +277,7 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     options.entrypoints
   );
   const output = resolve(options.output || join(packageRoot, "solid-reactivity.json"));
-  const scratch = mkdtempSync(join(tmpdir(), "solid-checker-contract-v2-"));
+  const scratch = mkdtempSync(join(tmpdir(), "solid-checker-contract-"));
   const proposals = [];
   let emittedArtifactCases = 0;
   const refusals = wildcardRefusals.map(entrypoint => ({
@@ -387,7 +387,7 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     version: manifest.version,
     output,
     plan: `${output}.proposal.json`,
-    schemaVersion: 2,
+    schemaVersion: 1,
     entrypoints: entrypoints.length,
     artifactCases: emittedArtifactCases,
     refusedArtifactCases: refusals.length,
@@ -395,7 +395,7 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
   };
   if (!quiet) {
     process.stdout.write(
-      `generated unaccepted temporary-v2 proposal for ${manifest.name}@${manifest.version} at ${output}` +
+      `generated unaccepted stable contract proposal for ${manifest.name}@${manifest.version} at ${output}` +
         (refusals.length
           ? `; ${refusals.length} artifact case(s) refused and omitted`
           : "") +

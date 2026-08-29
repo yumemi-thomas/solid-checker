@@ -44,7 +44,7 @@ name-only fallback is involved.
 - `./direct` — the source-level control. Its entry file *is* `channel.js`, so
   focused inference proves the exact `parameter-member` row without a module
   surface fallback. Package-contract inference does not yet expose this
-  subpath as an inference entrypoint, however, so temporary-v2 generation
+  subpath as an inference entrypoint, however, so stable-v1 generation
   refuses only `./direct` in `expected-refusals.json` while retaining `.`.
   Missing that entrypoint remains an explicit open premise, not a negative
   claim about `channelFor`.

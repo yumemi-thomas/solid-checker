@@ -42,7 +42,7 @@ Plus `solid-js/h`, `solid-js/html`, `solid-js/jsx-runtime`,
 > `solid-js/store` is correct.
 
 **Subpath precision.** The Solid 1 bundle index under
-`pkg/contracts/bundled/solid-v1/` names separate receipt-issued temporary-v2
+`pkg/contracts/bundled/solid-v1/` names separate receipt-issued stable-v1
 documents for root, store, web, universal, `h/jsx-runtime`, and
 `h/jsx-dev-runtime` artifact cases across their exact browser/node and
 development/production selections. Exports appear only in artifact cases whose

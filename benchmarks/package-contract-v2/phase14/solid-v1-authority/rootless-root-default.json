@@ -40,7 +40,7 @@
     "name": "@solid-primitives/rootless",
     "version": "1.5.4"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {

@@ -19,7 +19,7 @@ use thiserror::Error;
 
 use crate::{
     artifact_resolution::{ResolvedImport, select_and_bind},
-    contract_document_v2::{self, SidecarDigests},
+    contract_document::{self, SidecarDigests},
     contract_interface::ContractFailure,
 };
 
@@ -277,9 +277,8 @@ pub fn construct_proposal(
     // Artifact-case, operation, and resource identifiers are local wire
     // mechanics. Canonicalize them through the sole encoder/decoder boundary
     // before claim IDs or proof plans can observe them.
-    let canonical_bytes =
-        contract_document_v2::encode(&analyzed, &SidecarDigests::default(), false)?;
-    let normalized = contract_document_v2::decode(&canonical_bytes)?.normalize()?;
+    let canonical_bytes = contract_document::encode(&analyzed, &SidecarDigests::default(), false)?;
+    let normalized = contract_document::decode(&canonical_bytes)?.normalize()?;
     let analyzed = normalized.artifact_cases().len();
     let mut cases = Vec::new();
     let mut selected_ids = BTreeSet::new();

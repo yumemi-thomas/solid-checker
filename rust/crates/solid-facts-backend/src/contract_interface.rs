@@ -1,9 +1,9 @@
 //! The only package-contract boundary exposed to analyzer callers.
 //!
-//! Schema spellings and compact document mechanics remain private. Temporary
-//! schema-v2 documents are decoded and normalized by the sibling deep module;
-//! this analyzer-loading interface still refuses exposure until Phase 12 can
-//! validate proof-issued receipts and migrate consumers atomically.
+//! Schema spellings and compact document mechanics remain private. Stable-v1
+//! documents are decoded and normalized by the sibling deep module; this
+//! analyzer-loading interface exposes semantics only after validating a
+//! proof-issued receipt and exact artifact selection.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -20,7 +20,7 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::{artifact_resolution::select_and_bind, contract_document_v2};
+use crate::{artifact_resolution::select_and_bind, contract_document};
 
 const MAX_CONTRACT_DOCUMENT_BYTES: usize = 1024 * 1024;
 const MAX_RECEIPT_BYTES: usize = 64 * 1024;
@@ -520,7 +520,7 @@ pub fn load_accepted_contract(
     receipt: &[u8],
     import: &ResolvedImport,
 ) -> Result<AcceptedContract, ContractFailure> {
-    let document = contract_document_v2::decode(document_bytes)?;
+    let document = contract_document::decode(document_bytes)?;
     let receipt =
         decode_and_validate_receipt(document_bytes, document.semantic_model_version(), receipt)?;
 
@@ -537,7 +537,7 @@ pub(crate) fn load_receipt_issued_embedded_contract(
     document_bytes: &[u8],
     receipt_bytes: &[u8],
 ) -> Result<AcceptedContract, ContractFailure> {
-    let document = contract_document_v2::decode(document_bytes)?;
+    let document = contract_document::decode(document_bytes)?;
     let receipt = decode_and_validate_receipt(
         document_bytes,
         document.semantic_model_version(),
@@ -751,13 +751,13 @@ mod tests {
         let import = resolved_import();
         let closure = import.closure.digest.as_str().trim_start_matches("sha256:");
         let document = format!(
-            "{{\"format\":\"solid-reactivity-contract\",\"schemaVersion\":2,\"semanticModelVersion\":1,\"package\":{{\"name\":\"solid-js\",\"version\":\"2.0.0-rc.3\",\"integrity\":\"sha512:test\",\"manifest\":{{\"path\":\"package.json\",\"sha256\":\"{}\"}}}},\"summaries\":{{\"callable\":{{\"shape\":\"callable\",\"call\":{{\"closed\":[\"reads\"],\"reads\":[]}}}}}},\"entrypoints\":{{\".\":{{\"artifact\":{{\"path\":\"dist/solid.js\",\"sha256\":\"{}\",\"closureSha256\":\"{}\"}},\"declarations\":{{\"path\":\"types/index.d.ts\",\"sha256\":\"{}\"}},\"exports\":{{\"version\":\"callable\"}}}}}},\"sidecars\":{{}}}}",
+            "{{\"format\":\"solid-reactivity-contract\",\"schemaVersion\":1,\"semanticModelVersion\":1,\"package\":{{\"name\":\"solid-js\",\"version\":\"2.0.0-rc.3\",\"integrity\":\"sha512:test\",\"manifest\":{{\"path\":\"package.json\",\"sha256\":\"{}\"}}}},\"summaries\":{{\"callable\":{{\"shape\":\"callable\",\"call\":{{\"closed\":[\"reads\"],\"reads\":[]}}}}}},\"entrypoints\":{{\".\":{{\"artifact\":{{\"path\":\"dist/solid.js\",\"sha256\":\"{}\",\"closureSha256\":\"{}\"}},\"declarations\":{{\"path\":\"types/index.d.ts\",\"sha256\":\"{}\"}},\"exports\":{{\"version\":\"callable\"}}}}}},\"sidecars\":{{}}}}",
             "a".repeat(64),
             "b".repeat(64),
             closure,
             "d".repeat(64),
         );
-        let final_contract = contract_document_v2::decode(document.as_bytes())
+        let final_contract = contract_document::decode(document.as_bytes())
             .unwrap()
             .normalize()
             .unwrap();

@@ -20,7 +20,7 @@ use solid_reactive_ir::contract_semantics::{
 use thiserror::Error;
 
 use crate::{
-    contract_document_v2::{self, SidecarDigests},
+    contract_document::{self, SidecarDigests},
     contract_interface::{ContractFailure, encode_acceptance_receipt},
     evidence_sidecars::WireSemanticClaimSubject,
 };
@@ -82,9 +82,8 @@ pub(crate) fn accept_checked_corpus_case(
 ) -> Result<CheckedCorpusAcceptance, ContractWorkflowError> {
     let generation_started = Instant::now();
     let canonical_complete_bytes =
-        contract_document_v2::encode(complete, &SidecarDigests::default(), false)?;
-    let canonical_complete =
-        contract_document_v2::decode(&canonical_complete_bytes)?.normalize()?;
+        contract_document::encode(complete, &SidecarDigests::default(), false)?;
+    let canonical_complete = contract_document::decode(&canonical_complete_bytes)?.normalize()?;
     if canonical_complete.artifact_cases().len() != 1 {
         return invalid("checked corpus acceptance requires exactly one artifact case");
     }
@@ -149,7 +148,7 @@ pub(crate) fn accept_checked_corpus_case(
     let generation_ns = generation_started.elapsed().as_nanos();
     let verification_started = Instant::now();
     let accepted = verify(&proposal.document, &plan_bytes, &proof, &selected, pretty)?;
-    let finalized = contract_document_v2::decode(&accepted.document)?.normalize()?;
+    let finalized = contract_document::decode(&accepted.document)?.normalize()?;
     if finalized.semantic_digest() != canonical_complete.semantic_digest() {
         return invalid("proof finalization did not reproduce checked corpus semantics");
     }
@@ -177,8 +176,8 @@ pub(crate) fn canonicalize_proposal(
     closure_candidates: impl IntoIterator<Item = SemanticClaimSubject>,
     pretty: bool,
 ) -> Result<CanonicalProposal, ContractWorkflowError> {
-    let document = contract_document_v2::encode(contract, &SidecarDigests::default(), pretty)?;
-    let canonical = contract_document_v2::decode(&document)?.normalize()?;
+    let document = contract_document::encode(contract, &SidecarDigests::default(), pretty)?;
+    let canonical = contract_document::decode(&document)?.normalize()?;
     let closure_candidates = closure_candidates
         .into_iter()
         .map(|subject| rebind_subject(contract, &canonical, subject))
@@ -494,7 +493,7 @@ pub fn merge_plans(
     merged_document: &[u8],
     plans: impl IntoIterator<Item = Vec<u8>>,
 ) -> Result<Vec<u8>, ContractWorkflowError> {
-    let contract = contract_document_v2::decode(merged_document)?.normalize()?;
+    let contract = contract_document::decode(merged_document)?.normalize()?;
     let mut candidates = BTreeSet::new();
     for bytes in plans {
         let plan = decode_plan(&bytes)?;
@@ -517,7 +516,7 @@ pub fn merge_plans(
 }
 
 pub fn review(document: &[u8]) -> Result<Vec<u8>, ContractWorkflowError> {
-    let contract = contract_document_v2::decode(document)?.normalize()?;
+    let contract = contract_document::decode(document)?.normalize()?;
     let mut unresolved = Vec::new();
     for artifact in contract.artifact_cases() {
         for (export_name, export) in &artifact.exports {
@@ -560,7 +559,7 @@ pub fn verify(
     selected_artifact_case: &str,
     pretty: bool,
 ) -> Result<AcceptedArtifacts, ContractWorkflowError> {
-    let proposal = contract_document_v2::decode(proposal_bytes)?.normalize()?;
+    let proposal = contract_document::decode(proposal_bytes)?.normalize()?;
     let plan = decode_plan(plan_bytes)?;
     validate_identity(
         &proposal,
@@ -704,7 +703,7 @@ pub fn verify(
         ),
         probes: probe_sidecar,
     };
-    let document = contract_document_v2::encode(verified.contract(), &sidecars, pretty)?;
+    let document = contract_document::encode(verified.contract(), &sidecars, pretty)?;
     let accepted = verified.issue(&document).map_err(proof_error)?;
     Ok(AcceptedArtifacts {
         receipt: encode_acceptance_receipt(accepted.receipt())?,

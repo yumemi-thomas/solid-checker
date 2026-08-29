@@ -96,7 +96,7 @@ test("native caches do not restore macOS target executables", () => {
   assert.equal(actionInput(release, "cache-targets"), safeTargetPolicy);
 });
 
-test("the contract corpus installs and watches its temporary-v2 producer", () => {
+test("the contract corpus installs and watches its stable-v1 producer", () => {
   const install = contractCorpus.indexOf(
     "bun install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile"
   );

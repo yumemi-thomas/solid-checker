@@ -194,11 +194,11 @@ bun scripts/package-contract-v2-phase0.mjs --check
 step phase16-corpus
 bun scripts/package-contract-v2-phase16.mjs --check
 
-# Phase 17 proves that every live main producer, consumer, bundle, fixture,
-# receipt, manifest, cache, and documentation path has converged on temporary
-# schema version 2 without rewriting independent version namespaces.
-step phase17-convergence
-bun scripts/package-contract-v2-phase17.mjs
+# Phase 18 proves that every live main producer, consumer, bundle, fixture,
+# receipt, manifest, cache, and documentation path uses the first stable public
+# schema version 1 without rewriting independent version namespaces.
+step phase18-stable-cut
+bun scripts/package-contract-phase18.mjs
 
 # Proposal orchestration can change a refusal envelope without changing the
 # normalized Rust model. Keep the exact generator corpus in the local handoff

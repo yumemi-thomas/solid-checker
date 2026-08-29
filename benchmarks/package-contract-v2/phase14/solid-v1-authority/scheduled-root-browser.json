@@ -38,7 +38,7 @@
     "name": "@solid-primitives/scheduled",
     "version": "1.5.3"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {

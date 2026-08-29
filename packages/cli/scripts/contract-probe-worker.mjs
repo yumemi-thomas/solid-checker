@@ -1,4 +1,4 @@
-// One isolated temporary-v2 runtime-probe session. Recipe modules emit raw
+// One isolated runtime-probe-v2 session for a stable-v1 proposal. Recipe modules emit raw
 // semantic events; Rust later validates and classifies the complete run.
 
 import { createHash, randomUUID } from "node:crypto";

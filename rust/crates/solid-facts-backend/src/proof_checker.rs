@@ -15,7 +15,7 @@ use solid_reactive_ir::contract_semantics::{
 };
 
 use crate::{
-    contract_document_v2::{self, SidecarDigests},
+    contract_document::{self, SidecarDigests},
     contract_interface::ContractFailure,
     proposal_generation::PlannedProposal,
     runtime_probes::ProbeContradictionRecord,
@@ -87,7 +87,7 @@ pub fn verify_planned_proposal(
 }
 
 /// Proof-first production path. Closure is finalized before encoding, and the
-/// receipt is then issued over the encoder's exact temporary-v2 bytes.
+/// receipt is then issued over the encoder's exact stable-v1 bytes.
 pub fn verify_and_encode_planned_proposal(
     request: ProposalVerificationRequest,
 ) -> Result<VerifiedContractArtifact, ProposalVerificationError> {
@@ -116,7 +116,7 @@ pub fn verify_and_encode_planned_proposal(
         verifier: request.verifier,
     })?;
     let document =
-        contract_document_v2::encode(verified.contract(), &request.sidecars, request.pretty)?;
+        contract_document::encode(verified.contract(), &request.sidecars, request.pretty)?;
     let contract = verified.issue(&document)?;
     Ok(VerifiedContractArtifact { contract, document })
 }

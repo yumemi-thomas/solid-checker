@@ -204,7 +204,7 @@ solid-checker contract check
 
 Each package is reported as `bundled`, `accepted`, `unverified`, `stale`,
 `unbound`, or `missing`. The command exits non-zero when a package cannot be
-certified, so it also works as a CI gate. Generate an unaccepted temporary-v2
+certified, so it also works as a CI gate. Generate an unaccepted stable-v1
 proposal for an exact registry-installed artifact with its integrity:
 
 ```sh

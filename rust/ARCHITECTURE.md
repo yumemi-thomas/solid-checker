@@ -43,7 +43,7 @@ answer; it must not switch on an API spelling itself.
 | Rule projection and wording | `solid-reactive-ir::projection` owns typed finding seeds, shared selection, and finding assembly | `dialects/solid-v1/rules` declares capabilities and maps every supported seed to 1.x identity, severity, message, hint, and evidence | `dialects/solid-v2/rules` declares capabilities and maps every supported seed to 2.0 identity, severity, message, hint, and evidence |
 | ESLint-era file-local checks | fact helpers live in `solid-reactive-ir::upstream_compat` | `solid1x_*` modules; executed only for `Version::V1` | Not executed |
 | Shared static and fine-grained defects | `StaticDefectKind`, populated by static analysis and `upstream_compat::shared_reactivity`; contains no rule prose | Projected and worded by the 1.x catalog | Projected and worded by the 2.0 catalog; the async-tracked-scope check is omitted |
-| Package contracts | temporary-v2 wire decode, receipt validation, and exact artifact acquisition terminate in `solid-facts-backend`; the wire-independent model and accepted semantic index live in `solid-reactive-ir::contract_semantics`; every bundled package is declared in the dialect manifest | receipt-issued exact `solid-js@1.9.14` plus scheduled, debounce, and rootless artifact cases | receipt-issued exact `solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and `@solidjs/signals@2.0.0-rc.3` artifact cases |
+| Package contracts | stable-v1 wire decode, receipt validation, and exact artifact acquisition terminate in `solid-facts-backend`; the wire-independent model and accepted semantic index live in `solid-reactive-ir::contract_semantics`; every bundled package is declared in the dialect manifest | receipt-issued exact `solid-js@1.9.14` plus scheduled, debounce, and rootless artifact cases | receipt-issued exact `solid-js@2.0.0-rc.3`, `@solidjs/web@2.0.0-rc.3`, and `@solidjs/signals@2.0.0-rc.3` artifact cases |
 
 At runtime the stable dialect ids are `solid-v1` and `solid-v2`. In Rust,
 `Version::V1` always means Solid 1.x and `Version::V2` always means Solid 2.0;
@@ -159,8 +159,8 @@ with a negative.
 `ContractProposal::normalize` computes canonical semantic identity but does not
 accept proposed closure. `AcceptedContract` deliberately has no public
 constructor outside the Phase 11 proof authority.
-`solid-facts-backend::contract_document_v2` owns the complete
-temporary-schema decoder, summary expansion, local-closure interpretation,
+`solid-facts-backend::contract_document` owns the complete stable-schema
+decoder, summary expansion, local-closure interpretation,
 resource limits, artifact-case identity derivation, and handoff into this
 normalizer. `solid-facts-backend::contract_interface` now validates a
 proof-issued receipt after exact artifact selection and is the only ordinary
@@ -169,7 +169,7 @@ the exact importer/specifier binding, resolves exports through full runtime and
 declaration identity, instantiates restricted guards from demand-shaped call
 facts, and exposes only local normalized claim answers. Phase 14 removed the
 legacy decoder and public contract types: ordinary native and WASM analysis now
-accept only receipt-issued temporary-v2 inputs.
+accept only receipt-issued stable-v1 inputs.
 
 Phase 15 makes that boundary structurally bounded. Main documents, proof and
 probe sidecars, workflow documents, probe transcripts, receipts, and accepted
@@ -181,15 +181,15 @@ resource lifetime dependencies are checked as their own acyclic graph. These
 checks remain in the backend/normalized deep modules, so analysis consumers do
 not acquire wire-limit, path, or schema mechanics.
 
-Phase 17 makes temporary-v2 convergence a permanent repository gate. It
+Phase 18 makes stable-v1 convergence a permanent repository gate. It
 inventories every active main document and byte-bound receipt, asserts the
-exclusive Rust decoder/normalizer owner, rejects any legacy main shape or
-schema-v1 decoder path, and checks every neighboring document family under its
-own version namespace. The retired legacy schema no longer exists. Gate-cache
-and registry-memo formats are version 2 because their input closure changed.
-Semantic-model version 1 separately freezes SHA-256 with the
-`solid-checker:normalized-package-contract` domain and a checked golden vector;
-the Phase 18 wire renumbering cannot reinterpret that semantic identity.
+exclusive Rust decoder/normalizer owner, rejects temporary-v2 and the retired
+legacy-v1 shape, and checks every neighboring document family under its own
+version namespace. Gate-cache and registry-memo formats are version 3 because
+their input closure changed. Semantic-model version 1 separately freezes
+SHA-256 with the `solid-checker:normalized-package-contract` domain and a
+checked golden vector; the wire renumber did not reinterpret that semantic
+identity.
 
 `solid-facts-backend::artifact_resolution` owns the Phase 7 selection seam.
 Host, Type Facts, and standalone acquisition all produce one exact
@@ -218,11 +218,11 @@ artifact case before construction. The module withdraws every locally complete
 knowledge set: positive items remain partial, negative candidates become
 unknown, and each withdrawn leaf is retained as a proof obligation. It derives
 local unresolved edges, positive-operation candidates, and witness-only probe
-candidates in separate stages. `inferred_contract_v2` and `contract_workflow`
-then normalize, merge artifact cases, encode deterministic temporary-v2
+candidates in separate stages. `inferred_contract` and `contract_workflow`
+then normalize, merge artifact cases, encode deterministic stable-v1
 proposal bytes, and emit a proof plan whose acceptance is always unaccepted.
 
-`packages/cli/scripts/generate-package-contract-v2.mjs` is the matching Node
+`packages/cli/scripts/generate-package-contract.mjs` is the matching Node
 orchestration seam. It acquires exact package artifacts and finite condition
 partitions, invokes Rust for inference and normalization, and manages files and
 processes without reading or rewriting semantic summaries. External dependency

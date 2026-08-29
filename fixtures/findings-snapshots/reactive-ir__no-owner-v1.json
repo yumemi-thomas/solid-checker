@@ -11,7 +11,7 @@
       "end": 576,
       "fixes": 0,
       "message": "the reactivity contract for uncontracted-package has no entrypoint/export summary for imported export readCount; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-      "hint": "Generate a temporary-v2 proposal for the exact installed artifact, prove export readCount's required semantic leaves (including any complete-negative claims), issue its receipt, and register the exact document/receipt pair in .solid-checker/accepted-contracts.json. See docs/package-contracts.md for the workflow."
+      "hint": "Generate a stable-v1 proposal for the exact installed artifact, prove export readCount's required semantic leaves (including any complete-negative claims), issue its receipt, and register the exact document/receipt pair in .solid-checker/accepted-contracts.json. See docs/package-contracts.md for the workflow."
     },
     {
       "rule": "v1/missing-owner",

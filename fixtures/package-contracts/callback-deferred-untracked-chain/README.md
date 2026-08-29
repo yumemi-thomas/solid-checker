@@ -1,6 +1,6 @@
 # Callback wrapper chains preserve schedule and tracking independently
 
-This fixture exercises nested Solid 1.x callback wrappers during temporary-v2
+This fixture exercises nested Solid 1.x callback wrappers during stable-v1
 proposal generation. Schedule and tracking are separate operation axes:
 
 - `mountShape`, `mountShapeArrow`, and `mountThroughLocalUntrack` produce a

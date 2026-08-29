@@ -19,7 +19,7 @@ import {
 function document() {
   return {
     format: "solid-reactivity-contract",
-    schemaVersion: 2,
+    schemaVersion: 1,
     semanticModelVersion: 1,
     package: { name: "pkg", version: "1.0.0", integrity: "fixture" },
     summaries: {
@@ -52,7 +52,7 @@ function plan() {
   };
 }
 
-test("temporary-v2 unknown value leaves use the model vocabulary, not legacy sentinels", () => {
+test("stable-v1 unknown value leaves use the model vocabulary, not legacy sentinels", () => {
   assert.equal(isUnknownClaim("unknown"), true);
   assert.equal(isUnknownClaim({ kind: "unknown" }), true);
   assert.equal(isUnknownClaim({ status: "unknown" }), false);
@@ -70,8 +70,8 @@ test("wire measurement counts export names, open domains, and operation kinds", 
   assert.deepEqual(Object.keys(summary.behavioralRows), BEHAVIORAL_ROW_KINDS);
 });
 
-test("legacy schema-version-1 documents are not measured", () => {
-  assert.equal(summarizeContractDocument({ ...document(), schemaVersion: 1 }), null);
+test("retired temporary schema-version-2 documents are not measured", () => {
+  assert.equal(summarizeContractDocument({ ...document(), schemaVersion: 2 }), null);
 });
 
 test("proposal plans remain distinct from proof acceptance", () => {

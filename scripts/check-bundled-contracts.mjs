@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-// Checks receipt-issued temporary-v2 bundles without reimplementing semantic
+// Checks receipt-issued stable-v1 bundles without reimplementing semantic
 // expansion in JavaScript. Rust reproduces documents/receipts from checked
 // corpora; this layer checks the physical bundle/index inventory.
 
@@ -44,19 +44,19 @@ for (const location of ["pkg/contracts/bundled", "rust/crates/solid-dialect/cont
     if (!existsSync(indexPath)) fail(`${indexPath} is missing`);
     const index = JSON.parse(readFileSync(indexPath, "utf8"));
     if (
-      index.schemaVersion !== 2 ||
-      index.format !== "solid-checker-temporary-v2-bundle-index" ||
+      index.schemaVersion !== 1 ||
+      index.format !== "solid-checker-package-contract-bundle-index" ||
       !Array.isArray(index.contracts)
     ) {
-      fail(`${indexPath} is not a temporary-v2 bundle index`);
+      fail(`${indexPath} is not a stable-v1 bundle index`);
     }
     for (const item of index.contracts) {
       const documentPath = join(directory, entry.name, item.document);
       const receiptPath = join(directory, entry.name, item.receipt);
       const document = JSON.parse(readFileSync(documentPath, "utf8"));
       const receipt = JSON.parse(readFileSync(receiptPath, "utf8"));
-      if (document.schemaVersion !== 2 || document.format !== "solid-reactivity-contract") {
-        fail(`${documentPath} is not a temporary-v2 main document`);
+      if (document.schemaVersion !== 1 || document.format !== "solid-reactivity-contract") {
+        fail(`${documentPath} is not a stable-v1 main document`);
       }
       if (receipt.receiptVersion !== 1 || typeof receipt.wireDigest !== "string") {
         fail(`${receiptPath} is not a proof-issued acceptance receipt`);

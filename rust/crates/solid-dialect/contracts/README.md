@@ -1,6 +1,6 @@
 # Receipt-issued dialect contracts
 
-These are the review-location copies of the exact temporary-v2 bundles each
+These are the review-location copies of the exact stable-v1 bundles each
 dialect contributes. Every dialect directory contains a `bundle-index.json`,
 normalized main documents, and proof-issued receipts. Their bytes must match
 the runtime copies under `pkg/contracts/bundled/`; the analyzer never consumes

@@ -38,11 +38,11 @@
     "name": "@solid-primitives/scheduled",
     "version": "1.5.3"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {
     "proof": {
-      "sha256": "16dfa6f2eb076cd09c3548e45a052061138fb24bd132dc07a1ae7b700e883c46"
+      "sha256": "e8c88f231fe7fb088d35c98c01875c602e2442a338539686bde7ac242e5c1816"
     }
   },
   "summaries": {

@@ -1,6 +1,6 @@
 # Multi-role callback parameters stay locally open
 
-This fixture pins the temporary-v2 replacement for the former schema-v1
+This fixture pins the stable-v1 replacement for the former legacy-v1
 unknown sentinel. A parameter reached through incompatible execution sites
 does not emit contradictory callback rows and does not close the callback
 domain. The proposal retains unrelated known operations and records the exact

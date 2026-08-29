@@ -36,11 +36,11 @@
     "name": "solid-js",
     "version": "1.9.14"
   },
-  "schemaVersion": 2,
+  "schemaVersion": 1,
   "semanticModelVersion": 1,
   "sidecars": {
     "proof": {
-      "sha256": "e785910f4b7f3fd488af4775026d4d803f1c3fc95fead31f7ee56d4f9ff3247f"
+      "sha256": "3e298c9bd21443a3ec038f3d001303059e1d814a48eb176cf26eef5b526dfd1e"
     }
   },
   "summaries": {

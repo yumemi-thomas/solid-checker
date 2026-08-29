@@ -33,7 +33,7 @@ bun scripts/dialect-manifests.mjs validate
    closure. Encode behavior in the normalized model and identify local open
    domains; do not copy an existing dialect contract by API name.
 5. Run the Rust proof checker over the checked corpus to emit one deterministic
-   temporary-v2 document and receipt per artifact case plus a
+   stable-v1 document and receipt per artifact case plus a
    `bundle-index.json`. Generate identical bytes under
    `rust/crates/solid-dialect/contracts/<id>/` and
    `pkg/contracts/bundled/<id>/`. Register package pins in the runtime lock.

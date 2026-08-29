@@ -8,9 +8,9 @@ import { parseVerifyArguments } from "../scripts/verify-contract.mjs";
 import {
   finiteEntrypoints,
   retainIndependentlyMergeableProposals
-} from "../scripts/generate-package-contract-v2.mjs";
+} from "../scripts/generate-package-contract.mjs";
 
-test("review exposes only temporary-v2 proposal inspection", () => {
+test("review exposes only stable proposal inspection", () => {
   assert.deepEqual(parseReviewArguments(["proposal.json", "--output", "review.json"]), {
     proposal: "proposal.json",
     output: "review.json",

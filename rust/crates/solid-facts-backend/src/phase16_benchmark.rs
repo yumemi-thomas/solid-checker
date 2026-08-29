@@ -10,7 +10,7 @@ use std::{hint::black_box, time::Instant};
 use serde_json::{Value, json};
 
 use crate::{
-    contract_document_v2::{self, SidecarDigests},
+    contract_document::{self, SidecarDigests},
     contract_interface::load_receipt_issued_embedded_contract,
     first_party_bundles::{solid1_bundles_with_measurements, solid2_rc3_bundles_with_measurements},
 };
@@ -40,9 +40,8 @@ pub fn phase16_benchmark_report() -> Result<Value, Box<dyn std::error::Error>> {
 
     for measured in &bundles {
         let bundle = &measured.bundle;
-        let normalized = contract_document_v2::decode(&bundle.document)?.normalize()?;
-        let canonical =
-            contract_document_v2::encode(&normalized, &SidecarDigests::default(), false)?;
+        let normalized = contract_document::decode(&bundle.document)?.normalize()?;
+        let canonical = contract_document::encode(&normalized, &SidecarDigests::default(), false)?;
         let exports = normalized
             .artifact_cases()
             .iter()

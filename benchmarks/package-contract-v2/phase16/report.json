@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "documentKind": "solid-checker-package-contract-phase16-report",
-  "generatedAt": "2026-08-28T08:05:13.515Z",
+  "generatedAt": "2026-08-29T04:47:13.831Z",
   "authority": {
     "solid": "2.0.0-rc.3",
     "proofRule": "coverage never closes a claim; only checked proof and a receipt authorize analysis",
     "inputs": {
       "ecosystem": {
         "path": "benchmarks/ecosystem/report.json",
-        "sha256": "2dea3aa0cf6d8f7e026b30cfa88f7f0d2efa87f4658c22808a3a9fe8a75a3bda"
+        "sha256": "ed8123852939c56ce2f7f93b9f77acebc96fe4d24989ee8c471bc74b7dda843b"
       },
       "historicalVerification": {
         "path": "benchmarks/ecosystem/verification-report.json",
@@ -20,7 +20,7 @@
       },
       "syntheticCorpus": {
         "path": "fixtures/package-contracts/corpus.json",
-        "sha256": "a1bc5a6f1e3d0c85430f29bc39f42d1c9322ec0e0cc363305a11d3a09364b997"
+        "sha256": "1a57dc66aca8a2ea4ed378c0958025875f0e9716d896af5c7c3bcf04e06acede"
       },
       "phase13": {
         "path": "benchmarks/package-contract-v2/phase13/conformance.json",
@@ -134,32 +134,32 @@
     "ecosystemProposalWireBytes": {
       "prettyMain": {
         "count": 358,
-        "p50": 2080,
-        "p95": 7364,
+        "p50": 2114,
+        "p95": 8928,
         "max": 50378
       },
       "canonicalMain": {
         "count": 358,
-        "p50": 1599,
-        "p95": 4813,
+        "p50": 1626,
+        "p95": 4967,
         "max": 43055
       },
       "proposalPlan": {
         "count": 358,
-        "p50": 49172,
+        "p50": 49252,
         "p95": 303349,
         "max": 3676782
       },
       "perExport": {
         "count": 358,
-        "p50": 332.25,
-        "p95": 1074,
+        "p50": 333.25,
+        "p95": 1081,
         "max": 1936
       },
       "perOperation": {
-        "count": 63,
+        "count": 78,
         "p50": 712.4,
-        "p95": 2138,
+        "p95": 2476,
         "max": 3349
       }
     }
@@ -167,55 +167,55 @@
   "performance": {
     "ecosystemGenerationMs": {
       "count": 418,
-      "p50": 1568,
-      "p95": 25439,
-      "max": 434856
+      "p50": 1500,
+      "p95": 27026,
+      "max": 470672
     },
     "currentAcceptedCorpus": {
       "acceptedCorpusLoadNs": {
         "count": 25,
-        "max": 16240875,
-        "p50": 15886458,
-        "p95": 16152208
+        "max": 15912958,
+        "p50": 15683417,
+        "p95": 15814042
       },
       "loadIterations": 25,
       "memory": {
         "baselinePeakResidentKiB": 1536,
         "method": "getrusage-peak-rss",
-        "observedPeakDeltaKiB": 31232,
-        "postLoadPeakResidentKiB": 32768,
+        "observedPeakDeltaKiB": 30864,
+        "postLoadPeakResidentKiB": 32400,
         "scope": "whole benchmark process; includes checked-corpus construction and accepted loading; not a retained-heap measurement"
       },
       "normalizedQueryNsPerExport": {
         "count": 250,
         "max": 58,
         "p50": 31,
-        "p95": 32
+        "p95": 31
       },
       "proofVerificationAndReceiptNs": {
         "count": 24,
-        "max": 207305125,
-        "p50": 22744667,
-        "p95": 206064250
+        "max": 205342583,
+        "p50": 22637459,
+        "p95": 203746333
       },
       "proposalAndProofInputGenerationNs": {
         "count": 24,
-        "max": 15047792,
-        "p50": 1923458,
-        "p95": 14881292
+        "max": 14599958,
+        "p50": 1882541,
+        "p95": 14492958
       },
       "queryIterations": 250
     },
     "currentRuntimeProbeProcessExecution": {
-      "authority": "current temporary-v2 fresh-process probe driver with a deterministic witness recipe",
+      "authority": "current stable-v1 fresh-process probe driver with a deterministic witness recipe",
       "semanticAcceptance": false,
       "iterations": 25,
       "sessionsPerIteration": 2,
       "millisecondsPerIsolatedSession": {
         "count": 25,
-        "p50": 20.13,
-        "p95": 21.16,
-        "max": 21.73
+        "p50": 20.1,
+        "p95": 20.37,
+        "max": 21.33
       }
     },
     "runtimeProbeExecutionReference": {

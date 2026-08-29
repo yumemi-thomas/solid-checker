@@ -136,7 +136,7 @@ export const dialectBase = (dialect) => {
   // Package contracts require independently acquired registry integrity. The
   // audited oracle install uses Bun, so its lockfile must be visible from each
   // isolated checker project just as its node_modules tree is. Linking only
-  // node_modules made the temporary-v2 consumer correctly refuse every exact
+  // node_modules made the stable-v1 consumer correctly refuse every exact
   // first-party bundle even though TypeScript resolved the same package.
   ensureFileLink(join(base, "bun.lock"), join(root, "bun.lock"));
   const entry = { base };

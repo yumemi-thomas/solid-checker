@@ -5,7 +5,7 @@ shapes. A runtime class is `typeof === "function"`, while TypeScript callability
 alone reports no call signature; exact constructability is therefore required
 to distinguish constructors from ordinary values without syntax guessing.
 
-The temporary-v2 generator analyzes each finite entrypoint independently. It
+The stable-v1 generator analyzes each finite entrypoint independently. It
 may retain proven local export facts, but it refuses this fixture's package
 because its bare external export-all boundary has no independently accepted
 dependency semantics. A newly generated dependency proposal cannot be fed back

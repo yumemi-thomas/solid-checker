@@ -23,7 +23,7 @@ depends entirely on what it is handed.
 So the discharge is asked of the exports the attribution ladder actually
 resolves the obligation to, and holds only when every one of them publishes the
 row. `.` fails that test and `forwarded` is marked. The package-contract
-inference boundary does not yet expose `./direct`, so temporary-v2 generation
+inference boundary does not yet expose `./direct`, so stable-v1 generation
 retains `.` and records only that subpath as locally uncertifiable in
 `expected-refusals.json`; it does not reinterpret the missing entrypoint as a
 negative about `channelFor`.

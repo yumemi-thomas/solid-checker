@@ -14,7 +14,7 @@ fn root() -> PathBuf {
 }
 
 #[test]
-fn cli_validation_accepts_every_receipt_issued_v2_bundle() {
+fn cli_validation_accepts_every_receipt_issued_stable_v1_bundle() {
     let directory = root().join("pkg/contracts/bundled/solid-v2");
     for entry in fs::read_dir(directory).unwrap() {
         let path = entry.unwrap().path();

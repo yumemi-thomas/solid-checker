@@ -1,6 +1,6 @@
 # Accepted dependency semantics cannot launder a false value claim
 
-This fixture keeps the original carried-value adversary at the temporary-v2
+This fixture keeps the original carried-value adversary at the stable-v1
 acceptance boundary. `laundered-dependency` and
 `laundered-typed-dependency` each publish a normalized main document, but the
 analyzer sees either document only through the exact import rows in

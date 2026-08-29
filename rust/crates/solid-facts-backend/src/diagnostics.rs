@@ -674,7 +674,7 @@ impl PackageContractStatus {
     }
 }
 
-/// Reports temporary-v2 receipt coverage for every imported package that is
+/// Reports stable-v1 receipt coverage for every imported package that is
 /// either first-party to the selected dialect or declares a Solid dependency.
 /// Coverage is complete only when every exact imported specifier binds in the
 /// already receipt-validated normalized index.
@@ -732,7 +732,7 @@ pub fn accepted_package_contract_statuses(
                 "certified".into(),
                 None,
                 None,
-                "receipt-issued temporary-v2 index".into(),
+                "receipt-issued stable-v1 index".into(),
             )
         } else {
             let status = if bound == 0 { "missing" } else { "unbound" };

@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "format": "solid-checker-temporary-v2-bundle-index",
+  "schemaVersion": 1,
+  "format": "solid-checker-package-contract-bundle-index",
   "contracts": [
     {
       "package": "solid-js",

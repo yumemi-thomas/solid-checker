@@ -389,7 +389,7 @@ pub(crate) fn solid2_rc3_bundles_with_measurements()
                 "cannot issue {package_name}:{artifact_id} from checked corpus: {error}"
             ))
         })?;
-        let accepted_case = crate::contract_document_v2::decode(&accepted.document)
+        let accepted_case = crate::contract_document::decode(&accepted.document)
             .and_then(|proposal| proposal.normalize())
             .map_err(|error| {
                 inconsistent(format!("generated accepted document is invalid: {error}"))
@@ -415,7 +415,7 @@ pub(crate) fn solid2_rc3_bundles_with_measurements()
 
 /// Replays the normalized Solid 1 authority captured during the atomic Phase
 /// 14 migration and issues ordinary proof-bound receipts. The source documents
-/// already use the internal semantic model and temporary-v2 wire format; no
+/// already use the internal semantic model and stable-v1 wire format; no
 /// legacy summary IDs, variants, evidence tiers, or unknown sentinels are read.
 pub fn solid1_bundles() -> Result<Vec<FirstPartyBundle>, FirstPartyBundleError> {
     Ok(solid1_bundles_with_measurements()?
@@ -458,7 +458,7 @@ pub(crate) fn solid1_bundles_with_measurements()
                 case.document
             ))
         })?;
-        let normalized = crate::contract_document_v2::decode(source)
+        let normalized = crate::contract_document::decode(source)
             .and_then(|proposal| proposal.normalize())
             .map_err(|error| {
                 inconsistent(format!(
@@ -633,7 +633,7 @@ pub fn bundled_first_party_contract_index(
                         case.document
                     ),
                 })?;
-            let contract = crate::contract_document_v2::decode(source.document)
+            let contract = crate::contract_document::decode(source.document)
                 .and_then(|proposal| proposal.normalize())?;
             if !has_local_closure(&contract) {
                 continue;
@@ -1233,7 +1233,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::contract_document_v2;
+    use crate::contract_document;
 
     #[test]
     fn checked_rc3_corpus_produces_receipt_issued_single_case_bundles() {
@@ -1253,7 +1253,7 @@ mod tests {
             ])
         );
         for bundle in bundles {
-            let contract = contract_document_v2::decode(&bundle.document)
+            let contract = contract_document::decode(&bundle.document)
                 .unwrap()
                 .normalize()
                 .unwrap();

@@ -87,7 +87,7 @@ test("omitting acceptedContracts leaves external behavior unaccepted", () => {
   }
 });
 
-test("a receipt-issued temporary-v2 document crosses the WASM boundary", () => {
+test("a receipt-issued stable-v1 document crosses the WASM boundary", () => {
   const root = project();
   try {
     const snapshot = check(

@@ -1,6 +1,7 @@
-// Temporary-v2 runtime-probe process driver. It transports Rust-issued
-// sessions into fresh workers and returns raw runs. It never interprets an
-// event, a missing marker, or a semantic claim.
+// Runtime-probe process driver for stable main schema version 1. It transports
+// Rust-issued, independently versioned probe sessions into fresh workers and
+// returns raw runs. It never interprets an event, a missing marker, or a
+// semantic claim.
 
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -85,7 +86,7 @@ export async function runProbeSessions(plan, requestPath) {
     plan?.schemaVersion !== 2 ||
     !Array.isArray(plan.sessions)
   ) {
-    throw new TypeError("native runtime probe plan must use temporary schema version 2");
+    throw new TypeError("native runtime probe plan must use runtime-probe schema version 2");
   }
   const baseDirectory = dirname(resolve(requestPath));
   const runs = [];

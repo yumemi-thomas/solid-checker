@@ -19,7 +19,7 @@ fn tool(name: &str, byte: char) -> ToolIdentity {
 }
 
 fn fixture_contract() -> NormalizedContract {
-    contract_document_v2::decode(SIGNAL)
+    contract_document::decode(SIGNAL)
         .unwrap()
         .normalize()
         .unwrap()
@@ -172,7 +172,7 @@ fn claim_ids_survive_summary_renaming_and_wire_reformatting() {
         .unwrap();
     value["summaries"]["wire-only-renaming"] = summary;
     value["entrypoints"]["."]["exports"]["createSignal"] = serde_json::json!("wire-only-renaming");
-    let actual = contract_document_v2::decode(&serde_json::to_vec_pretty(&value).unwrap())
+    let actual = contract_document::decode(&serde_json::to_vec_pretty(&value).unwrap())
         .unwrap()
         .normalize()
         .unwrap();
@@ -259,7 +259,7 @@ fn main_hashes_and_sidecar_contract_identity_bind_both_directions() {
 
     // Ordinary normalization consumes only the main document's hash
     // references. Deleting both raw sidecars cannot change semantic meaning.
-    let without_raw_sidecars = contract_document_v2::decode(&main)
+    let without_raw_sidecars = contract_document::decode(&main)
         .unwrap()
         .normalize()
         .unwrap();

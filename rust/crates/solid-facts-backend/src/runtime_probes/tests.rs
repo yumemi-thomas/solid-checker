@@ -24,7 +24,7 @@ fn tool(name: &str, byte: char) -> ToolIdentity {
 }
 
 fn contract() -> NormalizedContract {
-    crate::contract_document_v2::decode(SIGNAL)
+    crate::contract_document::decode(SIGNAL)
         .unwrap()
         .normalize()
         .unwrap()

@@ -68,7 +68,7 @@ reimplemented by a directory walk.
 The CLI defaults to text output. `--format json` emits the stable certification
 snapshot (`status`, findings, package summaries, and metrics), and `--certify`
 returns exit code 1 unless the status is `certified`. Package behavior is loaded
-only from receipt-issued temporary-v2 documents registered with exact import
+only from receipt-issued stable-v1 documents registered with exact import
 resolutions in `.solid-checker/accepted-contracts.json`; the old `--contract`
 override and schema-1 validation path do not exist. Proposal generation,
 review, probes, and proof verification are exposed through the Node

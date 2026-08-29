@@ -12,7 +12,7 @@ bun add --dev solid-checker
 
 Then run `solid-checker --certify`.
 
-Library maintainers can generate an unaccepted temporary-v2 proposal from one
+Library maintainers can generate an unaccepted stable-v1 proposal from one
 exact installed package without writing semantic JSON:
 
 ```sh

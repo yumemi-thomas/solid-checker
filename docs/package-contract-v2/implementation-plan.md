@@ -623,6 +623,14 @@ report](phase17/2026-08-29-temporary-version2-convergence.md).
 
 **Exit:** stable schema version 1 is the only public package-contract format.
 
+Completed 2026-08-29. The single Rust boundary, stable JSON Schema, CLI
+producer, native/WASM consumers, 130 main documents, 73 acceptance receipts,
+bundle indexes, generator corpus, cache identities, and public documentation
+were cut atomically to stable version 1. The repository audit rejects both
+temporary-v2 and the retired legacy-v1 shape while preserving every neighboring
+protocol's independent version. See the [Phase 18 completion
+report](phase18/2026-08-29-atomic-stable-version1-cut.md).
+
 ## Phase 19 — Stable maintenance
 
 213. Permit only backward-compatible optional wire additions within stable

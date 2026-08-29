@@ -1225,7 +1225,7 @@ mod tests {
     fn normalized_contract(resolved: &ResolvedImport) -> NormalizedContract {
         let document = serde_json::json!({
             "format": "solid-reactivity-contract",
-            "schemaVersion": 2,
+            "schemaVersion": 1,
             "semanticModelVersion": 1,
             "package": {
                 "name": "example",
@@ -1259,7 +1259,7 @@ mod tests {
             },
             "sidecars": {}
         });
-        crate::contract_document_v2::decode(&serde_json::to_vec(&document).unwrap())
+        crate::contract_document::decode(&serde_json::to_vec(&document).unwrap())
             .unwrap()
             .normalize()
             .unwrap()

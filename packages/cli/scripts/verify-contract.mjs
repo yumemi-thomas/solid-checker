@@ -1,4 +1,4 @@
-// Temporary-v2 proof verification orchestration. The Rust proof checker is
+// Stable-v1 proof verification orchestration. The Rust proof checker is
 // the only component allowed to close claims or issue receipt bytes.
 
 import { resolve } from "node:path";
@@ -11,7 +11,7 @@ export const contractVerifyHelp = `Usage:
     --artifact-case <ID> [--output <FILE>] [--receipt <FILE>]
 
 Replays every required proof family for the selected exact artifact case. On
-success Rust writes a finalized temporary-v2 contract and a receipt bound to
+success Rust writes a finalized stable-v1 contract and a receipt bound to
 its wire, semantic, artifact, closure, proof, and closed-claim roots. Runtime
 probe observations can falsify proposed closure but can never replace proof.
 `;
@@ -97,6 +97,6 @@ export async function verifyContract(arguments_) {
   if (child.status !== 0) {
     throw new Error(child.stderr?.trim() || child.stdout?.trim() || `native checker exited ${child.status}`);
   }
-  process.stdout.write(`accepted temporary-v2 contract at ${output}; receipt ${receipt}\n`);
-  return { proposal, output, receipt, schemaVersion: 2 };
+  process.stdout.write(`accepted stable-v1 contract at ${output}; receipt ${receipt}\n`);
+  return { proposal, output, receipt, schemaVersion: 1 };
 }

@@ -4,7 +4,7 @@
 //! `PackageContract` remains an internal inference accumulator while the rule
 //! engine is migrated. No legacy document is decoded or emitted here: exact
 //! artifact identity arrives independently and the only output is normalized
-//! semantics suitable for the temporary-v2 encoder.
+//! semantics suitable for the stable package-contract encoder.
 
 use std::collections::BTreeSet;
 

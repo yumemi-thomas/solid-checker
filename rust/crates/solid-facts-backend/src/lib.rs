@@ -7,7 +7,7 @@ compile_error!("solid-facts-backend requires at least one dialect feature");
 mod artifact_resolution;
 mod bounded_json;
 mod cache;
-mod contract_document_v2;
+mod contract_document;
 mod contract_interface;
 mod contract_workflow;
 mod demand_plan;
@@ -15,7 +15,7 @@ mod diagnostics;
 pub mod dialect;
 mod evidence_sidecars;
 mod first_party_bundles;
-mod inferred_contract_v2;
+mod inferred_contract;
 mod phase16_benchmark;
 mod proof_checker;
 mod proposal_generation;
@@ -24,7 +24,7 @@ mod runtime_probes;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
-pub use contract_document_v2::SidecarDigests;
+pub use contract_document::SidecarDigests;
 pub use contract_interface::{
     AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
     ArtifactResolver, ArtifactResolverChain, BundledEvidenceStore, ClosureEntry, ClosureFileRole,
@@ -85,27 +85,27 @@ pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
 };
 
-/// Validates one temporary-v2 main document without exposing its wire model.
+/// Validates one stable-v1 main document without exposing its wire model.
 /// Analyzer use still requires exact artifact selection and a receipt through
 /// [`load_accepted_contract`].
 pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
-    contract_document_v2::decode(bytes)?.normalize()?;
+    contract_document::decode(bytes)?.normalize()?;
     Ok(())
 }
 
 /// Encodes one exact artifact's analyzer inference as an unaccepted
-/// temporary-v2 proposal. Every proposed closure is opened before emission;
+/// stable-v1 proposal. Every proposed closure is opened before emission;
 /// only the proof checker can later finalize it and issue a receipt.
 pub fn encode_inferred_contract_proposal(
     inferred: &solid_reactive_ir::PackageContract,
     resolved: &ResolvedImport,
     pretty: bool,
 ) -> Result<Vec<u8>, ContractFailure> {
-    let proposal = inferred_contract_v2::normalize_inferred_contract(inferred, resolved)?;
-    contract_document_v2::encode(&proposal, &SidecarDigests::default(), pretty)
+    let proposal = inferred_contract::normalize_inferred_contract(inferred, resolved)?;
+    contract_document::encode(&proposal, &SidecarDigests::default(), pretty)
 }
 
-/// Emits the temporary-v2 main proposal and its separately bound proof plan.
+/// Emits the stable-v1 main proposal and its separately bound proof plan.
 /// Neither artifact carries analyzer acceptance authority.
 pub fn encode_inferred_contract_workflow(
     inferred: &solid_reactive_ir::PackageContract,
@@ -113,7 +113,7 @@ pub fn encode_inferred_contract_workflow(
     pretty: bool,
 ) -> Result<ProposalArtifacts, ContractWorkflowError> {
     let (proposal, candidates) =
-        inferred_contract_v2::normalize_inferred_contract_with_candidates(inferred, resolved)?;
+        inferred_contract::normalize_inferred_contract_with_candidates(inferred, resolved)?;
     contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
 }
 
@@ -126,7 +126,7 @@ pub fn merge_contract_proposals<'a>(
     let mut package = None;
     let mut cases = Vec::new();
     for document in documents {
-        let contract = contract_document_v2::decode(document)?.normalize()?;
+        let contract = contract_document::decode(document)?.normalize()?;
         if let Some(expected) = &package {
             if expected != contract.package() {
                 return Err(ContractFailure::IdentityMismatch {
@@ -146,7 +146,7 @@ pub fn merge_contract_proposals<'a>(
         .map_err(|error| ContractFailure::InvalidSemanticModel {
             reason: error.to_string(),
         })?;
-    contract_document_v2::encode(&contract, &SidecarDigests::default(), pretty)
+    contract_document::encode(&contract, &SidecarDigests::default(), pretty)
 }
 
 #[must_use]

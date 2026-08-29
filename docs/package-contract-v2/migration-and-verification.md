@@ -2,23 +2,20 @@
 
 ## Migration rule
 
-The repository does not ship a dual public decoder. Development occurs with
-the replacement main document at temporary `schemaVersion: 2`. Every producer,
-consumer, bundle, fixture, report, sidecar, receipt, cache, and gate converges
-on that format before one atomic commit re-emits it as stable
-`schemaVersion: 1`.
+The repository does not ship a dual public decoder. Development converged on
+temporary `schemaVersion: 2` before Phase 18 atomically re-emitted every main
+document as stable `schemaVersion: 1`, recomputed every wire hash, and reissued
+every acceptance receipt.
 
 Because legacy and new formats both eventually use version 1, the replacement
 has a required `format` discriminator and the stable cut removes every legacy
 decoder and artifact. No build may accept both meanings of version 1.
 
-Phase 14 completed the temporary-v2 producer/consumer cut on 2026-08-28. The
-inventory below remains the audit ledger, including retired filenames: the old
-JavaScript document/closure/verification helpers and Rust generator were
-deleted, their temporary-v2 replacements are live, native and WASM consumers
-accept only receipt-issued normalized inputs, and both bundle locations and all
-fixtures were regenerated. Version-2 convergence remains Phase 17; the stable
-`2` → `1` renumber remains Phase 18 and must still be atomic.
+Phase 14 completed the temporary-v2 producer/consumer cut on 2026-08-28. Phase
+17 proved convergence and froze semantic-model version 1. Phase 18 completed
+the stable `2` → `1` cut on 2026-08-29: the old temporary owners and paths are
+retired, native and WASM consumers accept only receipt-issued stable-v1 inputs,
+and both bundle locations and every fixture were regenerated.
 
 Phase 15 completed the adversarial gate on 2026-08-28. All contract JSON
 families now share explicit byte, depth, node, and string bounds; file-backed
@@ -89,15 +86,15 @@ Every document family receives a format/media-type discriminator.
 
 The migration audit must include at least:
 
-- `schema/solid-reactivity-contract-v2.schema.json`;
-- `packages/cli/scripts/generate-package-contract-v2.mjs`;
+- `schema/solid-reactivity.schema.json`;
+- `packages/cli/scripts/generate-package-contract.mjs`;
 - `packages/cli/scripts/probe-contract.mjs`;
 - `packages/cli/scripts/contract-probe-driver.mjs`;
 - `packages/cli/scripts/contract-probe-worker.mjs`;
 - `packages/cli/scripts/verify-contract.mjs`;
 - `packages/cli/scripts/review-contract.mjs`;
 - `packages/cli/scripts/artifact-resolution.mjs`;
-- Rust `contract_document_v2`, proposal/proof workflow, and normalized model;
+- Rust `contract_document`, proposal/proof workflow, and normalized model;
 - contract import resolution and IR consumers;
 - CLI validation;
 - WASM types and host-provided Type Facts closure;
@@ -178,7 +175,7 @@ Do not run parallel Cargo processes or repeat unchanged commands.
 ```sh
 cargo +1.97 fmt --manifest-path rust/Cargo.toml --all -- --check
 git diff --check
-jq empty schema/solid-reactivity-contract-v2.schema.json
+jq empty schema/solid-reactivity.schema.json
 node scripts/dialect-manifests.mjs validate
 cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 ```
@@ -272,12 +269,12 @@ Before renumbering, prove:
 - no legacy decoder, sentinel, condition matcher, or JavaScript semantic
   normalizer remains;
 - every cache format has moved;
-- documentation consistently describes version 2 as temporary;
+- documentation consistently describes version 1 as stable;
 - the complete clean-cache authority passes.
 
-## Atomic stable cut
+## Completed atomic stable cut
 
-In one change:
+Phase 18 completed these steps in one change:
 
 1. Change the main schema constant from 2 to 1.
 2. Change every main producer and consumer together.
@@ -286,7 +283,7 @@ In one change:
 5. Reissue all receipts.
 6. Refresh bundles, manifests, locks, fixtures, and caches.
 7. Update public documentation.
-8. Verify there is no temporary-v2 or legacy-v1 main document.
+8. Verify there is no temporary-v2 or retired legacy-v1 main document.
 9. Rebuild binaries containing bundled contracts.
 10. Run `SOLID_CHECKER_GATE_CACHE=0 make verify` plus the complete contract and
     ecosystem corpus.

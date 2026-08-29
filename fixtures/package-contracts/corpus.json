@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "format": "solid-checker-temporary-v2-generator-corpus",
+  "schemaVersion": 1,
+  "format": "solid-checker-package-contract-generator-corpus",
   "fixtures": [
     "arrow-export-attribution",
     "asset-import",

@@ -1,20 +1,19 @@
 # Next package-contract design
 
-Status: **implemented on temporary schema version 2; stable public version 1
-cut pending**.
+Status: **implemented on stable public schema version 1**.
 
 This documentation set specifies the machine-first package-contract system now
 used by the checker. The implementation, bundles, fixtures, and analyzer
-boundary are internally converged on temporary schema version 2; only an exact
-proof-issued receipt makes one of those documents accepted. Stable public
-schema version 1 remains an atomic renumbering and reissuance step in Phase 18.
+boundary are converged on stable schema version 1; only an exact proof-issued
+receipt makes one of those documents accepted. Temporary-v2 and the retired
+legacy-v1 shape are rejected.
 
 Phase 14 made the replacement the only producer and analyzer path, Phase 15
 bounded and adversarially hardened it, Phase 16 measured its corpus,
 compactness, and performance gates, and Phase 17 proved repository-wide
-temporary-v2 convergence while freezing semantic-model version 1. The stable
-public version-1 cut remains a later atomic phase. Incomplete behavior remains
-locally open; no coverage target may weaken proof requirements.
+temporary-v2 convergence while freezing semantic-model version 1. Phase 18
+then performed the atomic stable-v1 cut and receipt reissuance. Incomplete
+behavior remains locally open; no coverage target may weaken proof requirements.
 
 ## Authority
 
@@ -33,7 +32,7 @@ RC.0 bundled examples cannot override those bytes.
   previously open implementation questions.
 - [Semantic model](semantic-model.md) — knowledge lattice, operations,
   recursive values, guards, ownership, and invariants.
-- [Wire format](wire-format.md) — frozen compact version-2 document shape and
+- [Wire format](wire-format.md) — stable compact version-1 document shape and
   normalization rules.
 - [Phase 1 semantic and policy freeze](phase1/2026-08-27-freeze.md) — closure
   record for the knowledge, operation, guard, ownership, evidence, digest, and
@@ -95,13 +94,16 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 17 temporary-v2 convergence completion](phase17/2026-08-29-temporary-version2-convergence.md)
   — exhaustive document/owner inventory, legacy-v1 elimination, independent
   version-namespace proof, cache invalidation, and frozen semantic digest.
+- [Phase 18 stable-v1 completion](phase18/2026-08-29-atomic-stable-version1-cut.md)
+  — atomic main renumber, wire-digest and receipt reissuance, stable-only
+  producer/consumer inventory, and clean-cache release authority.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.
 - [Solid 2 conformance matrix](solid2-conformance-matrix.md) — required RC.3
   behaviors and evidence expectations.
-- [Migration and verification](migration-and-verification.md) — corpus
-  migration, temporary version 2, stable version 1, gates, and measurements.
+- [Migration and verification](migration-and-verification.md) — completed
+  stable-version cut, independent version namespaces, gates, and measurements.
 - [Baseline](baseline.md) — reproducible quantitative and architectural
   starting point, backed by the checked Phase 0 benchmark artifacts.
 - [Phase 0 benchmark artifacts](../../benchmarks/package-contract-v2/phase0/README.md)

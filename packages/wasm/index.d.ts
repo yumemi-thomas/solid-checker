@@ -82,7 +82,7 @@ export interface ResolvedImport {
 }
 
 export interface AcceptedContractInput {
-  /** Exact temporary main schema-version-2 JSON text. */
+  /** Exact stable main schema-version-1 JSON text. */
   document: string
   /** Exact proof-issued receipt JSON text bound to the document bytes. */
   receipt: string

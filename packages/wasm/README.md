@@ -28,7 +28,7 @@ error. CI compiles both single-dialect variants so shared infrastructure cannot
 grow an accidental dependency on either compiler or catalog.
 
 Package behavior enters WASM only through `acceptedContracts`. Each entry pairs
-a temporary main schema-version-2 document's exact JSON text, its proof-issued
+a stable main schema-version-1 document's exact JSON text, its proof-issued
 receipt's exact JSON text, and the
 host's full Phase-7 `ResolvedImport`: exact package identity, independently
 selected runtime and declarations, resolution traces, export identities, and

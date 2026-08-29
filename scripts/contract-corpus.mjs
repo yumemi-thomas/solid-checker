@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-// Temporary-v2 generator corpus. Each fixture is acquired as an exact package
+// Stable-v1 generator corpus. Each fixture is acquired as an exact package
 // artifact, analyzed by Rust, emitted as an open proposal plus a separate
 // proof/probe plan, and compared byte-for-byte with checked snapshots. No
 // JavaScript code expands or normalizes semantic summaries.
@@ -34,11 +34,11 @@ if (!existsSync(native) || !existsSync(typeFacts)) {
 }
 
 const corpus = JSON.parse(readFileSync(join(fixturesRoot, "corpus.json"), "utf8"));
-if (corpus.schemaVersion !== 2 || corpus.format !== "solid-checker-temporary-v2-generator-corpus") {
-  throw new Error("fixture corpus manifest is not temporary schema version 2");
+if (corpus.schemaVersion !== 1 || corpus.format !== "solid-checker-package-contract-generator-corpus") {
+  throw new Error("fixture corpus manifest is not stable schema version 1");
 }
 const fixtures = corpus.fixtures.map(name => join(fixturesRoot, name));
-const temporary = mkdtempSync(join(tmpdir(), "solid-checker-contract-v2-corpus-"));
+const temporary = mkdtempSync(join(tmpdir(), "solid-checker-contract-corpus-"));
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -47,7 +47,7 @@ function sha256(bytes) {
 function assertEnvelope(path, expectedFormat, expectedVersionField, expectedVersion) {
   const document = JSON.parse(readFileSync(path, "utf8"));
   if (document.format !== expectedFormat || document[expectedVersionField] !== expectedVersion) {
-    throw new Error(`${path} has the wrong temporary-v2 workflow envelope`);
+    throw new Error(`${path} has the wrong package-contract workflow envelope`);
   }
   return document;
 }
@@ -101,7 +101,7 @@ async function generate(directory) {
       rmSync(expectedPlan, { force: true });
       rmSync(expectedRefusals, { force: true });
     } else if (!existsSync(expectedRefusal) || readFileSync(expectedRefusal, "utf8") !== rendered) {
-      throw new Error(`${name} temporary-v2 refusal differs; inspect and run --update intentionally\n${failure}`);
+      throw new Error(`${name} stable-v1 refusal differs; inspect and run --update intentionally\n${failure}`);
     }
     return {
       name,
@@ -116,7 +116,7 @@ async function generate(directory) {
   if (update) rmSync(expectedRefusal, { force: true });
   const plan = `${output}.proposal.json`;
   const refusalOutput = `${output}.refusals.json`;
-  const contract = assertEnvelope(output, "solid-reactivity-contract", "schemaVersion", 2);
+  const contract = assertEnvelope(output, "solid-reactivity-contract", "schemaVersion", 1);
   const planned = assertEnvelope(plan, "solid-checker-contract-proposal-plan", "planVersion", 1);
   const refusals = assertEnvelope(
     refusalOutput,
@@ -148,10 +148,10 @@ async function generate(directory) {
   } else {
     if (!existsSync(expectedPlan)) throw new Error(`${name} has no expected-proposal.json snapshot`);
     if (!readFileSync(output).equals(readFileSync(expected))) {
-      throw new Error(`${name} temporary-v2 contract snapshot differs; inspect and run --update intentionally`);
+      throw new Error(`${name} stable-v1 contract snapshot differs; inspect and run --update intentionally`);
     }
     if (!readFileSync(plan).equals(readFileSync(expectedPlan))) {
-      throw new Error(`${name} temporary-v2 proposal-plan snapshot differs; inspect and run --update intentionally`);
+      throw new Error(`${name} stable-v1 proposal-plan snapshot differs; inspect and run --update intentionally`);
     }
     if (refusals.refusals.length > 0) {
       if (!existsSync(expectedRefusals)) {
@@ -195,7 +195,7 @@ try {
     }
   );
   console.log(
-    `${update ? "updated" : "checked"} ${rows.length} temporary-v2 generator fixtures: ` +
+    `${update ? "updated" : "checked"} ${rows.length} stable-v1 generator fixtures: ` +
       `${rows.filter(row => row.refused).length} exact fail-closed refusals, ` +
       `${aggregate.refusedArtifactCases} local artifact-case refusals, ` +
       `${aggregate.cases} artifact cases, ${aggregate.positiveOperations} possible operations, ` +

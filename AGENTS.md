@@ -255,7 +255,7 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" bun scripts/coverage.mjs
 # universal handoff set
 cargo +1.97 fmt --manifest-path rust/Cargo.toml --all -- --check
 git diff --check
-jq empty schema/solid-reactivity-contract-v2.schema.json
+jq empty schema/solid-reactivity.schema.json
 bun scripts/dialect-manifests.mjs validate
 cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 ~~~

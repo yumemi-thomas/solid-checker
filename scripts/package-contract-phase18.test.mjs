@@ -8,7 +8,7 @@ import {
   MAIN_FORMAT,
   MAIN_SCHEMA_VERSION,
   SEMANTIC_MODEL_VERSION
-} from "./package-contract-v2-phase17.mjs";
+} from "./package-contract-phase18.mjs";
 
 const bytes = value => Buffer.from(JSON.stringify(value));
 const wireDigest = value =>
@@ -25,8 +25,8 @@ const main = (overrides = {}) => ({
   ...overrides
 });
 
-describe("Phase 17 temporary-v2 convergence", () => {
-  test("accepts a temporary-v2 main and a receipt bound to its exact bytes", () => {
+describe("Phase 18 stable schema-version-1 convergence", () => {
+  test("accepts a stable main and a receipt bound to its exact bytes", () => {
     const documentBytes = bytes(main());
     const receiptBytes = bytes({
       receiptVersion: 1,
@@ -37,11 +37,19 @@ describe("Phase 17 temporary-v2 convergence", () => {
       { path: "contracts/example.json", bytes: documentBytes },
       { path: "contracts/example.receipt.json", bytes: receiptBytes }
     ]);
+    assert.equal(MAIN_SCHEMA_VERSION, 1);
     assert.equal(result.mainDocuments, 1);
     assert.equal(result.receipts, 1);
   });
 
-  test("rejects both legacy-v1 shapes and temporary mains carrying the stable number", () => {
+  test("rejects both the retired temporary-v2 main and the legacy-v1 shape", () => {
+    assert.throws(
+      () =>
+        auditDocumentEntries([
+          { path: "contracts/temporary.json", bytes: bytes(main({ schemaVersion: 2 })) }
+        ]),
+      /schemaVersion 2.*expected 1/
+    );
     assert.throws(
       () =>
         auditDocumentEntries([
@@ -59,57 +67,49 @@ describe("Phase 17 temporary-v2 convergence", () => {
         ]),
       /legacy-v1 main document/
     );
-    assert.throws(
-      () =>
-        auditDocumentEntries([
-          { path: "contracts/wrong-version.json", bytes: bytes(main({ schemaVersion: 1 })) }
-        ]),
-      /schemaVersion 1.*expected 2/
-    );
   });
 
-  test("keeps receipt and catalog versions independent from the main schema", () => {
-    const catalog = bytes({
-      format: "solid-checker-accepted-contract-catalog",
-      catalogVersion: 1,
-      contracts: []
-    });
-    const result = auditDocumentEntries([{ path: "accepted-contracts.json", bytes: catalog }]);
-    assert.equal(result.independentVersionedDocuments, 1);
-    assert.throws(
-      () =>
-        auditDocumentEntries([
-          {
-            path: "accepted-contracts.json",
-            bytes: bytes({
-              format: "solid-checker-accepted-contract-catalog",
-              catalogVersion: 2,
-              contracts: []
-            })
-          }
-        ]),
-      /catalogVersion 2.*expected 1/
-    );
+  test("keeps every neighboring protocol in its independent namespace", () => {
+    const result = auditDocumentEntries([
+      {
+        path: "accepted-contracts.json",
+        bytes: bytes({
+          format: "solid-checker-accepted-contract-catalog",
+          catalogVersion: 1,
+          contracts: []
+        })
+      },
+      {
+        path: "probe-request.json",
+        bytes: bytes({
+          format: "solid-checker-runtime-probe-request",
+          schemaVersion: 2
+        })
+      }
+    ]);
+    assert.equal(result.independentVersionedDocuments, 2);
   });
 
-  test("rejects receipts for non-v2 or byte-different main documents", () => {
+  test("rejects a receipt carrying the pre-cut wire digest", () => {
     const documentBytes = bytes(main());
-    const wrongReceipt = bytes({
-      receiptVersion: 1,
-      wireDigest: `sha256:${"0".repeat(64)}`,
-      semanticModelVersion: 1
-    });
     assert.throws(
       () =>
         auditDocumentEntries([
           { path: "contracts/example.json", bytes: documentBytes },
-          { path: "contracts/example.receipt.json", bytes: wrongReceipt }
+          {
+            path: "contracts/example.receipt.json",
+            bytes: bytes({
+              receiptVersion: 1,
+              wireDigest: `sha256:${"0".repeat(64)}`,
+              semanticModelVersion: 1
+            })
+          }
         ]),
       /wireDigest does not bind/
     );
   });
 
-  test("the checked repository satisfies the complete convergence inventory", () => {
+  test("the checked repository is stable-only with semantic model 1", () => {
     const result = auditRepository();
     assert.ok(result.mainDocuments > 0);
     assert.ok(result.receipts > 0);

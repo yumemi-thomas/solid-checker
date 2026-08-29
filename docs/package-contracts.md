@@ -7,16 +7,16 @@ selection. Ordinary analysis consumes only proof-issued normalized contracts.
 It never executes package code, reads proof sidecars, contacts a registry, or
 accepts a proposal merely because it is present on disk.
 
-The current public migration format is temporary `schemaVersion: 2`. It is the
-only contract format produced or consumed by this checkout. The eventual
-stable public schema is a later atomic cut; this repository does not maintain a
-schema-1 compatibility decoder or emit both meanings in parallel.
+The public format is stable `schemaVersion: 1` with the required
+`format: "solid-reactivity-contract"` discriminator. It is the only contract
+format produced or consumed by this checkout. The repository maintains neither
+a temporary-v2 decoder nor compatibility with the retired legacy-v1 shape.
 
 ## Trust boundary
 
 One accepted input consists of three independently checked values:
 
-- the exact JSON text of a normalized temporary-v2 main document;
+- the exact JSON text of a normalized stable-v1 main document;
 - the exact JSON text of a proof-issued receipt bound to those document bytes;
 - a `ResolvedImport` acquired by the host for one import occurrence, including
   exact package name, version, integrity, runtime and declaration artifacts,
@@ -65,7 +65,7 @@ references, cycles where forbidden, invalid resource states, overlapping guard
 partitions, noncanonical claim paths, and false closure.
 
 The authoritative model is documented in
-[`semantic-model.md`](package-contract-v2/semantic-model.md). The temporary wire
+[`semantic-model.md`](package-contract-v2/semantic-model.md). The stable wire
 format is an encoding of that model, not the interface analysis code uses.
 
 ## Generate and review a proposal
