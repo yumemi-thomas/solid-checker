@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 
-import { verifyPin } from "./check-contract-pins.mjs";
+import { bundlePackageCoverage, verifyPin } from "./check-contract-pins.mjs";
 
 const audited = "sha512-audited==";
 const contract = (overrides = {}) => ({
@@ -42,4 +42,15 @@ test("a contract describing another package fails before any lookup", () => {
 test("a registry lookup failure is reported, not treated as a pass", () => {
   const failure = verifyPin(contract(), () => ({ error: "registry lookup failed: ENOTFOUND" }));
   assert.match(failure, /registry lookup failed: ENOTFOUND/);
+});
+
+test("a manifest target without an active receipt remains fail-closed, not malformed", () => {
+  const coverage = bundlePackageCoverage(
+    { contracts: [{ package: "active" }, { package: "awaiting-policy-2" }] },
+    { contracts: [{ package: "active" }, { package: "undeclared" }] },
+  );
+  assert.deepEqual(coverage, {
+    undeclared: ["undeclared"],
+    inactive: ["awaiting-policy-2"],
+  });
 });

@@ -686,6 +686,14 @@ version-2 refusal catalogs, so discovery produces an exact obsolete-policy-1
 uncertifiable result instead of silently losing the semantic demand. Both
 first-party bundle indexes are empty until a case can be reconstructed under
 policy 2. The migration is recorded in `receipt-migration.json`.
+Registry-pin conformance therefore verifies only entries carrying active
+receipt authority. Dialect-manifest packages without an active index entry are
+reported as unbundled certification targets and remain fail-closed; a manifest
+entry alone never authorizes package behavior.
+Generator-corpus expectations that previously borrowed callback operations
+from now-obsolete policy-1 dependency catalogs are also withdrawn: those
+proposals keep only locally established callable shape and open claims, and
+their refusal context names the obsolete-policy boundary.
 
 ### Slice 10 — Add automatic certification orchestration
 

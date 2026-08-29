@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
-// Verifies that every bundled contract names a package release that exists in
-// the registry, with the exact tarball the contract was audited against.
+// Verifies that every *active* bundled contract names a package release that
+// exists in the registry, with the exact tarball the contract was audited
+// against.
 //
 // `scripts/check-bundled-contracts.mjs` already proves this for contracts it
 // probes: it installs them and reads Bun's lockfile. That leaves the
@@ -275,9 +276,27 @@ export function verifyPin({ label, file, expectedName, document }, lookup = regi
   return undefined;
 }
 
+/**
+ * Distinguish active bundle authorities from manifest-owned certification
+ * targets. A manifest entry is not itself authority: after a proof-policy cut
+ * it may remain intentionally unbundled until certification issues a new
+ * authenticated receipt. Treating that state as a malformed bundle would
+ * force the release gate to restore the obsolete receipt it is meant to keep
+ * inactive.
+ */
+export function bundlePackageCoverage(manifest, index) {
+  const declared = new Set(manifest.contracts.map(contract => contract.package));
+  const present = new Set(index.contracts.map(entry => entry.package));
+  return {
+    undeclared: [...present].filter(package_ => !declared.has(package_)).sort(),
+    inactive: [...declared].filter(package_ => !present.has(package_)).sort(),
+  };
+}
+
 function main() {
   const manifests = loadDialectManifests({ requireArtifacts: true });
   const contracts = [];
+  let inactiveTargets = 0;
   for (const manifest of manifests) {
     const index = JSON.parse(readFileSync(join(root, manifest.bundleIndex), "utf8"));
     if (
@@ -288,11 +307,14 @@ function main() {
       fail(`${manifest.id}: ${manifest.bundleIndex} is not a stable-v1 bundle index`);
       continue;
     }
+    const coverage = bundlePackageCoverage(manifest, index);
+    for (const package_ of coverage.undeclared) {
+      fail(`${manifest.id}: bundle index contains undeclared package ${package_}`);
+    }
+    inactiveTargets += coverage.inactive.length;
     const declared = new Set(manifest.contracts.map(contract => contract.package));
-    const present = new Set();
     for (const entry of index.contracts) {
       if (!declared.has(entry.package)) {
-        fail(`${manifest.id}: bundle index contains undeclared package ${entry.package}`);
         continue;
       }
       const relativeFile = relative(
@@ -300,16 +322,12 @@ function main() {
         join(dirname(join(root, manifest.bundleIndex)), entry.document),
       );
       const document = JSON.parse(readFileSync(join(root, relativeFile), "utf8"));
-      present.add(entry.package);
       contracts.push({
         dialect: manifest.id,
         package: entry.package,
         file: relativeFile,
         document,
       });
-    }
-    for (const package_ of declared) {
-      if (!present.has(package_)) fail(`${manifest.id}: bundle index omits ${package_}`);
     }
   }
   const uniqueContracts = new Map();
@@ -355,7 +373,10 @@ function main() {
     console.error(`${failures} bundled contract pin(s) could not be verified`);
     process.exit(1);
   }
-  console.log(`verified ${checked.size} bundled package pins against the registry`);
+  console.log(
+    `verified ${checked.size} active bundled package pins against the registry; ` +
+      `${inactiveTargets} manifest package target(s) remain unbundled (fail-closed)`,
+  );
 }
 
 if (fileURLToPath(import.meta.url) === resolve(process.argv[1] ?? "")) main();

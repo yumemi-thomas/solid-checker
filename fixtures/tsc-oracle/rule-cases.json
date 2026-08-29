@@ -490,8 +490,10 @@
       "rule": "reactive-source-uncaptured",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "silent",
-      "why": "The receipt-issued exact-artifact `@solidjs/signals@2.0.0-rc.3` contract proves `isEqual` is an inert strict-identity comparison that cannot invoke either argument. The prior uncertifiable result was a package-contract gap; the v2 bundled contract closes only this reviewed export while the v1 case below remains open because the package is audited only for the v2 runtime.",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "checkerCount": 2,
+      "why": "TypeScript accepts both accessor arguments, but policy 2 retires the old policy-1 receipt that claimed `@solidjs/signals@2.0.0-rc.3` `isEqual` was inert. Until that exact artifact is recertified with authenticated policy-2 witnesses, each reactive source crossing the now-obsolete package boundary remains independently uncertifiable.",
       "code": "import { createSignal } from \"solid-js\";\nimport { isEqual } from \"@solidjs/signals\";\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  const same = isEqual(count, count);\n  return <div>{same ? count() : 0}</div>;\n}\n"
     },
     {

@@ -10,7 +10,7 @@
       "entrypoint": "./bare",
       "conditions": [],
       "stage": "artifact-case",
-      "reason": "solid-checker-rust: normalized operation graph is invalid: inference has no entrypoint \"./bare\""
+      "reason": "solid-checker:unknown-claim-attribution={\"analysisContext\":\"contract-generation-obligation\",\"domains\":[\"callbacks\"],\"endByte\":474,\"exports\":[\"forwardFromBareTarget\"],\"mechanism\":\"obligation-identity\",\"obligation\":\"UnknownCallbackExecution\",\"path\":\"<package-root>/bare.js\",\"startByte\":466}\nsolid-checker:unknown-claim-attribution={\"analysisContext\":\"obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics\",\"domains\":[\"reactiveReads\",\"returns\",\"callbacks\",\"ownerRequirements\",\"asyncBehavior\"],\"endByte\":379,\"exports\":[\"forwardFromBareTarget\"],\"mechanism\":\"fallback-all\",\"obligation\":\"PackageContractExportMissing\",\"path\":\"<package-root>/bare.js\",\"startByte\":305}\nsolid-checker-rust: normalized operation graph is invalid: inference has no entrypoint \"./bare\""
     }
   ]
 }

@@ -78,6 +78,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       pendingReceipts: 0,
       checkedCorpusShortcuts: 0,
       callerProofIssuancePaths: 0,
+      automaticCertificationWorkflows: 1,
       obsoletePolicy1Catalogs: 21,
       proofVersion: 2,
       receiptVersion: 2,
