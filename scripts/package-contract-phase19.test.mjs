@@ -70,8 +70,8 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
     assert.deepEqual(auditPhase19DemandAuthority(), {
       demands: 43,
       families: 18,
-      alreadyExact: 29,
-      producerExtensionRequired: 7,
+      alreadyExact: 31,
+      producerExtensionRequired: 5,
       unsupported: 7,
       certificationReadyFamilies: 7
     });

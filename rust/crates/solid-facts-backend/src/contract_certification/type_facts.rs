@@ -465,7 +465,9 @@ fn proof_artifact_export(subject: &ProofDemandSubject) -> (&str, &str) {
                 ..
             } => (artifact_case, export),
         },
-        ProofDemandSubject::ArtifactCase(_) => unreachable!("artifact demands are not Type Facts"),
+        ProofDemandSubject::ArtifactCase(_) | ProofDemandSubject::DependencyClosure { .. } => {
+            unreachable!("artifact and dependency demands are not Type Facts")
+        }
     }
 }
 

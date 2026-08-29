@@ -27,10 +27,14 @@ mod wire;
 pub use cache::{CacheStats, FactsCache};
 pub use contract_certification::{
     ArtifactSnapshot, ArtifactSnapshotError, CertificationPlan, CertificationPlanningError,
-    CertificationRequest, LocalArtifact, LockPinnedArchive, PublishedArchive, SnapshotLimits,
-    SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
+    CertificationRequest, DependencyCertificationQueue, DependencyCompositionError,
+    DependencyCompositionRequirement, DependencyCompositionSchedule, DependencyNodeIdentity,
+    DependencyQueueNode, InspectedProbeGateBatch, LocalArtifact, LockPinnedArchive, ProbeGate,
+    ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind, ProbeGateSchedule, PublishedArchive,
+    SnapshotLimits, SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
     TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
-    UntrustedArtifactEnvelope, VerifiedTypeFactsEvidence, WitnessWireError, plan_certification,
+    UntrustedArtifactEnvelope, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence, WitnessWireError,
+    plan_certification,
 };
 #[cfg(feature = "dialect-v2")]
 pub use contract_certification::{

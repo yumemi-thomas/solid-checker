@@ -336,11 +336,11 @@
     {
       "id": "accepted-dependency-composition/canonical-cycle-queue",
       "family": "accepted-dependency-composition",
-      "status": "producer extension required",
-      "producerField": "ClosureManifest.dependencies",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "Dependency edges are available in canonical closure material.",
-      "policy2Gap": "There is no bottom-up certification queue with cycle detection and canonical first-refusal ordering."
+      "status": "already exact",
+      "producerField": "DependencyCertificationQueue/DependencyCompositionSchedule",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification/dependencies.rs",
+      "completenessGuarantee": "The verifier derives one composition demand per snapshot-replayed edge and proposed parent closure, rejects duplicate nodes and canonicalized cycles, orders a finite batch dependency-first, and reports the first missing demand by package, artifact, export, and semantic claim ID.",
+      "policy2Gap": "The exact demand remains unsatisfied until Slice 8 authenticates its policy-2 dependency receipt."
     },
     {
       "id": "domain-exhaustiveness/invocation-completeness",
@@ -372,11 +372,11 @@
     {
       "id": "probe-consistency/verifier-mandatory-scheduling",
       "family": "probe-consistency",
-      "status": "producer extension required",
-      "producerField": "RuntimeProbePlan",
-      "source": "rust/crates/solid-facts-backend/src/runtime_probes.rs",
-      "completenessGuarantee": "Current plans enumerate scenarios, policies, recipes, and claims.",
-      "policy2Gap": "The policy-2 demand graph does not yet derive when a probe is mandatory or refuse a missing gate."
+      "status": "already exact",
+      "producerField": "ProbeGateSchedule",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification/probe_gates.rs",
+      "completenessGuarantee": "The opaque certification plan derives one snapshot-, demand-graph-, and claim-bound mandatory veto for every proposed closure; missing, duplicate, unknown, incomplete, and contradictory outcomes fail closed.",
+      "policy2Gap": "A complete successful batch remains non-authoritative until the separately listed harness binding exists."
     },
     {
       "id": "probe-consistency/harness-image-and-runtime-binding",

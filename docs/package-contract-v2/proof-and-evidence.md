@@ -82,6 +82,16 @@ requires compiler execution facts; dependency composition requires an already
 accepted dependency contract; and probe consistency requires runtime-probe
 authority. One authority cannot stand in for another.
 
+Policy 2 makes dependency and probe applicability verifier-owned. Every exact
+external closure edge is crossed with every proposed parent closure, producing
+a canonical `(dependency package, dependency artifact, parent export, parent
+claim)` requirement. Multi-package certification is dependency-first and
+cycles are refused before receipt use. Probe consistency is not a proof-witness
+family: every proposed closure gets a mandatory veto gate, a contradiction
+rejects that closure, and successful finite non-observation cannot close it.
+Until policy-2 receipt authentication and directly launched probe-harness
+identity are available, these schedules deliberately remain unsatisfied.
+
 ## Closure obligations
 
 Before closing one claim domain, the verifier proves:

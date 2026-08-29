@@ -11,8 +11,8 @@ use sha2::{Digest as _, Sha256, Sha512};
 use solid_reactive_ir::contract_semantics::{
     NormalizedContract,
     certification::{
-        CertificationCandidates, DemandPlanningError, ProofDemandGraph, ProofFamily,
-        ProofWitnessVariant, WitnessBinding, WitnessCoverage, proof_policy_2,
+        CertificationCandidates, DemandPlanningError, DependencyDemandInput, ProofDemandGraph,
+        ProofFamily, ProofWitnessVariant, WitnessBinding, WitnessCoverage, proof_policy_2,
     },
 };
 use std::{
@@ -30,8 +30,10 @@ use crate::contract_interface::ContractFailure;
 
 #[cfg(feature = "dialect-v2")]
 mod compiler_facts;
+mod dependencies;
 mod export_bindings;
 mod module_closure;
+mod probe_gates;
 mod type_facts;
 mod witness_wire;
 
@@ -40,8 +42,16 @@ pub use compiler_facts::{
     CompilerCertificationConfiguration, CompilerCertificationError, CompilerCertificationSchedule,
     LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
 };
+pub use dependencies::{
+    DependencyCertificationQueue, DependencyCompositionError, DependencyCompositionRequirement,
+    DependencyCompositionSchedule, DependencyNodeIdentity, DependencyQueueNode,
+};
 pub use export_bindings::SnapshotVerifiedExports;
 pub use module_closure::SnapshotVerifiedClosure;
+pub use probe_gates::{
+    InspectedProbeGateBatch, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
+    ProbeGateSchedule, VerifiedProbeGateBatch,
+};
 pub use type_facts::{
     TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
     VerifiedTypeFactsEvidence,
@@ -264,6 +274,21 @@ impl CertificationPlan {
         witness_wire::decode_witness_coverage(bytes, &self.demand_graph)
     }
 
+    /// Canonical dependency-composition requirements derived from the exact
+    /// snapshot-replayed external edges and every proposed parent closure.
+    pub fn dependency_composition_schedule(
+        &self,
+    ) -> Result<DependencyCompositionSchedule, DependencyCompositionError> {
+        dependencies::DependencyCompositionSchedule::from_plan(self)
+    }
+
+    /// Mandatory probe vetoes derived from every proposed closure. A complete
+    /// successful audit batch still cannot authenticate until the harness and
+    /// Node runtime image are directly bound.
+    pub fn probe_gate_schedule(&self) -> Result<ProbeGateSchedule, ProbeGateError> {
+        probe_gates::ProbeGateSchedule::from_plan(self)
+    }
+
     /// Acquires Type Facts evidence through the policy-2 live-session adapter.
     ///
     /// `TypeFactsProducerPin` has no public constructor. Policy orchestration
@@ -362,8 +387,21 @@ pub fn plan_certification(
     let candidates = policy
         .inspect_candidates(&selected)
         .map_err(|error| CertificationPlanningError::InvalidCandidate(error.to_string()))?;
-    let demand_graph =
-        policy.derive_demand_graph(&candidates, snapshot.root(), snapshot.provenance_root())?;
+    let demand_graph = policy.derive_demand_graph_with_dependencies(
+        &candidates,
+        snapshot.root(),
+        snapshot.provenance_root(),
+        verified_closure
+            .manifest()
+            .dependencies
+            .iter()
+            .map(|dependency| DependencyDemandInput {
+                specifier: dependency.specifier.clone(),
+                package: dependency.package_name.clone(),
+                artifact_case: dependency.artifact_case.clone(),
+                accepted_contract_digest: dependency.accepted_contract_digest.clone(),
+            }),
+    )?;
     let artifact_witnesses = artifact_witness_bindings(
         &snapshot,
         &verified_resolution,

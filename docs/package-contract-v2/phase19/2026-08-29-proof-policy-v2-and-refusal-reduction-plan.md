@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: implementation in progress (Slices 0–6 implemented; Slice 7 next)
+Status: implementation in progress (Slices 0–7 implemented; Slice 8 next)
 
 Review status: adversarially revised
 
@@ -510,8 +510,17 @@ neighboring immutable materialization sidecar binds those two byte sets
 separately. Trace-v3 generated rows remain exact positives, while missing
 generated wrappers remain open because the producer lacks an independent
 wrapper census.
-Dependency and probe adapters, receipt authentication, and the atomic cut are
-still pending. Run
+Slice 7 derives one dependency-composition demand for every snapshot-replayed
+external edge and proposed parent closure. A bounded canonical queue rejects
+duplicate nodes and cycles, orders a batch dependency-first, and reports the
+first missing receipt by package, artifact, export, and claim. Policy-1 receipt
+digests still cannot satisfy those demands; authenticated policy-2 receipt
+authority arrives in Slice 8. Mandatory probe vetoes are now derived for every
+proposed closure and reject missing, duplicate, unknown, incomplete, and
+contradictory outcomes. Successful finite non-observation remains explicitly
+non-authoritative, and the gate refuses authentication until a directly
+launched harness binds its executable and Node runtime images.
+Receipt authentication and the atomic cut are still pending. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
 artifact and digest with the compiled definition.

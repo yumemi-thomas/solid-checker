@@ -289,6 +289,28 @@ impl ProofPolicy2 {
         snapshot_root: &str,
         provenance_root: &str,
     ) -> Result<ProofDemandGraph, DemandPlanningError> {
+        self.derive_demand_graph_with_dependencies(
+            candidates,
+            snapshot_root,
+            provenance_root,
+            std::iter::empty(),
+        )
+    }
+
+    /// Derives the same verifier-owned graph plus one dependency-composition
+    /// demand for every exact external edge and proposed parent closure.
+    ///
+    /// The backend supplies edges only after replaying the immutable module
+    /// closure. This input is structural planning material, not receipt
+    /// authority; the family verifier must still authenticate each policy-2
+    /// dependency receipt before constructing a witness.
+    pub fn derive_demand_graph_with_dependencies(
+        &self,
+        candidates: &CertificationCandidates,
+        snapshot_root: &str,
+        provenance_root: &str,
+        dependencies: impl IntoIterator<Item = DependencyDemandInput>,
+    ) -> Result<ProofDemandGraph, DemandPlanningError> {
         let snapshot_root =
             Digest::parse(snapshot_root).map_err(|_| DemandPlanningError::InvalidArtifactRoot)?;
         let provenance_root =
@@ -352,6 +374,26 @@ impl ProofPolicy2 {
                     semantic_claim_id: semantic_claim_id.as_str().into(),
                 },
             ));
+        }
+        let dependencies = dependencies
+            .into_iter()
+            .map(DependencyDemandInput::validate)
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        for dependency in dependencies {
+            for closure in &candidates.closure_candidates {
+                let semantic_claim_id = candidates
+                    .proposal
+                    .claim_id(closure)
+                    .map_err(|_| DemandPlanningError::InvalidCandidate)?;
+                requested.insert((
+                    ProofFamily::AcceptedDependencyComposition,
+                    ProofDemandSubject::DependencyClosure {
+                        dependency: dependency.clone(),
+                        parent: closure.clone(),
+                        semantic_claim_id: semantic_claim_id.as_str().into(),
+                    },
+                ));
+            }
         }
         if requested.len() > self.demand_limit() {
             return Err(DemandPlanningError::DemandLimit);
@@ -667,6 +709,18 @@ fn hash_demand_subject(hash: &mut Sha256, subject: &ProofDemandSubject) {
             hash_demand_text(hash, "domain-closure");
             hash_demand_text(hash, semantic_claim_id);
         }
+        ProofDemandSubject::DependencyClosure {
+            dependency,
+            semantic_claim_id,
+            ..
+        } => {
+            hash_demand_text(hash, "dependency-closure");
+            hash_demand_text(hash, &dependency.package);
+            hash_demand_text(hash, &dependency.artifact_case);
+            hash_demand_text(hash, &dependency.specifier);
+            hash_demand_text(hash, &dependency.accepted_contract_digest);
+            hash_demand_text(hash, semantic_claim_id);
+        }
     }
 }
 
@@ -972,6 +1026,33 @@ pub enum ProofDemandSubject {
         subject: SemanticClaimSubject,
         semantic_claim_id: String,
     },
+    DependencyClosure {
+        dependency: DependencyDemandInput,
+        parent: SemanticClaimSubject,
+        semantic_claim_id: String,
+    },
+}
+
+/// Exact replayed external edge used only to plan dependency composition.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DependencyDemandInput {
+    pub specifier: String,
+    pub package: String,
+    pub artifact_case: String,
+    pub accepted_contract_digest: String,
+}
+
+impl DependencyDemandInput {
+    fn validate(self) -> Result<Self, DemandPlanningError> {
+        if self.specifier.trim().is_empty()
+            || self.package.trim().is_empty()
+            || self.artifact_case.trim().is_empty()
+            || Digest::parse(&self.accepted_contract_digest).is_err()
+        {
+            return Err(DemandPlanningError::InvalidDependency);
+        }
+        Ok(self)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1031,6 +1112,8 @@ pub enum DemandPlanningError {
     DemandIdCollision,
     #[error("the verifier-derived demand subject is absent from normalized meaning")]
     InvalidCandidate,
+    #[error("the replayed external dependency edge is invalid")]
+    InvalidDependency,
 }
 
 impl ProofDemandGraph {
@@ -1640,8 +1723,8 @@ const fn manifest() -> PolicyManifest {
 #[cfg(test)]
 mod tests {
     use super::{
-        ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding, WitnessCoverageError,
-        proof_policy_2,
+        DependencyDemandInput, ProofDemandSubject, ProofFamily, ProofWitnessVariant,
+        WitnessBinding, WitnessCoverageError, proof_policy_2,
     };
     use crate::contract_semantics::{
         KnowledgeState, SEMANTIC_MODEL_VERSION, SemanticClaimPath,
@@ -1781,6 +1864,60 @@ mod tests {
                 .zip(changed_snapshot.demands())
                 .all(|(left, right)| left.id() != right.id())
         );
+    }
+
+    #[test]
+    fn dependency_demands_cover_every_parent_closure_and_bind_the_exact_edge() {
+        let complete = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let policy = proof_policy_2();
+        let candidates = policy.inspect_candidates(&complete).unwrap();
+        let edge = DependencyDemandInput {
+            specifier: "dependency/subpath".into(),
+            package: "dependency".into(),
+            artifact_case: "artifact-case:dependency:browser".into(),
+            accepted_contract_digest: format!("sha256:{:064x}", 7),
+        };
+        let graph = policy
+            .derive_demand_graph_with_dependencies(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+                [edge.clone(), edge.clone()],
+            )
+            .unwrap();
+        let dependency_demands = graph
+            .demands()
+            .iter()
+            .filter(|demand| demand.family() == ProofFamily::AcceptedDependencyComposition)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            dependency_demands.len(),
+            candidates.closure_candidates().len()
+        );
+        assert!(dependency_demands.iter().all(|demand| matches!(
+            demand.subject(),
+            ProofDemandSubject::DependencyClosure { dependency, parent, .. }
+                if dependency == &edge && candidates.closure_candidates().contains(parent)
+        )));
+
+        let changed = policy
+            .derive_demand_graph_with_dependencies(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+                [DependencyDemandInput {
+                    accepted_contract_digest: format!("sha256:{:064x}", 8),
+                    ..edge
+                }],
+            )
+            .unwrap();
+        assert_ne!(graph.root(), changed.root());
     }
 
     #[test]
