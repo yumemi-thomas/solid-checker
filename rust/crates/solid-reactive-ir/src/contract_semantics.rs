@@ -25,6 +25,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
 pub const SEMANTIC_MODEL_VERSION: u16 = 1;
+/// Hash family frozen for semantic-model version 1.
+pub const SEMANTIC_DIGEST_ALGORITHM: &str = "sha256";
+/// Domain separator frozen for semantic-model version 1 contract identities.
+pub const SEMANTIC_DIGEST_DOMAIN: &str = "solid-checker:normalized-package-contract";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 
 /// Local knowledge for one immediate collection-valued claim domain.

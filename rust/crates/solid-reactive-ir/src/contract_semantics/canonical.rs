@@ -7,7 +7,7 @@ pub(super) fn semantic_digest(
     artifact_cases: &[ArtifactCase],
 ) -> Digest {
     let mut writer = CanonicalWriter::new();
-    writer.text("solid-checker:normalized-package-contract");
+    writer.text(SEMANTIC_DIGEST_DOMAIN);
     writer.u16(SEMANTIC_MODEL_VERSION);
     writer.package(package);
     writer.sequence(artifact_cases, CanonicalWriter::artifact_case);

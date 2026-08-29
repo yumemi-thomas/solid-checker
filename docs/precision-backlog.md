@@ -7922,3 +7922,31 @@ while 5 packages remain full fail-closed refusals. Eight fixtures that formerly
 stored only the first whole-package error now retain their known cases and name
 the unsupported condition, merge, or inference-entrypoint leaf separately.
 Those local refusals remain uncertifiable; snapshot migration is not proof.
+
+## 2026-08-29 — Phase 17 converges temporary-v2 mechanics without closing claims
+
+The repository-wide convergence authority inventories 130 active temporary-v2
+main documents, 73 exact byte-bound receipts, 69 independently versioned
+documents, 15 producer/consumer source owners, and 579 active JSON files. The
+retired legacy-v1 schema and dead Phase 0 decoder reconstruction are gone; the
+only analyzer normalization boundary is the Rust temporary-v2 decoder. Rule,
+dialect, receipt, catalog, sidecar, runtime-resolution, runtime-probe, cache,
+and registry-memo versions remain independent rather than inheriting the main
+document's temporary schema number.
+
+Semantic-model version 1 now names and tests its SHA-256 algorithm, canonical
+domain separator, typed length-delimited encoding, and golden digest. This is
+an identity freeze, not new semantic evidence. Cache format versions moved to
+2 so pre-convergence cached verdicts cannot cross the widened audit boundary.
+No Type Facts, compiler facts, bundled main document, receipt, finding, or
+closure claim changed.
+
+The Phase 16 boundary remains exact: every generated ecosystem proposal stays
+unaccepted without proof and receipt issuance; 60 full-row and 1,458 local
+artifact-case refusals remain uncertifiable; all open call domains and 13
+recursive leaves stay local; and the Phase 13 browser, request/transport,
+serialization, dynamic-leaf, TypeScript-owned declaration, and unstable-
+protocol domains remain open. Wildcard-only surfaces, missing or non-file
+targets, unresolved callable kinds, external export-all without accepted
+dependency semantics, closure hazards, stale receipts, and unsupported
+artifact shapes continue to fail closed.

@@ -109,7 +109,7 @@ test("a path no row claims escalates to the full verify, and says which path did
     "scripts/coverage.mjs",
     "scripts/lib/pool.mjs",
     "Makefile",
-    "schema/solid-reactivity.schema.json",
+    "schema/solid-reactivity-contract-v2.schema.json",
     "rust/Cargo.toml",
     "rust/Cargo.lock",
     "AGENTS.md",

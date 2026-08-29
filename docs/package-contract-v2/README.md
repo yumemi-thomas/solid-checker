@@ -3,17 +3,18 @@
 Status: **implemented on temporary schema version 2; stable public version 1
 cut pending**.
 
-This documentation set specifies the machine-first replacement for the current
-package-contract schema. The current implementation, bundled contracts, and
-public documentation continue to describe the legacy schema until the migration
-plan reaches its atomic cut. Do not use this directory as evidence that an
-existing contract has already been accepted under the new proof policy.
+This documentation set specifies the machine-first package-contract system now
+used by the checker. The implementation, bundles, fixtures, and analyzer
+boundary are internally converged on temporary schema version 2; only an exact
+proof-issued receipt makes one of those documents accepted. Stable public
+schema version 1 remains an atomic renumbering and reissuance step in Phase 18.
 
 Phase 14 made the replacement the only producer and analyzer path, Phase 15
-bounded and adversarially hardened it, and Phase 16 measured its corpus,
-compactness, and performance gates. The stable public version-1 cut remains a
-later atomic phase. Incomplete behavior remains locally open; no coverage
-target may weaken proof requirements.
+bounded and adversarially hardened it, Phase 16 measured its corpus,
+compactness, and performance gates, and Phase 17 proved repository-wide
+temporary-v2 convergence while freezing semantic-model version 1. The stable
+public version-1 cut remains a later atomic phase. Incomplete behavior remains
+locally open; no coverage target may weaken proof requirements.
 
 ## Authority
 
@@ -91,6 +92,9 @@ RC.0 bundled examples cannot override those bytes.
 - [Phase 16 corpus, compactness, and performance completion](phase16/2026-08-28-corpus-compactness-performance.md)
   — exact RC.3 and ecosystem coverage, local refusal records, wire/evidence
   size distributions, accepted load/query costs, and offline-analysis gates.
+- [Phase 17 temporary-v2 convergence completion](phase17/2026-08-29-temporary-version2-convergence.md)
+  — exhaustive document/owner inventory, legacy-v1 elimination, independent
+  version-namespace proof, cache invalidation, and frozen semantic digest.
 - [Compiler execution-facts protocol](phase4/compiler-execution-facts.md) —
   operation identity, independent execution axes, completeness, normalization,
   and acceptance invariants.

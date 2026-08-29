@@ -297,6 +297,21 @@ ordering, normalizes guards, and hashes length-delimited typed values. It never
 hashes a pretty-printed JSON representation. Unknown, partial, complete
 positive, and complete negative states have distinct encodings.
 
+Semantic-model version 1 freezes the hash family as SHA-256 and the domain
+separator as `solid-checker:normalized-package-contract`. Text and byte strings
+are prefixed by an unsigned 64-bit big-endian byte length; sequences are
+prefixed by an unsigned 64-bit big-endian item count; fixed-width integers are
+big-endian; options, variants, booleans, and the four knowledge states carry
+explicit tags. The canonical stream begins with the length-delimited domain,
+the unsigned 16-bit semantic-model version, exact package identity, and the
+ordered normalized artifact cases. The digest is rendered as lowercase
+`sha256:<64 hexadecimal digits>`.
+
+The checked golden proposal in `solid-reactive-ir` hashes to
+`sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9`.
+Changing any rule in this paragraph is an incompatible semantic-model change;
+wire-schema numbering alone never changes this digest.
+
 ## Core invariants
 
 - Every referenced operation and resource exists.

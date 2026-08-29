@@ -842,6 +842,34 @@ fn property_semantic_digest_is_deterministic_and_order_equivalent() {
 }
 
 #[test]
+fn semantic_model_v1_digest_algorithm_and_golden_vector_are_frozen() {
+    assert_eq!(SEMANTIC_MODEL_VERSION, 1);
+    assert_eq!(SEMANTIC_DIGEST_ALGORITHM, "sha256");
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN,
+        "solid-checker:normalized-package-contract"
+    );
+
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let mut behavior = call(vec![read.clone(), write.clone()], vec![owner, cleanup]);
+    behavior.edges = vec![OperationEdge {
+        kind: EdgeKind::Data,
+        from: read.id,
+        to: write.id,
+    }];
+    let normalized = proposal_with(ValueShape::Plain, behavior)
+        .normalize()
+        .unwrap();
+    assert_eq!(
+        normalized.semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9"
+    );
+}
+
+#[test]
 fn property_equivalent_numeric_guards_normalize_to_one_digest() {
     let with_number = |number: &str| {
         let mut read = operation("read", OperationKind::Read);

@@ -599,6 +599,14 @@ report](phase15/2026-08-28-adversarial-hardening.md).
 
 **Exit:** the repository is internally complete on temporary schema version 2.
 
+Completed 2026-08-29. The repository-wide Phase 17 authority inventories every
+active main document, receipt-bound sibling, independently versioned document,
+and producer/consumer owner. It removes the retired legacy schema and dead
+Phase 0 decoder reconstruction, keeps neighboring protocol versions in their
+own namespaces, invalidates both gate caches, and freezes semantic-model 1's
+SHA-256 domain and golden vector. See the [Phase 17 completion
+report](phase17/2026-08-29-temporary-version2-convergence.md).
+
 ## Phase 18 — Atomic stable version-1 cut
 
 203. Change main schema version 2 to stable version 1.

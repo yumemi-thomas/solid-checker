@@ -12,7 +12,7 @@ on:
       - "schema/typefacts-*"
       - "go.mod"
       - "go.sum"
-      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "packages/cli/scripts/**"
       - "scripts/ecosystem-benchmark/**"
       - ".github/workflows/ecosystem-benchmark.yml"
   pull_request:
@@ -25,7 +25,7 @@ on:
       - "schema/typefacts-*"
       - "go.mod"
       - "go.sum"
-      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "packages/cli/scripts/**"
       - "scripts/ecosystem-benchmark/**"
       - ".github/workflows/ecosystem-benchmark.yml"
   # Full-corpus installs and analyzes every discovered package against the

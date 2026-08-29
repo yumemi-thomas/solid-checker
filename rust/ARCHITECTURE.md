@@ -181,6 +181,16 @@ resource lifetime dependencies are checked as their own acyclic graph. These
 checks remain in the backend/normalized deep modules, so analysis consumers do
 not acquire wire-limit, path, or schema mechanics.
 
+Phase 17 makes temporary-v2 convergence a permanent repository gate. It
+inventories every active main document and byte-bound receipt, asserts the
+exclusive Rust decoder/normalizer owner, rejects any legacy main shape or
+schema-v1 decoder path, and checks every neighboring document family under its
+own version namespace. The retired legacy schema no longer exists. Gate-cache
+and registry-memo formats are version 2 because their input closure changed.
+Semantic-model version 1 separately freezes SHA-256 with the
+`solid-checker:normalized-package-contract` domain and a checked golden vector;
+the Phase 18 wire renumbering cannot reinterpret that semantic identity.
+
 `solid-facts-backend::artifact_resolution` owns the Phase 7 selection seam.
 Host, Type Facts, and standalone acquisition all produce one exact
 `ResolvedImport`; authority falls through in that order only when the stronger

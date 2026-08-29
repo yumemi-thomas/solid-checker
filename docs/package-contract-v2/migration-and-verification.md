@@ -89,18 +89,15 @@ Every document family receives a format/media-type discriminator.
 
 The migration audit must include at least:
 
-- `schema/solid-reactivity.schema.json`;
-- `packages/cli/scripts/generate-package-contract.mjs`;
-- `packages/cli/scripts/contract-document.mjs`;
+- `schema/solid-reactivity-contract-v2.schema.json`;
+- `packages/cli/scripts/generate-package-contract-v2.mjs`;
 - `packages/cli/scripts/probe-contract.mjs`;
 - `packages/cli/scripts/contract-probe-driver.mjs`;
 - `packages/cli/scripts/contract-probe-worker.mjs`;
 - `packages/cli/scripts/verify-contract.mjs`;
-- `packages/cli/scripts/contract-verification.mjs`;
 - `packages/cli/scripts/review-contract.mjs`;
-- `packages/cli/scripts/runtime-module-closure.mjs`;
-- Rust `solid-contract-gen`;
-- Rust document decoder and normalized model;
+- `packages/cli/scripts/artifact-resolution.mjs`;
+- Rust `contract_document_v2`, proposal/proof workflow, and normalized model;
 - contract import resolution and IR consumers;
 - CLI validation;
 - WASM types and host-provided Type Facts closure;
@@ -181,7 +178,7 @@ Do not run parallel Cargo processes or repeat unchanged commands.
 ```sh
 cargo +1.97 fmt --manifest-path rust/Cargo.toml --all -- --check
 git diff --check
-jq empty schema/solid-reactivity.schema.json
+jq empty schema/solid-reactivity-contract-v2.schema.json
 node scripts/dialect-manifests.mjs validate
 cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 ```
