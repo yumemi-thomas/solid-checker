@@ -22,9 +22,9 @@
     "proofPolicy": 1,
     "receiptVersion": 1,
     "typeFactsProducer": {
-      "sourceManifest": "sha256:aa653630f88754304bf4d6722859a4e686f833340f2963e7665b1a308de1e793",
-      "handshakeProtocol": 3,
-      "schema": "sha256:b071a78a86949a1e4162408912d7622aed0460fba3a64fd52506fc14091417c7",
+      "sourceManifest": "sha256:12a0585d59618a2e227f1f25fba613c4a1c5bddc7c6f17c401616f8194e8d10a",
+      "handshakeProtocol": 4,
+      "schema": "sha256:129f78430a829013b3fe1a6fd9948b27f7ba7269858dd8438e61d5b2bef76fbe",
       "buildId": "dev"
     },
     "compilerProducers": [

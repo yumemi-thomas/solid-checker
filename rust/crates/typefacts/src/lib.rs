@@ -1025,6 +1025,8 @@ pub enum TypeFactsError {
     Io(#[from] std::io::Error),
     #[error("source hash is not canonical sha256: {0:?}")]
     SourceHash(String),
+    #[error("certification invocation context must name a nonempty unique demand set")]
+    InvalidCertificationContext,
 }
 
 pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, TypeFactsError> {

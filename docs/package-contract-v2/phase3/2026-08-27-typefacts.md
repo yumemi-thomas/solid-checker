@@ -32,6 +32,17 @@ mandatory schema hash and handshake protocol refuse mixed producer/client
 pairs. The source-manifest stamp changes with every producer, client, shim, or
 schema input and the local producer was rebuilt from that identity.
 
+## Phase 19 authority follow-up
+
+Proof policy 2 extends this boundary without making serialized transcripts
+authoritative. Handshake protocol 4 adds an exact overload count and binds it
+into selected-signature identity v2; unresolved instantiable type leaves are
+explicitly local-open. Certification launches a compile-time-pinned producer
+from a private execution snapshot and carries a non-serializable live identity
+over the executable/source-manifest digests, handshake, PID, restart epoch,
+project generation, snapshot, demand graph, and proof-demand IDs. The ordinary
+`Session::invocations` result remains analysis and audit data only.
+
 ## Accuracy decisions
 
 - A finite callability partition enumerates the actual constituent categories,

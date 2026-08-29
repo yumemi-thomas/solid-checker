@@ -30,10 +30,15 @@ use crate::contract_interface::ContractFailure;
 
 mod export_bindings;
 mod module_closure;
+mod type_facts;
 mod witness_wire;
 
 pub use export_bindings::SnapshotVerifiedExports;
 pub use module_closure::SnapshotVerifiedClosure;
+pub use type_facts::{
+    TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
+    VerifiedTypeFactsEvidence,
+};
 pub use witness_wire::WitnessWireError;
 
 const SNAPSHOT_HASH_DOMAIN: &[u8] = b"solid-checker:artifact-snapshot:v1\0";
@@ -250,6 +255,31 @@ impl CertificationPlan {
         bytes: &[u8],
     ) -> Result<WitnessCoverage, WitnessWireError> {
         witness_wire::decode_witness_coverage(bytes, &self.demand_graph)
+    }
+
+    /// Acquires Type Facts evidence through the policy-2 live-session adapter.
+    ///
+    /// `TypeFactsProducerPin` has no public constructor. Policy orchestration
+    /// obtains it only from trusted built-in or configured producer policy, so
+    /// callers cannot mint authority by hashing an arbitrary executable.
+    pub fn acquire_type_facts(
+        &self,
+        pin: &TypeFactsProducerPin,
+        project_id: &str,
+        schedule: &TypeFactsCertificationSchedule,
+    ) -> Result<typefacts::LiveInvocationAnswer, TypeFactsCertificationError> {
+        let mut session = type_facts::TypeFactsCertificationSession::open(pin, project_id)?;
+        session.acquire(self, schedule)
+    }
+
+    /// Reconciles a direct live producer answer against every scheduled Type
+    /// Facts family and the exact immutable snapshot source census.
+    pub fn verify_type_facts(
+        &self,
+        schedule: &TypeFactsCertificationSchedule,
+        answer: &typefacts::LiveInvocationAnswer,
+    ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
+        type_facts::verify_live_answer(self, schedule, answer)
     }
 }
 

@@ -80,6 +80,9 @@ execute({ mode: "read", nested: { callback } }, ...steps);
 	if transcript.SelectedSignature == nil || transcript.SelectedSignature.Identity == "" {
 		t.Fatalf("selected signature = %#v, want durable identity", transcript.SelectedSignature)
 	}
+	if got := transcript.SelectedSignature.OverloadCount; got != 1 {
+		t.Fatalf("overload count = %d, want exact single-signature census", got)
+	}
 	if got := transcript.SelectedSignature.MinimumArgumentCount; got != 3 {
 		t.Fatalf("minimum argument count = %d, want 3", got)
 	}
@@ -134,6 +137,54 @@ execute({ mode: "read", nested: { callback } }, ...steps);
 	if answer.Envelope.Generation != 1 || answer.Envelope.DemandSHA256 == "" ||
 		answer.Envelope.ModuleGraphSHA256 == "" || len(answer.Envelope.Sources) < 1 {
 		t.Fatalf("envelope = %#v, want generation and all proof identities", answer.Envelope)
+	}
+}
+
+func TestInvocationTranscriptCountsOverloadsAndKeepsUnresolvedGenericLocal(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+function choose(value: string): string;
+function choose(value: number): number;
+function choose(value: string | number): string | number { return value; }
+declare function forward<T>(value: T): T;
+function generic<T>(value: T) { return forward(value); }
+choose(1);
+`
+	configPath := filepath.Join(dir, "tsconfig.json")
+	sourcePath := filepath.Join(dir, "facts.ts")
+	if err := os.WriteFile(configPath, []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), configPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	analyzer := opened.(typefacts.InvocationAnalyzer)
+	demands := invocationDemandsForNeedles(
+		sourcePath,
+		source,
+		[]string{"forward(value)", "choose(1)"},
+		false,
+	)
+	answer, err := analyzer.InvocationTranscripts(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generic := answer.Transcripts[0].SelectedSignature
+	if generic == nil || len(generic.Parameters) != 1 {
+		t.Fatalf("generic signature = %#v", generic)
+	}
+	if !slices.Contains(generic.Parameters[0].Value.OpenReasons, "unresolvedGeneric") ||
+		!slices.Contains(generic.Result.OpenReasons, "unresolvedGeneric") {
+		t.Fatalf("unresolved generic did not stay locally open: %#v", generic)
+	}
+	overloaded := answer.Transcripts[1].SelectedSignature
+	if overloaded == nil || overloaded.OverloadCount != 3 || overloaded.OverloadOrdinal >= overloaded.OverloadCount {
+		t.Fatalf("overload census = %#v, want selected ordinal within three declarations", overloaded)
 	}
 }
 

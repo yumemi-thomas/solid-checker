@@ -208,6 +208,7 @@ func (p *project) selectedSignatureLocked(
 	selected := typefacts.SelectedSignature{
 		Declaration:          *resolved,
 		OverloadOrdinal:      invocationOverloadOrdinal(declaration),
+		OverloadCount:        invocationOverloadCount(declaration),
 		MinimumArgumentCount: p.expandedMinimumArgumentCountLocked(signature, declaration),
 		HasRest:              signature.HasRestParameter(),
 	}
@@ -287,15 +288,29 @@ func invocationOverloadOrdinal(declaration *ast.Node) int {
 	return ordinal
 }
 
+func invocationOverloadCount(declaration *ast.Node) int {
+	if declaration == nil || declaration.Symbol() == nil {
+		return 0
+	}
+	count := 0
+	for _, candidate := range declaration.Symbol().Declarations {
+		if candidate.Kind == declaration.Kind {
+			count++
+		}
+	}
+	return count
+}
+
 func selectedSignatureDigest(kind typefacts.CallKind, selected typefacts.SelectedSignature) string {
 	hash := sha256.New()
-	hashField(hash, "solid-checker:typefacts:selected-signature:v1")
+	hashField(hash, "solid-checker:typefacts:selected-signature:v2")
 	hashField(hash, string(kind))
 	hashField(hash, string(selected.Declaration.Symbol))
 	hashField(hash, selected.Declaration.Location.Path)
 	hashField(hash, strconv.Itoa(selected.Declaration.Location.StartByte))
 	hashField(hash, strconv.Itoa(selected.Declaration.Location.EndByte))
 	hashField(hash, strconv.Itoa(selected.OverloadOrdinal))
+	hashField(hash, strconv.Itoa(selected.OverloadCount))
 	hashField(hash, strconv.Itoa(selected.MinimumArgumentCount))
 	hashField(hash, strconv.FormatBool(selected.HasRest))
 	for _, parameter := range selected.Parameters {
@@ -469,6 +484,9 @@ func (p *project) invocationValueFactLocked(value *checker.Type) typefacts.Invoc
 	fact.Partitions = p.finitePartitionsLocked(value, constituents)
 	if value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError) != 0 {
 		fact.OpenReasons = append(fact.OpenReasons, "openType")
+	}
+	if value.Flags()&checker.TypeFlagsInstantiable != 0 {
+		fact.OpenReasons = append(fact.OpenReasons, "unresolvedGeneric")
 	}
 	if len(p.checker.GetIndexInfosOfType(value)) != 0 {
 		fact.OpenReasons = append(fact.OpenReasons, "openIndex")

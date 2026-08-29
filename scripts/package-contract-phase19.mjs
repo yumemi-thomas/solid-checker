@@ -127,7 +127,7 @@ export function auditPhase19DemandAuthority(root = repositoryRoot) {
   if (
     audit.schemaVersion !== 1 ||
     audit.documentKind !== "solid-checker-package-contract-phase19-demand-authority-audit" ||
-    audit.capturedAt !== "2026-08-29" ||
+    audit.capturedAt !== "2026-08-30" ||
     audit.certificationReady !== false ||
     !Array.isArray(audit.demands)
   ) {

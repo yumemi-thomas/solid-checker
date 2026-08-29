@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     CallKind, CallTargetSet, Callability, Declaration, Location, PrimitiveLiteralCandidate,
-    ResolvedCallValidity, ResolvedDeclaration, TypeDescriptor,
+    ResolvedCallValidity, ResolvedDeclaration, SourceHash, TypeDescriptor, TypeFactsError,
 };
 
 pub const MAX_INVOCATION_CALLABLE_DEPTH: usize = 8;
@@ -269,6 +269,7 @@ pub struct SelectedSignature {
     pub identity: Arc<str>,
     pub declaration: ResolvedDeclaration,
     pub overload_ordinal: usize,
+    pub overload_count: usize,
     pub minimum_argument_count: usize,
     #[serde(default, skip_serializing_if = "is_false")]
     pub has_rest: bool,
@@ -410,6 +411,171 @@ pub struct InvocationEnvelope {
 pub struct InvocationAnswer {
     pub transcripts: Vec<InvocationTranscript>,
     pub envelope: InvocationEnvelope,
+}
+
+/// Verifier-owned identity that a certification invocation must be bound to.
+///
+/// This value is deliberately absent from the Type Facts wire model. The live
+/// Rust session adds it only after it has received and validated a response
+/// from the process it launched. A serialized [`InvocationAnswer`] therefore
+/// cannot be promoted back into certification authority by copying these
+/// strings into JSON.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CertificationInvocationContext {
+    snapshot_root: SourceHash,
+    demand_graph_root: SourceHash,
+    proof_demand_ids: Vec<SourceHash>,
+}
+
+impl CertificationInvocationContext {
+    pub fn new(
+        snapshot_root: impl Into<String>,
+        demand_graph_root: impl Into<String>,
+        proof_demand_ids: impl IntoIterator<Item = String>,
+    ) -> Result<Self, TypeFactsError> {
+        let snapshot_root = SourceHash::parse(snapshot_root)?;
+        let demand_graph_root = SourceHash::parse(demand_graph_root)?;
+        let mut proof_demand_ids = proof_demand_ids
+            .into_iter()
+            .map(SourceHash::parse)
+            .collect::<Result<Vec<_>, _>>()?;
+        proof_demand_ids.sort();
+        if proof_demand_ids.is_empty() || proof_demand_ids.windows(2).any(|pair| pair[0] == pair[1])
+        {
+            return Err(TypeFactsError::InvalidCertificationContext);
+        }
+        Ok(Self {
+            snapshot_root,
+            demand_graph_root,
+            proof_demand_ids,
+        })
+    }
+
+    #[must_use]
+    pub fn snapshot_root(&self) -> &str {
+        self.snapshot_root.as_str()
+    }
+
+    #[must_use]
+    pub fn demand_graph_root(&self) -> &str {
+        self.demand_graph_root.as_str()
+    }
+
+    #[must_use]
+    pub fn proof_demand_ids(&self) -> impl ExactSizeIterator<Item = &str> {
+        self.proof_demand_ids.iter().map(SourceHash::as_str)
+    }
+}
+
+/// Identity of the exact live producer response used for certification.
+///
+/// There is intentionally no serde implementation and no public constructor.
+/// Only [`crate::Session::certification_invocations`] can create this token.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LiveProducerSessionIdentity {
+    pub(crate) session_id: SourceHash,
+    pub(crate) restart_epoch: u64,
+    pub(crate) process_id: u32,
+    pub(crate) executable_sha256: SourceHash,
+    pub(crate) source_manifest_sha256: SourceHash,
+    pub(crate) handshake_protocol: u64,
+    pub(crate) handshake_schema_sha256: SourceHash,
+    pub(crate) handshake_build: Arc<str>,
+    pub(crate) project_id: Arc<str>,
+    pub(crate) generation: u64,
+    pub(crate) demand_sha256: SourceHash,
+    pub(crate) context: CertificationInvocationContext,
+    pub(crate) evidence_root: SourceHash,
+}
+
+impl LiveProducerSessionIdentity {
+    #[must_use]
+    pub fn session_id(&self) -> &str {
+        self.session_id.as_str()
+    }
+
+    #[must_use]
+    pub const fn restart_epoch(&self) -> u64 {
+        self.restart_epoch
+    }
+
+    #[must_use]
+    pub const fn process_id(&self) -> u32 {
+        self.process_id
+    }
+
+    #[must_use]
+    pub fn executable_sha256(&self) -> &str {
+        self.executable_sha256.as_str()
+    }
+
+    #[must_use]
+    pub fn source_manifest_sha256(&self) -> &str {
+        self.source_manifest_sha256.as_str()
+    }
+
+    #[must_use]
+    pub const fn handshake_protocol(&self) -> u64 {
+        self.handshake_protocol
+    }
+
+    #[must_use]
+    pub fn handshake_schema_sha256(&self) -> &str {
+        self.handshake_schema_sha256.as_str()
+    }
+
+    #[must_use]
+    pub fn handshake_build(&self) -> &str {
+        &self.handshake_build
+    }
+
+    #[must_use]
+    pub fn project_id(&self) -> &str {
+        &self.project_id
+    }
+
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    #[must_use]
+    pub fn demand_sha256(&self) -> &str {
+        self.demand_sha256.as_str()
+    }
+
+    #[must_use]
+    pub const fn context(&self) -> &CertificationInvocationContext {
+        &self.context
+    }
+
+    #[must_use]
+    pub fn evidence_root(&self) -> &str {
+        self.evidence_root.as_str()
+    }
+}
+
+/// A response obtained directly from one pinned live producer process.
+///
+/// The ordinary answer remains available for audit, but the non-serializable
+/// identity token is what lets the backend reject copied responses and
+/// cross-session or cross-restart splicing.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LiveInvocationAnswer {
+    pub(crate) answer: InvocationAnswer,
+    pub(crate) identity: LiveProducerSessionIdentity,
+}
+
+impl LiveInvocationAnswer {
+    #[must_use]
+    pub const fn answer(&self) -> &InvocationAnswer {
+        &self.answer
+    }
+
+    #[must_use]
+    pub const fn identity(&self) -> &LiveProducerSessionIdentity {
+        &self.identity
+    }
 }
 
 const fn is_false(value: &bool) -> bool {

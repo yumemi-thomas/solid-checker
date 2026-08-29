@@ -34,11 +34,11 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b071a78a86949a1e4162408912d7622aed0460fba3a64fd52506fc14091417c7";
-/// 3 because demand-shaped invocation proof transcripts widen the lifecycle
-/// operation set. The digest and build id still move with it, and the handshake
-/// refuses a producer that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 3;
+    "sha256:129f78430a829013b3fe1a6fd9948b27f7ba7269858dd8438e61d5b2bef76fbe";
+/// 4 adds an exact overload census to demand-shaped invocation transcripts.
+/// The digest and build id still move with it, and the handshake refuses a
+/// producer that differs on any one of the three.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 4;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

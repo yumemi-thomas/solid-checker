@@ -502,6 +502,7 @@ fn invocation_transcript_supplies_exact_signature_arity_and_result_protocol() {
                 "location": location
             },
             "overloadOrdinal": 0,
+            "overloadCount": 1,
             "minimumArgumentCount": 1,
             "result": {
                 "callability": "nonCallable",

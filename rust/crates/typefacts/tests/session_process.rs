@@ -1,13 +1,108 @@
 use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
+use sha2::{Digest as _, Sha256};
 use typefacts::{
-    AnalysisDemand, ArgumentBindingDisposition, ArrayShape, CallKind, Callability, ConstantValue,
-    ConstantValueKind, Constructability, ConstructionWitness, DemandGroup, FinitePartitionAxis,
-    InvocationDemand, InvocationDomain, Location, ModuleGraphDemand, ModuleResolution,
-    PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain,
-    Session, SessionError,
+    AnalysisDemand, ArgumentBindingDisposition, ArrayShape, CallKind, Callability,
+    CertificationInvocationContext, ConstantValue, ConstantValueKind, Constructability,
+    ConstructionWitness, DemandGroup, FinitePartitionAxis, InvocationDemand, InvocationDomain,
+    Location, ModuleGraphDemand, ModuleResolution, PrimitiveValueDomain, Producer, ReferenceSpace,
+    ResolvedCallValidity, RuntimeValueDomain, Session, SessionError, SourceHash,
     v3::{EntityDemand, FileChange},
 };
+
+fn executable_digest(path: &std::path::Path) -> String {
+    format!("sha256:{:x}", Sha256::digest(fs::read(path).unwrap()))
+}
+
+#[test]
+fn live_certification_identity_cannot_be_copied_or_spliced_between_sessions() {
+    let project = project();
+    let source_path = project.parent().unwrap().join("unrelated.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let needle = "identity(42)";
+    let start = source.find(needle).unwrap();
+    let demand = InvocationDemand {
+        location: Location {
+            path: source_path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + needle.len()) as u64,
+        },
+        callable_depth: 1,
+        census: true,
+    };
+    let snapshot = SourceHash::of("snapshot").to_string();
+    let graph = SourceHash::of("demand-graph").to_string();
+    let demand_id = SourceHash::of("proof-demand").to_string();
+    let context = || {
+        CertificationInvocationContext::new(snapshot.clone(), graph.clone(), [demand_id.clone()])
+            .unwrap()
+    };
+    let executable = producer();
+    let executable_sha256 = executable_digest(&executable);
+    let source_manifest_sha256 = SourceHash::of("source-manifest").to_string();
+
+    let mut ordinary = Session::open(
+        Producer::at(&executable),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    assert!(matches!(
+        ordinary.certification_invocations(context(), std::slice::from_ref(&demand)),
+        Err(SessionError::ProducerProvenance(_))
+    ));
+    ordinary.close().unwrap();
+
+    let mut first = Session::open(
+        Producer::pinned_for_certification(
+            &executable,
+            executable_sha256.clone(),
+            source_manifest_sha256.clone(),
+        )
+        .unwrap(),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let first_answer = first
+        .certification_invocations(context(), std::slice::from_ref(&demand))
+        .unwrap();
+    assert_eq!(first_answer.identity().restart_epoch(), 0);
+    assert_eq!(
+        first_answer.identity().executable_sha256(),
+        executable_sha256
+    );
+    assert_eq!(
+        first_answer.identity().source_manifest_sha256(),
+        source_manifest_sha256
+    );
+
+    let mut second = Session::open(
+        Producer::pinned_for_certification(&executable, executable_sha256, source_manifest_sha256)
+            .unwrap(),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let second_answer = second
+        .certification_invocations(context(), &[demand])
+        .unwrap();
+    assert_ne!(
+        first_answer.identity().session_id(),
+        second_answer.identity().session_id()
+    );
+    assert_ne!(
+        first_answer.identity().process_id(),
+        second_answer.identity().process_id()
+    );
+    assert_ne!(
+        first_answer.identity().evidence_root(),
+        second_answer.identity().evidence_root(),
+        "equal serialized facts from another process must not share authority"
+    );
+    first.close().unwrap();
+    second.close().unwrap();
+}
 
 #[test]
 fn invocation_transcripts_cross_the_process_seam_and_refresh_after_update() {

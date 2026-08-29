@@ -199,6 +199,7 @@ type SelectedSignature struct {
 	Identity             string              `cbor:"identity" json:"identity"`
 	Declaration          ResolvedDeclaration `cbor:"declaration" json:"declaration"`
 	OverloadOrdinal      int                 `cbor:"overloadOrdinal" json:"overloadOrdinal"`
+	OverloadCount        int                 `cbor:"overloadCount" json:"overloadCount"`
 	MinimumArgumentCount int                 `cbor:"minimumArgumentCount" json:"minimumArgumentCount"`
 	HasRest              bool                `cbor:"hasRest,omitempty" json:"hasRest,omitempty"`
 	Parameters           []SelectedParameter `cbor:"parameters,omitempty" json:"parameters,omitempty"`

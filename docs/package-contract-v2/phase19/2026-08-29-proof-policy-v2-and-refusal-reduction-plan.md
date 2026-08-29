@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: proposed
+Status: implementation in progress (Slices 0–5 implemented; Slice 6 next)
 
 Review status: adversarially revised
 
@@ -486,8 +486,19 @@ namespace, wildcard, and divergent runtime/declaration targets; and rejects a
 caller closure or export table on any path, role, edge, hash, condition trace,
 or target mismatch. Transformed output remains explicitly uncertifiable until
 both output and tool bytes can be materialized inside the snapshot authority.
-Authority-bearing Type Facts, compiler, dependency, and probe adapters, receipt
-authentication, and the atomic cut are still pending. Run
+Slice 5 now acquires Type Facts evidence only through a non-serializable live
+session token. The backend verifies a compile-time executable/source-manifest
+pin, copies and re-hashes the producer in a private execution directory, and
+binds the response to handshake, PID, session/restart epoch, project generation,
+snapshot, demand graph, and exact proof-demand IDs. Family reconciliation checks
+selected signatures and overload census, argument/rest-spread mappings,
+callable paths, reachability, recursive local leaves, finite partitions, and
+domain completeness against the snapshot declaration census. Unknown spreads,
+unresolved generics, escaped callbacks, composite dispatch, open guards, and
+multi-overload closure remain typed refusals; operation cardinality remains
+unsupported because the producer has no exact arbitrary loop/reentry bound.
+Compiler, dependency, and probe adapters, receipt authentication, and the
+atomic cut are still pending. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
 artifact and digest with the compiled definition.

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "documentKind": "solid-checker-package-contract-phase19-demand-authority-audit",
-  "capturedAt": "2026-08-29",
+  "capturedAt": "2026-08-30",
   "certificationReady": false,
   "statusMeaning": {
     "already exact": "The named producer field and its local completeness state already carry the stated fact exactly; policy 2 may consume it only after every separately listed snapshot or session binding demand succeeds.",
@@ -147,11 +147,11 @@
     {
       "id": "selected-signature/direct-session-binding",
       "family": "selected-signature",
-      "status": "producer extension required",
-      "producerField": "InvocationEnvelope",
-      "source": "rust/crates/typefacts/src/invocation.rs",
-      "completenessGuarantee": "The envelope binds project generation, demand, module graph, schema, build, and source digests.",
-      "policy2Gap": "It does not bind the launched executable, runtime image, process epoch, or policy demand ID as receipt authority."
+      "status": "already exact",
+      "producerField": "LiveProducerSessionIdentity",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs",
+      "completenessGuarantee": "The non-serializable live token binds the private launched image, executable/source-manifest pins, handshake, PID, restart epoch, project generation, snapshot, graph, and demand IDs.",
+      "policy2Gap": "none; serialized InvocationEnvelope bytes remain non-authoritative"
     },
     {
       "id": "argument-binding/formal-actual-map",
@@ -165,11 +165,11 @@
     {
       "id": "argument-binding/direct-session-binding",
       "family": "argument-binding",
-      "status": "producer extension required",
-      "producerField": "InvocationEnvelope",
-      "source": "rust/crates/typefacts/src/invocation.rs",
-      "completenessGuarantee": "Demand and source identities are present in the envelope.",
-      "policy2Gap": "Serialized caller responses are not yet excluded as authority by an opaque live-session witness."
+      "status": "already exact",
+      "producerField": "LiveInvocationAnswer/LiveProducerSessionIdentity",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs",
+      "completenessGuarantee": "Only the live pinned session constructs the token; launch-recipe changes drop the pin and each proof demand is scheduled exactly once.",
+      "policy2Gap": "none; ordinary and serialized invocation answers cannot construct authority"
     },
     {
       "id": "rest-spread-coverage/disposition-and-range",
@@ -210,11 +210,11 @@
     {
       "id": "callable-path/direct-session-binding",
       "family": "callable-path",
-      "status": "producer extension required",
-      "producerField": "InvocationEnvelope",
-      "source": "rust/crates/typefacts/src/invocation.rs",
-      "completenessGuarantee": "The envelope binds the current source and demand digests.",
-      "policy2Gap": "The callable-path result is not yet carried by an authority-bearing live-session witness."
+      "status": "already exact",
+      "producerField": "VerifiedTypeFactsEvidence",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs",
+      "completenessGuarantee": "Callable-path evidence is emitted only from a directly acquired live answer with complete local path facts and exact snapshot declaration identity.",
+      "policy2Gap": "none for fixed property/tuple paths; dynamic paths remain unsupported"
     },
     {
       "id": "operation-reachability/control-flow-census",
@@ -264,11 +264,11 @@
     {
       "id": "recursive-value-shape/normalized-path-witness",
       "family": "recursive-value-shape",
-      "status": "producer extension required",
-      "producerField": "InvocationValueFact/CallablePathFact",
-      "source": "rust/crates/typefacts/src/invocation.rs",
-      "completenessGuarantee": "Producer paths are source- and declaration-addressed.",
-      "policy2Gap": "There is no demand-ID-bound mapping to every retained normalized recursive positive."
+      "status": "already exact",
+      "producerField": "VerifiedTypeFactsEvidence recursive subject reconciliation",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs",
+      "completenessGuarantee": "Each demanded fixed tuple/property path is translated exactly, bound to its opaque demand ID, and verified without consulting unrelated siblings.",
+      "policy2Gap": "none for fixed paths; array/protocol/dynamic leaves remain locally unsupported"
     },
     {
       "id": "guard-partition/finite-discriminants-and-branches",
@@ -354,11 +354,11 @@
     {
       "id": "domain-exhaustiveness/package-source-census",
       "family": "domain-exhaustiveness",
-      "status": "producer extension required",
-      "producerField": "InvocationEnvelope.sources/moduleGraphSha256",
-      "source": "rust/crates/typefacts/src/invocation.rs",
-      "completenessGuarantee": "The envelope binds the analyzed source and module graph digests.",
-      "policy2Gap": "No opaque witness proves that every applicable normalized claim site is demanded and classified for the snapshot."
+      "status": "already exact",
+      "producerField": "InvocationEnvelope.sources plus TypeFactsCertificationSchedule",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs",
+      "completenessGuarantee": "The schedule covers every Type Facts demand exactly once and the backend reconciles every consulted package source and required declaration against the immutable snapshot.",
+      "policy2Gap": "none for the exact scheduled domain; multi-overload closure remains refused until one verifier demand exists per overload"
     },
     {
       "id": "probe-consistency/contradiction-evaluation",

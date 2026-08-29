@@ -30,9 +30,9 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       proofPolicy: 1,
       receiptVersion: 1,
       typeFactsProducer: {
-        sourceManifest: "sha256:aa653630f88754304bf4d6722859a4e686f833340f2963e7665b1a308de1e793",
-        handshakeProtocol: 3,
-        schema: "sha256:b071a78a86949a1e4162408912d7622aed0460fba3a64fd52506fc14091417c7",
+        sourceManifest: "sha256:12a0585d59618a2e227f1f25fba613c4a1c5bddc7c6f17c401616f8194e8d10a",
+        handshakeProtocol: 4,
+        schema: "sha256:129f78430a829013b3fe1a6fd9948b27f7ba7269858dd8438e61d5b2bef76fbe",
         buildId: "dev"
       },
       compilerProducers: [
@@ -58,7 +58,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       artifactPrerequisiteFamilies: 6,
       claimFamilies: 9,
       policyDigest:
-        "sha256:9fcc7bf98dc9af6bc97e7dda52d9201de4c11dd4654a5c417e5ba8ce80b4da78"
+        "sha256:8b068528cdf58fb6a2dd0a8c8d38e7c880fced243cf250ac1723bc5fb32e5d58"
     });
   });
 
@@ -70,10 +70,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
     assert.deepEqual(auditPhase19DemandAuthority(), {
       demands: 43,
       families: 18,
-      alreadyExact: 23,
-      producerExtensionRequired: 13,
+      alreadyExact: 28,
+      producerExtensionRequired: 8,
       unsupported: 7,
-      certificationReadyFamilies: 4
+      certificationReadyFamilies: 7
     });
   });
 });

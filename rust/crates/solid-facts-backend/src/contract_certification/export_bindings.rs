@@ -44,6 +44,15 @@ impl SnapshotVerifiedExports {
     pub fn is_empty(&self) -> bool {
         self.bindings.is_empty()
     }
+
+    pub(super) fn declaration_binding(&self, name: &str) -> Option<(&str, &str)> {
+        self.bindings.get(name).map(|binding| {
+            (
+                binding.declarations_path.as_str(),
+                binding.declarations_export.as_str(),
+            )
+        })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

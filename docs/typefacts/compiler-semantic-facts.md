@@ -501,7 +501,14 @@ import list is distinguishable from an unanalyzed file.
 The active lifecycle schema is V1 and the active Wire table model is v17. The
 `modules` and `invocations` operations carry no Wire table transition: their
 answers belong to the open program generation rather than to a retained fact
-table. The packed transition framing remains version 1. Handshake protocol 3
-adds invocation transcripts; Go and Rust pin that protocol, the same schema
-digest, and the same build identity, so mismatched producer/client versions fail
-during startup.
+table. The packed transition framing remains version 1. Handshake protocol 4
+adds the exact overload count beside the selected overload ordinal in invocation
+transcripts. Go and Rust pin that protocol, the same schema digest, and the same
+build identity, so mismatched producer/client versions fail during startup.
+
+Policy-2 package certification uses a stricter client path than ordinary
+analysis. It launches a compile-time-pinned producer from a private execution
+snapshot and returns a non-serializable live token binding executable and source
+manifest digests, handshake, PID, restart epoch, project generation, demand,
+snapshot, and proof-demand graph. A serialized invocation response or copied
+build string has no constructor for that token.

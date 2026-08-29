@@ -4,12 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 3 because the lifecycle operation set widened
-// with demand-shaped invocation proof transcripts. The digest and build id
-// still move with it, and the handshake refuses on any mismatch.
+// TypeFactsHandshakeProtocol is 4 because selected-signature transcripts now
+// carry their exact overload census. The digest and build id still move with
+// it, and the handshake refuses on any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 3
-	TypeFactsSchemaSHA256             = "sha256:b071a78a86949a1e4162408912d7622aed0460fba3a64fd52506fc14091417c7"
+	TypeFactsHandshakeProtocol uint64 = 4
+	TypeFactsSchemaSHA256             = "sha256:129f78430a829013b3fe1a6fd9948b27f7ba7269858dd8438e61d5b2bef76fbe"
 )
 
 type ServiceHandshake struct {

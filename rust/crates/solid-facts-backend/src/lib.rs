@@ -29,7 +29,8 @@ pub use contract_certification::{
     ArtifactSnapshot, ArtifactSnapshotError, CertificationPlan, CertificationPlanningError,
     CertificationRequest, LocalArtifact, LockPinnedArchive, PublishedArchive, SnapshotLimits,
     SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
-    UntrustedArtifactEnvelope, WitnessWireError, plan_certification,
+    TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
+    UntrustedArtifactEnvelope, VerifiedTypeFactsEvidence, WitnessWireError, plan_certification,
 };
 pub use contract_document::SidecarDigests;
 pub use contract_interface::{

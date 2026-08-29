@@ -1321,8 +1321,13 @@ struct ArtifactProducerConstraints {
 struct ProcessProducerConstraints {
     session: &'static str,
     executable_digest_required: bool,
+    source_manifest_digest_required: bool,
     runtime_digest_required: bool,
     build_and_protocol_identity_required: bool,
+    private_execution_snapshot_required: bool,
+    process_and_restart_epoch_required: bool,
+    project_generation_required: bool,
+    snapshot_and_demand_binding_required: bool,
     caller_serialized_authority_accepted: bool,
 }
 
@@ -1565,15 +1570,25 @@ const fn manifest() -> PolicyManifest {
             type_facts: ProcessProducerConstraints {
                 session: "direct-fresh-process",
                 executable_digest_required: true,
+                source_manifest_digest_required: true,
                 runtime_digest_required: true,
                 build_and_protocol_identity_required: true,
+                private_execution_snapshot_required: true,
+                process_and_restart_epoch_required: true,
+                project_generation_required: true,
+                snapshot_and_demand_binding_required: true,
                 caller_serialized_authority_accepted: false,
             },
             compiler_execution_facts: ProcessProducerConstraints {
                 session: "direct-fresh-process",
                 executable_digest_required: true,
+                source_manifest_digest_required: true,
                 runtime_digest_required: true,
                 build_and_protocol_identity_required: true,
+                private_execution_snapshot_required: true,
+                process_and_restart_epoch_required: true,
+                project_generation_required: true,
+                snapshot_and_demand_binding_required: true,
                 caller_serialized_authority_accepted: false,
             },
             accepted_dependency_contract: DependencyProducerConstraints {
@@ -1649,7 +1664,7 @@ mod tests {
         assert_eq!(policy.semantic_model_version(), SEMANTIC_MODEL_VERSION);
         assert_eq!(
             policy.digest().as_str(),
-            "sha256:9fcc7bf98dc9af6bc97e7dda52d9201de4c11dd4654a5c417e5ba8ce80b4da78"
+            "sha256:8b068528cdf58fb6a2dd0a8c8d38e7c880fced243cf250ac1723bc5fb32e5d58"
         );
         assert_eq!(PROOF_POLICY_VERSION, 1);
         assert_eq!(ACCEPTANCE_RECEIPT_VERSION, 1);

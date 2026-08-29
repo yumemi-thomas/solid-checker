@@ -185,15 +185,25 @@
     "typeFacts": {
       "session": "direct-fresh-process",
       "executableDigestRequired": true,
+      "sourceManifestDigestRequired": true,
       "runtimeDigestRequired": true,
       "buildAndProtocolIdentityRequired": true,
+      "privateExecutionSnapshotRequired": true,
+      "processAndRestartEpochRequired": true,
+      "projectGenerationRequired": true,
+      "snapshotAndDemandBindingRequired": true,
       "callerSerializedAuthorityAccepted": false
     },
     "compilerExecutionFacts": {
       "session": "direct-fresh-process",
       "executableDigestRequired": true,
+      "sourceManifestDigestRequired": true,
       "runtimeDigestRequired": true,
       "buildAndProtocolIdentityRequired": true,
+      "privateExecutionSnapshotRequired": true,
+      "processAndRestartEpochRequired": true,
+      "projectGenerationRequired": true,
+      "snapshotAndDemandBindingRequired": true,
       "callerSerializedAuthorityAccepted": false
     },
     "acceptedDependencyContract": {
