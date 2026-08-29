@@ -244,6 +244,7 @@ async function analyzeArtifact({
     plan,
     entrypoint,
     conditions,
+    resolution,
     identity: JSON.stringify({
       entrypoint,
       runtime: resolution.runtime,
@@ -280,6 +281,7 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
   const scratch = mkdtempSync(join(tmpdir(), "solid-checker-contract-"));
   const proposals = [];
   let emittedArtifactCases = 0;
+  let certificationProposals = [];
   const refusals = wildcardRefusals.map(entrypoint => ({
     entrypoint,
     conditions: null,
@@ -338,6 +340,7 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     try {
       await merge(proposals, output, `${output}.proposal.json`);
       emittedArtifactCases = proposals.length;
+      certificationProposals = proposals;
     } catch {
       // One contradictory proposal must not erase unrelated exact cases. The
       // fallback greedily replays Rust's merge boundary and refuses only the
@@ -348,8 +351,13 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
           const nextDocument = join(scratch, `merge-${index}.json`);
           const nextPlan = `${nextDocument}.proposal.json`;
           const inputs = merged ? [merged, candidate] : [candidate];
-          await merge(inputs, nextDocument, nextPlan);
-          return { document: nextDocument, plan: nextPlan };
+          const proposalsToMerge = inputs.flatMap(input => input.certificationProposals ?? [input]);
+          await merge(proposalsToMerge, nextDocument, nextPlan);
+          return {
+            document: nextDocument,
+            plan: nextPlan,
+            certificationProposals: proposalsToMerge
+          };
         }
       );
       for (const { candidate, error } of fallback.rejected) {
@@ -362,6 +370,7 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
       }
       if (!fallback.merged) throw new Error("no independently mergeable artifact case remains");
       emittedArtifactCases = fallback.acceptedCount;
+      certificationProposals = fallback.merged.certificationProposals;
       copyFileSync(fallback.merged.document, output);
       copyFileSync(fallback.merged.plan, `${output}.proposal.json`);
     }
@@ -391,6 +400,11 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     entrypoints: entrypoints.length,
     artifactCases: emittedArtifactCases,
     refusedArtifactCases: refusals.length,
+    certificationInputs: certificationProposals.map(proposal => ({
+      entrypoint: proposal.entrypoint,
+      conditions: proposal.conditions,
+      resolution: proposal.resolution
+    })),
     accepted: false
   };
   if (!quiet) {

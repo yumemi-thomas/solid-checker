@@ -2474,6 +2474,12 @@ mod tests {
         let candidate = ContractProposal::new(package, vec![artifact_case])
             .normalize()
             .unwrap();
+        let candidate_document = crate::contract_document::encode(
+            &candidate,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .unwrap();
         let plan = plan_certification(
             CertificationRequest::new(candidate, request.clone(), resolved.clone()),
             UntrustedArtifactEnvelope::Published(archive.clone()),
@@ -2497,6 +2503,15 @@ mod tests {
                 .verify_witness_coverage(plan.artifact_witness_bindings().iter().cloned())
                 .is_ok()
         );
+        let document_plan = crate::plan_contract_document_certification(
+            &candidate_document,
+            request.clone(),
+            resolved.clone(),
+            UntrustedArtifactEnvelope::Published(archive),
+        )
+        .unwrap();
+        assert_eq!(document_plan.snapshot_root(), snapshot.root());
+        assert_eq!(document_plan.demand_graph().demands().len(), 6);
 
         let request_without_development = ImportRequest {
             export_conditions: vec!["import".into()],

@@ -43,11 +43,14 @@ solid-checker contract review solid-reactivity.json
 solid-checker contract verify # deterministic migration refusal
 ```
 
-The upcoming `solid-checker contract certify` command will own reacquisition,
-witness scheduling, issuer invocation, and atomic catalog publication. Until
-that workflow succeeds, the native checker reports the exact import as
-uncertifiable rather than accepting name-only, stale, unreceipted, or
-artifact-mismatched input.
+`solid-checker contract certify --integrity 'sha512-…'` now owns exact registry
+reacquisition, Rust demand planning, witness scheduling, issuer invocation,
+and catalog-last publication. The initial policy-2 producer rollout fails
+closed at the first unavailable live witness adapter; `--audit-output` records
+the exact demand-local refusal but is explicitly non-replayable authority.
+Until every demanded producer answers and an issuer is configured, the native
+checker reports the exact import as uncertifiable rather than accepting
+name-only, stale, unreceipted, or artifact-mismatched input.
 `solid-checker contract probe` is a separate opt-in falsification workflow;
 ordinary generation and analysis never execute dependency code, and a passing
 probe never closes a claim.

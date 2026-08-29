@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-Status: implementation in progress (Slices 0–9 implemented; Slice 10 next)
+Status: implementation in progress (Slices 0–10 implemented; Slice 11 next)
 
 Review status: adversarially revised
 
@@ -696,6 +696,19 @@ after success. Intermediate failures produce deterministic claim-local
 refusals and never leave a partially accepted catalog entry. Repurpose or
 remove public `verify-contract` proof-file issuance; audit transcripts may be
 exported for diagnosis but cannot be replayed as authority.
+
+Implemented. `solid-checker contract certify` reacquires the exact published
+registry record and archive against the package-manager SRI, generates its open
+proposal in scratch space, and sends the proposal, independently acquired
+resolution, registry metadata, and archive through a native planning boundary.
+Rust rebuilds the immutable snapshot and emits the policy-2 demand graph; Node
+never derives or edits demand IDs. The transaction orders artifact acquisition,
+proposal generation, demand planning, live witness acquisition, certification,
+configured issuance, and catalog publication, with publication unreachable
+until every earlier authority succeeds. Current missing producer adapters fail
+closed with exact demand/family/owner records. Optional audit output is marked
+non-authoritative and non-replayable, and neither `certify` nor the retired
+`verify` command accepts caller proof or receipt files.
 
 ### Slice 11 — Reduce refusals by verified-export leverage
 

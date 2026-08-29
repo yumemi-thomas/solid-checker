@@ -150,10 +150,15 @@ receipt-version-2 payload binds exact main/semantic identity; every artifact,
 producer, dependency, probe, witness, and closed-claim root; verifier
 source/build; and issuer kind, scope, key, algorithm, and signature.
 
-The automatic `solid-checker contract certify` orchestration is the next Phase
-19 slice. Until it is available and every required producer can answer, a
-proposal remains open and no catalog pointer is published. The current
-policy-1 migration catalog shape is deliberately refusal-only:
+The automatic `solid-checker contract certify --integrity 'sha512-…'`
+orchestration reacquires exact registry metadata and archive bytes, generates
+the open proposal, and asks Rust to replay the snapshot and derive demand IDs.
+It accepts no proof or receipt input. Missing live Type Facts, compiler,
+dependency, probe, or issuer authority becomes a deterministic demand-local
+refusal; an optional audit transcript is marked non-authoritative and
+non-replayable. The transaction cannot publish a catalog pointer until every
+witness, certification result, and receipt succeeds. The current policy-1
+migration catalog shape is deliberately refusal-only:
 
 ```json
 {

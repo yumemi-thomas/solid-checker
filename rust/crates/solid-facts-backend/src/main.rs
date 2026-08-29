@@ -109,6 +109,14 @@ struct Request {
     runtime_probe_runs: String,
     #[serde(default)]
     runtime_probe_evaluation_output: String,
+    /// Node-owned acquisition request for policy-2 planning. Rust reads the
+    /// proposal, registry metadata, archive, and exact resolution once, then
+    /// emits only verifier-derived demand identities. This is planning, never
+    /// receipt authority.
+    #[serde(default)]
+    plan_contract_certification: String,
+    #[serde(default)]
+    certification_plan_output: String,
     #[serde(default)]
     package_name: String,
     #[serde(default)]
@@ -142,6 +150,103 @@ fn producer_arguments(arguments: &[String]) -> Vec<String> {
 
 fn json_format() -> String {
     "json".into()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContractCertificationPlanningRequest {
+    schema_version: u16,
+    proposal: String,
+    resolution: solid_facts_backend::ResolvedImport,
+    #[serde(default)]
+    export_conditions: Vec<String>,
+    registry_origin: String,
+    registry_metadata: String,
+    archive: String,
+}
+
+fn write_contract_certification_plan(
+    request_path: &Path,
+    output_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let request: ContractCertificationPlanningRequest =
+        serde_json::from_slice(&fs::read(request_path)?)?;
+    if request.schema_version != 1 {
+        return Err(format!(
+            "unsupported certification planning request version {}; expected 1",
+            request.schema_version
+        )
+        .into());
+    }
+    let import_request = solid_facts_backend::ImportRequest {
+        specifier: request.resolution.specifier.clone(),
+        importer: request.resolution.importer.clone(),
+        export_conditions: request.export_conditions,
+    };
+    let archive = solid_facts_backend::PublishedArchive::new(
+        request.registry_origin,
+        request.resolution.package_name.clone(),
+        request.resolution.package_version.clone(),
+        fs::read(request.registry_metadata)?,
+        fs::read(request.archive)?,
+    )?;
+    let plan = solid_facts_backend::plan_contract_document_certification(
+        &fs::read(request.proposal)?,
+        import_request,
+        request.resolution,
+        solid_facts_backend::UntrustedArtifactEnvelope::Published(archive),
+    )?;
+    let graph = plan.demand_graph();
+    let snapshot_witnesses = plan
+        .artifact_witness_bindings()
+        .iter()
+        .map(|witness| witness.demand_id())
+        .collect::<BTreeSet<_>>();
+    let output = serde_json::json!({
+        "format": "solid-checker-contract-certification-plan",
+        "planVersion": 1,
+        "policyDigest": graph.policy_digest().as_str(),
+        "candidateSemanticDigest": graph.candidate_semantic_digest().as_str(),
+        "snapshotRoot": graph.snapshot_root().as_str(),
+        "provenanceRoot": graph.provenance_root().as_str(),
+        "demandGraphRoot": graph.root().as_str(),
+        "demands": graph.demands().iter().map(|demand| serde_json::json!({
+            "id": demand.id().as_str(),
+            "family": demand.family(),
+            "owner": certification_demand_owner(demand.family()),
+            "satisfiedByArtifactSnapshot": snapshot_witnesses.contains(demand.id().as_str()),
+        })).collect::<Vec<_>>(),
+    });
+    let mut bytes = serde_json::to_vec_pretty(&output)?;
+    bytes.push(b'\n');
+    fs::write(output_path, bytes)?;
+    Ok(())
+}
+
+fn certification_demand_owner(
+    family: solid_reactive_ir::contract_semantics::certification::ProofFamily,
+) -> &'static str {
+    use solid_reactive_ir::contract_semantics::certification::ProofFamily;
+    match family {
+        ProofFamily::PackageIdentity
+        | ProofFamily::ManifestEntrypoint
+        | ProofFamily::ExportResolution
+        | ProofFamily::ArtifactDeclarations
+        | ProofFamily::ExportIdentity
+        | ProofFamily::ModuleClosure => "package-artifact",
+        ProofFamily::SelectedSignature
+        | ProofFamily::ArgumentBinding
+        | ProofFamily::RestSpreadCoverage
+        | ProofFamily::CallablePath
+        | ProofFamily::OperationReachability
+        | ProofFamily::OperationCardinality
+        | ProofFamily::RecursiveValueShape
+        | ProofFamily::GuardPartition
+        | ProofFamily::DomainExhaustiveness => "type-facts",
+        ProofFamily::CompilerReconciliation => "compiler-facts",
+        ProofFamily::AcceptedDependencyComposition => "dependency-contract",
+        ProofFamily::ProbeConsistency => "probe-gate",
+    }
 }
 
 fn run() -> Result<i32, Box<dyn std::error::Error>> {
@@ -300,6 +405,20 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 )?,
             )?;
         }
+        return Ok(0);
+    }
+    if !request.plan_contract_certification.is_empty()
+        || !request.certification_plan_output.is_empty()
+    {
+        if request.plan_contract_certification.is_empty()
+            || request.certification_plan_output.is_empty()
+        {
+            return Err("--plan-contract-certification and --certification-plan-output are required together".into());
+        }
+        write_contract_certification_plan(
+            Path::new(&request.plan_contract_certification),
+            Path::new(&request.certification_plan_output),
+        )?;
         return Ok(0);
     }
     #[cfg(unix)]
@@ -650,6 +769,8 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut runtime_probe_plan_output = String::new();
     let mut runtime_probe_runs = String::new();
     let mut runtime_probe_evaluation_output = String::new();
+    let mut plan_contract_certification = String::new();
+    let mut certification_plan_output = String::new();
     let mut package_name = String::new();
     let mut package_version = String::new();
     let mut contract_entry_file = String::new();
@@ -765,6 +886,14 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--runtime-probe-evaluation-output=") {
             runtime_probe_evaluation_output = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--plan-contract-certification=") {
+            plan_contract_certification = value.into();
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--certification-plan-output=") {
+            certification_plan_output = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--package-version=") {
@@ -896,6 +1025,16 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                     .next()
                     .ok_or("--runtime-probe-evaluation-output needs a path")?
             }
+            "--plan-contract-certification" => {
+                plan_contract_certification = args
+                    .next()
+                    .ok_or("--plan-contract-certification needs a path")?
+            }
+            "--certification-plan-output" => {
+                certification_plan_output = args
+                    .next()
+                    .ok_or("--certification-plan-output needs a path")?
+            }
             "--package-name" => package_name = args.next().ok_or("--package-name needs a value")?,
             "--package-version" => {
                 package_version = args.next().ok_or("--package-version needs a value")?
@@ -955,6 +1094,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         && merge_contract_output.is_empty()
         && review_contract.is_empty()
         && runtime_probe_proposal.is_empty()
+        && plan_contract_certification.is_empty()
     {
         project.canonicalize()?
     } else {
@@ -996,6 +1136,8 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         runtime_probe_plan_output,
         runtime_probe_runs,
         runtime_probe_evaluation_output,
+        plan_contract_certification,
+        certification_plan_output,
         package_name,
         package_version,
         contract_entry_file,

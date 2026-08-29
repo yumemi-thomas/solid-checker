@@ -27,6 +27,7 @@ const PATHS = Object.freeze({
   proofAuthority: "rust/crates/solid-reactive-ir/src/contract_semantics/proof.rs",
   checkedCorpusAuthority: "rust/crates/solid-facts-backend/src/contract_workflow.rs",
   callerProofAuthority: "packages/cli/scripts/verify-contract.mjs",
+  certificationOrchestration: "packages/cli/scripts/certify-contract.mjs",
   typeFactsProtocol: "rust/crates/typefacts/src/v3.rs",
   solidV1Compiler: "rust/dialects/solid-v1/compiler/src/lib.rs",
   solidV2Compiler: "rust/dialects/solid-v2/compiler/src/lib.rs"
@@ -264,6 +265,8 @@ export function auditPhase19Cut(root = repositoryRoot) {
 
   const checkedCorpus = readText(root, PATHS.checkedCorpusAuthority);
   const callerProof = readText(root, PATHS.callerProofAuthority);
+  const certification = readText(root, PATHS.certificationOrchestration);
+  const dispatcher = readText(root, "packages/cli/bin/solid-checker.mjs");
   const native = readText(root, "rust/crates/solid-facts-backend/src/main.rs");
   for (const [path, source, marker] of [
     [PATHS.checkedCorpusAuthority, checkedCorpus, "accept_checked_corpus_case"],
@@ -274,6 +277,24 @@ export function auditPhase19Cut(root = repositoryRoot) {
   }
   if (existsSync(join(root, "rust/crates/solid-facts-backend/src/proof_checker.rs"))) {
     throw new Error("retired policy-1 proof checker remains active");
+  }
+  requireMarkers(certification, PATHS.certificationOrchestration, [
+    "runContractCertificationPipeline",
+    "plan-contract-certification",
+    "authoritative: false",
+    "replayable: false",
+    "catalogPublication"
+  ]);
+  requireMarkers(dispatcher, "packages/cli/bin/solid-checker.mjs", [
+    'process.argv[3] === "certify"',
+    "certifyContract"
+  ]);
+  for (const forbidden of ["--proof", "--receipt"]) {
+    if (certification.includes(`if (key === \"${forbidden}\")`)) {
+      throw new Error(
+        `${PATHS.certificationOrchestration} accepts caller authority ${forbidden}`
+      );
+    }
   }
   if (policy.status !== "active" || policy.proofVersion !== 2 || policy.receiptVersion !== 2) {
     throw new Error("policy 2 is not the active proof/receipt authority");
@@ -307,6 +328,7 @@ export function auditPhase19Cut(root = repositoryRoot) {
     pendingReceipts: counts.pending,
     checkedCorpusShortcuts: 0,
     callerProofIssuancePaths: 0,
+    automaticCertificationWorkflows: 1,
     obsoletePolicy1Catalogs: refusalCatalogs.length,
     proofVersion: policy.proofVersion,
     receiptVersion: policy.receiptVersion,

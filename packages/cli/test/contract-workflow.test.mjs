@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "vitest";
 
 import { createRuntimeProbeHarness } from "../scripts/contract-probe-harness.mjs";
+import {
+  CertificationRefusal,
+  certifyContract,
+  parseCertifyArguments,
+  runContractCertificationPipeline
+} from "../scripts/certify-contract.mjs";
 import { parseProbeArguments } from "../scripts/probe-contract.mjs";
 import { parseReviewArguments } from "../scripts/review-contract.mjs";
 import { parseVerifyArguments } from "../scripts/verify-contract.mjs";
@@ -25,6 +34,141 @@ test("policy-1 caller-proof verification is retired", () => {
     () => parseVerifyArguments(["proposal.json"]),
     /proof-file issuance was retired/
   );
+});
+
+test("policy-2 certification accepts no caller-authored proof or receipt input", () => {
+  assert.equal(
+    parseCertifyArguments(["--integrity", "sha512-cGlubmVk"]).integrity,
+    "sha512-cGlubmVk"
+  );
+  assert.throws(() => parseCertifyArguments([]), /--integrity is required/);
+  assert.throws(
+    () => parseCertifyArguments(["--integrity", "sha512-cGlubmVk", "--proof", "proof.json"]),
+    /unknown contract certification argument --proof/
+  );
+  assert.throws(
+    () => parseCertifyArguments(["--integrity", "sha512-cGlubmVk", "--receipt", "receipt.json"]),
+    /unknown contract certification argument --receipt/
+  );
+});
+
+test("certification publishes only after every authority stage succeeds", async () => {
+  const stages = [];
+  const result = await runContractCertificationPipeline({
+    request: { package: "example" },
+    acquisition: {
+      acquireArtifacts: async () => (stages.push("artifact"), { snapshot: "exact" })
+    },
+    proposal: {
+      generate: async () => (stages.push("proposal"), { authority: "rust" })
+    },
+    rust: {
+      planDemands: async () => (stages.push("demands"), { authority: "rust" }),
+      certify: async () => (stages.push("certify"), { authority: "rust" })
+    },
+    evidence: {
+      obtainWitnesses: async () => (stages.push("witnesses"), { live: true })
+    },
+    issuer: {
+      issue: async () => (stages.push("receipt"), { authority: "configured-issuer" })
+    },
+    publication: {
+      commit: async () => (stages.push("publish"), "published")
+    }
+  });
+  assert.equal(result, "published");
+  assert.deepEqual(stages, [
+    "artifact",
+    "proposal",
+    "demands",
+    "witnesses",
+    "certify",
+    "receipt",
+    "publish"
+  ]);
+});
+
+test("an intermediate certification refusal cannot reach catalog publication", async () => {
+  let published = false;
+  await assert.rejects(
+    runContractCertificationPipeline({
+      request: {},
+      acquisition: { acquireArtifacts: async () => ({}) },
+      proposal: { generate: async () => ({ authority: "rust" }) },
+      rust: {
+        planDemands: async () => ({ authority: "rust" }),
+        certify: async () => ({ authority: "rust" })
+      },
+      evidence: {
+        obtainWitnesses: async () => {
+          throw new CertificationRefusal({
+            stage: "witness-acquisition",
+            owner: "probe-gate",
+            demandId: "sha256:missing",
+            family: "probe-consistency",
+            reason: "missing live harness binding"
+          });
+        }
+      },
+      issuer: { issue: async () => ({ authority: "configured-issuer" }) },
+      publication: { commit: async () => (published = true) }
+    }),
+    /witness-acquisition refused for demand sha256:missing/
+  );
+  assert.equal(published, false);
+});
+
+test("concrete acquisition failure writes only a non-replayable audit", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-certify-test-"));
+  const catalog = join(root, "accepted-contracts.json");
+  const audit = join(root, "audit.json");
+  writeFileSync(join(root, "package.json"), '{"name":"example","version":"1.0.0"}\n');
+  writeFileSync(catalog, "catalog-sentinel\n");
+  const metadata = new TextEncoder().encode(
+    JSON.stringify({
+      versions: {
+        "1.0.0": {
+          name: "example",
+          version: "1.0.0",
+          dist: {
+            integrity: "sha512-registry",
+            tarball: "https://registry.npmjs.org/example/-/example-1.0.0.tgz"
+          }
+        }
+      }
+    })
+  );
+  const fetch_ = async () => ({
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => metadata.buffer
+  });
+  try {
+    await assert.rejects(
+      certifyContract(
+        [
+          "--package-root",
+          root,
+          "--integrity",
+          "sha512-lockfile",
+          "--catalog",
+          catalog,
+          "--audit-output",
+          audit
+        ],
+        { fetch_ }
+      ),
+      /registry integrity .* disagrees/
+    );
+    assert.equal(readFileSync(catalog, "utf8"), "catalog-sentinel\n");
+    assert.equal(existsSync(audit), true);
+    const transcript = JSON.parse(readFileSync(audit, "utf8"));
+    assert.equal(transcript.authoritative, false);
+    assert.equal(transcript.replayable, false);
+    assert.equal(transcript.status, "refused");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("probe parsing has no write or negative-discovery compatibility mode", () => {

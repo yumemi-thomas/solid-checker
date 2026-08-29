@@ -1289,6 +1289,11 @@ impl WitnessBinding {
             site_ids,
         }
     }
+
+    #[must_use]
+    pub fn demand_id(&self) -> &str {
+        &self.demand_id
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

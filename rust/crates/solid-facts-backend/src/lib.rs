@@ -110,6 +110,23 @@ pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
     Ok(())
 }
 
+/// Plans policy-2 certification from one stable-v1 open proposal without
+/// exposing its wire model. Artifact bytes and the independently acquired
+/// resolution are replayed by [`plan_certification`] before any demand IDs are
+/// returned to orchestration.
+pub fn plan_contract_document_certification(
+    document: &[u8],
+    import_request: ImportRequest,
+    resolved_import: ResolvedImport,
+    artifact: UntrustedArtifactEnvelope,
+) -> Result<CertificationPlan, CertificationPlanningError> {
+    let candidate = contract_document::decode(document)?.normalize()?;
+    plan_certification(
+        CertificationRequest::new(candidate, import_request, resolved_import),
+        artifact,
+    )
+}
+
 /// Encodes one exact artifact's analyzer inference as an unaccepted
 /// stable-v1 proposal. Every proposed closure is opened before emission;
 /// only the proof checker can later finalize it and issue a receipt.

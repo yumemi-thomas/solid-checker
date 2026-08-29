@@ -296,6 +296,14 @@ atomic cut. `load_accepted_contract` reports policy 1 as obsolete and refuses
 raw policy-2 bytes without provenance; only the authenticated policy-2 loader
 can construct `AcceptedContract`.
 
+The public `solid-checker contract certify` transaction acquires published
+archive bytes in Node, then crosses a narrow native planning boundary that
+decodes the open stable-v1 document and independently replays package identity,
+exports, closure, and resolution from the immutable archive. Only Rust-derived
+demand IDs leave that boundary. Producer failures remain claim-local, audit
+transcripts cannot be replayed as authority, and catalog publication is the
+last transaction stage after accepted bytes and configured-issuer receipt.
+
 All former policy-1 built-ins are currently retired, so both bundle indexes
 are empty. Catalog version 2 can retain an exact import as
 `obsolete-policy1`; that produces a claim-local uncertifiable result without
