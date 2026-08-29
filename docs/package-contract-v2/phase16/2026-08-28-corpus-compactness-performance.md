@@ -115,7 +115,7 @@ Focused checks completed while implementing the slices:
 | `make phase16-report && make phase16-check` | passed; 85.65% / 94.16% milestones |
 | `make ecosystem-benchmark-test` | 10 files, 173 tests passed, including heartbeat and exact sentinel-family matrix coverage |
 | Ruby YAML parse of `.github/workflows/ecosystem-benchmark.yml` | passed |
-| `make verify` | passed again in 164.44 seconds with the family-sharded, classification-preserving CI configuration, including the generator corpus |
+| `make verify` | passed again in 164.20 seconds with the measured per-family concurrency policy, including the generator corpus |
 
 The complete gate passed Go formatting, vet, and race tests; workspace Clippy;
 backend and WASM feature configurations; compiler identity and Type Facts stamp
@@ -142,7 +142,7 @@ The CI follow-up also reproduced and closed the two deterministic failures:
 | `bun scripts/ecosystem-benchmark/run.mjs --sentinel --timeout 120` (with fresh checker and Type Facts binaries; reports redirected to `/tmp`; local default resolved to the workflow's 8 workers) | passed; 23 probes, 5 complete contracts, 7 partial; the pinned timeout probe remained `timeout during generate` |
 | focused workflow and heartbeat Vitest | 2 files, 33 tests passed; heartbeat scheduling, deterministic progress, and cancellation are pinned |
 
-Five ecosystem sentinel attempts received an external `SIGTERM` without
+Five unsharded ecosystem sentinel attempts received an external `SIGTERM` without
 reaching a benchmark assertion. Runs ended after varying 2m53s, 4m0s, and 5m11s
 overall, falsifying a stable job-duration ceiling. The fifth log contained
 heartbeats at 30, 60, and 90 seconds immediately before termination, also
@@ -150,12 +150,16 @@ falsifying silence as the cause. A 60-second local run was rejected because it
 changed four unrelated Kobalte, Motion, and Solid RC.3 classifications to
 timeouts.
 
-The final workflow therefore shards the pinned set by its eight manifest-owned
-families. Every shard keeps the classification-preserving 120-second timeout
-and runs at most 1–6 related probes with four workers; a data-driven test proves
-that every sentinel ID belongs to exactly one listed matrix family. Per-family
-reports are uploaded independently, and a fast aggregate job retains the
-stable `sentinel` verdict and requires every shard to pass. The progress
+The sixth workflow attempt sharded the pinned set by its eight manifest-owned
+families. Six shards passed, including the long Official Solid and TanStack
+timeout families. Motion and Solid Recharts alone were SIGTERM'd after 49–55
+seconds while each ran its two heavy probes concurrently; Kobalte's single
+heavy probe passed. The final matrix therefore serializes those two measured
+families and retains four workers for the six proven-safe families. Every shard
+keeps the classification-preserving 120-second timeout, and a data-driven test
+proves that every sentinel ID belongs to exactly one listed matrix family.
+Per-family reports are uploaded independently, and a fast aggregate job retains
+the stable `sentinel` verdict and requires every shard to pass. The progress
 heartbeat remains operational-only, is canceled in `finally`, and never enters
 results, reports, digests, or threshold decisions. The benchmark runner and
 `make ecosystem-sentinel` retain the 300-second operator default.

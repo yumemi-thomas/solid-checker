@@ -67,15 +67,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        family:
-          - corvu
-          - kobalte
-          - motion-solidjs
-          - official-solid
-          - solid-devtools
-          - solid-primitives
-          - solid-recharts
-          - tanstack
+        include:
+          - family: corvu
+            concurrency: 4
+          - family: kobalte
+            concurrency: 4
+          - family: motion-solidjs
+            concurrency: 1
+          - family: official-solid
+            concurrency: 4
+          - family: solid-devtools
+            concurrency: 4
+          - family: solid-primitives
+            concurrency: 4
+          - family: solid-recharts
+            concurrency: 1
+          - family: tanstack
+            concurrency: 4
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97
@@ -104,12 +112,14 @@ jobs:
       # fails closed with exit 2 rather than silently skipping analysis when
       # either binary is missing. Each family keeps the same 120-second
       # per-probe budget that preserves every pinned classification, while a
-      # four-worker family shard bounds each process tree independently.
+      # family shard bounds each process tree independently. Motion and Solid
+      # Recharts serialize their two measured heavy probes; the other six
+      # families are proven safe at four workers.
       - name: Run the pinned sentinel family
         env:
           SOLID_CHECKER_NATIVE_BIN: ${{ github.workspace }}/rust/target/debug/solid-checker-rust
           SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
-        run: bun scripts/ecosystem-benchmark/run.mjs --sentinel --family "${{ matrix.family }}" --timeout 120 --concurrency 4
+        run: bun scripts/ecosystem-benchmark/run.mjs --sentinel --family "${{ matrix.family }}" --timeout 120 --concurrency "${{ matrix.concurrency }}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

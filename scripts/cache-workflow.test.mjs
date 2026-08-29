@@ -48,16 +48,19 @@ function actionInput(body, name) {
   return body.match(new RegExp(`^\\s+${escaped}:\\s*(.+)$`, "m"))?.[1].trim();
 }
 
-function matrixValues(body, name) {
+function matrixIncludes(body) {
   const lines = body.split("\n");
-  const start = lines.findIndex(line => line === `        ${name}:`);
-  assert.notEqual(start, -1, `missing ${name} matrix`);
+  const start = lines.findIndex(line => line === "        include:");
+  assert.notEqual(start, -1, "missing include matrix");
 
   const values = [];
   for (let index = start + 1; index < lines.length; index += 1) {
-    const value = lines[index].match(/^          - (.+)$/)?.[1];
-    if (!value) break;
-    values.push(value);
+    const family = lines[index].match(/^          - family: (.+)$/)?.[1];
+    if (!family) break;
+    const concurrency = Number(lines[index + 1]?.match(/^            concurrency: (\d+)$/)?.[1]);
+    assert.ok(Number.isInteger(concurrency) && concurrency > 0, `missing concurrency for ${family}`);
+    values.push({ family, concurrency });
+    index += 1;
   }
   return values;
 }
@@ -119,10 +122,16 @@ test("the PR ecosystem sentinel shards every pinned family without weakening tim
   }
 
   assert.deepEqual([...foundIds].sort(), [...sentinelIds].sort());
-  assert.deepEqual(matrixValues(shards, "family"), [...families].sort());
+  assert.deepEqual(
+    matrixIncludes(shards),
+    [...families].sort().map(family => ({
+      family,
+      concurrency: family === "motion-solidjs" || family === "solid-recharts" ? 1 : 4,
+    })),
+  );
   assert.match(
     shards,
-    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --family "\$\{\{ matrix\.family \}\}" --timeout 120 --concurrency 4$/m,
+    /^\s+run: bun scripts\/ecosystem-benchmark\/run\.mjs --sentinel --family "\$\{\{ matrix\.family \}\}" --timeout 120 --concurrency "\$\{\{ matrix\.concurrency \}\}"$/m,
   );
   assert.match(shards, /name: ecosystem-benchmark-sentinel-\$\{\{ matrix\.family \}\}-report/);
 
