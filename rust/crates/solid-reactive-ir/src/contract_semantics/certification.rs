@@ -19,6 +19,18 @@ const POLICY_DIGEST_DOMAIN: &str = "solid-checker:contract-proof-policy:v2";
 /// the receipts, catalogs, native loader, and WASM loader move atomically.
 pub struct ProofPolicy2;
 
+/// Archive budgets consumed by the backend snapshot boundary. These values
+/// come from the same Rust-owned policy definition that renders the audit
+/// manifest; adapters must not load replacement limits from JSON.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArtifactSnapshotLimits {
+    pub registry_metadata_bytes: usize,
+    pub archive_bytes: usize,
+    pub expanded_archive_bytes: usize,
+    pub archive_members: usize,
+    pub package_path_bytes: usize,
+}
+
 /// Verifier-derived facts that must survive certification planning.
 ///
 /// The source candidate list is deliberately not an argument. This typestate
@@ -116,6 +128,17 @@ impl ProofPolicy2 {
     #[must_use]
     pub fn digest(&self) -> &'static Digest {
         &POLICY_DIGEST
+    }
+
+    #[must_use]
+    pub const fn artifact_snapshot_limits(&self) -> ArtifactSnapshotLimits {
+        ArtifactSnapshotLimits {
+            registry_metadata_bytes: 16 * 1024 * 1024,
+            archive_bytes: 256 * 1024 * 1024,
+            expanded_archive_bytes: 1024 * 1024 * 1024,
+            archive_members: 100_000,
+            package_path_bytes: 4 * 1024,
+        }
     }
 
     /// Rebuilds the certification candidate universe from normalized meaning.
@@ -344,6 +367,7 @@ struct ResourceBudgets {
     string_bytes: usize,
     demands: usize,
     witness_items_per_demand: usize,
+    registry_metadata_bytes: usize,
     archive_bytes: usize,
     expanded_archive_bytes: usize,
     archive_members: usize,
@@ -551,6 +575,7 @@ const fn manifest() -> PolicyManifest {
             string_bytes: 16 * 1024,
             demands: 65_536,
             witness_items_per_demand: 16_384,
+            registry_metadata_bytes: 16 * 1024 * 1024,
             archive_bytes: 256 * 1024 * 1024,
             expanded_archive_bytes: 1024 * 1024 * 1024,
             archive_members: 100_000,
@@ -600,7 +625,7 @@ mod tests {
         assert_eq!(policy.semantic_model_version(), SEMANTIC_MODEL_VERSION);
         assert_eq!(
             policy.digest().as_str(),
-            "sha256:a272f8aa3db479a45fabe8a6fcc3272b59a337b67a60c9d7e673a4095fbc507d"
+            "sha256:aeea7aaaa8ee5a85946328719b66e8ed185c38e7989da19e26d0424bb743e4db"
         );
         assert_eq!(PROOF_POLICY_VERSION, 1);
         assert_eq!(ACCEPTANCE_RECEIPT_VERSION, 1);

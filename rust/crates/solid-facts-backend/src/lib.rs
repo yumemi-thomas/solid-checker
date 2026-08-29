@@ -7,6 +7,7 @@ compile_error!("solid-facts-backend requires at least one dialect feature");
 mod artifact_resolution;
 mod bounded_json;
 mod cache;
+mod contract_certification;
 mod contract_document;
 mod contract_interface;
 mod contract_workflow;
@@ -24,6 +25,10 @@ mod runtime_probes;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
+pub use contract_certification::{
+    ArtifactSnapshot, ArtifactSnapshotError, LocalArtifact, LockPinnedArchive, PublishedArchive,
+    SnapshotLimits, SnapshotVerifiedResolution,
+};
 pub use contract_document::SidecarDigests;
 pub use contract_interface::{
     AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,

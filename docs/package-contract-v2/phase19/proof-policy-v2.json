@@ -183,6 +183,7 @@
     "stringBytes": 16384,
     "demands": 65536,
     "witnessItemsPerDemand": 16384,
+    "registryMetadataBytes": 16777216,
     "archiveBytes": 268435456,
     "expandedArchiveBytes": 1073741824,
     "archiveMembers": 100000,

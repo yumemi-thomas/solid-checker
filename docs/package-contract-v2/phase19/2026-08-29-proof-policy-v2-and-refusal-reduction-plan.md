@@ -466,8 +466,12 @@ policy-1 inventory and refusal envelope, exposes a typed Rust-owned policy-2
 manifest with golden digest, and derives proposed closures plus positive
 operation candidates directly from normalized meaning. The active loader,
 proof documents, and receipts remain policy 1. The producer-field authority
-audit, immutable snapshot, the remaining positive-fact variants, witnesses,
-receipt authentication, and the atomic cut are still pending. Run
+audit is now executable, and Slice 2 adds distinct published, lock-pinned, and
+refused-local provenance; bounded archive/SRI and registry-metadata
+verification; immutable order-independent snapshots; and Rust-owned replay of
+runtime/declaration entrypoint resolution. Full export and module-closure
+verification, the remaining positive-fact variants, witnesses, receipt
+authentication, and the atomic cut are still pending. Run
 `cargo +1.97 run --manifest-path rust/Cargo.toml -p solid-reactive-ir --example emit_proof_policy_2`
 to render the audit manifest; Rust and Bun drift tests compare the checked-in
 artifact and digest with the compiled definition.

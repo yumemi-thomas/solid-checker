@@ -12,20 +12,20 @@
     {
       "id": "package-identity/registry-publication-provenance",
       "family": "package-identity",
-      "status": "producer extension required",
-      "producerField": "ResolvedImport.packageName/packageVersion/packageIntegrity",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "The selected resolver returns one exact package tuple.",
-      "policy2Gap": "Registry origin, independently selected metadata, archive SRI, and immutable snapshot identity are not bound."
+      "status": "already exact",
+      "producerField": "PublishedArchive/ArtifactSnapshot.provenanceRoot",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification.rs",
+      "completenessGuarantee": "Rust selects the exact version from bounded raw registry metadata, verifies canonical registry origin and tarball URL, checks archive SRI, and binds the immutable snapshot plus metadata digest into a distinct provenance root.",
+      "policy2Gap": "none"
     },
     {
       "id": "package-identity/lock-pinned-provenance",
       "family": "package-identity",
-      "status": "producer extension required",
-      "producerField": "ResolvedImport.packageName/packageVersion/packageIntegrity",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "The resolver preserves the selected package tuple.",
-      "policy2Gap": "There is no distinct lock-entry provenance type or binding to exact lockfile bytes."
+      "status": "already exact",
+      "producerField": "LockPinnedArchive/ArtifactSnapshot.provenanceRoot",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification.rs",
+      "completenessGuarantee": "The lock-pinned input is a non-convertible provenance type whose root binds package-manager identity, exact lockfile digest, locator, SRI, and immutable snapshot root.",
+      "policy2Gap": "none"
     },
     {
       "id": "package-identity/local-artifact-provenance",
@@ -48,11 +48,11 @@
     {
       "id": "manifest-entrypoint/immutable-manifest-binding",
       "family": "manifest-entrypoint",
-      "status": "producer extension required",
-      "producerField": "ResolvedImport.packageManifest",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "The manifest path and digest are validated at resolution time.",
-      "policy2Gap": "Later reads are not constrained to immutable snapshot bytes."
+      "status": "already exact",
+      "producerField": "ArtifactSnapshot.verifyResolvedImport",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification.rs",
+      "completenessGuarantee": "Manifest identity, path, digest, ordered export conditions, and every later entrypoint-selection read are replayed from snapshot-owned bytes.",
+      "policy2Gap": "none"
     },
     {
       "id": "export-resolution/runtime-declaration-target-pair",
@@ -66,11 +66,11 @@
     {
       "id": "export-resolution/snapshot-replay",
       "family": "export-resolution",
-      "status": "producer extension required",
-      "producerField": "ResolvedImport.runtimeTrace/declarationTrace",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "Trace validation rejects malformed branches and targets.",
-      "policy2Gap": "Resolution is not independently rerun against immutable snapshot topology."
+      "status": "already exact",
+      "producerField": "SnapshotVerifiedResolution",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification.rs",
+      "completenessGuarantee": "Rust independently replays exact subpath, wildcard, array, condition-order, legacy, runtime, and declaration entrypoint selection against immutable topology and compares the supplied trace, path, real-path identity, and digest.",
+      "policy2Gap": "none"
     },
     {
       "id": "artifact-declarations/runtime-and-declaration-digests",
@@ -84,11 +84,11 @@
     {
       "id": "artifact-declarations/immutable-file-bytes",
       "family": "artifact-declarations",
-      "status": "producer extension required",
-      "producerField": "ClosureInput.File",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "Closure materialization hashes canonicalized local files.",
-      "policy2Gap": "Paths can mutate between materialization, proof planning, and issuance."
+      "status": "already exact",
+      "producerField": "ArtifactSnapshot.files/root",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification.rs",
+      "completenessGuarantee": "Archive bytes are copied into a private read-only map before planning; file content, directories, package identity, and paths are content-addressed and later host mutation is never reread.",
+      "policy2Gap": "none"
     },
     {
       "id": "export-identity/resolved-target-identity",
@@ -102,11 +102,11 @@
     {
       "id": "export-identity/snapshot-mixed-package-rejection",
       "family": "export-identity",
-      "status": "producer extension required",
-      "producerField": "ResolvedImport.packageRoot/packageRealRoot",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "Current validation constrains resolved paths to the selected package root.",
-      "policy2Gap": "The root itself is mutable and is not a provenance-separated snapshot identity."
+      "status": "already exact",
+      "producerField": "ArtifactSnapshot manifest identity and resolvedPackagePath replay",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification.rs",
+      "completenessGuarantee": "Archive manifest name/version must match selected provenance and logical/real resolved paths must preserve one package-relative identity before their snapshot bytes and digests match.",
+      "policy2Gap": "none"
     },
     {
       "id": "module-closure/canonical-entry-census",
@@ -120,11 +120,11 @@
     {
       "id": "module-closure/immutable-topology-root",
       "family": "module-closure",
-      "status": "producer extension required",
-      "producerField": "ClosureManifest.digest",
-      "source": "rust/crates/solid-facts-backend/src/artifact_resolution.rs",
-      "completenessGuarantee": "Equivalent supplied closure entries produce one deterministic digest.",
-      "policy2Gap": "Archive topology, duplicate members, case folding, links, and post-plan mutation are not part of this root."
+      "status": "already exact",
+      "producerField": "ArtifactSnapshot.root",
+      "source": "rust/crates/solid-facts-backend/src/contract_certification.rs",
+      "completenessGuarantee": "Rust rejects traversal, absolute/mixed roots, duplicate and case-folded members, non-files including links/devices, file-directory conflicts, and bounded-resource violations before hashing canonical order-independent topology and bytes.",
+      "policy2Gap": "The separate module-graph completeness demand remains open."
     },
     {
       "id": "module-closure/opaque-dynamic-hazards",

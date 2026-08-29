@@ -58,7 +58,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       artifactPrerequisiteFamilies: 6,
       claimFamilies: 9,
       policyDigest:
-        "sha256:a272f8aa3db479a45fabe8a6fcc3272b59a337b67a60c9d7e673a4095fbc507d"
+        "sha256:aeea7aaaa8ee5a85946328719b66e8ed185c38e7989da19e26d0424bb743e4db"
     });
   });
 
@@ -70,10 +70,10 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
     assert.deepEqual(auditPhase19DemandAuthority(), {
       demands: 43,
       families: 18,
-      alreadyExact: 16,
-      producerExtensionRequired: 20,
+      alreadyExact: 23,
+      producerExtensionRequired: 13,
       unsupported: 7,
-      certificationReadyFamilies: 0
+      certificationReadyFamilies: 4
     });
   });
 });
