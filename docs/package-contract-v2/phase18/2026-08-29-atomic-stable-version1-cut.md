@@ -31,9 +31,11 @@ and schema mechanics do not cross the boundary.
 The Phase 18 repository authority is
 `scripts/package-contract-phase18.mjs`. It inventories 130 stable-v1 mains, 73
 exact byte-bound receipts, 69 independently versioned neighboring documents,
-15 producer/consumer source owners, and 579 active JSON files. It rejects
-`schemaStatus`, stale receipt hashes, temporary-v2 mains, legacy-v1 structural
-mains, retired owner paths, or an unregistered JavaScript main reader.
+15 producer/consumer source owners, one stable-boundary WASM regression, and
+579 active JSON files. It rejects `schemaStatus`, stale receipt hashes,
+temporary-v2 mains, legacy-v1 structural mains, retired owner paths, an
+unregistered JavaScript main reader, or a WASM boundary assertion that still
+expects the retired temporary schema version.
 
 Version namespaces remain independent. Runtime-probe documents and contract
 review documents remain version 2; receipts, accepted catalogs, proposal plans,
@@ -91,7 +93,27 @@ identified four remaining temporary-version test fixtures. After the cut:
 | uncached `make ecosystem-benchmark` | 418 rows: 40 complete proposals, 318 partial proposals, 60 fail-closed rows; thresholds passed |
 | `make phase16-check` | 85.65% ecosystem and 94.16% Solid Primitives generatable; passed |
 | uncached `make verify-performance` | passed; 1.91x export scaling and all latency/payload ceilings held |
-| `SOLID_CHECKER_GATE_CACHE=0 make verify` | passed in 199.65 seconds on the final implementation tree; both gate caches disabled and 7 registry pins checked live |
+| focused Phase 18 convergence Vitest after the CI repair | 1 file, 6 tests passed |
+| focused WASM accepted-contract boundary Vitest | 1 file, 5 tests passed |
+| `bun run --cwd packages/wasm test` | 2 files, 7 tests passed |
+| `bun pm pack --dry-run` in `packages/wasm` | 11 expected package files passed |
+| final `SOLID_CHECKER_GATE_CACHE=0 make verify` | passed in 323.43 seconds on the CI-repair tree; 19 script files/114 tests passed, both gate caches were disabled, and 7 registry pins were checked live |
+
+PR #60's first `wasm-package` run caught one stale pre-cut assertion that the
+local handoff had missed. The fixture was already a stable-v1 document, so
+rewriting `schemaVersion` to 1 changed only its bytes and correctly failed its
+receipt binding before reaching schema validation. The repaired suite now
+independently proves that temporary-v2 documents report `expected 1` and that
+legacy-v1 structural documents without the stable `format` discriminator are
+rejected. The Phase 18 authority pins both assertions so the repository-wide
+handoff gate catches this specific regression without trusting a previously
+built WASM artifact.
+
+The first uncached full verification after the repair encountered a one-run EOF
+in the existing Type Facts producer crash-recovery test. That exact test passed
+immediately under the same armed producer and verify profile; the complete
+uncached verification was then rerun and passed, including the crash-recovery
+case. No Type Facts code or expectations were changed for that transient race.
 
 The first sandboxed ecosystem attempt produced 418 installation failures with
 Bun `EPERM` before generation. A one-row deterministic repro produced one
@@ -136,5 +158,7 @@ version-1 cut. It does not claim complete package semantics.
 - Branch: `codex/phase18-atomic-stable-version1-cut`
 - Implementation commit: `e79ebad4` (`feat: complete package contract phase 18
   stable cut`)
-- Handoff metadata: this documentation-only follow-up commit
+- Initial completion report: `a40492e4` (`docs: record phase 18 pull request`)
+- CI closure: `68a98716` (`test: pin phase 18 WASM boundary`)
+- Final handoff metadata: this documentation-only follow-up commit
 - Pull request: <https://github.com/yumemi-thomas/solid-checker/pull/60>
