@@ -134,6 +134,7 @@ version-1 cut. It does not claim complete package semantics.
 ## Handoff
 
 - Branch: `codex/phase18-atomic-stable-version1-cut`
-- Implementation commit: this report's implementation commit (recorded after
-  the final green authority)
-- Pull request: recorded in the follow-up handoff commit after creation
+- Implementation commit: `e79ebad4` (`feat: complete package contract phase 18
+  stable cut`)
+- Handoff metadata: this documentation-only follow-up commit
+- Pull request: <https://github.com/yumemi-thomas/solid-checker/pull/60>
