@@ -113,7 +113,7 @@ Focused checks completed while implementing the slices:
 | targeted backend Clippy (`--lib --bins`) | passed with `-D warnings` |
 | `make ecosystem-benchmark` | passed; 418 rows, 40 complete, 318 partial |
 | `make phase16-report && make phase16-check` | passed; 85.65% / 94.16% milestones |
-| `make verify` | passed in 149.01 seconds on the final post-probe diff |
+| `make verify` | passed in 207.95 seconds on the CI follow-up diff, including the generator corpus |
 
 The complete gate passed Go formatting, vet, and race tests; workspace Clippy;
 backend and WASM feature configurations; compiler identity and Type Facts stamp
@@ -130,6 +130,19 @@ proposal content/size measurement, generatability thresholds, report
 determinism, all 24 accepted cases, and query closure after raw inputs are
 dropped.
 
+The CI follow-up also reproduced and closed the two deterministic failures:
+
+| Command | Result |
+| --- | --- |
+| `cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --target wasm32-wasip1-threads` | passed; the non-Unix RSS path compiles without `getrusage` |
+| `cargo +1.97 test --manifest-path rust/Cargo.toml -p solid-facts-backend --lib` | 85 passed |
+| `SOLID_CHECKER_GATE_CACHE=0 make contract-corpus` | 39 fixtures passed: 5 full refusals, 14 local refusals, 40 retained cases |
+
+The failed ecosystem sentinel received an external runner shutdown signal
+while its documented 300-second timeout-class probe was running; its workflow
+budget is 30 minutes and no benchmark assertion failed. The corrective push
+therefore retries that job without weakening or removing the timeout sentinel.
+
 ## Type Facts, compiler facts, and generated artifacts
 
 No Type Facts producer, Rust client, normalized consumer, schema, protocol,
@@ -138,9 +151,12 @@ code, compiler pin, identity notice, or conformance artifact changed.
 
 Generated source-controlled reports changed under `benchmarks/ecosystem/` and
 `benchmarks/package-contract-v2/phase16/`; `rust/Cargo.lock` also records the
-backend's direct `libc` use for peak-RSS measurement. The temporary main schema
-version, bundled contracts, acceptance receipts, fixture snapshots, compiler
-identity, and Type Facts build identity are unchanged.
+backend's direct `libc` use for peak-RSS measurement. The CI follow-up migrated
+the 39-fixture generator corpus to the Phase 16 partial-proposal behavior: 8
+former whole-package refusals now carry main, proposal-plan, and localized
+refusal snapshots, while 5 remaining full refusals pin the aggregate envelope.
+The temporary main schema version, bundled contracts, acceptance receipts,
+compiler identity, and Type Facts build identity are unchanged.
 
 ## Exact remaining open or uncertifiable cases
 
@@ -168,4 +184,6 @@ complete semantic knowledge of every package export.
 - Branch: `codex/phase16-corpus-compactness-performance`
 - Implementation commit: `35ab4d36` (`feat: complete package contract phase 16
   gates`)
+- CI correction commit: `6b408374` (`fix: make phase 16 gates portable and
+  complete`)
 - Pull request: <https://github.com/yumemi-thomas/solid-checker/pull/58>
