@@ -1,13 +1,15 @@
 //! Policy-owned package-contract certification.
 
-use std::sync::LazyLock;
+use std::{collections::BTreeSet, sync::LazyLock};
 
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
+use thiserror::Error;
 
 use super::{
-    ContractProposal, Digest, ModelError, NormalizedContract, SEMANTIC_MODEL_VERSION,
-    SemanticClaimPath, SemanticClaimSubject,
+    CallSemantics, ContractProposal, Digest, EdgeKind, ModelError, NormalizedContract,
+    ResourceKind, SEMANTIC_MODEL_VERSION, SemanticClaimPath, SemanticClaimSubject, ValuePath,
+    ValuePathSegment, ValueRoot, ValueShape,
 };
 
 const POLICY_VERSION: u32 = 2;
@@ -42,6 +44,55 @@ pub struct CertificationCandidates {
     proposal: NormalizedContract,
     closure_candidates: Vec<SemanticClaimSubject>,
     positive_operations: Vec<SemanticClaimSubject>,
+    positive_facts: Vec<PositiveFactSubject>,
+}
+
+/// Exact analyzer-visible positive facts retained when proposed completeness
+/// is withdrawn. Each variant has a distinct proof subject; no generic claim
+/// ID can be reused to stand for a structurally different fact.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PositiveFactSubject {
+    SelectedCall {
+        artifact_case: String,
+        export: String,
+    },
+    CallbackBinding {
+        artifact_case: String,
+        export: String,
+        ordinal: u32,
+        operation: String,
+    },
+    Operation {
+        artifact_case: String,
+        export: String,
+        operation: String,
+        has_cardinality: bool,
+    },
+    OperationEdge {
+        artifact_case: String,
+        export: String,
+        kind: String,
+        from: String,
+        to: String,
+    },
+    Resource {
+        artifact_case: String,
+        export: String,
+        resource: String,
+        kind: String,
+    },
+    GuardCase {
+        artifact_case: String,
+        export: String,
+        ordinal: u32,
+    },
+    RecursiveValue {
+        artifact_case: String,
+        export: String,
+        root: ValueRoot,
+        path: ValuePath,
+        callable: bool,
+    },
 }
 
 impl CertificationCandidates {
@@ -63,6 +114,11 @@ impl CertificationCandidates {
     #[must_use]
     pub fn positive_operations(&self) -> &[SemanticClaimSubject] {
         &self.positive_operations
+    }
+
+    #[must_use]
+    pub fn positive_facts(&self) -> &[PositiveFactSubject] {
+        &self.positive_facts
     }
 }
 
@@ -141,6 +197,11 @@ impl ProofPolicy2 {
         }
     }
 
+    #[must_use]
+    pub const fn demand_limit(&self) -> usize {
+        65_536
+    }
+
     /// Rebuilds the certification candidate universe from normalized meaning.
     ///
     /// Closure is withdrawn in the returned proposal; known positive
@@ -154,9 +215,17 @@ impl ProofPolicy2 {
         let mut artifact_cases = candidate.artifact_cases().to_vec();
         let mut closure_candidates = Vec::new();
         let mut positive_operations = Vec::new();
+        let mut positive_facts = Vec::new();
 
         for artifact in &mut artifact_cases {
             for (export_name, export) in &mut artifact.exports {
+                inventory_export_facts(
+                    &artifact.id,
+                    export_name,
+                    &export.shape,
+                    &export.call,
+                    &mut positive_facts,
+                );
                 positive_operations.extend(export.call.operations.iter().map(|operation| {
                     SemanticClaimSubject {
                         artifact_case: artifact.id.clone(),
@@ -177,13 +246,559 @@ impl ProofPolicy2 {
         closure_candidates.dedup();
         positive_operations.sort();
         positive_operations.dedup();
+        positive_facts.sort();
+        positive_facts.dedup();
 
         Ok(CertificationCandidates {
             candidate_semantic_digest: candidate.semantic_digest().clone(),
             proposal: ContractProposal::new(package, artifact_cases).normalize()?,
             closure_candidates,
             positive_operations,
+            positive_facts,
         })
+    }
+
+    pub fn derive_demand_graph(
+        &self,
+        candidates: &CertificationCandidates,
+        snapshot_root: &str,
+        provenance_root: &str,
+    ) -> Result<ProofDemandGraph, DemandPlanningError> {
+        let snapshot_root =
+            Digest::parse(snapshot_root).map_err(|_| DemandPlanningError::InvalidArtifactRoot)?;
+        let provenance_root =
+            Digest::parse(provenance_root).map_err(|_| DemandPlanningError::InvalidArtifactRoot)?;
+        let mut requested = BTreeSet::<(ProofFamily, ProofDemandSubject)>::new();
+        for artifact in candidates.proposal.artifact_cases() {
+            for rule in ARTIFACT_PREREQUISITES {
+                requested.insert((
+                    rule.family,
+                    ProofDemandSubject::ArtifactCase(artifact.id.clone()),
+                ));
+            }
+        }
+        for positive in &candidates.positive_facts {
+            match positive {
+                PositiveFactSubject::SelectedCall { .. } => {
+                    insert_positive(&mut requested, ProofFamily::SelectedSignature, positive);
+                }
+                PositiveFactSubject::CallbackBinding { .. } => {
+                    insert_positive(&mut requested, ProofFamily::ArgumentBinding, positive);
+                    insert_positive(&mut requested, ProofFamily::CallablePath, positive);
+                }
+                PositiveFactSubject::Operation {
+                    has_cardinality, ..
+                } => {
+                    insert_positive(&mut requested, ProofFamily::OperationReachability, positive);
+                    if *has_cardinality {
+                        insert_positive(
+                            &mut requested,
+                            ProofFamily::OperationCardinality,
+                            positive,
+                        );
+                    }
+                }
+                PositiveFactSubject::OperationEdge { .. } => {
+                    insert_positive(&mut requested, ProofFamily::OperationReachability, positive)
+                }
+                PositiveFactSubject::Resource { .. } => {
+                    insert_positive(&mut requested, ProofFamily::RecursiveValueShape, positive)
+                }
+                PositiveFactSubject::GuardCase { .. } => {
+                    insert_positive(&mut requested, ProofFamily::GuardPartition, positive);
+                }
+                PositiveFactSubject::RecursiveValue { callable, .. } => {
+                    insert_positive(&mut requested, ProofFamily::RecursiveValueShape, positive);
+                    if *callable {
+                        insert_positive(&mut requested, ProofFamily::CallablePath, positive);
+                    }
+                }
+            }
+        }
+        for closure in &candidates.closure_candidates {
+            let semantic_claim_id = candidates
+                .proposal
+                .claim_id(closure)
+                .map_err(|_| DemandPlanningError::InvalidCandidate)?;
+            requested.insert((
+                ProofFamily::DomainExhaustiveness,
+                ProofDemandSubject::DomainClosure {
+                    subject: closure.clone(),
+                    semantic_claim_id: semantic_claim_id.as_str().into(),
+                },
+            ));
+        }
+        if requested.len() > self.demand_limit() {
+            return Err(DemandPlanningError::DemandLimit);
+        }
+        let policy_digest = self.digest().clone();
+        let candidate_semantic_digest = candidates.candidate_semantic_digest.clone();
+        let mut demands = requested
+            .into_iter()
+            .map(|(family, subject)| ProofDemand {
+                id: demand_id(
+                    &policy_digest,
+                    &candidate_semantic_digest,
+                    &snapshot_root,
+                    &provenance_root,
+                    family,
+                    &subject,
+                ),
+                family,
+                subject,
+            })
+            .collect::<Vec<_>>();
+        demands.sort_by(|left, right| left.id.cmp(&right.id));
+        if demands
+            .windows(2)
+            .any(|pair| pair[0].id == pair[1].id && pair[0] != pair[1])
+        {
+            return Err(DemandPlanningError::DemandIdCollision);
+        }
+        let root = demand_graph_root(&demands);
+        Ok(ProofDemandGraph {
+            policy_digest,
+            candidate_semantic_digest,
+            snapshot_root,
+            provenance_root,
+            demands,
+            root,
+        })
+    }
+}
+
+fn insert_positive(
+    demands: &mut BTreeSet<(ProofFamily, ProofDemandSubject)>,
+    family: ProofFamily,
+    positive: &PositiveFactSubject,
+) {
+    demands.insert((family, ProofDemandSubject::PositiveFact(positive.clone())));
+}
+
+fn inventory_export_facts(
+    artifact_case: &str,
+    export: &str,
+    shape: &ValueShape,
+    call: &CallSemantics,
+    facts: &mut Vec<PositiveFactSubject>,
+) {
+    let has_call_facts = !call.operations.is_empty()
+        || !call.edges.is_empty()
+        || !call.resources.is_empty()
+        || !call.claims().callbacks.items().is_empty()
+        || !call.guards.cases.items().is_empty();
+    if has_call_facts {
+        facts.push(PositiveFactSubject::SelectedCall {
+            artifact_case: artifact_case.into(),
+            export: export.into(),
+        });
+    }
+    for (ordinal, callback) in call.claims().callbacks.items().iter().enumerate() {
+        facts.push(PositiveFactSubject::CallbackBinding {
+            artifact_case: artifact_case.into(),
+            export: export.into(),
+            ordinal: u32::try_from(ordinal).unwrap_or(u32::MAX),
+            operation: callback.operation.0.clone(),
+        });
+    }
+    for operation in &call.operations {
+        facts.push(PositiveFactSubject::Operation {
+            artifact_case: artifact_case.into(),
+            export: export.into(),
+            operation: operation.id.0.clone(),
+            has_cardinality: operation.cardinality.scope.is_some()
+                || operation.cardinality.min.is_some()
+                || operation.cardinality.max.is_some(),
+        });
+        for (index, input) in operation.inputs.iter().enumerate() {
+            inventory_value_shape(
+                artifact_case,
+                export,
+                &ValueRoot::OperationInput {
+                    operation: operation.id.clone(),
+                    index: u16::try_from(index).unwrap_or(u16::MAX),
+                },
+                &ValuePath::default(),
+                input,
+                facts,
+            );
+        }
+        if let Some(output) = &operation.output {
+            inventory_value_shape(
+                artifact_case,
+                export,
+                &ValueRoot::OperationOutput {
+                    operation: operation.id.clone(),
+                },
+                &ValuePath::default(),
+                output,
+                facts,
+            );
+        }
+    }
+    for edge in &call.edges {
+        facts.push(PositiveFactSubject::OperationEdge {
+            artifact_case: artifact_case.into(),
+            export: export.into(),
+            kind: edge_kind_name(edge.kind).into(),
+            from: edge.from.0.clone(),
+            to: edge.to.0.clone(),
+        });
+    }
+    for resource in &call.resources {
+        facts.push(PositiveFactSubject::Resource {
+            artifact_case: artifact_case.into(),
+            export: export.into(),
+            resource: resource.id.0.clone(),
+            kind: resource_kind_name(resource.kind).into(),
+        });
+    }
+    for (ordinal, _) in call.guards.cases.items().iter().enumerate() {
+        facts.push(PositiveFactSubject::GuardCase {
+            artifact_case: artifact_case.into(),
+            export: export.into(),
+            ordinal: u32::try_from(ordinal).unwrap_or(u32::MAX),
+        });
+    }
+    inventory_value_shape(
+        artifact_case,
+        export,
+        &ValueRoot::Export,
+        &ValuePath::default(),
+        shape,
+        facts,
+    );
+}
+
+const fn edge_kind_name(kind: EdgeKind) -> &'static str {
+    match kind {
+        EdgeKind::Orders => "orders",
+        EdgeKind::Data => "data",
+        EdgeKind::Invalidates => "invalidates",
+        EdgeKind::Error => "error",
+        EdgeKind::Cleanup => "cleanup",
+        EdgeKind::Lifetime => "lifetime",
+    }
+}
+
+const fn resource_kind_name(kind: ResourceKind) -> &'static str {
+    match kind {
+        ResourceKind::Owner => "owner",
+        ResourceKind::ReactiveSource => "reactive-source",
+        ResourceKind::AsyncComputation => "async-computation",
+        ResourceKind::Transition => "transition",
+        ResourceKind::Cleanup => "cleanup",
+        ResourceKind::Request => "request",
+        ResourceKind::Response => "response",
+        ResourceKind::Stream => "stream",
+        ResourceKind::ServerFunctionReference => "server-function-reference",
+    }
+}
+
+fn inventory_value_shape(
+    artifact_case: &str,
+    export: &str,
+    root: &ValueRoot,
+    path: &ValuePath,
+    shape: &ValueShape,
+    facts: &mut Vec<PositiveFactSubject>,
+) {
+    if matches!(shape, ValueShape::Unknown) {
+        return;
+    }
+    facts.push(PositiveFactSubject::RecursiveValue {
+        artifact_case: artifact_case.into(),
+        export: export.into(),
+        root: root.clone(),
+        path: path.clone(),
+        callable: matches!(shape, ValueShape::Callable),
+    });
+    match shape {
+        ValueShape::Tuple(items) | ValueShape::Choice(items) => {
+            for (index, item) in items.items().iter().enumerate() {
+                let segment = if matches!(shape, ValueShape::Tuple(_)) {
+                    ValuePathSegment::TupleItem(u32::try_from(index).unwrap_or(u32::MAX))
+                } else {
+                    ValuePathSegment::ChoiceAlternative(u32::try_from(index).unwrap_or(u32::MAX))
+                };
+                inventory_value_child(artifact_case, export, root, path, segment, item, facts);
+            }
+        }
+        ValueShape::Array { element, .. } => inventory_value_child(
+            artifact_case,
+            export,
+            root,
+            path,
+            ValuePathSegment::ArrayElement,
+            element,
+            facts,
+        ),
+        ValueShape::Object(properties) => {
+            for property in properties.items() {
+                inventory_value_child(
+                    artifact_case,
+                    export,
+                    root,
+                    path,
+                    ValuePathSegment::ObjectProperty(property.name.clone()),
+                    &property.value,
+                    facts,
+                );
+            }
+        }
+        ValueShape::Promise(value) => inventory_value_child(
+            artifact_case,
+            export,
+            root,
+            path,
+            ValuePathSegment::PromiseValue,
+            value,
+            facts,
+        ),
+        ValueShape::AsyncIterable(value) => inventory_value_child(
+            artifact_case,
+            export,
+            root,
+            path,
+            ValuePathSegment::AsyncIterableElement,
+            value,
+            facts,
+        ),
+        ValueShape::Unknown
+        | ValueShape::Plain
+        | ValueShape::Parameter { .. }
+        | ValueShape::Callable
+        | ValueShape::Reactive { .. }
+        | ValueShape::Store { .. }
+        | ValueShape::Action { .. }
+        | ValueShape::Component
+        | ValueShape::Cleanup { .. }
+        | ValueShape::RefApplication
+        | ValueShape::ServerFunctionReference { .. } => {}
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn inventory_value_child(
+    artifact_case: &str,
+    export: &str,
+    root: &ValueRoot,
+    path: &ValuePath,
+    segment: ValuePathSegment,
+    shape: &ValueShape,
+    facts: &mut Vec<PositiveFactSubject>,
+) {
+    let mut child = path.clone();
+    child.0.push(segment);
+    inventory_value_shape(artifact_case, export, root, &child, shape, facts);
+}
+
+fn demand_id(
+    policy_digest: &Digest,
+    candidate_digest: &Digest,
+    snapshot_root: &Digest,
+    provenance_root: &Digest,
+    family: ProofFamily,
+    subject: &ProofDemandSubject,
+) -> ProofDemandId {
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:contract-proof-demand:v2");
+    hash_demand_text(&mut hash, policy_digest.as_str());
+    hash_demand_text(&mut hash, candidate_digest.as_str());
+    hash_demand_text(&mut hash, snapshot_root.as_str());
+    hash_demand_text(&mut hash, provenance_root.as_str());
+    hash_demand_text(&mut hash, proof_family_name(family));
+    hash_demand_subject(&mut hash, subject);
+    ProofDemandId(Digest::from_sha256(hash.finalize().into()))
+}
+
+fn demand_graph_root(demands: &[ProofDemand]) -> Digest {
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:contract-proof-demand-graph:v2");
+    hash.update(
+        u64::try_from(demands.len())
+            .unwrap_or(u64::MAX)
+            .to_be_bytes(),
+    );
+    for demand in demands {
+        hash_demand_text(&mut hash, demand.id.as_str());
+    }
+    Digest::from_sha256(hash.finalize().into())
+}
+
+fn hash_demand_subject(hash: &mut Sha256, subject: &ProofDemandSubject) {
+    match subject {
+        ProofDemandSubject::ArtifactCase(artifact_case) => {
+            hash_demand_text(hash, "artifact-case");
+            hash_demand_text(hash, artifact_case);
+        }
+        ProofDemandSubject::PositiveFact(positive) => {
+            hash_demand_text(hash, "positive-fact");
+            hash_positive_subject(hash, positive);
+        }
+        ProofDemandSubject::DomainClosure {
+            semantic_claim_id, ..
+        } => {
+            hash_demand_text(hash, "domain-closure");
+            hash_demand_text(hash, semantic_claim_id);
+        }
+    }
+}
+
+fn hash_positive_subject(hash: &mut Sha256, subject: &PositiveFactSubject) {
+    match subject {
+        PositiveFactSubject::SelectedCall {
+            artifact_case,
+            export,
+        } => {
+            hash_demand_text(hash, "selected-call");
+            hash_artifact_export(hash, artifact_case, export);
+        }
+        PositiveFactSubject::CallbackBinding {
+            artifact_case,
+            export,
+            ordinal,
+            operation,
+        } => {
+            hash_demand_text(hash, "callback-binding");
+            hash_artifact_export(hash, artifact_case, export);
+            hash.update(ordinal.to_be_bytes());
+            hash_demand_text(hash, operation);
+        }
+        PositiveFactSubject::Operation {
+            artifact_case,
+            export,
+            operation,
+            has_cardinality,
+        } => {
+            hash_demand_text(hash, "operation");
+            hash_artifact_export(hash, artifact_case, export);
+            hash_demand_text(hash, operation);
+            hash.update([u8::from(*has_cardinality)]);
+        }
+        PositiveFactSubject::OperationEdge {
+            artifact_case,
+            export,
+            kind,
+            from,
+            to,
+        } => {
+            hash_demand_text(hash, "operation-edge");
+            hash_artifact_export(hash, artifact_case, export);
+            hash_demand_text(hash, kind);
+            hash_demand_text(hash, from);
+            hash_demand_text(hash, to);
+        }
+        PositiveFactSubject::Resource {
+            artifact_case,
+            export,
+            resource,
+            kind,
+        } => {
+            hash_demand_text(hash, "resource");
+            hash_artifact_export(hash, artifact_case, export);
+            hash_demand_text(hash, resource);
+            hash_demand_text(hash, kind);
+        }
+        PositiveFactSubject::GuardCase {
+            artifact_case,
+            export,
+            ordinal,
+        } => {
+            hash_demand_text(hash, "guard-case");
+            hash_artifact_export(hash, artifact_case, export);
+            hash.update(ordinal.to_be_bytes());
+        }
+        PositiveFactSubject::RecursiveValue {
+            artifact_case,
+            export,
+            root,
+            path,
+            callable,
+        } => {
+            hash_demand_text(hash, "recursive-value");
+            hash_artifact_export(hash, artifact_case, export);
+            hash_value_root(hash, root);
+            hash_value_path(hash, path);
+            hash.update([u8::from(*callable)]);
+        }
+    }
+}
+
+fn hash_artifact_export(hash: &mut Sha256, artifact_case: &str, export: &str) {
+    hash_demand_text(hash, artifact_case);
+    hash_demand_text(hash, export);
+}
+
+fn hash_value_root(hash: &mut Sha256, root: &ValueRoot) {
+    match root {
+        ValueRoot::Export => hash_demand_text(hash, "export"),
+        ValueRoot::OperationInput { operation, index } => {
+            hash_demand_text(hash, "operation-input");
+            hash_demand_text(hash, &operation.0);
+            hash.update(index.to_be_bytes());
+        }
+        ValueRoot::OperationOutput { operation } => {
+            hash_demand_text(hash, "operation-output");
+            hash_demand_text(hash, &operation.0);
+        }
+    }
+}
+
+fn hash_value_path(hash: &mut Sha256, path: &ValuePath) {
+    hash.update(
+        u64::try_from(path.0.len())
+            .unwrap_or(u64::MAX)
+            .to_be_bytes(),
+    );
+    for segment in &path.0 {
+        match segment {
+            ValuePathSegment::TupleItem(index) => {
+                hash_demand_text(hash, "tuple-item");
+                hash.update(index.to_be_bytes());
+            }
+            ValuePathSegment::ArrayElement => hash_demand_text(hash, "array-element"),
+            ValuePathSegment::ObjectProperty(name) => {
+                hash_demand_text(hash, "object-property");
+                hash_demand_text(hash, name);
+            }
+            ValuePathSegment::ChoiceAlternative(index) => {
+                hash_demand_text(hash, "choice-alternative");
+                hash.update(index.to_be_bytes());
+            }
+            ValuePathSegment::PromiseValue => hash_demand_text(hash, "promise-value"),
+            ValuePathSegment::AsyncIterableElement => {
+                hash_demand_text(hash, "async-iterable-element");
+            }
+        }
+    }
+}
+
+fn hash_demand_text(hash: &mut Sha256, value: &str) {
+    hash.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+    hash.update(value.as_bytes());
+}
+
+const fn proof_family_name(family: ProofFamily) -> &'static str {
+    match family {
+        ProofFamily::PackageIdentity => "package-identity",
+        ProofFamily::ManifestEntrypoint => "manifest-entrypoint",
+        ProofFamily::ExportResolution => "export-resolution",
+        ProofFamily::ArtifactDeclarations => "artifact-declarations",
+        ProofFamily::ExportIdentity => "export-identity",
+        ProofFamily::ModuleClosure => "module-closure",
+        ProofFamily::SelectedSignature => "selected-signature",
+        ProofFamily::ArgumentBinding => "argument-binding",
+        ProofFamily::RestSpreadCoverage => "rest-spread-coverage",
+        ProofFamily::CallablePath => "callable-path",
+        ProofFamily::OperationReachability => "operation-reachability",
+        ProofFamily::OperationCardinality => "operation-cardinality",
+        ProofFamily::RecursiveValueShape => "recursive-value-shape",
+        ProofFamily::GuardPartition => "guard-partition",
+        ProofFamily::CompilerReconciliation => "compiler-reconciliation",
+        ProofFamily::AcceptedDependencyComposition => "accepted-dependency-composition",
+        ProofFamily::DomainExhaustiveness => "domain-exhaustiveness",
+        ProofFamily::ProbeConsistency => "probe-consistency",
     }
 }
 
@@ -260,9 +875,9 @@ struct ProbeRule {
     successful_observation: &'static str,
 }
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
-enum ProofFamily {
+pub enum ProofFamily {
     PackageIdentity,
     ManifestEntrypoint,
     ExportResolution,
@@ -309,6 +924,107 @@ enum DemandTarget {
     CompilerOwnedSite,
     RelevantExternalDependencyEdge,
     VerifierScheduledProbe,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ProofDemandSubject {
+    ArtifactCase(String),
+    PositiveFact(PositiveFactSubject),
+    DomainClosure {
+        subject: SemanticClaimSubject,
+        semantic_claim_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ProofDemandId(Digest);
+
+impl ProofDemandId {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ProofDemand {
+    id: ProofDemandId,
+    family: ProofFamily,
+    subject: ProofDemandSubject,
+}
+
+impl ProofDemand {
+    #[must_use]
+    pub const fn id(&self) -> &ProofDemandId {
+        &self.id
+    }
+
+    #[must_use]
+    pub const fn family(&self) -> ProofFamily {
+        self.family
+    }
+
+    #[must_use]
+    pub const fn subject(&self) -> &ProofDemandSubject {
+        &self.subject
+    }
+}
+
+/// Complete policy-2 demand universe for one candidate and immutable artifact
+/// snapshot. The graph is constructed from normalized meaning; proof-wire
+/// documents can reference its IDs but cannot add, remove, or reclassify them.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProofDemandGraph {
+    policy_digest: Digest,
+    candidate_semantic_digest: Digest,
+    snapshot_root: Digest,
+    provenance_root: Digest,
+    demands: Vec<ProofDemand>,
+    root: Digest,
+}
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum DemandPlanningError {
+    #[error("artifact snapshot or provenance root is invalid")]
+    InvalidArtifactRoot,
+    #[error("proof demand graph exceeds the policy limit")]
+    DemandLimit,
+    #[error("proof demand ID collision")]
+    DemandIdCollision,
+    #[error("the verifier-derived demand subject is absent from normalized meaning")]
+    InvalidCandidate,
+}
+
+impl ProofDemandGraph {
+    #[must_use]
+    pub fn demands(&self) -> &[ProofDemand] {
+        &self.demands
+    }
+
+    #[must_use]
+    pub const fn root(&self) -> &Digest {
+        &self.root
+    }
+
+    #[must_use]
+    pub const fn policy_digest(&self) -> &Digest {
+        &self.policy_digest
+    }
+
+    #[must_use]
+    pub const fn candidate_semantic_digest(&self) -> &Digest {
+        &self.candidate_semantic_digest
+    }
+
+    #[must_use]
+    pub const fn snapshot_root(&self) -> &Digest {
+        &self.snapshot_root
+    }
+
+    #[must_use]
+    pub const fn provenance_root(&self) -> &Digest {
+        &self.provenance_root
+    }
 }
 
 #[derive(Serialize)]
@@ -406,7 +1122,7 @@ struct PortableReceiptTrust {
     explicit_trust_store_chain_required: bool,
 }
 
-const DIGESTS: [DigestRule; 4] = [
+const DIGESTS: [DigestRule; 5] = [
     DigestRule {
         purpose: "policy",
         algorithm: "sha256",
@@ -418,6 +1134,12 @@ const DIGESTS: [DigestRule; 4] = [
         algorithm: "sha256",
         domain: "solid-checker:contract-proof-demand:v2",
         framing: "typed-length-prefixed-fields",
+    },
+    DigestRule {
+        purpose: "demand-graph",
+        algorithm: "sha256",
+        domain: "solid-checker:contract-proof-demand-graph:v2",
+        framing: "sorted-demand-id-sequence",
     },
     DigestRule {
         purpose: "evidence-root",
@@ -603,7 +1325,7 @@ const fn manifest() -> PolicyManifest {
 
 #[cfg(test)]
 mod tests {
-    use super::proof_policy_2;
+    use super::{ProofDemandSubject, proof_policy_2};
     use crate::contract_semantics::{
         KnowledgeState, SEMANTIC_MODEL_VERSION, SemanticClaimPath,
         proof::{ACCEPTANCE_RECEIPT_VERSION, PROOF_POLICY_VERSION},
@@ -625,7 +1347,7 @@ mod tests {
         assert_eq!(policy.semantic_model_version(), SEMANTIC_MODEL_VERSION);
         assert_eq!(
             policy.digest().as_str(),
-            "sha256:aeea7aaaa8ee5a85946328719b66e8ed185c38e7989da19e26d0424bb743e4db"
+            "sha256:15f26bd9e71ea6ba5a65a1b87be356c85fad7b98e8457825d75a61c5959e42e6"
         );
         assert_eq!(PROOF_POLICY_VERSION, 1);
         assert_eq!(ACCEPTANCE_RECEIPT_VERSION, 1);
@@ -682,6 +1404,65 @@ mod tests {
         assert_ne!(
             candidates.proposal().semantic_digest(),
             complete.semantic_digest()
+        );
+    }
+
+    #[test]
+    fn demand_graph_covers_every_positive_and_closure_without_caller_plan_input() {
+        let complete = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let policy = proof_policy_2();
+        let candidates = policy.inspect_candidates(&complete).unwrap();
+        let graph = policy
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+
+        assert!(candidates.positive_facts().iter().all(|positive| {
+            graph.demands().iter().any(|demand| {
+                demand.subject() == &ProofDemandSubject::PositiveFact(positive.clone())
+            })
+        }));
+        assert!(candidates.closure_candidates().iter().all(|closure| {
+            graph.demands().iter().any(|demand| {
+                matches!(
+                    demand.subject(),
+                    ProofDemandSubject::DomainClosure { subject, .. } if subject == closure
+                )
+            })
+        }));
+        assert_eq!(
+            graph
+                .demands()
+                .iter()
+                .map(|demand| demand.id().as_str())
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            graph.demands().len()
+        );
+
+        let changed_snapshot = policy
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 3),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+        assert_ne!(graph.root(), changed_snapshot.root());
+        assert!(
+            graph
+                .demands()
+                .iter()
+                .zip(changed_snapshot.demands())
+                .all(|(left, right)| left.id() != right.id())
         );
     }
 }

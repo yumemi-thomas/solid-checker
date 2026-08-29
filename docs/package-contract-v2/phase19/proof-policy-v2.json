@@ -23,6 +23,12 @@
       "framing": "typed-length-prefixed-fields"
     },
     {
+      "purpose": "demand-graph",
+      "algorithm": "sha256",
+      "domain": "solid-checker:contract-proof-demand-graph:v2",
+      "framing": "sorted-demand-id-sequence"
+    },
+    {
       "purpose": "evidence-root",
       "algorithm": "sha256",
       "domain": "solid-checker:contract-proof-evidence:v2",

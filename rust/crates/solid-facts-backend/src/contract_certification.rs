@@ -8,7 +8,12 @@ use serde::{
 };
 use serde_json::Value;
 use sha2::{Digest as _, Sha256, Sha512};
-use solid_reactive_ir::contract_semantics::certification::proof_policy_2;
+use solid_reactive_ir::contract_semantics::{
+    NormalizedContract,
+    certification::{
+        CertificationCandidates, DemandPlanningError, ProofDemandGraph, proof_policy_2,
+    },
+};
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::{Cursor, Read},
@@ -20,6 +25,7 @@ use thiserror::Error;
 use crate::artifact_resolution::{
     ImportRequest, ResolutionTrace, ResolutionTraceStep, ResolvedFile, ResolvedImport,
 };
+use crate::contract_interface::ContractFailure;
 
 const SNAPSHOT_HASH_DOMAIN: &[u8] = b"solid-checker:artifact-snapshot:v1\0";
 
@@ -144,6 +150,113 @@ impl LocalArtifact {
         }
         Ok(Self { root })
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UntrustedArtifactEnvelope {
+    Published(PublishedArchive),
+    LockPinned(LockPinnedArchive),
+    Local(LocalArtifact),
+}
+
+#[derive(Clone, Debug)]
+pub struct CertificationRequest {
+    candidate: NormalizedContract,
+    import_request: ImportRequest,
+    resolved_import: ResolvedImport,
+}
+
+impl CertificationRequest {
+    #[must_use]
+    pub fn new(
+        candidate: NormalizedContract,
+        import_request: ImportRequest,
+        resolved_import: ResolvedImport,
+    ) -> Self {
+        Self {
+            candidate,
+            import_request,
+            resolved_import,
+        }
+    }
+}
+
+/// Opaque output of policy-owned planning. Keeping the snapshot and candidate
+/// inventory private prevents issuance from swapping in a caller-supplied plan
+/// or rereading mutable acquisition paths.
+pub struct CertificationPlan {
+    snapshot: ArtifactSnapshot,
+    verified_resolution: SnapshotVerifiedResolution,
+    candidates: CertificationCandidates,
+    demand_graph: ProofDemandGraph,
+}
+
+impl CertificationPlan {
+    #[must_use]
+    pub const fn demand_graph(&self) -> &ProofDemandGraph {
+        &self.demand_graph
+    }
+
+    #[must_use]
+    pub const fn candidates(&self) -> &CertificationCandidates {
+        &self.candidates
+    }
+
+    #[must_use]
+    pub fn snapshot_root(&self) -> &str {
+        self.snapshot.root()
+    }
+
+    #[must_use]
+    pub fn verified_resolution(&self) -> &SnapshotVerifiedResolution {
+        &self.verified_resolution
+    }
+}
+
+pub fn plan_certification(
+    request: CertificationRequest,
+    artifact: UntrustedArtifactEnvelope,
+) -> Result<CertificationPlan, CertificationPlanningError> {
+    let limits = SnapshotLimits::policy_2();
+    let snapshot = match artifact {
+        UntrustedArtifactEnvelope::Published(archive) => {
+            ArtifactSnapshot::from_published(&archive, limits)?
+        }
+        UntrustedArtifactEnvelope::LockPinned(archive) => {
+            ArtifactSnapshot::from_lock_pinned(&archive, limits)?
+        }
+        UntrustedArtifactEnvelope::Local(artifact) => {
+            ArtifactSnapshot::from_local(&artifact, limits)?
+        }
+    };
+    let verified_resolution =
+        snapshot.verify_resolved_import(&request.import_request, &request.resolved_import)?;
+    let selected =
+        crate::artifact_resolution::select_and_bind(&request.candidate, &request.resolved_import)?;
+    let policy = proof_policy_2();
+    let candidates = policy
+        .inspect_candidates(&selected)
+        .map_err(|error| CertificationPlanningError::InvalidCandidate(error.to_string()))?;
+    let demand_graph =
+        policy.derive_demand_graph(&candidates, snapshot.root(), snapshot.provenance_root())?;
+    Ok(CertificationPlan {
+        snapshot,
+        verified_resolution,
+        candidates,
+        demand_graph,
+    })
+}
+
+#[derive(Debug, Error)]
+pub enum CertificationPlanningError {
+    #[error(transparent)]
+    Artifact(#[from] ArtifactSnapshotError),
+    #[error(transparent)]
+    Contract(#[from] ContractFailure),
+    #[error(transparent)]
+    Demand(#[from] DemandPlanningError),
+    #[error("invalid certification candidate: {0}")]
+    InvalidCandidate(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1445,8 +1558,9 @@ fn archive_error(error: impl std::fmt::Display) -> ArtifactSnapshotError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ArtifactSnapshot, ArtifactSnapshotError, LocalArtifact, LockPinnedArchive,
-        PublishedArchive, SnapshotLimits,
+        ArtifactSnapshot, ArtifactSnapshotError, CertificationRequest, LocalArtifact,
+        LockPinnedArchive, PublishedArchive, SnapshotLimits, UntrustedArtifactEnvelope,
+        plan_certification,
     };
     use crate::artifact_resolution::{
         ClosureEntry, ClosureFileRole, ClosureManifest, ImportRequest, ResolutionAuthority,
@@ -1455,6 +1569,7 @@ mod tests {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use flate2::{Compression, write::GzEncoder};
     use sha2::{Digest as _, Sha256, Sha512};
+    use solid_reactive_ir::contract_semantics::ContractProposal;
     use std::collections::BTreeMap;
 
     use std::io::Write as _;
@@ -1916,6 +2031,19 @@ mod tests {
             snapshot.verify_resolved_import(&request, &copied_trace),
             Err(ArtifactSnapshotError::ResolutionMismatch(_))
         ));
+
+        let (package, artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        let plan = plan_certification(
+            CertificationRequest::new(candidate, request.clone(), resolved.clone()),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+        )
+        .unwrap();
+        assert_eq!(plan.snapshot_root(), snapshot.root());
+        assert_eq!(plan.demand_graph().demands().len(), 6);
 
         let request_without_development = ImportRequest {
             export_conditions: vec!["import".into()],
