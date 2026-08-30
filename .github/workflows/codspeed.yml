@@ -1,0 +1,70 @@
+name: CodSpeed
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+# The action mints an OIDC token for this run and authenticates with it, so
+# there is no upload secret to store or rotate.
+permissions:
+  contents: read
+  id-token: write
+
+# A measurement is only wanted for the tip of a branch, and these jobs hold a
+# runner for minutes: a re-push supersedes the run it replaces rather than
+# queueing behind it. Never on main, whose runs are the baseline every pull
+# request is reported against.
+concurrency:
+  group: codspeed-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  benchmarks:
+    name: Wall-time benchmarks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: dtolnay/rust-toolchain@1.97
+      # The same release binary the Performance workflow builds, so this job
+      # restores that workflow's entry rather than keep a second copy of it,
+      # and writes nothing of its own (CONTRIBUTING.md, "Continuous integration
+      # caches").
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: performance
+          save-if: false
+      - uses: ./.github/actions/typefacts
+
+      - name: Build the benchmark runtime
+        run: |
+          cargo build --release --manifest-path rust/Cargo.toml \
+            -p solid-facts-backend --bin solid-checker-session-bench
+
+      # Same 1,000-source corpus the repository-owned ceilings are measured on,
+      # generated rather than checked in: the generator is deterministic, so
+      # every run measures byte-identical sources.
+      - name: Prepare the deterministic corpus
+        run: |
+          bun benchmarks/generate-bench-corpus.mjs \
+            1000 /tmp/solid-checker-codspeed-corpus
+
+      # This analysis spans the Rust process and the Type Facts child process.
+      # CodSpeed CPU simulation does not follow child processes, so wall time is
+      # the correct end-to-end instrument here. Runs on main establish the
+      # baseline each pull request is reported against.
+      - name: Measure the benchmark cases on CodSpeed
+        uses: CodSpeedHQ/action@v5
+        with:
+          mode: walltime
+          config: codspeed.yml
+        env:
+          SOLID_CHECKER_CODSPEED_CORPUS: /tmp/solid-checker-codspeed-corpus
+          SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts

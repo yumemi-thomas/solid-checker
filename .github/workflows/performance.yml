@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   benchmarks:
@@ -139,23 +138,7 @@ jobs:
             /tmp/perf-runtime/${{ github.sha }}/solid-typefacts
           key: perf-runtime-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
 
-      - name: Prepare the deterministic corpus
-        run: |
-          bun benchmarks/generate-bench-corpus.mjs \
-            1000 /tmp/solid-checker-codspeed-corpus
-
-      # This analysis spans the Rust process and the Type Facts child process.
-      # CodSpeed CPU simulation does not follow child processes, so wall time is
-      # the correct end-to-end instrument here.
-      # Optional extra beyond the merge-base comparison above: enable after
-      # registering the repository with CodSpeed by setting the repository
-      # variable CODSPEED_ENABLED to true.
-      - name: Compare performance with the base commit on CodSpeed
-        if: vars.CODSPEED_ENABLED == 'true'
-        uses: CodSpeedHQ/action@v4
-        with:
-          mode: walltime
-          config: codspeed.yml
-        env:
-          SOLID_CHECKER_CODSPEED_CORPUS: /tmp/solid-checker-codspeed-corpus
-          SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
+      # The CodSpeed wall-time benchmarks over the same corpus live in their own
+      # workflow (.github/workflows/codspeed.yml): they are a tracked baseline
+      # rather than a gate, and they must still report when the merge-base
+      # comparison above turns this job red.
