@@ -115,6 +115,22 @@ carries is that any future message embedding the exact phrase "package contract
 value export ... cannot have function effects" inside a differently-caused
 refusal would now be claimed by this class first. No such shape is known.
 
+## Callback obligations do not create value-export function domains (2026-08-31)
+
+Contract-generation `UnknownCallbackExecution` obligations previously carried
+only a function's runtime identity. A re-exported module namespace can share
+that identity with several exported bindings, so direct attribution set
+`callbacks` to OPEN on value siblings that never had an invocation subject.
+Those constants were then correctly refused by the invariant that a closed
+value export cannot carry function effects.
+
+The IR obligation now also carries the exact compiler symbol of its owning
+function. Joined entrypoints select exports by that canonical symbol first and
+never fall back to broader runtime identity when symbol provenance exists. The
+negative regressions keep value siblings closed and forbid fallback after an
+unmatched exact symbol. The real geolocation conflict remains symbol-matched,
+so the pinned downstream refusal is unchanged.
+
 ## Package imports maps fail closed until Rust replays them (2026-08-31)
 
 The generator's proposal closure followed a matched `#specifier` into the

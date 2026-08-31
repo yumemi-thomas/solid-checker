@@ -528,6 +528,11 @@ fn unknown_callback_obligation(
     .to_string();
     ContractGenerationObligation {
         function,
+        function_symbol: node
+            .symbol
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default(),
         function_identity: node.runtime_identity.clone(),
         parameter,
         package,
@@ -5072,6 +5077,11 @@ fn interprocedural_reads(
                         .name
                         .clone()
                         .unwrap_or_else(|| "<anonymous>".into()),
+                    function_symbol: nodes[*owner]
+                        .symbol
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default(),
                     function_identity: nodes[*owner].runtime_identity.clone(),
                     parameter: *owner_parameter,
                     package: obligation.package.clone(),

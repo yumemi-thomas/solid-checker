@@ -1317,6 +1317,8 @@ pub struct ContractBindingCounts {
 pub struct ContractGenerationObligation {
     pub function: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub function_symbol: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub function_identity: String,
     pub parameter: usize,
     #[serde(default, skip_serializing_if = "String::is_empty")]

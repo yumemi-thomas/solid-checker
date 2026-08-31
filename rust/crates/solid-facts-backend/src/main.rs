@@ -3547,6 +3547,164 @@ fn unknown_contract_claim<T>() -> solid_reactive_ir::ContractClaim<T> {
     solid_reactive_ir::ContractClaim::Open
 }
 
+fn mark_contract_generation_callback_unknown(summary: &mut solid_reactive_ir::ContractExport) {
+    summary.callbacks = unknown_contract_claim();
+}
+
+fn contract_generation_obligation_target_names(
+    entry_joined: bool,
+    obligation: &solid_reactive_ir::ContractGenerationObligation,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+    names_by_identity: &HashMap<String, Vec<String>>,
+    names_by_symbol: &HashMap<String, Vec<String>>,
+    aliases: &HashMap<String, String>,
+) -> Vec<String> {
+    if !entry_joined {
+        return if exports.contains_key(&obligation.function) {
+            vec![obligation.function.clone()]
+        } else {
+            Vec::new()
+        };
+    }
+    if !obligation.function_symbol.is_empty() {
+        let symbol = canonical_symbol(&obligation.function_symbol, aliases);
+        return names_by_symbol.get(&symbol).cloned().unwrap_or_default();
+    }
+    if !obligation.function_identity.is_empty() {
+        return names_by_identity
+            .get(&obligation.function_identity)
+            .cloned()
+            .unwrap_or_default();
+    }
+    if exports.contains_key(&obligation.function) {
+        vec![obligation.function.clone()]
+    } else {
+        Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod contract_generation_callback_attribution_tests {
+    use std::collections::{BTreeMap, HashMap};
+
+    use super::{
+        contract_generation_obligation_target_names, mark_contract_generation_callback_unknown,
+        reconcile_entry_export_kind,
+    };
+    use solid_reactive_ir::{
+        ContractClaim, ContractExport, ContractGenerationObligation, ExportKindProof,
+    };
+
+    fn obligation(function_symbol: &str, function_identity: &str) -> ContractGenerationObligation {
+        ContractGenerationObligation {
+            function: "callableExport".into(),
+            function_symbol: function_symbol.into(),
+            function_identity: function_identity.into(),
+            ..ContractGenerationObligation::default()
+        }
+    }
+
+    #[test]
+    fn exact_function_symbol_excludes_value_siblings_that_share_runtime_identity() {
+        let mut exports = BTreeMap::from([
+            (
+                "IR".into(),
+                ContractExport {
+                    kind: "value".into(),
+                    ..ContractExport::default()
+                },
+            ),
+            (
+                "callableExport".into(),
+                ContractExport {
+                    kind: "function".into(),
+                    ..ContractExport::default()
+                },
+            ),
+        ]);
+        let names_by_identity = HashMap::from([(
+            "shared-module-identity".into(),
+            vec!["IR".into(), "callableExport".into()],
+        )]);
+        let names_by_symbol =
+            HashMap::from([("function-symbol".into(), vec!["callableExport".into()])]);
+
+        let targets = contract_generation_obligation_target_names(
+            true,
+            &obligation("function-symbol", "shared-module-identity"),
+            &exports,
+            &names_by_identity,
+            &names_by_symbol,
+            &HashMap::new(),
+        );
+        for target in targets {
+            mark_contract_generation_callback_unknown(exports.get_mut(&target).unwrap());
+        }
+
+        assert_eq!(exports["IR"].callbacks, ContractClaim::Known(Vec::new()));
+        assert_eq!(exports["callableExport"].callbacks, ContractClaim::Open);
+    }
+
+    #[test]
+    fn an_unmatched_exact_function_symbol_never_falls_back_to_runtime_identity() {
+        let exports = BTreeMap::from([(
+            "IR".into(),
+            ContractExport {
+                kind: "value".into(),
+                ..ContractExport::default()
+            },
+        )]);
+        let names_by_identity =
+            HashMap::from([("shared-module-identity".into(), vec!["IR".into()])]);
+
+        assert!(
+            contract_generation_obligation_target_names(
+                true,
+                &obligation("function-symbol", "shared-module-identity"),
+                &exports,
+                &names_by_identity,
+                &HashMap::new(),
+                &HashMap::new(),
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn an_exact_invocation_symbol_preserves_a_real_export_kind_conflict() {
+        let mut exports = BTreeMap::from([(
+            "createGeolocation".into(),
+            ContractExport {
+                kind: "value".into(),
+                ..ContractExport::default()
+            },
+        )]);
+        let names_by_symbol = HashMap::from([(
+            "geolocation-function-symbol".into(),
+            vec!["createGeolocation".into()],
+        )]);
+        let targets = contract_generation_obligation_target_names(
+            true,
+            &obligation("geolocation-function-symbol", "module-identity"),
+            &exports,
+            &HashMap::new(),
+            &names_by_symbol,
+            &HashMap::new(),
+        );
+        for target in targets {
+            mark_contract_generation_callback_unknown(exports.get_mut(&target).unwrap());
+        }
+
+        let summary = exports.remove("createGeolocation").unwrap();
+        assert_eq!(summary.callbacks, ContractClaim::Open);
+        assert!(
+            reconcile_entry_export_kind(ExportKindProof::NonCallable, summary)
+                .unwrap_err()
+                .contains("cannot have function effects")
+        );
+    }
+}
+
 #[derive(Clone, Copy)]
 struct UnresolvedExportIndex<'a> {
     facts: &'a solid_facts::ProjectFacts,
@@ -4487,19 +4645,14 @@ fn emit_package_contract(
         obligation_reach: &program.obligation_reach,
     };
     for unresolved in &program.contract_generation_obligations {
-        let target_names =
-            if request.contract_entry_file.is_empty() || unresolved.function_identity.is_empty() {
-                if exports.contains_key(&unresolved.function) {
-                    vec![unresolved.function.clone()]
-                } else {
-                    Vec::new()
-                }
-            } else {
-                exported_names_by_identity
-                    .get(&unresolved.function_identity)
-                    .cloned()
-                    .unwrap_or_default()
-            };
+        let target_names = contract_generation_obligation_target_names(
+            !request.contract_entry_file.is_empty(),
+            unresolved,
+            &exports,
+            &exported_names_by_identity,
+            &exported_names_by_symbol,
+            &symbol_aliases,
+        );
         let mut marked = Vec::new();
         for name in target_names {
             let Some(summary) = exports.get_mut(&name) else {
@@ -4508,7 +4661,7 @@ fn emit_package_contract(
             // The obligation proves only that the callback list is
             // incomplete. Preserve every independently known claim and make
             // the uncertainty explicit instead of refusing the whole export.
-            summary.callbacks = solid_reactive_ir::ContractClaim::Open;
+            mark_contract_generation_callback_unknown(summary);
             marked.push(name);
         }
         report_unknown_claim_attribution(
