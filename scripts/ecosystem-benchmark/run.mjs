@@ -1614,10 +1614,26 @@ async function main(argv = process.argv.slice(2)) {
     return;
   }
 
+  // The raw dependency-graph `nodes`/`edges` arrays dominate the persisted
+  // report (tens of KB per probe) and no consumer reads them from disk: the
+  // ledgers and gates read only `complete`/`status`/`roots`/`rootIdentity`/
+  // `leaves`/`cycles`, and `graphDigest` already commits to the full graph.
+  // Drop them from the serialized report so a re-measure diffs on semantics
+  // rather than rewriting the whole graph. (The planner's own unit tests build
+  // plans in-memory and are unaffected.)
+  const persistedReport = {
+    ...report,
+    results: report.results.map(result => {
+      if (!result.dependencyPlan || typeof result.dependencyPlan !== "object") return result;
+      const { nodes, edges, ...plan } = result.dependencyPlan;
+      return { ...result, dependencyPlan: plan };
+    })
+  };
+
   try {
     mkdirSync(dirname(options.json), { recursive: true });
     mkdirSync(dirname(options.markdown), { recursive: true });
-    writeFileSync(options.json, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    writeFileSync(options.json, `${JSON.stringify(persistedReport, null, 2)}\n`, "utf8");
     writeFileSync(options.markdown, markdown, "utf8");
   } catch (error) {
     fail(`failed to write reports: ${error?.stack ?? error}`);
