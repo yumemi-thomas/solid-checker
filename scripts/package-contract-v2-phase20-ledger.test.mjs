@@ -69,9 +69,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     partial: 37
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 108,
+    "exact-refusal": 83,
     "not-attempted": 25,
-    verified: 285
+    verified: 310
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -79,7 +79,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 285);
+  assert.equal(ledger.summary.verifiedRows, 310);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -112,6 +112,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-devtools/frontend@0.15.4|solid1|only",
       "@solid-devtools/logger@0.9.11|solid1|only",
       "@solid-devtools/overlay@0.33.5|solid1|only",
+      "@solid-devtools/transform@0.10.4|solid1|only",
       "@solid-primitives/a11y@1.0.0-next.3|solid2|floor",
       "@solid-primitives/a11y@1.0.0-next.3|solid2|head",
       "@solid-primitives/active-element@2.1.6|solid1|only",
@@ -188,6 +189,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/geolocation@3.0.0-next.2|solid2|head",
       "@solid-primitives/gestures@3.0.0-next.3|solid2|floor",
       "@solid-primitives/gestures@3.0.0-next.3|solid2|head",
+      "@solid-primitives/graphql@3.0.0-next.0|solid1|only",
       "@solid-primitives/history@0.2.5|solid1|only",
       "@solid-primitives/history@1.0.0-next.3|solid2|floor",
       "@solid-primitives/history@1.0.0-next.3|solid2|head",
@@ -344,30 +346,53 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solidjs/html@2.0.0-rc.3|solid2|only",
       "@solidjs/meta@1.0.0-next.2|solid2|floor",
       "@solidjs/meta@1.0.0-next.2|solid2|head",
+      "@solidjs/start@2.0.3|solid1|only",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|floor",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|head",
       "@tanstack/ai-devtools-core@0.5.8|solid1|only",
+      "@tanstack/charts@0.15.0|solid1|only",
       "@tanstack/devtools@0.14.2|solid1|only",
       "@tanstack/devtools-a11y@0.2.2|solid1|only",
       "@tanstack/devtools-utils@0.7.0|solid1|only",
+      "@tanstack/form-devtools@1.0.0-alpha.2|solid1|only",
       "@tanstack/hotkeys-devtools@0.9.0|solid1|only",
       "@tanstack/pacer-devtools@1.4.0|solid1|only",
       "@tanstack/solid-ai-devtools@0.2.71|solid1|only",
+      "@tanstack/solid-charts@0.15.0|solid1|only",
       "@tanstack/solid-devtools@0.8.12|solid1|only",
       "@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only",
       "@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only",
       "@tanstack/solid-pacer@0.22.0|solid1|only",
       "@tanstack/solid-pacer-devtools@0.14.0|solid1|only",
+      "@tanstack/solid-query-devtools@5.102.5|solid1|only",
+      "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor",
+      "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head",
       "@tanstack/solid-router@1.170.30|solid1|only",
       "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
       "@tanstack/solid-router@2.0.0-rc.2|solid2|head",
       "@tanstack/solid-router-devtools@1.167.1|solid1|only",
+      "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|floor",
+      "@tanstack/solid-router-devtools@2.0.0-rc.2|solid2|head",
       "@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only",
+      "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|floor",
+      "@tanstack/solid-router-ssr-query@2.0.0-rc.2|solid2|head",
+      "@tanstack/solid-start@1.168.47|solid1|only",
+      "@tanstack/solid-start@2.0.0-rc.2|solid2|floor",
+      "@tanstack/solid-start@2.0.0-rc.2|solid2|head",
       "@tanstack/solid-start-client@1.168.29|solid1|only",
+      "@tanstack/solid-start-client@2.0.0-rc.2|solid2|floor",
+      "@tanstack/solid-start-client@2.0.0-rc.2|solid2|head",
+      "@tanstack/solid-start-config@1.120.20|solid1|only",
       "@tanstack/solid-store@0.11.1|solid1|only",
       "@tanstack/solid-table@9.1.2|solid1|only",
+      "@tanstack/solid-table-devtools@9.2.0|solid1|only",
       "@tanstack/solid-virtual@3.13.37|solid1|only",
-      "corvu@0.7.2|solid1|only"
+      "@tanstack/table-devtools@9.2.0|solid1|only",
+      "corvu@0.7.2|solid1|only",
+      "motion-solidjs@0.7.0-beta.4|solid2|floor",
+      "motion-solidjs@0.7.0-beta.4|solid2|head",
+      "solid-recharts@2.0.0-beta.1|solid2|floor",
+      "solid-recharts@2.0.0-beta.1|solid2|head"
     ]
   );
   assert.equal(ledger.summary.incompleteRefusalCensusRows, 0);

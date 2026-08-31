@@ -262,6 +262,7 @@ test("complete proposals retain an exact policy-2 certification refusal when att
       family: "selected-signature",
       reason: "the automatic type-facts witness adapter is unavailable",
       refusalCount: 1,
+      memoryExceeded: false,
       durationMs: 0,
       stageDurationsMs: { artifactAcquisition: 1, demandPlanning: 2 },
       graphPreparation: {
@@ -280,6 +281,62 @@ test("complete proposals retain an exact policy-2 certification refusal when att
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }
+});
+
+test("a watchdog-killed certification is a machine-queryable resource failure, not only prose", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-certification-memory-"));
+  const hooks = successHooks();
+  hooks.mkProject = async () => {
+    const projectDir = join(temporary, "project");
+    const outputDir = join(temporary, "output");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    return { projectDir, outputDir };
+  };
+  // Exactly what the real hook resolves when `superviseChildMemory` SIGKILLs
+  // the tree: a non-zero status, the marker appended to stderr, and the flag.
+  // No audit file is written, because the child never reached its own exit.
+  hooks.attemptCertification = async () => ({
+    status: null,
+    stdout: "",
+    stderr:
+      "\n[solid-checker-ecosystem-benchmark: probe process tree exceeded the 4096 MiB memory ceiling and was killed]",
+    timedOut: false,
+    memoryExceeded: true
+  });
+  try {
+    const [result] = await runBenchmark({
+      manifest,
+      hooks,
+      options: { concurrency: 1, attemptCertification: true }
+    });
+    assert.equal(result.certificationAttempt.status, "infrastructure-failure");
+    assert.equal(result.certificationAttempt.memoryExceeded, true);
+    assert.match(result.certificationAttempt.reason, /memory ceiling/);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
+test("a certification that exits on its own is not reported as a resource failure", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const hooks = successHooks();
+  // A hook result that names no flag at all: the row must read `false`, never
+  // `undefined`, so "was this a memory kill?" is always answerable.
+  hooks.attemptCertification = async () => ({
+    status: 0,
+    stdout: "",
+    stderr: "",
+    timedOut: false
+  });
+  const [result] = await runBenchmark({
+    manifest,
+    hooks,
+    options: { concurrency: 1, attemptCertification: true }
+  });
+  assert.equal(result.certificationAttempt.status, "certified");
+  assert.equal(result.certificationAttempt.memoryExceeded, false);
 });
 
 test("the shared pool drains certification during long generation without exceeding either cap", async () => {
@@ -852,12 +909,17 @@ test("recommendedCertificationConcurrency fills the bounded drain pool within me
   assert.equal(recommendedCertificationConcurrency(14, plenty), 14);
   assert.equal(recommendedCertificationConcurrency(32, plenty), 14);
   assert.equal(recommendedCertificationConcurrency(Number.NaN, plenty), 2);
-  // Certification materializes each package's authenticated dependency closure
-  // into its witness program, so the drain width reserves one memory share
-  // (8 GiB) per slot: a 14-wide drain on a 48 GB host is the measured way to
-  // exhaust the machine, not a throughput win.
-  assert.equal(recommendedCertificationConcurrency(14, 48 * gib), 6);
-  assert.equal(recommendedCertificationConcurrency(14, 16 * gib), 2);
+  // The drain width reserves one memory share per slot. The share is 2 GiB,
+  // ~2.7x the worst process-tree peak measured across the heavy tail after the
+  // resolver stopped retaining one `ts.Program` per module (762 MiB, down from
+  // 30.5 GB for the worst probe), so a 48 GB host now runs the full
+  // cores-bounded width instead of the six slots an 8 GiB share allowed.
+  assert.equal(recommendedCertificationConcurrency(14, 48 * gib), 14);
+  assert.equal(recommendedCertificationConcurrency(14, 16 * gib), 8);
+  // The share still bounds a small machine below its core count, and the floor
+  // keeps two slots on a host too small for even one share.
+  assert.equal(recommendedCertificationConcurrency(14, 8 * gib), 4);
+  assert.equal(recommendedCertificationConcurrency(14, 1 * gib), 2);
   // Memory never lifts the width above cores, and an unknown size stays at the
   // conservative floor rather than the cores-only width.
   assert.equal(recommendedCertificationConcurrency(4, plenty), 4);

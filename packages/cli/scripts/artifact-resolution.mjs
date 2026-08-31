@@ -146,10 +146,30 @@ export function nonModuleTargetExtension(path) {
   return NON_MODULE_EXTENSIONS.includes(extension.toLowerCase()) ? extension : undefined;
 }
 
+// These programs answer exactly one kind of question, in `syntaxHazards` and
+// nowhere else: does the symbol this identifier resolves to have a declaration
+// in *this same source file*? `noResolve` already keeps every imported module
+// out, so the only non-root declarations a program could contribute are the
+// default library's -- and a `lib.*.d.ts` declaration is never a declaration in
+// an analyzed package file. Both answers a global identifier can produce, "the
+// symbol is declared elsewhere" (libraries loaded) and "no symbol resolves at
+// all" (libraries absent), therefore leave every predicate here reading `not
+// locally bound`, while a genuinely local declaration resolves locally in both
+// cases because lexical scope never consults globals.
+//
+// So `noLib` is a memory decision, not a semantic one, and it is a large one:
+// the default `target: Latest` library set is 86 source files that were parsed
+// and bound again for every module needing symbol identity, and it accounts for
+// essentially the whole per-program cost -- ten retained programs measured
+// 631 MB resident with the library set and ~0 without it, against roughly
+// 70 MB per program observed in situ. It was checked as well as argued: across
+// 6740 real installed package files (2507 of which need a checker) the hazard
+// census is byte-identical with and without the library set.
 const PROGRAM_OPTIONS = Object.freeze({
   allowJs: true,
   checkJs: true,
   noEmit: true,
+  noLib: true,
   noResolve: true,
   skipLibCheck: true,
   target: ts.ScriptTarget.Latest
@@ -1039,8 +1059,10 @@ function moduleDescription(path, axis, packageRoot, cache) {
     imports: new Map(),
     externalImports: new Map(),
     specifiers: [],
-    file,
-    checker
+    // The syntax hazard census is extracted here, while the TypeScript program
+    // that answers it is still live, and only its plain-data result is retained
+    // (see the `hazards` note below).
+    hazards: []
   };
   cache.local.set(key, description);
   cache.shared?.set(key, { digest, description });
@@ -1192,6 +1214,21 @@ function moduleDescription(path, axis, packageRoot, cache) {
       specifier.kind = "reexport";
     }
   }
+  // A cached description must not keep the TypeScript program that produced it
+  // alive. `parseModule` builds a whole standalone `ts.Program` per module that
+  // needs symbol identity, and every module description used to retain that
+  // program transitively through its `checker` (and its `SourceFile`). One
+  // session's description cache therefore held one live program per such
+  // module -- measured at roughly 70 MB each, and dozens of them across a
+  // dependency graph's preparation.
+  //
+  // The only consumer of the AST and checker beyond this function is the
+  // syntax hazard census, which is a pure function of (relative path, file
+  // text) and is recomputed identically on every closure walk. Extract it once
+  // here, while the program is still live, and retain only its plain-data
+  // result. `closureForRoots` copies the rows it consumes, so the census stays
+  // exactly as immutable to its callers as a freshly computed one.
+  description.hazards = syntaxHazards(packagePath(packageRoot, path), file, checker);
   return description;
 }
 
@@ -1463,7 +1500,16 @@ function closureForRoots(
     if (entries.has(key)) return;
     entries.set(key, { role, path: relativePath, digest: fileDigest(realpath(path)) });
     const description = moduleDescription(path, axis, packageRoot, cache);
-    hazards.push(...syntaxHazards(relativePath, description.file, description.checker));
+    // Copy each cached census row: `canonicalClosure` sorts and deduplicates
+    // the arrays it is handed in place, and a cached row is shared with every
+    // other closure walk over the same module.
+    hazards.push(
+      ...description.hazards.map(hazard => ({
+        ...hazard,
+        affectedExports: [...hazard.affectedExports],
+        affectedDomains: [...hazard.affectedDomains]
+      }))
+    );
     for (const specifier of description.specifiers) {
       if (specifier.asset) {
         const assetPath = packagePath(packageRoot, specifier.asset);

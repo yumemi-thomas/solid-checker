@@ -22,11 +22,11 @@
 // - A single probe's install failure, integrity mismatch, timeout, or crash
 //   is business data for the report, not a reason to stop the benchmark. The
 //   runner's job is to report what happened to every probe, not to judge
-//   whether the run "succeeded" — that is `--thresholds` mode's job, and
+//   whether the run "succeeded" -- that is `--thresholds` mode's job, and
 //   only `--thresholds` mode can turn probe-level content into a non-zero
 //   exit. Exit 2 is reserved for the harness itself failing to do its job
 //   (bad manifest, missing binaries, a crash in the runner, unwritable
-//   reports) — never for what the packages under test happened to do. Even a
+//   reports) -- never for what the packages under test happened to do. Even a
 //   run where every single probe fails to install is still exit 0: the
 //   runner reported faithfully, it did not judge.
 
@@ -77,14 +77,25 @@ const DEFAULT_CONCURRENCY = recommendedConcurrency();
 // use the host directly while generation retains its smaller install-safe
 // outer pool; the child artifact-analysis width is derived separately below.
 //
-// The width is bounded by memory as well as cores: certification materializes
-// each package's authenticated dependency closure into its witness program, so
-// a heavy probe's process tree can transiently hold gigabytes, and enough of
-// them in flight together can exhaust the host (observed: a 14-wide drain
-// taking down a 48 GB machine). One memory share per certification slot is
-// reserved from total RAM; SOLID_CHECKER_CERTIFICATION_CONCURRENCY overrides
-// the computed width, mirroring SOLID_CHECKER_GATE_CONCURRENCY for the gates.
-const CERTIFICATION_MEMORY_SHARE_BYTES = 8 * 1024 * 1024 * 1024;
+// The width is bounded by memory as well as cores, because a heavy probe's
+// process tree is a real working set and enough of them in flight together can
+// exhaust the host. One memory share per certification slot is reserved from
+// total RAM; SOLID_CHECKER_CERTIFICATION_CONCURRENCY overrides the computed
+// width, mirroring SOLID_CHECKER_GATE_CONCURRENCY for the gates.
+//
+// The share is 2 GiB, from measurement rather than from a guess. The share was
+// first set to 8 GiB after a 14-wide drain took down a 48 GB machine, when the
+// resolver's module-description cache retained one whole `ts.Program` per
+// module needing symbol identity; the heavy tail then peaked far above the
+// nominal 2.5 GB -- 30.5 GB for `@solidjs/start@2.0.3`, 25.1 GB for
+// `@solid-devtools/transform@0.10.4`, 10.4 GB for `@kobalte/core@2.0.0-alpha.0`
+// -- and 38 probes were killed by the ceiling below. With that retention
+// released (see `moduleDescription` in packages/cli/scripts/artifact-resolution.mjs)
+// the same six probes' worst process-tree peak is 762 MiB, the whole set
+// spanning 496-762 MiB. Two gigabytes is therefore ~2.7x the measured worst
+// peak, and it lets a 48 GB host run the full cores-bounded width while a
+// 4 GB machine still floors at two slots.
+const CERTIFICATION_MEMORY_SHARE_BYTES = 2 * 1024 * 1024 * 1024;
 
 export function recommendedCertificationConcurrency(
   parallelism = availableParallelism(),
@@ -376,7 +387,7 @@ export function unknownExplicitProbeIds(manifest, explicitProbeIds = []) {
 
 // Concurrency-limited map that always writes into a pre-sized array by
 // index, so results come back in `items` order no matter which worker
-// finishes first — completion order and report order are deliberately
+// finishes first -- completion order and report order are deliberately
 // decoupled.
 async function mapConcurrent(items, concurrency, worker) {
   const results = new Array(items.length);
@@ -393,12 +404,12 @@ async function mapConcurrent(items, concurrency, worker) {
 }
 
 // The three outcomes a probe can be filed under. `success` means a COMPLETE
-// contract — every declared entrypoint the generator reached is described by
+// contract -- every declared entrypoint the generator reached is described by
 // it. A contract with refused entrypoints is real output and is recorded as
 // such, but it is its own outcome: folding it into `success` would let the
 // corpus-wide rate read 100% while a third of the ecosystem's entrypoints went
 // undescribed. Nothing here ever moves a probe the other way (a failure into
-// a success), which is the rule the benchmark exists under — it may only ever
+// a success), which is the rule the benchmark exists under -- it may only ever
 // make its own rate stricter.
 export function probeOutcome(className) {
   if (className === "success") return "success";
@@ -494,6 +505,11 @@ function readCertificationAttempt(result, auditPath, durationMs) {
       demandId: null,
       family: null,
       reason: null,
+      // Whether the memory watchdog killed this probe's tree is a resource
+      // fact, not a package fact, and it previously reached the report only as
+      // a marker appended to `reason`. Carry the flag itself so "this row is a
+      // resource failure" is machine-queryable without matching that prose.
+      memoryExceeded: result.memoryExceeded === true,
       durationMs,
       stageDurationsMs: audit?.stageDurationsMs ?? {},
       graphPreparation: audit?.graphPreparation ?? null,
@@ -528,6 +544,7 @@ function readCertificationAttempt(result, auditPath, durationMs) {
         ? "policy-2 certification attempt timed out"
         : result.stderr?.trim() || result.stdout?.trim() || `certification exited ${result.status}`),
     refusalCount: refusals.length,
+    memoryExceeded: result.memoryExceeded === true,
     durationMs,
     stageDurationsMs: audit?.stageDurationsMs ?? {},
     graphPreparation: audit?.graphPreparation ?? null,
@@ -539,7 +556,7 @@ function readCertificationAttempt(result, auditPath, durationMs) {
 }
 
 // A hook throwing (rather than resolving with a status/stderr shape) is
-// still just this one probe's failure — never rethrown, always folded into
+// still just this one probe's failure -- never rethrown, always folded into
 // the same result shape every other failure produces.
 function buildInfraFailureResult({ row, probe, error, phase, durationMs }) {
   const message = error?.stack ?? String(error);
@@ -931,7 +948,7 @@ async function certifyCompleteProbe(item, { timeoutMs, keepTemp }, hooks) {
 // probe-id filter (`null` means every probe in the manifest), run options,
 // and the four side-effecting hooks plus a clock. Returns results in
 // deterministic manifest order regardless of completion order, and never
-// rejects because one probe's hooks threw — see `runProbe`.
+// rejects because one probe's hooks threw -- see `runProbe`.
 export async function runBenchmark({ manifest, probeIds = null, options = {}, hooks }) {
   const timeoutMs = (options.timeoutMs ?? DEFAULT_TIMEOUT_SECONDS * 1000) | 0;
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
@@ -1289,11 +1306,18 @@ function readSentinelIds(path) {
 
 // A probe child (bun/JSC) has no conservative heap ceiling of its own, and
 // certification's process tree now includes the checker plus a Type Facts
-// producer type-checking a materialized dependency closure — so a pathological
+// producer type-checking a materialized dependency closure -- so a pathological
 // probe must be turned into one failed row here, never a host memory
 // exhaustion. Polls the child's whole process tree RSS and SIGKILLs it at the
 // cap. Resource fail-closed: exceeding the ceiling reads as that probe's
-// failure with an explicit stderr marker, exactly like a timeout.
+// failure with an explicit stderr marker and a `memoryExceeded` flag on the
+// row, exactly like a timeout.
+//
+// 4 GiB stays the default after the retention repair: the measured worst
+// process-tree peak across the previously-killed heavy tail is 762 MiB, so the
+// ceiling is already ~5x it -- a guard, not a budget. Lowering it towards the
+// measured peak would start deciding rows rather than catching pathologies,
+// and the whole ecosystem manifest is far wider than the probes measured here.
 const PROBE_MEMORY_CAP_MB = (() => {
   const raw = Number(process.env.SOLID_CHECKER_PROBE_MEMORY_MB);
   return Number.isInteger(raw) && raw > 0 ? raw : 4096;
@@ -1361,7 +1385,7 @@ function superviseChildMemory(child, capMb = PROBE_MEMORY_CAP_MB) {
 
 // Real, side-effecting hooks: exactly the four `runBenchmark` needs, backed
 // by lib/install.mjs (for npm) and a spawned CLI subprocess (for
-// generation) — never a `require`/`import` of anything under an installed
+// generation) -- never a `require`/`import` of anything under an installed
 // package's own node_modules tree.
 function buildRealHooks({
   nativeBin,
@@ -1691,7 +1715,7 @@ async function main(argv = process.argv.slice(2)) {
     });
   } catch (error) {
     // runBenchmark itself is designed to never reject over a single probe's
-    // behavior (see runProbe) — reaching here means the harness itself broke.
+    // behavior (see runProbe) -- reaching here means the harness itself broke.
     fail(`benchmark harness crashed: ${error?.stack ?? error}`);
     return;
   } finally {
@@ -1709,7 +1733,7 @@ async function main(argv = process.argv.slice(2)) {
       baseline,
       // Not one of the five parameters INTERFACES.md names, but buildReport's
       // documented top-level `checker: { nativeBin, typeFactsBin }` field has
-      // no other source of this data — see lib/report.mjs's own comment on
+      // no other source of this data -- see lib/report.mjs's own comment on
       // this parameter.
       checker: { nativeBin: binaries.nativeBin, typeFactsBin: binaries.typeFactsBin },
       scope

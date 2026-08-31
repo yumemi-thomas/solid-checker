@@ -1,5 +1,102 @@
 # Precision backlog
 
+## The certify child's TypeScript-program retention, and the width it was costing (2026-09-01)
+
+Not a precision movement: **no verdict, claim, digest, receipt, or report
+semantic changes**, and this is recorded here only because it moved the resource
+policy the previous entry installed. Six probes were measured end to end before
+and after; every field of every probe result is equivalent (see below).
+
+**What was retained.** `moduleDescription` in
+`packages/cli/scripts/artifact-resolution.mjs` cached each module's description
+with the `SourceFile` *and the `TypeChecker`* that produced it. The checker
+retains its whole `ts.Program`, and `parseModule` builds a fresh standalone
+program for every module needing symbol identity, so one
+`ArtifactResolutionSession`'s description cache held one live program per such
+module for the session's lifetime. A published dependency graph's preparation
+walks dozens of packages under one session.
+
+Phase-delta instrumentation on `corvu@0.7.2` (42 graph nodes), sampling
+`process.memoryUsage()` at every stage boundary:
+
+| phase | RSS | heapUsed |
+| --- | --- | --- |
+| artifact acquisition ends | 86 MB | 8 MB |
+| **graph preparation ends** | **3179 MB** | **1997 MB** |
+| graph acquisition ends | 3188 MB | 2192 MB |
+| 42 in-process proposal generations end | 3446 MB | 2722 MB |
+| witness acquisition ends | 3450 MB | 27 MB |
+
+The entire cost is one phase, and it tracks the program count exactly: RSS rose
+with `parseModule` calls at roughly 70 MB each. The proposal generations that
+were the intuitive suspect add 258 MB across all 42. The heap collapses to
+27 MB once preparation's caches are dropped, which is what says *retention*
+rather than working set.
+
+**Two repairs, both in `artifact-resolution.mjs`:**
+
+1. `moduleDescription` extracts the syntax hazard census while the program is
+   live and retains only that plain-data result; `closureForRoots` reads the
+   cached rows (copying each, because `canonicalClosure` sorts in place) instead
+   of recomputing from a retained AST. The census is a pure function of
+   (relative path, file text), and the relative path is determined by the cache
+   key, which already keys the specifier targets computed from the same package
+   root. Alone this took `corvu` from 3622 MB to 1055 MB.
+2. `PROGRAM_OPTIONS` gains `noLib`. These programs answer one question, in
+   `syntaxHazards` and nowhere else: does this identifier's symbol have a
+   declaration in *this same source file*? With `noResolve` already excluding
+   every imported module, the default library is the only other declaration
+   source a program has -- and a `lib.*.d.ts` declaration is never a declaration
+   in an analyzed package file, so "resolves elsewhere" and "resolves to
+   nothing" both read as *not locally bound*. Checked as well as argued: across
+   6740 real installed package files (2507 needing a checker) the census is
+   byte-identical with and without the library set. The library set is 86 source
+   files re-parsed and re-bound per program, measured at ~63 MB resident each.
+
+**Measured, per probe, whole process tree, `ps` sampled at 2 Hz.** The
+watchdog was raised to 32 GiB for the measurement so the pre-repair peaks could
+be observed rather than truncated at the kill.
+
+| probe | before | after | verdict before/after |
+| --- | --- | --- | --- |
+| `@solidjs/start@2.0.3` | 30539 MB | 731 MB | certified / certified |
+| `@solid-devtools/transform@0.10.4` | 25126 MB | 762 MB | certified / certified |
+| `@kobalte/core@2.0.0-alpha.0` | 10385 MB | 644 MB | refused / refused |
+| `@tanstack/solid-db@0.2.40` | 5994 MB | 589 MB | refused / refused |
+| `corvu@0.7.2` | 3754 MB | 705 MB | certified / certified |
+| `@solidjs/web@2.0.0-rc.3` | 3666 MB | 496 MB | refused / refused |
+
+Five of these six are among the 38 probes the previous entry's 4 GiB ceiling
+killed outright; all six now complete under the unchanged ceiling and produce a
+real verdict.
+
+**Equivalence.** Each probe's whole result document was diffed field by field,
+ignoring only wall-clock timings, absolute temporary paths, and the identity
+digests that hash those paths -- the dependency plan's node/leaf/cycle ids, its
+`graphDigest`, and the published-graph digest quoted in a refusal reason. Those
+are run-specific by construction: the harness installs each probe into a fresh
+`mkdtemp` directory whose absolute path is hashed into `identity.runtime.path`.
+The ignore set was validated by running the *same* code twice and confirming the
+two runs differ in exactly those places and nowhere else. Under it, all six
+probes are equivalent, contract content digests included.
+
+**Width restored.** `CERTIFICATION_MEMORY_SHARE_BYTES` in
+`scripts/ecosystem-benchmark/run.mjs` moves from 8 GiB to 2 GiB -- ~2.7x the
+measured worst peak of 762 MB -- so a 48 GB host runs the full cores-bounded
+width of 14 again instead of 6, while a 4 GB machine still floors at two slots.
+The 4 GiB probe ceiling is deliberately **unchanged**: at ~5x the measured worst
+peak it is a guard against pathology, and lowering it toward the measured peak
+would start deciding rows. The certification row now carries a `memoryExceeded`
+flag so a watchdog kill is machine-queryable rather than only prose in `reason`.
+
+**What remains, honestly.** The peaks above are still hundreds of megabytes, and
+that is mostly JavaScriptCore's allocator high-water rather than live data:
+forcing a full GC at the phase boundary drops `corvu`'s live heap to 26 MB while
+RSS stays at 490 MB. Reducing it further means creating fewer transient
+programs, not releasing more references. Also unchanged, and still open from the
+previous entry: `acquirePublishedArtifact` buffers each archive and packument
+whole in memory with no per-dependency cap.
+
 ## Certification witness programs now carry their authenticated dependency typings (2026-08-31)
 
 Ordinary root certification built its witness program from the target package's

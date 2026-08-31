@@ -359,7 +359,17 @@ impl Connection {
             let handshake = read_frame(&mut output).and_then(|frame| decode::<Handshake>(&frame));
             let _ = handshake_sender.send((handshake, output));
         });
-        let (handshake, mut output) = match handshake_receiver.recv_timeout(Duration::from_secs(5))
+        // Liveness bound only: the startup frame normally arrives within
+        // milliseconds, and compatibility is decided by the frame's content,
+        // never by its timing. The bound exists so a hung or dead producer
+        // fails eventually rather than blocking forever. It must be generous:
+        // under a fully loaded host (the ecosystem benchmark launches one
+        // producer per concurrent certification), a freshly spawned process
+        // can miss a tight deadline on scheduling alone, and that timeout was
+        // observed recording load-dependent *refusals* for packages that
+        // certify on an idle machine -- a nondeterministic verdict, which is
+        // worse than a slow failure.
+        let (handshake, mut output) = match handshake_receiver.recv_timeout(Duration::from_secs(60))
         {
             Ok(result) => {
                 handshake_reader
@@ -371,7 +381,7 @@ impl Connection {
                 terminate_child(&mut child);
                 let _ = handshake_reader.join();
                 return Err(SessionError::Handshake(
-                    "producer did not report compatibility within 5 seconds".into(),
+                    "producer did not report compatibility within 60 seconds".into(),
                 ));
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
