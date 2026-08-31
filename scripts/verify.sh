@@ -208,6 +208,18 @@ bun scripts/package-contract-phase18.mjs
 step phase19-policy
 bun scripts/package-contract-phase19.mjs
 
+# Phase 20 is the live row-disposition authority. Its generated ledger must
+# remain byte-identical to the checked full-corpus report, including ordinary
+# receipt loads, typed applicability, and complete dependency plans.
+step phase20-ledger
+bun scripts/package-contract-v2-phase20-ledger.mjs --check
+
+# Phase 21 freezes the exact 30-row Phase 20 refusal cohort before tracking
+# proof-preserving reductions. Its taxonomy must retain the upstream and CJS
+# controls while keeping semantic terminal classes authoritative over prose.
+step phase21-ledger
+bun scripts/package-contract-v2-phase21-ledger.mjs --check
+
 # Proposal orchestration can change a refusal envelope without changing the
 # normalized Rust model. Keep the exact generator corpus in the local handoff
 # authority as well as its dedicated CI workflow so snapshot drift cannot hide

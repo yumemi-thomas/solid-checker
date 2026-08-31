@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "documentKind": "solid-checker-phase20-slice2-remeasurement-summary",
+  "measuredAt": "2026-08-30",
+  "checker": {
+    "releaseSha256": "080d7bb5308e710a0b36953b3a14d11522343734a24a8141b12f8746777383b9"
+  },
+  "baselineLedger": {
+    "path": "benchmarks/package-contract-v2/phase20/row-ledger.json",
+    "sha256": "0a8657c57d3d70afdd9a6b26defd97d6e6d9a860106005cbcf420c3cafdbce83"
+  },
+  "exactIdentity": {
+    "sourceReportSha256": "2fc9830caa9945ca35b8ebef50355775ad893a6014ac8f1c889edb96c642d2df",
+    "selector": "baseline blockerMemberships includes exact-proposal-identity",
+    "rowsMeasured": 57,
+    "completeProposals": 7,
+    "partialProposals": 50,
+    "fullyRefusedProposals": 0,
+    "oldIdentityRefusalRows": [],
+    "completeRows": [
+      {
+        "probeId": "@corvu-next/utils@0.1.5|solid2|only",
+        "certificationOwner": "type-facts",
+        "certificationStage": "witness-acquisition"
+      },
+      {
+        "probeId": "@corvu/utils@0.4.2|solid1|only",
+        "certificationOwner": "type-facts",
+        "certificationStage": "witness-acquisition"
+      },
+      {
+        "probeId": "@solidjs/router@2.0.0-next.18|solid2|only",
+        "certificationOwner": "artifact-provenance",
+        "certificationStage": "artifact-or-demand-planning"
+      },
+      {
+        "probeId": "@tanstack/charts@0.15.0|solid1|only",
+        "certificationOwner": "type-facts",
+        "certificationStage": "witness-acquisition"
+      },
+      {
+        "probeId": "@tanstack/devtools-a11y@0.2.2|solid1|only",
+        "certificationOwner": "artifact-provenance",
+        "certificationStage": "artifact-or-demand-planning"
+      },
+      {
+        "probeId": "@tanstack/devtools-utils@0.7.0|solid1|only",
+        "certificationOwner": "artifact-provenance",
+        "certificationStage": "artifact-or-demand-planning"
+      },
+      {
+        "probeId": "@tanstack/solid-ai-devtools@0.2.71|solid1|only",
+        "certificationOwner": "type-facts",
+        "certificationStage": "witness-acquisition"
+      }
+    ]
+  },
+  "staleSubjects": {
+    "sourceReportSha256": "1ecf075b522e2fcf81a67e35b48ffcd49c032e117fc1546ac916abed72d6aebf",
+    "rowsMeasured": 4,
+    "completeProposals": 1,
+    "partialProposals": 3,
+    "oldStaleSubjectRefusalRows": [],
+    "completeRows": [
+      {
+        "probeId": "@solid-primitives/debounce@1.3.0|solid1|only",
+        "certificationOwner": "type-facts",
+        "certificationStage": "witness-acquisition"
+      }
+    ]
+  },
+  "verifiedRows": 0
+}
