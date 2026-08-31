@@ -5,6 +5,7 @@
     "arrow-export-attribution",
     "asset-import",
     "asset-query-import",
+    "asset-query-import-control",
     "attested-record-matches-walk",
     "attested-specifier-restated",
     "callback-deferred-untracked-chain",
@@ -16,6 +17,7 @@
     "conditional-imports-side-effect",
     "conditional-returns-divergence",
     "conditional-returns-divergence-both",
+    "conditional-targets",
     "declaration-sibling-reach",
     "entry-reexport-identity",
     "escaping-private-helper",
@@ -39,11 +41,13 @@
     "torture-getter-exports",
     "torture-runtime-namespace",
     "uncaptured-source-return",
+    "unpublished-conditional-target",
     "unreached-private-obligation",
     "unresolved-callee-callback",
     "unresolved-contract-export-attribution",
     "unresolved-dispatch-attribution",
     "unresolved-dispatch-domains-control",
-    "unresolved-dispatch-reachability"
+    "unresolved-dispatch-reachability",
+    "wildcard-asset-entrypoints"
   ]
 }

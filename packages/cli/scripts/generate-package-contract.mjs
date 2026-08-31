@@ -22,7 +22,12 @@ import { runNativeAsync } from "../bin/launcher.mjs";
 import {
   ArtifactResolutionError,
   ArtifactResolutionSession,
-  resolvePackageExport
+  MUTUALLY_EXCLUSIVE_CONDITION_AXES,
+  RESOLVER_STANDARD_CONDITIONS,
+  isPrivateNamespacedCondition,
+  nonModuleTargetExtension,
+  resolvePackageExport,
+  selectPackageExportTarget
 } from "./artifact-resolution.mjs";
 
 export const ARTIFACT_APPLICABILITY = Object.freeze({
@@ -32,6 +37,86 @@ export const ARTIFACT_APPLICABILITY = Object.freeze({
   UnsupportedConditionSet: "unsupported-condition-environment",
   UnsupportedArtifactShape: "unsupported-artifact-shape"
 });
+
+/**
+ * An artifact case that asserts nothing about certifiable behavior. It is not a
+ * refusal: a refusal says "a consumer can reach this and we could not prove it",
+ * while these two classes say "no consumer reaches a certifiable module here at
+ * all". An inapplicable case is recorded with its class and reason, never
+ * certified, never counted as a refusal, and never suppresses a sibling case or
+ * the proposal.
+ */
+export const ARTIFACT_DISPOSITION = Object.freeze({
+  UnpublishedConditionalTarget: "unpublished-conditional-target",
+  NonModuleTarget: "non-module-target"
+});
+
+/**
+ * The disposition of one exact artifact case, decided from the export-map
+ * selection alone and before any analysis. Returns `null` for every case that
+ * keeps ordinary certify-or-refuse semantics — including a selection that
+ * refuses for its own reason (`blocked`, `conditions-unmatched`, `not-exported`,
+ * invalid target syntax, traversal), which is a property of the package and
+ * still refuses.
+ *
+ * `unpublished-conditional-target`: the runtime target is absent from the
+ * artifact and the selection traversed at least one *namespaced* custom
+ * condition (`@scope/name` or `vendor/name`). The artifact itself proves the
+ * target unpublished (`files` excluded it) and, by the namespacing convention,
+ * no consumer reaches it without naming that private condition in its own
+ * resolver configuration, so there is no behavior to certify. A target reached
+ * through standard conditions — or through a *bare-name* custom condition such
+ * as `bun`, `workerd`, `edge-light`, `react-native`, or `electron`, each of
+ * which its ecosystem activates unconditionally — stays a refusal: real
+ * consumers do fail there, and that is a defective publish worth reporting.
+ *
+ * `non-module-target`: the selected runtime target's filename is one of the
+ * genuinely non-executable resource extensions (`nonModuleTargetExtension`) —
+ * a sourcemap, stylesheet, JSON, image, font, or document. `.node`/`.wasm` and
+ * unknown extensions are deliberately *not* in that set; an entrypoint of that
+ * kind is a native-code/opaque-wasm hazard rather than "nothing to assert", and
+ * still refuses. Assets remain ordinary closure members; this rule only says an
+ * *entrypoint* must be a module.
+ */
+export function artifactCaseDisposition({
+  manifest,
+  packageRoot,
+  entrypoint,
+  conditions,
+  resolutionKind = "import"
+}) {
+  let selected;
+  try {
+    selected = selectPackageExportTarget({
+      packageRoot,
+      manifest,
+      entrypoint,
+      conditions,
+      axis: "runtime",
+      resolutionKind
+    });
+  } catch {
+    return null;
+  }
+  const extension = nonModuleTargetExtension(selected.path);
+  if (extension) {
+    return {
+      class: ARTIFACT_DISPOSITION.NonModuleTarget,
+      reason: `runtime target extension ${JSON.stringify(extension)} is not an executable module`
+    };
+  }
+  if (selected.exists) return null;
+  const namespaced = selected.conditions.filter(condition =>
+    isPrivateNamespacedCondition(condition)
+  );
+  if (namespaced.length === 0) return null;
+  return {
+    class: ARTIFACT_DISPOSITION.UnpublishedConditionalTarget,
+    reason:
+      `runtime target is unpublished behind private namespaced export condition(s) ` +
+      `${namespaced.map(condition => JSON.stringify(condition)).join(", ")}`
+  };
+}
 
 export function artifactApplicabilityForRefusal(error) {
   if (!(error instanceof ArtifactResolutionError)) {
@@ -277,11 +362,9 @@ function specifierFor(packageName, entrypoint) {
   return `${packageName}/${entrypoint.slice(2)}`;
 }
 
-const mutuallyExclusiveConditionAxes = Object.freeze([
-  Object.freeze(["browser", "node", "deno", "worker"]),
-  Object.freeze(["development", "production"]),
-  Object.freeze(["csr", "string-ssr", "streaming-ssr"])
-]);
+// The census and the artifact-case disposition rules must agree on exactly one
+// standard condition vocabulary; both read the resolver's lists.
+const mutuallyExclusiveConditionAxes = MUTUALLY_EXCLUSIVE_CONDITION_AXES;
 
 export function finiteConditionPartitions(manifest, requested) {
   if (requested.length) return [[...new Set(requested)].sort()];
@@ -293,10 +376,7 @@ export function finiteConditionPartitions(manifest, requested) {
     }
     if (!value || typeof value !== "object") return;
     for (const [key, child] of Object.entries(value)) {
-      if (
-        !key.startsWith(".") &&
-        !["default", "types", "import", "require", "node-addons"].includes(key)
-      ) {
+      if (!key.startsWith(".") && !RESOLVER_STANDARD_CONDITIONS.includes(key)) {
         conditions.add(key);
       }
       visit(child);
@@ -512,7 +592,12 @@ function stableRefusalReason(error, { packageRoot, scratch }) {
     .replaceAll(scratch, "<scratch>");
 }
 
-function writeProposalRefusalAudit(output, manifest, refusals) {
+// Additive: `inapplicable` sits beside `refusals` under the same envelope
+// version. Every existing consumer validates `format`, `refusalVersion`, and
+// `Array.isArray(refusals)`, and every one of them counts `refusals.length` as
+// the refusal total — so a separate array is what makes "never counted as a
+// refusal" true by construction rather than by editing each counter.
+function writeProposalRefusalAudit(output, manifest, refusals, inapplicable = []) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(
     `${output}.refusals.json`,
@@ -521,7 +606,8 @@ function writeProposalRefusalAudit(output, manifest, refusals) {
         format: "solid-checker-contract-proposal-refusals",
         refusalVersion: 1,
         package: { name: manifest.name, version: manifest.version },
-        refusals
+        refusals,
+        inapplicable
       },
       null,
       2
@@ -930,6 +1016,7 @@ export async function generatePackageContract(
   const proposals = [];
   let emittedArtifactCases = 0;
   let certificationProposals = [];
+  const inapplicable = [];
   const refusals = wildcardRefusals.map(entrypoint => ({
     entrypoint,
     conditions: null,
@@ -958,6 +1045,23 @@ export async function generatePackageContract(
     const resolutionSession = new ArtifactResolutionSession();
     let caseIndex = 0;
     for (const { entrypoint, conditions } of artifactCandidates) {
+      const disposition = artifactCaseDisposition({
+        manifest,
+        packageRoot,
+        entrypoint,
+        conditions
+      });
+      if (disposition) {
+        inapplicable.push({
+          entrypoint,
+          conditions,
+          stage: "artifact-case",
+          class: disposition.class,
+          reason: disposition.reason
+        });
+        caseIndex += 1;
+        continue;
+      }
       try {
         preparedCases.push({
           index: caseIndex,
@@ -1086,11 +1190,23 @@ export async function generatePackageContract(
       // The benchmark and row ledger need the complete artifact-case census,
       // not only the first refusal repeated in the thrown message. Persist the
       // structured audit before taking the full-refusal exit.
-      writeProposalRefusalAudit(output, manifest, refusals);
+      writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
       const first = refusals[0];
+      // When nothing refused, the refusal clause names no cause at all and the
+      // signature is unclassifiable. Name the first inapplicable class and
+      // reason instead, so an all-inapplicable census still says why.
+      const firstInapplicable = inapplicable[0];
       throw new Error(
         `no certifiable artifact case; ${refusals.length} case(s) refused` +
-          (first ? `; first refusal: ${first.entrypoint}: ${first.reason}` : "")
+          (inapplicable.length
+            ? ` and ${inapplicable.length} case(s) recorded inapplicable`
+            : "") +
+          (first
+            ? `; first refusal: ${first.entrypoint}: ${first.reason}`
+            : firstInapplicable
+              ? `; first inapplicable: ${firstInapplicable.entrypoint}: ` +
+                `${firstInapplicable.class}: ${firstInapplicable.reason}`
+              : "")
       );
     }
     mkdirSync(dirname(output), { recursive: true });
@@ -1151,7 +1267,7 @@ export async function generatePackageContract(
           });
         }
         if (!fallback.merged) {
-          writeProposalRefusalAudit(output, manifest, refusals);
+          writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
           throw new Error("no independently mergeable artifact case remains");
         }
         emittedArtifactCases = fallback.acceptedCount;
@@ -1167,7 +1283,7 @@ export async function generatePackageContract(
       await checked(["--validate-contract", output], packageRoot);
     }
     if (timing) timing.validationMs = performance.now() - validationStartedAt;
-    writeProposalRefusalAudit(output, manifest, refusals);
+    writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -1180,6 +1296,7 @@ export async function generatePackageContract(
     entrypoints: entrypoints.length,
     artifactCases: emittedArtifactCases,
     refusedArtifactCases: refusals.length,
+    inapplicableArtifactCases: inapplicable.length,
     certificationInputs: certificationProposals.map(proposal => ({
       entrypoint: proposal.entrypoint,
       conditions: proposal.conditions,
@@ -1192,6 +1309,9 @@ export async function generatePackageContract(
       `generated unaccepted stable contract proposal for ${manifest.name}@${manifest.version} at ${output}` +
         (refusals.length
           ? `; ${refusals.length} artifact case(s) refused and omitted`
+          : "") +
+        (inapplicable.length
+          ? `; ${inapplicable.length} artifact case(s) recorded inapplicable`
           : "") +
         "; proof verification must issue its receipt\n"
     );

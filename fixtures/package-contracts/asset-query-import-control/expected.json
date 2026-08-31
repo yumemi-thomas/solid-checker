@@ -1,0 +1,45 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "4594ff92f0298a294ccf71df64ac4fcaa38fbbb5a58144a53d2a0ec03d9c18c3",
+            "path": "./index.js",
+            "sha256": "6ee6c2f7d5924cba92914685c611432b869248e597926e7d43e8ddc7f7408ea2"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "6ee6c2f7d5924cba92914685c611432b869248e597926e7d43e8ddc7f7408ea2"
+          },
+          "exports": {
+            "runModule": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:0b6c4e560961da96576a9d8ec37fa7d9434c4a78e6f7876e4a715b888c11af89",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "0b6c4e560961da96576a9d8ec37fa7d9434c4a78e6f7876e4a715b888c11af89"
+    },
+    "name": "asset-query-import-control",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

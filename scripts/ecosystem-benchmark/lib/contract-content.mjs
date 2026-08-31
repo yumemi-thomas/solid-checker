@@ -182,6 +182,7 @@ export function summarizeContract({
   contract,
   reviewPlan,
   refusals = null,
+  inapplicable = null,
   refusedEntrypointsFromStdout = null,
   mainBytes = null,
   planBytes = null
@@ -198,6 +199,10 @@ export function summarizeContract({
     Array.isArray(refusals.refusals)
       ? refusals.refusals
       : [];
+  // Recorded artifact-case dispositions. They are census decisions, never
+  // refusals: an entrypoint no consumer can reach as a module asserts nothing
+  // about certifiable behavior, so it must not be counted as one.
+  const inapplicableArtifactCases = Array.isArray(inapplicable) ? inapplicable : [];
   const operationCount = Object.values(document.behavioralRows).reduce(
     (total, count) => total + count,
     0
@@ -214,6 +219,8 @@ export function summarizeContract({
     entrypointsRefused: refusedEntrypoints,
     artifactCasesRefused: refusedArtifactCases.length,
     artifactCaseRefusals: refusedArtifactCases,
+    artifactCasesInapplicable: inapplicableArtifactCases.length,
+    artifactCaseInapplicabilities: inapplicableArtifactCases,
     refusedEntrypointNames: [],
     exportsTotal: document.exportsTotal,
     exportsProven: document.exportsProven,
@@ -274,6 +281,9 @@ export function readProposalRefusalAudit(contractPath) {
   return {
     package: audit.value.package ?? null,
     refusals: audit.value.refusals,
+    // Additive under the same envelope version: a sidecar written before the
+    // disposition census existed simply has none.
+    inapplicable: Array.isArray(audit.value.inapplicable) ? audit.value.inapplicable : [],
     bytes: audit.bytes
   };
 }
@@ -292,6 +302,7 @@ export function readContractContent(contractPath, refusedEntrypointsFromStdout =
           refusalVersion: 1,
           refusals: refusalAudit.refusals
         },
+    inapplicable: refusalAudit?.inapplicable ?? null,
     refusedEntrypointsFromStdout,
     mainBytes: contract?.bytes ?? null,
     planBytes: reviewPlan?.bytes ?? null

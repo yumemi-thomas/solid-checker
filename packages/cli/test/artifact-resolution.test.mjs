@@ -21,7 +21,11 @@ import {
   resolvePackageArtifactClosure,
   resolvePackageArtifacts,
   resolvePackageDependencyPlanClosure,
+  isCustomCondition,
+  isPrivateNamespacedCondition,
+  nonModuleTargetExtension,
   resolvePackageExport,
+  selectPackageExportTarget,
   selectTypeScriptApi
 } from "../scripts/artifact-resolution.mjs";
 
@@ -115,6 +119,65 @@ describe("standalone package-export resolution", () => {
       "development",
       "target"
     ]);
+  });
+
+  test("a nested object that selects nothing backtracks to the next sibling key", () => {
+    // Node's PACKAGE_TARGET_RESOLVE continues to the next key when a matched
+    // key's own target resolves to nothing, so ["vendor"] here resolves
+    // ./index.js. Returning on the first *matching* key and refusing there
+    // would report a defect where every real consumer resolves fine -- and
+    // disagree with the Rust replay, whose `select_target` backtracks the same
+    // way.
+    const manifest = {
+      name: "nested-backtrack",
+      version: "1.0.0",
+      exports: {
+        ".": {
+          vendor: { browser: "./missing.js" },
+          default: "./index.js"
+        },
+        "./blocked": {
+          vendor: { browser: null },
+          default: "./index.js"
+        },
+        "./none": { vendor: { browser: "./index.js" } }
+      }
+    };
+    const root = fixture(manifest, {
+      "index.js": "export const value = 1;\n",
+      "browser.js": "export const value = 2;\n"
+    });
+    const select = (entrypoint, conditions) =>
+      selectPackageExportTarget({ packageRoot: root, manifest, entrypoint, conditions });
+
+    const selected = select(".", ["vendor"]);
+    expect(selected.path).toBe(join(root, "index.js"));
+    // The abandoned `vendor` branch leaves no trace: neither the hashed steps
+    // nor the conditions-taken list may name a condition the surviving
+    // resolution never traversed.
+    expect(selected.trace.steps.map(step => step.condition)).toEqual([
+      "subpath",
+      "default",
+      "target"
+    ]);
+    expect(selected.conditions).toEqual(["default"]);
+
+    // With the nested condition active the inner branch wins, and a target the
+    // package does not ship is reported as absent rather than falling through
+    // to `default`: a missing file is a property of the package, not an
+    // unmatched condition.
+    const inner = select(".", ["vendor", "browser"]);
+    expect(inner.path).toBe(join(root, "missing.js"));
+    expect(inner.exists).toBe(false);
+    expect(inner.conditions).toEqual(["vendor", "browser"]);
+
+    // A `null` target blocks; it never backtracks.
+    expect(() => select("./blocked", ["vendor", "browser"])).toThrow(/blocked by a null/);
+
+    // And an object that yields nothing at all still refuses.
+    expect(() => select("./none", ["vendor"])).toThrow(
+      /selects no active package-export condition/
+    );
   });
 
   test("uses manifest key order rather than caller condition order for default and custom branches", () => {
@@ -529,6 +592,21 @@ describe("exact artifact records and closure", () => {
       "dist/default-resolver.js": "export const resolve = () => 'default';\n"
     });
 
+    // The proposal closure deliberately refuses instead: the Rust certifier has
+    // no imports-map support, so a proposal whose closure walked into
+    // `./dist/browser-resolver.js` could only be rejected on replay. See the
+    // parity test below. Graph PLANNING is a different operation with no
+    // replayed closure, so it still follows the alias exactly.
+    expect(() =>
+      resolvePackageArtifacts({
+        importer: join(root, "consumer.mjs"),
+        specifier: "package-imports",
+        packageRoot: root,
+        conditions: ["browser"],
+        integrity: "sha512:test"
+      })
+    ).toThrow(/package imports-map target .* certifier replay does not support imports maps yet/);
+
     const graph = resolvePackageDependencyPlanClosure({
       importer: join(root, "consumer.mjs"),
       specifier: "package-imports",
@@ -549,6 +627,96 @@ describe("exact artifact records and closure", () => {
         expect.objectContaining({ path: "./dist/default-resolver.js" })
       ])
     );
+  });
+
+  test("a matched package imports target refuses the proposal closure until Rust replays imports maps", () => {
+    const manifest = {
+      name: "package-imports-parity",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+      imports: { "#dep": { default: "./dist/dep.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'export { helper } from "#dep";\n',
+      "index.d.ts": 'export { helper } from "#dep";\n',
+      "dist/dep.js": "export const helper = () => 1;\n"
+    });
+    const request = {
+      importer: join(root, "consumer.mjs"),
+      specifier: "package-imports-parity",
+      packageRoot: root,
+      integrity: "sha512:test"
+    };
+
+    // `#dep` is matched by `default` under every partition, so this closure
+    // would contain ./dist/dep.js while the certifier's replay -- which has no
+    // `imports` field on its snapshot manifest and treats every `#specifier` as
+    // External -- would not. That is a closure mismatch on replay, so the
+    // generator must refuse the artifact case rather than emit a proposal that
+    // cannot certify. Removing this refusal requires imports-map replay on the
+    // Rust side; see docs/precision-backlog.md.
+    let refusal;
+    try {
+      resolvePackageArtifacts(request);
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toBeInstanceOf(ArtifactResolutionError);
+    expect(refusal.code).toBe("package-imports-unsupported");
+    expect(refusal.message).toBe(
+      "package imports-map target ./dist/dep.js resolves into the closure; " +
+        "certifier replay does not support imports maps yet"
+    );
+    expect(() => resolvePackageArtifactClosure(request)).toThrow(
+      /certifier replay does not support imports maps yet/
+    );
+  });
+
+  test("an unmatched package imports specifier stays an open frontier, never an external dependency", () => {
+    const manifest = {
+      name: "package-imports-open",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+      imports: { "#platform": { browser: "./dist/browser.js", node: "./dist/node.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'import "#platform";\nexport const thing = 1;\n',
+      "index.d.ts": "export declare const thing: number;\n",
+      "dist/browser.js": "globalThis.platform = 'browser';\n",
+      "dist/node.js": "globalThis.platform = 'node';\n"
+    });
+    const request = {
+      importer: join(root, "consumer.mjs"),
+      specifier: "package-imports-open",
+      packageRoot: root,
+      integrity: "sha512:test"
+    };
+
+    // No environment condition is active, so no arm is selected. That is
+    // unknown, not absent: the artifact case still certifies, with the same
+    // opaque frontier an unaccepted bare dependency records.
+    const artifact = resolvePackageArtifacts(request);
+    expect(artifact.closure.hazards).toEqual([
+      expect.objectContaining({
+        kind: "unaccepted-external-dependency",
+        source: "./index.js:#platform"
+      })
+    ]);
+    expect(artifact.closure.entries).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "./dist/browser.js" })])
+    );
+
+    // And it is emphatically NOT an external dependency: `#platform` names no
+    // package, so a census row for it would make the external locator derive a
+    // nonsense package name from the specifier.
+    const planned = resolvePackageArtifactClosure(request);
+    expect(planned.externalDependencies).toEqual([]);
+    expect(planned.closure.hazards).toEqual([
+      expect.objectContaining({
+        kind: "unaccepted-external-dependency",
+        source: "./index.js:#platform"
+      })
+    ]);
   });
 
   test("dependency graph planning leaves an unmatched package imports condition open", () => {
@@ -1282,4 +1450,128 @@ test("loads the TypeScript compiler API from a repository-root Bun process", () 
   );
 
   expect(result.status, result.stderr).toBe(0);
+});
+
+test("the standard condition vocabulary is one shared list", () => {
+  for (const standard of [
+    "default",
+    "types",
+    "import",
+    "require",
+    "node-addons",
+    "browser",
+    "node",
+    "deno",
+    "worker",
+    "development",
+    "production",
+    "csr",
+    "string-ssr",
+    "streaming-ssr",
+    // This checker's own ecosystem default: vite-plugin-solid and solid-start
+    // activate it unconditionally, so it is not a private opt-in name.
+    "solid"
+  ]) {
+    expect(isCustomCondition(standard), standard).toBe(false);
+  }
+  for (const custom of ["@solid-devtools/source", "vendor/source", "bun"]) {
+    expect(isCustomCondition(custom), custom).toBe(true);
+  }
+});
+
+test("only a namespaced custom condition is private to one consumer", () => {
+  for (const namespaced of [
+    "@solid-devtools/source",
+    "vendor/source",
+    "@scope/whatever",
+    "tool/dev"
+  ]) {
+    expect(isPrivateNamespacedCondition(namespaced), namespaced).toBe(true);
+  }
+  // Bare-name custom conditions are ecosystem-activated, never private: each of
+  // these is switched on unconditionally by the runtime or bundler that owns it,
+  // so a missing target behind one is a defective publish real consumers hit.
+  for (const bare of [
+    "bun",
+    "workerd",
+    "edge-light",
+    "react-native",
+    "electron",
+    "svelte",
+    "solid",
+    "browser",
+    "default"
+  ]) {
+    expect(isPrivateNamespacedCondition(bare), bare).toBe(false);
+  }
+});
+
+test("non-module target extensions are exactly the non-executable resource list", () => {
+  for (const module of [
+    "./a.js",
+    "./a.mjs",
+    "./a.cjs",
+    "./a.jsx",
+    "./a.ts",
+    "./a.mts",
+    "./a.cts",
+    "./a.tsx"
+  ]) {
+    expect(nonModuleTargetExtension(module), module).toBeUndefined();
+  }
+  expect(nonModuleTargetExtension("./a.js.map")).toBe(".map");
+  expect(nonModuleTargetExtension("./a.jsx.map")).toBe(".map");
+  expect(nonModuleTargetExtension("./a.module.css")).toBe(".css");
+  expect(nonModuleTargetExtension("./a.json")).toBe(".json");
+  expect(nonModuleTargetExtension("./a.png")).toBe(".png");
+  expect(nonModuleTargetExtension("./a.woff2")).toBe(".woff2");
+  expect(nonModuleTargetExtension("./a.svg")).toBe(".svg");
+  expect(nonModuleTargetExtension("./README.md")).toBe(".md");
+  // `.node` and `.wasm` are executable entrypoints this pipeline cannot read.
+  // The closure already names them native-code/opaque-wasm hazards, so they are
+  // emphatically not "nothing to assert" — they keep certify-or-refuse.
+  expect(nonModuleTargetExtension("./build/addon.node")).toBeUndefined();
+  expect(nonModuleTargetExtension("./build/engine.wasm")).toBeUndefined();
+  // An unknown extension is likewise not answered here: the list is positive,
+  // so a shape nothing models refuses instead of silently asserting nothing.
+  expect(nonModuleTargetExtension("./a.json5")).toBeUndefined();
+  expect(nonModuleTargetExtension("./a.coffee")).toBeUndefined();
+  // A declaration file ends in a module extension on purpose: whether a `.d.ts`
+  // runtime target is analyzable is a separate question this rule must not
+  // silently answer.
+  expect(nonModuleTargetExtension("./a.d.ts")).toBeUndefined();
+  // No extension is not answered here.
+  expect(nonModuleTargetExtension("./bin")).toBeUndefined();
+});
+
+test("export target selection reports the conditions traversed and target presence", () => {
+  const root = fixture(
+    {
+      name: "selection",
+      version: "1.0.0",
+      exports: {
+        ".": { "vendor/source": "./src/index.ts", browser: "./browser.js", import: "./index.js" }
+      }
+    },
+    { "index.js": "export const value = 1;\n", "browser.js": "export const value = 2;\n" }
+  );
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const select = conditions =>
+    selectPackageExportTarget({ packageRoot: root, manifest, entrypoint: ".", conditions });
+
+  expect(select([]).conditions).toEqual(["import"]);
+  expect(select([]).exists).toBe(true);
+  expect(select(["browser"]).conditions).toEqual(["browser"]);
+  expect(select(["browser"]).exists).toBe(true);
+  const custom = select(["vendor/source"]);
+  expect(custom.conditions).toEqual(["vendor/source"]);
+  expect(custom.exists).toBe(false);
+  expect(custom.path.endsWith("src/index.ts")).toBe(true);
+  // The persisted trace is unchanged: the condition list is a separate field so
+  // the resolution record's digest does not move.
+  expect(custom.trace.steps.map(step => step.condition)).toEqual([
+    "subpath",
+    "vendor/source",
+    "target"
+  ]);
 });

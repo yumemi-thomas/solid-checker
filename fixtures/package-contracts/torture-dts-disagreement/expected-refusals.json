@@ -1,0 +1,18 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "torture-dts-disagreement-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export \"runtimeOnly\""
+    }
+  ],
+  "inapplicable": []
+}

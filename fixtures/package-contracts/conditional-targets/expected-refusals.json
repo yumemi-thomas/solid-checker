@@ -2,16 +2,18 @@
   "format": "solid-checker-contract-proposal-refusals",
   "refusalVersion": 1,
   "package": {
-    "name": "conditional-export-absence-package",
+    "name": "conditional-targets-package",
     "version": "1.0.0"
   },
   "refusals": [
     {
       "entrypoint": ".",
-      "conditions": [],
+      "conditions": [
+        "solid"
+      ],
       "stage": "artifact-case",
-      "applicability": "unsupported-condition-environment",
-      "reason": ". selects no active package-export condition"
+      "applicability": "unavailable-published-target",
+      "reason": "resolved target <package-root>/unbuilt-solid.jsx is not a file"
     }
   ],
   "inapplicable": []

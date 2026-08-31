@@ -2,7 +2,7 @@
   "format": "solid-checker-contract-proposal-refusals",
   "refusalVersion": 1,
   "package": {
-    "name": "conditional-export-absence-package",
+    "name": "namespace-export-surface",
     "version": "1.0.0"
   },
   "refusals": [
@@ -10,8 +10,8 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "artifact-case",
-      "applicability": "unsupported-condition-environment",
-      "reason": ". selects no active package-export condition"
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export \"Config\""
     }
   ],
   "inapplicable": []

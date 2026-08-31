@@ -1,0 +1,25 @@
+{
+  "name": "unpublished-conditional-target-package",
+  "version": "1.0.0",
+  "type": "module",
+  "files": [
+    "*.js",
+    "*.d.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    },
+    "./source": {
+      "unpublished-conditional-target/source": "./src/source.ts",
+      "types": "./source.d.ts",
+      "import": "./source.js"
+    },
+    "./browser-gap": {
+      "browser": "./missing-browser.js",
+      "types": "./browser-gap.d.ts",
+      "import": "./browser-gap.js"
+    }
+  }
+}

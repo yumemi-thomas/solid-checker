@@ -105,7 +105,16 @@ test("readContractContent uses the proposal-plan sibling", () => {
       JSON.stringify({
         format: "solid-checker-contract-proposal-refusals",
         refusalVersion: 1,
-        refusals: [{ entrypoint: "./types/*", stage: "entrypoint-census", reason: "open" }]
+        refusals: [{ entrypoint: "./types/*", stage: "entrypoint-census", reason: "open" }],
+        inapplicable: [
+          {
+            entrypoint: "./theme/base.css",
+            conditions: [],
+            stage: "artifact-case",
+            class: "non-module-target",
+            reason: "runtime target extension \".css\" is not an executable module"
+          }
+        ]
       })
     );
     const content = readContractContent(path, 0);
@@ -116,6 +125,10 @@ test("readContractContent uses the proposal-plan sibling", () => {
     assert.equal(content.wireBytes.proposalPlan, Buffer.byteLength(JSON.stringify(plan())));
     assert.equal(content.artifactCasesRefused, 1);
     assert.equal(content.artifactCaseRefusals[0].entrypoint, "./types/*");
+    // A recorded disposition is counted apart from refusals and never inflates
+    // them.
+    assert.equal(content.artifactCasesInapplicable, 1);
+    assert.equal(content.artifactCaseInapplicabilities[0].class, "non-module-target");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

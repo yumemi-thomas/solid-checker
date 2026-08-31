@@ -44,6 +44,108 @@ const DECLARATION_MODULE_EXTENSIONS = [
   ".mjs",
   ".cjs"
 ];
+// The resolution-kind/type keys Node itself defines. These are active (or
+// deliberately inactive) on every selection without a consumer naming them, so
+// the condition census never enumerates one as an axis of its own.
+export const RESOLVER_STANDARD_CONDITIONS = Object.freeze([
+  "default",
+  "types",
+  "import",
+  "require",
+  "node-addons"
+]);
+export const MUTUALLY_EXCLUSIVE_CONDITION_AXES = Object.freeze([
+  Object.freeze(["browser", "node", "deno", "worker"]),
+  Object.freeze(["development", "production"]),
+  Object.freeze(["csr", "string-ssr", "streaming-ssr"])
+]);
+// This checker's own ecosystem default. vite-plugin-solid and solid-start
+// activate `solid` unconditionally, so a target behind it is reached by every
+// real Solid consumer and a missing one is a defective publish rather than a
+// private branch. It stays out of `RESOLVER_STANDARD_CONDITIONS` on purpose:
+// the resolver does not activate it implicitly (Rust's replay does not either,
+// and the two must select the same target), so the census still enumerates it
+// as an axis and really exercises the branch.
+const ECOSYSTEM_DEFAULT_CONDITIONS = Object.freeze(["solid"]);
+// The exact condition vocabulary this resolver already understands without
+// being told. The artifact-case disposition rules read it, so a condition is
+// "custom" in exactly one place.
+const STANDARD_CONDITION_NAMES = new Set([
+  ...RESOLVER_STANDARD_CONDITIONS,
+  ...MUTUALLY_EXCLUSIVE_CONDITION_AXES.flat(),
+  ...ECOSYSTEM_DEFAULT_CONDITIONS
+]);
+
+/**
+ * A package-export condition outside the standard set above. It says only
+ * "this resolver does not itself define the name" — a bare custom name like
+ * `bun`, `workerd`, or `react-native` is still activated unconditionally by the
+ * ecosystem that owns it, so a consumer really does reach a target behind one.
+ * Use `isPrivateNamespacedCondition` for the narrower "no consumer reaches this
+ * without opting in" question.
+ */
+export function isCustomCondition(condition) {
+  return !STANDARD_CONDITION_NAMES.has(condition);
+}
+
+/**
+ * A custom condition whose name is namespaced — it contains a `/` or starts
+ * with `@`, as in `@solid-devtools/source` or `vendor/source`. Namespacing is
+ * the published convention for a condition private to one tool: a consumer
+ * reaches a target behind it only by naming that exact condition in its own
+ * resolver configuration. A bare-name custom condition is not private — an
+ * ecosystem activates it for every one of its consumers — so it is deliberately
+ * excluded here.
+ */
+export function isPrivateNamespacedCondition(condition) {
+  return (
+    isCustomCondition(condition) &&
+    (condition.includes("/") || condition.startsWith("@"))
+  );
+}
+
+// Extensions that name a resource nothing executes as a module: sourcemaps,
+// data, stylesheets, images, fonts, and documents. This is deliberately a
+// positive list rather than the complement of `RUNTIME_EXTENSIONS`: an
+// entrypoint with an unknown, absent, or executable-but-opaque extension
+// (`.node`, `.wasm`) is emphatically *not* "nothing to assert" — the closure
+// already names those two as native-code/opaque-wasm hazards — so everything
+// outside this list keeps ordinary certify-or-refuse semantics.
+const NON_MODULE_EXTENSIONS = Object.freeze([
+  ".map",
+  ".json",
+  ".css",
+  ".svg",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".ico",
+  ".avif",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".eot",
+  ".txt",
+  ".md",
+  ".html"
+]);
+
+/**
+ * The extension of a target that is a genuinely non-executable resource, from
+ * the exact `NON_MODULE_EXTENSIONS` list above. Everything else — a runtime
+ * module extension, `.node`, `.wasm`, an unrecognized suffix, or no extension
+ * at all — is answered `undefined` and stays on the ordinary path, where a
+ * missing or unanalyzable entrypoint still refuses.
+ */
+export function nonModuleTargetExtension(path) {
+  const extension = extname(path);
+  if (!extension) return undefined;
+  return NON_MODULE_EXTENSIONS.includes(extension.toLowerCase()) ? extension : undefined;
+}
+
 const PROGRAM_OPTIONS = Object.freeze({
   allowJs: true,
   checkJs: true,
@@ -291,7 +393,13 @@ function selectTarget(target, context) {
       return {
         path,
         branch: context.pointer,
-        steps: [...context.steps, { condition: "target", target: selected }]
+        steps: [...context.steps, { condition: "target", target: selected }],
+        // Exact condition keys traversed to reach this target. Deliberately not
+        // part of `steps`: the trace is hashed into the resolution record, and
+        // reading condition names back out of it would confuse a package
+        // condition literally named `subpath`, `array`, or `target` with the
+        // resolver's own step markers.
+        conditions: context.conditionsTaken
       };
     }
     case "array": {
@@ -314,13 +422,38 @@ function selectTarget(target, context) {
       const keys = Object.keys(target);
       const hasSubpath = keys.some(key => key.startsWith("."));
       if (hasSubpath) fail("invalid-target", "subpath keys cannot be nested inside a conditional target");
+      // Node's PACKAGE_TARGET_RESOLVE continues to the next key when a key's
+      // own target resolves to nothing, so `{"vendor": {"browser": "./a.js"},
+      // "default": "./index.js"}` under conditions ["vendor"] resolves to
+      // ./index.js. Taking the first *matching* key and refusing there instead
+      // would report a defect where every real consumer resolves fine. Only a
+      // nested `conditions-unmatched` backtracks: `null` (blocked) and an
+      // invalid target are properties of the package and still refuse
+      // immediately, exactly as Node's own algorithm treats them.
+      //
+      // The abandoned branch's `steps` and `conditionsTaken` are discarded,
+      // never merged: `context` is copied per key rather than mutated, so the
+      // trace that survives is exactly the branch actually taken. Recording a
+      // condition the selection walked away from would put a name in the
+      // resolution record's hashed trace that no consumer's resolution ever
+      // traverses.
       for (const condition of keys) {
         if (condition !== "default" && !context.conditions.has(condition)) continue;
-        return selectTarget(target[condition], {
-          ...context,
-          pointer: `${context.pointer}/${pointerSegment(condition)}`,
-          steps: [...context.steps, { condition, target: context.pointer }]
-        });
+        try {
+          return selectTarget(target[condition], {
+            ...context,
+            pointer: `${context.pointer}/${pointerSegment(condition)}`,
+            steps: [...context.steps, { condition, target: context.pointer }],
+            conditionsTaken: [...context.conditionsTaken, condition]
+          });
+        } catch (error) {
+          if (
+            !(error instanceof ArtifactResolutionError) ||
+            error.code !== "conditions-unmatched"
+          ) {
+            throw error;
+          }
+        }
       }
       fail("conditions-unmatched", `${context.entrypoint} selects no active package-export condition`);
       break;
@@ -378,7 +511,14 @@ function legacyModuleTarget(packageRoot, manifest) {
   return isFile(path) ? path : undefined;
 }
 
-export function resolvePackageExport({
+/**
+ * Exact export-map target selection, stopping before the selected path is
+ * required to be a real file. `resolvePackageExport` is this plus that
+ * requirement; the artifact-case disposition rules need the selection alone,
+ * because "the target this branch names is absent" and "the target this branch
+ * names is not a module" are both properties of the selection.
+ */
+export function selectPackageExportTarget({
   packageRoot,
   manifest,
   entrypoint = ".",
@@ -398,11 +538,18 @@ export function resolvePackageExport({
       capture: selected.capture,
       conditions: active,
       pointer: selected.pointer,
-      steps: [{ condition: "subpath", target: entrypoint }]
+      steps: [{ condition: "subpath", target: entrypoint }],
+      conditionsTaken: []
     });
     const path = axis === "declarations" ? declarationCandidate(target.path) : target.path;
     if (!path) fail("declarations-not-found", `no declaration target exists for ${target.path}`);
-    return { file: resolvedFile(path), trace: { branch: target.branch, steps: target.steps } };
+    return {
+      path,
+      exists: isFile(path),
+      trace: { branch: target.branch, steps: target.steps },
+      conditions: target.conditions,
+      legacyField: null
+    };
   }
 
   if (entrypoint !== ".") fail("not-exported", `${entrypoint} has no legacy package entrypoint`);
@@ -426,12 +573,22 @@ export function resolvePackageExport({
   const path = axis === "declarations" ? declarationCandidate(initial) : initial;
   if (!path) fail("declarations-not-found", `no declaration target exists for ${initial}`);
   return {
-    file: resolvedFile(path),
+    path,
+    exists: isFile(path),
     trace: {
       branch: `legacy:${field}`,
       steps: [{ condition: field, target }]
-    }
+    },
+    // A legacy field name is not a package-export condition; no consumer opts
+    // into `main` or `module`, so this selection never took a custom condition.
+    conditions: [],
+    legacyField: field
   };
+}
+
+export function resolvePackageExport(request) {
+  const selected = selectPackageExportTarget(request);
+  return { file: resolvedFile(selected.path), trace: selected.trace };
 }
 
 function resolvePackageImport({
@@ -452,7 +609,8 @@ function resolvePackageImport({
     capture: selected.capture,
     conditions: active,
     pointer: selected.pointer,
-    steps: [{ condition: "imports", target: specifier }]
+    steps: [{ condition: "imports", target: specifier }],
+    conditionsTaken: []
   });
   const path = axis === "declarations" ? declarationCandidate(target.path) : target.path;
   if (!path) fail("declarations-not-found", `no declaration target exists for ${target.path}`);
@@ -1273,6 +1431,22 @@ function closureForRoots(
         continue;
       }
       if (specifier.target) {
+        // A matched `#` specifier reaching a local module is exactly where the
+        // generator and the certifier disagree: this closure walks into the
+        // imports-map target, while the Rust replay has no imports-map support
+        // at all (`SnapshotPackageManifest` carries no `imports` field and
+        // `resolve_local` treats every `#specifier` as External), so it would
+        // reject the resulting proposal with a closure mismatch. Refuse the
+        // artifact case here instead of emitting a proposal that cannot
+        // certify. Teaching Rust the imports map is the named follow-up in
+        // docs/precision-backlog.md; until then this is fail-closed.
+        if (specifier.text.startsWith("#")) {
+          fail(
+            "package-imports-unsupported",
+            `package imports-map target ${packagePath(packageRoot, specifier.target)} ` +
+              `resolves into the closure; certifier replay does not support imports maps yet`
+          );
+        }
         visit(
           specifier.target,
           axis,
@@ -1306,6 +1480,21 @@ function closureForRoots(
       }
       if (specifier.text.startsWith(".") || specifier.text.startsWith("/")) {
         fail("module-not-found", `local closure module ${specifier.text} from ${path} was not found`);
+      }
+      // An unmatched `#` specifier is unknown in this census row, not absent:
+      // see `packageImportTargetOrUnknown`. It is emphatically not an external
+      // dependency — `#platform` names no package, and putting it in the census
+      // made the external locator derive a nonsense package name from it. Give
+      // it the same unresolved/opaque frontier the other two closure builders
+      // give it, so every claim reachable through the binding stays open.
+      if (specifier.text.startsWith("#")) {
+        hazards.push({
+          kind: "unaccepted-external-dependency",
+          source: `${relativePath}:${specifier.text}`,
+          affectedExports: [],
+          affectedDomains: [...DOMAIN_NAMES]
+        });
+        continue;
       }
       externalDependencyCensus?.push({
         axis,

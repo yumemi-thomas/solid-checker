@@ -70,6 +70,15 @@ positive behavioral rows. It reads them inside `runProbe`, before cleanup
 removes the output directory — moving that read later would silently measure
 nothing.
 
+Artifact cases the generator recorded as *inapplicable* are counted separately,
+as `artifactCasesInapplicable`, and never added to `artifactCasesRefused`. An
+entrypoint no consumer reaches as a module — an unpublished target behind a
+custom export condition, or a sourcemap/JSON/CSS entrypoint — asserts nothing
+about certifiable behavior, so counting it as a refusal would make a row look
+unproven where nothing was ever provable. See the sidecar's `inapplicable`
+array and `artifactCaseDisposition` in
+`packages/cli/scripts/generate-package-contract.mjs`.
+
 It is additive: no outcome class, success rate, baseline comparison, or
 floor/head diff depends on it, and a result with no `contractContent` still
 builds and renders a report. See `lib/contract-content.mjs` for the counting

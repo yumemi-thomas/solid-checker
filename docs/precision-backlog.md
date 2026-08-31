@@ -1,5 +1,198 @@
 # Precision backlog
 
+## Two refusal classes became a recorded inapplicable disposition (2026-08-31)
+
+The ecosystem benchmark counted every omitted artifact case as a refusal. Two
+classes inside that count assert nothing about certifiable behavior, and
+carrying them as refusals made a row look unproven where nothing was ever
+provable.
+
+An artifact case is now recorded as **inapplicable** -- with a class and a
+reason, never certified, never counted as a refusal, never suppressing a sibling
+case or the proposal -- in exactly two situations, decided from the export-map
+selection alone before any analysis (`artifactCaseDisposition` in
+`packages/cli/scripts/generate-package-contract.mjs`):
+
+- **`unpublished-conditional-target`** -- the runtime target is absent from the
+  artifact *and* the selection traversed at least one **private namespaced**
+  export condition (a name containing `/` or starting with `@`).
+  `@solid-devtools/debugger@0.28.1` is the shape: `"@solid-devtools/source":
+  "./src/index.ts"` beside `"files": ["dist"]`, so the source tree is omitted
+  from the tarball on purpose. The artifact itself proves the target
+  unpublished, and namespacing is the published convention for a condition one
+  tool opts into by name, so no consumer reaches it without naming it.
+- **`non-module-target`** -- the selected runtime target's filename is one of an
+  exact positive list of non-executable resources (`.map`, `.json`, `.css`,
+  images, fonts, `.txt`/`.md`/`.html`). `@kobalte/solidbase`'s
+  `"./default-theme/*"` enumerates sourcemaps, JSON, and CSS beside real
+  modules; an entrypoint over one of those has no ESM runtime surface.
+
+Boundaries that deliberately keep full refusal semantics: a missing target
+reached through standard conditions only stays a refusal, because real
+consumers do fail there and that is a defective publish; a missing target behind
+a **bare-name** custom condition stays a refusal for the same reason, because
+the ecosystem that owns the name activates it unconditionally (`bun`,
+`workerd`, `edge-light`, `react-native`, `electron`, `svelte`, and `solid`
+itself, which vite-plugin-solid and solid-start switch on for every Solid
+consumer); the `.` entrypoint under the empty/default partition can only ever
+reach standard conditions, so its refusal always stands; and `blocked`,
+`conditions-unmatched`, `not-exported`, invalid target syntax, and traversal are
+properties of the package and are untouched.
+
+Both questions are decided against one shared vocabulary in
+`packages/cli/scripts/artifact-resolution.mjs`. `isCustomCondition` answers
+"this resolver does not define the name", reading
+`RESOLVER_STANDARD_CONDITIONS`, `MUTUALLY_EXCLUSIVE_CONDITION_AXES`, and
+`ECOSYSTEM_DEFAULT_CONDITIONS` (`solid`); `isPrivateNamespacedCondition` narrows
+that to the namespaced names the disposition rule acts on. `solid` is
+deliberately *not* in `RESOLVER_STANDARD_CONDITIONS`: that list is the
+census-exclusion list of names active without a consumer naming them, and the
+resolver does not activate `solid` implicitly (Rust's replay does not either,
+and the two must select the same target), so the census still enumerates it as
+an axis and really exercises the branch --
+`fixtures/package-contracts/conditional-targets` pins the resulting refusal.
+
+Non-module extensions are a **positive** list, not the complement of the
+resolver's `RUNTIME_EXTENSIONS`. The complement swallowed `.node` and `.wasm`
+and every unknown suffix, and an entrypoint of that kind is emphatically not
+"nothing to assert" -- the closure already names those two as
+native-code/opaque-wasm hazards -- so everything outside the positive list keeps
+certify-or-refuse. A `.d.ts` runtime target still ends in a module extension and
+keeps whatever disposition it has today; a target with no extension is not
+answered by the rule at all.
+
+The rule is about *entrypoints only*. An asset that an analyzed module imports
+is still an ordinary closure member with the role the closure gives it; the
+`asset-import` and `asset-query-import` fixtures pin that path unchanged.
+
+Representation: the proposal refusal sidecar
+(`solid-checker-contract-proposal-refusals`, `refusalVersion` 1) gained an
+additive sibling array `inapplicable`, whose rows carry `entrypoint`,
+`conditions`, `stage`, `class`, and `reason`. No version bump: every consumer
+validates `format`, `refusalVersion`, and `Array.isArray(refusals)`, and every
+one of them counts `refusals.length` as the refusal total, so a separate array
+makes "never counted as a refusal" true by construction. A `disposition` field
+*inside* `refusals` would have needed each counter edited and would have kept
+the pollution wherever one was missed.
+
+There is no Rust twin to add. Rust never enumerates the manifest census: it
+replays the resolution of the cases a proposal *contains*
+(`resolve_snapshot_export`), and the case-set completeness check in
+`rust/crates/solid-facts-backend/src/main.rs` compares planning against the
+proposal document's own cases. An inapplicable case is omitted from the
+proposal exactly as a refused case already is, so both sides stay in agreement
+without a new surface.
+
+Regression pins: `fixtures/package-contracts/unpublished-conditional-target`
+(namespaced-condition case inapplicable, sibling entrypoints certify, and a
+`browser` arm whose missing target still refuses),
+`fixtures/package-contracts/conditional-targets` (a missing target behind the
+bare-name `solid` condition refuses, while the shipped `development`/`default`
+branches still certify) and
+`fixtures/package-contracts/wildcard-asset-entrypoints` (module entrypoint
+certifies, `.map`/`.json`/`.css` entrypoints inapplicable, zero refusals). The
+`.` default-partition boundary is pinned by the generator unit test *a fully
+refused proposal writes every artifact-case refusal before throwing*, which now
+also asserts an empty `inapplicable` census.
+
+Remaining approximation: the classification is filename- and
+existence-based, not a proof that the target has no ESM surface. A `.js` file
+that is in fact a CJS bundle, or a `.ts` target that ships but cannot be parsed,
+is untouched by this change and keeps its current refusal. The 1,280 `.ts`
+"resolved target is not a file" cases are reduced only where a *namespaced*
+condition selected them; a `.ts` target missing behind standard or bare-name
+conditions is still a refusal. Namespacing is likewise a convention, not a
+proof: a package that ships a private branch under a bare name, or a public one
+under a namespaced name, is classified by the convention rather than by
+evidence, and only the artifact's own absent target keeps that fail-closed.
+
+Benchmark classification, same date: `export-kind-conflict` was promoted above
+`unresolved-parameter-behavior` in `MARKERS` so a full-generation refusal
+carrying earlier `UnknownCallbackExecution` attribution records cannot be
+relabelled by diagnostic line order. That rank is deliberate and was chosen from
+the one real sample (the `createGeolocation` geolocation refusal); the risk it
+carries is that any future message embedding the exact phrase "package contract
+value export ... cannot have function effects" inside a differently-caused
+refusal would now be claimed by this class first. No such shape is known.
+
+## Package imports maps fail closed until Rust replays them (2026-08-31)
+
+The generator's proposal closure followed a matched `#specifier` into the
+package's own imports map and pulled the resolved module into the closure
+(`closureForRoots` in `packages/cli/scripts/artifact-resolution.mjs`, via
+`packageImportTargetOrUnknown`). The certifier has no imports-map support at
+all: `SnapshotPackageManifest` carries no `imports` field, and `resolve_local`
+in `rust/crates/solid-facts-backend/src/contract_certification/module_closure.rs`
+treats every `#specifier` as External. The two therefore build different
+closures for the same artifact, and the proposal could only ever be rejected on
+replay with a closure mismatch -- a refusal reported at certification time, with
+no reason naming the actual cause.
+
+A matched `#specifier` resolving to a local module is now an explicit
+artifact-case refusal at generation time, code `package-imports-unsupported`,
+applicability `unsupported-artifact-shape`, reason "package imports-map target
+`./x.mjs` resolves into the closure; certifier replay does not support imports
+maps yet". Fail-closed and named, rather than emitted and rejected later.
+
+An **unmatched** `#specifier` is unchanged and still certifies: the census row
+that activates no environment condition cannot say which arm a consumer selects,
+which is unknown rather than absent, so the specifier stays an opaque frontier
+and every claim reachable through the binding stays open.
+`fixtures/package-contracts/conditional-imports-side-effect` pins that.
+
+Fixed while there: in `closureForRoots` an unmatched `#specifier` fell through
+into the **external dependency census**, where `locateExternalFrom` derived a
+package name from `#platform`. It now takes the same unaccepted-external
+frontier the other two closure builders already gave it, and never a census row.
+
+**Named follow-up: teach the Rust certifier the imports map.** That means an
+`imports` field on `SnapshotPackageManifest`, `resolve_local` resolving a
+`#specifier` through it with the case's own conditions, and the generator's
+refusal above deleted in the same change. Until then every package that uses a
+matched imports map is uncertifiable, which is a real coverage hole rather than
+a proof.
+
+Regression pins: the generator unit tests *a matched package imports target
+refuses the proposal closure until Rust replays imports maps* and *an unmatched
+package imports specifier stays an open frontier, never an external dependency*
+in `packages/cli/test/artifact-resolution.test.mjs`. Graph **planning**
+(`resolvePackageDependencyPlanClosure`) is a different operation with no
+replayed closure and still follows the alias exactly; its own test is unchanged.
+
+## Conditional targets backtrack the way Node resolves them (2026-08-31)
+
+Node's PACKAGE_TARGET_RESOLVE continues to the next key when a matched key's own
+target resolves to nothing. Both sides returned on the first *matching* key
+instead, so `"./a": {"vendor": {"browser": "./missing.js"}, "default":
+"./index.js"}` refused under conditions `["vendor"]` -- reporting a defect where
+every real consumer resolves `./index.js`.
+
+`selectTarget` in `packages/cli/scripts/artifact-resolution.mjs` and its twin
+`select_target` in
+`rust/crates/solid-facts-backend/src/contract_certification.rs` now backtrack
+identically: a nested selection that matched no condition continues to the next
+key, and only an object that yields nothing at all refuses. Rust needed a
+`TargetSelectionError::ConditionsUnmatched` variant to tell that outcome apart
+from the refusals that must still stop where they happen -- a `null` (blocked)
+target, a target the snapshot does not contain, and an invalid target are
+properties of the package, not unmatched conditions, and none of them
+backtracks.
+
+Trace semantics: an abandoned branch's steps and conditions-taken are
+**discarded, never merged**. Both implementations copy the context per key
+rather than extending a shared list, so the hashed resolution trace names
+exactly the branch a consumer's resolution traverses; recording a condition the
+selection walked away from would put a name in the receipt that no resolution
+ever took.
+
+Top-level unmatched conditions are untouched:
+`fixtures/package-contracts/conditional-export-absence` and
+`torture-conditional-semantics` pin those refusals and neither snapshot moved.
+Focused pins: *a nested object that selects nothing backtracks to the next
+sibling key* (`packages/cli/test/artifact-resolution.test.mjs`) and
+*an_unmatched_nested_condition_backtracks_to_the_next_sibling_key*
+(`contract_certification.rs`).
+
 ## Legacy runtime resolution reads `module` again (2026-08-31)
 
 The v2 artifact-resolution boundary resolved a legacy (no-`exports`) manifest's

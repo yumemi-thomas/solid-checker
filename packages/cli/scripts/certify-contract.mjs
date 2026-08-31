@@ -28,6 +28,7 @@ import {
   resolvePackageArtifactClosure
 } from "./artifact-resolution.mjs";
 import {
+  artifactCaseDisposition,
   finiteArtifactCandidates,
   finiteConditionPartitions,
   finiteEntrypoints,
@@ -414,6 +415,17 @@ export function isReusableDependencyRefusalAudit({
       currentEntrypoints.entrypoints,
       finiteConditionPartitions(manifest, conditions),
       packageRoot
+    ).filter(candidate =>
+      // Re-derived here rather than read from the untrusted audit: a case the
+      // current census records inapplicable produces neither a proposal case
+      // nor a refusal, so requiring a refusal row for it would reject every
+      // reusable audit of a package that has one.
+      artifactCaseDisposition({
+        manifest,
+        packageRoot,
+        entrypoint: candidate.entrypoint,
+        conditions: candidate.conditions
+      }) === null
     );
     if (candidates.length === 0) return false;
   } catch {

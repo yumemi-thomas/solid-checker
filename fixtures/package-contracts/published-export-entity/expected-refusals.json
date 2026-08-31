@@ -20,5 +20,6 @@
       "applicability": "runtime-module",
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/unknown.js exports \"unknownBinding\", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind \"value\" would certify it invokes no caller-supplied callback"
     }
-  ]
+  ],
+  "inapplicable": []
 }

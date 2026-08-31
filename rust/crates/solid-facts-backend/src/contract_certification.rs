@@ -829,12 +829,20 @@ struct SelectedTarget {
 enum TargetSelectionError {
     InvalidTarget(String),
     Refusal(String),
+    /// A conditional target selected no active condition. Split out from
+    /// `Refusal` because it is the one outcome Node's PACKAGE_TARGET_RESOLVE
+    /// backtracks over: an enclosing conditional object continues to its next
+    /// key rather than refusing. Every other refusal is a property of the
+    /// package and still stops resolution where it happens.
+    ConditionsUnmatched(String),
 }
 
 impl TargetSelectionError {
     fn into_snapshot_error(self) -> ArtifactSnapshotError {
         let reason = match self {
-            Self::InvalidTarget(reason) | Self::Refusal(reason) => reason,
+            Self::InvalidTarget(reason)
+            | Self::Refusal(reason)
+            | Self::ConditionsUnmatched(reason) => reason,
         };
         ArtifactSnapshotError::ResolutionMismatch(reason)
     }
@@ -1699,7 +1707,10 @@ fn select_target(
                 ) {
                     Ok(selected) => return Ok(selected),
                     Err(error @ TargetSelectionError::InvalidTarget(_)) => last = Some(error),
-                    Err(error @ TargetSelectionError::Refusal(_)) => return Err(error),
+                    Err(
+                        error @ (TargetSelectionError::Refusal(_)
+                        | TargetSelectionError::ConditionsUnmatched(_)),
+                    ) => return Err(error),
                 }
             }
             Err(last.unwrap_or_else(|| {
@@ -1712,6 +1723,21 @@ fn select_target(
                     "subpath keys cannot be nested inside a conditional target".into(),
                 ));
             }
+            // Node's PACKAGE_TARGET_RESOLVE continues to the next key when a
+            // key's own target resolves to nothing, so `{"vendor": {"browser":
+            // "./a.js"}, "default": "./index.js"}` under conditions ["vendor"]
+            // resolves to ./index.js. Taking the first *matching* key and
+            // refusing there instead would reject a package every real consumer
+            // resolves fine. Only `ConditionsUnmatched` backtracks; a null
+            // (blocked) target, a missing snapshot file, and an invalid target
+            // are properties of the package and still refuse immediately.
+            //
+            // The abandoned branch's steps are discarded, never merged: each key
+            // clones `steps` rather than extending a shared vector, so the trace
+            // that survives describes exactly the branch actually taken. This
+            // mirrors `selectTarget` in packages/cli/scripts/artifact-resolution.mjs
+            // step for step -- the generator and this replay must select the
+            // same target and produce the same trace.
             for (condition, nested) in fields {
                 if condition != "default" && !conditions.contains(condition.as_str()) {
                     continue;
@@ -1721,7 +1747,7 @@ fn select_target(
                     condition: condition.clone(),
                     target: pointer.into(),
                 });
-                return select_target(
+                match select_target(
                     nested,
                     snapshot,
                     entrypoint,
@@ -1729,9 +1755,12 @@ fn select_target(
                     conditions,
                     &format!("{pointer}/{}", pointer_segment(condition)),
                     next_steps,
-                );
+                ) {
+                    Err(TargetSelectionError::ConditionsUnmatched(_)) => continue,
+                    other => return other,
+                }
             }
-            Err(TargetSelectionError::Refusal(format!(
+            Err(TargetSelectionError::ConditionsUnmatched(format!(
                 "entrypoint {entrypoint:?} selects no active condition"
             )))
         }
@@ -2684,6 +2713,111 @@ mod tests {
         assert!(matches!(
             ArtifactSnapshot::from_local(&local, SnapshotLimits::policy_2()),
             Err(ArtifactSnapshotError::UnsupportedProvenance(_))
+        ));
+    }
+
+    fn exports_resolution(
+        manifest: &[u8],
+        files: &[(&str, &[u8])],
+        entrypoint: &str,
+        conditions: &[&str],
+        axis: ResolutionAxis,
+    ) -> Result<(String, ResolutionTrace), ArtifactSnapshotError> {
+        let mut members = vec![("package/package.json", manifest)];
+        members.extend(files.iter().copied());
+        let snapshot = ArtifactSnapshot::from_published(
+            &published_archive(&members),
+            SnapshotLimits::policy_2(),
+        )
+        .unwrap();
+        let parsed: SnapshotPackageManifest = serde_json::from_slice(manifest).unwrap();
+        let active: BTreeSet<&str> = conditions.iter().copied().collect();
+        let selected = resolve_snapshot_export(&snapshot, &parsed, entrypoint, &active, axis)?;
+        Ok((selected.path, selected.trace))
+    }
+
+    /// Node's PACKAGE_TARGET_RESOLVE continues to the next key when a matched
+    /// key's own nested object selects nothing. Taking the first matching key
+    /// and refusing there would reject a package every real consumer resolves
+    /// fine -- and, worse, disagree with the generator, whose `selectTarget`
+    /// backtracks the same way.
+    #[test]
+    fn an_unmatched_nested_condition_backtracks_to_the_next_sibling_key() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{"./a":{"vendor":{"browser":"./missing-a.js"},"default":"./index.js"},"./b":{"vendor":{"browser":"./b-browser.js"},"default":"./index.js"},"./none":{"vendor":{"browser":"./b-browser.js"}}}}"#;
+        let files: &[(&str, &[u8])] = &[
+            ("package/index.js", b"export const value = 1;"),
+            ("package/b-browser.js", b"export const value = 2;"),
+        ];
+
+        // `vendor` matches, its nested object selects nothing, so resolution
+        // continues to `default` instead of refusing.
+        for entrypoint in ["./a", "./b"] {
+            let (path, trace) = exports_resolution(
+                manifest,
+                files,
+                entrypoint,
+                &["import", "vendor"],
+                ResolutionAxis::Runtime,
+            )
+            .unwrap();
+            assert_eq!(path, "index.js");
+            // The abandoned `vendor` branch leaves no trace: the steps describe
+            // exactly the branch actually taken.
+            assert_eq!(
+                trace.steps,
+                vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: entrypoint.into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "default".into(),
+                        target: format!("/exports/{}", super::pointer_segment(entrypoint)),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./index.js".into(),
+                    },
+                ]
+            );
+        }
+
+        // With `browser` active the nested branch does select, and wins.
+        let (path, trace) = exports_resolution(
+            manifest,
+            files,
+            "./b",
+            &["import", "vendor", "browser"],
+            ResolutionAxis::Runtime,
+        )
+        .unwrap();
+        assert_eq!(path, "b-browser.js");
+        assert_eq!(trace.branch, "/exports/.~1b/vendor/browser");
+
+        // A matched branch naming a target the artifact does not contain is a
+        // property of the package, not an unmatched condition: it refuses where
+        // it happens rather than silently falling through to `default`.
+        assert!(matches!(
+            exports_resolution(
+                manifest,
+                files,
+                "./a",
+                &["import", "vendor", "browser"],
+                ResolutionAxis::Runtime,
+            ),
+            Err(ArtifactSnapshotError::ResolutionMismatch(_))
+        ));
+
+        // And an object that yields nothing at all still refuses.
+        assert!(matches!(
+            exports_resolution(
+                manifest,
+                files,
+                "./none",
+                &["import", "vendor"],
+                ResolutionAxis::Runtime,
+            ),
+            Err(ArtifactSnapshotError::ResolutionMismatch(_))
         ));
     }
 

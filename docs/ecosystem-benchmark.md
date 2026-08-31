@@ -292,6 +292,10 @@ Every contract-generation invocation is classified into exactly one of:
 | `unsupported-package-shape` | The package's manifest or exports map cannot be resolved into an entrypoint at all. |
 | `no-esm-runtime-target` | No materialized ESM implementation target exists for a runtime entrypoint — typically a publishing mistake, such as an `exports` map naming a file the tarball does not contain. |
 | `no-exported-surface` | The ESM target resolved and parsed, and exports nothing. A side-effect-only module has no reactive surface to describe; this is a well-formed package, not a broken one. |
+| `missing-export-binding` | Both axes resolved and both export the name, but no exact runtime+declaration pair binds it — the legacy dual-root shape, where `main` and `types` describe different module graphs. |
+| `unavailable-published-target` | The entrypoint's resolved runtime or declaration target is a path the published tarball does not contain (`resolved target <path> is not a file`). Same publishing defect `no-esm-runtime-target` describes at whole-entrypoint granularity, but stated by the stable-v1 artifact-case resolver with the exact resolved path it refused on. |
+| `missing-closure-module` | A module the resolved declaration file imports is absent from the package's own published closure (`local closure module <specifier> from <path> was not found`) — either a sibling the tarball omits or a dependency layout the analyzed tree does not provide. |
+| `all-cases-inapplicable` | Every artifact case in the census was recorded inapplicable and none refused, so there is no certifiable case and no refusal reason to name. |
 | `cjs-only-entrypoint` | The entrypoint resolves to a CJS-only target, which contract generation does not support. |
 | `conditional-export-incompatible` | Conditional-export branches cannot be ordered or resolved into complete variant summaries. |
 | `incompatible-conditional-summaries` | Build targets disagree in a claim shape that cannot be represented as complete variants. |

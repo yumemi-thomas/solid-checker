@@ -27,6 +27,23 @@ const EXPORT_KIND_CONFLICT_LINE =
 const GEOLOCATION_ATTRIBUTION_LINE =
   'solid-checker:unknown-claim-attribution={"obligation":"UnknownCallbackExecution","exports":["createGeolocation"]}';
 
+// The five stderr lines that were the whole of the `unclassified` bucket on the
+// run this marker pair was added for, copied verbatim out of
+// benchmarks/ecosystem/report.json. `<package-root>` is not a placeholder this
+// test invented: generate-package-contract.mjs redacts the real temporary root
+// to that literal token before the text ever reaches classification, so this is
+// exactly the string MARKERS is matched against.
+const TARGET_MISSING_KOBALTE_THEMES =
+  "solid-checker: no certifiable artifact case; 2 case(s) refused; first refusal: .: resolved target <package-root>/dist/index.jsx is not a file";
+const TARGET_MISSING_ANIMATION =
+  "solid-checker: no certifiable artifact case; 1 case(s) refused and 1 case(s) recorded inapplicable; first refusal: .: resolved target <package-root>/dist/index.js is not a file";
+const TARGET_MISSING_COMPOSITES =
+  "solid-checker: no certifiable artifact case; 1 case(s) refused; first refusal: .: resolved target <package-root>/dist/index.cjs is not a file";
+const CLOSURE_MISSING_CONTEXT =
+  "solid-checker: no certifiable artifact case; 1 case(s) refused and 1 case(s) recorded inapplicable; first refusal: .: local closure module ../node_modules/solid-js/types/reactive/signal.js from <package-root>/dist/index.d.ts was not found";
+const CLOSURE_MISSING_WORKERS =
+  "solid-checker: no certifiable artifact case; 1 case(s) refused and 1 case(s) recorded inapplicable; first refusal: .: local closure module ./types.js from <package-root>/dist/index.d.ts was not found";
+
 // Real captured lines from live `contract generate` runs against
 // @tanstack/solid-query, corvu, @solidjs/meta, and @solid-primitives/map (see
 // the scratchpad's p3/*/gen.log fixtures). These pin the three normalizeSignature
@@ -52,6 +69,10 @@ test("FAILURE_CLASSES matches the documented exact id list, in order", () => {
     "unsupported-package-shape",
     "no-esm-runtime-target",
     "no-exported-surface",
+    "missing-export-binding",
+    "unavailable-published-target",
+    "missing-closure-module",
+    "all-cases-inapplicable",
     "cjs-only-entrypoint",
     "conditional-export-incompatible",
     "incompatible-conditional-summaries",
@@ -99,6 +120,51 @@ test("every failure class is reachable and each documented stderr shape maps to 
         status: 1,
         stdout: "",
         stderr: "emit package contract: entry file /tmp/x/index.js has no runtime ESM exports",
+        phase: "generate"
+      })
+    },
+    {
+      // Captured verbatim from the legacy-dual-root fixture, which landed
+      // `unclassified` before this marker existed.
+      class: "missing-export-binding",
+      result: classifyResult({
+        status: 1,
+        stdout: "",
+        stderr:
+          'solid-checker: no certifiable artifact case; 1 case(s) refused; first refusal: .: solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export "observe"',
+        phase: "generate"
+      })
+    },
+    {
+      // A target the manifest declares that the tarball does not ship.
+      class: "unavailable-published-target",
+      result: classifyResult({
+        status: 2,
+        stdout: "",
+        stderr: TARGET_MISSING_KOBALTE_THEMES,
+        phase: "generate"
+      })
+    },
+    {
+      // A module the resolved declaration file imports, absent from the
+      // package's own published closure.
+      class: "missing-closure-module",
+      result: classifyResult({
+        status: 2,
+        stdout: "",
+        stderr: CLOSURE_MISSING_WORKERS,
+        phase: "generate"
+      })
+    },
+    {
+      // The full-refusal exit whose census is entirely inapplicable: no
+      // refusal reason exists to classify, so the shape itself is the class.
+      class: "all-cases-inapplicable",
+      result: classifyResult({
+        status: 1,
+        stdout: "",
+        stderr:
+          'solid-checker: no certifiable artifact case; 0 case(s) refused and 2 case(s) recorded inapplicable; first inapplicable: ./styles: non-module-target: runtime target extension ".css" is not an executable module',
         phase: "generate"
       })
     },
@@ -275,6 +341,48 @@ test("terminal export-kind conflict wins over embedded callback attribution in e
   }
 });
 
+test("every real publish-defect refusal from the run classifies, none stays unclassified", () => {
+  const cases = [
+    [TARGET_MISSING_KOBALTE_THEMES, "unavailable-published-target"],
+    [TARGET_MISSING_ANIMATION, "unavailable-published-target"],
+    [TARGET_MISSING_COMPOSITES, "unavailable-published-target"],
+    [CLOSURE_MISSING_CONTEXT, "missing-closure-module"],
+    [CLOSURE_MISSING_WORKERS, "missing-closure-module"]
+  ];
+  for (const [stderr, expected] of cases) {
+    assert.equal(
+      classifyResult({ status: 2, stdout: "", stderr, phase: "generate" }).class,
+      expected,
+      `expected ${expected} for: ${stderr}`
+    );
+  }
+});
+
+// The one collision these markers can actually have with a marker above them:
+// a consumer-side obligation that names the absent file as its evidence. The
+// obligation is the terminal reason, so it must keep the row -- the same
+// resolution phase20's classifyArtifactApplicability and phase21's
+// classifyPhase21Terminal already use for this text.
+test("a dependency-contract obligation keeps the row even when it names a missing target", () => {
+  const stderr =
+    'solid-checker: dependency contract for @scope/dep has no entrypoint matching "."; resolved target <package-root>/dist/index.js is not a file';
+  assert.equal(
+    classifyResult({ status: 2, stdout: "", stderr, phase: "generate" }).class,
+    "dependency-contract-obligation"
+  );
+});
+
+// A census with zero refusals cannot carry a first-refusal reason, so the
+// higher `all-cases-inapplicable` marker is unaffected by the two additions.
+test("an entirely inapplicable census is not claimed by the publish-defect markers", () => {
+  const stderr =
+    'solid-checker: no certifiable artifact case; 0 case(s) refused and 2 case(s) recorded inapplicable; first inapplicable: ./styles: non-module-target: runtime target extension ".css" is not an executable module';
+  assert.equal(
+    classifyResult({ status: 2, stdout: "", stderr, phase: "generate" }).class,
+    "all-cases-inapplicable"
+  );
+});
+
 test("an exact accepted-binding frontier remains a dependency-contract obligation", () => {
   const result = classifyResult({
     status: 2,
@@ -309,6 +417,45 @@ test("stable-v1 localized artifact refusals are partial success", () => {
   assert.equal(result.class, "partial-success");
   assert.equal(result.detail.refusedCases, 93);
   assert.equal(result.detail.refusalUnit, "artifact-case");
+});
+
+test("recorded inapplicable cases are counted but never make a row partial", () => {
+  const line =
+    "generated unaccepted stable contract proposal for @kobalte/solidbase@0.6.13 at /tmp/out/sb.json; 94 artifact case(s) recorded inapplicable; proof verification must issue its receipt";
+  const result = classifyResult({ status: 0, stdout: line, stderr: "", phase: "generate" });
+  assert.equal(result.class, "success");
+  assert.equal(result.detail.inapplicableCases, 94);
+  assert.equal(result.detail.refusedCases, undefined);
+
+  const both =
+    "generated unaccepted stable contract proposal for pkg@1.0.0 at /tmp/out/pkg.json; 3 artifact case(s) refused and omitted; 7 artifact case(s) recorded inapplicable; proof verification must issue its receipt";
+  const mixed = classifyResult({ status: 0, stdout: both, stderr: "", phase: "generate" });
+  assert.equal(mixed.class, "partial-success");
+  assert.equal(mixed.detail.refusedCases, 3);
+  assert.equal(mixed.detail.inapplicableCases, 7);
+});
+
+test("a manifest-controlled name or version cannot inject a refusal or inapplicable count", () => {
+  // Every one of these carries the exact success wording; the counts are
+  // smuggled through the "for <name>@<version>" slot, which comes verbatim
+  // from the analyzed package's own manifest. A greedy `.+` there used to let
+  // the count land inside the match, where a rescan read it as a real suffix
+  // and relabelled a complete contract `partial-success`. None may now be read
+  // as a success shape at all.
+  const spoofs = [
+    "generated unaccepted stable contract proposal for evil@1.0.0-; 9 artifact case(s) refused and omitted at /tmp/o.json; proof verification must issue its receipt",
+    "generated unaccepted stable contract proposal for evil@1.0.0-; 9 artifact case(s) recorded inapplicable at /tmp/o.json; 1 artifact case(s) refused and omitted; proof verification must issue its receipt",
+    // The two suffixes are anchored in one fixed order; emitting them reversed
+    // is not the documented shape and is never read as one.
+    "generated unaccepted stable contract proposal for foo@1.0.0 at /tmp/o.json; 2 artifact case(s) recorded inapplicable; 1 artifact case(s) refused and omitted; proof verification must issue its receipt"
+  ];
+  for (const stdout of spoofs) {
+    const result = classifyResult({ status: 0, stdout, stderr: "", phase: "generate" });
+    assert.equal(result.class, "unclassified", stdout);
+    assert.equal(result.detail.refusedCases, undefined, stdout);
+    assert.equal(result.detail.inapplicableCases, undefined, stdout);
+    assert.equal(result.raw.stdout, stdout);
+  }
 });
 
 test("unrecognized stderr yields unclassified and retains the complete raw stderr byte-for-byte", () => {

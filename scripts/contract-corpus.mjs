@@ -93,20 +93,57 @@ async function generate(directory) {
   const expectedPlan = join(directory, "expected-proposal.json");
   const expectedRefusals = join(directory, "expected-refusals.json");
   const expectedRefusal = join(directory, "expected-refusal.txt");
+  const refusalOutput = `${output}.refusals.json`;
   if (failure) {
     const rendered = `${failure}\n`;
+    // A fixture that refuses every artifact case still writes the complete
+    // census sidecar before taking the full-refusal exit. The thrown message
+    // names only the first refusal, so pin the sidecar here exactly as the
+    // success path does: otherwise a class, count, or reason can change — or a
+    // whole inapplicable census can appear — behind an unchanged one-line
+    // message.
+    const audit = existsSync(refusalOutput)
+      ? assertEnvelope(
+          refusalOutput,
+          "solid-checker-contract-proposal-refusals",
+          "refusalVersion",
+          1
+        )
+      : null;
+    if (audit && (!Array.isArray(audit.refusals) || !Array.isArray(audit.inapplicable))) {
+      throw new Error(`${name} produced an invalid artifact-case refusal sidecar`);
+    }
+    const auditedCases = audit
+      ? audit.refusals.length + audit.inapplicable.length
+      : 0;
     if (update) {
       writeFileSync(expectedRefusal, rendered);
       rmSync(expected, { force: true });
       rmSync(expectedPlan, { force: true });
-      rmSync(expectedRefusals, { force: true });
-    } else if (!existsSync(expectedRefusal) || readFileSync(expectedRefusal, "utf8") !== rendered) {
-      throw new Error(`${name} stable-v1 refusal differs; inspect and run --update intentionally\n${failure}`);
+      if (auditedCases > 0) copyFileSync(refusalOutput, expectedRefusals);
+      else rmSync(expectedRefusals, { force: true });
+    } else {
+      if (!existsSync(expectedRefusal) || readFileSync(expectedRefusal, "utf8") !== rendered) {
+        throw new Error(`${name} stable-v1 refusal differs; inspect and run --update intentionally\n${failure}`);
+      }
+      if (auditedCases > 0) {
+        if (!existsSync(expectedRefusals)) {
+          throw new Error(`${name} has no expected-refusals.json snapshot`);
+        }
+        if (!readFileSync(refusalOutput).equals(readFileSync(expectedRefusals))) {
+          throw new Error(
+            `${name} artifact-case refusal snapshot differs; inspect and run --update intentionally`
+          );
+        }
+      } else if (existsSync(expectedRefusals)) {
+        throw new Error(`${name} retains a stale expected-refusals.json snapshot`);
+      }
     }
     return {
       name,
       refused: true,
-      refusedArtifactCases: 0,
+      refusedArtifactCases: audit?.refusals.length ?? 0,
+      inapplicableArtifactCases: audit?.inapplicable.length ?? 0,
       cases: 0,
       closureCandidates: 0,
       unresolvedClaims: 0,
@@ -115,7 +152,6 @@ async function generate(directory) {
   }
   if (update) rmSync(expectedRefusal, { force: true });
   const plan = `${output}.proposal.json`;
-  const refusalOutput = `${output}.refusals.json`;
   const contract = assertEnvelope(output, "solid-reactivity-contract", "schemaVersion", 1);
   const planned = assertEnvelope(plan, "solid-checker-contract-proposal-plan", "planVersion", 1);
   const refusals = assertEnvelope(
@@ -133,14 +169,19 @@ async function generate(directory) {
   if (
     refusals.package?.name !== contract.package.name ||
     refusals.package?.version !== contract.package.version ||
-    !Array.isArray(refusals.refusals)
+    !Array.isArray(refusals.refusals) ||
+    !Array.isArray(refusals.inapplicable)
   ) {
     throw new Error(`${name} produced an invalid artifact-case refusal sidecar`);
   }
+  // An inapplicable disposition is not a refusal, but it is still a recorded
+  // census decision: pin the sidecar whenever either array carries a row, so a
+  // disposition cannot appear, change class, or vanish unreviewed.
+  const auditedCases = refusals.refusals.length + refusals.inapplicable.length;
   if (update) {
     copyFileSync(output, expected);
     copyFileSync(plan, expectedPlan);
-    if (refusals.refusals.length > 0) {
+    if (auditedCases > 0) {
       copyFileSync(refusalOutput, expectedRefusals);
     } else {
       rmSync(expectedRefusals, { force: true });
@@ -153,7 +194,7 @@ async function generate(directory) {
     if (!readFileSync(plan).equals(readFileSync(expectedPlan))) {
       throw new Error(`${name} stable-v1 proposal-plan snapshot differs; inspect and run --update intentionally`);
     }
-    if (refusals.refusals.length > 0) {
+    if (auditedCases > 0) {
       if (!existsSync(expectedRefusals)) {
         throw new Error(`${name} has no expected-refusals.json snapshot`);
       }
@@ -168,6 +209,7 @@ async function generate(directory) {
     name,
     refused: false,
     refusedArtifactCases: refusals.refusals.length,
+    inapplicableArtifactCases: refusals.inapplicable.length,
     cases: Object.values(contract.entrypoints).reduce((count, entrypoint) => count + entrypoint.cases.length, 0),
     closureCandidates: planned.closureCandidates.length,
     unresolvedClaims: planned.unresolvedClaims.length,
@@ -181,6 +223,7 @@ try {
     (result, row) => {
       result.cases += row.cases;
       result.refusedArtifactCases += row.refusedArtifactCases;
+      result.inapplicableArtifactCases += row.inapplicableArtifactCases;
       result.closureCandidates += row.closureCandidates;
       result.unresolvedClaims += row.unresolvedClaims;
       result.positiveOperations += row.positiveOperations;
@@ -188,6 +231,7 @@ try {
     },
     {
       refusedArtifactCases: 0,
+      inapplicableArtifactCases: 0,
       cases: 0,
       closureCandidates: 0,
       unresolvedClaims: 0,
@@ -198,6 +242,7 @@ try {
     `${update ? "updated" : "checked"} ${rows.length} stable-v1 generator fixtures: ` +
       `${rows.filter(row => row.refused).length} exact fail-closed refusals, ` +
       `${aggregate.refusedArtifactCases} local artifact-case refusals, ` +
+      `${aggregate.inapplicableArtifactCases} inapplicable artifact cases, ` +
       `${aggregate.cases} artifact cases, ${aggregate.positiveOperations} possible operations, ` +
       `${aggregate.closureCandidates} proof candidates, ${aggregate.unresolvedClaims} local open claims`
   );

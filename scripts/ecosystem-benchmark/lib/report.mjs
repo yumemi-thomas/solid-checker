@@ -170,6 +170,14 @@ function buildFamilySection(family, results) {
     // uncertifiable.
     refusedEntrypoints: sumField(partials, "refusedEntrypoints"),
     refusedArtifactCases: sumField(partials, "refusedArtifactCases"),
+    // Summed over every probe that produced a contract, not only the partial
+    // ones: an inapplicable disposition is not a refusal, so a complete
+    // contract can and does record them, and restricting this to `partials`
+    // would silently drop the whole census on a successful row.
+    inapplicableArtifactCases: sumField(
+      contractProducing(familyResults),
+      "inapplicableArtifactCases"
+    ),
     successCount: successes.length,
     partialCount: partials.length,
     failureCount: failures.length,
@@ -191,6 +199,7 @@ function buildTotals(results) {
     generatedEntrypoints: sumField(contractProducing(results), "generatedEntrypoints"),
     refusedEntrypoints: sumField(partials, "refusedEntrypoints"),
     refusedArtifactCases: sumField(partials, "refusedArtifactCases"),
+    inapplicableArtifactCases: sumField(contractProducing(results), "inapplicableArtifactCases"),
     successCount: successes.length,
     partialCount: partials.length,
     failureCount: failures.length,
@@ -462,10 +471,16 @@ function emptyContentAccumulator() {
     probesFullyProven: 0,
     probesWithUnknowns: 0,
     probesWithRefusals: 0,
+    // Counted apart from `probesWithRefusals` on purpose: a refusal is an
+    // omitted claim, an inapplicable disposition says no consumer reaches a
+    // certifiable module there at all. Folding them together would make a
+    // clean package look partial.
+    probesWithInapplicable: 0,
     probesWithClosureNotes: 0,
     entrypointsEmitted: 0,
     entrypointsRefused: 0,
     artifactCasesRefused: 0,
+    artifactCasesInapplicable: 0,
     exportsTotal: 0,
     exportsProven: 0,
     exportsWithUnknown: 0,
@@ -494,6 +509,7 @@ function accumulateContent(accumulator, result) {
   accumulator.entrypointsEmitted += content.entrypointsEmitted ?? 0;
   accumulator.entrypointsRefused += content.entrypointsRefused ?? 0;
   accumulator.artifactCasesRefused += content.artifactCasesRefused ?? 0;
+  accumulator.artifactCasesInapplicable += content.artifactCasesInapplicable ?? 0;
   accumulator.exportsTotal += content.exportsTotal ?? 0;
   accumulator.exportsProven += content.exportsProven ?? 0;
   accumulator.exportsWithUnknown += content.exportsWithUnknown ?? 0;
@@ -515,6 +531,7 @@ function accumulateContent(accumulator, result) {
     (content.entrypointsRefused ?? 0) > 0 ||
     (content.artifactCasesRefused ?? 0) > 0
   ) accumulator.probesWithRefusals += 1;
+  if ((content.artifactCasesInapplicable ?? 0) > 0) accumulator.probesWithInapplicable += 1;
   if ((content.closureNotes ?? 0) > 0) accumulator.probesWithClosureNotes += 1;
 
   // A package is only fully proven when EVERY probe that produced a contract
@@ -889,6 +906,7 @@ function renderFamilySection(section) {
   lines.push(`- Generated entrypoints: ${section.generatedEntrypoints}`);
   lines.push(`- Refused entrypoints (partial contracts): ${section.refusedEntrypoints ?? 0}`);
   lines.push(`- Refused artifact cases (partial contracts): ${section.refusedArtifactCases ?? 0}`);
+  lines.push(`- Inapplicable artifact cases (recorded, not refused): ${section.inapplicableArtifactCases ?? 0}`);
   lines.push(`- Success (complete contracts): ${formatRate(section.successRate)}`);
   lines.push(`- Partial contracts: ${section.partialCount ?? 0}`);
   lines.push(`- Failures: ${section.failureCount}`);
@@ -1005,6 +1023,7 @@ function renderContractContentSection(content) {
   );
   lines.push(`- Probes with at least one unknown claim: ${content.probesWithUnknowns}`);
   lines.push(`- Probes with at least one refused entrypoint: ${content.probesWithRefusals}`);
+  lines.push(`- Probes with at least one inapplicable artifact case: ${content.probesWithInapplicable ?? 0}`);
   lines.push(`- Probes with at least one closure note: ${content.probesWithClosureNotes}`);
   lines.push(
     `- Exports proven: ${formatCount(content.exportsProven, content.exportsTotal, content.exportsProvenPercentage)}` +
@@ -1018,7 +1037,8 @@ function renderContractContentSection(content) {
   );
   lines.push(
     `- Entrypoints: ${content.entrypointsEmitted} emitted, ${content.entrypointsRefused} refused; ` +
-      `${content.artifactCasesRefused ?? 0} artifact cases refused`
+      `${content.artifactCasesRefused ?? 0} artifact cases refused, ` +
+      `${content.artifactCasesInapplicable ?? 0} artifact cases inapplicable`
   );
   lines.push(`- Closure notes (block byte-attested verification): ${content.closureNotes}`);
   // Counted apart from the line above because the two say different things: a

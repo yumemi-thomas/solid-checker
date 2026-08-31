@@ -1,0 +1,32 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "wildcard-asset-entrypoints-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [
+    {
+      "entrypoint": "./assets/styles.module.css",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-module-target",
+      "reason": "runtime target extension \".css\" is not an executable module"
+    },
+    {
+      "entrypoint": "./assets/tokens.json",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-module-target",
+      "reason": "runtime target extension \".json\" is not an executable module"
+    },
+    {
+      "entrypoint": "./assets/widget.js.map",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-module-target",
+      "reason": "runtime target extension \".map\" is not an executable module"
+    }
+  ]
+}

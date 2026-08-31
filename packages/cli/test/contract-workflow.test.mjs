@@ -8,7 +8,8 @@ import {
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import { createRuntimeProbeHarness } from "../scripts/contract-probe-harness.mjs";
@@ -30,8 +31,10 @@ import { parseVerifyArguments } from "../scripts/verify-contract.mjs";
 import {
   ARTIFACT_CASE_CANDIDATE_LIMIT,
   ARTIFACT_APPLICABILITY,
+  ARTIFACT_DISPOSITION,
   artifactAnalysisBatchConcurrencyLimit,
   artifactApplicabilityForRefusal,
+  artifactCaseDisposition,
   finiteArtifactCandidates,
   finiteConditionPartitions,
   finiteEntrypoints,
@@ -145,6 +148,112 @@ test("artifact refusals carry verifier-owned applicability classes", () => {
     artifactApplicabilityForRefusal(new Error("semantic refusal")),
     ARTIFACT_APPLICABILITY.RuntimeModule
   );
+});
+
+test("inapplicable artifact cases are decided from the export-map selection alone", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-disposition-"));
+  mkdirSync(join(root, "assets"), { recursive: true });
+  writeFileSync(join(root, "index.js"), "export const value = 1;\n");
+  writeFileSync(join(root, "assets", "widget.js"), "export const widget = 1;\n");
+  writeFileSync(join(root, "assets", "widget.js.map"), "{}\n");
+  writeFileSync(join(root, "assets", "styles.module.css"), ".root {}\n");
+  writeFileSync(join(root, "assets", "addon.node"), "\0native\n");
+  writeFileSync(join(root, "assets", "engine.wasm"), "\0asm\n");
+  const manifest = {
+    exports: {
+      ".": "./index.js",
+      "./assets/widget.js": "./assets/widget.js",
+      "./assets/widget.js.map": "./assets/widget.js.map",
+      "./assets/styles.module.css": "./assets/styles.module.css",
+      "./private": { "vendor/source": "./src/private.ts", default: "./index.js" },
+      "./browser-gap": { browser: "./missing-browser.js", default: "./index.js" },
+      "./bun-gap": { bun: "./missing-bun.js", default: "./index.js" },
+      "./solid-gap": { solid: "./missing-solid.jsx", default: "./index.js" },
+      "./blocked": { "vendor/source": null, default: "./index.js" },
+      "./extensionless": "./missing-target",
+      "./native": "./assets/addon.node",
+      "./engine": "./assets/engine.wasm"
+    }
+  };
+  const disposition = (entrypoint, conditions = []) =>
+    artifactCaseDisposition({ manifest, packageRoot: root, entrypoint, conditions });
+  try {
+    // A module entrypoint, and an asset entrypoint reached through the same
+    // wildcard-shaped surface: only the asset is inapplicable.
+    assert.equal(disposition("./assets/widget.js"), null);
+    assert.deepEqual(disposition("./assets/widget.js.map"), {
+      class: ARTIFACT_DISPOSITION.NonModuleTarget,
+      reason: 'runtime target extension ".map" is not an executable module'
+    });
+    assert.deepEqual(disposition("./assets/styles.module.css"), {
+      class: ARTIFACT_DISPOSITION.NonModuleTarget,
+      reason: 'runtime target extension ".css" is not an executable module'
+    });
+
+    // A missing target behind a PRIVATE NAMESPACED condition is unpublished on
+    // purpose; the same entrypoint under the empty partition resolves and stays
+    // ordinary.
+    assert.deepEqual(disposition("./private", ["vendor/source"]), {
+      class: ARTIFACT_DISPOSITION.UnpublishedConditionalTarget,
+      reason:
+        'runtime target is unpublished behind private namespaced export condition(s) "vendor/source"'
+    });
+    assert.equal(disposition("./private"), null);
+
+    // Standard conditions only: real consumers fail there, so it stays a
+    // refusal. `.` under the empty/default partition can never reach a custom
+    // condition at all, which is why its refusal always stands.
+    assert.equal(disposition("./browser-gap", ["browser"]), null);
+    assert.equal(disposition("."), null);
+
+    // A BARE-NAME custom condition is not private: `bun` is activated
+    // unconditionally by the Bun runtime, and `solid` by vite-plugin-solid and
+    // solid-start, so a consumer really does reach these targets and a missing
+    // one is a defective publish. Both stay refusals.
+    assert.equal(disposition("./bun-gap", ["bun"]), null);
+    assert.equal(disposition("./solid-gap", ["solid"]), null);
+
+    // `.node` and `.wasm` are executable entrypoints this pipeline cannot read,
+    // not inert resources. The closure already names them native-code and
+    // opaque-wasm hazards, so they keep certify-or-refuse rather than asserting
+    // nothing.
+    assert.equal(disposition("./native"), null);
+    assert.equal(disposition("./engine"), null);
+
+    // Selections that refuse for their own reason keep those semantics.
+    assert.equal(disposition("./blocked", ["vendor/source"]), null);
+    assert.equal(disposition("./absent"), null);
+    // An extensionless target is not answered by the module-extension rule.
+    assert.equal(disposition("./extensionless"), null);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the bundler-suffix fixture keeps a real control, pinned by both snapshots", () => {
+  // `asset-query-import` proves a `?raw` specifier is opaque: no closure edge,
+  // no proof candidate, every claim open. That claim is only meaningful against
+  // a control where the SAME file, imported as a plain module, really is
+  // proven. The control lives in `asset-query-import-control`, and this test
+  // pins the two numbers against each other so a regression that flattened the
+  // control -- one that stopped resolving the plain module import or stopped
+  // producing candidates for it -- cannot be absorbed by a routine
+  // `contract-corpus.mjs --update` while the `?raw` fixture's own snapshot sits
+  // unchanged and its README's control claim quietly becomes a tautology.
+  const fixtures = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../fixtures/package-contracts"
+  );
+  const plan = name =>
+    JSON.parse(readFileSync(join(fixtures, name, "expected-proposal.json"), "utf8"));
+
+  const control = plan("asset-query-import-control");
+  assert.equal(control.closureCandidates.length, 3);
+  assert.equal(control.unresolvedClaims.length, 7);
+
+  const suffixed = plan("asset-query-import");
+  assert.equal(suffixed.closureCandidates.length, 0);
+  assert.equal(suffixed.unresolvedClaims.length, 20);
 });
 
 test("review exposes only stable proposal inspection", () => {
@@ -625,6 +734,10 @@ test("a fully refused proposal writes every artifact-case refusal before throwin
     assert.equal(audit.refusals[0].entrypoint, ".");
     assert.equal(audit.refusals[0].stage, "artifact-case");
     assert.match(audit.refusals[0].reason, /does not exist|is not a file|runtime target/i);
+    // The "." entrypoint under the empty/default partition reaches its missing
+    // target through standard conditions only. No disposition rule applies: the
+    // row's refusal stands and the inapplicable census stays empty.
+    assert.deepEqual(audit.inapplicable, []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -74,7 +74,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // measured while three certifying fixtures (class-expression-kind,
       // escaping-private-helper, published-export-entity) were still
       // untracked and invisible to the audit.
-      stableMainDocuments: 136,
+      stableMainDocuments: 140,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
