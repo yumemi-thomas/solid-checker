@@ -1112,25 +1112,52 @@ fn export_implementation_location(
     let mut owners = plans
         .iter()
         .copied()
-        .filter(|candidate| candidate.snapshot_root() == snapshot_root);
-    let owner = owners
+        .filter(|candidate| candidate.snapshot_root() == snapshot_root)
+        .peekable();
+    if owners.peek().is_none() {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.to_owned(),
+            reason: "runtime export binding belongs to an unplanned snapshot".into(),
+        });
+    }
+    // `snapshot_root` is a content hash over the package name, version, and
+    // every file's bytes, so every plan matching it materializes byte-identical
+    // sources. The implementation location (path + span) therefore resolves to
+    // the same bytes regardless of which matching owner is selected, and the
+    // producer's transcript over that span is identical. A batch or graph that
+    // legitimately carries the same installation as several plans — a package's
+    // alternative artifact cases (all share one snapshot_root by construction),
+    // or a dependency reached through multiple graph edges — is not an
+    // ambiguity. Select the first matching owner the project actually
+    // materialized; refusing on multiplicity was spurious.
+    let package_root = owners
+        .filter_map(|owner| project.package_root(owner).ok())
         .next()
         .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
             demand: demand.to_owned(),
-            reason: "runtime export binding belongs to an unplanned snapshot".into(),
+            reason: "runtime export binding snapshot is not materialized in the project".into(),
         })?;
-    if owners.next().is_some() {
-        return Err(TypeFactsCertificationError::SubjectMismatch {
-            demand: demand.to_owned(),
-            reason: "runtime export binding snapshot has multiple installation identities".into(),
-        });
-    }
-    let path = project.package_root(owner)?.join(runtime_path);
+    let path = package_root.join(runtime_path);
     Ok(Some(typefacts::Location {
         path: path.to_string_lossy().into_owned().into(),
         start_byte: u64::from(span.start),
         end_byte: u64::from(span.end),
     }))
+}
+
+/// Test-only entry point: materialize `owner`'s package and resolve the
+/// implementation location for `export` against the full `plans` set. Used by
+/// the sibling module's regression test that a value-only case set carrying
+/// several plans of one snapshot_root (its alternative artifact cases) no
+/// longer refuses as "multiple installation identities".
+#[cfg(test)]
+pub(super) fn export_implementation_location_for_test(
+    plans: &[&CertificationPlan],
+    owner: &CertificationPlan,
+    export: &str,
+) -> Result<Option<typefacts::Location>, TypeFactsCertificationError> {
+    let project = PrivateTypeFactsProject::materialize(owner, &[], &[])?;
+    export_implementation_location(plans, &project, owner, export, "test-demand")
 }
 
 fn export_value_harness_subject(

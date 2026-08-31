@@ -3571,9 +3571,29 @@ fn contract_generation_obligation_target_names(
         return names_by_symbol.get(&symbol).cloned().unwrap_or_default();
     }
     if !obligation.function_identity.is_empty() {
+        // No exact symbol: the obligation carries only its owning function's
+        // runtime identity. A re-export barrel (`export * from "<dependency>"`)
+        // can share one runtime identity across every binding it republishes,
+        // and a symbol-less callback owner (an anonymous forwarder) then joins
+        // to all of them. The obligation proves a *callback* is forwarded, so
+        // its invocation subject is by construction callable; a value export
+        // can never be that subject, and opening its callbacks domain only
+        // manufactures the "value export cannot have function effects" refusal.
+        // Without symbol provenance the identity match is not proof that any
+        // particular value sibling is the subject, so it must never reach one.
         return names_by_identity
             .get(&obligation.function_identity)
-            .cloned()
+            .map(|names| {
+                names
+                    .iter()
+                    .filter(|name| {
+                        exports
+                            .get(name.as_str())
+                            .is_none_or(|export| export.kind != "value")
+                    })
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default();
     }
     if exports.contains_key(&obligation.function) {
@@ -3668,6 +3688,56 @@ mod contract_generation_callback_attribution_tests {
             )
             .is_empty()
         );
+    }
+
+    #[test]
+    fn an_empty_function_symbol_never_falls_back_onto_a_value_sibling() {
+        // The real wrapper shape: a `export * from "<dependency>"` barrel shares
+        // one runtime identity across the module-namespace value export (`IR`)
+        // and a callable sibling. A symbol-less callback owner (an anonymous
+        // forwarder in the wrapper) reaches the barrel identity, and the pre-fix
+        // fallback marked every joined name -- opening `callbacks` on the value
+        // export `IR`, which the operation-graph invariant then refuses with
+        // "value export .:IR cannot have function effects". The fallback must
+        // reach only callable siblings it could plausibly be the subject of.
+        let mut exports = BTreeMap::from([
+            (
+                "IR".into(),
+                ContractExport {
+                    kind: "value".into(),
+                    ..ContractExport::default()
+                },
+            ),
+            (
+                "callableExport".into(),
+                ContractExport {
+                    kind: "function".into(),
+                    ..ContractExport::default()
+                },
+            ),
+        ]);
+        let names_by_identity = HashMap::from([(
+            "shared-barrel-identity".into(),
+            vec!["IR".into(), "callableExport".into()],
+        )]);
+
+        let targets = contract_generation_obligation_target_names(
+            true,
+            // Empty function symbol: the owning callback forwarder is anonymous,
+            // so only the runtime identity is available.
+            &obligation("", "shared-barrel-identity"),
+            &exports,
+            &names_by_identity,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        assert_eq!(targets, vec!["callableExport".to_string()]);
+        for target in targets {
+            mark_contract_generation_callback_unknown(exports.get_mut(&target).unwrap());
+        }
+
+        assert_eq!(exports["IR"].callbacks, ContractClaim::Known(Vec::new()));
+        assert_eq!(exports["callableExport"].callbacks, ContractClaim::Open);
     }
 
     #[test]

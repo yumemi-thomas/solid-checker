@@ -1,11 +1,11 @@
 # Phase 21 ecosystem refusal-reduction ledger
 
 - Baseline fully refused rows: 30
-- Current report SHA-256: 015ef0ef314173b1d0f9f4b4aeb57a25be710dacc793f627bc33eb03282f9b5e
+- Current report SHA-256: 727667e112c7aa56bd34c312e14fcffd20ea2ef88ab25caffcde09f771295923
 - Upstream missing-byte controls: 5
 - CJS/no-ESM controls: 7
 - Checker-addressable rows: 18
-- Newly verified rows: 4
+- Newly verified rows: 8
 - Confirmed upstream declaration defects: 1
 
 ## Current terminal classes
@@ -28,9 +28,8 @@
 | exact-refusal-semantic-model | 5 |
 | retained-upstream-missing-bytes | 5 |
 | exact-refusal-package-import-resolution | 3 |
-| exact-refusal-type-facts-capability | 2 |
+| pending-phase21-checker-work | 3 |
 | confirmed-upstream-declaration-defect | 1 |
-| pending-phase21-checker-work | 1 |
 | verified-through-ordinary-receipt-load | 1 |
 
 ## Remaining owners
@@ -76,6 +75,6 @@
 | @tanstack/solid-start-server@1.167.36\|solid1\|only | exact-refusal-package-import-resolution | checker-resolver | dependency-contract-obligation |
 | @tanstack/solid-start-server@2.0.0-rc.2\|solid2\|floor | exact-refusal-package-import-resolution | checker-resolver | dependency-contract-obligation |
 | @tanstack/solid-start-server@2.0.0-rc.2\|solid2\|head | exact-refusal-package-import-resolution | checker-resolver | dependency-contract-obligation |
-| @tanstack/solid-store@0.11.1\|solid1\|only | exact-refusal-type-facts-capability | checker-type-facts | dependency-contract-obligation |
-| @tanstack/solid-virtual@3.13.37\|solid1\|only | exact-refusal-type-facts-capability | checker-type-facts | dependency-contract-obligation |
+| @tanstack/solid-store@0.11.1\|solid1\|only | pending-phase21-checker-work | checker-type-facts | dependency-contract-obligation |
+| @tanstack/solid-virtual@3.13.37\|solid1\|only | pending-phase21-checker-work | checker-type-facts | dependency-contract-obligation |
 | corvu@0.7.2\|solid1\|only | verified-through-ordinary-receipt-load | none | dependency-contract-obligation |

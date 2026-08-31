@@ -1,5 +1,78 @@
 # Precision backlog
 
+## Two authenticated-demand regressions from the non-export proof policy (2026-08-31)
+
+Landing "Authenticate non-export Type Facts demands" (`0fcaf82e`) introduced two
+certification-time regressions that no `make verify` gate exercised (the
+ecosystem certification runs only in the lead-owned benchmark). Both are now
+fixed and pinned by regression tests that run inside `make verify`.
+
+- **Value-only case sets refused as "multiple installation identities."**
+  `export_implementation_location`
+  (`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`)
+  filtered every plan in the batch/graph by the runtime binding's
+  `snapshot_root` and refused the moment more than one matched. But a value-only
+  case set carries one plan per alternative artifact case of a single package,
+  and the batch identity check requires all of them to share one `snapshot_root`
+  -- so any package with two or more alternative cases always refused. Because
+  `snapshot_root` is a content hash, every matching plan materializes
+  byte-identical sources; the resolver now binds the first materialized owner
+  (still failing closed when none is materialized). This restored certification
+  for the corvu / corvu-next / `@solid-devtools/logger` clusters and every
+  multi-case `@solid-primitives` package. Pinned by
+  `implementation_location_binds_first_owner_for_shared_snapshot_root`.
+
+- **Producer nil dereference in the returned-closure census.** The producer's
+  new returned-closure resolution
+  (`apps/solid-typefacts/internal/typefacts/tsgo/invocation_transcripts.go`)
+  left the resolved closure node nil when a returned identifier's symbol had no
+  value declaration and not exactly one declaration (e.g. a namespace import),
+  then called `isCallableDeclaration(nil)` -> `ast.IsArrowFunction(nil)`, which
+  panicked and took down the whole certification session (crashing
+  `@solid-primitives/media`, `page-visibility`, and any package with that
+  returned shape). A nil closure is a missing-evidence frontier: it now yields
+  no proven captures (a fail-closed open premise) instead of crashing. Pinned by
+  `TestExportImplementationTranscriptKeepsReturnedNilClosureOpen`.
+
+Neither fix loosens subject binding or produces a finding, so neither duplicates
+a `tsc` diagnostic: the first only removes a spurious multiplicity refusal
+between byte-identical owners, and the second only replaces a crash with the
+existing open-premise path.
+
+## Symbol-less callback obligations no longer contaminate value siblings (2026-08-31)
+
+"Normalize callback obligations by exact symbol" (`696834fc`) made
+`contract_generation_obligation_target_names` select an obligation's target by
+its exact owning-function symbol, but kept a `function_identity` fallback for
+obligations whose owner is anonymous and so carries an empty symbol. When a
+package republishes bindings through `export *`, one runtime identity is shared
+across every republished binding, so a symbol-less callback obligation raised by
+an anonymous forwarder in the same module could match a value sibling by
+identity alone and open a callbacks domain the operation-graph invariant then
+refuses.
+
+The fallback now excludes value-kind exports. A callback obligation proves a
+callback is forwarded, so its invocation subject is callable by construction;
+without symbol provenance an identity-only match is not proof that any value
+sibling is that subject, so it must never reach one. The exact-symbol path is
+untouched, so the geolocation true positive (obligation symbol equal to its own
+value-export symbol) stays marked and refused. This closes a latent
+contamination path, pinned by a unit regression test (the shared identity only
+arises from a real cross-package `export *` composition) and by the
+`reexport-value-sibling-callback` fixture for the companion exact-symbol path.
+
+**Still open — a distinct mechanism (b).** The five `@tanstack/solid-*` wrapper
+rows (`.:IR`, `.:initialServerFormState`, `.:ALL_KEYS`, `.:dataTagErrorSymbol`,
+`.:PERSISTER_KEY_PREFIX`) still refuse with `value export … cannot have function
+effects` after the fallback guard, so their obligation is **not** symbol-less:
+its `function_symbol` resolves *to the value export itself* through the wrapper's
+re-export aliasing. That is a symbol-resolution/aliasing defect, not the fallback
+path, and needs a fix where the obligation's owning symbol is bound (an alias of
+a value export must not be accepted as a callback obligation's owner). The
+invariant refusing them is correct; the constants are plain values (`Symbol()`,
+`Set`, string, object, namespace object) that `tsc` says nothing about, so the
+future certification duplicates no diagnostic. Named follow-up.
+
 ## Two refusal classes became a recorded inapplicable disposition (2026-08-31)
 
 The ecosystem benchmark counted every omitted artifact case as a refusal. Two

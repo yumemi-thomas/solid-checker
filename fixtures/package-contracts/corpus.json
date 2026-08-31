@@ -32,6 +32,7 @@
     "non-literal-dynamic-import",
     "parameter-member-forwarded",
     "published-export-entity",
+    "reexport-value-sibling-callback",
     "retained-callback-parameter",
     "seed-attestation-discrepancy",
     "torture-conditional-semantics",

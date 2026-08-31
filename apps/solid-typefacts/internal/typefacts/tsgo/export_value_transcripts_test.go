@@ -357,3 +357,54 @@ void local;
 		}
 	}
 }
+
+// A returned identifier whose symbol has no value declaration and several
+// declarations — here a namespace import, whose module symbol resolves to its
+// source declarations with no single value declaration — leaves the resolved
+// closure node nil. This mirrors @solid-primitives/media@2.3.6, whose
+// `return noop`-style returned bindings crashed the producer. The
+// returned-closure capture census must treat a nil closure as a
+// missing-evidence frontier — no proven captures — rather than dereferencing
+// the nil AST node. Before the nil guard this panicked in ast.IsArrowFunction
+// (isCallableDeclaration(nil)) and took the whole producer session down.
+func TestExportImplementationTranscriptKeepsReturnedNilClosureOpen(t *testing.T) {
+	dir := t.TempDir()
+	// The namespace binding resolves to an alias with no value declaration and
+	// not exactly one declaration, so the returned-closure resolution yields a
+	// nil closure node — the exact shape that crashed the producer on
+	// @solid-primitives/media@2.3.6.
+	source := `import * as ns from "./unresolved-peer";
+export function returnsNamespace(callback: () => void): unknown {
+  callback();
+  return ns;
+}
+void returnsNamespace;
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	analyzer := opened.(typefacts.ExportValueAnalyzer)
+	path := filepath.Join(dir, "facts.ts")
+	queryStart := strings.LastIndex(source, "void returnsNamespace") + len("void ")
+	implementationStart := strings.Index(source, "function returnsNamespace") + len("function ")
+	location := typefacts.Location{Path: path, StartByte: queryStart, EndByte: queryStart + len("returnsNamespace")}
+	implementation := typefacts.Location{Path: path, StartByte: implementationStart, EndByte: implementationStart + len("returnsNamespace")}
+	demands := []typefacts.ExportValueDemand{{Location: location, ImplementationLocation: &implementation}}
+	answer, err := analyzer.ExportValueTranscripts(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answer.Transcripts) != 1 {
+		t.Fatalf("transcripts = %d, want 1", len(answer.Transcripts))
+	}
+	returned := answer.Transcripts[0].Implementation
+	if returned == nil || returned.ControlFlow == nil || len(returned.ControlFlow.Returns) != 1 {
+		t.Fatalf("implementation = %#v, want one return site", returned)
+	}
+	if captures := returned.ControlFlow.Returns[0].Captures; len(captures) != 0 {
+		t.Fatalf("returned captures = %#v, want no proven captures for a nil closure", captures)
+	}
+}

@@ -1137,8 +1137,8 @@ func isArgumentOfCall(node, parent *ast.Node) bool {
 }
 
 func isCallableDeclaration(node *ast.Node) bool {
-	return ast.IsArrowFunction(node) || ast.IsFunctionExpression(node) ||
-		ast.IsFunctionDeclaration(node) || ast.IsMethodDeclaration(node)
+	return node != nil && (ast.IsArrowFunction(node) || ast.IsFunctionExpression(node) ||
+		ast.IsFunctionDeclaration(node) || ast.IsMethodDeclaration(node))
 }
 
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {
@@ -1271,7 +1271,11 @@ func (p *project) returnedClosureCapturesLocked(
 			}
 		}
 	}
-	if !isCallableDeclaration(closure) {
+	// A symbol whose value declaration is absent (or ambiguous across several
+	// declarations) leaves `closure` nil. That is a missing-evidence frontier,
+	// not a callable closure: return no proven captures so the demand stays a
+	// fail-closed open premise instead of dereferencing a nil AST node.
+	if closure == nil || !isCallableDeclaration(closure) {
 		return nil
 	}
 	roots := p.parameterCensusRootsLocked(implementation)

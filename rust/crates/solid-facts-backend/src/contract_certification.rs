@@ -3117,6 +3117,158 @@ mod tests {
         ));
     }
 
+    // Regression: a value-only case set carries one plan per alternative
+    // artifact case of a single package, and every such plan shares one
+    // `snapshot_root` (the batch identity check requires it). The
+    // implementation-location resolver used to refuse the moment more than one
+    // plan matched that shared root ("multiple installation identities"), which
+    // sank every multi-case package (corvu, corvu-next, @solid-devtools/logger,
+    // and every multi-case solid-primitives). `snapshot_root` is a content hash,
+    // so all matching plans materialize byte-identical sources: the resolver
+    // must bind the first materialized owner, not refuse.
+    #[test]
+    fn implementation_location_binds_first_owner_for_shared_snapshot_root() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js","default":"./dist/index.js"}}}"#;
+        let runtime = b"export function make(callback) { callback(); return () => {}; }";
+        let declarations = b"export declare function make(callback: () => void): () => void;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", runtime),
+            ("package/types/index.d.ts", declarations),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let root = "/project/node_modules/fixture-package";
+        let package_manifest = resolved_file(root, "package.json", manifest);
+        let runtime_file = resolved_file(root, "dist/index.js", runtime);
+        let declaration_file = resolved_file(root, "types/index.d.ts", declarations);
+        let closure = ClosureManifest::new(
+            vec![
+                closure_entry(ClosureFileRole::Manifest, "package.json", manifest),
+                closure_entry(ClosureFileRole::ResolutionInput, "package.json", manifest),
+                closure_entry(ClosureFileRole::Runtime, "dist/index.js", runtime),
+                closure_entry(
+                    ClosureFileRole::Declaration,
+                    "types/index.d.ts",
+                    declarations,
+                ),
+            ],
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        let request = ImportRequest {
+            specifier: "fixture-package".into(),
+            importer: "/project/src/app.ts".into(),
+            export_conditions: vec!["import".into()],
+        };
+        let exports = BTreeMap::from([(
+            "make".into(),
+            ResolvedExportBinding {
+                runtime: ResolvedExportTarget {
+                    module: runtime_file.clone(),
+                    export_name: "make".into(),
+                },
+                declarations: ResolvedExportTarget {
+                    module: declaration_file.clone(),
+                    export_name: "make".into(),
+                },
+            },
+        )]);
+        let resolved = ResolvedImport {
+            specifier: request.specifier.clone(),
+            importer: request.importer.clone(),
+            requested_entrypoint: ".".into(),
+            package_name: "fixture-package".into(),
+            package_version: "1.2.3".into(),
+            package_integrity: snapshot.package_integrity().into(),
+            package_root: root.into(),
+            package_real_root: None,
+            package_manifest,
+            runtime: runtime_file,
+            declarations: declaration_file,
+            runtime_trace: ResolutionTrace {
+                branch: "/exports/./import".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "import".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./dist/index.js".into(),
+                    },
+                ],
+            },
+            declaration_trace: ResolutionTrace {
+                branch: "/exports/./types".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "types".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./types/index.d.ts".into(),
+                    },
+                ],
+            },
+            closure,
+            transform: None,
+            exports,
+            authority: ResolutionAuthority::Host,
+        };
+
+        let (package, artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        let plan = plan_certification(
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive),
+        )
+        .unwrap();
+        // The runtime export must expose a span for the implementation-location
+        // resolver to have anything to bind; otherwise this test would trivially
+        // pass on the early `Ok(None)` and never reach the multiplicity path.
+        assert!(
+            plan.verified_exports().runtime_binding("make").is_some(),
+            "the function export must carry a runtime span"
+        );
+
+        // Two references to the same plan model a value-only case set whose
+        // alternative artifact cases share one snapshot_root and one package
+        // root — exactly the shape that used to refuse.
+        let location = super::type_facts::export_implementation_location_for_test(
+            &[&plan, &plan],
+            &plan,
+            "make",
+        )
+        .expect("shared snapshot_root must bind, not refuse as multiple identities")
+        .expect("the resolved function export has an implementation span");
+        assert!(
+            location.path.ends_with("dist/index.js"),
+            "implementation location must point at the runtime module, got {}",
+            location.path
+        );
+
+        // A single plan still resolves; the fix did not narrow the ordinary path.
+        assert!(
+            super::type_facts::export_implementation_location_for_test(&[&plan], &plan, "make")
+                .unwrap()
+                .is_some()
+        );
+    }
+
     #[test]
     fn module_closure_is_recomputed_with_exact_roles_edges_and_hazards() {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
