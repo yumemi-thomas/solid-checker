@@ -339,7 +339,11 @@ impl ExportReplay<'_> {
                             },
                         );
                     }
-                    LocalResolution::External => {
+                    // A bundler-mediated asset import binds an opaque value, so
+                    // it is unresolved here exactly as an external one is. The
+                    // generator's `moduleDescription` records the same binding
+                    // in `externalImports`.
+                    LocalResolution::External | LocalResolution::OpaqueAsset => {
                         external_imports.insert(
                             local.into(),
                             (import.module.to_string(), imported.to_string()),
@@ -362,9 +366,12 @@ impl ExportReplay<'_> {
                     LocalResolution::Module(target) => Some(target.clone()),
                     _ => None,
                 });
-            let external = matches!(module_resolution, Some(LocalResolution::External))
-                .then(|| export.module.as_deref())
-                .flatten();
+            let external = matches!(
+                module_resolution,
+                Some(LocalResolution::External | LocalResolution::OpaqueAsset)
+            )
+            .then(|| export.module.as_deref())
+            .flatten();
             match export.kind {
                 ExportKind::All => {
                     if !export.type_only

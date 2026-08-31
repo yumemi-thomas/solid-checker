@@ -8143,3 +8143,38 @@ and assigns the remaining owner to the upstream package; it does not create a
 fixture-only nested layout or add a duplicate checker diagnostic. The exact
 archive, layout, and oracle are recorded in
 `docs/package-contract-v2/phase21/context-upstream-declaration-defect.md`.
+
+## 2026-08-31 — A query-suffixed specifier is an asset import, not a missing module
+
+A bundler resource query (`./read-preferred-language-cookie.js?raw`) was read as
+part of the filename, so the artifact resolver reported a file the package ships
+as a missing local closure module and refused the whole artifact case. That
+shape produced 204 recorded `local closure module ... was not found` refusals in
+the ecosystem census, all from `@kobalte/solidbase`.
+
+The specifier is now opaque on both sides of the closure. Stripping the query
+and walking into the module would be worse than the refusal, not better: the
+binding's value is the loader's product -- a string for `?raw`, a URL string for
+`?url`, a constructor for `?worker` -- and never the target module's exports, so
+walking in would attribute the target's semantics to a binding that has none.
+The specifier therefore contributes no closure edge and no resolved binding,
+only the `unaccepted-external-dependency` frontier an unaccepted bare dependency
+contributes, and every claim of the artifact case stays open.
+
+This is deliberately conservative in three places. The frontier carries no
+`affectedExports`, so one asset import leaves every export of that artifact case
+unprovable rather than only the exports reachable through the binding; a query
+target that is absent from the package is as opaque as one that is present,
+because no loader-independent resolution exists for either; and a `#` fragment,
+a `#imports` specifier carrying a query, and a bare specifier carrying one are
+all opaque too, the last being kept out of the external dependency census
+because no package entrypoint answers to a suffixed subpath. An unsuffixed
+relative specifier with no file still refuses, and a literal on-disk filename
+containing `?` or `#` stays unreachable from a specifier.
+
+`fixtures/package-contracts/asset-query-import` pins the semantics: the same
+shipped file imported as a module and as `?raw` yields a proposal with both
+exports, twenty open claims, and no proof candidate. The published-graph
+acquisition still refuses a node whose closure carries an opaque asset frontier,
+exactly as it refuses `node:` and every other non-package external specifier;
+that path is unchanged.

@@ -4,6 +4,7 @@
   "fixtures": [
     "arrow-export-attribution",
     "asset-import",
+    "asset-query-import",
     "attested-record-matches-walk",
     "attested-specifier-restated",
     "callback-deferred-untracked-chain",

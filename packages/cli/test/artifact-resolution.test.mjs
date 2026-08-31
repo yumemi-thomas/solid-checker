@@ -606,6 +606,153 @@ describe("exact artifact records and closure", () => {
     );
   });
 
+  test("a query-suffixed relative specifier is an opaque asset import, not a missing module", () => {
+    const manifest = {
+      name: "resource-query",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      // The same shipped file, imported both ways. `?raw` binds the loader's
+      // product -- the file's source text -- so it is not this module's exports
+      // and must not be walked into; the plain import still is.
+      "index.js":
+        'import source from "./shipped.js?raw";\nimport { run } from "./shipped.js";\nexport const thing = [source, run];\n',
+      "index.d.ts": "export declare const thing: unknown[];\n",
+      "shipped.js": "export const run = callback => callback();\n"
+    });
+
+    const artifact = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "resource-query",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(artifact.closure.hazards).toEqual([
+      expect.objectContaining({
+        kind: "unaccepted-external-dependency",
+        source: "./index.js:./shipped.js?raw",
+        affectedDomains: expect.arrayContaining(["callbacks", "returns"])
+      })
+    ]);
+    // The module import still reaches the file; the query-suffixed one adds no
+    // second edge and no resolution input for a literal `shipped.js?raw`.
+    expect(
+      artifact.closure.entries.filter(entry => entry.path.startsWith("./shipped.js"))
+    ).toEqual([expect.objectContaining({ role: "runtime", path: "./shipped.js" })]);
+
+    // A relative specifier never names a package, so it stays out of the
+    // external dependency census that acquires accepted dependencies.
+    const planned = resolvePackageArtifactClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "resource-query",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(planned.externalDependencies).toEqual([]);
+    expect(planned.closure.hazards.map(hazard => hazard.source)).toEqual([
+      "./index.js:./shipped.js?raw"
+    ]);
+
+    const graph = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "resource-query",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(graph.closure.hazards).toEqual([
+      expect.objectContaining({
+        kind: "unaccepted-external-dependency",
+        source: "./index.js:./shipped.js?raw"
+      })
+    ]);
+  });
+
+  test("query and fragment suffixes are opaque wherever they appear, and only when non-empty", () => {
+    const manifest = {
+      name: "resource-suffix-shapes",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+      imports: { "#platform": "./dist/platform.js" }
+    };
+    const files = {
+      "index.d.ts": "export declare const thing: number;\n",
+      "dist/platform.js": "export const platform = 1;\n"
+    };
+
+    // Every suffixed specifier is opaque: an absent query target no more
+    // resolves than a present one, a fragment behaves like a query, a `#`
+    // imports specifier carrying a query is not looked up in the imports map,
+    // and a bare specifier with a suffix names no entrypoint to acquire.
+    for (const specifier of [
+      "./absent.js?raw",
+      "./dist/platform.js?url",
+      "./dist/platform.js#fragment",
+      "#platform?raw",
+      "external-pkg/theme.css?inline"
+    ]) {
+      const root = fixture(manifest, {
+        ...files,
+        "index.js": `import "${specifier}";\nexport const thing = 1;\n`
+      });
+      const planned = resolvePackageArtifactClosure({
+        importer: join(root, "consumer.mjs"),
+        specifier: "resource-suffix-shapes",
+        packageRoot: root,
+        integrity: "sha512:test"
+      });
+      expect(planned.closure.hazards).toEqual([
+        expect.objectContaining({
+          kind: "unaccepted-external-dependency",
+          source: `./index.js:${specifier}`
+        })
+      ]);
+      expect(planned.externalDependencies).toEqual([]);
+      expect(planned.closure.entries.map(entry => entry.path)).not.toContain("./dist/platform.js");
+    }
+
+    // An introducer with nothing after it is not a suffix: `./absent.js?` stays
+    // on the ordinary path, where a specifier with no file still refuses.
+    for (const specifier of ["./absent.js", "./absent.js?", "./absent.js#"]) {
+      const root = fixture(manifest, {
+        ...files,
+        "index.js": `import "${specifier}";\nexport const thing = 1;\n`
+      });
+      expect(() =>
+        resolvePackageArtifactClosure({
+          importer: join(root, "consumer.mjs"),
+          specifier: "resource-suffix-shapes",
+          packageRoot: root,
+          integrity: "sha512:test"
+        })
+      ).toThrow(/local closure module .* was not found/);
+    }
+  });
+
+  test("an unsuffixed relative specifier with no file still refuses the artifact case", () => {
+    const manifest = {
+      name: "missing-local-module",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'import { run } from "./absent.js";\nexport const thing = run;\n',
+      "index.d.ts": "export declare const thing: unknown;\n"
+    });
+    const request = {
+      importer: join(root, "consumer.mjs"),
+      specifier: "missing-local-module",
+      packageRoot: root,
+      integrity: "sha512:test"
+    };
+    expect(() => resolvePackageArtifacts(request)).toThrow(
+      /local closure module \.\/absent\.js from .* was not found/
+    );
+    expect(() => resolvePackageDependencyPlanClosure(request)).toThrow(
+      /local closure module \.\/absent\.js from .* was not found/
+    );
+  });
+
   test("dependency graph planning refuses a package imports specifier the map never defines", () => {
     const manifest = {
       name: "package-imports-undefined",

@@ -3161,6 +3161,93 @@ mod tests {
     }
 
     #[test]
+    fn module_closure_holds_query_suffixed_asset_imports_opaque_without_refusing() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        // The generator's `bundlerResourceSuffix` classifies exactly these five
+        // as bundler-mediated, and `./shipped.js` as an ordinary module edge.
+        // This replay must agree specifier for specifier or every such closure
+        // diverges from the supplied one.
+        // `br##` because the source contains `"#`, which would close `br#`.
+        let entry = br##"
+            import source from "./shipped.js?raw";
+            import { run } from "./shipped.js";
+            import "./absent.js?url";
+            import "./shipped.js#fragment";
+            import "#platform?raw";
+            import "external-pkg/theme.css?inline";
+            export const thing = [source, run];
+        "##;
+        let shipped = b"export const run = callback => callback();";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", entry),
+            ("package/dist/shipped.js", shipped),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "dist/index.js".into(),
+            declarations_path: "dist/index.js".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+
+        let replayed =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        // The module import still reaches the shipped file; no suffixed
+        // specifier contributes an entry, and none refuses the replay.
+        for role in [ClosureFileRole::Runtime, ClosureFileRole::Declaration] {
+            assert!(
+                replayed
+                    .entries
+                    .contains(&closure_entry(role, "dist/shipped.js", shipped))
+            );
+        }
+        let mut opaque = replayed
+            .hazards
+            .iter()
+            .filter(|hazard| hazard.kind == ClosureHazardKind::UnacceptedExternalDependency)
+            .map(|hazard| hazard.source.clone())
+            .collect::<Vec<_>>();
+        opaque.sort();
+        opaque.dedup();
+        assert_eq!(
+            opaque,
+            [
+                "./dist/index.js:#platform?raw",
+                "./dist/index.js:./absent.js?url",
+                "./dist/index.js:./shipped.js#fragment",
+                "./dist/index.js:./shipped.js?raw",
+                "./dist/index.js:external-pkg/theme.css?inline",
+            ]
+        );
+        assert!(replayed.dependencies.is_empty());
+
+        // An unsuffixed relative specifier with no file still refuses.
+        let missing = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", b"import './absent.js';"),
+        ]);
+        let missing_snapshot =
+            ArtifactSnapshot::from_published(&missing, SnapshotLimits::policy_2()).unwrap();
+        let missing_resolution = SnapshotVerifiedResolution {
+            snapshot_root: missing_snapshot.root().into(),
+            provenance_root: missing_snapshot.provenance_root().into(),
+            runtime_path: "dist/index.js".into(),
+            declarations_path: "dist/index.js".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+        let refusal = super::module_closure::replay_snapshot_closure(
+            &missing_snapshot,
+            &missing_resolution,
+            &[],
+        )
+        .unwrap_err();
+        assert!(refusal.to_string().contains("was not found"));
+    }
+
+    #[test]
     fn module_closure_maps_explicit_source_suffix_to_declaration_file() {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
         let runtime = b"export const value = true;";

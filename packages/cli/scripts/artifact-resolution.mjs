@@ -711,7 +711,37 @@ function mutationTargetHasUnboundIdentifier(node, checker, sourceFile) {
   return false;
 }
 
+// A Vite-style resource query (`./x.js?raw`, `?url`, `?worker`) or URL fragment
+// makes an import bundler-mediated. The binding's value is whatever the loader
+// produces -- a string for `?raw`, a URL string for `?url`, a constructor for
+// `?worker` -- and never the target module's exports, so stripping the suffix
+// and walking into the module would assert the wrong semantics for the binding.
+// Refusing instead would treat a file the package ships as missing and kill the
+// whole artifact case. The specifier is therefore opaque on both sides: no
+// closure edge, no resolved binding, and the same unaccepted-external frontier
+// a bare unaccepted dependency records, so every claim reachable through the
+// binding stays open.
+//
+// Edges, all deliberate: a `#` at index 0 is a package imports specifier rather
+// than a fragment, so only a `#` later in the specifier is a suffix; a suffix
+// introducer with nothing after it (`./x.js?`) names nothing a loader treats
+// specially and stays on the ordinary path, where a missing file still refuses;
+// a bare specifier carrying a suffix (`pkg/x.css?inline`) is opaque too and is
+// deliberately kept out of the external dependency census, because no package
+// entrypoint answers to a suffixed subpath; and a literal on-disk filename
+// containing `?` or `#` stays unreachable from a specifier, because no real
+// loader resolves one.
+function bundlerResourceSuffix(specifier) {
+  const query = specifier.indexOf("?");
+  const fragment = specifier.indexOf("#", 1);
+  const introducer = query < 0 ? fragment : fragment < 0 ? query : Math.min(query, fragment);
+  return introducer > 0 && introducer < specifier.length - 1
+    ? specifier.slice(introducer)
+    : undefined;
+}
+
 function localModuleTarget(importer, specifier, axis, packageRoot) {
+  if (bundlerResourceSuffix(specifier)) return undefined;
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) return undefined;
   const base = specifier.startsWith("/") ? specifier : resolve(dirname(importer), specifier);
   const observedExtension = extname(base);
@@ -763,6 +793,7 @@ function localModuleTarget(importer, specifier, axis, packageRoot) {
 }
 
 function localAssetTarget(importer, specifier, packageRoot) {
+  if (bundlerResourceSuffix(specifier)) return undefined;
   if (!specifier.startsWith(".") && !specifier.startsWith("/")) return undefined;
   const path = specifier.startsWith("/") ? specifier : resolve(dirname(importer), specifier);
   if (!isFile(path)) return undefined;
@@ -774,6 +805,7 @@ function localAssetTarget(importer, specifier, packageRoot) {
 }
 
 function moduleTarget(importer, specifier, axis, packageRoot, cache) {
+  if (bundlerResourceSuffix(specifier)) return undefined;
   if (specifier.startsWith("#")) {
     return packageImportTargetOrUnknown({
       packageRoot,
@@ -1252,6 +1284,17 @@ function closureForRoots(
         );
         continue;
       }
+      // Bundler-mediated asset import: opaque, never a closure edge, never a
+      // census row. See `bundlerResourceSuffix`.
+      if (bundlerResourceSuffix(specifier.text)) {
+        hazards.push({
+          kind: "unaccepted-external-dependency",
+          source: `${relativePath}:${specifier.text}`,
+          affectedExports: [],
+          affectedDomains: [...DOMAIN_NAMES]
+        });
+        continue;
+      }
       if (specifier.text.endsWith(".node") || specifier.text.endsWith(".wasm")) {
         hazards.push({
           kind: specifier.text.endsWith(".node") ? "native-code" : "opaque-wasm",
@@ -1656,6 +1699,18 @@ function dependencyPlanningClosure(
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
     const byteOffset = offset => Buffer.byteLength(source.slice(0, offset), "utf8");
     const follow = (specifier, dynamic = false) => {
+      // Bundler-mediated asset import: opaque, never a closure edge. Record the
+      // same unaccepted external frontier the fall-through below records for a
+      // bare specifier. See `bundlerResourceSuffix`.
+      if (bundlerResourceSuffix(specifier)) {
+        external.set(`${relativePath}:${specifier}`, {
+          kind: "unaccepted-external-dependency",
+          source: `${relativePath}:${specifier}`,
+          affectedExports: [],
+          affectedDomains: [...DOMAIN_NAMES]
+        });
+        return;
+      }
       if (specifier.startsWith("#")) {
         const selected = packageImportTargetOrUnknown({
           packageRoot,

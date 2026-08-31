@@ -1,0 +1,46 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "ebdff0357b3adc17288ca3b1405a0cee0b7b6a8fda95678fb6fc8cbe0306d015",
+            "path": "./index.js",
+            "sha256": "3b6004194b3f4de26d7629011e93667ef63f5768c6accc1687e059bdbea0cc80"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "3b6004194b3f4de26d7629011e93667ef63f5768c6accc1687e059bdbea0cc80"
+          },
+          "exports": {
+            "runModule": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "runOpaque": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:d0aee1d70cc63c61a6875ec1883679398ba44c6c0c29bfd60226e5fa58be4adc",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d0aee1d70cc63c61a6875ec1883679398ba44c6c0c29bfd60226e5fa58be4adc"
+    },
+    "name": "asset-query-import",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

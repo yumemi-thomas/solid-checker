@@ -261,6 +261,13 @@ impl ClosureReplay<'_> {
             LocalResolution::Asset(target) => {
                 self.add_entry(ClosureFileRole::ResolutionInput, &target)
             }
+            // Bundler-mediated asset import. It never names a package, so it
+            // never matches a supplied dependency identity; record the opaque
+            // frontier directly. See `bundler_resource_suffix`.
+            LocalResolution::OpaqueAsset => {
+                self.record_opaque_frontier(importer, specifier);
+                Ok(())
+            }
             LocalResolution::External => self.record_external(importer, specifier),
             LocalResolution::Missing => closure_mismatch(format!(
                 "local closure module {specifier:?} from {importer:?} was not found"
@@ -280,12 +287,7 @@ impl ClosureReplay<'_> {
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [dependency] => self.dependencies.push((*dependency).clone()),
-            [] => self.hazards.push(ClosureHazard {
-                kind: ClosureHazardKind::UnacceptedExternalDependency,
-                source: format!("./{importer}:{specifier}"),
-                affected_exports: Vec::new(),
-                affected_domains: all_domains(),
-            }),
+            [] => self.record_opaque_frontier(importer, specifier),
             _ => {
                 return closure_mismatch(format!(
                     "external specifier {specifier:?} has more than one supplied dependency identity"
@@ -293,6 +295,15 @@ impl ClosureReplay<'_> {
             }
         }
         Ok(())
+    }
+
+    fn record_opaque_frontier(&mut self, importer: &str, specifier: &str) {
+        self.hazards.push(ClosureHazard {
+            kind: ClosureHazardKind::UnacceptedExternalDependency,
+            source: format!("./{importer}:{specifier}"),
+            affected_exports: Vec::new(),
+            affected_domains: all_domains(),
+        });
     }
 
     fn add_entry(
@@ -319,8 +330,34 @@ impl ClosureReplay<'_> {
 pub(super) enum LocalResolution {
     Module(String),
     Asset(String),
+    OpaqueAsset,
     External,
     Missing,
+}
+
+/// A Vite-style resource query (`./x.js?raw`, `?url`, `?worker`) or URL
+/// fragment makes an import bundler-mediated: the binding's value is whatever
+/// the loader produces and never the target module's exports. This is the exact
+/// rule `bundlerResourceSuffix` applies in
+/// `packages/cli/scripts/artifact-resolution.mjs`; the generator and this replay
+/// must classify the same specifiers or every such closure diverges. A `#` at
+/// index 0 is a package imports specifier rather than a fragment, and a suffix
+/// introducer with nothing after it is not a suffix.
+fn bundler_resource_suffix(specifier: &str) -> Option<&str> {
+    let query = specifier.find('?');
+    let fragment = specifier
+        .match_indices('#')
+        .map(|(at, _)| at)
+        .find(|&at| at > 0);
+    let introducer = match (query, fragment) {
+        (Some(query), Some(fragment)) => query.min(fragment),
+        (Some(at), None) | (None, Some(at)) => at,
+        (None, None) => return None,
+    };
+    if introducer == 0 || introducer + 1 >= specifier.len() {
+        return None;
+    }
+    Some(&specifier[introducer..])
 }
 
 pub(super) fn resolve_local(
@@ -329,6 +366,9 @@ pub(super) fn resolve_local(
     specifier: &str,
     axis: ModuleAxis,
 ) -> Result<LocalResolution, ArtifactSnapshotError> {
+    if bundler_resource_suffix(specifier).is_some() {
+        return Ok(LocalResolution::OpaqueAsset);
+    }
     if !specifier.starts_with('.') && !specifier.starts_with('/') {
         return Ok(LocalResolution::External);
     }
