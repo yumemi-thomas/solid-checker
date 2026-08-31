@@ -4,12 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 5 because exported-value transcripts are now
-// a distinct read-only operation. The digest and build id still move with it,
-// and the handshake refuses on any mismatch.
+// TypeFactsHandshakeProtocol is 6 because exported-value demands can now bind
+// an independently replayed runtime implementation census. The digest and
+// build id still move with it, and the handshake refuses on any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 5
-	TypeFactsSchemaSHA256             = "sha256:1e44dbc1d157c27e389a40185b33fa3f74def102fa7459e0a90d667131e4a943"
+	TypeFactsHandshakeProtocol uint64 = 6
+	TypeFactsSchemaSHA256             = "sha256:c94ee6da50a44562910b111cee58e0e7e344d4b50ee89fc068221fe1ab41d5aa"
 )
 
 type ServiceHandshake struct {

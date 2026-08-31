@@ -10,9 +10,10 @@
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
-    ClaimDomain, ClaimPath, SemanticClaimPath, ValuePathSegment, ValueRoot,
+    CardinalityScope, ClaimDomain, ClaimPath, OperationKind, Requirement, SemanticClaimPath,
+    UpperBound, ValuePathSegment, ValueRoot, ValueShape, ValueSource,
     certification::{
-        PositiveFactSubject, ProofDemandGraph, ProofDemandSubject, ProofFamily,
+        PositiveFactSubject, ProofDemand, ProofDemandGraph, ProofDemandSubject, ProofFamily,
         ProofWitnessVariant, WitnessBinding,
     },
 };
@@ -25,10 +26,10 @@ use std::{
 use thiserror::Error;
 use typefacts::{
     ArgumentBindingDisposition, CallKind, Callability, CertificationInvocationContext,
-    ExportValueDemand, ExportValueTranscript, FinitePartition, InvocationDemand, InvocationDomain,
-    InvocationTranscript, InvocationValueFact, LiveExportValueAnswer, LiveInvocationAnswer,
-    ParameterUseKind, PathPresence, PathSegmentKind, Producer, Reachability, ResolvedCallValidity,
-    Session, SourceHash, TranscriptSourceDigest,
+    ExportValueDemand, ExportValueTranscript, FinitePartition, InvocationConstructability,
+    InvocationDemand, InvocationDomain, InvocationTranscript, InvocationValueFact,
+    LiveExportValueAnswer, LiveInvocationAnswer, ParameterUseKind, PathPresence, PathSegmentKind,
+    Producer, Reachability, ResolvedCallValidity, Session, SourceHash, TranscriptSourceDigest,
 };
 
 use super::CertificationPlan;
@@ -162,57 +163,26 @@ struct ScheduledProofDemand {
 type ExpectedExportValueProofDemands =
     std::collections::BTreeMap<String, (ProofFamily, ProofDemandSubject)>;
 
-fn ensure_export_value_schedule_subject(
-    demand: &str,
-    subject: &ProofDemandSubject,
-) -> Result<(), TypeFactsCertificationError> {
-    let export_root = matches!(
-        subject,
-        ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
-            root: ValueRoot::Export,
-            ..
-        })
-    ) || matches!(
-        subject,
-        ProofDemandSubject::DomainClosure { subject, .. }
-            if matches!(subject.path, SemanticClaimPath::Domain(ClaimPath::Value { root: ValueRoot::Export, .. }))
-    );
-    if !export_root {
-        return Err(TypeFactsCertificationError::UnsupportedDemand {
-            demand: demand.to_owned(),
-            reason: "non-export Type Facts demand cannot use an export-value transcript".into(),
-        });
-    }
-    Ok(())
-}
-
 fn export_value_schedule_proof_demands(
     graph: &ProofDemandGraph,
 ) -> Result<ExpectedExportValueProofDemands, TypeFactsCertificationError> {
-    graph
+    Ok(graph
         .demands()
         .iter()
         .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
         .map(|demand| {
-            ensure_export_value_schedule_subject(demand.id().as_str(), demand.subject())?;
-            Ok((
+            (
                 demand.id().as_str().to_owned(),
                 (demand.family(), demand.subject().clone()),
-            ))
+            )
         })
-        .collect()
+        .collect())
 }
 
 fn preflight_export_value_schedule_compatibility(
-    graph: &ProofDemandGraph,
+    _graph: &ProofDemandGraph,
 ) -> Result<(), TypeFactsCertificationError> {
-    graph
-        .demands()
-        .iter()
-        .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
-        .try_for_each(|demand| {
-            ensure_export_value_schedule_subject(demand.id().as_str(), demand.subject())
-        })
+    Ok(())
 }
 
 impl TypeFactsCertificationSchedule {
@@ -288,9 +258,9 @@ impl TypeFactsCertificationSchedule {
         })
     }
 
-    /// Builds a total exported-value schedule. Every Type Facts-owned demand
-    /// must name the exported value root; invocation and operation subjects
-    /// are rejected rather than silently redirected through the harness.
+    /// Builds a total exported-value schedule. Export-root demands use the
+    /// declaration expression; function and operation subjects additionally
+    /// bind the independently replayed runtime implementation location.
     pub(crate) fn new_export_values(
         graph: &ProofDemandGraph,
         assignments: impl IntoIterator<Item = (String, ExportValueDemand)>,
@@ -731,25 +701,43 @@ impl PrivateTypeFactsProject {
         }
         let harness = root.join("solid-checker-export-values.ts");
         let project_id = root.join("tsconfig.json");
-        let configuration = br#"{
-  "compilerOptions": {
-    "strict": true,
-    "skipLibCheck": false,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "target": "esnext",
-    "jsx": "preserve",
-    "allowJs": true,
-    "checkJs": false,
-    "maxNodeModuleJsDepth": 100,
-    "allowImportingTsExtensions": true,
-    "moduleDetection": "force",
-    "types": []
-  },
-  "files": ["solid-checker-export-values.ts"]
-}
-"#;
-        write_new_private_project_file(&project_id, configuration)?;
+        let mut files = vec![harness.to_string_lossy().into_owned()];
+        for candidate in std::iter::once(plan).chain(dependencies.iter().copied()) {
+            let candidate_root = package_roots
+                .get(&private_project_plan_key(candidate))
+                .ok_or(TypeFactsCertificationError::IdentityMismatch)?;
+            files.extend(
+                candidate
+                    .verified_exports
+                    .runtime_paths()
+                    .map(|path| candidate_root.join(path).to_string_lossy().into_owned()),
+            );
+        }
+        files.sort();
+        files.dedup();
+        let configuration = serde_json::to_vec_pretty(&serde_json::json!({
+            "compilerOptions": {
+                "strict": true,
+                "skipLibCheck": false,
+                "module": "esnext",
+                "moduleResolution": "bundler",
+                "target": "esnext",
+                "jsx": "preserve",
+                "allowJs": true,
+                "checkJs": false,
+                "maxNodeModuleJsDepth": 100,
+                "allowImportingTsExtensions": true,
+                "moduleDetection": "force",
+                "types": []
+            },
+            "files": files
+        }))
+        .map_err(|error| {
+            TypeFactsCertificationError::ProducerProvenance(format!(
+                "could not encode private Type Facts project: {error}"
+            ))
+        })?;
+        write_new_private_project_file(&project_id, &configuration)?;
         Ok(Self {
             root,
             project_id,
@@ -975,6 +963,23 @@ fn derive_export_value_schedules(
     plans
         .iter()
         .map(|plan| {
+            let callable_depths = plan
+                .demand_graph()
+                .demands()
+                .iter()
+                .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
+                .try_fold(
+                    std::collections::BTreeMap::<(String, String), usize>::new(),
+                    |mut depths, demand| {
+                        let (artifact_case, export) = proof_artifact_export(demand.subject());
+                        let depth = export_value_callable_depth(plan, demand)?;
+                        depths
+                            .entry((artifact_case.to_owned(), export.to_owned()))
+                            .and_modify(|current| *current = (*current).max(depth))
+                            .or_insert(depth);
+                        Ok::<_, TypeFactsCertificationError>(depths)
+                    },
+                )?;
             let assignments = plan
                 .demand_graph()
                 .demands()
@@ -995,7 +1000,7 @@ fn derive_export_value_schedules(
                     let (start, end) = locations
                         .get(&subject)
                         .expect("every scheduled subject has one harness expression");
-                    (
+                    Ok((
                         demand.id().as_str().to_owned(),
                         ExportValueDemand {
                             location: typefacts::Location {
@@ -1003,11 +1008,20 @@ fn derive_export_value_schedules(
                                 start_byte: u64::try_from(*start).unwrap_or(u64::MAX),
                                 end_byte: u64::try_from(*end).unwrap_or(u64::MAX),
                             },
-                            callable_depth: typefacts::MAX_INVOCATION_CALLABLE_DEPTH,
+                            implementation_location: export_implementation_location(
+                                plans,
+                                project,
+                                plan,
+                                export,
+                                demand.id().as_str(),
+                            )?,
+                            callable_depth: *callable_depths
+                                .get(&(artifact_case.to_owned(), export.to_owned()))
+                                .expect("every scheduled export has an exact callable depth"),
                         },
-                    )
+                    ))
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, TypeFactsCertificationError>>()?;
             let mut schedule = TypeFactsCertificationSchedule::new_export_values(
                 plan.demand_graph(),
                 assignments,
@@ -1019,6 +1033,104 @@ fn derive_export_value_schedules(
             Ok(schedule)
         })
         .collect()
+}
+
+fn export_value_callable_depth(
+    plan: &CertificationPlan,
+    demand: &ProofDemand,
+) -> Result<usize, TypeFactsCertificationError> {
+    let (artifact_case, export_name) = proof_artifact_export(demand.subject());
+    let export = plan
+        .candidates()
+        .proposal()
+        .artifact_case(artifact_case)
+        .and_then(|artifact| artifact.exports.get(export_name))
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.id().as_str().to_owned(),
+            reason: "scheduled export is absent from the normalized candidate".into(),
+        })?;
+    let depth = match demand.subject() {
+        ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+            ordinal,
+            operation,
+            ..
+        }) => export
+            .callbacks()
+            .items()
+            .get(usize::try_from(*ordinal).unwrap_or(usize::MAX))
+            .filter(|callback| callback.operation.0 == *operation)
+            .and_then(|callback| match &callback.from {
+                ValueSource::Parameter { path, .. } => Some(path.len()),
+                _ => None,
+            })
+            .unwrap_or(0),
+        ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+            root,
+            path,
+            ..
+        }) => {
+            let prefix = match root {
+                ValueRoot::Export | ValueRoot::OperationOutput { .. } => 0,
+                ValueRoot::OperationInput { operation, index } => export
+                    .operation(&operation.0)
+                    .and_then(|operation| operation.inputs.get(usize::from(*index)))
+                    .and_then(|input| parameter_source(input).ok())
+                    .and_then(|source| match source {
+                        ValueSource::Parameter { path, .. } => Some(path.len()),
+                        _ => None,
+                    })
+                    .unwrap_or(0),
+            };
+            prefix.saturating_add(path.0.len())
+        }
+        _ => 0,
+    };
+    if depth > typefacts::MAX_INVOCATION_CALLABLE_DEPTH {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: demand.id().as_str().to_owned(),
+            reason: format!(
+                "required callable path depth {depth} exceeds the Type Facts limit {}",
+                typefacts::MAX_INVOCATION_CALLABLE_DEPTH
+            ),
+        });
+    }
+    Ok(depth)
+}
+
+fn export_implementation_location(
+    plans: &[&CertificationPlan],
+    project: &PrivateTypeFactsProject,
+    plan: &CertificationPlan,
+    export: &str,
+    demand: &str,
+) -> Result<Option<typefacts::Location>, TypeFactsCertificationError> {
+    let Some((runtime_path, _runtime_export, span, snapshot_root)) =
+        plan.verified_exports.runtime_binding(export)
+    else {
+        return Ok(None);
+    };
+    let mut owners = plans
+        .iter()
+        .copied()
+        .filter(|candidate| candidate.snapshot_root() == snapshot_root);
+    let owner = owners
+        .next()
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.to_owned(),
+            reason: "runtime export binding belongs to an unplanned snapshot".into(),
+        })?;
+    if owners.next().is_some() {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.to_owned(),
+            reason: "runtime export binding snapshot has multiple installation identities".into(),
+        });
+    }
+    let path = project.package_root(owner)?.join(runtime_path);
+    Ok(Some(typefacts::Location {
+        path: path.to_string_lossy().into_owned().into(),
+        start_byte: u64::from(span.start),
+        end_byte: u64::from(span.end),
+    }))
 }
 
 fn export_value_harness_subject(
@@ -1326,11 +1438,19 @@ fn verify_live_export_value_answer_with_project_census(
         if transcript.location != scheduled.demand.location {
             return Err(TypeFactsCertificationError::IdentityMismatch);
         }
+        match (
+            scheduled.demand.implementation_location.as_ref(),
+            transcript.implementation.as_ref(),
+        ) {
+            (Some(expected), Some(actual)) if expected == &actual.location => {}
+            (None, None) => {}
+            _ => return Err(TypeFactsCertificationError::IdentityMismatch),
+        }
         let transcript_bytes = typefacts::encode(transcript)?;
         let transcript_root = format!("sha256:{:x}", Sha256::digest(&transcript_bytes));
         for proof in &scheduled.proof_demands {
             verify_export_value_subject(plan, proof, transcript, dependencies)?;
-            let mut sites = verify_export_value_family(proof, transcript)?;
+            let mut sites = verify_export_value_family(plan, proof, transcript)?;
             sites.extend(source_sites.iter().cloned());
             sites.sort();
             sites.dedup();
@@ -1546,20 +1666,121 @@ fn authenticated_dependency_declaration_target(
 }
 
 fn verify_export_value_family(
+    plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
     transcript: &ExportValueTranscript,
 ) -> Result<Vec<String>, TypeFactsCertificationError> {
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
     let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
         demand: proof.id.clone(),
-        reason: reason.into(),
+        reason: format!(
+            "{} ({artifact_case}:{export_name}): {reason}",
+            proof_family_name(proof.family)
+        ),
     };
     let mut sites = vec![format!(
         "export-value:{}:{}:{}",
         transcript.location.path, transcript.location.start_byte, transcript.location.end_byte
     )];
     match proof.family {
-        ProofFamily::CallablePath | ProofFamily::RecursiveValueShape => {
-            require_export_recursive_subject(proof, transcript, &open, &mut sites)?;
+        ProofFamily::SelectedSignature | ProofFamily::RestSpreadCoverage => {
+            let signature = require_export_call_signature(proof, transcript, &open)?;
+            sites.push(format!(
+                "export-signature:{}:overload:{}/{}:rest:{}",
+                signature.identity,
+                signature.overload_ordinal,
+                signature.overload_count,
+                signature.has_rest
+            ));
+        }
+        ProofFamily::ArgumentBinding => {
+            let (export, implementation) =
+                require_export_implementation(plan, proof, transcript, &open)?;
+            let source = callback_parameter_source(export, proof)?;
+            require_parameter_flow(implementation, &source, &open, &mut sites)?;
+        }
+        ProofFamily::CallablePath => match &proof.subject {
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                root: ValueRoot::Export,
+                ..
+            }) => require_export_recursive_subject(proof, transcript, &open, &mut sites)?,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue { .. }) => {
+                require_operation_recursive_subject(plan, proof, transcript, &open, &mut sites)?
+            }
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding { .. }) => {
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                let source = callback_parameter_source(export, proof)?;
+                let typed = require_signature_parameter_callable(
+                    require_export_call_signature(proof, transcript, &open)?,
+                    &source,
+                    &open,
+                    &mut sites,
+                );
+                if typed.is_ok() {
+                    require_parameter_flow(implementation, &source, &open, &mut sites)?;
+                } else {
+                    require_parameter_callback_flow(implementation, &source, &open, &mut sites)?;
+                }
+            }
+            _ => {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason: "callable-path demand has no exact exported value or callback binding"
+                        .into(),
+                });
+            }
+        },
+        ProofFamily::OperationReachability => {
+            let (export, implementation) =
+                require_export_implementation(plan, proof, transcript, &open)?;
+            let operation = proof_operation(export, proof)?;
+            require_operation_evidence(
+                export,
+                operation,
+                proof,
+                implementation,
+                &open,
+                &mut sites,
+            )?;
+        }
+        ProofFamily::OperationCardinality => {
+            let (export, implementation) =
+                require_export_implementation(plan, proof, transcript, &open)?;
+            let operation = proof_operation(export, proof)?;
+            if operation.cardinality.scope != Some(CardinalityScope::Call)
+                || operation.cardinality.min != Some(0)
+                || operation.cardinality.max != Some(UpperBound::Many)
+            {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason:
+                        "runtime implementation census cannot prove a tighter operation cardinality"
+                            .into(),
+                });
+            }
+            require_operation_evidence(
+                export,
+                operation,
+                proof,
+                implementation,
+                &open,
+                &mut sites,
+            )?;
+            sites.push("operation-cardinality:per-call:0..many".into());
+        }
+        ProofFamily::RecursiveValueShape => {
+            if matches!(
+                &proof.subject,
+                ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                    root: ValueRoot::Export,
+                    ..
+                })
+            ) {
+                require_export_recursive_subject(proof, transcript, &open, &mut sites)?;
+            } else {
+                require_operation_recursive_subject(plan, proof, transcript, &open, &mut sites)?;
+            }
         }
         ProofFamily::DomainExhaustiveness => {
             require_closed_value(&transcript.value, &open)?;
@@ -1574,6 +1795,743 @@ fn verify_export_value_family(
         }
     }
     Ok(sites)
+}
+
+fn require_export_call_signature<'a>(
+    proof: &ScheduledProofDemand,
+    transcript: &'a ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<&'a typefacts::SelectedSignature, TypeFactsCertificationError> {
+    let signature = transcript
+        .call_signature
+        .as_ref()
+        .ok_or_else(|| open("exported callable has no unique compiler signature"))?;
+    if signature.overload_count != 1 || signature.overload_ordinal != 0 {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "exported callable proof requires one exact overload".into(),
+        });
+    }
+    Ok(signature)
+}
+
+fn require_export_implementation<'a>(
+    plan: &'a CertificationPlan,
+    proof: &ScheduledProofDemand,
+    transcript: &'a ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<
+    (
+        &'a solid_reactive_ir::contract_semantics::ExportSemantics,
+        &'a typefacts::ExportImplementationTranscript,
+    ),
+    TypeFactsCertificationError,
+> {
+    let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    let export = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)
+        .and_then(|case| case.exports.get(export_name))
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "demanded implementation export is absent from the candidate".into(),
+        })?;
+    let implementation = transcript
+        .implementation
+        .as_ref()
+        .ok_or_else(|| open("runtime implementation transcript is absent"))?;
+    let control_flow_only_open = !implementation.complete
+        && !implementation.open_reasons.is_empty()
+        && implementation
+            .open_reasons
+            .iter()
+            .all(|reason| reason.as_ref() == "controlFlowUnsupported");
+    if (!implementation.complete && !control_flow_only_open)
+        || implementation.target.is_empty()
+        || implementation.query_name.is_empty()
+        || implementation
+            .open_reasons
+            .iter()
+            .any(|reason| reason.as_ref() != "controlFlowUnsupported")
+        || implementation.signature.is_none()
+        || implementation.declaration.is_none()
+        || implementation.control_flow.is_none()
+    {
+        return Err(open(&format!(
+            "runtime implementation transcript is incomplete or open (reasons={:?})",
+            implementation.open_reasons
+        )));
+    }
+    let (runtime_path, runtime_export, _, _) =
+        plan.verified_exports
+            .runtime_binding(export_name)
+            .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+                demand: proof.id.clone(),
+                reason: "demanded export has no exact identifier runtime binding".into(),
+            })?;
+    let declaration = implementation
+        .declaration
+        .as_ref()
+        .expect("implementation closure checked the declaration");
+    let actual_path = declaration.location.path.replace('\\', "/");
+    let expected_suffix = format!("/{}", runtime_path.trim_start_matches("./"));
+    if implementation.query_name.as_ref() != runtime_export
+        || !actual_path.ends_with(&expected_suffix)
+    {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "runtime implementation does not match the snapshot-replayed export binding"
+                .into(),
+        });
+    }
+    Ok((export, implementation))
+}
+
+fn callback_parameter_source(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    proof: &ScheduledProofDemand,
+) -> Result<ValueSource, TypeFactsCertificationError> {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+        ordinal,
+        operation,
+        ..
+    }) = &proof.subject
+    else {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "callback binding family has no callback subject".into(),
+        });
+    };
+    let callback = export
+        .callbacks()
+        .items()
+        .get(usize::try_from(*ordinal).unwrap_or(usize::MAX))
+        .filter(|callback| callback.operation.0 == *operation)
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "callback ordinal and normalized operation disagree".into(),
+        })?;
+    Ok(callback.from.clone())
+}
+
+fn proof_operation<'a>(
+    export: &'a solid_reactive_ir::contract_semantics::ExportSemantics,
+    proof: &ScheduledProofDemand,
+) -> Result<&'a solid_reactive_ir::contract_semantics::Operation, TypeFactsCertificationError> {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::Operation { operation, .. }) =
+        &proof.subject
+    else {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "operation family has no exact operation subject".into(),
+        });
+    };
+    export
+        .operation(operation)
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "normalized operation is absent from the selected export".into(),
+        })
+}
+
+fn parameter_source(value: &ValueShape) -> Result<ValueSource, TypeFactsCertificationError> {
+    match value {
+        ValueShape::Parameter { index, path } => Ok(ValueSource::Parameter {
+            index: *index,
+            path: path.clone(),
+        }),
+        _ => Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: "operation-input".into(),
+            reason: "implementation census only binds exact parameter-rooted operation inputs"
+                .into(),
+        }),
+    }
+}
+
+fn parameter_value_source_matches(
+    actual: &typefacts::ParameterValueSource,
+    expected: &ValueSource,
+) -> bool {
+    let ValueSource::Parameter { index, path } = expected else {
+        return false;
+    };
+    actual.parameter_index == usize::from(*index)
+        && actual.path.len() >= path.len()
+        && actual.path.iter().zip(path).all(|(actual, expected)| {
+            actual.kind == PathSegmentKind::Property && actual.property.as_ref() == expected
+        })
+}
+
+fn parameter_value_source_exact(
+    actual: &typefacts::ParameterValueSource,
+    expected: &ValueSource,
+) -> bool {
+    let ValueSource::Parameter { path, .. } = expected else {
+        return false;
+    };
+    actual.path.len() == path.len() && parameter_value_source_matches(actual, expected)
+}
+
+fn require_parameter_flow(
+    implementation: &typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let matching = implementation.calls.iter().filter(|call| {
+        implementation_call_executes_parameter(implementation, call, source)
+            && (call
+                .callee_parameter
+                .as_ref()
+                .is_some_and(|actual| parameter_value_source_matches(actual, source))
+                || call.argument_parameters.iter().flatten().any(|actual| {
+                    parameter_value_source_matches(actual, source) && !call.target.is_empty()
+                }))
+    });
+    let mut found = false;
+    for call in matching {
+        found = true;
+        sites.push(format!(
+            "implementation-flow:{}:{}:{}:{}",
+            call.location.path, call.location.start_byte, call.location.end_byte, call.target
+        ));
+    }
+    if !found {
+        return Err(open(
+            "callback parameter has no exact direct-call or resolved-argument flow",
+        ));
+    }
+    Ok(())
+}
+
+fn require_parameter_callback_flow(
+    implementation: &typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    for call in &implementation.calls {
+        if !implementation_call_executes_parameter(implementation, call, source) {
+            continue;
+        }
+        if call
+            .callee_parameter
+            .as_ref()
+            .is_some_and(|actual| parameter_value_source_exact(actual, source))
+        {
+            sites.push(format!(
+                "implementation-direct-callback:{}:{}:{}",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            ));
+            return Ok(());
+        }
+        if call.target.is_empty() || call.target_module.as_ref() != "solid-js" {
+            continue;
+        }
+        for (argument, actual) in call.argument_parameters.iter().enumerate() {
+            if actual
+                .as_ref()
+                .is_some_and(|actual| parameter_value_source_exact(actual, source))
+                && solid_dialect::unambiguous_callback_argument(
+                    &call.target_name,
+                    argument,
+                    call.argument_parameters.len(),
+                )
+            {
+                sites.push(format!(
+                    "implementation-dialect-callback:{}:{}:{}:{}:{}",
+                    call.location.path,
+                    call.location.start_byte,
+                    call.location.end_byte,
+                    call.target_module,
+                    call.target_name
+                ));
+                return Ok(());
+            }
+        }
+    }
+    Err(open(
+        "callback parameter has neither an exact direct call nor an exact dialect callback flow",
+    ))
+}
+
+fn implementation_call_executes_parameter(
+    implementation: &typefacts::ExportImplementationTranscript,
+    call: &typefacts::ImplementationCall,
+    source: &ValueSource,
+) -> bool {
+    if call.reach != Reachability::Reachable {
+        return false;
+    }
+    if !call.captured {
+        return true;
+    }
+    let ValueSource::Parameter { index, .. } = source else {
+        return false;
+    };
+    implementation.control_flow.as_ref().is_some_and(|flow| {
+        flow.returns.iter().any(|site| {
+            site.reach == Reachability::Reachable && site.captures.contains(&usize::from(*index))
+        })
+    })
+}
+
+fn require_signature_parameter_callable(
+    signature: &typefacts::SelectedSignature,
+    source: &ValueSource,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let ValueSource::Parameter { index, path } = source else {
+        return Err(open(
+            "callback source is not rooted in an exported parameter",
+        ));
+    };
+    let parameter = signature
+        .parameters
+        .get(usize::from(*index))
+        .ok_or_else(|| open("callback source names a missing exported parameter"))?;
+    if path.is_empty() {
+        if parameter.value.callability == Callability::Unknown
+            && parameter.declared_type.as_ref().is_some_and(|declared| {
+                solid_dialect::unambiguous_callable_type(&declared.module, &declared.name)
+            })
+        {
+            let declared = parameter
+                .declared_type
+                .as_ref()
+                .expect("declared callable type checked above");
+            sites.push(format!(
+                "callback-parameter:{}:declared-type:{}:{}",
+                index, declared.module, declared.name
+            ));
+            return Ok(());
+        }
+        require_root_callability(&parameter.value, true, "callback parameter", open)?;
+        sites.push(format!("callback-parameter:{}:root", index));
+        return Ok(());
+    }
+    let matches = parameter.callable_paths.iter().filter(|fact| {
+        fact.path.len() == path.len()
+            && fact.path.iter().zip(path).all(|(actual, expected)| {
+                actual.kind == PathSegmentKind::Property && actual.property.as_ref() == expected
+            })
+    });
+    let mut found = false;
+    for fact in matches {
+        found = true;
+        if !fact.complete
+            || !fact.open_reasons.is_empty()
+            || fact.presence == PathPresence::Unknown
+            || fact.callability != Callability::Callable
+        {
+            return Err(open("callback parameter path is not closed and callable"));
+        }
+        sites.push(callable_path_site(fact));
+    }
+    if !found {
+        return Err(open(
+            "callback parameter path is absent from the exact signature census",
+        ));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn require_operation_evidence(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+    proof: &ScheduledProofDemand,
+    implementation: &typefacts::ExportImplementationTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    match operation.kind {
+        OperationKind::Invoke => {
+            let callback = export
+                .callbacks()
+                .items()
+                .iter()
+                .find(|callback| callback.operation == operation.id)
+                .ok_or_else(|| open("invoke operation has no exact callback source"))?;
+            require_parameter_flow(implementation, &callback.from, open, sites)
+        }
+        OperationKind::Read => {
+            let source = operation
+                .inputs
+                .first()
+                .ok_or_else(|| open("read operation has no input"))
+                .and_then(parameter_source)?;
+            let mut found = false;
+            for call in &implementation.calls {
+                if call.reach == Reachability::Reachable
+                    && !call.captured
+                    && call
+                        .callee_parameter
+                        .as_ref()
+                        .is_some_and(|actual| parameter_value_source_matches(actual, &source))
+                {
+                    found = true;
+                    sites.push(format!(
+                        "implementation-read:{}:{}:{}",
+                        call.location.path, call.location.start_byte, call.location.end_byte
+                    ));
+                }
+            }
+            if !found {
+                return Err(open(
+                    "parameter-rooted read has no exact implementation call",
+                ));
+            }
+            Ok(())
+        }
+        OperationKind::Return => {
+            let flow = implementation
+                .control_flow
+                .as_ref()
+                .ok_or_else(|| open("implementation control-flow census is absent"))?;
+            let reachable = flow
+                .returns
+                .iter()
+                .filter(|site| site.reach == Reachability::Reachable)
+                .collect::<Vec<_>>();
+            if reachable.is_empty() {
+                return Err(open(
+                    "return operation has no reachable implementation return",
+                ));
+            }
+            sites.extend(reachable.into_iter().map(|site| {
+                format!(
+                    "implementation-return:{}:{}:{}",
+                    site.location.path, site.location.start_byte, site.location.end_byte
+                )
+            }));
+            Ok(())
+        }
+        OperationKind::Create => {
+            require_owner_operation_call(operation, proof, implementation, open, sites)
+        }
+        _ => Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "runtime implementation census does not yet bind this operation kind".into(),
+        }),
+    }?;
+    Ok(())
+}
+
+fn require_owner_operation_call(
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+    proof: &ScheduledProofDemand,
+    implementation: &typefacts::ExportImplementationTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let expected = if operation.owner.requirements.cleanup == Requirement::Required {
+        solid_dialect::OwnerRequirementRole::Cleanup
+    } else if operation.owner.requirements.child_owners == Requirement::Required {
+        solid_dialect::OwnerRequirementRole::Effect
+    } else {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "create operation has no supported owner requirement".into(),
+        });
+    };
+    let mut found = false;
+    for call in &implementation.calls {
+        if call.reach != Reachability::Reachable
+            || call.captured
+            || call.target.is_empty()
+            || call.target_module.as_ref() != "solid-js"
+        {
+            continue;
+        }
+        let name = if !call.target_name.is_empty() {
+            call.target_name.as_ref()
+        } else if let Some(declaration) = &call.declaration {
+            if declaration.name.is_empty() {
+                declaration
+                    .qualified_name
+                    .rsplit('.')
+                    .next()
+                    .unwrap_or_default()
+            } else {
+                declaration.name.as_ref()
+            }
+        } else {
+            continue;
+        };
+        let Some(actual) = solid_dialect::unambiguous_owner_requirement_role(name) else {
+            continue;
+        };
+        if actual == expected {
+            found = true;
+            sites.push(format!(
+                "implementation-owner-call:{}:{}:{}:{name}",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            ));
+        }
+    }
+    if !found {
+        let observed = implementation
+            .calls
+            .iter()
+            .filter_map(|call| {
+                if !call.target_name.is_empty() {
+                    Some(call.target_name.as_ref())
+                } else if let Some(declaration) = &call.declaration {
+                    if declaration.name.is_empty() {
+                        Some(
+                            declaration
+                                .qualified_name
+                                .rsplit('.')
+                                .next()
+                                .unwrap_or_default(),
+                        )
+                    } else {
+                        Some(declaration.name.as_ref())
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        return Err(open(&format!(
+            "owner requirement has no exact dialect primitive call; observed {observed:?}"
+        )));
+    }
+    Ok(())
+}
+
+fn require_operation_recursive_subject(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+        artifact_case,
+        export,
+        root,
+        path,
+        callable,
+    }) = &proof.subject
+    else {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "recursive operation family has no recursive subject".into(),
+        });
+    };
+    let exported = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)
+        .and_then(|case| case.exports.get(export))
+        .ok_or_else(|| open("recursive operation export is absent"))?;
+    if let ValueRoot::OperationInput { operation, index } = root {
+        let operation = exported
+            .operation(&operation.0)
+            .ok_or_else(|| open("recursive input operation is absent"))?;
+        let mut source = operation
+            .inputs
+            .get(usize::from(*index))
+            .ok_or_else(|| open("recursive input index is absent"))
+            .and_then(parameter_source)?;
+        if path.0.is_empty() && !*callable {
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            if let Some(call) = implementation.calls.iter().find(|call| {
+                call.reach == Reachability::Reachable
+                    && !call.captured
+                    && !call.target.is_empty()
+                    && call
+                        .callee_parameter
+                        .as_ref()
+                        .is_some_and(|actual| parameter_value_source_exact(actual, &source))
+            }) {
+                sites.push(format!(
+                    "recursive-operation-parameter:{}:{}:{}:{}",
+                    call.location.path,
+                    call.location.start_byte,
+                    call.location.end_byte,
+                    call.target
+                ));
+                return Ok(());
+            }
+        }
+        let path_is_exact_properties = if let ValueSource::Parameter {
+            path: source_path, ..
+        } = &mut source
+        {
+            path.0.iter().all(|segment| match segment {
+                ValuePathSegment::ObjectProperty(property) => {
+                    source_path.push(property.clone());
+                    true
+                }
+                ValuePathSegment::ChoiceAlternative(_) => true,
+                _ => false,
+            })
+        } else {
+            false
+        };
+        if path_is_exact_properties && *callable {
+            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
+            require_parameter_callback_flow(implementation, &source, open, sites)?;
+            return Ok(());
+        }
+    }
+    let signature = require_export_call_signature(proof, transcript, open)?;
+    let (value, callable_paths, prefix) = match root {
+        ValueRoot::OperationInput { operation, index } => {
+            let operation = exported
+                .operation(&operation.0)
+                .ok_or_else(|| open("recursive input operation is absent"))?;
+            let source = operation
+                .inputs
+                .get(usize::from(*index))
+                .ok_or_else(|| open("recursive input index is absent"))
+                .and_then(parameter_source)?;
+            let ValueSource::Parameter { index, path } = source else {
+                return Err(open("recursive input is not parameter-rooted"));
+            };
+            let parameter = signature
+                .parameters
+                .get(usize::from(index))
+                .ok_or_else(|| open("recursive input parameter is absent"))?;
+            (parameter.value.clone(), &parameter.callable_paths, path)
+        }
+        ValueRoot::OperationOutput { operation } => {
+            let operation = exported
+                .operation(&operation.0)
+                .ok_or_else(|| open("recursive output operation is absent"))?;
+            if operation.kind != OperationKind::Return || operation.output.is_none() {
+                return Err(open(
+                    "recursive output is not the exported return operation",
+                ));
+            }
+            (
+                signature.result.clone(),
+                &signature.result_callable_paths,
+                Vec::new(),
+            )
+        }
+        ValueRoot::Export => unreachable!("export roots are handled before this helper"),
+    };
+    let mut expected = prefix
+        .into_iter()
+        .map(|property| typefacts::PathSegment {
+            kind: PathSegmentKind::Property,
+            property: property.into(),
+            index: None,
+        })
+        .collect::<Vec<_>>();
+    let (alternative, suffix) = translate_value_path(&path.0).ok_or_else(|| {
+        TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "Type Facts cannot address this operation value path exactly".into(),
+        }
+    })?;
+    expected.extend(suffix);
+    if expected.is_empty() {
+        require_root_callability(&value, *callable, "operation value root", open)?;
+        sites.push("recursive-operation-value:root".into());
+        return Ok(());
+    }
+    let fact = callable_paths
+        .iter()
+        .find(|fact| fact.alternative == alternative && fact.path == expected)
+        .ok_or_else(|| {
+            open(&format!(
+                "operation value path is absent from the signature census (alternative={alternative}, path={expected:?})"
+            ))
+        })?;
+    let callable_local_closure = *callable
+        && fact.presence == PathPresence::Required
+        && fact.callability == Callability::Callable
+        && fact
+            .open_reasons
+            .iter()
+            .all(|reason| reason.as_ref() == "openType");
+    if *callable && alternative == 0 && require_return_callable_source(transcript, &expected, sites)
+    {
+        return Ok(());
+    }
+    if (!fact.complete || !fact.open_reasons.is_empty() || fact.presence == PathPresence::Unknown)
+        && !callable_local_closure
+    {
+        return Err(open(&format!(
+            "operation value path is locally open (complete={}, presence={:?}, callability={:?}, reasons={:?})",
+            fact.complete, fact.presence, fact.callability, fact.open_reasons
+        )));
+    }
+    match (*callable, fact.callability) {
+        (true, Callability::Callable) | (false, Callability::NonCallable) => {}
+        _ => return Err(open("operation value path has the wrong callability")),
+    }
+    sites.push(callable_path_site(fact));
+    Ok(())
+}
+
+fn require_return_callable_source(
+    transcript: &ExportValueTranscript,
+    expected: &[typefacts::PathSegment],
+    sites: &mut Vec<String>,
+) -> bool {
+    let Some(flow) = transcript
+        .implementation
+        .as_ref()
+        .and_then(|implementation| implementation.control_flow.as_ref())
+    else {
+        return false;
+    };
+    if flow
+        .returns
+        .iter()
+        .any(|site| site.reach == Reachability::Unknown)
+    {
+        return false;
+    }
+    let mut evidence = Vec::new();
+    for site in flow
+        .returns
+        .iter()
+        .filter(|site| site.reach == Reachability::Reachable)
+    {
+        let source = site.sources.iter().find(|source| {
+            source.path == expected
+                && match source.kind {
+                    typefacts::ImplementationValueSourceKind::DirectCallable => true,
+                    typefacts::ImplementationValueSourceKind::CallResult => {
+                        source.target_module.as_ref() == "solid-js"
+                            && !source.target.is_empty()
+                            && source.target_path.len() == 1
+                            && source.target_path[0].kind == PathSegmentKind::Tuple
+                            && source.target_path[0].index.is_some_and(|index| {
+                                solid_dialect::unambiguous_callable_result_tuple_item(
+                                    &source.target_name,
+                                    index,
+                                )
+                            })
+                    }
+                }
+        });
+        let Some(source) = source else {
+            return false;
+        };
+        evidence.push(format!(
+            "implementation-return-source:{}:{}:{}:{}:{}",
+            site.location.path,
+            site.location.start_byte,
+            site.location.end_byte,
+            source.target_module,
+            source.target_name
+        ));
+    }
+    if evidence.is_empty() {
+        return false;
+    }
+    sites.extend(evidence);
+    true
 }
 
 fn require_export_callable_paths_closed(
@@ -2186,11 +3144,15 @@ fn require_root_callability(
     label: &str,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
 ) -> Result<(), TypeFactsCertificationError> {
-    match (callable, value.callability) {
-        (true, Callability::Callable) | (false, Callability::NonCallable) => Ok(()),
-        (true, _) => Err(open(&format!("{label} is not compiler-proved callable"))),
-        (false, _) => Err(open(&format!(
-            "{label} is not compiler-proved non-callable"
+    match (callable, value.callability, value.constructability) {
+        (true, Callability::Callable | Callability::UntypedCallable, _)
+        | (true, _, InvocationConstructability::Constructable)
+        | (false, Callability::NonCallable, InvocationConstructability::NonConstructable) => Ok(()),
+        (true, _, _) => Err(open(&format!(
+            "{label} is not compiler-proved callable or constructable"
+        ))),
+        (false, _, _) => Err(open(&format!(
+            "{label} is not compiler-proved non-callable and non-constructable"
         ))),
     }
 }
@@ -2721,7 +3683,8 @@ mod tests {
     }
 
     #[test]
-    fn export_value_preflight_preserves_the_authoritative_schedule_refusal() {
+    fn export_value_preflight_admits_runtime_bound_function_demands_but_requires_total_assignment()
+    {
         let candidate = conformance_corpus()
             .into_iter()
             .next()
@@ -2741,18 +3704,13 @@ mod tests {
             )
             .expect("demand graph");
 
-        let authoritative = TypeFactsCertificationSchedule::new_export_values(&graph, [])
-            .expect_err("non-export demands cannot use export-value transcripts");
-        let preflight = preflight_export_value_schedule_compatibility(&graph)
-            .expect_err("preflight must reject the same demand");
-
-        assert_eq!(preflight.to_string(), authoritative.to_string());
+        preflight_export_value_schedule_compatibility(&graph)
+            .expect("runtime-bound function subjects are schedulable");
+        let refusal = TypeFactsCertificationSchedule::new_export_values(&graph, [])
+            .expect_err("the authority schedule still requires every exact demand");
         assert!(matches!(
-            preflight,
-            TypeFactsCertificationError::UnsupportedDemand { demand, reason }
-                if demand.starts_with("sha256:")
-                    && reason
-                        == "non-export Type Facts demand cannot use an export-value transcript"
+            refusal,
+            TypeFactsCertificationError::MissingDemand(demand) if demand.starts_with("sha256:")
         ));
     }
 
@@ -2964,6 +3922,184 @@ mod tests {
             artifact_case: "browser".into(),
             export: "run".into(),
         })
+    }
+
+    #[test]
+    fn implementation_flow_requires_direct_or_returned_closure_execution() {
+        let mut implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": [{
+                    "location": {"path": "/project/index.js", "startByte": 20, "endByte": 30},
+                    "reach": "reachable",
+                    "captures": [0]
+                }]},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 10, "endByte": 15},
+                    "reach": "reachable",
+                    "calleeParameter": {"parameterIndex": 0},
+                    "captured": true
+                }]
+            }))
+            .unwrap();
+        let source = ValueSource::Parameter {
+            index: 0,
+            path: Vec::new(),
+        };
+        assert!(implementation_call_executes_parameter(
+            &implementation,
+            &implementation.calls[0],
+            &source
+        ));
+
+        implementation.control_flow.as_mut().unwrap().returns[0]
+            .captures
+            .clear();
+        assert!(!implementation_call_executes_parameter(
+            &implementation,
+            &implementation.calls[0],
+            &source
+        ));
+        implementation.calls[0].captured = false;
+        assert!(implementation_call_executes_parameter(
+            &implementation,
+            &implementation.calls[0],
+            &source
+        ));
+        implementation.calls[0].reach = Reachability::Unknown;
+        assert!(!implementation_call_executes_parameter(
+            &implementation,
+            &implementation.calls[0],
+            &source
+        ));
+    }
+
+    #[test]
+    fn return_callable_source_requires_every_reachable_return() {
+        let mut transcript: ExportValueTranscript = serde_json::from_value(json!({
+            "location": {"path": "/project/index.d.ts", "startByte": 0, "endByte": 4},
+            "value": {
+                "callability": "callable",
+                "constructability": "nonConstructable",
+                "primitive": {"mayBeObject": true}
+            },
+            "implementation": {
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": [{
+                    "location": {"path": "/project/index.js", "startByte": 20, "endByte": 30},
+                    "reach": "reachable",
+                    "sources": [{
+                        "path": [{"kind": "tuple", "index": 0}],
+                        "kind": "directCallable"
+                    }]
+                }]}
+            }
+        }))
+        .unwrap();
+        let expected = vec![typefacts::PathSegment {
+            kind: PathSegmentKind::Tuple,
+            property: String::new().into(),
+            index: Some(0),
+        }];
+        let mut sites = Vec::new();
+        assert!(require_return_callable_source(
+            &transcript,
+            &expected,
+            &mut sites
+        ));
+        assert_eq!(sites.len(), 1);
+
+        transcript
+            .implementation
+            .as_mut()
+            .unwrap()
+            .control_flow
+            .as_mut()
+            .unwrap()
+            .returns
+            .push(
+                serde_json::from_value(json!({
+                    "location": {"path": "/project/index.js", "startByte": 31, "endByte": 40},
+                    "reach": "reachable"
+                }))
+                .unwrap(),
+            );
+        sites.clear();
+        assert!(!require_return_callable_source(
+            &transcript,
+            &expected,
+            &mut sites
+        ));
+        assert!(sites.is_empty());
+
+        transcript
+            .implementation
+            .as_mut()
+            .unwrap()
+            .control_flow
+            .as_mut()
+            .unwrap()
+            .returns[1]
+            .reach = Reachability::Unknown;
+        assert!(!require_return_callable_source(
+            &transcript,
+            &expected,
+            &mut sites
+        ));
+    }
+
+    #[test]
+    fn runtime_function_shape_accepts_constructable_but_needs_both_negatives_for_values() {
+        let mut value: InvocationValueFact = serde_json::from_value(json!({
+            "callability": "nonCallable",
+            "constructability": "constructable",
+            "primitive": {"mayBeObject": true}
+        }))
+        .unwrap();
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        assert!(require_root_callability(&value, true, "export", &open).is_ok());
+        assert!(require_root_callability(&value, false, "export", &open).is_err());
+
+        value.constructability = InvocationConstructability::NonConstructable;
+        assert!(require_root_callability(&value, false, "export", &open).is_ok());
+        value.callability = Callability::Unknown;
+        assert!(require_root_callability(&value, false, "export", &open).is_err());
+    }
+
+    #[test]
+    fn unresolved_parameter_callability_requires_an_exact_dialect_type_import() {
+        let mut signature = transcript().selected_signature.unwrap();
+        let parameter = &mut signature.parameters[0];
+        parameter.value.callability = Callability::Unknown;
+        parameter.declared_type = Some(typefacts::DeclaredTypeReference {
+            name: "Accessor".into(),
+            module: "solid-js".into(),
+        });
+        let source = ValueSource::Parameter {
+            index: 0,
+            path: Vec::new(),
+        };
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let mut sites = Vec::new();
+        assert!(
+            require_signature_parameter_callable(&signature, &source, &open, &mut sites).is_ok()
+        );
+
+        signature.parameters[0]
+            .declared_type
+            .as_mut()
+            .unwrap()
+            .module = "user-module".into();
+        assert!(
+            require_signature_parameter_callable(&signature, &source, &open, &mut Vec::new())
+                .is_err()
+        );
     }
 
     fn verify_bound_recursive(

@@ -36,11 +36,12 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:1e44dbc1d157c27e389a40185b33fa3f74def102fa7459e0a90d667131e4a943";
-/// 5 adds exact exported-value transcripts as a separate read-only operation.
-/// The digest and build id still move with it, and the handshake refuses a
-/// producer that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 5;
+    "sha256:c94ee6da50a44562910b111cee58e0e7e344d4b50ee89fc068221fe1ab41d5aa";
+/// 6 binds an independently replayed runtime implementation census to each
+/// exported-value demand that needs function or operation evidence. The digest
+/// and build id still move with it, and the handshake refuses a producer that
+/// differs on any one of the three.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 6;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

@@ -2,7 +2,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use solid_facts::ast::{AstFacts, ExportKind, ImportKind, extract};
+use solid_facts::{
+    ast::{AstFacts, ExportKind, ImportKind, extract},
+    core::Span,
+};
 
 use crate::artifact_resolution::{ResolvedExportBinding, ResolvedImport};
 
@@ -53,6 +56,25 @@ impl SnapshotVerifiedExports {
         })
     }
 
+    pub(super) fn runtime_binding(&self, name: &str) -> Option<(&str, &str, Span, &str)> {
+        self.bindings.get(name).and_then(|binding| {
+            binding.runtime_span.map(|span| {
+                (
+                    binding.runtime_path.as_str(),
+                    binding.runtime_export.as_str(),
+                    span,
+                    binding.runtime_snapshot_root.as_str(),
+                )
+            })
+        })
+    }
+
+    pub(super) fn runtime_paths(&self) -> impl Iterator<Item = &str> {
+        self.bindings
+            .values()
+            .map(|binding| binding.runtime_path.as_str())
+    }
+
     pub(super) fn has_declaration_target(&self, path: &str, name: &str) -> bool {
         self.bindings.iter().any(|(public_name, binding)| {
             binding.declarations_path == path
@@ -65,9 +87,11 @@ impl SnapshotVerifiedExports {
 struct VerifiedExportBinding {
     runtime_path: String,
     runtime_export: String,
+    runtime_span: Option<Span>,
     runtime_snapshot_root: String,
     declarations_path: String,
     declarations_export: String,
+    declarations_span: Option<Span>,
     declarations_snapshot_root: String,
 }
 
@@ -158,9 +182,11 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
             VerifiedExportBinding {
                 runtime_path: runtime.file,
                 runtime_export: runtime.name,
+                runtime_span: runtime.span,
                 runtime_snapshot_root: runtime.snapshot_root,
                 declarations_path: declarations.file,
                 declarations_export: declarations.name,
+                declarations_span: declarations.span,
                 declarations_snapshot_root: declarations.snapshot_root,
             },
         );
@@ -171,9 +197,15 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
             name.clone(),
             binding.runtime_path.clone(),
             binding.runtime_export.clone(),
+            binding
+                .runtime_span
+                .map_or_else(String::new, |span| format!("{}:{}", span.start, span.end)),
             binding.runtime_snapshot_root.clone(),
             binding.declarations_path.clone(),
             binding.declarations_export.clone(),
+            binding
+                .declarations_span
+                .map_or_else(String::new, |span| format!("{}:{}", span.start, span.end)),
             binding.declarations_snapshot_root.clone(),
         ]);
     }
@@ -267,6 +299,7 @@ struct BindingTarget {
     file: String,
     name: String,
     snapshot_root: String,
+    span: Option<Span>,
 }
 
 struct ExportReplay<'a> {
@@ -336,6 +369,7 @@ impl ExportReplay<'_> {
                                 file: target.clone(),
                                 name: imported.to_string(),
                                 snapshot_root: self.snapshot.root().into(),
+                                span: None,
                             },
                         );
                     }
@@ -384,6 +418,7 @@ impl ExportReplay<'_> {
                                     file: target,
                                     name: "*".into(),
                                     snapshot_root: self.snapshot.root().into(),
+                                    span: None,
                                 },
                             );
                         } else {
@@ -434,12 +469,14 @@ impl ExportReplay<'_> {
                                         file: path.into(),
                                         name: local.into(),
                                         snapshot_root: self.snapshot.root().into(),
+                                        span: Some(specifier.local.span),
                                     })
                             },
                             |target| BindingTarget {
                                 file: target.clone(),
                                 name: local.into(),
                                 snapshot_root: self.snapshot.root().into(),
+                                span: None,
                             },
                         );
                         description
@@ -457,6 +494,7 @@ impl ExportReplay<'_> {
                                 file: path.into(),
                                 name: declaration.exported.to_string(),
                                 snapshot_root: self.snapshot.root().into(),
+                                span: Some(declaration.local.span),
                             },
                         );
                     }
@@ -469,6 +507,10 @@ impl ExportReplay<'_> {
                                 file: path.into(),
                                 name: "default".into(),
                                 snapshot_root: self.snapshot.root().into(),
+                                span: export
+                                    .declarations
+                                    .first()
+                                    .map(|declaration| declaration.local.span),
                             },
                         );
                     }
@@ -601,22 +643,25 @@ impl ExportReplay<'_> {
         }
         let dependency = self.external_dependency(specifier)?;
         let binding = dependency.verified_exports.bindings.get(name)?;
-        let (file, name, snapshot_root) = match axis {
+        let (file, name, snapshot_root, span) = match axis {
             ModuleAxis::Runtime => (
                 &binding.runtime_path,
                 &binding.runtime_export,
                 &binding.runtime_snapshot_root,
+                binding.runtime_span,
             ),
             ModuleAxis::Declarations => (
                 &binding.declarations_path,
                 &binding.declarations_export,
                 &binding.declarations_snapshot_root,
+                binding.declarations_span,
             ),
         };
         Some(BindingTarget {
             file: file.clone(),
             name: name.clone(),
             snapshot_root: snapshot_root.clone(),
+            span,
         })
     }
 }
@@ -685,6 +730,7 @@ mod tests {
                 file: "impl.ts".into(),
                 name: "value".into(),
                 snapshot_root: snapshot.root().into(),
+                span: Some(Span { start: 13, end: 18 }),
             })
         );
     }
@@ -718,6 +764,7 @@ mod tests {
                     file: "build/_tsup-dts-rollup.d.ts".into(),
                     name: "SolidQueryDevtools".into(),
                     snapshot_root: snapshot.root().into(),
+                    span: None,
                 },
             )])
         );
@@ -732,6 +779,7 @@ mod tests {
                     file: "build/_tsup-dts-rollup.d.ts".into(),
                     name: "SolidQueryDevtools".into(),
                     snapshot_root: snapshot.root().into(),
+                    span: Some(Span { start: 21, end: 39 }),
                 },
             )])
         );
@@ -749,6 +797,7 @@ mod tests {
                 file: "build/_tsup-dts-rollup.d.ts".into(),
                 name: "SolidQueryDevtools".into(),
                 snapshot_root: snapshot.root().into(),
+                span: Some(Span { start: 21, end: 39 }),
             })
         );
     }

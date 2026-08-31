@@ -251,6 +251,45 @@ rather than about the field that was resolved.
 `@solid-devtools/babel-plugin@0.3.1` declares no `module` at all and is
 genuinely CJS-only; it keeps refusing unchanged.
 
+## Type Facts authenticates non-export proof subjects (2026-08-31)
+
+Policy-2 certification formerly allowed an export-value transcript to answer
+only `Export`-rooted recursive value and domain-closure demands. Selected-call,
+callback-binding, operation, and operation-value demands for the same export
+were refused before the in-repo Type Facts producer could inspect the runtime
+implementation.
+
+The verifier-owned declaration harness still authenticates the public export
+value and signature. Each demand now additionally binds the snapshot-replayed
+runtime identifier span, and protocol 6 returns an exhaustive implementation
+transcript: parameter flows, exact resolved calls with reachability, returned
+closure captures, and control-flow facts. Family adapters consume only the
+local premise they need. A reachable callback call inside `try/finally` can
+therefore certify while whole-function control flow remains open; a captured
+call certifies only when a reachable return proves that exact parameter is
+captured by the returned closure.
+
+The transcript also preserves an exact direct-import type reference when the
+private declaration harness cannot load a peer package. Only the dialect-owned
+`solid-js` `Accessor` and `Setter` exports may close an otherwise unknown root
+callability premise; a same-named local or third-party type stays open. Return
+value provenance likewise authenticates direct closures and exact
+`solid-js#createSignal` tuple items, and requires every reachable return branch
+to establish the demanded callable path before it closes.
+
+Missing runtime identifier bindings, ambiguous signatures, unresolved call
+targets, unknown call reachability, retained-but-unreturned closures, tighter
+than `0..many` cardinality, and unsupported operation kinds remain explicit
+uncertifiable frontiers. A parameter used only inside a captured callback also
+remains open unless exact callback-owner evidence proves that callback's
+execution; a dialect fact for a nested call is not authority for its containing
+helper. Constructable classes follow the existing runtime
+function-shape rule; a value proof still requires both non-callable and
+non-constructable negatives. The generated
+`typefacts-implementation-transcript` fixture pins direct and returned-closure
+positives plus the retained-closure negative without duplicating a TypeScript
+diagnostic.
+
 ## Phase 21 published dependency graph transaction (2026-08-31)
 
 Published dependency certification no longer treats recursive eager child

@@ -86,7 +86,12 @@ pub(super) fn finalize_value_only_with_dependencies(
         ProofFamily::ArtifactDeclarations,
         ProofFamily::ExportIdentity,
         ProofFamily::ModuleClosure,
+        ProofFamily::SelectedSignature,
+        ProofFamily::ArgumentBinding,
+        ProofFamily::RestSpreadCoverage,
         ProofFamily::CallablePath,
+        ProofFamily::OperationReachability,
+        ProofFamily::OperationCardinality,
         ProofFamily::RecursiveValueShape,
         ProofFamily::AcceptedDependencyComposition,
     ];
@@ -110,11 +115,18 @@ pub(super) fn finalize_value_only_with_dependencies(
         (false, Some(dependencies)) => dependencies.verify_plan(plan)?,
         (false, None) => {}
     }
-    let requires_type_facts = plan
-        .demand_graph
-        .demands()
-        .iter()
-        .any(|demand| demand.family() == ProofFamily::RecursiveValueShape);
+    let requires_type_facts = plan.demand_graph.demands().iter().any(|demand| {
+        matches!(
+            demand.family(),
+            ProofFamily::SelectedSignature
+                | ProofFamily::ArgumentBinding
+                | ProofFamily::RestSpreadCoverage
+                | ProofFamily::CallablePath
+                | ProofFamily::OperationReachability
+                | ProofFamily::OperationCardinality
+                | ProofFamily::RecursiveValueShape
+        )
+    });
     if requires_type_facts && type_facts.is_none() {
         return Err(Policy2FinalizationError::TypeFactsRequired);
     }

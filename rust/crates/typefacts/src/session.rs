@@ -2417,6 +2417,13 @@ fn export_value_demand_digest(demands: &[crate::ExportValueDemand]) -> String {
         hash_invocation_field(&mut hasher, &demand.location.path);
         hash_invocation_field(&mut hasher, &demand.location.start_byte.to_string());
         hash_invocation_field(&mut hasher, &demand.location.end_byte.to_string());
+        if let Some(location) = &demand.implementation_location {
+            hash_invocation_field(&mut hasher, &location.path);
+            hash_invocation_field(&mut hasher, &location.start_byte.to_string());
+            hash_invocation_field(&mut hasher, &location.end_byte.to_string());
+        } else {
+            hash_invocation_field(&mut hasher, "");
+        }
         hash_invocation_field(&mut hasher, &demand.callable_depth.to_string());
     }
     format!("sha256:{:x}", hasher.finalize())
@@ -2427,7 +2434,7 @@ fn selected_signature_digest(
     signature: &crate::SelectedSignature,
 ) -> String {
     let mut hasher = Sha256::new();
-    hash_invocation_field(&mut hasher, "solid-checker:typefacts:selected-signature:v2");
+    hash_invocation_field(&mut hasher, "solid-checker:typefacts:selected-signature:v3");
     hash_invocation_field(
         &mut hasher,
         match kind {
@@ -2462,6 +2469,13 @@ fn selected_signature_digest(
                 .as_ref()
                 .map_or("", |descriptor| &descriptor.text),
         );
+        if let Some(declared) = &parameter.declared_type {
+            hash_invocation_field(&mut hasher, &declared.module);
+            hash_invocation_field(&mut hasher, &declared.name);
+        } else {
+            hash_invocation_field(&mut hasher, "");
+            hash_invocation_field(&mut hasher, "");
+        }
     }
     hash_invocation_field(
         &mut hasher,

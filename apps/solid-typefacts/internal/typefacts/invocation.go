@@ -42,8 +42,9 @@ type InvocationDemand struct {
 // ExportValueDemand asks for the exact value of one expression. Certification
 // points it at a deterministic imported binding, never at an invented call.
 type ExportValueDemand struct {
-	Location      Location `cbor:"location" json:"location"`
-	CallableDepth int      `cbor:"callableDepth,omitempty" json:"callableDepth,omitempty"`
+	Location               Location  `cbor:"location" json:"location"`
+	ImplementationLocation *Location `cbor:"implementationLocation,omitempty" json:"implementationLocation,omitempty"`
+	CallableDepth          int       `cbor:"callableDepth,omitempty" json:"callableDepth,omitempty"`
 }
 
 type ArgumentBindingDisposition string
@@ -192,25 +193,79 @@ type InvocationValueFact struct {
 }
 
 type ExportValueTranscript struct {
+	Location       Location                        `cbor:"location" json:"location"`
+	QueryName      string                          `cbor:"queryName,omitempty" json:"queryName,omitempty"`
+	Target         SymbolID                        `cbor:"target,omitempty" json:"target,omitempty"`
+	Declaration    *ResolvedDeclaration            `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Value          InvocationValueFact             `cbor:"value" json:"value"`
+	CallablePaths  []CallablePathFact              `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
+	CallSignature  *SelectedSignature              `cbor:"callSignature,omitempty" json:"callSignature,omitempty"`
+	Implementation *ExportImplementationTranscript `cbor:"implementation,omitempty" json:"implementation,omitempty"`
+	Complete       bool                            `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons    []string                        `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
+type ExportImplementationTranscript struct {
 	Location      Location             `cbor:"location" json:"location"`
 	QueryName     string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
 	Target        SymbolID             `cbor:"target,omitempty" json:"target,omitempty"`
 	Declaration   *ResolvedDeclaration `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Value         InvocationValueFact  `cbor:"value" json:"value"`
-	CallablePaths []CallablePathFact   `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
+	Signature     *SelectedSignature   `cbor:"signature,omitempty" json:"signature,omitempty"`
+	ParameterUses []ParameterUse       `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
+	ControlFlow   *ControlFlowCensus   `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
+	Calls         []ImplementationCall `cbor:"calls,omitempty" json:"calls,omitempty"`
 	Complete      bool                 `cbor:"complete,omitempty" json:"complete,omitempty"`
 	OpenReasons   []string             `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
+type ParameterValueSource struct {
+	ParameterIndex int           `cbor:"parameterIndex" json:"parameterIndex"`
+	Path           []PathSegment `cbor:"path,omitempty" json:"path,omitempty"`
+}
+
+type ImplementationCall struct {
+	Location           Location                `cbor:"location" json:"location"`
+	Reach              Reachability            `cbor:"reach" json:"reach"`
+	Target             SymbolID                `cbor:"target,omitempty" json:"target,omitempty"`
+	TargetName         string                  `cbor:"targetName,omitempty" json:"targetName,omitempty"`
+	TargetModule       string                  `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
+	Declaration        *ResolvedDeclaration    `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	CalleeParameter    *ParameterValueSource   `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
+	ArgumentParameters []*ParameterValueSource `cbor:"argumentParameters,omitempty" json:"argumentParameters,omitempty"`
+	Captured           bool                    `cbor:"captured,omitempty" json:"captured,omitempty"`
+}
+
+type ImplementationValueSourceKind string
+
+const (
+	ImplementationValueDirectCallable ImplementationValueSourceKind = "directCallable"
+	ImplementationValueCallResult     ImplementationValueSourceKind = "callResult"
+)
+
+type ImplementationValueSource struct {
+	Path         []PathSegment                 `cbor:"path,omitempty" json:"path,omitempty"`
+	Kind         ImplementationValueSourceKind `cbor:"kind" json:"kind"`
+	Target       SymbolID                      `cbor:"target,omitempty" json:"target,omitempty"`
+	TargetName   string                        `cbor:"targetName,omitempty" json:"targetName,omitempty"`
+	TargetModule string                        `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
+	TargetPath   []PathSegment                 `cbor:"targetPath,omitempty" json:"targetPath,omitempty"`
+}
+
+type DeclaredTypeReference struct {
+	Name   string `cbor:"name" json:"name"`
+	Module string `cbor:"module" json:"module"`
+}
+
 type SelectedParameter struct {
-	Index         int                 `cbor:"index" json:"index"`
-	Symbol        SymbolID            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	Declaration   *Declaration        `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Rest          bool                `cbor:"rest,omitempty" json:"rest,omitempty"`
-	Optional      bool                `cbor:"optional,omitempty" json:"optional,omitempty"`
-	Defaulted     bool                `cbor:"defaulted,omitempty" json:"defaulted,omitempty"`
-	Value         InvocationValueFact `cbor:"value" json:"value"`
-	CallablePaths []CallablePathFact  `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
+	Index         int                    `cbor:"index" json:"index"`
+	Symbol        SymbolID               `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	Declaration   *Declaration           `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Rest          bool                   `cbor:"rest,omitempty" json:"rest,omitempty"`
+	Optional      bool                   `cbor:"optional,omitempty" json:"optional,omitempty"`
+	Defaulted     bool                   `cbor:"defaulted,omitempty" json:"defaulted,omitempty"`
+	Value         InvocationValueFact    `cbor:"value" json:"value"`
+	DeclaredType  *DeclaredTypeReference `cbor:"declaredType,omitempty" json:"declaredType,omitempty"`
+	CallablePaths []CallablePathFact     `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
 }
 
 type SelectedSignature struct {
@@ -257,10 +312,11 @@ const (
 )
 
 type ReturnSite struct {
-	Location Location             `cbor:"location" json:"location"`
-	Reach    Reachability         `cbor:"reach" json:"reach"`
-	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
-	Captures []int                `cbor:"captures,omitempty" json:"captures,omitempty"`
+	Location Location                    `cbor:"location" json:"location"`
+	Reach    Reachability                `cbor:"reach" json:"reach"`
+	Value    *InvocationValueFact        `cbor:"value,omitempty" json:"value,omitempty"`
+	Captures []int                       `cbor:"captures,omitempty" json:"captures,omitempty"`
+	Sources  []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
 }
 
 type ThrowSite struct {

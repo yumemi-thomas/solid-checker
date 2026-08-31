@@ -204,6 +204,7 @@
       "required": ["location"],
       "properties": {
         "location": { "$ref": "#/$defs/location" },
+        "implementationLocation": { "$ref": "#/$defs/location" },
         "callableDepth": { "type": "integer", "minimum": 0, "maximum": 8 }
       }
     },
@@ -371,6 +372,7 @@
         "optional": { "type": "boolean" },
         "defaulted": { "type": "boolean" },
         "value": { "$ref": "#/$defs/invocationValue" },
+        "declaredType": { "$ref": "#/$defs/declaredTypeReference" },
         "callablePaths": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/callablePath" } }
       }
     },
@@ -445,7 +447,8 @@
         "location": { "$ref": "#/$defs/location" },
         "reach": { "enum": ["reachable", "unreachable", "unknown"] },
         "value": { "$ref": "#/$defs/invocationValue" },
-        "captures": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } }
+        "captures": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "sources": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationValueSource" } }
       }
     },
     "throwSite": {
@@ -507,6 +510,72 @@
         "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
         "value": { "$ref": "#/$defs/invocationValue" },
         "callablePaths": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/callablePath" } },
+        "callSignature": { "$ref": "#/$defs/selectedSignature" },
+        "implementation": { "$ref": "#/$defs/exportImplementationTranscript" },
+        "complete": { "type": "boolean" },
+        "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
+      }
+    },
+    "parameterValueSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameterIndex"],
+      "properties": {
+        "parameterIndex": { "type": "integer", "minimum": 0 },
+        "path": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/pathSegment" } }
+      }
+    },
+    "implementationValueSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "path": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/pathSegment" } },
+        "kind": { "enum": ["directCallable", "callResult"] },
+        "target": { "type": "string" },
+        "targetName": { "type": "string" },
+        "targetModule": { "type": "string" },
+        "targetPath": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/pathSegment" } }
+      }
+    },
+    "declaredTypeReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "module"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "module": { "type": "string", "minLength": 1 }
+      }
+    },
+    "implementationCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "reach"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "reach": { "enum": ["reachable", "unreachable", "unknown"] },
+        "target": { "type": "string" },
+        "targetName": { "type": "string" },
+        "targetModule": { "type": "string" },
+        "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
+        "calleeParameter": { "$ref": "#/$defs/parameterValueSource" },
+        "argumentParameters": { "type": "array", "maxItems": 1000000, "items": { "anyOf": [{ "$ref": "#/$defs/parameterValueSource" }, { "type": "null" }] } },
+        "captured": { "type": "boolean" }
+      }
+    },
+    "exportImplementationTranscript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "queryName": { "type": "string" },
+        "target": { "type": "string" },
+        "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
+        "signature": { "$ref": "#/$defs/selectedSignature" },
+        "parameterUses": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/parameterUse" } },
+        "controlFlow": { "$ref": "#/$defs/controlFlowCensus" },
+        "calls": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationCall" } },
         "complete": { "type": "boolean" },
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }

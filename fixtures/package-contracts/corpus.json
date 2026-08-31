@@ -40,6 +40,7 @@
     "torture-environment-conditions",
     "torture-getter-exports",
     "torture-runtime-namespace",
+    "typefacts-implementation-transcript",
     "uncaptured-source-return",
     "unpublished-conditional-target",
     "unreached-private-obligation",

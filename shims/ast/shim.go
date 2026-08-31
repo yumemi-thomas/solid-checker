@@ -108,6 +108,9 @@ func IsNumericLiteral(node *ast.Node) bool
 //go:linkname IsParenthesizedExpression github.com/microsoft/typescript-go/internal/ast.IsParenthesizedExpression
 func IsParenthesizedExpression(node *ast.Node) bool
 
+//go:linkname IsParameterDeclaration github.com/microsoft/typescript-go/internal/ast.IsParameterDeclaration
+func IsParameterDeclaration(node *ast.Node) bool
+
 //go:linkname IsPostfixUnaryExpression github.com/microsoft/typescript-go/internal/ast.IsPostfixUnaryExpression
 func IsPostfixUnaryExpression(node *ast.Node) bool
 
@@ -185,6 +188,9 @@ func IsThrowStatement(node *ast.Node) bool
 
 //go:linkname IsTryStatement github.com/microsoft/typescript-go/internal/ast.IsTryStatement
 func IsTryStatement(node *ast.Node) bool
+
+//go:linkname IsTypeReferenceNode github.com/microsoft/typescript-go/internal/ast.IsTypeReferenceNode
+func IsTypeReferenceNode(node *ast.Node) bool
 
 //go:linkname IsVariableDeclaration github.com/microsoft/typescript-go/internal/ast.IsVariableDeclaration
 func IsVariableDeclaration(node *ast.Node) bool

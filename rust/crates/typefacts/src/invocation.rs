@@ -56,6 +56,8 @@ pub struct InvocationDemand {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExportValueDemand {
     pub location: Location,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation_location: Option<Location>,
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub callable_depth: usize,
 }
@@ -275,10 +277,100 @@ pub struct ExportValueTranscript {
     pub value: InvocationValueFact,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub callable_paths: Vec<CallablePathFact>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_signature: Option<SelectedSignature>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation: Option<ExportImplementationTranscript>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub complete: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_reasons: Vec<Arc<str>>,
+}
+
+/// Exact runtime implementation selected independently of the declaration
+/// expression used by [`ExportValueTranscript`]. This is not an invented
+/// invocation: the producer inspects the snapshot-replayed binding itself.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportImplementationTranscript {
+    pub location: Location,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub query_name: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target: Arc<str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<ResolvedDeclaration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<SelectedSignature>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_uses: Vec<ParameterUse>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_flow: Option<ControlFlowCensus>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<ImplementationCall>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_reasons: Vec<Arc<str>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ParameterValueSource {
+    pub parameter_index: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub path: Vec<PathSegment>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImplementationCall {
+    pub location: Location,
+    pub reach: Reachability,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target_name: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target_module: Arc<str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<ResolvedDeclaration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callee_parameter: Option<ParameterValueSource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub argument_parameters: Vec<Option<ParameterValueSource>>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub captured: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ImplementationValueSourceKind {
+    DirectCallable,
+    CallResult,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImplementationValueSource {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub path: Vec<PathSegment>,
+    pub kind: ImplementationValueSourceKind,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target_name: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target_module: Arc<str>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub target_path: Vec<PathSegment>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DeclaredTypeReference {
+    pub name: Arc<str>,
+    pub module: Arc<str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -296,6 +388,8 @@ pub struct SelectedParameter {
     #[serde(default, skip_serializing_if = "is_false")]
     pub defaulted: bool,
     pub value: InvocationValueFact,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_type: Option<DeclaredTypeReference>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub callable_paths: Vec<CallablePathFact>,
 }
@@ -362,6 +456,8 @@ pub struct ReturnSite {
     pub value: Option<InvocationValueFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub captures: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<ImplementationValueSource>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

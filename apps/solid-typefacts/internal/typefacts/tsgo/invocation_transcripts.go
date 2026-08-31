@@ -231,8 +231,10 @@ func (p *project) selectedSignatureLocked(
 			}
 		}
 		if index < len(declarationParameters) {
-			parameter.Defaulted = declarationParameters[index].Initializer() != nil
+			declarationParameter := declarationParameters[index]
+			parameter.Defaulted = declarationParameter.Initializer() != nil
 			parameter.Optional = parameter.Optional || parameter.Defaulted
+			parameter.DeclaredType = p.declaredTypeReferenceLocked(declarationParameter)
 		}
 		parameter.CallablePaths = p.callablePathsLocked(parameterType, depth)
 		selected.Parameters[index] = parameter
@@ -242,6 +244,28 @@ func (p *project) selectedSignatureLocked(
 	selected.ResultCallablePaths = p.callablePathsLocked(returnType, depth)
 	selected.Identity = selectedSignatureDigest(kind, selected)
 	return selected
+}
+
+func (p *project) declaredTypeReferenceLocked(
+	parameter *ast.Node,
+) *typefacts.DeclaredTypeReference {
+	if parameter == nil || !ast.IsParameterDeclaration(parameter) {
+		return nil
+	}
+	typeNode := parameter.AsParameterDeclaration().Type
+	if typeNode == nil || !ast.IsTypeReferenceNode(typeNode) {
+		return nil
+	}
+	typeName := typeNode.AsTypeReferenceNode().TypeName
+	if typeName == nil || !ast.IsIdentifier(typeName) {
+		return nil
+	}
+	symbol := p.checker.GetSymbolAtLocation(typeName)
+	module, name := importedAliasIdentity(symbol)
+	if module == "" || name == "" || !utf8.ValidString(module) || !utf8.ValidString(name) {
+		return nil
+	}
+	return &typefacts.DeclaredTypeReference{Name: name, Module: module}
 }
 
 // expandedMinimumArgumentCount reports the minimum runtime argument count.
@@ -303,7 +327,7 @@ func invocationOverloadCount(declaration *ast.Node) int {
 
 func selectedSignatureDigest(kind typefacts.CallKind, selected typefacts.SelectedSignature) string {
 	hash := sha256.New()
-	hashField(hash, "solid-checker:typefacts:selected-signature:v2")
+	hashField(hash, "solid-checker:typefacts:selected-signature:v3")
 	hashField(hash, string(kind))
 	hashField(hash, string(selected.Declaration.Symbol))
 	hashField(hash, selected.Declaration.Location.Path)
@@ -319,6 +343,13 @@ func selectedSignatureDigest(kind typefacts.CallKind, selected typefacts.Selecte
 			text = parameter.Value.Type.Text
 		}
 		hashField(hash, text)
+		if parameter.DeclaredType == nil {
+			hashField(hash, "")
+			hashField(hash, "")
+		} else {
+			hashField(hash, parameter.DeclaredType.Module)
+			hashField(hash, parameter.DeclaredType.Name)
+		}
 	}
 	result := ""
 	if selected.Result.Type != nil {
@@ -801,13 +832,18 @@ func (p *project) walkCallablePathsLocked(
 	seen map[*checker.Type]struct{},
 	paths *[]typefacts.CallablePathFact,
 ) {
+	callability := callabilityOfType(p.checker, value)
+	constructability := invocationConstructabilityOfType(p.checker, value)
 	fact := typefacts.CallablePathFact{
 		Alternative:      alternative,
 		Path:             append([]typefacts.PathSegment(nil), path...),
 		Presence:         typefacts.PathRequired,
-		Callability:      callabilityOfType(p.checker, value),
-		Constructability: invocationConstructabilityOfType(p.checker, value),
-		Complete:         value != nil && value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError) == 0,
+		Callability:      callability,
+		Constructability: constructability,
+		Complete: value != nil &&
+			value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError) == 0 &&
+			callability != typefacts.CallabilityUnknown &&
+			constructability != typefacts.InvocationConstructUnknown,
 	}
 	if !fact.Complete {
 		fact.OpenReasons = append(fact.OpenReasons, "openType")
@@ -948,6 +984,7 @@ func (p *project) parameterUseCensusLocked(
 					return
 				}
 				if ast.IsVariableDeclaration(current) && ast.IsVarConst(current) &&
+					current.Name() != nil && current.Initializer() != nil &&
 					ast.IsIdentifier(current.Name()) && ast.IsIdentifier(current.Initializer()) {
 					initializer := p.canonicalSymbol(p.checker.GetSymbolAtLocation(current.Initializer()))
 					if root, ok := bySymbol[initializer]; ok {
@@ -1107,6 +1144,17 @@ func isCallableDeclaration(node *ast.Node) bool {
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {
 	census := &typefacts.ControlFlowCensus{}
 	body := implementation.Body()
+	if body != nil && !ast.IsBlock(body) {
+		value := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(body))
+		census.Returns = append(census.Returns, typefacts.ReturnSite{
+			Location: nodeLocation(body),
+			Reach:    typefacts.Reachable,
+			Value:    &value,
+			Captures: p.returnedClosureCapturesLocked(implementation, body),
+			Sources:  p.returnValueSourcesLocked(body),
+		})
+		return census
+	}
 	var scan func(*ast.Node, typefacts.Reachability) typefacts.Reachability
 	scan = func(node *ast.Node, reach typefacts.Reachability) typefacts.Reachability {
 		if node == nil {
@@ -1132,6 +1180,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			}
 			census.Returns = append(census.Returns, typefacts.ReturnSite{
 				Location: nodeLocation(node), Reach: reach, Value: value, Captures: captures,
+				Sources: p.returnValueSourcesLocked(node.Expression()),
 			})
 			return typefacts.Unreachable
 		}
@@ -1212,7 +1261,17 @@ func (p *project) returnedClosureCapturesLocked(
 	implementation *ast.Node,
 	expression *ast.Node,
 ) []int {
-	if !isCallableDeclaration(expression) {
+	closure := expression
+	if ast.IsIdentifier(expression) {
+		target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(expression))
+		if target != nil {
+			closure = target.ValueDeclaration
+			if closure == nil && len(target.Declarations) == 1 {
+				closure = target.Declarations[0]
+			}
+		}
+	}
+	if !isCallableDeclaration(closure) {
 		return nil
 	}
 	roots := p.parameterCensusRootsLocked(implementation)
@@ -1221,7 +1280,7 @@ func (p *project) returnedClosureCapturesLocked(
 		bySymbol[p.canonicalSymbol(root.symbol)] = root.index
 	}
 	seen := make(map[int]struct{})
-	expression.ForEachChild(func(node *ast.Node) bool {
+	closure.ForEachChild(func(node *ast.Node) bool {
 		var visit func(*ast.Node)
 		visit = func(current *ast.Node) {
 			if ast.IsIdentifier(current) && !ast.IsDeclarationNameOrImportPropertyName(current) {

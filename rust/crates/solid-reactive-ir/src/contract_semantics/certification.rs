@@ -600,7 +600,7 @@ fn inventory_value_shape(
         export: export.into(),
         root: root.clone(),
         path: path.clone(),
-        callable: matches!(shape, ValueShape::Callable),
+        callable: recursive_value_is_callable(shape),
     });
     match shape {
         ValueShape::Tuple(items) | ValueShape::Choice(items) => {
@@ -665,6 +665,10 @@ fn inventory_value_shape(
         | ValueShape::RefApplication
         | ValueShape::ServerFunctionReference { .. } => {}
     }
+}
+
+fn recursive_value_is_callable(shape: &ValueShape) -> bool {
+    matches!(shape, ValueShape::Callable | ValueShape::Reactive { .. })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1826,10 +1830,11 @@ const fn manifest() -> PolicyManifest {
 mod tests {
     use super::{
         DependencyDemandInput, ProofDemandSubject, ProofFamily, ProofWitnessVariant,
-        WitnessBinding, WitnessCoverageError, proof_policy_2,
+        WitnessBinding, WitnessCoverageError, proof_policy_2, recursive_value_is_callable,
     };
     use crate::contract_semantics::{
-        KnowledgeState, SEMANTIC_MODEL_VERSION, SemanticClaimPath,
+        KnowledgeSet, KnowledgeState, ReactiveRole, SEMANTIC_MODEL_VERSION, SemanticClaimPath,
+        ValueShape,
         proof::{ACCEPTANCE_RECEIPT_VERSION, PROOF_POLICY_VERSION},
         solid2_rc3::conformance_corpus,
     };
@@ -1838,6 +1843,23 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../docs/package-contract-v2/phase19/proof-policy-v2.json"
     ));
+
+    #[test]
+    fn recursive_reactive_values_are_callable_but_plain_values_are_not() {
+        for role in [ReactiveRole::Accessor, ReactiveRole::Setter] {
+            assert!(recursive_value_is_callable(&ValueShape::Reactive {
+                role,
+                resource: None,
+                capabilities: KnowledgeSet::Unknown,
+            }));
+        }
+        assert!(recursive_value_is_callable(&ValueShape::Callable));
+        assert!(!recursive_value_is_callable(&ValueShape::Plain));
+        assert!(!recursive_value_is_callable(&ValueShape::Store {
+            resource: None,
+            capabilities: KnowledgeSet::Unknown,
+        }));
+    }
 
     #[test]
     fn policy_2_is_canonical_rust_owned_and_active() {

@@ -73,8 +73,9 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // moves whenever a fixture main document becomes tracked. 130 was
       // measured while three certifying fixtures (class-expression-kind,
       // escaping-private-helper, published-export-entity) were still
-      // untracked and invisible to the audit.
-      stableMainDocuments: 140,
+      // untracked and invisible to the audit. 141 includes the generated
+      // Type Facts implementation-transcript main document added by Phase 21.
+      stableMainDocuments: 141,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
