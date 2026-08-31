@@ -351,6 +351,33 @@ function resolvedFile(path) {
   };
 }
 
+// The runtime target a legacy `module` field names, when it names a real file.
+// `module` is the bundler's ESM entry of a dual package whose `main` is usually
+// the CJS transpile of the same source, so the runtime axis prefers it instead
+// of refusing the package. A declared-but-absent (or unresolvable) target is not
+// a refusal: Node consumers never read `module`, so the `main` surface is still
+// real. The segment check mirrors the Rust snapshot replay's `module`
+// preference exactly, so the generator and the certifier select the same field.
+function legacyModuleTarget(packageRoot, manifest) {
+  if (typeof manifest.module !== "string") return undefined;
+  const pieces = manifest.module.replace(/^(?:\.\/)+/, "").split("/");
+  if (
+    pieces.some(
+      piece =>
+        piece === "" ||
+        piece === "." ||
+        piece === ".." ||
+        piece === "node_modules" ||
+        piece.includes("\\") ||
+        /%2e|%2f|%5c/i.test(piece)
+    )
+  ) {
+    return undefined;
+  }
+  const path = resolve(packageRoot, manifest.module);
+  return isFile(path) ? path : undefined;
+}
+
 export function resolvePackageExport({
   packageRoot,
   manifest,
@@ -389,9 +416,11 @@ export function resolvePackageExport({
           : manifest.main
             ? "main"
             : "index"
-      : manifest.main
-        ? "main"
-        : "index";
+      : legacyModuleTarget(packageRoot, manifest)
+        ? "module"
+        : manifest.main
+          ? "main"
+          : "index";
   const target = field === "index" ? fallback : manifest[field];
   const initial = resolve(packageRoot, target);
   const path = axis === "declarations" ? declarationCandidate(initial) : initial;

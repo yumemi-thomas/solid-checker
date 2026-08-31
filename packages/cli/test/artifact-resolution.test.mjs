@@ -235,6 +235,71 @@ describe("standalone package-export resolution", () => {
       })
     ).toThrow(/invalid segment/);
   });
+
+  test("legacy runtime resolution prefers a present module target over main", () => {
+    const manifest = {
+      name: "legacy-dual",
+      version: "1.0.0",
+      type: "module",
+      main: "dist/index.cjs",
+      module: "dist/index.js",
+      types: "dist/index.d.ts"
+    };
+    const root = fixture(manifest, {
+      "dist/index.cjs": "exports.observe = () => {};\n",
+      "dist/index.js": "export const observe = () => {};\n",
+      "dist/index.d.ts": "export declare const observe: () => void;\n"
+    });
+
+    const runtime = target(root, manifest, []);
+    expect(runtime.file.path).toBe(join(root, "dist/index.js"));
+    expect(runtime.trace).toEqual({
+      branch: "legacy:module",
+      steps: [{ condition: "module", target: "dist/index.js" }]
+    });
+
+    // The declarations axis is untouched: `module` never names a typing.
+    const declarations = target(root, manifest, [], "declarations");
+    expect(declarations.file.path).toBe(join(root, "dist/index.d.ts"));
+    expect(declarations.trace.branch).toBe("legacy:types");
+  });
+
+  test("legacy runtime resolution falls back to main when module is unusable", () => {
+    const files = { "dist/index.js": "export const observe = () => {};\n" };
+    const root = fixture({ name: "legacy-fallback", version: "1.0.0" }, files);
+    for (const declared of [
+      undefined,
+      "dist/absent.js",
+      "../outside/index.js",
+      true,
+      null
+    ]) {
+      const manifest = {
+        name: "legacy-fallback",
+        version: "1.0.0",
+        type: "module",
+        main: "dist/index.js",
+        ...(declared === undefined ? {} : { module: declared })
+      };
+      const runtime = target(root, manifest, []);
+      expect(runtime.file.path).toBe(join(root, "dist/index.js"));
+      expect(runtime.trace).toEqual({
+        branch: "legacy:main",
+        steps: [{ condition: "main", target: "dist/index.js" }]
+      });
+    }
+
+    const indexed = fixture({ name: "legacy-index", version: "1.0.0" }, {
+      "index.js": "export const observe = () => {};\n"
+    });
+    const runtime = target(
+      indexed,
+      { name: "legacy-index", version: "1.0.0", module: "dist/absent.js" },
+      []
+    );
+    expect(runtime.file.path).toBe(join(indexed, "index.js"));
+    expect(runtime.trace.branch).toBe("legacy:index");
+  });
 });
 
 describe("exact artifact records and closure", () => {

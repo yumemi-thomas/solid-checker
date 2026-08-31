@@ -22,6 +22,8 @@
     "exported-class",
     "function-supertype-kind",
     "legacy-dual-root",
+    "legacy-module-absent",
+    "legacy-module-entry",
     "multi-role-callback-parameter",
     "namespace-export-surface",
     "non-literal-dynamic-import",

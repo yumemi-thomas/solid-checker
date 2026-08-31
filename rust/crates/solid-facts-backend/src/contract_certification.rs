@@ -687,10 +687,26 @@ struct SnapshotPackageManifest {
     exports: ExportField,
     #[serde(default)]
     main: Option<String>,
+    /// The bundler ESM entry of a legacy dual package. It is not a Node field,
+    /// so a package that declares it as anything other than a string is still
+    /// resolvable through `main`: a non-string value degrades to "not declared"
+    /// instead of refusing the package.
+    #[serde(default, deserialize_with = "optional_module_target")]
+    module: Option<String>,
     #[serde(default)]
     types: Option<String>,
     #[serde(default)]
     typings: Option<String>,
+}
+
+fn optional_module_target<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::String(target) => Some(target),
+        _ => None,
+    })
 }
 
 #[derive(Default)]
@@ -1744,6 +1760,8 @@ fn resolve_legacy(
         } else {
             ("index", "index.js")
         }
+    } else if let Some(target) = legacy_module_target(snapshot, manifest) {
+        ("module", target)
     } else if let Some(target) = &manifest.main {
         ("main", target.as_str())
     } else {
@@ -1772,6 +1790,21 @@ fn resolve_legacy(
             }],
         },
     })
+}
+
+/// The runtime target a legacy `module` field names, when it names a snapshot
+/// file. `module` is the bundler's ESM entry of a dual package whose `main` is
+/// usually the CJS transpile of the same source, so preferring it on the
+/// runtime axis analyzes the ESM build instead of refusing the package. A
+/// declared-but-absent (or unresolvable) target is not a refusal: Node
+/// consumers never read `module`, so the `main` surface is still real.
+fn legacy_module_target<'a>(
+    snapshot: &ArtifactSnapshot,
+    manifest: &'a SnapshotPackageManifest,
+) -> Option<&'a str> {
+    let target = manifest.module.as_deref()?;
+    let path = validate_legacy_target(target).ok()?;
+    snapshot.read(&path).is_some().then_some(target)
 }
 
 fn validate_target_string(target: &str) -> Result<String, String> {
@@ -2156,10 +2189,10 @@ mod tests {
         DependencyReceiptCompositionError, LocalArtifact, LockPinnedArchive,
         Policy2ReceiptBindings, Policy2ReceiptProvenance, PublishedArchive,
         PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
-        SnapshotLimits, SnapshotVerifiedResolution, UntrustedArtifactEnvelope,
-        authenticate_policy2_receipt, issue_policy2_receipt, plan_certification,
-        plan_published_contract_graph, policy2_main_semantic_digest,
-        policy2_trust_configuration_for_issuer,
+        ResolutionAxis, SnapshotLimits, SnapshotPackageManifest, SnapshotVerifiedResolution,
+        UntrustedArtifactEnvelope, authenticate_policy2_receipt, issue_policy2_receipt,
+        plan_certification, plan_published_contract_graph, policy2_main_semantic_digest,
+        policy2_trust_configuration_for_issuer, resolve_snapshot_export,
     };
     use crate::artifact_resolution::{
         AcceptedDependencyEdge, ClosureEntry, ClosureFileRole, ClosureHazardKind, ClosureManifest,
@@ -2173,7 +2206,7 @@ mod tests {
         CallClaims, CallSemantics, ContractProposal, ExportIdentity, ExportSemantics,
         ExportTargetIdentity, GuardPartition, KnowledgeSet, StabilityKnowledge, ValueShape,
     };
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use std::io::Write as _;
     use std::sync::Arc;
@@ -2652,6 +2685,97 @@ mod tests {
             ArtifactSnapshot::from_local(&local, SnapshotLimits::policy_2()),
             Err(ArtifactSnapshotError::UnsupportedProvenance(_))
         ));
+    }
+
+    fn legacy_resolution(
+        manifest: &[u8],
+        files: &[(&str, &[u8])],
+        axis: ResolutionAxis,
+    ) -> Result<(String, ResolutionTrace), ArtifactSnapshotError> {
+        let mut members = vec![("package/package.json", manifest)];
+        members.extend(files.iter().copied());
+        let snapshot = ArtifactSnapshot::from_published(
+            &published_archive(&members),
+            SnapshotLimits::policy_2(),
+        )
+        .unwrap();
+        let parsed: SnapshotPackageManifest = serde_json::from_slice(manifest).unwrap();
+        let selected = resolve_snapshot_export(&snapshot, &parsed, ".", &BTreeSet::new(), axis)?;
+        Ok((selected.path, selected.trace))
+    }
+
+    #[test]
+    fn legacy_runtime_resolution_prefers_a_present_module_target_over_main() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","type":"module","main":"dist/index.cjs","module":"dist/index.js","types":"dist/index.d.ts"}"#;
+        let files: &[(&str, &[u8])] = &[
+            ("package/dist/index.cjs", b"exports.observe = () => {};"),
+            ("package/dist/index.js", b"export const observe = () => {};"),
+            (
+                "package/dist/index.d.ts",
+                b"export declare const observe: () => void;",
+            ),
+        ];
+
+        let (path, trace) = legacy_resolution(manifest, files, ResolutionAxis::Runtime).unwrap();
+        assert_eq!(path, "dist/index.js");
+        assert_eq!(trace.branch, "legacy:module");
+        assert_eq!(
+            trace.steps,
+            vec![ResolutionTraceStep {
+                condition: "module".into(),
+                target: "dist/index.js".into(),
+            }]
+        );
+
+        // The declarations axis is untouched: `module` never names a typing.
+        let (path, trace) =
+            legacy_resolution(manifest, files, ResolutionAxis::Declarations).unwrap();
+        assert_eq!(path, "dist/index.d.ts");
+        assert_eq!(trace.branch, "legacy:types");
+    }
+
+    #[test]
+    fn legacy_runtime_resolution_falls_back_to_main_when_module_is_unusable() {
+        let present = br#"{"name":"fixture-package","version":"1.2.3","type":"module","main":"dist/index.js"}"#;
+        let runtime: &[u8] = b"export const observe = () => {};";
+        let files: &[(&str, &[u8])] = &[("package/dist/index.js", runtime)];
+        let (baseline, baseline_trace) =
+            legacy_resolution(present, files, ResolutionAxis::Runtime).unwrap();
+        assert_eq!(baseline, "dist/index.js");
+        assert_eq!(baseline_trace.branch, "legacy:main");
+
+        // A declared `module` target that the artifact does not contain is not a
+        // refusal: Node consumers never read `module`, so `main` is still real.
+        for manifest in [
+            br#"{"name":"fixture-package","version":"1.2.3","type":"module","main":"dist/index.js","module":"dist/absent.js"}"#.as_slice(),
+            // Neither is a traversal, an escaping, or a non-string `module`.
+            br#"{"name":"fixture-package","version":"1.2.3","type":"module","main":"dist/index.js","module":"../outside/index.js"}"#.as_slice(),
+            br#"{"name":"fixture-package","version":"1.2.3","type":"module","main":"dist/index.js","module":true}"#.as_slice(),
+            br#"{"name":"fixture-package","version":"1.2.3","type":"module","main":"dist/index.js","module":null}"#.as_slice(),
+        ] {
+            let (path, trace) =
+                legacy_resolution(manifest, files, ResolutionAxis::Runtime).unwrap();
+            assert_eq!(path, "dist/index.js");
+            assert_eq!(trace.branch, "legacy:main");
+            assert_eq!(
+                trace.steps,
+                vec![ResolutionTraceStep {
+                    condition: "main".into(),
+                    target: "dist/index.js".into(),
+                }]
+            );
+        }
+
+        // With neither field usable the index fallback is still the last resort.
+        let indexed = br#"{"name":"fixture-package","version":"1.2.3","type":"module","module":"dist/absent.js"}"#;
+        let (path, trace) = legacy_resolution(
+            indexed,
+            &[("package/index.js", runtime)],
+            ResolutionAxis::Runtime,
+        )
+        .unwrap();
+        assert_eq!(path, "index.js");
+        assert_eq!(trace.branch, "legacy:index");
     }
 
     #[test]

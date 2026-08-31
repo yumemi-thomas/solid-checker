@@ -1,0 +1,74 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "094663c7f8a9ece8131230fd517f92628f75e3f60641d0204a8daa8cb421cabe",
+            "path": "./dist/index.js",
+            "sha256": "cc8581fc5a3931cffc321cc6ce9d6e57f627185a8bfeb9a0a9400a00fc34eaa6"
+          },
+          "declarations": {
+            "path": "./dist/index.d.ts",
+            "sha256": "8c158374f6e577dd153bfde1a4dbab49d475cca83badfa7753c9cf7a0c1222e2"
+          },
+          "exports": {
+            "observe": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "legacy:module",
+            "typesBranch": "legacy:types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:b590b6c39c2d547d57fc5551b46f04d0d9fef8bfbb5786ca0f4b627cf352e439",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "b590b6c39c2d547d57fc5551b46f04d0d9fef8bfbb5786ca0f4b627cf352e439"
+    },
+    "name": "legacy-module-entry-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "legacy-module-absent-package",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/index.d.ts"
+}

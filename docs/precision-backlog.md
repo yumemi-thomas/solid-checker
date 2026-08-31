@@ -1,5 +1,63 @@
 # Precision backlog
 
+## Legacy runtime resolution reads `module` again (2026-08-31)
+
+The v2 artifact-resolution boundary resolved a legacy (no-`exports`) manifest's
+runtime axis through `main`, then `index.js`, and never consulted `module`. That
+lost a distinction the pre-v2 generator already made (see "Legacy
+`module`/`main` provenance was invisible"): a legacy dual package whose `main`
+is the CJS transpile of the same source landed on the CJS sibling and was
+refused with "no runtime ESM exports", even though the artifact ships a real
+ESM build.
+
+Legacy runtime resolution now prefers the `module` target when it is declared
+and names a file inside the artifact, falling back to `main` and then
+`index.js`. The trace branch is `legacy:module`, so the certifier replays the
+same field and receipts stay attributable. The declarations axis is unchanged:
+`module` never names a typing, so it is not consulted there.
+
+A declared `module` target that names no file in the artifact -- or is a
+traversal, an escaping path, or a non-string -- is not a refusal. Node consumers
+never read `module` at all, so the `main` surface is the one every runtime
+consumer loads and is still real; resolution falls back to it.
+
+Both the Rust snapshot replay (`resolve_legacy` in
+`rust/crates/solid-facts-backend/src/contract_certification.rs`) and the
+JavaScript generator (`resolvePackageExport` in
+`packages/cli/scripts/artifact-resolution.mjs`) select the field by the same
+predicate, so the generator and the certifier cannot disagree about which field
+won. The two sides still validate the *selected* legacy target differently --
+Rust rejects traversal, `node_modules`, and percent-encoded segments; the
+JavaScript `main`/`index` path does not -- which predates this change and
+remains a fail-closed mismatch at certification rather than a silent
+divergence.
+
+Regression pins: `fixtures/package-contracts/legacy-module-entry` (present
+`module` wins, `legacy:module`), `legacy-module-absent` (absent `module` falls
+back, `legacy:main`), and `legacy-dual-root`, whose refusal moved from the
+runtime axis to the declaration axis -- it publishes no `types`/`typings`, so
+declarations still fall back to the CJS `main`, which carries no declaration
+binding for the ESM build's export. That remains exactly refused; a legacy dual
+package with no published typings is still uncertifiable, and this change does
+not let the generator assume the two builds agree. Unit pins:
+`legacy_runtime_resolution_prefers_a_present_module_target_over_main` and
+`legacy_runtime_resolution_falls_back_to_main_when_module_is_unusable` in
+`contract_certification.rs`, plus the matching pair in
+`packages/cli/test/artifact-resolution.test.mjs`.
+
+The ecosystem benchmark was not re-run, so `benchmarks/ecosystem/report.json`
+still records the old behavior. Its seven full-row `no-exported-surface`
+refusals were spot-checked against the warm local package cache instead, with
+no network access and no install. Six declare a present `module`; five of them
+now generate a proposal through `legacy:module`
+(`@solid-primitives/{until,countdown,date-difference,reducer}`,
+`@solid-devtools/extension-adapter@0.12.1`). `@solid-devtools/ext-adapter@0.17.0`
+still refuses, now truthfully: its ESM build is a side-effect-only entry that
+exports nothing, so "no runtime ESM exports" is a fact about the artifact
+rather than about the field that was resolved.
+`@solid-devtools/babel-plugin@0.3.1` declares no `module` at all and is
+genuinely CJS-only; it keeps refusing unchanged.
+
 ## Phase 21 published dependency graph transaction (2026-08-31)
 
 Published dependency certification no longer treats recursive eager child
