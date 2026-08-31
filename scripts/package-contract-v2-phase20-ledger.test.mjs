@@ -69,9 +69,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     partial: 37
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 145,
+    "exact-refusal": 143,
     "not-attempted": 25,
-    verified: 248
+    verified: 250
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -79,7 +79,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 248);
+  assert.equal(ledger.summary.verifiedRows, 250);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -156,6 +156,8 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
       "@solid-primitives/focus@1.0.0-next.4|solid2|floor",
       "@solid-primitives/focus@1.0.0-next.4|solid2|head",
+      "@solid-primitives/form@1.0.0-next.2|solid2|floor",
+      "@solid-primitives/form@1.0.0-next.2|solid2|head",
       "@solid-primitives/fullscreen@1.3.5|solid1|only",
       "@solid-primitives/fullscreen@2.0.0-next.3|solid2|floor",
       "@solid-primitives/fullscreen@2.0.0-next.3|solid2|head",

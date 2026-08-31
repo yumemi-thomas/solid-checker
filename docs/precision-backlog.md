@@ -61,17 +61,103 @@ contamination path, pinned by a unit regression test (the shared identity only
 arises from a real cross-package `export *` composition) and by the
 `reexport-value-sibling-callback` fixture for the companion exact-symbol path.
 
-**Still open — a distinct mechanism (b).** The five `@tanstack/solid-*` wrapper
-rows (`.:IR`, `.:initialServerFormState`, `.:ALL_KEYS`, `.:dataTagErrorSymbol`,
-`.:PERSISTER_KEY_PREFIX`) still refuse with `value export … cannot have function
-effects` after the fallback guard, so their obligation is **not** symbol-less:
-its `function_symbol` resolves *to the value export itself* through the wrapper's
-re-export aliasing. That is a symbol-resolution/aliasing defect, not the fallback
-path, and needs a fix where the obligation's owning symbol is bound (an alias of
-a value export must not be accepted as a callback obligation's owner). The
-invariant refusing them is correct; the constants are plain values (`Symbol()`,
-`Set`, string, object, namespace object) that `tsc` says nothing about, so the
-future certification duplicates no diagnostic. Named follow-up.
+## A non-callable value export's open call-path no longer manufactures function effects on composition (2026-08-31)
+
+The five `@tanstack/solid-*` wrapper rows (`.:IR`, `.:initialServerFormState`,
+`.:ALL_KEYS`, `.:dataTagErrorSymbol`, `.:PERSISTER_KEY_PREFIX`) refused with
+`normalized operation graph is invalid: package contract value export … cannot
+have function effects` when the wrapper's contract was generated with its
+dependency composed. An earlier note hypothesised this was a symbol-resolution
+defect in `contract_generation_obligation_target_names` ("mechanism (b)": the
+callback obligation's `function_symbol` resolving to the value export through
+re-export aliasing). Instrumenting the real composed refusal for
+`@tanstack/solid-db@0.2.40 -> .:IR` disproved that: **no** callback obligation
+reaches the value export through that function. The refusing `IR` summary is
+`kind: "value"` with `open_claims: {Callbacks, Reads, Creates, Returns}` and
+every corresponding claim `Open`, and it is built by
+`project_accepted_export` (`rust/crates/solid-reactive-ir/src/contracts.rs`),
+not by obligation attribution.
+
+The mechanism is composition, not attribution. `IR` is
+`import * as ir from "./query/ir.js"; export { ir as IR }` — a non-callable
+namespace value. Its call-path effects are vacuous (a value is never invoked),
+and standalone generation of `@tanstack/db@0.8.5` correctly certifies `IR` as a
+plain value with an empty summary. But a *proposal* dependency keeps that
+export's call-path domains **open** (unresolved — forwarders inside `ir.js`
+reachable only via the namespace). When the wrapper's generation composes that
+proposal, `project_accepted_export` opened the callbacks/reads/returns/creates
+domains from the export's non-closed knowledge *regardless of callability*,
+manufacturing function effects on a value export — the exact inconsistency the
+operation-graph invariant then refuses.
+
+`project_accepted_export` now closes those vacuous domains for a non-callable
+(`kind == "value"`) export: an *open* call-path domain projects as
+closed-empty instead of open, matching standalone generation. Only open domains
+are closed; a genuinely *known* effect is left intact, so a real
+value-with-effects defect still refuses, and certified value exports (already
+closed-empty) are unchanged. The geolocation true positive is untouched: it is
+a generation-time `reconcile_entry_export_kind` conflict on a genuinely callable
+runtime whose declaration is a value, in a different code path, still pinned by
+`an_exact_invocation_symbol_preserves_a_real_export_kind_conflict`.
+
+The closing is gated by `shape_may_be_callable` (added after adversarial review
+caught a false certification): only a *proven* non-callable shape has its open
+domains closed. A `ValueShape::Unknown` (an `any`/error shape, reachable through
+the untrusted wire-decode seam) or a `Choice` union whose membership is not
+exhaustively non-callable stays open and continues to fail closed — closing them
+would assert "invokes no callback" about something that may be callable, from
+missing knowledge. Pinned by `shape_may_be_callable_keeps_unproven_callability_open`.
+
+Residual, measured: clearing this false refusal moves all five wrapper rows off
+the function-effects error, but four of them then refuse at the deeper
+`export root is not compiler-proved callable or constructable` Type Facts stage
+(the largest remaining ecosystem refusal class), so the net certified movement is
+small. That callability class is a separate, open producer-evidence question.
+
+Pinned by
+`contract_document::tests::composing_a_value_export_with_open_call_path_never_manufactures_function_effects`,
+which drives the `MINIMAL` golden's open-call-path value export through
+`project_untrusted_proposal_for_generation` -> `AcceptedContractIndex` ->
+`project_accepted_export` and reproduces the exact `{Callbacks, Reads, Creates,
+Returns}` shape before the fix. It cannot be a self-contained package-contract
+corpus fixture: the corpus runs single-package `generate` with no composed
+dependency, and the open call-path on a value export only arises from composing
+a proposal dependency.
+
+## Dependency graph edges match a re-export from any module of the parent package (2026-08-31)
+
+The native published-graph matcher assumed a package's external re-export lived
+in its *entry* module: both `graph_request_edges` and the authoritative
+planned-node matcher required the dependency edge's importer to equal the
+parent's entry runtime path. But Node resolution is per-importing-module, and the
+JS node builder correctly records the importer as the *source module* that issued
+the import. They agree only when the re-export sits in the entry module, so
+`@solid-primitives/form@1.0.0-next.2` (re-exports `@solid-primitives/a11y` from
+`dist/form-control.js`) and `@tanstack/ai-solid@0.19.1` (via `@tanstack/ai`'s
+`dist/esm/types.js`) refused with `has no exact dependency node`.
+
+The request-ordering matcher now accepts an importer under the parent's
+`package_root` (component-wise containment; a name-prefix sibling like `foo-bar`
+vs `foo` does not match). The authoritative matcher is *tightened*, not relaxed:
+it admits the importer only if it equals `<package_root>/<entry.path>` for a
+Runtime- or Declaration-role entry of the parent's **verified** (replayed,
+digest-pinned) closure, so every admitted importer is a proven byte-identity
+module of the closure. The identity/artifact-case/semantic-digest checks and the
+ambiguity/reachability censuses remain the fail-closed backstop, and the
+transplanted-leaf regression (importer outside the package root) stays rejected.
+Pinned by `native_published_graph_matches_a_non_entry_module_reexport`.
+
+The constants are plain values (`Symbol()`, `Set`, string, object, namespace
+object) `tsc` says nothing about, so certifying them duplicates no diagnostic.
+Verified offline for `.:IR` (@tanstack/solid-db) and `.:ALL_KEYS`
+(@tanstack/solid-hotkeys): both now pass the demand-planning stage where the
+function-effects refusal lived. **Remaining, separate from this fix:** past that
+stage the witness-acquisition / live Type Facts export-value verification raises
+its own refusals (for `IR`, the resolved value declaration `query/ir` is not the
+snapshot-selected `index.d.ts` suffix; for `@tanstack/hotkeys`'s
+`createSequenceMatcher`, "operation value path has the wrong callability"). Those
+are a distinct certification stage and are not addressed here; whether each of
+the five rows fully certifies is the authoritative ecosystem re-measure's call.
 
 ## Two refusal classes became a recorded inapplicable disposition (2026-08-31)
 

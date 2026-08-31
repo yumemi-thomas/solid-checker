@@ -30,6 +30,22 @@ use crate::contract_semantics::{
 use crate::identity::symbol_id;
 use crate::pipeline::parallel_slice_results;
 
+/// Whether a value-kind export's shape leaves open the possibility that it is
+/// callable, in which case its open call-path domains must NOT be closed to
+/// empty. `Unknown` (an `any`/error shape) and a `Choice` union whose
+/// membership is not exhaustively known, or that contains a callable member,
+/// are possibly-callable and stay open (fail closed). Every other value shape
+/// is proven non-callable, so its vacuous call-path domains may be closed.
+fn shape_may_be_callable(shape: &ValueShape) -> bool {
+    match shape {
+        ValueShape::Callable | ValueShape::Component | ValueShape::Unknown => true,
+        ValueShape::Choice(members) => {
+            !members.is_closed() || members.items().iter().any(shape_may_be_callable)
+        }
+        _ => false,
+    }
+}
+
 /// Projects an already receipt-validated normalized export into the compact
 /// indexes used by the current interprocedural solver. This is deliberately
 /// downstream of exact import/artifact selection: no schema version, summary
@@ -43,11 +59,50 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         "value"
     };
 
-    let callbacks = project_callbacks(export, &mut open_claims);
-    let reactive_reads = project_reactive_reads(export, &mut open_claims);
-    let returns = project_return(export, &mut open_claims);
-    let owner_requirements = project_owner_requirements(export, &mut open_claims);
+    let mut callbacks = project_callbacks(export, &mut open_claims);
+    let mut reactive_reads = project_reactive_reads(export, &mut open_claims);
+    let mut returns = project_return(export, &mut open_claims);
+    let mut owner_requirements = project_owner_requirements(export, &mut open_claims);
     let async_behavior = project_async_behavior(export, &mut open_claims);
+
+    if kind == "value" && !shape_may_be_callable(&export.shape) {
+        // A *proven* non-callable value export is never invoked, so every
+        // call-path function-effect domain is vacuously empty. A composed
+        // *proposal* dependency can still carry that export's call-path
+        // knowledge as open (unresolved) -- e.g. a namespace/constant
+        // re-exported past forwarders it never exposes as call targets.
+        // Projecting that as open would manufacture function effects on a value
+        // export, the exact inconsistency `validate_export` refuses with "value
+        // export cannot have function effects". Standalone generation already
+        // certifies such an export effect-free, so composing its proposal must
+        // agree rather than refuse the importing package. Only the *open*
+        // (vacuous) domains are closed here; a genuinely known effect is left
+        // intact so a real value-with-effects defect still refuses.
+        //
+        // The `shape_may_be_callable` guard is load-bearing: a shape whose
+        // callability is *not* proven (an `Unknown`/`any` shape, or a `Choice`
+        // union whose membership is not exhaustively non-callable) must keep its
+        // open domains and continue to fail closed. Closing them would assert
+        // "invokes no callback / performs no read" about something that may in
+        // fact be callable -- manufacturing a negative claim from missing
+        // knowledge, which the precision contract forbids.
+        if callbacks.is_open() {
+            callbacks = ContractClaim::Known(Vec::new());
+            open_claims.remove(&ClaimDomain::Callbacks);
+        }
+        if reactive_reads.is_open() {
+            reactive_reads = ContractClaim::Known(Vec::new());
+            open_claims.remove(&ClaimDomain::Reads);
+        }
+        if returns.is_open() {
+            returns = ContractClaim::Known(None);
+            open_claims.remove(&ClaimDomain::Returns);
+        }
+        if owner_requirements.is_open() {
+            owner_requirements = ContractClaim::Known(Vec::new());
+            open_claims.remove(&ClaimDomain::Creates);
+        }
+    }
 
     ContractExport {
         kind: kind.into(),
@@ -2692,5 +2747,45 @@ mod export_kind_proof_tests {
         });
         assert_eq!(raised.kind, "function");
         assert!(matches!(raised.callbacks, ContractClaim::Open));
+    }
+
+    #[test]
+    fn shape_may_be_callable_keeps_unproven_callability_open() {
+        // Guards the value-export call-path closing in `project_accepted_export`:
+        // only a *proven* non-callable shape may have its open call-path domains
+        // closed to empty. A shape whose callability is not proven must return
+        // true here so its domains stay open and it fails closed -- closing them
+        // would manufacture "invokes no callback" from missing knowledge.
+        use super::shape_may_be_callable;
+        use crate::contract_semantics::{KnowledgeSet, ValueShape};
+
+        // Callable / possibly-callable shapes: keep open.
+        assert!(shape_may_be_callable(&ValueShape::Callable));
+        assert!(shape_may_be_callable(&ValueShape::Component));
+        assert!(shape_may_be_callable(&ValueShape::Unknown));
+        // A union with a callable member is possibly callable.
+        assert!(shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Complete(vec![ValueShape::Plain, ValueShape::Callable,])
+        )));
+        // A union whose membership is not exhaustively known could hide a
+        // callable member.
+        assert!(shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Partial(vec![ValueShape::Plain,])
+        )));
+        assert!(shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Unknown
+        )));
+
+        // Proven non-callable value shapes: closable.
+        assert!(!shape_may_be_callable(&ValueShape::Plain));
+        assert!(!shape_may_be_callable(&ValueShape::Object(
+            KnowledgeSet::Unknown
+        )));
+        assert!(!shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Complete(vec![
+                ValueShape::Plain,
+                ValueShape::Object(KnowledgeSet::Unknown),
+            ])
+        )));
     }
 }

@@ -4026,6 +4026,242 @@ mod tests {
         )
     }
 
+    /// Builds a published root package whose *entry* module imports only a
+    /// local sibling, and whose non-entry sibling (`dist/re-export.js` /
+    /// `types/re-export.d.ts`) is the module that re-exports the external
+    /// dependency. Node resolves an external import from the importing module,
+    /// so this leaf's importer is the non-entry sibling, not the package entry.
+    /// Every artifact identity is still replayed from the archive bytes.
+    fn synthetic_reexport_module_root_request(
+        name: &str,
+        version: &str,
+        package_root: &str,
+        importer: &str,
+        dependency_specifier: &str,
+        dependencies: Vec<AcceptedDependencyEdge>,
+    ) -> (CertificationRequest, PublishedArchive, String) {
+        let manifest = format!(
+            r#"{{"name":"{name}","version":"{version}","exports":{{".":{{"types":"./types/index.d.ts","import":"./dist/index.js"}}}}}}"#
+        );
+        let entry_runtime = b"export * from './re-export.js';".to_vec();
+        let entry_declarations = b"export * from './re-export.js';".to_vec();
+        let reexport_runtime = format!("export * from '{dependency_specifier}';").into_bytes();
+        let reexport_declarations = format!("export * from '{dependency_specifier}';").into_bytes();
+        let archive = published_archive_for(
+            name,
+            version,
+            &[
+                ("package/package.json", manifest.as_bytes()),
+                ("package/dist/index.js", &entry_runtime),
+                ("package/dist/re-export.js", &reexport_runtime),
+                ("package/types/index.d.ts", &entry_declarations),
+                ("package/types/re-export.d.ts", &reexport_declarations),
+            ],
+        );
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let package_manifest = resolved_file(package_root, "package.json", manifest.as_bytes());
+        let runtime_file = resolved_file(package_root, "dist/index.js", &entry_runtime);
+        let declaration_file = resolved_file(package_root, "types/index.d.ts", &entry_declarations);
+        let closure = ClosureManifest::new(
+            vec![
+                closure_entry(
+                    ClosureFileRole::Manifest,
+                    "package.json",
+                    manifest.as_bytes(),
+                ),
+                closure_entry(
+                    ClosureFileRole::ResolutionInput,
+                    "package.json",
+                    manifest.as_bytes(),
+                ),
+                closure_entry(ClosureFileRole::Runtime, "dist/index.js", &entry_runtime),
+                closure_entry(
+                    ClosureFileRole::Runtime,
+                    "dist/re-export.js",
+                    &reexport_runtime,
+                ),
+                closure_entry(
+                    ClosureFileRole::Declaration,
+                    "types/index.d.ts",
+                    &entry_declarations,
+                ),
+                closure_entry(
+                    ClosureFileRole::Declaration,
+                    "types/re-export.d.ts",
+                    &reexport_declarations,
+                ),
+            ],
+            dependencies,
+            Vec::new(),
+        )
+        .unwrap();
+        let request = ImportRequest {
+            specifier: name.into(),
+            importer: importer.into(),
+            export_conditions: vec!["import".into()],
+        };
+        let resolved = ResolvedImport {
+            specifier: name.into(),
+            importer: importer.into(),
+            requested_entrypoint: ".".into(),
+            package_name: name.into(),
+            package_version: version.into(),
+            package_integrity: snapshot.package_integrity().into(),
+            package_root: package_root.into(),
+            package_real_root: None,
+            package_manifest,
+            runtime: runtime_file,
+            declarations: declaration_file,
+            runtime_trace: ResolutionTrace {
+                branch: "/exports/./import".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "import".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./dist/index.js".into(),
+                    },
+                ],
+            },
+            declaration_trace: ResolutionTrace {
+                branch: "/exports/./types".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "types".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./types/index.d.ts".into(),
+                    },
+                ],
+            },
+            closure,
+            transform: None,
+            exports: BTreeMap::new(),
+            authority: ResolutionAuthority::Host,
+        };
+        let (package, mut artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        artifact_case.exports.insert(
+            "value".into(),
+            ExportSemantics {
+                identity: ExportIdentity {
+                    entrypoint: artifact_case.entrypoint.clone(),
+                    public_name: "value".into(),
+                    runtime: ExportTargetIdentity {
+                        module: artifact_case.runtime.clone(),
+                        export_name: "value".into(),
+                    },
+                    declarations: ExportTargetIdentity {
+                        module: artifact_case.declarations.clone(),
+                        export_name: "value".into(),
+                    },
+                },
+                shape: ValueShape::Plain,
+                stability: StabilityKnowledge::Unknown,
+                call: CallSemantics::new(
+                    CallClaims::default(),
+                    vec![],
+                    vec![],
+                    vec![],
+                    GuardPartition {
+                        cases: KnowledgeSet::Unknown,
+                    },
+                ),
+            },
+        );
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        (
+            CertificationRequest::new(candidate, request, resolved),
+            archive,
+            snapshot.package_integrity().into(),
+        )
+    }
+
+    /// A dependency edge whose external re-export is issued from a *non-entry*
+    /// module of the parent package must still resolve to its exact graph node.
+    /// Node resolution is per-importing-module, so the child's importer is the
+    /// re-exporting sibling, not the parent entry; the authoritative matcher
+    /// admits it because that sibling is a runtime/declaration module of the
+    /// parent's replayed, digest-pinned closure. The transplanted-leaf case in
+    /// `native_published_graph_is_dependency_first_and_rejects_missing_or_transplanted_nodes`
+    /// remains rejected: an importer outside the parent package root is not one
+    /// of those closure modules.
+    #[test]
+    fn native_published_graph_matches_a_non_entry_module_reexport() {
+        let reexport_importer = "/project/node_modules/root-package/dist/re-export.js";
+        let (leaf_request, leaf_archive, leaf_integrity) = synthetic_graph_certification_request(
+            "leaf-package",
+            "2.0.0",
+            "/project/node_modules/root-package/node_modules/leaf-package",
+            reexport_importer,
+            b"export const value = 1;",
+            b"export declare const value: number;",
+            Vec::new(),
+        );
+        let leaf_plan = plan_certification(
+            leaf_request.clone(),
+            UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+        )
+        .unwrap();
+        let edge = AcceptedDependencyEdge {
+            specifier: "leaf-package".into(),
+            package_name: "leaf-package".into(),
+            artifact_case: leaf_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: leaf_plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        };
+        let (mut root_request, root_archive, root_integrity) =
+            synthetic_reexport_module_root_request(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                "leaf-package",
+                vec![edge],
+            );
+        root_request.resolved_import.exports.insert(
+            "value".into(),
+            leaf_request.resolved_import.exports["value"].clone(),
+        );
+
+        let graph = plan_published_contract_graph(
+            PublishedGraphNodeRequest::new(
+                root_request,
+                root_archive,
+                graph_lock("root-package", "1.0.0", &root_integrity),
+            ),
+            [PublishedGraphNodeRequest::new(
+                leaf_request,
+                leaf_archive,
+                graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+            )],
+        )
+        .unwrap();
+        let order = graph.dependency_first_identities();
+        assert_eq!(order.len(), 2);
+        assert_eq!(order[0].package_name, "leaf-package");
+        assert_eq!(order[1].package_name, "root-package");
+        assert_eq!(graph.root_identity().package_name, "root-package");
+    }
+
     #[test]
     fn planning_transaction_shares_snapshot_members_but_rebuilds_request_authority() {
         let (request, archive, _) = synthetic_graph_certification_request(

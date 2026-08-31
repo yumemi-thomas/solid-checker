@@ -26,13 +26,18 @@ integration-level companion to the unit regression
 `contract_generation_callback_attribution_tests::exact_function_symbol_excludes_value_siblings_that_share_runtime_identity`
 in `rust/crates/solid-facts-backend/src/main.rs`.
 
-The related ecosystem-wrapper failures — `@tanstack/solid-db` (`IR`),
+This fixture pins the exact-symbol attribution path only. The superficially
+related ecosystem-wrapper failures — `@tanstack/solid-db` (`IR`),
 `@tanstack/solid-hotkeys` (`ALL_KEYS`), `@tanstack/solid-query`
 (`dataTagErrorSymbol`), `@tanstack/solid-form` (`initialServerFormState`), and
-`@tanstack/solid-query-persist-client` (`PERSISTER_KEY_PREFIX`) — take the
-*symbol-less* path: the callback forwarder is an anonymous function inside the
-wrapper, so its obligation has no symbol and falls back to the runtime identity
-shared across a `export * from "<dependency>"` barrel. That case is pinned by
-the sibling unit regression `an_empty_function_symbol_never_falls_back_onto_a_value_sibling`;
-it cannot be a self-contained corpus fixture because the shared runtime identity
-only arises from a real cross-package `export *` composition.
+`@tanstack/solid-query-persist-client` (`PERSISTER_KEY_PREFIX`) — do **not** run
+through callback-obligation attribution at all. They are a *composition*
+mechanism: a non-callable value constant re-exported from a dependency whose
+proposal keeps that export's call-path domains open. Composing the proposal
+projected those open domains onto the value export and manufactured function
+effects. Fixed in `project_accepted_export`
+(`rust/crates/solid-reactive-ir/src/contracts.rs`) and pinned by
+`contract_document::tests::composing_a_value_export_with_open_call_path_never_manufactures_function_effects`;
+see docs/precision-backlog.md. It cannot be a self-contained corpus fixture
+because the open call-path on a value export only arises from composing a
+cross-package proposal dependency, which single-package `generate` never does.

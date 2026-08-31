@@ -792,11 +792,16 @@ fn plan_published_contract_graph_with_limits(
 
     let mut identity_disagreements = Vec::new();
     for parent_index in 0..planned.len() {
-        let parent_runtime = planned[parent_index]
+        let parent_root = planned[parent_index]
             .plan
             .resolved_import
-            .runtime
-            .path
+            .package_root
+            .clone();
+        let parent_entries = planned[parent_index]
+            .plan
+            .verified_closure
+            .manifest()
+            .entries
             .clone();
         let parent_conditions = planned[parent_index].identity.conditions.clone();
         let edges = planned[parent_index]
@@ -812,7 +817,11 @@ fn plan_published_contract_graph_with_limits(
                 .filter(|candidate| {
                     candidate.identity.package_name == edge.package_name
                         && candidate.plan.import_request.specifier == edge.specifier
-                        && candidate.plan.import_request.importer == parent_runtime
+                        && importer_is_closure_entry_module(
+                            &candidate.plan.import_request.importer,
+                            &parent_root,
+                            &parent_entries,
+                        )
                         && candidate.identity.conditions == parent_conditions
                 })
                 .map(|candidate| candidate.identity.clone())
@@ -928,12 +937,50 @@ fn plan_published_contract_graph_with_limits(
     })
 }
 
+/// True when `importer` lies anywhere inside `package_root`. Node resolves an
+/// external import from the importing module, which may be any module of the
+/// parent package rather than only its entry, so package-root containment is
+/// the sound relation for ordering unplanned graph requests. Comparison is
+/// component-wise, so a sibling directory sharing a name prefix does not match.
+fn importer_within_package_root(importer: &str, package_root: &str) -> bool {
+    Path::new(importer).starts_with(Path::new(package_root))
+}
+
+/// True when `importer` is exactly one runtime- or declaration-role module of
+/// the parent's replayed, digest-pinned verified closure, reconstructed against
+/// its package root. This is the authoritative dependency-edge matcher: it
+/// admits a re-export issued from a non-entry module of the parent package
+/// while still rejecting any importer that is not a member of the parent's
+/// proven closure (for instance one transplanted outside the package root).
+fn importer_is_closure_entry_module(
+    importer: &str,
+    package_root: &str,
+    entries: &[crate::artifact_resolution::ClosureEntry],
+) -> bool {
+    let importer_path = Path::new(importer);
+    let root = Path::new(package_root);
+    entries.iter().any(|entry| {
+        if !matches!(
+            entry.role,
+            crate::artifact_resolution::ClosureFileRole::Runtime
+                | crate::artifact_resolution::ClosureFileRole::Declaration
+        ) {
+            return false;
+        }
+        let relative = entry.path.strip_prefix("./").unwrap_or(entry.path.as_str());
+        if relative.starts_with("virtual:") {
+            return false;
+        }
+        root.join(relative).as_path() == importer_path
+    })
+}
+
 fn graph_request_edges(
     requests: &[PublishedGraphNodeRequest],
 ) -> Result<Vec<Vec<usize>>, PublishedGraphPlanningError> {
     let mut graph = vec![Vec::new(); requests.len()];
     for (parent_index, parent) in requests.iter().enumerate() {
-        let parent_runtime = &parent.certification.resolved_import.runtime.path;
+        let parent_root = &parent.certification.resolved_import.package_root;
         let mut parent_conditions = parent
             .certification
             .import_request
@@ -952,7 +999,10 @@ fn graph_request_edges(
                     child_conditions.dedup();
                     child.certification.resolved_import.package_name == edge.package_name
                         && child.certification.import_request.specifier == edge.specifier
-                        && child.certification.import_request.importer == *parent_runtime
+                        && importer_within_package_root(
+                            &child.certification.import_request.importer,
+                            parent_root,
+                        )
                         && child_conditions == parent_conditions
                 })
                 .map(|(index, _)| index)
