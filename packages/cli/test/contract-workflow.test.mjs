@@ -17,6 +17,7 @@ import { ArtifactResolutionError } from "../scripts/artifact-resolution.mjs";
 import {
   buildPublishedGraphExecutionRequest,
   CertificationRefusal,
+  acquireRootCompilerSources,
   certifyContract,
   isExactDependencyCompositionRefusal,
   isReusableDependencyRefusalAudit,
@@ -975,4 +976,336 @@ test("batched merge isolation preserves order and accepts valid intervals togeth
     { accepted: ["known-a"], interval: ["contradictory-b"] },
     { accepted: ["known-a"], interval: ["known-c", "known-d"] }
   ]);
+});
+
+// A minimal installed tree for the root-path declaration-only source walk:
+// `root-package`'s typings import `alpha` and `beta`, both installed side by
+// side, and only the ones the caller lists reach the Bun lockfile.
+function writeRootSourceInstall(project, { lockedNames }) {
+  const write = (path, body) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+  };
+  const declarationOnly = name => {
+    write(
+      join(project, "node_modules", name, "package.json"),
+      `{"name":"${name}","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}\n`
+    );
+    write(join(project, "node_modules", name, "types/index.d.ts"), `export type T = () => void;\n`);
+    write(join(project, "node_modules", name, "dist/index.js"), `export {};\n`);
+  };
+  write(
+    join(project, "node_modules/root-package/package.json"),
+    `{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}\n`
+  );
+  write(
+    join(project, "node_modules/root-package/types/index.d.ts"),
+    `import type { T as A } from "alpha";\nimport type { T as B } from "beta";\nexport declare const value: A | B;\n`
+  );
+  write(join(project, "node_modules/root-package/dist/index.js"), `export const value = () => {};\n`);
+  declarationOnly("alpha");
+  declarationOnly("beta");
+  const packages = Object.fromEntries(
+    lockedNames.map(name => [name, [`${name}@1.0.0`, "", {}, `sha512-${name}`]])
+  );
+  write(join(project, "bun.lock"), `${JSON.stringify({ lockfileVersion: 2, packages }, null, 2)}\n`);
+}
+
+function rootSourceGenerated(project) {
+  return {
+    certificationInputs: [
+      {
+        entrypoint: ".",
+        conditions: ["import"],
+        resolution: {
+          specifier: "root-package",
+          importer: join(project, "solid-checker-certification-importer.ts"),
+          packageRoot: join(project, "node_modules/root-package")
+        }
+      }
+    ]
+  };
+}
+
+// Serves any package the registry stub was told about; every other name fails
+// acquisition the way an unreachable registry would.
+function registryStub(served) {
+  const origin = "https://registry.npmjs.org/";
+  return async url => {
+    // `<origin>/<name>` for a packument, `<origin>/<name>/-/<file>.tgz` for the
+    // archive; both address the same package name.
+    const path = decodeURIComponent(url.slice(origin.length));
+    const name = path.split("/-/")[0];
+    const record = served[name];
+    if (!record) return { ok: false, status: 404, statusText: "Not Found" };
+    if (url.endsWith(".tgz")) {
+      return { ok: true, status: 200, arrayBuffer: async () => record.archive };
+    }
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () =>
+        new TextEncoder().encode(
+          JSON.stringify({
+            versions: {
+              "1.0.0": {
+                name,
+                version: "1.0.0",
+                dist: {
+                  integrity: `sha512-${name}`,
+                  tarball: `https://registry.npmjs.org/${name}/-/${name}-1.0.0.tgz`
+                }
+              }
+            }
+          })
+        ).buffer
+    };
+  };
+}
+
+test("root certification names only the declaration-only packages the lockfile selects", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    writeRootSourceInstall(project, { lockedNames: ["alpha", "beta"] });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const [emitted] = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+    });
+    assert.deepEqual(
+      emitted.map(source => source.packageName).sort(),
+      ["alpha", "beta"],
+      "both lock-selected declaration-only packages are named"
+    );
+    for (const source of emitted) {
+      assert.equal(source.registryOrigin, "https://registry.npmjs.org");
+      assert.ok(existsSync(source.archive), "an emitted source names acquired archive bytes");
+      assert.ok(existsSync(source.registryMetadata));
+      assert.equal(
+        source.installedPackageRoot,
+        join(project, "node_modules", source.packageName)
+      );
+    }
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("root certification withholds a whole package name it could not name or acquire", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // `beta` is installed but absent from the lockfile, so it can never be
+    // authenticated. Naming only `alpha` would be fine; the point of this test
+    // is that the withheld name never appears.
+    writeRootSourceInstall(project, { lockedNames: ["alpha"] });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const [emitted] = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub({ alpha: { archive } })
+    });
+    assert.deepEqual(
+      emitted.map(source => source.packageName),
+      ["alpha"],
+      "a package the lockfile does not select is never named"
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("root certification withholds a name whose published bytes it could not acquire", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    writeRootSourceInstall(project, { lockedNames: ["alpha", "beta"] });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    // The registry serves `alpha` and refuses `beta`. An unserved name must be
+    // withheld rather than silently omitted from acquisition but kept in the
+    // emitted set.
+    const [emitted] = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub({ alpha: { archive } })
+    });
+    assert.deepEqual(
+      emitted.map(source => source.packageName),
+      ["alpha"],
+      "a package whose archive cannot be acquired is withheld"
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a project with no Bun lockfile names no declaration-only source at all", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    writeRootSourceInstall(project, { lockedNames: ["alpha", "beta"] });
+    rmSync(join(project, "bun.lock"));
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const emitted = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: async () => {
+        throw new Error("no lockfile means no acquisition may be attempted");
+      }
+    });
+    assert.deepEqual(emitted, [[]]);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+// Two entrypoints of one package that reach two *different* copies of one
+// dependency name: `.` reaches the hoisted `alpha`, `./sub` reaches a nested
+// `alpha` under `mid` that the lockfile does not select.
+//
+// This is the substitution shape. Materializing the hoisted copy because one
+// entrypoint could name it, while the copy that actually governs the other
+// entrypoint is missing, does not leave `alpha` unresolved — bundler resolution
+// walks up and answers from the wrong version. The name has to go entirely.
+function writeShadowedSourceInstall(project) {
+  const write = (path, body) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+  };
+  const declarationOnly = (root, name, version, body) => {
+    write(
+      join(root, "package.json"),
+      `{"name":"${name}","version":"${version}","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}\n`
+    );
+    write(join(root, "types/index.d.ts"), body);
+    write(join(root, "dist/index.js"), `export {};\n`);
+  };
+  const rootPackage = join(project, "node_modules/root-package");
+  write(
+    join(rootPackage, "package.json"),
+    `{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"},"./sub":{"types":"./sub/types/index.d.ts","import":"./sub/dist/index.js"}}}\n`
+  );
+  write(
+    join(rootPackage, "types/index.d.ts"),
+    `import type { T } from "alpha";\nexport declare const value: T;\n`
+  );
+  write(join(rootPackage, "dist/index.js"), `export const value = () => {};\n`);
+  write(
+    join(rootPackage, "sub/types/index.d.ts"),
+    `import type { T } from "mid";\nexport declare const other: T;\n`
+  );
+  write(join(rootPackage, "sub/dist/index.js"), `export const other = () => {};\n`);
+
+  declarationOnly(
+    join(project, "node_modules/alpha"),
+    "alpha",
+    "1.0.0",
+    `export type T = () => void;\n`
+  );
+  declarationOnly(
+    join(project, "node_modules/mid"),
+    "mid",
+    "1.0.0",
+    `import type { T as A } from "alpha";\nexport type T = A;\n`
+  );
+  declarationOnly(
+    join(project, "node_modules/mid/node_modules/alpha"),
+    "alpha",
+    "2.0.0",
+    `export type T = { notCallable: true };\n`
+  );
+
+  // Only the hoisted alpha@1.0.0 and mid@1.0.0 are selectable; the nested
+  // alpha@2.0.0 that governs `mid` is not.
+  write(
+    join(project, "bun.lock"),
+    `${JSON.stringify(
+      {
+        lockfileVersion: 2,
+        packages: {
+          alpha: ["alpha@1.0.0", "", {}, "sha512-alpha"],
+          mid: ["mid@1.0.0", "", {}, "sha512-mid"]
+        }
+      },
+      null,
+      2
+    )}\n`
+  );
+  return rootPackage;
+}
+
+test("a package name one entrypoint could not authenticate is withheld from every entrypoint", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    const rootPackage = writeShadowedSourceInstall(project);
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const emitted = await acquireRootCompilerSources({
+      options: {
+        packageRoot: rootPackage,
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: {
+        certificationInputs: [
+          {
+            entrypoint: ".",
+            conditions: ["import"],
+            resolution: {
+              specifier: "root-package",
+              importer: join(project, "solid-checker-certification-importer.ts"),
+              packageRoot: rootPackage
+            }
+          },
+          {
+            entrypoint: "./sub",
+            conditions: ["import"],
+            resolution: {
+              specifier: "root-package/sub",
+              importer: join(project, "solid-checker-certification-importer.ts"),
+              packageRoot: rootPackage
+            }
+          }
+        ]
+      },
+      scratch,
+      fetch_: registryStub({ alpha: { archive }, mid: { archive } })
+    });
+    const names = emitted.flat().map(source => source.packageName);
+    assert.ok(
+      !names.includes("alpha"),
+      `the hoisted alpha must not stand in for the nested copy; got ${JSON.stringify(names)}`
+    );
+    // `mid` still travels: one unnameable grandchild poisons its own name, not
+    // the whole collected subtree.
+    assert.deepEqual([...new Set(names)], ["mid"]);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
 });

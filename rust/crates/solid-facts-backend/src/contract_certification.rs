@@ -151,6 +151,37 @@ impl CertificationPlanningTransaction {
         )
     }
 
+    /// Plans an ordinary root certification together with the declaration-only
+    /// packages whose typings its own declarations reference.
+    ///
+    /// The sources travel through the same authenticated channel a published
+    /// graph node uses: each one is an integrity-verified published archive
+    /// replayed against an exact lock selection. They are evidence material
+    /// only — the demand graph, snapshot root, selected artifact case, and
+    /// every semantic claim are identical to [`Self::plan_contract_document`]
+    /// with the same document.
+    ///
+    /// Because they are only evidence, a source that will not authenticate is
+    /// dropped rather than refused, and supplying none is not a failure. In
+    /// both cases the witness program simply cannot resolve those references
+    /// and the demands that need them stay open, which is exactly the answer
+    /// this path gives today.
+    pub fn plan_contract_document_with_sources(
+        &mut self,
+        document: &[u8],
+        import_request: ImportRequest,
+        resolved_import: ResolvedImport,
+        artifact: UntrustedArtifactEnvelope,
+        sources: Vec<PublishedGraphSourceRequest>,
+    ) -> Result<CertificationPlan, CertificationPlanningError> {
+        let mut plan =
+            self.plan_contract_document(document, import_request, resolved_import, artifact)?;
+        let authenticated = dependencies::retain_authenticated_source_packages(self, sources);
+        plan.certification_sources =
+            type_facts::retain_collision_free_source_packages(&plan, authenticated);
+        Ok(plan)
+    }
+
     fn published_snapshot(
         &mut self,
         archive: PublishedArchive,
@@ -298,6 +329,11 @@ pub struct CertificationPlan {
     artifact_witnesses: Vec<WitnessBinding>,
     import_request: ImportRequest,
     resolved_import: ResolvedImport,
+    /// Declaration-only packages this plan already authenticated. They supply
+    /// the type-providing closure the witness program needs to resolve a
+    /// cross-package reference; they never contribute a semantic claim, a
+    /// dependency receipt, or a runtime module to this plan.
+    certification_sources: Vec<dependencies::VerifiedGraphSourcePackage>,
 }
 
 impl CertificationPlan {
@@ -322,6 +358,29 @@ impl CertificationPlan {
     #[must_use]
     pub fn snapshot_root(&self) -> &str {
         self.snapshot.root()
+    }
+
+    /// Canonical root over the declaration-only closure this plan will
+    /// materialize into its witness program.
+    ///
+    /// Every Type Facts witness binding folds this in, so a receipt records
+    /// which closure proved it and an auditor can tell a full-closure
+    /// certification from a partial-closure one. A plan with no sources has its
+    /// own well-defined root, so "nothing was supplied" is a statement the
+    /// receipt makes rather than an absence. The composition is over the
+    /// canonical `VerifiedGraphSourcePackage` identities, which already bind
+    /// registry origin, package manager, lockfile digest, lock locator, name,
+    /// version, integrity, installed root, snapshot root, and provenance root —
+    /// mirroring the graph's `source_dependencies_root`.
+    pub(super) fn certification_sources_root(&self) -> String {
+        certification_evidence_root(
+            "policy2-certification-sources",
+            std::iter::once("solid-checker:certification-source-closure:v1").chain(
+                self.certification_sources
+                    .iter()
+                    .map(|source| source.identity.as_str()),
+            ),
+        )
     }
 
     #[must_use]
@@ -623,6 +682,7 @@ fn plan_certification_with_dependencies(
         artifact_witnesses,
         import_request: request.import_request,
         resolved_import: request.resolved_import,
+        certification_sources: Vec::new(),
     })
 }
 
@@ -2218,15 +2278,17 @@ mod tests {
         DependencyReceiptCompositionError, LocalArtifact, LockPinnedArchive,
         Policy2ReceiptBindings, Policy2ReceiptProvenance, PublishedArchive,
         PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
-        ResolutionAxis, SnapshotLimits, SnapshotPackageManifest, SnapshotVerifiedResolution,
-        UntrustedArtifactEnvelope, authenticate_policy2_receipt, issue_policy2_receipt,
-        plan_certification, plan_published_contract_graph, policy2_main_semantic_digest,
-        policy2_trust_configuration_for_issuer, resolve_snapshot_export,
+        PublishedGraphSourceRequest, ResolutionAxis, SnapshotLimits, SnapshotPackageManifest,
+        SnapshotVerifiedResolution, UntrustedArtifactEnvelope, authenticate_policy2_receipt,
+        issue_policy2_receipt, plan_certification, plan_published_contract_graph,
+        policy2_main_semantic_digest, policy2_trust_configuration_for_issuer,
+        resolve_snapshot_export,
     };
     use crate::artifact_resolution::{
-        AcceptedDependencyEdge, ClosureEntry, ClosureFileRole, ClosureHazardKind, ClosureManifest,
-        ImportRequest, ResolutionAuthority, ResolutionTrace, ResolutionTraceStep,
-        ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
+        AcceptedDependencyEdge, AffectedClaimDomain, ClosureEntry, ClosureFileRole, ClosureHazard,
+        ClosureHazardKind, ClosureManifest, ImportRequest, ResolutionAuthority, ResolutionTrace,
+        ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile,
+        ResolvedImport,
     };
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use flate2::{Compression, write::GzEncoder};
@@ -4788,24 +4850,502 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn published_graph_certifies_bottom_up_with_the_pinned_producer() {
-        let Some(typefacts_path) = std::env::var_os("SOLID_TYPEFACTS_BIN") else {
-            return;
-        };
-        let typefacts_path = std::fs::canonicalize(typefacts_path).unwrap();
+    fn pinned_producer_for_test() -> Option<super::TypeFactsProducerPin> {
+        let typefacts_path =
+            std::fs::canonicalize(std::env::var_os("SOLID_TYPEFACTS_BIN")?).ok()?;
         let executable = std::fs::read(&typefacts_path).unwrap();
         let buildinfo: serde_json::Value = serde_json::from_slice(
             &std::fs::read(format!("{}.buildinfo", typefacts_path.display())).unwrap(),
         )
         .unwrap();
         let source_digest = buildinfo["sourceDigest"].as_str().unwrap();
-        let pin = super::TypeFactsProducerPin::new(
-            typefacts_path,
-            format!("sha256:{:x}", Sha256::digest(executable)),
-            format!("sha256:{source_digest}"),
+        Some(
+            super::TypeFactsProducerPin::new(
+                typefacts_path,
+                format!("sha256:{:x}", Sha256::digest(executable)),
+                format!("sha256:{source_digest}"),
+            )
+            .unwrap(),
+        )
+    }
+
+    /// A root package whose only claim — that `value` is callable — is provable
+    /// exclusively from a *different* package's declarations. Its own `.d.ts`
+    /// says nothing more than "`value` has the type `source-types` calls
+    /// `Callback`"; a witness program built without `source-types` sees that
+    /// name as `any`, which the producer correctly refuses to call callable.
+    fn callable_through_external_declaration_root()
+    -> (Vec<u8>, ImportRequest, ResolvedImport, PublishedArchive) {
+        let package_root = "/project/node_modules/root-package";
+        let manifest = br#"{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}"#;
+        let runtime = b"export const value = () => true;";
+        let declarations = b"import type { Callback } from \"source-types\";\nexport declare const value: Callback;\n";
+        let archive = published_archive_for(
+            "root-package",
+            "1.0.0",
+            &[
+                ("package/package.json", manifest),
+                ("package/dist/index.js", runtime),
+                ("package/types/index.d.ts", declarations),
+            ],
+        );
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let runtime_file = resolved_file(package_root, "dist/index.js", runtime);
+        let declaration_file = resolved_file(package_root, "types/index.d.ts", declarations);
+        let closure = ClosureManifest::new(
+            vec![
+                closure_entry(ClosureFileRole::Manifest, "package.json", manifest),
+                closure_entry(ClosureFileRole::ResolutionInput, "package.json", manifest),
+                closure_entry(ClosureFileRole::Runtime, "dist/index.js", runtime),
+                closure_entry(
+                    ClosureFileRole::Declaration,
+                    "types/index.d.ts",
+                    declarations,
+                ),
+            ],
+            Vec::new(),
+            // The declaration import of `source-types` is an opaque frontier
+            // for the closure replay whether or not its bytes are supplied as
+            // evidence. Declaring it here is what a real resolver's manifest
+            // does; it is not what makes the type resolvable.
+            vec![ClosureHazard {
+                kind: ClosureHazardKind::UnacceptedExternalDependency,
+                source: "./types/index.d.ts:source-types".into(),
+                affected_exports: Vec::new(),
+                affected_domains: vec![
+                    AffectedClaimDomain::Callbacks,
+                    AffectedClaimDomain::Reads,
+                    AffectedClaimDomain::Writes,
+                    AffectedClaimDomain::Creates,
+                    AffectedClaimDomain::Invalidates,
+                    AffectedClaimDomain::Throws,
+                    AffectedClaimDomain::Returns,
+                    AffectedClaimDomain::Cleanups,
+                    AffectedClaimDomain::Disposals,
+                ],
+            }],
         )
         .unwrap();
+        let import_request = ImportRequest {
+            specifier: "root-package".into(),
+            importer: "/project/src/app.ts".into(),
+            export_conditions: vec!["import".into()],
+        };
+        let resolved = ResolvedImport {
+            specifier: "root-package".into(),
+            importer: "/project/src/app.ts".into(),
+            requested_entrypoint: ".".into(),
+            package_name: "root-package".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: snapshot.package_integrity().into(),
+            package_root: package_root.into(),
+            package_real_root: None,
+            package_manifest: resolved_file(package_root, "package.json", manifest),
+            runtime: runtime_file,
+            declarations: declaration_file,
+            runtime_trace: ResolutionTrace {
+                branch: "/exports/./import".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "import".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./dist/index.js".into(),
+                    },
+                ],
+            },
+            declaration_trace: ResolutionTrace {
+                branch: "/exports/./types".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "types".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./types/index.d.ts".into(),
+                    },
+                ],
+            },
+            closure,
+            transform: None,
+            exports: BTreeMap::from([(
+                "value".into(),
+                ResolvedExportBinding {
+                    runtime: ResolvedExportTarget {
+                        module: resolved_file(package_root, "dist/index.js", runtime),
+                        export_name: "value".into(),
+                    },
+                    declarations: ResolvedExportTarget {
+                        module: resolved_file(package_root, "types/index.d.ts", declarations),
+                        export_name: "value".into(),
+                    },
+                },
+            )]),
+            authority: ResolutionAuthority::Host,
+        };
+        let (package, mut artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        artifact_case.exports.insert(
+            "value".into(),
+            ExportSemantics {
+                identity: ExportIdentity {
+                    entrypoint: artifact_case.entrypoint.clone(),
+                    public_name: "value".into(),
+                    runtime: ExportTargetIdentity {
+                        module: artifact_case.runtime.clone(),
+                        export_name: "value".into(),
+                    },
+                    declarations: ExportTargetIdentity {
+                        module: artifact_case.declarations.clone(),
+                        export_name: "value".into(),
+                    },
+                },
+                shape: ValueShape::Callable,
+                stability: StabilityKnowledge::Unknown,
+                call: CallSemantics::new(
+                    CallClaims::default(),
+                    vec![],
+                    vec![],
+                    vec![],
+                    GuardPartition {
+                        cases: KnowledgeSet::Unknown,
+                    },
+                ),
+            },
+        );
+        let document = crate::contract_document::encode(
+            &ContractProposal::new(package, vec![artifact_case])
+                .normalize()
+                .unwrap(),
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .unwrap();
+
+        (document, import_request, resolved, archive)
+    }
+
+    /// One copy of `source-types` for the root above, at an exact installed
+    /// location. `lock_integrity` overrides the lock selection's integrity so a
+    /// copy can be made to fail authentication while remaining well-formed.
+    fn external_declaration_source(
+        version: &str,
+        declarations: &[u8],
+        installed_package_root: &str,
+        lock_integrity: Option<&str>,
+    ) -> PublishedGraphSourceRequest {
+        let manifest = format!(
+            r#"{{"name":"source-types","version":"{version}","exports":{{".":{{"types":"./types/index.d.ts","import":"./dist/index.js"}}}}}}"#
+        );
+        let archive = published_archive_for(
+            "source-types",
+            version,
+            &[
+                ("package/package.json", manifest.as_bytes()),
+                ("package/dist/index.js", b"export {};"),
+                ("package/types/index.d.ts", declarations),
+            ],
+        );
+        let integrity = ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2())
+            .unwrap()
+            .package_integrity()
+            .to_owned();
+        let lock = graph_lock(
+            "source-types",
+            version,
+            lock_integrity.unwrap_or(&integrity),
+        );
+        PublishedGraphSourceRequest::new(archive, lock, installed_package_root)
+    }
+
+    fn dependencies_verify_for_test(
+        transaction: &mut CertificationPlanningTransaction,
+        requests: Vec<PublishedGraphSourceRequest>,
+    ) -> Result<Vec<super::dependencies::VerifiedGraphSourcePackage>, PublishedGraphPlanningError>
+    {
+        super::dependencies::verify_certification_source_packages_for_test(transaction, requests)
+    }
+
+    fn callable_source(installed_package_root: &str) -> PublishedGraphSourceRequest {
+        external_declaration_source(
+            "3.0.0",
+            b"export type Callback = () => boolean;\n",
+            installed_package_root,
+            None,
+        )
+    }
+
+    /// A well-formed archive whose lock selection claims different bytes, so
+    /// `plan_graph_source_package` refuses it on integrity.
+    const SUBSTITUTED_INTEGRITY: &str = "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
+    /// Plans the cross-package root with `sources` and asks the pinned producer
+    /// whether the callable claim is now provable. `Ok(())` means the demand
+    /// closed; `Err` carries the refusal text.
+    fn certify_cross_package_root_with(
+        pin: &super::TypeFactsProducerPin,
+        sources: Vec<PublishedGraphSourceRequest>,
+    ) -> Result<(), String> {
+        let (document, import_request, resolved, archive) =
+            callable_through_external_declaration_root();
+        let plan = CertificationPlanningTransaction::new()
+            .plan_contract_document_with_sources(
+                &document,
+                import_request,
+                resolved,
+                UntrustedArtifactEnvelope::Published(archive),
+                sources,
+            )
+            .unwrap();
+        plan.acquire_and_verify_export_value_type_facts(pin)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    #[test]
+    fn root_certification_withholds_every_copy_of_a_name_one_copy_could_not_authenticate() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        // The installed truth: a nested copy of `source-types` shadows the
+        // hoisted one, and it is the nested copy that types `Callback` as a
+        // non-callable object. Only the hoisted copy authenticates.
+        //
+        // Materializing just the hoisted copy is not "removing evidence":
+        // `moduleResolution: "bundler"` walks up, finds it, and proves the
+        // export callable from a version that never governed this import. The
+        // whole name must be withheld so the module is simply missing.
+        let refusal = certify_cross_package_root_with(
+            &pin,
+            vec![
+                callable_source("/project/node_modules/source-types"),
+                external_declaration_source(
+                    "4.0.0",
+                    b"export type Callback = { notCallable: true };\n",
+                    "/project/node_modules/root-package/node_modules/source-types",
+                    Some(SUBSTITUTED_INTEGRITY),
+                ),
+            ],
+        )
+        .expect_err("a partially authenticated name must not prove anything");
+        assert!(
+            refusal.contains("is not compiler-proved callable or constructable"),
+            "{refusal}"
+        );
+    }
+
+    #[test]
+    fn root_certification_drops_a_source_whose_lock_selection_claims_other_bytes() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let refusal = certify_cross_package_root_with(
+            &pin,
+            vec![external_declaration_source(
+                "3.0.0",
+                b"export type Callback = () => boolean;\n",
+                "/project/node_modules/source-types",
+                Some(SUBSTITUTED_INTEGRITY),
+            )],
+        )
+        .expect_err("an archive the lock does not select must not become evidence");
+        assert!(
+            refusal.contains("is not compiler-proved callable or constructable"),
+            "{refusal}"
+        );
+    }
+
+    #[test]
+    fn root_certification_drops_a_source_installed_outside_an_exact_node_modules_coordinate() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let refusal = certify_cross_package_root_with(
+            &pin,
+            vec![callable_source("/project/vendor/source-types")],
+        )
+        .expect_err("a source outside an exact node_modules coordinate is not authenticated");
+        assert!(
+            refusal.contains("is not compiler-proved callable or constructable"),
+            "{refusal}"
+        );
+    }
+
+    #[test]
+    fn root_certification_withholds_a_name_whose_copies_collide_in_the_private_project() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        // Neither copy sits under the owner or under the owner's installation
+        // root, so `private_project_package_target` projects both onto the
+        // project's top-level `node_modules/source-types`. Materializing them
+        // would be an `AlreadyExists` write — a hard source-census failure this
+        // path must not have — and keeping only one would be substitution.
+        let refusal = certify_cross_package_root_with(
+            &pin,
+            vec![
+                callable_source("/elsewhere/node_modules/source-types"),
+                external_declaration_source(
+                    "4.0.0",
+                    b"export type Callback = () => boolean;\n",
+                    "/other-place/node_modules/source-types",
+                    None,
+                ),
+            ],
+        )
+        .expect_err("colliding copies of one name must be withheld, not half-materialized");
+        assert!(
+            refusal.contains("is not compiler-proved callable or constructable"),
+            "{refusal}"
+        );
+    }
+
+    #[test]
+    fn certification_sources_root_names_the_exact_closure_a_receipt_was_proved_against() {
+        let (document, import_request, resolved, archive) =
+            callable_through_external_declaration_root();
+        let plan_with = |sources| {
+            CertificationPlanningTransaction::new()
+                .plan_contract_document_with_sources(
+                    &document,
+                    import_request.clone(),
+                    resolved.clone(),
+                    UntrustedArtifactEnvelope::Published(archive.clone()),
+                    sources,
+                )
+                .unwrap()
+        };
+        let empty = plan_with(Vec::new());
+        let full = plan_with(vec![callable_source("/project/node_modules/source-types")]);
+        // A dropped source must be indistinguishable from one never supplied,
+        // so that a receipt states the closure it really used.
+        let dropped = plan_with(vec![callable_source("/project/vendor/source-types")]);
+
+        assert_ne!(
+            empty.certification_sources_root(),
+            full.certification_sources_root(),
+            "an auditor must be able to tell a full closure from an empty one"
+        );
+        assert_eq!(
+            empty.certification_sources_root(),
+            dropped.certification_sources_root(),
+            "a withheld source is not part of the closure the receipt claims"
+        );
+        assert_eq!(
+            empty.demand_graph().root(),
+            full.demand_graph().root(),
+            "the closure is evidence, not a semantic claim"
+        );
+    }
+
+    #[test]
+    fn graph_nodes_still_refuse_a_source_they_cannot_authenticate() {
+        let mut transaction = CertificationPlanningTransaction::new();
+        // The root path drops; a graph node must not, because its canonical
+        // identity binds `source_dependencies_root`.
+        assert!(matches!(
+            dependencies_verify_for_test(
+                &mut transaction,
+                vec![callable_source("/project/vendor/source-types")]
+            ),
+            Err(PublishedGraphPlanningError::InvalidSourcePackageRoot(_))
+        ));
+        assert!(matches!(
+            dependencies_verify_for_test(
+                &mut transaction,
+                vec![external_declaration_source(
+                    "3.0.0",
+                    b"export type Callback = () => boolean;\n",
+                    "/project/node_modules/source-types",
+                    Some(SUBSTITUTED_INTEGRITY),
+                )]
+            ),
+            Err(PublishedGraphPlanningError::LockDisagreement {
+                field: "source package integrity",
+                ..
+            })
+        ));
+        assert!(matches!(
+            dependencies_verify_for_test(
+                &mut transaction,
+                vec![
+                    callable_source("/project/node_modules/source-types"),
+                    callable_source("/project/node_modules/source-types"),
+                ]
+            ),
+            Err(PublishedGraphPlanningError::DuplicateSourceDependency)
+        ));
+    }
+
+    #[test]
+    fn root_certification_proves_a_cross_package_type_only_from_authenticated_sources() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let (document, import_request, resolved, archive) =
+            callable_through_external_declaration_root();
+        let source = callable_source("/project/node_modules/source-types");
+        let mut transaction = CertificationPlanningTransaction::new();
+
+        // Exactly today's behaviour when the type-providing package is outside
+        // the authenticated set: `Callback` is `any`, so the producer refuses to
+        // call the export callable and the demand stays open.
+        let without_sources = transaction
+            .plan_contract_document_with_sources(
+                &document,
+                import_request.clone(),
+                resolved.clone(),
+                UntrustedArtifactEnvelope::Published(archive.clone()),
+                Vec::new(),
+            )
+            .unwrap();
+        let refusal = match without_sources.acquire_and_verify_export_value_type_facts(&pin) {
+            Ok(_) => panic!("an unresolved cross-package type cannot prove callability"),
+            Err(error) => error.to_string(),
+        };
+        assert!(
+            refusal.contains("is not compiler-proved callable or constructable"),
+            "{refusal}"
+        );
+
+        // The same plan, the same claim, the same demand graph — with the one
+        // package whose authenticated declarations make the claim provable.
+        let with_sources = transaction
+            .plan_contract_document_with_sources(
+                &document,
+                import_request,
+                resolved,
+                UntrustedArtifactEnvelope::Published(archive),
+                vec![source],
+            )
+            .unwrap();
+        assert_eq!(
+            with_sources.demand_graph().root(),
+            without_sources.demand_graph().root(),
+            "supplying evidence must not move the demand graph"
+        );
+        if let Err(error) = with_sources.acquire_and_verify_export_value_type_facts(&pin) {
+            panic!("the authenticated declaration must prove the callable root: {error}");
+        }
+    }
+
+    #[test]
+    fn published_graph_certifies_bottom_up_with_the_pinned_producer() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
         let (root, leaf) = two_node_published_graph(false, false, false);
         let graph = plan_published_contract_graph(root, [leaf]).unwrap();
         let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [19; 32]).unwrap();

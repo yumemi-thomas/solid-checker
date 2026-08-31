@@ -1152,17 +1152,8 @@ fn plan_graph_node(
     let declarations_digest =
         digest_snapshot_member(&plan, plan.verified_resolution.declarations_path());
     let resolved_import_root = policy2_resolved_import_root(&plan.resolved_import)?;
-    let mut source_dependencies = source_dependencies
-        .into_iter()
-        .map(|request| plan_graph_source_package(transaction, request))
-        .collect::<Result<Vec<_>, _>>()?;
-    source_dependencies.sort_by(|left, right| left.identity.cmp(&right.identity));
-    if source_dependencies
-        .windows(2)
-        .any(|pair| pair[0].identity == pair[1].identity)
-    {
-        return Err(PublishedGraphPlanningError::DuplicateSourceDependency);
-    }
+    let source_dependencies =
+        verify_certification_source_packages(transaction, source_dependencies)?;
     let source_dependencies_root = composition_root(
         "source-dependency-snapshots",
         "source-dependency-graph",
@@ -1207,6 +1198,99 @@ fn plan_graph_node(
         dependencies: Vec::new(),
         source_dependencies,
     })
+}
+
+/// Authenticates a declaration-only source set into canonical, deduplicated
+/// order.
+///
+/// Published-graph nodes and ordinary root certification share this one
+/// channel: bytes are accepted only as an integrity-verified published archive
+/// whose exact lock selection replays the same name, version, and integrity,
+/// installed at an exact `node_modules` coordinate. Nothing here reads an
+/// installed tree, and a source that cannot be authenticated is an error rather
+/// than a silently trusted package.
+#[cfg(test)]
+pub(super) fn verify_certification_source_packages_for_test(
+    transaction: &mut CertificationPlanningTransaction,
+    requests: Vec<PublishedGraphSourceRequest>,
+) -> Result<Vec<VerifiedGraphSourcePackage>, PublishedGraphPlanningError> {
+    verify_certification_source_packages(transaction, requests)
+}
+
+pub(super) fn verify_certification_source_packages(
+    transaction: &mut CertificationPlanningTransaction,
+    requests: Vec<PublishedGraphSourceRequest>,
+) -> Result<Vec<VerifiedGraphSourcePackage>, PublishedGraphPlanningError> {
+    let mut sources = requests
+        .into_iter()
+        .map(|request| plan_graph_source_package(transaction, request))
+        .collect::<Result<Vec<_>, _>>()?;
+    sources.sort_by(|left, right| left.identity.cmp(&right.identity));
+    if sources
+        .windows(2)
+        .any(|pair| pair[0].identity == pair[1].identity)
+    {
+        return Err(PublishedGraphPlanningError::DuplicateSourceDependency);
+    }
+    Ok(sources)
+}
+
+/// Authenticates a declaration-only source set for ordinary root
+/// certification, withholding whole *package names* rather than single copies.
+///
+/// A drop here must mean "the witness program cannot resolve this module".
+/// Dropping one copy does not mean that. `moduleResolution: "bundler"` walks up
+/// `node_modules`, so withholding a nested copy hands the lookup to a hoisted
+/// copy of the same name at a *different version* — and the source census
+/// accepts those bytes, because they are authentic under their own marker.
+/// The determination then comes from authentic-but-wrong-version declarations
+/// and can differ from the truth in either direction. That is substitution, not
+/// removal, and it is not fail-closed.
+///
+/// So authentication is all-or-nothing per package name: if any request for a
+/// name fails, no copy of that name is materialized, TypeScript reports the
+/// module as missing, the reference is `any`, and every demand that needed it
+/// stays open exactly as when nothing is supplied. A failing request poisons
+/// both the name its lock selection claims and the name its installed root
+/// occupies, so a request that disagrees with itself cannot leave either
+/// spelling half-materialized.
+///
+/// Published-graph nodes deliberately do not use this. There a node's canonical
+/// identity binds its `source_dependencies_root`, so a source that will not
+/// authenticate must refuse the node outright.
+pub(super) fn retain_authenticated_source_packages(
+    transaction: &mut CertificationPlanningTransaction,
+    requests: Vec<PublishedGraphSourceRequest>,
+) -> Vec<VerifiedGraphSourcePackage> {
+    let mut withheld = BTreeSet::new();
+    let mut sources = Vec::with_capacity(requests.len());
+    for request in requests {
+        let claimed = [
+            request.lock_selection.package_name.clone(),
+            installed_package_root_name(&request.installed_package_root),
+        ];
+        match plan_graph_source_package(transaction, request) {
+            Ok(source) => sources.push(source),
+            Err(_) => withheld.extend(claimed),
+        }
+    }
+    sources.retain(|source| !withheld.contains(source.snapshot.package_name()));
+    sources.sort_by(|left, right| left.identity.cmp(&right.identity));
+    sources.dedup_by(|left, right| left.identity == right.identity);
+    sources
+}
+
+/// The package name an installed root occupies, which is the directory name
+/// module resolution will find it under. Everything after the last
+/// `node_modules/` segment, so a scoped package keeps both of its segments.
+fn installed_package_root_name(installed_package_root: &str) -> String {
+    installed_package_root
+        .replace('\\', "/")
+        .rsplit_once("/node_modules/")
+        .map_or_else(
+            || installed_package_root.to_owned(),
+            |(_, name)| name.to_owned(),
+        )
 }
 
 fn plan_graph_source_package(

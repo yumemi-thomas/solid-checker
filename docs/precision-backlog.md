@@ -1,5 +1,134 @@
 # Precision backlog
 
+## Certification witness programs now carry their authenticated dependency typings (2026-08-31)
+
+Ordinary root certification built its witness program from the target package's
+snapshot alone. Every cross-package type reference in that package's own
+declarations -- `Accessor` and `JSX` from `solid-js`, `Component`, `Context`, a
+cross-package base class -- therefore resolved to `any`, and the producer's
+`callabilityOfType` correctly fail-closed to Unknown on `any`. Contract
+*generation* resolves those same names against the installed tree and records
+definite facts, so the two halves disagreed and 75 ecosystem rows refused
+`export root is not compiler-proved callable or constructable` at live
+export-value verification.
+
+The fix supplies evidence; it relaxes no determination. `callabilityOfType` and
+`require_root_callability` are untouched. Ordinary root certification now names
+its declaration-only closure through the *same* authenticated channel a
+published graph node already uses -- integrity-verified published archives
+replayed against exact Bun lock selections -- and Rust materializes those
+snapshots into the private project so `moduleResolution: "bundler"` resolves
+them. No installed `node_modules` byte is ever read as evidence, and the tsconfig
+the witness program uses is unchanged.
+
+### Drops are name-scoped, because a per-copy drop is substitution
+
+The first version of this change dropped individual copies and claimed that
+removing evidence is always the fail-closed direction. **That claim is false**,
+and adversarial review caught it. `moduleResolution: "bundler"` walks up
+`node_modules`, so withholding a *nested* copy while a *hoisted* copy of the same
+name survives does not make the module unresolvable -- it hands the lookup to a
+different version, whose bytes the source census accepts because they are
+authentic under their own marker. The determination then comes from
+authentic-but-wrong-version declarations. Measured against the published
+typings, with `foo`'s `.d.ts` importing `Callback` from `bar`:
+
+| private project | `IsCallable<typeof value>` | verdict |
+| --- | --- | --- |
+| nested `bar@2` (non-callable) shadows hoisted `bar@1` -- the install truth | `false` | non-callable |
+| nested copy dropped, hoisted `bar@1` kept | **`true`** | **flipped** |
+| whole `bar` name withheld | `TS2307 Cannot find module 'bar'` | `any`, demand open |
+
+So both halves withhold whole package names, all-or-nothing:
+
+- The CLI records every package name it could not name or acquire and excludes
+  every copy of that name, globally across certification inputs (the private
+  project is materialized once from their union). An unnameable grandchild
+  poisons its own name only; the rest of the collected subtree still travels.
+- Rust's `retain_authenticated_source_packages` partitions by package name and
+  withholds the whole group if any member fails authentication, poisoning both
+  the name the lock selection claims and the name the installed root occupies.
+- A name whose authenticated copies cannot occupy distinct places in the private
+  project is withheld too, rather than colliding on `write_immutable_project_file`
+  -- which would be an `AlreadyExists` source-census failure, a hard failure class
+  this path must not have.
+
+Only then is a drop really "the module cannot be resolved". Published-graph
+nodes keep the old fatal behavior throughout, because a node's canonical
+identity binds its `source_dependencies_root`.
+
+Everything else about an absence stays a non-event: a missing lockfile, a copy
+the lock does not select exactly, an uninstalled package, unresolvable
+declarations, an oversized registry document, an unreachable archive -- each
+withholds a name and leaves the demand open, and none of them aborts a
+certification. The source census is unchanged, so a producer-consulted file
+outside an authenticated snapshot is still refused outright.
+
+### The closure a receipt was proved against is now named by the receipt
+
+The verdict depends on which declaration-only closure was materialized, so a
+receipt has to say which one that was; otherwise an auditor cannot tell a
+full-closure certification from a partial-closure one. `certification_sources_root`
+composes the sorted canonical source identities -- mirroring the graph's
+`source_dependencies_root` -- and every Type Facts witness binding folds it in.
+An empty closure has its own well-defined root, so "nothing was supplied" is a
+statement the receipt makes rather than an absence, and a withheld source is
+indistinguishable from one never supplied.
+
+Census site paths are now **project-relative** before hashing, for all three
+site kinds (`typefacts-verifier-source`, `typefacts-source`,
+`typefacts-source-snapshot`). They previously carried the producer-reported
+absolute path inside a temporary directory keyed on pid and a counter, which
+made every evidence root -- and every receipt witness root -- unique per run and
+incomparable across certifications of the same bytes. The project-relative path
+plus the content digest is what the site actually asserts. This is a deliberate
+receipt movement: it affects the existing package-own and verifier-source sites,
+not only the ones this change added.
+
+Remaining fail-closed cases this does **not** close:
+
+- **The TypeScript DOM library is not a package.** Solid 1.x types
+  `JSX.Element` as `Node | ...`, and `Node` is a `lib.dom.d.ts` type. The witness
+  program's tsconfig is deliberately unchanged, so `Node` remains an error type
+  and any Solid 1.x export whose proof needs `JSX.Element` still fails closed --
+  `@solid-primitives/keyed`'s `Entries` is the observed case.
+- Packages whose type-providing dependency is outside the authenticated set for
+  any of the reasons listed above.
+
+Named follow-up, not fixed here: acquisition buffers each archive and packument
+whole in memory, with no per-dependency cap. That is the pre-existing
+`acquirePublishedArtifact` pattern, but the root path now runs it once per
+declaration-only dependency instead of once per row, so the peak is multiplied
+by closure size.
+
+Pinned by, in `rust/crates/solid-facts-backend/src/contract_certification.rs`
+unless noted:
+
+- `root_certification_proves_a_cross_package_type_only_from_authenticated_sources`
+  -- the same plan, claim, and demand graph refuses with no sources and
+  certifies with the authenticated snapshot.
+- `root_certification_withholds_every_copy_of_a_name_one_copy_could_not_authenticate`
+  -- the substitution shape above. Deleting the name-scoping makes it certify
+  from the surviving hoisted copy.
+- `root_certification_drops_a_source_whose_lock_selection_claims_other_bytes`
+  -- deleting the source authentication makes it certify.
+- `root_certification_drops_a_source_installed_outside_an_exact_node_modules_coordinate`
+  and `root_certification_withholds_a_name_whose_copies_collide_in_the_private_project`.
+- `certification_sources_root_names_the_exact_closure_a_receipt_was_proved_against`
+  -- a full closure differs from an empty one, a withheld source equals an
+  absent one, and neither moves the demand graph.
+- `graph_nodes_still_refuse_a_source_they_cannot_authenticate` -- the graph path
+  keeps refusing on bad root, lock disagreement, and duplicate.
+- `certification_source_request_tests` in `main.rs` -- a graph node refuses a
+  planning that carries its own nested source set.
+- In `packages/cli/test/contract-workflow.test.mjs`:
+  `a package name one entrypoint could not authenticate is withheld from every
+  entrypoint` pins the CLI half of the same rule, including that one unnameable
+  grandchild does not discard its whole collected subtree.
+
+This adds no finding and reports nothing, so it cannot duplicate a `tsc`
+diagnostic; it only lets the checker see the types `tsc` would have seen.
+
 ## Two authenticated-demand regressions from the non-export proof policy (2026-08-31)
 
 Landing "Authenticate non-export Type Facts demands" (`0fcaf82e`) introduced two

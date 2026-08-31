@@ -349,6 +349,214 @@ function findBunLock(packageRoot) {
   });
 }
 
+/// Walks the declaration-only closure a package's typings reach and names the
+/// exact published artifact behind each one.
+///
+/// This is the single traversal both certification paths use: an ordinary root
+/// package and every node of a published dependency graph. What it returns is
+/// only a *naming* of packages — name, version, exact Bun lock locator and
+/// integrity, and the installed root the resolver used. No installed byte
+/// becomes evidence: the caller acquires each named package from the registry,
+/// and Rust re-derives the snapshot from those archive bytes and refuses any
+/// one whose lock selection disagrees.
+///
+/// A package the lockfile does not select exactly, or whose declarations do not
+/// resolve, is simply not named. That is the fail-closed direction: the witness
+/// program then cannot resolve the reference, and the demands that needed it
+/// stay open exactly as they were.
+function createCompilerSourceCollector({
+  bunLockPath,
+  bunLockIndex,
+  scratch,
+  resolutionSession,
+  scratchPrefix,
+  onUnnameable = null
+}) {
+  const sourceArtifacts = new Map();
+  const compilerSourceClosures = new Map();
+  let nextSourceIndex = 0;
+  const locateExternalFrom = (ownerRoot, dependency) => {
+    if (dependency.specifier.startsWith("node:")) return null;
+    const dependencyName = packageNameOfSpecifier(dependency.specifier);
+    const dependencyImporter = resolve(
+      ownerRoot,
+      dependency.importerPath ?? dependency.source
+    );
+    const dependencyRoot = findPackageRoot(dependencyImporter, dependencyName);
+    const dependencyManifest = JSON.parse(
+      readFileSync(join(dependencyRoot, "package.json"), "utf8")
+    );
+    const dependencyLock = exactBunLockSelection(
+      bunLockIndex,
+      dependencyManifest.name,
+      dependencyManifest.version,
+      bunLockLocatorForInstalledPackage(bunLockPath, dependencyRoot)
+    );
+    return {
+      ...dependency,
+      dependencyImporter,
+      dependencyRoot,
+      dependencyManifest,
+      dependencyLock
+    };
+  };
+  const collectCompilerSources = async (
+    located,
+    sourceConditions,
+    semanticRoots,
+    visiting = new Set()
+  ) => {
+    const installedRoot = resolve(located.dependencyRoot);
+    if (semanticRoots.has(installedRoot)) return [];
+    const memoKey = JSON.stringify([
+      installedRoot,
+      located.specifier,
+      [...new Set(sourceConditions)].sort(),
+      [...semanticRoots].sort()
+    ]);
+    if (!visiting.has(memoKey)) {
+      let memoized = compilerSourceClosures.get(memoKey);
+      if (!memoized) {
+        memoized = collectCompilerSources(
+          located,
+          sourceConditions,
+          semanticRoots,
+          new Set(visiting).add(memoKey)
+        );
+        // A memo entry is the in-flight promise, so a rejection would otherwise
+        // be replayed to every later caller of this key for the rest of the
+        // run. Forget a rejected traversal so an independent caller retries it
+        // rather than inheriting a failure it never provoked.
+        memoized = memoized.catch(error => {
+          if (compilerSourceClosures.get(memoKey) === memoized) {
+            compilerSourceClosures.delete(memoKey);
+          }
+          throw error;
+        });
+        compilerSourceClosures.set(memoKey, memoized);
+      }
+      return memoized;
+    }
+    const artifactKey = JSON.stringify([
+      installedRoot,
+      located.dependencyLock.locator,
+      located.dependencyLock.integrity
+    ]);
+    let source = sourceArtifacts.get(artifactKey);
+    if (!source) {
+      const sourceScratch = join(scratch, `${scratchPrefix}-source-${nextSourceIndex++}`);
+      mkdirSync(sourceScratch);
+      source = {
+        key: artifactKey,
+        manifest: located.dependencyManifest,
+        integrity: located.dependencyLock.integrity,
+        scratch: sourceScratch,
+        packageName: located.dependencyManifest.name,
+        packageVersion: located.dependencyManifest.version,
+        lockfile: resolve(bunLockPath),
+        lockLocator: located.dependencyLock.locator,
+        installedPackageRoot: installedRoot
+      };
+      sourceArtifacts.set(artifactKey, source);
+    }
+    const traversalKey = JSON.stringify([
+      installedRoot,
+      located.specifier,
+      [...new Set(sourceConditions)].sort()
+    ]);
+    if (visiting.has(traversalKey)) return [source];
+    const nextVisiting = new Set(visiting).add(traversalKey);
+    let closure;
+    try {
+      closure = resolvePackageArtifactClosure({
+        importer: located.dependencyImporter,
+        specifier: located.specifier,
+        packageRoot: located.dependencyRoot,
+        conditions: sourceConditions,
+        resolutionKind: "import",
+        integrity: located.dependencyLock.integrity
+      }, resolutionSession);
+    } catch (error) {
+      if (["target-not-found", "declarations-not-found"].includes(error?.code)) {
+        return [source];
+      }
+      throw error;
+    }
+    const transitive = [source];
+    for (const dependency of closure.externalDependencies.filter(
+      dependency => dependency.axis === "declarations"
+    )) {
+      // With `onUnnameable` (the root path) one unnameable grandchild poisons
+      // only its own package name; the rest of the subtree is still collected.
+      // Without it (the published-graph path) the failure propagates exactly as
+      // before, because a graph node's canonical identity binds its source set.
+      if (onUnnameable) {
+        try {
+          const child = locateExternalFrom(closure.packageRoot, dependency);
+          if (!child) continue;
+          transitive.push(
+            ...await collectCompilerSources(
+              child,
+              sourceConditions,
+              semanticRoots,
+              nextVisiting
+            )
+          );
+        } catch {
+          onUnnameable(packageNameOfSpecifier(dependency.specifier));
+        }
+        continue;
+      }
+      const child = locateExternalFrom(closure.packageRoot, dependency);
+      if (!child) continue;
+      transitive.push(
+        ...await collectCompilerSources(
+          child,
+          sourceConditions,
+          semanticRoots,
+          nextVisiting
+        )
+      );
+    }
+    return transitive;
+  };
+  return {
+    locateExternalFrom,
+    collectCompilerSources,
+    sourceArtifacts,
+    compilerSourceClosureCount: () => compilerSourceClosures.size
+  };
+}
+
+/// The bare package name a specifier addresses, which is also the directory
+/// name every copy of it occupies under `node_modules` — the exact granularity
+/// module resolution decides at.
+export function packageNameOfSpecifier(specifier) {
+  return specifier.startsWith("@")
+    ? specifier.split("/").slice(0, 2).join("/")
+    : specifier.split("/")[0];
+}
+
+/// Canonical order for a declaration-only source set, deduplicated by the exact
+/// coordinate that identifies one installed package.
+function canonicalCompilerSources(sources) {
+  return [...new Map(
+    sources.map(source => [
+      JSON.stringify([
+        source.packageName,
+        source.packageVersion,
+        source.lockLocator,
+        source.installedPackageRoot
+      ]),
+      source
+    ])
+  ).values()].sort((left, right) =>
+    left.installedPackageRoot.localeCompare(right.installedPackageRoot) ||
+    left.packageName.localeCompare(right.packageName) ||
+    left.packageVersion.localeCompare(right.packageVersion)
+  );
+}
+
 function rootSpecifier(packageName, entrypoint) {
   return entrypoint && entrypoint !== "."
     ? `${packageName}/${entrypoint.replace(/^\.\//, "")}`
@@ -769,12 +977,9 @@ async function preparePublishedGraphFallback({
   // receipt.
   const byKey = new Map();
   const pendingByKey = new Map();
-  const sourceArtifacts = new Map();
-  const compilerSourceClosures = new Map();
   const publishedArtifacts = new Map();
   const graphResolutionSession = new ArtifactResolutionSession();
   let nextNodeIndex = 0;
-  let nextSourceIndex = 0;
   const publishedArtifactKey = (nodeManifest, integrity) => JSON.stringify([
     options.registryOrigin,
     nodeManifest.name,
@@ -804,123 +1009,20 @@ async function preparePublishedGraphFallback({
     Promise.resolve(rootArtifactSnapshot)
   );
 
+  const {
+    locateExternalFrom,
+    collectCompilerSources,
+    sourceArtifacts,
+    compilerSourceClosureCount
+  } = createCompilerSourceCollector({
+    bunLockPath,
+    bunLockIndex,
+    scratch,
+    resolutionSession: graphResolutionSession,
+    scratchPrefix: "graph"
+  });
+
   const prepareArtifactCase = async (artifactCase, caseIndex) => {
-    const locateExternalFrom = (ownerRoot, dependency) => {
-      if (dependency.specifier.startsWith("node:")) return null;
-      const dependencyName = dependency.specifier.startsWith("@")
-        ? dependency.specifier.split("/").slice(0, 2).join("/")
-        : dependency.specifier.split("/")[0];
-      const dependencyImporter = resolve(
-        ownerRoot,
-        dependency.importerPath ?? dependency.source
-      );
-      const dependencyRoot = findPackageRoot(dependencyImporter, dependencyName);
-      const dependencyManifest = JSON.parse(
-        readFileSync(join(dependencyRoot, "package.json"), "utf8")
-      );
-      const dependencyLock = exactBunLockSelection(
-        bunLockIndex,
-        dependencyManifest.name,
-        dependencyManifest.version,
-        bunLockLocatorForInstalledPackage(bunLockPath, dependencyRoot)
-      );
-      return {
-        ...dependency,
-        dependencyImporter,
-        dependencyRoot,
-        dependencyManifest,
-        dependencyLock
-      };
-    };
-    const collectCompilerSources = async (
-      located,
-      sourceConditions,
-      semanticRoots,
-      visiting = new Set()
-    ) => {
-      const installedRoot = resolve(located.dependencyRoot);
-      if (semanticRoots.has(installedRoot)) return [];
-      const memoKey = JSON.stringify([
-        installedRoot,
-        located.specifier,
-        [...new Set(sourceConditions)].sort(),
-        [...semanticRoots].sort()
-      ]);
-      if (!visiting.has(memoKey)) {
-        let memoized = compilerSourceClosures.get(memoKey);
-        if (!memoized) {
-          memoized = collectCompilerSources(
-            located,
-            sourceConditions,
-            semanticRoots,
-            new Set(visiting).add(memoKey)
-          );
-          compilerSourceClosures.set(memoKey, memoized);
-        }
-        return memoized;
-      }
-      const artifactKey = JSON.stringify([
-        installedRoot,
-        located.dependencyLock.locator,
-        located.dependencyLock.integrity
-      ]);
-      let source = sourceArtifacts.get(artifactKey);
-      if (!source) {
-        const sourceScratch = join(scratch, `graph-${caseIndex}-source-${nextSourceIndex++}`);
-        mkdirSync(sourceScratch);
-        source = {
-          key: artifactKey,
-          manifest: located.dependencyManifest,
-          integrity: located.dependencyLock.integrity,
-          scratch: sourceScratch,
-          packageName: located.dependencyManifest.name,
-          packageVersion: located.dependencyManifest.version,
-          lockfile: resolve(bunLockPath),
-          lockLocator: located.dependencyLock.locator,
-          installedPackageRoot: installedRoot
-        };
-        sourceArtifacts.set(artifactKey, source);
-      }
-      const traversalKey = JSON.stringify([
-        installedRoot,
-        located.specifier,
-        [...new Set(sourceConditions)].sort()
-      ]);
-      if (visiting.has(traversalKey)) return [source];
-      const nextVisiting = new Set(visiting).add(traversalKey);
-      let closure;
-      try {
-        closure = resolvePackageArtifactClosure({
-          importer: located.dependencyImporter,
-          specifier: located.specifier,
-          packageRoot: located.dependencyRoot,
-          conditions: sourceConditions,
-          resolutionKind: "import",
-          integrity: located.dependencyLock.integrity
-        }, graphResolutionSession);
-      } catch (error) {
-        if (["target-not-found", "declarations-not-found"].includes(error?.code)) {
-          return [source];
-        }
-        throw error;
-      }
-      const transitive = [source];
-      for (const dependency of closure.externalDependencies.filter(
-        dependency => dependency.axis === "declarations"
-      )) {
-        const child = locateExternalFrom(closure.packageRoot, dependency);
-        if (!child) continue;
-        transitive.push(
-          ...await collectCompilerSources(
-            child,
-            sourceConditions,
-            semanticRoots,
-            nextVisiting
-          )
-        );
-      }
-      return transitive;
-    };
     const prepareState = async (request, isRoot, conditions, key, nextAncestry) => {
       const resolved = resolvePackageArtifactClosure({
         importer: request.importer,
@@ -1022,26 +1124,12 @@ async function preparePublishedGraphFallback({
           ...await collectCompilerSources(located, conditions, semanticRoots)
         );
       }
-      const sourceDependencies = [...new Map(
-        [
-          ...ownSourceDependencies,
-          ...directDependencies.flatMap(
-            dependency => dependency.state.sourceDependencies ?? []
-          )
-        ].map(source => [
-          JSON.stringify([
-            source.packageName,
-            source.packageVersion,
-            source.lockLocator,
-            source.installedPackageRoot
-          ]),
-          source
-        ])
-      ).values()].sort((left, right) =>
-        left.installedPackageRoot.localeCompare(right.installedPackageRoot) ||
-        left.packageName.localeCompare(right.packageName) ||
-        left.packageVersion.localeCompare(right.packageVersion)
-      );
+      const sourceDependencies = canonicalCompilerSources([
+        ...ownSourceDependencies,
+        ...directDependencies.flatMap(
+          dependency => dependency.state.sourceDependencies ?? []
+        )
+      ]);
       const preparedState = {
         index: `${caseIndex}-${nodeIndex}`,
         node,
@@ -1232,7 +1320,7 @@ async function preparePublishedGraphFallback({
       acquisitionUnits: acquisitionUnits.length,
       graphAcquisitionDurationMs,
       resolutionSession: graphResolutionSession.statistics(),
-      compilerSourceClosureCensus: compilerSourceClosures.size,
+      compilerSourceClosureCensus: compilerSourceClosureCount(),
       proposalGenerations,
       proposalFrontiers,
       graphNodeReferences: preparedCases.reduce((total, item) => total + item.nodes.length, 0),
@@ -1242,7 +1330,128 @@ async function preparePublishedGraphFallback({
   };
 }
 
-async function executeNativeCertification({ options, generated, artifactSnapshot, scratch }) {
+/// Acquires the declaration-only closure an ordinary root certification needs
+/// so its witness program can resolve cross-package type references.
+///
+/// Contract *generation* resolves `Accessor`, `Component`, `JSX.Element` and
+/// every other cross-package reference against the installed tree. Certification
+/// deliberately replays in a private project built only from authenticated
+/// bytes, so without this the same references resolve to `any` and the producer
+/// correctly fail-closes their callability to Unknown. This supplies the missing
+/// evidence through the one authenticated channel — registry archives replayed
+/// against exact lock selections — and never through the installed tree.
+///
+/// Failure is a non-event, but it is **name-scoped and all-or-nothing**. A
+/// missing lockfile, a copy the lock does not select exactly, a package that is
+/// not installed, declarations that do not resolve, a registry that will not
+/// serve the archive — any of these poisons the whole *package name*, and every
+/// copy of that name is then withheld.
+///
+/// Dropping one copy while another copy of the same name survives is not
+/// evidence removal, it is evidence substitution: `moduleResolution: "bundler"`
+/// walks up `node_modules`, so a nested copy that is withheld silently hands the
+/// lookup to a hoisted copy at a *different version*, and the census accepts
+/// those bytes because they are authentic under their own marker. A verdict can
+/// flip that way. Withholding the whole name is the only drop that really does
+/// mean "cannot resolve": TypeScript then reports the module as missing and the
+/// reference is `any`, exactly as when nothing is supplied.
+///
+/// The exclusion is deliberately global across certification inputs, because the
+/// private project is materialized once from their union — a name one input
+/// could not authenticate must not reach any of them.
+///
+/// Returns one array of acquired sources per certification input, positionally.
+export async function acquireRootCompilerSources({ options, generated, scratch, fetch_ }) {
+  const empty = generated.certificationInputs.map(() => []);
+  let bunLockPath;
+  try {
+    bunLockPath = findBunLock(options.packageRoot);
+  } catch {
+    return empty;
+  }
+  let bunLockIndex;
+  try {
+    bunLockIndex = createBunLockSelectionIndex(readFileSync(bunLockPath, "utf8"));
+  } catch {
+    return empty;
+  }
+  const sourceScratch = join(scratch, "root-sources");
+  mkdirSync(sourceScratch, { recursive: true });
+  const withheldNames = new Set();
+  const collector = createCompilerSourceCollector({
+    bunLockPath,
+    bunLockIndex,
+    scratch: sourceScratch,
+    resolutionSession: new ArtifactResolutionSession(),
+    scratchPrefix: "root",
+    onUnnameable: name => withheldNames.add(name)
+  });
+  const perInput = [];
+  for (const input of generated.certificationInputs) {
+    const conditions = [...new Set([...(input.conditions ?? []), "import"])].sort();
+    let resolved;
+    try {
+      resolved = resolvePackageArtifactClosure({
+        importer: input.resolution.importer,
+        specifier: input.resolution.specifier,
+        packageRoot: input.resolution.packageRoot ?? options.packageRoot,
+        conditions,
+        resolutionKind: "import",
+        integrity: options.integrity
+      }, null);
+    } catch {
+      perInput.push([]);
+      continue;
+    }
+    const found = [];
+    for (const dependency of resolved.externalDependencies) {
+      try {
+        const located = collector.locateExternalFrom(resolved.packageRoot, dependency);
+        if (!located) continue;
+        found.push(...await collector.collectCompilerSources(located, conditions, new Set()));
+      } catch {
+        withheldNames.add(packageNameOfSpecifier(dependency.specifier));
+      }
+    }
+    perInput.push(canonicalCompilerSources(found));
+  }
+  const acquiredByKey = new Map();
+  for (const source of new Set(perInput.flat())) {
+    try {
+      const artifact = await acquirePublishedArtifact({
+        options: { registryOrigin: options.registryOrigin, integrity: source.integrity },
+        manifest: source.manifest,
+        scratch: source.scratch,
+        fetch_
+      });
+      acquiredByKey.set(source.key, {
+        packageName: source.packageName,
+        packageVersion: source.packageVersion,
+        registryOrigin: artifact.registryOrigin,
+        registryMetadata: artifact.metadataPath,
+        archive: artifact.archivePath,
+        lockfile: source.lockfile,
+        lockLocator: source.lockLocator,
+        installedPackageRoot: source.installedPackageRoot
+      });
+    } catch {
+      withheldNames.add(source.packageName);
+    }
+  }
+  return perInput.map(sources =>
+    sources
+      .map(source => acquiredByKey.get(source.key))
+      .filter(acquired => acquired && !withheldNames.has(acquired.packageName))
+  );
+}
+
+async function executeNativeCertification({
+  options,
+  generated,
+  artifactSnapshot,
+  scratch,
+  fetch_
+}) {
   if (!options.issuerConfiguration) {
     throw new CertificationRefusal({
       stage: "receipt-issuance",
@@ -1276,14 +1485,21 @@ async function executeNativeCertification({ options, generated, artifactSnapshot
     ? dirname(options.catalog)
     : options.catalog;
   const requestPath = join(scratch, "certification-execution.json");
-  const plannings = generated.certificationInputs.map(input => ({
+  const sourceDependenciesByInput = await acquireRootCompilerSources({
+    options,
+    generated,
+    scratch,
+    fetch_
+  });
+  const plannings = generated.certificationInputs.map((input, index) => ({
       schemaVersion: 1,
       proposal: generated.output,
       resolution: input.resolution,
       exportConditions: [...new Set([...input.conditions, "import"])].sort(),
       registryOrigin: artifactSnapshot.registryOrigin,
       registryMetadata: artifactSnapshot.metadataPath,
-      archive: artifactSnapshot.archivePath
+      archive: artifactSnapshot.archivePath,
+      sourceDependencies: sourceDependenciesByInput[index] ?? []
   }));
   const execution = {
     schemaVersion: plannings.length === 1 ? 1 : 2,
@@ -1315,10 +1531,17 @@ async function executeNativeOrGraphCertification({
   generated,
   graph,
   artifactSnapshot,
-  scratch
+  scratch,
+  fetch_
 }) {
   if (!graph) {
-    return executeNativeCertification({ options, generated, artifactSnapshot, scratch });
+    return executeNativeCertification({
+      options,
+      generated,
+      artifactSnapshot,
+      scratch,
+      fetch_
+    });
   }
   const catalogRoot = options.catalog.endsWith("accepted-contracts.json")
     ? dirname(options.catalog)
@@ -1616,7 +1839,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
             generated: openProposal.generated,
             graph: openProposal.graph,
             artifactSnapshot,
-            scratch
+            scratch,
+            fetch_
           }))
       },
       issuer: {

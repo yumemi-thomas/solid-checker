@@ -490,7 +490,95 @@ pub(super) fn acquire_and_verify_export_values_batch(
     plans: &[&CertificationPlan],
     pin: &TypeFactsProducerPin,
 ) -> Result<Vec<VerifiedTypeFactsEvidence>, TypeFactsCertificationError> {
-    acquire_and_verify_export_values_batch_with_dependencies(plans, &[], &[], pin)
+    let sources = union_of_certification_sources(plans)?;
+    acquire_and_verify_export_values_batch_with_dependencies(plans, &[], &sources, pin)
+}
+
+/// The declaration-only closure every case in this batch already
+/// authenticated.
+///
+/// A batch is one package's alternative artifact cases — the batch identity
+/// check already requires one snapshot root, package name, and package root —
+/// so the union is that one package row's own authenticated bytes, and one
+/// materialized project can serve every case. The union only ever *adds*
+/// authenticated copies, never removes one, so it cannot manufacture the
+/// partial-name shape that would let a hoisted copy stand in for a withheld
+/// nested one. Each source keeps its exact canonical identity, so the census
+/// still refuses any producer-consulted file outside one of these snapshots.
+///
+/// Two union members that project onto the same place are refused rather than
+/// dropped. Per-plan retention already withheld every name whose own copies
+/// collide, so reaching here means two distinct authenticated identities claim
+/// one installed directory — self-contradictory input, not a dependency that
+/// merely failed to authenticate.
+fn union_of_certification_sources(
+    plans: &[&CertificationPlan],
+) -> Result<Vec<super::dependencies::VerifiedGraphSourcePackage>, TypeFactsCertificationError> {
+    let mut sources = std::collections::BTreeMap::new();
+    for plan in plans {
+        for source in &plan.certification_sources {
+            sources
+                .entry(source.identity.clone())
+                .or_insert_with(|| (*plan, source.clone()));
+        }
+    }
+    let mut targets = std::collections::BTreeSet::new();
+    for (plan, source) in sources.values() {
+        let marker = private_project_package_marker(
+            plan,
+            &source.installed_package_root,
+            source.snapshot.package_name(),
+        );
+        if !targets.insert(marker) {
+            return Err(TypeFactsCertificationError::IdentityMismatch);
+        }
+    }
+    Ok(sources.into_values().map(|(_, source)| source).collect())
+}
+
+/// Withholds every source package name whose authenticated copies cannot all
+/// occupy distinct places in the private project.
+///
+/// `private_project_package_target` projects a copy faithfully when it sits
+/// under the owner or under the owner's `node_modules` installation root, which
+/// is what preserves hoisting and shadowing. Anything else falls back to the
+/// project's top-level `node_modules/<name>` — so two such copies of one name,
+/// or a copy whose name is the owner package's own, land on one path. That is
+/// an `AlreadyExists` write, which the immutable-file writer reports as a source
+/// census failure: a hard failure class ordinary root certification must not
+/// have, for the same reason it must not refuse on an unacquirable archive.
+///
+/// The remedy is the F1 rule again, for the same reason: withhold the whole
+/// name. Keeping one of the colliding copies would be substitution, and a
+/// half-materialized name is exactly what makes a hoisted copy answer for a
+/// missing nested one.
+pub(super) fn retain_collision_free_source_packages(
+    plan: &CertificationPlan,
+    sources: Vec<super::dependencies::VerifiedGraphSourcePackage>,
+) -> Vec<super::dependencies::VerifiedGraphSourcePackage> {
+    let owner_marker = format!(
+        "/node_modules/{}/",
+        plan.snapshot.package_name().replace('\\', "/")
+    );
+    let mut seen = std::collections::BTreeMap::<String, usize>::new();
+    let mut withheld = std::collections::BTreeSet::new();
+    for source in &sources {
+        let marker = private_project_package_marker(
+            plan,
+            &source.installed_package_root,
+            source.snapshot.package_name(),
+        );
+        if marker == owner_marker {
+            withheld.insert(source.snapshot.package_name().to_owned());
+        }
+        if seen.insert(marker, 0).is_some() {
+            withheld.insert(source.snapshot.package_name().to_owned());
+        }
+    }
+    sources
+        .into_iter()
+        .filter(|source| !withheld.contains(source.snapshot.package_name()))
+        .collect()
 }
 
 fn preflight_export_value_plans(
@@ -1459,6 +1547,7 @@ fn verify_live_export_value_answer_with_project_census(
         &answer.envelope.sources,
         &schedule.verifier_sources,
     )?;
+    let certification_sources_root = plan.certification_sources_root();
     let mut bindings = Vec::with_capacity(expected_ids.len());
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
         let transcript = &answer.transcripts[index];
@@ -1489,6 +1578,11 @@ fn verify_live_export_value_answer_with_project_census(
                     transcript_root.as_str(),
                     plan.snapshot_root(),
                     plan.demand_graph().root().as_str(),
+                    // Which declaration-only closure proved this. Without it the
+                    // verdict would depend on an input the receipt does not
+                    // name, and a full-closure certification would be
+                    // indistinguishable from a partial-closure one.
+                    certification_sources_root.as_str(),
                 ],
             );
             bindings.push(WitnessBinding::new(
@@ -2717,6 +2811,13 @@ fn verify_snapshot_source_census(
         "/node_modules/{}/",
         plan.snapshot.package_name().replace('\\', "/")
     );
+    // Every site below names its file by the path it occupies *inside the
+    // private project*, never by the absolute path the producer reported. The
+    // absolute path is a temporary directory keyed on this process's pid and a
+    // counter, so hashing it made every evidence root — and therefore every
+    // receipt witness root — unique per run and impossible to compare across
+    // certifications of the same bytes. The project-relative path plus the
+    // content digest is what the site is actually asserting.
     let mut sites = Vec::new();
     for expected in verifier_sources {
         let matches = sources
@@ -2729,9 +2830,18 @@ fn verify_snapshot_source_census(
                 expected.path
             )));
         }
+        // The verifier query harness is written directly at the project root,
+        // so its file name is its project-relative path.
+        let harness = expected
+            .path
+            .replace('\\', "/")
+            .rsplit('/')
+            .next()
+            .unwrap_or(&expected.path)
+            .to_owned();
         sites.push(format!(
-            "typefacts-verifier-source:{}:{}",
-            expected.path, expected.sha256
+            "typefacts-verifier-source:{harness}:{}",
+            expected.sha256
         ));
     }
     for entry in &plan.verified_closure.manifest().entries {
@@ -2756,10 +2866,8 @@ fn verify_snapshot_source_census(
                 matches.len(),
             )));
         }
-        sites.push(format!(
-            "typefacts-source:{}:{}",
-            matches[0].path, matches[0].sha256
-        ));
+        // `suffix` is exactly this declaration's project-relative path.
+        sites.push(format!("typefacts-source:{suffix}:{}", matches[0].sha256));
     }
 
     let mut dependency_markers = dependencies
@@ -2818,14 +2926,16 @@ fn verify_snapshot_source_census(
                 "producer source digest differs from snapshot: {relative}"
             )));
         }
-        if let Some((_, snapshot)) = dependency_markers
+        if let Some((marker, snapshot)) = dependency_markers
             .iter()
             .find(|(marker, _)| normalized.contains(marker))
         {
+            // `marker` is this package's project-relative root and `relative`
+            // its path inside the snapshot, so together they are the file's
+            // project-relative path.
             sites.push(format!(
-                "typefacts-source-snapshot:{}:{}:{}",
+                "typefacts-source-snapshot:{}:{marker}{relative}:{}",
                 snapshot.provenance_root(),
-                source.path,
                 source.sha256
             ));
         }

@@ -176,7 +176,7 @@ fn json_format() -> String {
     "json".into()
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContractCertificationPlanningRequest {
     schema_version: u16,
@@ -187,6 +187,12 @@ struct ContractCertificationPlanningRequest {
     registry_origin: String,
     registry_metadata: String,
     archive: String,
+    /// Declaration-only packages whose authenticated bytes the witness program
+    /// needs in order to resolve this package's cross-package type references.
+    /// Graph nodes carry the same set one level up, on the node request, so a
+    /// planning nested inside a graph node must leave this empty.
+    #[serde(default)]
+    source_dependencies: Vec<ContractCertificationSourceRequest>,
 }
 
 #[derive(Deserialize)]
@@ -532,13 +538,49 @@ fn certification_plan_from_request_in(
             )
         })?,
     )?;
-    let plan = transaction.plan_contract_document(
+    // Root-path sources are evidence supply only, so one that cannot even be
+    // assembled from its local bytes is dropped for the same reason Rust drops
+    // one that will not authenticate: see `plan_contract_document_with_sources`.
+    let sources = request
+        .source_dependencies
+        .into_iter()
+        .filter_map(|source| certification_source_request(source).ok())
+        .collect();
+    let plan = transaction.plan_contract_document_with_sources(
         &proposal,
         import_request,
         request.resolution,
         solid_facts_backend::UntrustedArtifactEnvelope::Published(archive),
+        sources,
     )?;
     Ok((plan, proposal))
+}
+
+/// Reads every declaration-only source archive named by a request into the
+/// authenticated acquisition type. Nothing here consults an installed tree:
+/// the archive bytes, the registry metadata, and the lockfile are the only
+/// inputs, and Rust replays the lock selection against the archive it decoded.
+fn certification_source_request(
+    source: ContractCertificationSourceRequest,
+) -> Result<solid_facts_backend::PublishedGraphSourceRequest, Box<dyn std::error::Error>> {
+    let lock = solid_facts_backend::PublishedGraphLockSelection::from_bun_lock(
+        &fs::read(&source.lockfile)?,
+        source.lock_locator,
+        source.package_name.clone(),
+        source.package_version.clone(),
+    )?;
+    let archive = solid_facts_backend::PublishedArchive::new(
+        source.registry_origin,
+        source.package_name,
+        source.package_version,
+        fs::read(source.registry_metadata)?,
+        fs::read(source.archive)?,
+    )?;
+    Ok(solid_facts_backend::PublishedGraphSourceRequest::new(
+        archive,
+        lock,
+        source.installed_package_root,
+    ))
 }
 
 fn certification_graph_node_from_request(
@@ -556,6 +598,15 @@ fn certification_graph_node_from_request(
             planning.schema_version
         )
         .into());
+    }
+    // A graph node names its declaration-only sources once, on the node. A
+    // second set nested in the planning would be silently ignored here, so
+    // refuse it rather than accept two disagreeing declarations of the same
+    // authenticated closure.
+    if !planning.source_dependencies.is_empty() {
+        return Err(
+            "a graph node's planning must not carry its own declaration-only source set".into(),
+        );
     }
     let proposal = fs::read(&planning.proposal)?;
     let import_request = solid_facts_backend::ImportRequest {
@@ -578,28 +629,7 @@ fn certification_graph_node_from_request(
     )?;
     let sources = source_dependencies
         .into_iter()
-        .map(|source| {
-            let lock = solid_facts_backend::PublishedGraphLockSelection::from_bun_lock(
-                &fs::read(&source.lockfile)?,
-                source.lock_locator,
-                source.package_name.clone(),
-                source.package_version.clone(),
-            )?;
-            let archive = solid_facts_backend::PublishedArchive::new(
-                source.registry_origin,
-                source.package_name,
-                source.package_version,
-                fs::read(source.registry_metadata)?,
-                fs::read(source.archive)?,
-            )?;
-            Ok::<_, Box<dyn std::error::Error>>(
-                solid_facts_backend::PublishedGraphSourceRequest::new(
-                    archive,
-                    lock,
-                    source.installed_package_root,
-                ),
-            )
-        })
+        .map(certification_source_request)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(
         solid_facts_backend::PublishedGraphNodeRequest::from_document_with_sources(
@@ -6033,6 +6063,114 @@ fn refuse_unresolved_dependency_module<T>(
         from: from.into(),
     }
     .into())
+}
+
+#[cfg(test)]
+mod certification_source_request_tests {
+    use super::*;
+
+    fn planning(source_dependencies: Vec<ContractCertificationSourceRequest>) -> String {
+        serde_json::json!({
+            "schemaVersion": 1,
+            "proposal": "/does/not/exist/proposal.json",
+            "resolution": {
+                "specifier": "root-package",
+                "importer": "/project/src/app.ts",
+                "requestedEntrypoint": ".",
+                "packageName": "root-package",
+                "packageVersion": "1.0.0",
+                "packageIntegrity": "sha512-AA==",
+                "packageRoot": "/project/node_modules/root-package",
+                "packageManifest": { "path": "/p/package.json", "digest": "sha256:00" },
+                "runtime": { "path": "/p/dist/index.js", "digest": "sha256:00" },
+                "declarations": { "path": "/p/types/index.d.ts", "digest": "sha256:00" },
+                "closure": { "digest": "sha256:00", "entries": [], "dependencies": [], "hazards": [] },
+                "authority": "host"
+            },
+            "exportConditions": ["import"],
+            "registryOrigin": "https://registry.npmjs.org",
+            "registryMetadata": "/does/not/exist/metadata.json",
+            "archive": "/does/not/exist/package.tgz",
+            "sourceDependencies": source_dependencies
+                .into_iter()
+                .map(|source| serde_json::json!({
+                    "packageName": source.package_name,
+                    "packageVersion": source.package_version,
+                    "registryOrigin": source.registry_origin,
+                    "registryMetadata": source.registry_metadata,
+                    "archive": source.archive,
+                    "lockfile": source.lockfile,
+                    "lockLocator": source.lock_locator,
+                    "installedPackageRoot": source.installed_package_root,
+                }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string()
+    }
+
+    fn source() -> ContractCertificationSourceRequest {
+        serde_json::from_str(
+            r#"{
+                "packageName": "source-types",
+                "packageVersion": "3.0.0",
+                "registryOrigin": "https://registry.npmjs.org",
+                "registryMetadata": "/does/not/exist/metadata.json",
+                "archive": "/does/not/exist/source.tgz",
+                "lockfile": "/does/not/exist/bun.lock",
+                "lockLocator": "source-types@3.0.0",
+                "installedPackageRoot": "/project/node_modules/source-types"
+            }"#,
+        )
+        .unwrap()
+    }
+
+    /// A graph node names its declaration-only closure once, on the node. The
+    /// nested planning's copy would be silently ignored, so two disagreeing
+    /// declarations of one authenticated closure must be refused outright
+    /// rather than half-applied.
+    #[test]
+    fn a_graph_node_refuses_a_planning_that_carries_its_own_source_set() {
+        let node: ContractCertificationGraphNodeRequest =
+            serde_json::from_value(serde_json::json!({
+                "planning": serde_json::from_str::<serde_json::Value>(&planning(vec![source()]))
+                    .unwrap(),
+                "lockfile": "/does/not/exist/bun.lock",
+                "lockLocator": "root-package@1.0.0",
+                "sourceDependencies": [],
+            }))
+            .unwrap();
+        let Err(error) = certification_graph_node_from_request(node) else {
+            panic!("a nested source set must be refused");
+        };
+        assert_eq!(
+            error.to_string(),
+            "a graph node's planning must not carry its own declaration-only source set"
+        );
+    }
+
+    /// The same node without the nested set gets past the refusal and fails on
+    /// its (deliberately absent) proposal bytes instead, which proves the check
+    /// above is the sources and not the rest of the request.
+    #[test]
+    fn a_graph_node_without_a_nested_source_set_reaches_its_artifact_bytes() {
+        let node: ContractCertificationGraphNodeRequest =
+            serde_json::from_value(serde_json::json!({
+                "planning": serde_json::from_str::<serde_json::Value>(&planning(Vec::new()))
+                    .unwrap(),
+                "lockfile": "/does/not/exist/bun.lock",
+                "lockLocator": "root-package@1.0.0",
+                "sourceDependencies": [],
+            }))
+            .unwrap();
+        let Err(error) = certification_graph_node_from_request(node) else {
+            panic!("this request has no artifact bytes and cannot plan");
+        };
+        let error = error.to_string();
+        assert!(
+            !error.contains("declaration-only source set"),
+            "unexpected refusal: {error}"
+        );
+    }
 }
 
 #[cfg(test)]

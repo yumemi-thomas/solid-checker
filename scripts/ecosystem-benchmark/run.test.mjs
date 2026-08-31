@@ -843,13 +843,25 @@ test("recommendedConcurrency bounds Bun install and outer proposal contention", 
   assert.equal(recommendedConcurrency(Number.NaN), 4);
 });
 
-test("recommendedCertificationConcurrency fills the bounded drain pool", () => {
-  assert.equal(recommendedCertificationConcurrency(1), 1);
-  assert.equal(recommendedCertificationConcurrency(8), 8);
-  assert.equal(recommendedCertificationConcurrency(12), 12);
-  assert.equal(recommendedCertificationConcurrency(14), 14);
-  assert.equal(recommendedCertificationConcurrency(32), 14);
-  assert.equal(recommendedCertificationConcurrency(Number.NaN), 2);
+test("recommendedCertificationConcurrency fills the bounded drain pool within memory", () => {
+  const gib = 1024 * 1024 * 1024;
+  const plenty = 1024 * gib;
+  assert.equal(recommendedCertificationConcurrency(1, plenty), 1);
+  assert.equal(recommendedCertificationConcurrency(8, plenty), 8);
+  assert.equal(recommendedCertificationConcurrency(12, plenty), 12);
+  assert.equal(recommendedCertificationConcurrency(14, plenty), 14);
+  assert.equal(recommendedCertificationConcurrency(32, plenty), 14);
+  assert.equal(recommendedCertificationConcurrency(Number.NaN, plenty), 2);
+  // Certification materializes each package's authenticated dependency closure
+  // into its witness program, so the drain width reserves one memory share
+  // (8 GiB) per slot: a 14-wide drain on a 48 GB host is the measured way to
+  // exhaust the machine, not a throughput win.
+  assert.equal(recommendedCertificationConcurrency(14, 48 * gib), 6);
+  assert.equal(recommendedCertificationConcurrency(14, 16 * gib), 2);
+  // Memory never lifts the width above cores, and an unknown size stays at the
+  // conservative floor rather than the cores-only width.
+  assert.equal(recommendedCertificationConcurrency(4, plenty), 4);
+  assert.equal(recommendedCertificationConcurrency(14, Number.NaN), 2);
 });
 
 test("recommendedCertificationInnerConcurrency preserves a host-wide native bound", () => {

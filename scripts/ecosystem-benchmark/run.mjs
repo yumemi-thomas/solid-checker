@@ -30,11 +30,11 @@
 //   run where every single probe fails to install is still exit 0: the
 //   runner reported faithfully, it did not judge.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { availableParallelism, tmpdir } from "node:os";
+import { availableParallelism, tmpdir, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -76,12 +76,37 @@ const DEFAULT_CONCURRENCY = recommendedConcurrency();
 // Certification is a large share of measured worker time. Let its drain phase
 // use the host directly while generation retains its smaller install-safe
 // outer pool; the child artifact-analysis width is derived separately below.
-export function recommendedCertificationConcurrency(parallelism = availableParallelism()) {
+//
+// The width is bounded by memory as well as cores: certification materializes
+// each package's authenticated dependency closure into its witness program, so
+// a heavy probe's process tree can transiently hold gigabytes, and enough of
+// them in flight together can exhaust the host (observed: a 14-wide drain
+// taking down a 48 GB machine). One memory share per certification slot is
+// reserved from total RAM; SOLID_CHECKER_CERTIFICATION_CONCURRENCY overrides
+// the computed width, mirroring SOLID_CHECKER_GATE_CONCURRENCY for the gates.
+const CERTIFICATION_MEMORY_SHARE_BYTES = 8 * 1024 * 1024 * 1024;
+
+export function recommendedCertificationConcurrency(
+  parallelism = availableParallelism(),
+  totalMemoryBytes = totalmem()
+) {
   if (!Number.isInteger(parallelism) || parallelism <= 0) return 2;
-  return Math.min(14, parallelism);
+  const memorySlots = Number.isFinite(totalMemoryBytes) && totalMemoryBytes > 0
+    ? Math.max(2, Math.floor(totalMemoryBytes / CERTIFICATION_MEMORY_SHARE_BYTES))
+    : 2;
+  return Math.min(14, parallelism, memorySlots);
 }
 
-const DEFAULT_CERTIFICATION_CONCURRENCY = recommendedCertificationConcurrency();
+export function certificationConcurrencyFromEnvironment(env = process.env) {
+  const raw = env.SOLID_CHECKER_CERTIFICATION_CONCURRENCY;
+  if (raw === undefined || raw === "") return undefined;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) return undefined;
+  return parsed;
+}
+
+const DEFAULT_CERTIFICATION_CONCURRENCY =
+  certificationConcurrencyFromEnvironment() ?? recommendedCertificationConcurrency();
 
 export function recommendedCertificationInnerConcurrency(
   certificationConcurrency,
@@ -1262,6 +1287,78 @@ function readSentinelIds(path) {
   return parsed.probes;
 }
 
+// A probe child (bun/JSC) has no conservative heap ceiling of its own, and
+// certification's process tree now includes the checker plus a Type Facts
+// producer type-checking a materialized dependency closure — so a pathological
+// probe must be turned into one failed row here, never a host memory
+// exhaustion. Polls the child's whole process tree RSS and SIGKILLs it at the
+// cap. Resource fail-closed: exceeding the ceiling reads as that probe's
+// failure with an explicit stderr marker, exactly like a timeout.
+const PROBE_MEMORY_CAP_MB = (() => {
+  const raw = Number(process.env.SOLID_CHECKER_PROBE_MEMORY_MB);
+  return Number.isInteger(raw) && raw > 0 ? raw : 4096;
+})();
+const PROBE_MEMORY_POLL_MS = 2000;
+
+function sampleProcessTreeRssKb(rootPid) {
+  try {
+    const table = execFileSync("ps", ["-ax", "-o", "pid=,ppid=,rss="], {
+      encoding: "utf8",
+      maxBuffer: 8 * 1024 * 1024
+    });
+    const children = new Map();
+    const rss = new Map();
+    for (const line of table.split("\n")) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length !== 3) continue;
+      const pid = Number(parts[0]);
+      const ppid = Number(parts[1]);
+      const kb = Number(parts[2]);
+      if (!Number.isInteger(pid)) continue;
+      rss.set(pid, Number.isFinite(kb) ? kb : 0);
+      if (Number.isInteger(ppid)) {
+        if (!children.has(ppid)) children.set(ppid, []);
+        children.get(ppid).push(pid);
+      }
+    }
+    let total = 0;
+    const queue = [rootPid];
+    const seen = new Set();
+    while (queue.length) {
+      const pid = queue.pop();
+      if (seen.has(pid)) continue;
+      seen.add(pid);
+      total += rss.get(pid) ?? 0;
+      for (const child of children.get(pid) ?? []) queue.push(child);
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+function superviseChildMemory(child, capMb = PROBE_MEMORY_CAP_MB) {
+  const state = { exceeded: false };
+  const interval = setInterval(() => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const kb = sampleProcessTreeRssKb(child.pid);
+    if (kb > capMb * 1024) {
+      state.exceeded = true;
+      clearInterval(interval);
+      child.kill("SIGKILL");
+    }
+  }, PROBE_MEMORY_POLL_MS);
+  interval.unref?.();
+  return {
+    stop: () => clearInterval(interval),
+    exceeded: () => state.exceeded,
+    marker: () =>
+      state.exceeded
+        ? `\n[solid-checker-ecosystem-benchmark: probe process tree exceeded the ${capMb} MiB memory ceiling and was killed]`
+        : ""
+  };
+}
+
 // Real, side-effecting hooks: exactly the four `runBenchmark` needs, backed
 // by lib/install.mjs (for npm) and a spawned CLI subprocess (for
 // generation) — never a `require`/`import` of anything under an installed
@@ -1324,6 +1421,7 @@ function buildRealHooks({
         let stdout = "";
         let stderr = "";
         let timedOut = false;
+        const memory = superviseChildMemory(child);
         const timer = timeoutMs
           ? setTimeout(() => {
               timedOut = true;
@@ -1338,7 +1436,14 @@ function buildRealHooks({
         });
         child.on("close", status => {
           if (timer) clearTimeout(timer);
-          resolvePromise({ status, stdout, stderr, timedOut });
+          memory.stop();
+          resolvePromise({
+            status,
+            stdout,
+            stderr: stderr + memory.marker(),
+            timedOut,
+            memoryExceeded: memory.exceeded()
+          });
         });
       }),
 
@@ -1395,6 +1500,7 @@ function buildRealHooks({
         let stdout = "";
         let stderr = "";
         let timedOut = false;
+        const memory = superviseChildMemory(child);
         const timer = timeoutMs
           ? setTimeout(() => {
               timedOut = true;
@@ -1409,7 +1515,14 @@ function buildRealHooks({
         });
         child.on("close", status => {
           if (timer) clearTimeout(timer);
-          resolvePromise({ status, stdout, stderr, timedOut });
+          memory.stop();
+          resolvePromise({
+            status,
+            stdout,
+            stderr: stderr + memory.marker(),
+            timedOut,
+            memoryExceeded: memory.exceeded()
+          });
         });
       }),
 
