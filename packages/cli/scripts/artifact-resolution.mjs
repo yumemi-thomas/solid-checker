@@ -962,12 +962,55 @@ function localAssetTarget(importer, specifier, packageRoot) {
     : path;
 }
 
+function packageScopeForImporter(importer, packageRoot, cache) {
+  const root = resolve(packageRoot);
+  const start = dirname(resolve(importer));
+  const relativeStart = relative(root, start);
+  if (relativeStart === ".." || relativeStart.startsWith(`..${sep}`)) {
+    fail("invalid-target", `${importer} is outside package root ${packageRoot}`);
+  }
+  const scopes = cache.packageScopes ??= new Map();
+  const cached = scopes.get(start);
+  if (cached) return cached;
+
+  const visited = [];
+  let directory = start;
+  while (true) {
+    const known = scopes.get(directory);
+    if (known) {
+      for (const path of visited) scopes.set(path, known);
+      return known;
+    }
+    visited.push(directory);
+    const manifestPath = join(directory, "package.json");
+    if (isFile(manifestPath)) {
+      const bytes = readFileSync(manifestPath);
+      const scope = {
+        packageRoot: directory,
+        manifest:
+          directory === root
+            ? cache.resolutionProgram.manifest
+            : JSON.parse(bytes),
+        digest: sha256(bytes)
+      };
+      for (const path of visited) scopes.set(path, scope);
+      return scope;
+    }
+    if (directory === root) break;
+    const parent = dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  fail("package-identity", `no package manifest owns importer ${importer}`);
+}
+
 function moduleTarget(importer, specifier, axis, packageRoot, cache) {
   if (bundlerResourceSuffix(specifier)) return undefined;
   if (specifier.startsWith("#")) {
+    const scope = packageScopeForImporter(importer, packageRoot, cache);
     return packageImportTargetOrUnknown({
-      packageRoot,
-      manifest: cache.resolutionProgram.manifest,
+      packageRoot: scope.packageRoot,
+      manifest: scope.manifest,
       specifier,
       conditions: cache.resolutionProgram.conditions,
       axis,
@@ -978,7 +1021,8 @@ function moduleTarget(importer, specifier, axis, packageRoot, cache) {
 }
 
 function moduleDescription(path, axis, packageRoot, cache) {
-  const key = `${cache.resolutionProgram.key}:${axis}:${path}`;
+  const scope = packageScopeForImporter(path, packageRoot, cache);
+  const key = `${cache.resolutionProgram.key}:${scope.digest}:${axis}:${path}`;
   if (cache.local.has(key)) return cache.local.get(key);
   const digest = fileDigest(realpath(path));
   const shared = cache.shared?.get(key);

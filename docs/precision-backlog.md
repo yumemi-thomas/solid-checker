@@ -175,6 +175,13 @@ in `packages/cli/test/artifact-resolution.test.mjs`. Graph **planning**
 (`resolvePackageDependencyPlanClosure`) is a different operation with no
 replayed closure and still follows the alias exactly; its own test is unchanged.
 
+Package-scope ownership is also exact: a `#specifier` in a nested dependency is
+selected against the nearest `package.json` owning the importing module, not
+the certification root manifest, and the module cache binds that owner manifest
+digest. A dependency-owned match reaches the existing
+`package-imports-unsupported` refusal; a dependency cannot inherit a parent
+package's imports map. Rust imports-map replay remains the named follow-up.
+
 ## Conditional targets backtrack the way Node resolves them (2026-08-31)
 
 Node's PACKAGE_TARGET_RESOLVE continues to the next key when a matched key's own

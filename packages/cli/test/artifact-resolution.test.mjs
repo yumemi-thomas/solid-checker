@@ -672,6 +672,85 @@ describe("exact artifact records and closure", () => {
     );
   });
 
+  test("a nested dependency resolves package imports against its own manifest", () => {
+    const manifest = {
+      name: "package-imports-owner",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const dependencyManifest = {
+      name: "nested-dependency",
+      version: "1.0.0",
+      imports: { "#dependency-entry": "./entry.js" }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'export * from "./node_modules/nested-dependency/index.js";\n',
+      "index.d.ts": 'export * from "./node_modules/nested-dependency/index.d.ts";\n',
+      "node_modules/nested-dependency/package.json":
+        `${JSON.stringify(dependencyManifest, null, 2)}\n`,
+      "node_modules/nested-dependency/index.js":
+        'export { dependencyValue } from "#dependency-entry";\n',
+      "node_modules/nested-dependency/index.d.ts":
+        'export { dependencyValue } from "#dependency-entry";\n',
+      "node_modules/nested-dependency/entry.js":
+        "export const dependencyValue = 1;\n"
+    });
+    const request = {
+      importer: join(root, "consumer.mjs"),
+      specifier: "package-imports-owner",
+      packageRoot: root,
+      integrity: "sha512:test"
+    };
+
+    let refusal;
+    try {
+      resolvePackageArtifacts(request);
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toBeInstanceOf(ArtifactResolutionError);
+    expect(refusal.code).toBe("package-imports-unsupported");
+    expect(refusal.message).toContain(
+      "node_modules/nested-dependency/entry.js resolves into the closure"
+    );
+  });
+
+  test("a nested dependency cannot inherit package imports from its parent package", () => {
+    const manifest = {
+      name: "package-imports-parent",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+      imports: { "#parent-only": "./parent-entry.js" }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'export * from "./node_modules/nested-dependency/index.js";\n',
+      "index.d.ts": 'export * from "./node_modules/nested-dependency/index.d.ts";\n',
+      "parent-entry.js": "export const dependencyValue = 1;\n",
+      "node_modules/nested-dependency/package.json": `${JSON.stringify({
+        name: "nested-dependency",
+        version: "1.0.0"
+      }, null, 2)}\n`,
+      "node_modules/nested-dependency/index.js":
+        'export { dependencyValue } from "#parent-only";\n',
+      "node_modules/nested-dependency/index.d.ts":
+        'export { dependencyValue } from "#parent-only";\n'
+    });
+
+    expect(() =>
+      resolvePackageArtifacts({
+        importer: join(root, "consumer.mjs"),
+        specifier: "package-imports-parent",
+        packageRoot: root,
+        integrity: "sha512:test"
+      })
+    ).toThrow(
+      expect.objectContaining({
+        code: "package-import-not-defined",
+        message: "#parent-only is not defined by the package imports map"
+      })
+    );
+  });
+
   test("an unmatched package imports specifier stays an open frontier, never an external dependency", () => {
     const manifest = {
       name: "package-imports-open",
