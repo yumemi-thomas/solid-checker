@@ -667,6 +667,14 @@ pub(crate) fn select_and_bind(
     contract: &NormalizedContract,
     resolved: &ResolvedImport,
 ) -> Result<NormalizedContract, ContractFailure> {
+    select_and_bind_with_external_targets(contract, resolved, &BTreeSet::new())
+}
+
+pub(crate) fn select_and_bind_with_external_targets(
+    contract: &NormalizedContract,
+    resolved: &ResolvedImport,
+    external_targets: &BTreeSet<(String, String)>,
+) -> Result<NormalizedContract, ContractFailure> {
     resolved
         .validate()
         .map_err(|error| invalid_identity(error.to_string()))?;
@@ -682,12 +690,38 @@ pub(crate) fn select_and_bind(
         [selected] => (*selected).clone(),
         _ => return Err(ContractFailure::MultipleArtifactCases),
     };
-    let selected = bind_exports(selected, resolved)?;
+    let selected = bind_exports(selected, resolved, external_targets)?;
     ContractProposal::new(contract.package().clone(), vec![selected])
         .normalize()
         .map_err(|error| ContractFailure::InvalidSemanticModel {
             reason: error.to_string(),
         })
+}
+
+pub(crate) fn resolved_external_export_targets(
+    resolved: &ResolvedImport,
+) -> Result<BTreeSet<(String, String)>, ContractFailure> {
+    let mut targets = BTreeSet::new();
+    for target in resolved
+        .exports
+        .values()
+        .flat_map(|binding| [&binding.runtime, &binding.declarations])
+    {
+        let relative = package_relative_path(&target.module, resolved);
+        let nested_package = relative.as_deref().is_some_and(|path| {
+            Path::new(path)
+                .components()
+                .any(|component| component.as_os_str() == "node_modules")
+        });
+        if relative.is_none() || nested_package {
+            targets.insert((
+                target.module.path.clone(),
+                normalize_digest(&target.module.digest)
+                    .map_err(|error| invalid_identity(error.to_string()))?,
+            ));
+        }
+    }
+    Ok(targets)
 }
 
 /// Creates the exact package and empty artifact-case identities used by the
@@ -842,6 +876,7 @@ fn trace_matches(case: &ArtifactCase, resolved: &ResolvedImport) -> bool {
 fn bind_exports(
     mut case: ArtifactCase,
     resolved: &ResolvedImport,
+    external_targets: &BTreeSet<(String, String)>,
 ) -> Result<ArtifactCase, ContractFailure> {
     for (name, export) in &mut case.exports {
         let binding = resolved.exports.get(name).ok_or_else(|| {
@@ -849,13 +884,19 @@ fn bind_exports(
                 "resolved artifact has no exact runtime/declaration binding for export {name:?}"
             ))
         })?;
-        export.identity.runtime =
-            bind_export_target(&binding.runtime, ClosureFileRole::Runtime, resolved, name)?;
+        export.identity.runtime = bind_export_target(
+            &binding.runtime,
+            ClosureFileRole::Runtime,
+            resolved,
+            name,
+            external_targets,
+        )?;
         export.identity.declarations = bind_export_target(
             &binding.declarations,
             ClosureFileRole::Declaration,
             resolved,
             name,
+            external_targets,
         )?;
         export.open_call_domains(resolved.closure.open_domains(name));
     }
@@ -867,12 +908,8 @@ fn bind_export_target(
     role: ClosureFileRole,
     resolved: &ResolvedImport,
     public_name: &str,
+    external_targets: &BTreeSet<(String, String)>,
 ) -> Result<ExportTargetIdentity, ContractFailure> {
-    let path = package_relative_path(&target.module, resolved).ok_or_else(|| {
-        invalid_identity(format!(
-            "{role:?} target for export {public_name:?} is outside the resolved package"
-        ))
-    })?;
     let digest = normalize_digest(&target.module.digest)
         .map_err(|error| invalid_identity(error.to_string()))?;
     let root = match role {
@@ -880,6 +917,22 @@ fn bind_export_target(
         ClosureFileRole::Declaration => &resolved.declarations,
         _ => unreachable!("export targets are runtime or declarations"),
     };
+    if external_targets.contains(&(target.module.path.clone(), digest.clone())) {
+        // An installed nested dependency is lexically below the parent
+        // package root, but it is not a member of the parent's authenticated
+        // archive. Exact child target identity takes precedence over that
+        // filesystem prefix.
+        let module = semantic_artifact(root, resolved)?;
+        return Ok(ExportTargetIdentity {
+            module,
+            export_name: target.export_name.clone(),
+        });
+    }
+    let path = package_relative_path(&target.module, resolved).ok_or_else(|| {
+        invalid_identity(format!(
+            "{role:?} target for export {public_name:?} is outside the resolved package"
+        ))
+    })?;
     let is_root = package_relative_path(root, resolved).as_deref() == Some(path.as_str())
         && normalize_digest(&root.digest).ok().as_deref() == Some(digest.as_str());
     // A checked whole-package census binds every regular file in the exact

@@ -23,6 +23,25 @@
         },
         {
           "artifact": {
+            "closureSha256": "a277e1b0244a38424cee4c0348cf64505f8075580706018d929f7d8154fb2b7e",
+            "path": "./node.js",
+            "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
+          },
+          "declarations": {
+            "path": "./node.js",
+            "sha256": "d929b2d5c7e32f89aa36523dc13e0feb1fbb58236a64b3f1ec01aaf0e90f4ec0"
+          },
+          "exports": {
+            "Show": "summary-746e4490245bde8e30d3c9ab495553b39f388e3c5a6be62c3479e69692368a87",
+            "Steady": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./node",
+            "typesBranch": "/exports/./node"
+          }
+        },
+        {
+          "artifact": {
             "closureSha256": "d81fc65c5a22c69570c481290fbfae34839813646ebf03ee75986b8b07d759e9",
             "path": "./browser.js",
             "sha256": "415c2986a3d355234653761c114ea0d250aad072d462d5c3a52067b1ccf63042"

@@ -6,12 +6,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Constructability,
-    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, FileFact, InvocationDemand,
-    InvocationEnvelope, InvocationTranscript, Location, ModuleFact, ModuleImportFact,
-    ObjectConstructionProperty, ObjectConstructionShape, ParameterFact, PrimitiveLiteralCandidate,
-    PrimitiveLiteralKind, PrimitiveValueDomain, ReferenceSpace, ResolvedCall, ResolvedCallValidity,
-    ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash,
-    SymbolFact, TupleShape, TypeDescriptor,
+    ConstructionWitness, Declaration, DeclarationOwner, EntityFact, ExportValueDemand,
+    ExportValueTranscript, FileFact, InvocationDemand, InvocationEnvelope, InvocationTranscript,
+    Location, ModuleFact, ModuleImportFact, ObjectConstructionProperty, ObjectConstructionShape,
+    ParameterFact, PrimitiveLiteralCandidate, PrimitiveLiteralKind, PrimitiveValueDomain,
+    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeBindingKind,
+    RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
+    TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -33,12 +34,13 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V14: u64 = 14;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V15: u64 = 15;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:129f78430a829013b3fe1a6fd9948b27f7ba7269858dd8438e61d5b2bef76fbe";
-/// 4 adds an exact overload census to demand-shaped invocation transcripts.
+    "sha256:1e44dbc1d157c27e389a40185b33fa3f74def102fa7459e0a90d667131e4a943";
+/// 5 adds exact exported-value transcripts as a separate read-only operation.
 /// The digest and build id still move with it, and the handshake refuses a
 /// producer that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 4;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 5;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -67,6 +69,9 @@ pub enum Operation {
     /// Demand-shaped invocation proof transcripts. This read does not retain
     /// facts or disturb the editor-analysis state token.
     Invocations,
+    /// Exact compiler value facts for verifier-owned exported-value query
+    /// expressions. This is distinct from a call transcript by construction.
+    ExportValues,
     Cancel,
     Close,
 }
@@ -165,6 +170,8 @@ pub struct Request {
     pub module_graph: Option<ModuleGraphRequest>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub invocation_demands: Vec<InvocationDemand>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub export_value_demands: Vec<ExportValueDemand>,
 }
 
 /// The wire form of a module-graph demand.
@@ -277,6 +284,10 @@ pub struct Response {
     pub invocation_transcripts: Vec<InvocationTranscript>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invocation_envelope: Option<InvocationEnvelope>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub export_value_transcripts: Vec<ExportValueTranscript>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub export_value_envelope: Option<InvocationEnvelope>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]
@@ -818,6 +829,7 @@ fn decode_entity_run(
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
             TYPE_FACTS_TABLE_SCHEMA_V16 | TYPE_FACTS_TABLE_SCHEMA_V17 => 32767,
+            TYPE_FACTS_TABLE_SCHEMA_V18 => 65535,
             TYPE_FACTS_TABLE_SCHEMA_V15 | TYPE_FACTS_TABLE_SCHEMA_V14 => 16383,
             TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
@@ -991,6 +1003,17 @@ fn decode_entity_run(
         } else {
             None
         };
+        let runtime_binding_kind = if flags & 32768 != 0 {
+            Some(match cursor.u64()? {
+                0 => RuntimeBindingKind::Callable,
+                1 => RuntimeBindingKind::NonCallable,
+                2 => RuntimeBindingKind::Mixed,
+                3 => RuntimeBindingKind::Open,
+                tag => return Err(format!("unknown runtime binding kind tag {tag}")),
+            })
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -1007,6 +1030,7 @@ fn decode_entity_run(
             resolved_call,
             callability,
             constructability,
+            runtime_binding_kind,
             runtime_value_domain,
             call_result_domain,
             constant_value,
@@ -1282,6 +1306,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V15
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V16
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V17
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V18
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1632,9 +1657,10 @@ mod tests {
     use super::{
         SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_TABLE_SCHEMA_V3, TYPE_FACTS_TABLE_SCHEMA_V14,
         TYPE_FACTS_TABLE_SCHEMA_V15, TYPE_FACTS_TABLE_SCHEMA_V16, TYPE_FACTS_TABLE_SCHEMA_V17,
-        TransitionMode, decode_table_transition, parse_argument_mapping_reason,
-        parse_argument_mapping_status, parse_call_kind, parse_callability, parse_constructability,
-        parse_reference_space, parse_resolved_call_validity, push_uvarint,
+        TYPE_FACTS_TABLE_SCHEMA_V18, TransitionMode, decode_table_transition,
+        parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
+        parse_callability, parse_constructability, parse_reference_space,
+        parse_resolved_call_validity, push_uvarint,
     };
 
     fn push_test_string(frame: &mut Vec<u8>, value: &str) {
@@ -2238,6 +2264,7 @@ mod tests {
         assert!(decode_table_transition(&primitive_literal_candidates_transition(15)).is_err());
         assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V16, 16);
         assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V17, 17);
+        assert_eq!(TYPE_FACTS_TABLE_SCHEMA_V18, 18);
     }
 
     #[test]

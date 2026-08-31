@@ -13,7 +13,7 @@ use std::{
 
 use solid_dialect::Dialect;
 use solid_facts::ProjectFacts;
-use typefacts::{Callability, Constructability, Location, ReferenceSpace};
+use typefacts::{Callability, Constructability, Location, ReferenceSpace, RuntimeBindingKind};
 
 use super::{
     ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
@@ -34,7 +34,7 @@ use crate::pipeline::parallel_slice_results;
 /// indexes used by the current interprocedural solver. This is deliberately
 /// downstream of exact import/artifact selection: no schema version, summary
 /// ID, condition label, evidence spelling, or closure-array mechanic is inspected.
-pub(crate) fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
+pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
     let export = accepted.export();
     let mut open_claims = BTreeSet::new();
     let kind = if matches!(export.shape, ValueShape::Callable | ValueShape::Component) {
@@ -1974,7 +1974,7 @@ pub fn export_kind_proof_from_entity(
     }
     let callability = entity.and_then(|entity| entity.callability);
     let constructability = entity.and_then(|entity| entity.constructability);
-    match (callability, constructability) {
+    let signature_proof = match (callability, constructability) {
         (Some(Callability::Callable | Callability::UntypedCallable), _)
         | (_, Some(Constructability::Constructable)) => ExportKindProof::Callable,
         (Some(Callability::NonCallable), Some(Constructability::NonConstructable)) => {
@@ -1984,6 +1984,32 @@ pub fn export_kind_proof_from_entity(
             ExportKindProof::Unresolvable(callability, constructability)
         }
         _ => ExportKindProof::Unanswered,
+    };
+    // A closed census of the exact runtime binding corrects a declaration-
+    // surface negative. Published packages commonly ship `index.js` beside
+    // `index.d.ts`; the configured compiler may attach the declaration
+    // module's non-callable answer to the runtime declarator even though the
+    // exact runtime symbol is initialized and remains bound to a function.
+    // Only the closed callable census corrects that contradiction. Open/mixed
+    // censuses and a non-callable census beside a positive signature retain
+    // the established fail-closed signature rule.
+    if entity.and_then(|entity| entity.runtime_binding_kind) == Some(RuntimeBindingKind::Callable) {
+        return ExportKindProof::Callable;
+    }
+    match signature_proof {
+        ExportKindProof::Unresolvable(_, _) | ExportKindProof::Unanswered => {
+            match entity.and_then(|entity| entity.runtime_binding_kind) {
+                Some(RuntimeBindingKind::Callable) => ExportKindProof::Callable,
+                Some(RuntimeBindingKind::NonCallable) => ExportKindProof::NonCallable,
+                // A mixed or open write census is explicit evidence that no
+                // closed runtime kind exists. Preserve the signature failure
+                // so the caller refuses with its established diagnostic.
+                Some(RuntimeBindingKind::Mixed | RuntimeBindingKind::Open) | None => {
+                    signature_proof
+                }
+            }
+        }
+        _ => signature_proof,
     }
 }
 
@@ -2173,7 +2199,10 @@ mod export_kind_proof_tests {
     use solid_facts::ast;
     use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
     use solid_facts::core::{Generation, Span};
-    use typefacts::{Callability, Constructability, EntityFact, Location, PrimitiveValueDomain};
+    use typefacts::{
+        Callability, Constructability, EntityFact, Location, PrimitiveValueDomain,
+        RuntimeBindingKind,
+    };
 
     const PATH: &str = "artifact.ts";
 
@@ -2194,6 +2223,7 @@ mod export_kind_proof_tests {
             resolved_call: None,
             callability,
             constructability,
+            runtime_binding_kind: None,
             runtime_value_domain: None,
             primitive_value_domain: PrimitiveValueDomain::default(),
             primitive_literal_candidates: None,
@@ -2219,6 +2249,16 @@ mod export_kind_proof_tests {
         name: &str,
         callability: Option<Callability>,
         constructability: Option<Constructability>,
+    ) -> ExportKindProof {
+        proof_with_binding(source, name, callability, constructability, None)
+    }
+
+    fn proof_with_binding(
+        source: &str,
+        name: &str,
+        callability: Option<Callability>,
+        constructability: Option<Constructability>,
+        runtime_binding_kind: Option<RuntimeBindingKind>,
     ) -> ExportKindProof {
         let ast = ast::extract(PATH, source).unwrap();
         let start = u32::try_from(source.find(name).expect("name occurs in source")).unwrap();
@@ -2250,7 +2290,10 @@ mod export_kind_proof_tests {
                 1,
                 "fixture",
                 Vec::new(),
-                vec![entity(span, callability, constructability)],
+                vec![EntityFact {
+                    runtime_binding_kind,
+                    ..entity(span, callability, constructability)
+                }],
                 Vec::new(),
                 Vec::new(),
             ),
@@ -2259,6 +2302,58 @@ mod export_kind_proof_tests {
             runtime_symbol_redirects: Default::default(),
         };
         export_kind_proof(&facts, &location)
+    }
+
+    #[test]
+    fn exact_runtime_binding_census_closes_only_signature_failures() {
+        let source = "export const value = opaque();";
+        assert_eq!(
+            proof_with_binding(
+                source,
+                "value",
+                Some(Callability::Unknown),
+                Some(Constructability::Unknown),
+                Some(RuntimeBindingKind::Callable),
+            ),
+            ExportKindProof::Callable
+        );
+        assert_eq!(
+            proof_with_binding(
+                source,
+                "value",
+                Some(Callability::Unknown),
+                Some(Constructability::Unknown),
+                Some(RuntimeBindingKind::NonCallable),
+            ),
+            ExportKindProof::NonCallable
+        );
+        for open in [RuntimeBindingKind::Mixed, RuntimeBindingKind::Open] {
+            assert_eq!(
+                proof_with_binding(
+                    source,
+                    "value",
+                    Some(Callability::Unknown),
+                    Some(Constructability::Unknown),
+                    Some(open),
+                ),
+                ExportKindProof::Unresolvable(Callability::Unknown, Constructability::Unknown)
+            );
+        }
+    }
+
+    #[test]
+    fn exact_runtime_binding_census_corrects_sibling_declaration_signature_conflicts() {
+        let source = "export const published = () => {};";
+        assert_eq!(
+            proof_with_binding(
+                source,
+                "published",
+                Some(Callability::NonCallable),
+                Some(Constructability::NonConstructable),
+                Some(RuntimeBindingKind::Callable),
+            ),
+            ExportKindProof::Callable
+        );
     }
 
     const CALLABILITIES: [Option<Callability>; 6] = [

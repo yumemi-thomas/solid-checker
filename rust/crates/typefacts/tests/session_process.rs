@@ -1,4 +1,11 @@
-use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
+use std::{
+    fs,
+    path::PathBuf,
+    process::Command,
+    sync::OnceLock,
+    thread,
+    time::{Duration, Instant},
+};
 
 use sha2::{Digest as _, Sha256};
 use typefacts::{
@@ -102,6 +109,64 @@ fn live_certification_identity_cannot_be_copied_or_spliced_between_sessions() {
     );
     first.close().unwrap();
     second.close().unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn close_is_bounded_when_the_producer_exits_between_requests() {
+    let project = project();
+    let source_path = project.parent().unwrap().join("unrelated.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let needle = "identity(42)";
+    let start = source.find(needle).unwrap();
+    let demand = InvocationDemand {
+        location: Location {
+            path: source_path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + needle.len()) as u64,
+        },
+        callable_depth: 1,
+        census: true,
+    };
+    let context = CertificationInvocationContext::new(
+        SourceHash::of("snapshot").to_string(),
+        SourceHash::of("demand-graph").to_string(),
+        [SourceHash::of("proof-demand").to_string()],
+    )
+    .unwrap();
+    let executable = producer();
+    let mut session = Session::open(
+        Producer::pinned_for_certification(
+            &executable,
+            executable_digest(&executable),
+            SourceHash::of("source-manifest").to_string(),
+        )
+        .unwrap(),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let answer = session
+        .certification_invocations(context, &[demand])
+        .unwrap();
+    assert!(
+        Command::new("kill")
+            .args(["-9", &answer.identity().process_id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    // Let the response reader observe EOF before close registers its request;
+    // this is the ordering that previously left a new receiver stranded.
+    thread::sleep(Duration::from_millis(100));
+
+    let started = Instant::now();
+    assert!(session.close().is_err());
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "close waited {:?} after the producer had already exited",
+        started.elapsed()
+    );
 }
 
 #[test]

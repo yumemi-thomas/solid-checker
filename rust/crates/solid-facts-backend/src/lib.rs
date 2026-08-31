@@ -26,19 +26,27 @@ mod wire;
 pub use cache::{CacheStats, FactsCache};
 pub use contract_certification::{
     ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt, BuiltInReceiptEntry,
-    CertificationPlan, CertificationPlanningError, CertificationRequest, ConfiguredReceiptIssuer,
-    DependencyCertificationQueue, DependencyCompositionError, DependencyCompositionRequirement,
-    DependencyCompositionSchedule, DependencyNodeIdentity, DependencyQueueNode,
-    InspectedProbeGateBatch, LocalArtifact, LockPinnedArchive, Policy2ReceiptBindings,
-    Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustEntry, Policy2TrustStore, ProbeGate,
-    ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind, ProbeGateSchedule, PublishedArchive,
-    PublishedPolicy2Catalog, ReceiptIssuerKind, ReceiptPublicationError, SnapshotLimits,
-    SnapshotVerifiedClosure, SnapshotVerifiedExports, SnapshotVerifiedResolution,
-    TypeFactsCertificationError, TypeFactsCertificationSchedule, TypeFactsProducerPin,
-    UntrustedArtifactEnvelope, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence, WitnessWireError,
-    authenticate_policy2_receipt, canonicalize_policy2_main, issue_builtin_policy2_receipt,
-    issue_policy2_receipt, plan_certification, policy2_main_semantic_digest, policy2_policy_digest,
-    publish_policy2_catalog,
+    CanonicalDependencyNodeIdentity, CertificationPlan, CertificationPlanningError,
+    CertificationPlanningTransaction, CertificationRequest, ConfiguredReceiptIssuer,
+    DependencyCompositionError, DependencyCompositionRequirement, DependencyCompositionSchedule,
+    DependencyNodeIdentity, DependencyQueueNode, DependencyReceiptCompositionError,
+    FinalizedGraphNode, FinalizedPolicy2Contract, FinalizedPolicy2Graph, InspectedProbeGateBatch,
+    LocalArtifact, LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings,
+    Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry,
+    Policy2TrustStore, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
+    ProbeGateSchedule, PublishedArchive, PublishedContractGraphPlan,
+    PublishedGraphCertificationError, PublishedGraphLockSelection, PublishedGraphNodeRequest,
+    PublishedGraphPlanningError, PublishedGraphSourceRequest, PublishedPolicy2Catalog,
+    ReceiptIssuerKind, ReceiptPublicationError, SnapshotLimits, SnapshotVerifiedClosure,
+    SnapshotVerifiedExports, SnapshotVerifiedResolution, TypeFactsCertificationError,
+    TypeFactsCertificationSchedule, TypeFactsProducerPin, UntrustedArtifactEnvelope,
+    VerifiedDependencyComposition, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence,
+    WitnessWireError, authenticate_policy2_receipt, canonicalize_policy2_main,
+    certify_published_contract_graph_case_set, certify_value_only_case_set,
+    decode_policy2_trust_configuration, encode_policy2_trust_configuration,
+    issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
+    plan_published_contract_graph, policy2_main_semantic_digest, policy2_policy_digest,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 #[cfg(feature = "dialect-v2")]
 pub use contract_certification::{
@@ -57,6 +65,8 @@ pub use contract_interface::{
     StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
     load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
     load_authenticated_policy2_embedded_contract, read_accepted_contract_catalog,
+    read_accepted_contract_catalog_with_trust, read_policy2_trust_configuration,
+    read_proposal_dependency_catalog_for_generation,
 };
 pub use contract_workflow::{
     ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
@@ -120,9 +130,10 @@ pub fn plan_contract_document_certification(
     resolved_import: ResolvedImport,
     artifact: UntrustedArtifactEnvelope,
 ) -> Result<CertificationPlan, CertificationPlanningError> {
-    let candidate = contract_document::decode(document)?.normalize()?;
-    plan_certification(
-        CertificationRequest::new(candidate, import_request, resolved_import),
+    CertificationPlanningTransaction::new().plan_contract_document(
+        document,
+        import_request,
+        resolved_import,
         artifact,
     )
 }
@@ -148,6 +159,75 @@ pub fn encode_inferred_contract_workflow(
 ) -> Result<ProposalArtifacts, ContractWorkflowError> {
     let (proposal, candidates) =
         inferred_contract::normalize_inferred_contract_with_candidates(inferred, resolved)?;
+    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
+}
+
+/// Emits one exact entrypoint's analyzer inference while keeping the resolved
+/// package subpath explicit at the construction seam. A caller cannot reuse
+/// an export map inferred for `.` to answer `./web`, even when both subpaths
+/// happen to expose the same public names.
+pub fn encode_inferred_entrypoint_workflow(
+    package_name: &str,
+    package_version: &str,
+    requested_entrypoint: &str,
+    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
+    resolved: &ResolvedImport,
+    pretty: bool,
+) -> Result<ProposalArtifacts, ContractWorkflowError> {
+    encode_inferred_entrypoint_workflow_with_external_targets(
+        package_name,
+        package_version,
+        requested_entrypoint,
+        exports,
+        resolved,
+        &std::collections::BTreeSet::new(),
+        pretty,
+    )
+}
+
+/// Proposal-only graph acquisition seam. External targets are untrusted
+/// candidates admitted solely so native dependency-graph planning can replay
+/// them against child archives; this function never accepts or certifies them.
+pub fn encode_inferred_entrypoint_workflow_with_external_targets(
+    package_name: &str,
+    package_version: &str,
+    requested_entrypoint: &str,
+    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
+    resolved: &ResolvedImport,
+    external_targets: &std::collections::BTreeSet<(String, String)>,
+    pretty: bool,
+) -> Result<ProposalArtifacts, ContractWorkflowError> {
+    if requested_entrypoint != resolved.requested_entrypoint {
+        return Err(ContractFailure::IdentityMismatch {
+            reason: format!(
+                "inferred entrypoint {requested_entrypoint:?} does not match resolved entrypoint {:?}",
+                resolved.requested_entrypoint
+            ),
+        }
+        .into());
+    }
+    let inferred = solid_reactive_ir::PackageContract {
+        package: solid_reactive_ir::ContractPackage {
+            name: package_name.to_owned(),
+            version: package_version.to_owned(),
+            integrity: String::new(),
+        },
+        entrypoints: [(
+            requested_entrypoint.to_owned(),
+            solid_reactive_ir::ContractEntrypoint { exports },
+        )]
+        .into(),
+        source_path: String::new(),
+    };
+    inferred
+        .validate()
+        .map_err(|reason| ContractFailure::InvalidSemanticModel { reason })?;
+    let (proposal, candidates) =
+        inferred_contract::normalize_inferred_contract_with_candidates_and_external_targets(
+            &inferred,
+            resolved,
+            external_targets,
+        )?;
     contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
 }
 

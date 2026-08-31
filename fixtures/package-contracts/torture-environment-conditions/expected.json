@@ -21,6 +21,28 @@
           }
         }
       ]
+    },
+    "./bare": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "11516b79b8368e9e523bdc4928738cc402e24d892cf70787b683063c92ae766a",
+            "path": "./bare.js",
+            "sha256": "c11ce0dbd904a2dae1078299c455308baa589519174d30d70f694a4977cfb189"
+          },
+          "declarations": {
+            "path": "./bare.js",
+            "sha256": "c11ce0dbd904a2dae1078299c455308baa589519174d30d70f694a4977cfb189"
+          },
+          "exports": {
+            "forwardFromBareTarget": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1bare",
+            "typesBranch": "/exports/.~1bare"
+          }
+        }
+      ]
     }
   },
   "format": "solid-reactivity-contract",

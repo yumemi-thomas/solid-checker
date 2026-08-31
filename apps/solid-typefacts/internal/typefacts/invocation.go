@@ -39,6 +39,13 @@ type InvocationDemand struct {
 	Census        bool     `cbor:"census,omitempty" json:"census,omitempty"`
 }
 
+// ExportValueDemand asks for the exact value of one expression. Certification
+// points it at a deterministic imported binding, never at an invented call.
+type ExportValueDemand struct {
+	Location      Location `cbor:"location" json:"location"`
+	CallableDepth int      `cbor:"callableDepth,omitempty" json:"callableDepth,omitempty"`
+}
+
 type ArgumentBindingDisposition string
 
 const (
@@ -184,6 +191,17 @@ type InvocationValueFact struct {
 	OpenReasons      []string                   `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
+type ExportValueTranscript struct {
+	Location      Location             `cbor:"location" json:"location"`
+	QueryName     string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
+	Target        SymbolID             `cbor:"target,omitempty" json:"target,omitempty"`
+	Declaration   *ResolvedDeclaration `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Value         InvocationValueFact  `cbor:"value" json:"value"`
+	CallablePaths []CallablePathFact   `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
+	Complete      bool                 `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons   []string             `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
 type SelectedParameter struct {
 	Index         int                 `cbor:"index" json:"index"`
 	Symbol        SymbolID            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
@@ -299,9 +317,20 @@ type InvocationAnswer struct {
 	Envelope    InvocationEnvelope     `cbor:"envelope" json:"envelope"`
 }
 
+type ExportValueAnswer struct {
+	Transcripts []ExportValueTranscript `cbor:"transcripts,omitempty" json:"transcripts,omitempty"`
+	Envelope    InvocationEnvelope      `cbor:"envelope" json:"envelope"`
+}
+
 // InvocationAnalyzer is the optional exact compiler capability behind the
 // invocation lifecycle operation. A backend without it must fail the request;
 // it may not synthesize a partial transcript from weaker Project methods.
 type InvocationAnalyzer interface {
 	InvocationTranscripts(context.Context, []InvocationDemand) (InvocationAnswer, error)
+}
+
+// ExportValueAnalyzer is intentionally separate from InvocationAnalyzer: an
+// implementation cannot answer exported-value proof from a selected call.
+type ExportValueAnalyzer interface {
+	ExportValueTranscripts(context.Context, []ExportValueDemand) (ExportValueAnswer, error)
 }

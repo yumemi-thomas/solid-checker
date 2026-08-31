@@ -332,11 +332,18 @@ impl ProofPolicy2 {
                     ProofDemandSubject::ArtifactCase(artifact.id.clone()),
                 ));
             }
+            if artifact.transform.is_some() {
+                requested.insert((
+                    ProofFamily::CompilerReconciliation,
+                    ProofDemandSubject::ArtifactCase(artifact.id.clone()),
+                ));
+            }
         }
         for positive in &candidates.positive_facts {
             match positive {
                 PositiveFactSubject::SelectedCall { .. } => {
                     insert_positive(&mut requested, ProofFamily::SelectedSignature, positive);
+                    insert_positive(&mut requested, ProofFamily::RestSpreadCoverage, positive);
                 }
                 PositiveFactSubject::CallbackBinding { .. } => {
                     insert_positive(&mut requested, ProofFamily::ArgumentBinding, positive);
@@ -389,6 +396,12 @@ impl ProofPolicy2 {
             .map(DependencyDemandInput::validate)
             .collect::<Result<BTreeSet<_>, _>>()?;
         for dependency in dependencies {
+            requested.insert((
+                ProofFamily::AcceptedDependencyComposition,
+                ProofDemandSubject::DependencyArtifact {
+                    dependency: dependency.clone(),
+                },
+            ));
             for closure in &candidates.closure_candidates {
                 let semantic_claim_id = candidates
                     .proposal
@@ -718,6 +731,13 @@ fn hash_demand_subject(hash: &mut Sha256, subject: &ProofDemandSubject) {
             hash_demand_text(hash, "domain-closure");
             hash_demand_text(hash, semantic_claim_id);
         }
+        ProofDemandSubject::DependencyArtifact { dependency } => {
+            hash_demand_text(hash, "dependency-artifact");
+            hash_demand_text(hash, &dependency.package);
+            hash_demand_text(hash, &dependency.artifact_case);
+            hash_demand_text(hash, &dependency.specifier);
+            hash_demand_text(hash, &dependency.accepted_contract_digest);
+        }
         ProofDemandSubject::DependencyClosure {
             dependency,
             semantic_claim_id,
@@ -1035,6 +1055,9 @@ pub enum ProofDemandSubject {
         subject: SemanticClaimSubject,
         semantic_claim_id: String,
     },
+    DependencyArtifact {
+        dependency: DependencyDemandInput,
+    },
     DependencyClosure {
         dependency: DependencyDemandInput,
         parent: SemanticClaimSubject,
@@ -1342,7 +1365,66 @@ impl WitnessCoverage {
     pub fn is_empty(&self) -> bool {
         self.covered.is_empty()
     }
+
+    /// Canonical per-family roots for receipt v2. Every receipt family is
+    /// present even when its verified schedule is empty; the empty root is
+    /// domain-separated by policy, demand graph, family, and a zero count.
+    #[must_use]
+    pub fn family_evidence_roots(&self) -> std::collections::BTreeMap<String, Digest> {
+        RECEIPT_WITNESS_FAMILIES
+            .into_iter()
+            .map(|family| {
+                let rows = self
+                    .covered
+                    .iter()
+                    .filter(|(_, witness)| witness.family == family)
+                    .collect::<Vec<_>>();
+                let mut hash = Sha256::new();
+                hash.update(b"solid-checker:policy2-family-evidence-root:v1");
+                hash_demand_text(&mut hash, proof_policy_2().digest().as_str());
+                hash_demand_text(&mut hash, self.demand_graph_root.as_str());
+                hash_demand_text(&mut hash, proof_family_name(family));
+                hash.update(u64::try_from(rows.len()).unwrap_or(u64::MAX).to_be_bytes());
+                for (demand_id, witness) in rows {
+                    hash_demand_text(&mut hash, demand_id);
+                    hash_demand_text(&mut hash, witness.evidence_root.as_str());
+                    hash.update(
+                        u64::try_from(witness.site_ids.len())
+                            .unwrap_or(u64::MAX)
+                            .to_be_bytes(),
+                    );
+                    for site in &witness.site_ids {
+                        hash_demand_text(&mut hash, site);
+                    }
+                }
+                (
+                    proof_family_name(family).to_owned(),
+                    Digest::from_sha256(hash.finalize().into()),
+                )
+            })
+            .collect()
+    }
 }
+
+const RECEIPT_WITNESS_FAMILIES: [ProofFamily; 17] = [
+    ProofFamily::PackageIdentity,
+    ProofFamily::ManifestEntrypoint,
+    ProofFamily::ExportResolution,
+    ProofFamily::ArtifactDeclarations,
+    ProofFamily::ExportIdentity,
+    ProofFamily::ModuleClosure,
+    ProofFamily::SelectedSignature,
+    ProofFamily::ArgumentBinding,
+    ProofFamily::RestSpreadCoverage,
+    ProofFamily::CallablePath,
+    ProofFamily::OperationReachability,
+    ProofFamily::OperationCardinality,
+    ProofFamily::RecursiveValueShape,
+    ProofFamily::GuardPartition,
+    ProofFamily::CompilerReconciliation,
+    ProofFamily::AcceptedDependencyComposition,
+    ProofFamily::DomainExhaustiveness,
+];
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum WitnessCoverageError {
@@ -1468,6 +1550,8 @@ struct ResourceBudgets {
 struct ReceiptTrust {
     canonical_main_encoding_required: bool,
     policy_digest_constraint_required: bool,
+    exact_importer_and_specifier_binding_required: bool,
+    exact_resolved_import_binding_required: bool,
     receipt_carried_key_is_trust_root: bool,
     built_in: BuiltInReceiptTrust,
     persistent_local: SignedReceiptTrust,
@@ -1719,6 +1803,8 @@ const fn manifest() -> PolicyManifest {
         receipt_trust: ReceiptTrust {
             canonical_main_encoding_required: true,
             policy_digest_constraint_required: true,
+            exact_importer_and_specifier_binding_required: true,
+            exact_resolved_import_binding_required: true,
             receipt_carried_key_is_trust_root: false,
             built_in: BuiltInReceiptTrust {
                 provenance: "binary-embedded",
@@ -1763,7 +1849,7 @@ mod tests {
         assert_eq!(policy.semantic_model_version(), SEMANTIC_MODEL_VERSION);
         assert_eq!(
             policy.digest().as_str(),
-            "sha256:43d68db58d35311234c4d11bb0331b71aa9ad621532c26360c20415150e74f53"
+            "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278"
         );
         // Policy-1 replay types remain only for historical internal tests;
         // the backend loader no longer accepts their receipts.
@@ -1885,6 +1971,74 @@ mod tests {
     }
 
     #[test]
+    fn every_selected_call_has_an_explicit_rest_spread_demand() {
+        let complete = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let policy = proof_policy_2();
+        let candidates = policy.inspect_candidates(&complete).unwrap();
+        let graph = policy
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+        assert!(candidates.positive_facts().iter().all(|positive| {
+            !matches!(positive, super::PositiveFactSubject::SelectedCall { .. })
+                || graph.demands().iter().any(|demand| {
+                    demand.family() == ProofFamily::RestSpreadCoverage
+                        && demand.subject() == &ProofDemandSubject::PositiveFact(positive.clone())
+                })
+        }));
+    }
+
+    #[test]
+    fn every_transformed_artifact_has_a_compiler_reconciliation_demand() {
+        let base = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let mut artifact_cases = base.artifact_cases().to_vec();
+        artifact_cases[0].transform = Some(artifact_cases[0].runtime.clone());
+        let complete = crate::contract_semantics::ContractProposal::new(
+            base.package().clone(),
+            artifact_cases,
+        )
+        .normalize()
+        .unwrap();
+        let policy = proof_policy_2();
+        let candidates = policy.inspect_candidates(&complete).unwrap();
+        let graph = policy
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+        let transformed = candidates
+            .proposal()
+            .artifact_cases()
+            .iter()
+            .filter(|artifact| artifact.transform.is_some())
+            .collect::<Vec<_>>();
+        assert!(!transformed.is_empty());
+        assert!(transformed.iter().all(|artifact| {
+            graph.demands().iter().any(|demand| {
+                demand.family() == ProofFamily::CompilerReconciliation
+                    && demand.subject() == &ProofDemandSubject::ArtifactCase(artifact.id.clone())
+            })
+        }));
+    }
+
+    #[test]
     fn dependency_demands_cover_every_parent_closure_and_bind_the_exact_edge() {
         let complete = conformance_corpus()
             .into_iter()
@@ -1916,13 +2070,25 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             dependency_demands.len(),
-            candidates.closure_candidates().len()
+            candidates.closure_candidates().len() + 1
         );
-        assert!(dependency_demands.iter().all(|demand| matches!(
+        assert!(dependency_demands.iter().any(|demand| matches!(
             demand.subject(),
-            ProofDemandSubject::DependencyClosure { dependency, parent, .. }
-                if dependency == &edge && candidates.closure_candidates().contains(parent)
+            ProofDemandSubject::DependencyArtifact { dependency } if dependency == &edge
         )));
+        assert!(
+            dependency_demands
+                .iter()
+                .filter(|demand| matches!(
+                    demand.subject(),
+                    ProofDemandSubject::DependencyClosure { .. }
+                ))
+                .all(|demand| matches!(
+                    demand.subject(),
+                    ProofDemandSubject::DependencyClosure { dependency, parent, .. }
+                        if dependency == &edge && candidates.closure_candidates().contains(parent)
+                ))
+        );
 
         let changed = policy
             .derive_demand_graph_with_dependencies(
@@ -1936,6 +2102,42 @@ mod tests {
             )
             .unwrap();
         assert_ne!(graph.root(), changed.root());
+    }
+
+    #[test]
+    fn dependency_archive_authority_is_demanded_even_without_parent_closures() {
+        let complete = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let policy = proof_policy_2();
+        let mut candidates = policy.inspect_candidates(&complete).unwrap();
+        candidates.closure_candidates.clear();
+        let edge = DependencyDemandInput {
+            specifier: "dependency/subpath".into(),
+            package: "dependency".into(),
+            artifact_case: "artifact-case:dependency:browser".into(),
+            accepted_contract_digest: format!("sha256:{:064x}", 7),
+        };
+        let graph = policy
+            .derive_demand_graph_with_dependencies(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+                [edge.clone()],
+            )
+            .unwrap();
+        assert!(graph.demands().iter().any(|demand| {
+            demand.family() == ProofFamily::AcceptedDependencyComposition
+                && matches!(
+                    demand.subject(),
+                    ProofDemandSubject::DependencyArtifact { dependency }
+                        if dependency == &edge
+                )
+        }));
     }
 
     #[test]
@@ -2061,6 +2263,56 @@ mod tests {
         assert_eq!(
             graph.verify_witness_coverage(duplicate_site.drain(..)),
             Err(WitnessCoverageError::DuplicateSiteIdentity)
+        );
+    }
+
+    #[test]
+    fn replanning_after_pruning_invalidates_every_old_witness() {
+        let complete = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let policy = proof_policy_2();
+        let candidates = policy.inspect_candidates(&complete).unwrap();
+        let graph = policy
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+        let old_witnesses = graph
+            .demands()
+            .iter()
+            .enumerate()
+            .map(|(index, demand)| {
+                WitnessBinding::new(
+                    witness_variant(demand.family()),
+                    demand.id().as_str(),
+                    format!("sha256:{index:064x}"),
+                    vec![format!("site:{index}")],
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let mut finalized = candidates;
+        finalized.candidate_semantic_digest =
+            crate::contract_semantics::Digest::parse(format!("sha256:{:064x}", 99)).unwrap();
+        let replanned = policy
+            .derive_demand_graph(
+                &finalized,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+
+        assert_ne!(graph.root(), replanned.root());
+        assert_eq!(
+            replanned.verify_witness_coverage(old_witnesses),
+            Err(WitnessCoverageError::OrphanWitness)
         );
     }
 

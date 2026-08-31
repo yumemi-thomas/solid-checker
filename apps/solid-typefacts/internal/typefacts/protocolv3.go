@@ -4,12 +4,12 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 4 because selected-signature transcripts now
-// carry their exact overload census. The digest and build id still move with
-// it, and the handshake refuses on any mismatch.
+// TypeFactsHandshakeProtocol is 5 because exported-value transcripts are now
+// a distinct read-only operation. The digest and build id still move with it,
+// and the handshake refuses on any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 4
-	TypeFactsSchemaSHA256             = "sha256:129f78430a829013b3fe1a6fd9948b27f7ba7269858dd8438e61d5b2bef76fbe"
+	TypeFactsHandshakeProtocol uint64 = 5
+	TypeFactsSchemaSHA256             = "sha256:1e44dbc1d157c27e389a40185b33fa3f74def102fa7459e0a90d667131e4a943"
 )
 
 type ServiceHandshake struct {
@@ -34,9 +34,10 @@ const (
 	// LifecycleInvocations returns demand-shaped selected-signature, binding,
 	// callable-path and census proof facts without retaining them in the editor
 	// analysis table.
-	LifecycleInvocations LifecycleOperation = "invocations"
-	LifecycleCancel      LifecycleOperation = "cancel"
-	LifecycleClose       LifecycleOperation = "close"
+	LifecycleInvocations  LifecycleOperation = "invocations"
+	LifecycleExportValues LifecycleOperation = "export-values"
+	LifecycleCancel       LifecycleOperation = "cancel"
+	LifecycleClose        LifecycleOperation = "close"
 )
 
 type FileChangeV3 struct {
@@ -66,8 +67,9 @@ type LifecycleRequest struct {
 	// ModuleGraph selects how much of the resolved module graph a modules
 	// operation answers. It is read only by that operation; an absent demand
 	// there answers the module inventory alone.
-	ModuleGraph       *ModuleInventoryDemand `cbor:"moduleGraph,omitempty" json:"moduleGraph,omitempty"`
-	InvocationDemands []InvocationDemand     `cbor:"invocationDemands,omitempty" json:"invocationDemands,omitempty"`
+	ModuleGraph        *ModuleInventoryDemand `cbor:"moduleGraph,omitempty" json:"moduleGraph,omitempty"`
+	InvocationDemands  []InvocationDemand     `cbor:"invocationDemands,omitempty" json:"invocationDemands,omitempty"`
+	ExportValueDemands []ExportValueDemand    `cbor:"exportValueDemands,omitempty" json:"exportValueDemands,omitempty"`
 }
 
 // SymbolQueryV6 is one row in Rust's batched TSGo oracle request. Alias and
@@ -125,11 +127,13 @@ type LifecycleResponse struct {
 	// Modules, ModuleImports, and UnknownImportPaths carry a modules
 	// operation's answer. They are the flattened ModuleInventory: the protocol
 	// keeps response payloads flat, as sources and symbolEvidence already are.
-	Modules               []ModuleFact           `cbor:"modules,omitempty" json:"modules,omitempty"`
-	ModuleImports         []ModuleImportFact     `cbor:"moduleImports,omitempty" json:"moduleImports,omitempty"`
-	UnknownImportPaths    []string               `cbor:"unknownImportPaths,omitempty" json:"unknownImportPaths,omitempty"`
-	InvocationTranscripts []InvocationTranscript `cbor:"invocationTranscripts,omitempty" json:"invocationTranscripts,omitempty"`
-	InvocationEnvelope    *InvocationEnvelope    `cbor:"invocationEnvelope,omitempty" json:"invocationEnvelope,omitempty"`
+	Modules                []ModuleFact            `cbor:"modules,omitempty" json:"modules,omitempty"`
+	ModuleImports          []ModuleImportFact      `cbor:"moduleImports,omitempty" json:"moduleImports,omitempty"`
+	UnknownImportPaths     []string                `cbor:"unknownImportPaths,omitempty" json:"unknownImportPaths,omitempty"`
+	InvocationTranscripts  []InvocationTranscript  `cbor:"invocationTranscripts,omitempty" json:"invocationTranscripts,omitempty"`
+	InvocationEnvelope     *InvocationEnvelope     `cbor:"invocationEnvelope,omitempty" json:"invocationEnvelope,omitempty"`
+	ExportValueTranscripts []ExportValueTranscript `cbor:"exportValueTranscripts,omitempty" json:"exportValueTranscripts,omitempty"`
+	ExportValueEnvelope    *InvocationEnvelope     `cbor:"exportValueEnvelope,omitempty" json:"exportValueEnvelope,omitempty"`
 }
 
 func ValidateLifecycleRequest(request LifecycleRequest) error {
@@ -141,7 +145,7 @@ func ValidateLifecycleRequest(request LifecycleRequest) error {
 	}
 	switch request.Operation {
 	case LifecycleOpen, LifecycleUpdate, LifecycleAnalyze, LifecycleSymbols,
-		LifecycleSources, LifecycleModules, LifecycleInvocations, LifecycleCancel, LifecycleClose:
+		LifecycleSources, LifecycleModules, LifecycleInvocations, LifecycleExportValues, LifecycleCancel, LifecycleClose:
 	default:
 		return fmt.Errorf("unsupported lifecycle operation %q", request.Operation)
 	}

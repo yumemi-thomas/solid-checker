@@ -1,4 +1,9 @@
 use super::*;
+use crate::ContractFailure;
+use crate::artifact_resolution::{
+    ClosureManifest, ClosurePackageIdentity, ResolutionAuthority, ResolutionTrace,
+    ResolvedExportBinding, ResolvedExportTarget, ResolvedFile,
+};
 
 const MAIN: &[u8] =
     include_bytes!("../../../../../../pkg/contracts/bundled/solid-v1/debounce-root-default.json");
@@ -33,6 +38,9 @@ fn bindings(main: &[u8]) -> Policy2ReceiptBindings {
         .as_str()
         .into();
     Policy2ReceiptBindings {
+        importer: "/workspace/src/App.tsx".into(),
+        specifier: "@solid-primitives/debounce".into(),
+        resolved_import_root: root("resolved-import"),
         semantic_digest,
         artifact_provenance_root: root("provenance"),
         snapshot_root: root("snapshot"),
@@ -54,6 +62,139 @@ fn bindings(main: &[u8]) -> Policy2ReceiptBindings {
         verifier_source_digest: root("verifier-source"),
         verifier_build_digest: root("verifier-build"),
     }
+}
+
+fn resolved_import() -> ResolvedImport {
+    let package_root = "/workspace/node_modules/@solid-primitives/debounce";
+    let runtime = ResolvedFile {
+        path: format!("{package_root}/dist/index.js"),
+        real_path: None,
+        digest: format!(
+            "sha256:{}",
+            "b772f925ca55d55a6ef84c3277ab85f9bff2018c30c4269817327e267c76efe1"
+        ),
+    };
+    let declarations = ResolvedFile {
+        path: format!("{package_root}/dist/index.d.ts"),
+        real_path: None,
+        digest: format!(
+            "sha256:{}",
+            "4fe1834060a02e3a3df804927e4fd7b73eab9496cd6a5e2624dd14f1d2ec382c"
+        ),
+    };
+    let target = |export_name: &str| ResolvedExportBinding {
+        runtime: ResolvedExportTarget {
+            module: runtime.clone(),
+            export_name: export_name.into(),
+        },
+        declarations: ResolvedExportTarget {
+            module: declarations.clone(),
+            export_name: export_name.into(),
+        },
+    };
+    let exports = BTreeMap::from([
+        ("createDebounce".into(), target("createDebounce")),
+        ("default".into(), target("default")),
+    ]);
+    ResolvedImport {
+        specifier: "@solid-primitives/debounce".into(),
+        importer: "/workspace/src/App.tsx".into(),
+        requested_entrypoint: ".".into(),
+        package_name: "@solid-primitives/debounce".into(),
+        package_version: "1.3.0".into(),
+        package_integrity: "sha512-Cen4ccCPTuEtQM7o9aEKuOJ0LRlAnzKvN7loEBBOQ+zKdu7/7kYKr7HHE/WS8JAI3QeQr5v2ModYRIZLERw5zw==".into(),
+        package_root: package_root.into(),
+        package_real_root: None,
+        package_manifest: ResolvedFile {
+            path: format!("{package_root}/package.json"),
+            real_path: None,
+            digest: "sha256:19e4b7c252d2650e1d291af601e9fa26cc35cc2f370b14d1c5861cdd008012ab".into(),
+        },
+        runtime,
+        declarations,
+        runtime_trace: ResolutionTrace {
+            branch: "/exports/./import".into(),
+            steps: Vec::new(),
+        },
+        declaration_trace: ResolutionTrace {
+            branch: "/exports/./import".into(),
+            steps: Vec::new(),
+        },
+        closure: ClosureManifest::new(Vec::new(), Vec::new(), Vec::new()).unwrap(),
+        transform: None,
+        exports,
+        authority: ResolutionAuthority::Host,
+    }
+}
+
+fn materialized_resolved_import(project: &Path) -> ResolvedImport {
+    let mut resolved = resolved_import();
+    fs::create_dir_all(project).unwrap();
+    let project = project.canonicalize().unwrap();
+    let package_root = project.join("node_modules/@solid-primitives/debounce");
+    let importer = project.join("src/App.tsx");
+    fs::create_dir_all(package_root.join("dist")).unwrap();
+    fs::create_dir_all(importer.parent().unwrap()).unwrap();
+    for path in [
+        package_root.join("package.json"),
+        package_root.join("dist/index.js"),
+        package_root.join("dist/index.d.ts"),
+        importer.clone(),
+    ] {
+        fs::write(path, b"fixture").unwrap();
+    }
+    resolved.importer = importer.to_string_lossy().into_owned();
+    resolved.package_root = package_root.to_string_lossy().into_owned();
+    resolved.package_manifest.path = package_root
+        .join("package.json")
+        .to_string_lossy()
+        .into_owned();
+    resolved.runtime.path = package_root
+        .join("dist/index.js")
+        .to_string_lossy()
+        .into_owned();
+    resolved.declarations.path = package_root
+        .join("dist/index.d.ts")
+        .to_string_lossy()
+        .into_owned();
+    for binding in resolved.exports.values_mut() {
+        binding.runtime.module = resolved.runtime.clone();
+        binding.declarations.module = resolved.declarations.clone();
+    }
+    resolved.closure = ClosureManifest::from_package_census(vec![
+        ClosurePackageIdentity {
+            name: "@solid-primitives/debounce".into(),
+            version: "1.3.0".into(),
+            integrity: "sha512-Cen4ccCPTuEtQM7o9aEKuOJ0LRlAnzKvN7loEBBOQ+zKdu7/7kYKr7HHE/WS8JAI3QeQr5v2ModYRIZLERw5zw==".into(),
+            files_manifest_digest: "sha256:325aec3e2c3e44e50b09cae7d6210c4f36f62d04ac1acdebd7213b3c8964d97d".into(),
+        },
+        ClosurePackageIdentity {
+            name: "csstype".into(),
+            version: "3.2.3".into(),
+            integrity: "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==".into(),
+            files_manifest_digest: "sha256:67f35df64a494f8bcebe228c056478858ab201ab6fc0036067d92c006a689108".into(),
+        },
+        ClosurePackageIdentity {
+            name: "seroval-plugins".into(),
+            version: "1.5.6".into(),
+            integrity: "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ==".into(),
+            files_manifest_digest: "sha256:eb33a8834d4353e4de034bf03799d1c3991922f937161c2418358c23ce041918".into(),
+        },
+        ClosurePackageIdentity {
+            name: "seroval".into(),
+            version: "1.5.6".into(),
+            integrity: "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA==".into(),
+            files_manifest_digest: "sha256:9a392773534333f3337edb24d2ad301ef9b3c4c50d1ccdc7beefc3b4de068f80".into(),
+        },
+        ClosurePackageIdentity {
+            name: "solid-js".into(),
+            version: "1.9.14".into(),
+            integrity: "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==".into(),
+            files_manifest_digest: "sha256:53190caadda3870b6b66b1334c5913d8208eb0a4d429a006952a28ab49926c76".into(),
+        },
+    ])
+    .unwrap();
+    resolved
 }
 
 fn local_issuer(seed: u8) -> ConfiguredReceiptIssuer {
@@ -176,7 +317,10 @@ fn every_mutable_certification_root_is_rechecked() {
         )
     };
 
-    let mutations: [BindingMutation; 12] = [
+    let mutations: [BindingMutation; 13] = [
+        ("resolvedImportRoot", |value| {
+            value.resolved_import_root = root("changed-resolved-import")
+        }),
         ("artifactProvenanceRoot", |value| {
             value.artifact_provenance_root = root("stale-artifact")
         }),
@@ -508,6 +652,7 @@ fn publication_commits_one_pointer_after_both_content_objects() {
         },
     )
     .unwrap();
+    let resolved = resolved_import();
     let root = std::env::temp_dir().join(format!(
         "solid-checker-policy2-publication-{}-{}",
         std::process::id(),
@@ -519,7 +664,7 @@ fn publication_commits_one_pointer_after_both_content_objects() {
     let mut changed_receipt = receipt.clone();
     changed_receipt.push(b' ');
     assert!(matches!(
-        publish_policy2_catalog(&root, &main, &changed_receipt, &authenticated),
+        publish_policy2_catalog(&root, &main, &changed_receipt, &authenticated, &resolved),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
     assert!(!root.exists());
@@ -532,17 +677,133 @@ fn publication_commits_one_pointer_after_both_content_objects() {
         bindings.semantic_digest
     );
     assert!(matches!(
-        publish_policy2_catalog(&root, &alternate_main, &receipt, &authenticated),
+        publish_policy2_catalog(&root, &alternate_main, &receipt, &authenticated, &resolved),
         Err(ReceiptPublicationError::Unauthenticated(_))
     ));
     assert!(!root.exists());
-    let published = publish_policy2_catalog(&root, &main, &receipt, &authenticated).unwrap();
+    let published =
+        publish_policy2_catalog(&root, &main, &receipt, &authenticated, &resolved).unwrap();
     assert_eq!(fs::read(&published.main_path).unwrap(), main);
     assert_eq!(fs::read(&published.receipt_path).unwrap(), receipt);
     let pointer: serde_json::Value =
         serde_json::from_slice(&fs::read(&published.catalog_path).unwrap()).unwrap();
     assert_eq!(pointer["catalogVersion"], 2);
-    assert_eq!(pointer["main"]["digest"], digest_bytes(&main));
-    assert_eq!(pointer["receipt"]["digest"], digest_bytes(&receipt));
+    assert_eq!(
+        pointer["contracts"][0]["documentDigest"],
+        digest_bytes(&main)
+    );
+    assert_eq!(
+        pointer["contracts"][0]["receiptDigest"],
+        digest_bytes(&receipt)
+    );
+    assert_eq!(
+        pointer["contracts"][0]["bindings"]["importer"],
+        bindings.importer
+    );
+    assert_eq!(
+        pointer["contracts"][0]["status"],
+        "policy2-persistent-local"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn normal_catalog_discovery_authenticates_the_published_policy2_entry() {
+    let root = std::env::temp_dir().join(format!(
+        "solid-checker-policy2-discovery-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let resolved = materialized_resolved_import(&root);
+    let main = canonical_main(MAIN);
+    let normalized = contract_document::decode(&main)
+        .unwrap()
+        .normalize()
+        .unwrap();
+    let mut bindings = bindings(&main);
+    bindings.importer = resolved.importer.clone();
+    bindings.specifier = resolved.specifier.clone();
+    bindings.resolved_import_root = policy2_resolved_import_root(&resolved).unwrap();
+    bindings.closed_claims_root =
+        solid_reactive_ir::contract_semantics::proof::policy2_closed_claims_root(
+            &normalized,
+            &normalized.artifact_cases()[0].id,
+        )
+        .unwrap()
+        .as_str()
+        .into();
+    let issuer = local_issuer(41);
+    let receipt = issue_policy2_receipt(&main, &bindings, &issuer).unwrap();
+    let trust = trust_store(&issuer, &bindings, None);
+    let authenticated = authenticate_policy2_receipt(
+        &main,
+        &receipt,
+        &bindings,
+        Policy2ReceiptProvenance::PersistentLocal {
+            trust_store: &trust,
+            scope: issuer.scope(),
+        },
+    )
+    .unwrap();
+    let published = publish_policy2_catalog(
+        &root.join(".solid-checker"),
+        &main,
+        &receipt,
+        &authenticated,
+        &resolved,
+    )
+    .unwrap();
+    let configuration = Policy2TrustConfiguration::new(trust, Some(issuer.scope().into())).unwrap();
+    let accepted = crate::contract_interface::read_accepted_contract_catalog_with_trust(
+        &published.catalog_path,
+        Some(&configuration),
+    )
+    .unwrap();
+    let use_ = accepted
+        .resolve_name(&resolved.importer, &resolved.specifier, "createDebounce")
+        .unwrap();
+    assert_eq!(use_.contract().receipt().receipt_version, 2);
+    assert!(use_.contract().receipt().authentication.is_some());
+
+    let catalog: serde_json::Value =
+        serde_json::from_slice(&fs::read(&published.catalog_path).unwrap()).unwrap();
+    let mut changed_target = catalog.clone();
+    changed_target["contracts"][0]["import"]["exports"]["default"]["runtime"]["exportName"] =
+        "createDebounce".into();
+    fs::write(
+        &published.catalog_path,
+        serde_json::to_vec(&changed_target).unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        crate::contract_interface::read_accepted_contract_catalog_with_trust(
+            &published.catalog_path,
+            Some(&configuration),
+        ),
+        Err(ContractFailure::ReceiptMismatch {
+            field: "resolvedImportRoot"
+        })
+    ));
+
+    let mut catalog = catalog;
+    let other_importer = root.join("src/Other.tsx");
+    fs::write(&other_importer, b"fixture").unwrap();
+    catalog["contracts"][0]["import"]["importer"] =
+        other_importer.to_string_lossy().into_owned().into();
+    fs::write(
+        &published.catalog_path,
+        serde_json::to_vec(&catalog).unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        crate::contract_interface::read_accepted_contract_catalog_with_trust(
+            &published.catalog_path,
+            Some(&configuration),
+        ),
+        Err(ContractFailure::ReceiptMismatch { field: "importer" })
+    ));
     fs::remove_dir_all(root).unwrap();
 }

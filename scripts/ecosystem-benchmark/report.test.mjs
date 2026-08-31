@@ -1143,3 +1143,25 @@ test("a filtered report identifies itself as partial rather than reading as a fu
   assert.equal(full.scope.kind, "full");
   assert.match(renderMarkdown(full), /- Scope: full corpus/);
 });
+
+test("an exact-probe report retains its complete row identity set", () => {
+  const results = [makeResult({ package: "@kobalte/core", version: "0.13.13", family: "kobalte" })];
+  const probeIds = ["@kobalte/core@0.13.13|solid1|only"];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-08-21T09:00:00.000Z",
+    finishedAt: "2026-08-21T09:01:00.000Z",
+    scope: {
+      kind: "filtered",
+      sentinel: false,
+      families: [],
+      solidTargets: [],
+      probeIds,
+      includeSupplemental: false
+    }
+  });
+
+  assert.deepEqual(report.scope.probeIds, probeIds);
+  assert.match(renderMarkdown(report), /1 exact probe id\(s\)/);
+});

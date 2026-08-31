@@ -16,7 +16,7 @@ use solid_reactive_ir::contract_semantics::{
     },
 };
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     io::{Cursor, Read},
     path::{Component, Path},
     sync::Arc,
@@ -32,6 +32,7 @@ use crate::contract_interface::ContractFailure;
 mod compiler_facts;
 mod dependencies;
 mod export_bindings;
+mod finalization;
 mod module_closure;
 mod policy2_receipt;
 mod probe_gates;
@@ -44,19 +45,27 @@ pub use compiler_facts::{
     LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
 };
 pub use dependencies::{
-    DependencyCertificationQueue, DependencyCompositionError, DependencyCompositionRequirement,
+    CanonicalDependencyNodeIdentity, DependencyCompositionError, DependencyCompositionRequirement,
     DependencyCompositionSchedule, DependencyNodeIdentity, DependencyQueueNode,
+    DependencyReceiptCompositionError, FinalizedGraphNode, FinalizedPolicy2Graph,
+    PublishedContractGraphPlan, PublishedGraphCertificationError, PublishedGraphLockSelection,
+    PublishedGraphNodeRequest, PublishedGraphPlanningError, PublishedGraphSourceRequest,
+    VerifiedDependencyComposition, certify_published_contract_graph_case_set,
+    plan_published_contract_graph,
 };
 pub use export_bindings::SnapshotVerifiedExports;
+pub use finalization::{FinalizedPolicy2Contract, Policy2FinalizationError};
 pub use module_closure::SnapshotVerifiedClosure;
 #[doc(hidden)]
 pub use policy2_receipt::{
     AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, ConfiguredReceiptIssuer,
-    Policy2ReceiptBindings, Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustEntry,
-    Policy2TrustStore, PublishedPolicy2Catalog, ReceiptIssuerKind, ReceiptPublicationError,
-    authenticate_policy2_receipt, canonicalize_policy2_main, issue_builtin_policy2_receipt,
-    issue_policy2_receipt, policy2_main_semantic_digest, policy2_policy_digest,
-    publish_policy2_catalog,
+    Policy2ReceiptBindings, Policy2ReceiptError, Policy2ReceiptProvenance,
+    Policy2TrustConfiguration, Policy2TrustEntry, Policy2TrustStore, PublishedPolicy2Catalog,
+    ReceiptIssuerKind, ReceiptPublicationError, authenticate_policy2_receipt,
+    canonicalize_policy2_main, decode_policy2_trust_configuration,
+    encode_policy2_trust_configuration, issue_builtin_policy2_receipt, issue_policy2_receipt,
+    policy2_main_semantic_digest, policy2_policy_digest, policy2_resolved_import_root,
+    policy2_trust_configuration_for_issuer, publish_policy2_catalog,
 };
 pub use probe_gates::{
     InspectedProbeGateBatch, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
@@ -93,13 +102,66 @@ impl SnapshotLimits {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct PublishedArchive {
     registry_origin: String,
     package_name: String,
     package_version: String,
     registry_metadata: Vec<u8>,
     archive: Vec<u8>,
+}
+
+/// Transaction-local reuse of fully verified immutable published snapshots.
+///
+/// Equality covers the complete acquisition identity and bytes: registry
+/// origin, package coordinates, registry metadata, and archive. The cache
+/// deliberately retains no resolution, closure, export, demand, Type Facts,
+/// or receipt state, so every request still replays all proof-bearing work
+/// against its own source program and graph root.
+#[derive(Default)]
+pub struct CertificationPlanningTransaction {
+    published_snapshots: HashMap<PublishedArchive, ArtifactSnapshot>,
+}
+
+impl CertificationPlanningTransaction {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn plan_certification(
+        &mut self,
+        request: CertificationRequest,
+        artifact: UntrustedArtifactEnvelope,
+    ) -> Result<CertificationPlan, CertificationPlanningError> {
+        plan_certification_with_dependencies(self, request, artifact, &[])
+    }
+
+    pub fn plan_contract_document(
+        &mut self,
+        document: &[u8],
+        import_request: ImportRequest,
+        resolved_import: ResolvedImport,
+        artifact: UntrustedArtifactEnvelope,
+    ) -> Result<CertificationPlan, CertificationPlanningError> {
+        let candidate = crate::contract_document::decode(document)?.normalize()?;
+        self.plan_certification(
+            CertificationRequest::new(candidate, import_request, resolved_import),
+            artifact,
+        )
+    }
+
+    fn published_snapshot(
+        &mut self,
+        archive: PublishedArchive,
+    ) -> Result<ArtifactSnapshot, ArtifactSnapshotError> {
+        if let Some(snapshot) = self.published_snapshots.get(&archive) {
+            return Ok(snapshot.clone());
+        }
+        let snapshot = ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2())?;
+        self.published_snapshots.insert(archive, snapshot.clone());
+        Ok(snapshot)
+    }
 }
 
 impl PublishedArchive {
@@ -230,9 +292,12 @@ pub struct CertificationPlan {
     verified_resolution: SnapshotVerifiedResolution,
     verified_closure: SnapshotVerifiedClosure,
     verified_exports: SnapshotVerifiedExports,
+    selected_candidate: NormalizedContract,
     candidates: CertificationCandidates,
     demand_graph: ProofDemandGraph,
     artifact_witnesses: Vec<WitnessBinding>,
+    import_request: ImportRequest,
+    resolved_import: ResolvedImport,
 }
 
 impl CertificationPlan {
@@ -244,6 +309,14 @@ impl CertificationPlan {
     #[must_use]
     pub const fn candidates(&self) -> &CertificationCandidates {
         &self.candidates
+    }
+
+    /// Exact artifact case retained after independent resolution replay.
+    /// Batch orchestration may use this identity only for census checks; it
+    /// cannot replace the opaque plan or affect receipt finalization.
+    #[must_use]
+    pub fn selected_artifact_case_id(&self) -> &str {
+        &self.selected_candidate.artifact_cases()[0].id
     }
 
     #[must_use]
@@ -324,6 +397,71 @@ impl CertificationPlan {
         type_facts::verify_live_answer(self, schedule, answer)
     }
 
+    /// Acquires exact exported-value evidence without manufacturing a call.
+    pub fn acquire_export_value_type_facts(
+        &self,
+        pin: &TypeFactsProducerPin,
+        project_id: &str,
+        schedule: &TypeFactsCertificationSchedule,
+    ) -> Result<typefacts::LiveExportValueAnswer, TypeFactsCertificationError> {
+        let mut session = type_facts::TypeFactsCertificationSession::open(pin, project_id)?;
+        session.acquire_export_values(self, schedule)
+    }
+
+    /// Reconciles a live exported-value answer with its exact proof subjects.
+    pub fn verify_export_value_type_facts(
+        &self,
+        schedule: &TypeFactsCertificationSchedule,
+        answer: &typefacts::LiveExportValueAnswer,
+    ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
+        type_facts::verify_live_export_value_answer(self, schedule, answer)
+    }
+
+    /// Executes the complete opaque exported-value Type Facts transaction.
+    /// No harness path, source location, schedule, or serialized answer is
+    /// accepted from the caller.
+    pub fn acquire_and_verify_export_value_type_facts(
+        &self,
+        pin: &TypeFactsProducerPin,
+    ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
+        type_facts::acquire_and_verify_export_values(self, pin)
+    }
+
+    /// Certifies the supported value-only cohort in one native transaction.
+    pub fn certify_value_only(
+        &self,
+        canonical_proposal: &[u8],
+        pin: &TypeFactsProducerPin,
+        issuer: &ConfiguredReceiptIssuer,
+        revocation_epoch: u64,
+    ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
+        let evidence = type_facts::acquire_and_verify_export_values(self, pin)?;
+        finalization::finalize_value_only(
+            self,
+            canonical_proposal,
+            &evidence,
+            pin,
+            issuer,
+            revocation_epoch,
+        )
+    }
+
+    /// Atomically publishes a final result against the exact resolved import
+    /// retained by this opaque plan.
+    pub fn publish_finalized_policy2(
+        &self,
+        catalog_root: &Path,
+        finalized: &FinalizedPolicy2Contract,
+    ) -> Result<PublishedPolicy2Catalog, ReceiptPublicationError> {
+        publish_policy2_catalog(
+            catalog_root,
+            finalized.canonical_main(),
+            finalized.receipt(),
+            finalized.authenticated(),
+            &self.resolved_import,
+        )
+    }
+
     /// Launches a fresh private verifier child for every fully materialized
     /// compiler demand and retains authority only in opaque live-session
     /// tokens. Current schema-v1 transform cases are refused by schedule
@@ -348,6 +486,33 @@ impl CertificationPlan {
     }
 }
 
+/// Finalizes a complete set of alternative artifact cases while sharing only
+/// immutable Type Facts setup. Evidence and receipts remain one-per-plan and
+/// each is checked against its own demand graph before this returns anything.
+pub fn certify_value_only_case_set(
+    plans: &[&CertificationPlan],
+    canonical_proposal: &[u8],
+    pin: &TypeFactsProducerPin,
+    issuer: &ConfiguredReceiptIssuer,
+    revocation_epoch: u64,
+) -> Result<Vec<FinalizedPolicy2Contract>, Policy2FinalizationError> {
+    let evidence = type_facts::acquire_and_verify_export_values_batch(plans, pin)?;
+    plans
+        .iter()
+        .zip(evidence)
+        .map(|(plan, evidence)| {
+            finalization::finalize_value_only(
+                plan,
+                canonical_proposal,
+                &evidence,
+                pin,
+                issuer,
+                revocation_epoch,
+            )
+        })
+        .collect()
+}
+
 /// Hidden child-mode entrypoint used only by the policy-2 compiler adapter.
 #[doc(hidden)]
 #[cfg(feature = "dialect-v2")]
@@ -367,16 +532,22 @@ pub fn plan_certification(
     request: CertificationRequest,
     artifact: UntrustedArtifactEnvelope,
 ) -> Result<CertificationPlan, CertificationPlanningError> {
-    let limits = SnapshotLimits::policy_2();
+    CertificationPlanningTransaction::new().plan_certification(request, artifact)
+}
+
+fn plan_certification_with_dependencies(
+    transaction: &mut CertificationPlanningTransaction,
+    request: CertificationRequest,
+    artifact: UntrustedArtifactEnvelope,
+    dependencies: &[&CertificationPlan],
+) -> Result<CertificationPlan, CertificationPlanningError> {
     let snapshot = match artifact {
-        UntrustedArtifactEnvelope::Published(archive) => {
-            ArtifactSnapshot::from_published(&archive, limits)?
-        }
+        UntrustedArtifactEnvelope::Published(archive) => transaction.published_snapshot(archive)?,
         UntrustedArtifactEnvelope::LockPinned(archive) => {
-            ArtifactSnapshot::from_lock_pinned(&archive, limits)?
+            ArtifactSnapshot::from_lock_pinned(&archive, SnapshotLimits::policy_2())?
         }
         UntrustedArtifactEnvelope::Local(artifact) => {
-            ArtifactSnapshot::from_local(&artifact, limits)?
+            ArtifactSnapshot::from_local(&artifact, SnapshotLimits::policy_2())?
         }
     };
     let verified_resolution =
@@ -386,13 +557,35 @@ pub fn plan_certification(
         &verified_resolution,
         &request.resolved_import.closure,
     )?;
-    let verified_exports = export_bindings::verify_snapshot_exports(
+    let verified_exports = export_bindings::verify_snapshot_exports_with_dependencies(
         &snapshot,
         &verified_resolution,
         &request.resolved_import,
+        dependencies,
     )?;
-    let selected =
-        crate::artifact_resolution::select_and_bind(&request.candidate, &request.resolved_import)?;
+    let external_targets = dependencies
+        .iter()
+        .flat_map(|dependency| dependency.resolved_import.exports.values())
+        .flat_map(|binding| [&binding.runtime.module, &binding.declarations.module])
+        .map(|module| (module.path.clone(), module.digest.clone()))
+        .collect();
+    let selected = crate::artifact_resolution::select_and_bind_with_external_targets(
+        &request.candidate,
+        &request.resolved_import,
+        &external_targets,
+    )?;
+    // Exact per-export re-export targets are intentionally receipt evidence,
+    // not stable-v1 main-document fields. Round-trip the independently bound
+    // selection through the public document boundary before deriving its
+    // semantic digest, while `verified_exports` and artifact witnesses retain
+    // the exact target declarations and digests. Otherwise planning hashes an
+    // internal identity that ordinary discovery can never reconstruct.
+    let selected = crate::contract_document::decode(&crate::contract_document::encode(
+        &selected,
+        &crate::contract_document::SidecarDigests::default(),
+        false,
+    )?)?
+    .normalize()?;
     let policy = proof_policy_2();
     let candidates = policy
         .inspect_candidates(&selected)
@@ -424,9 +617,12 @@ pub fn plan_certification(
         verified_resolution,
         verified_closure,
         verified_exports,
+        selected_candidate: selected,
         candidates,
         demand_graph,
         artifact_witnesses,
+        import_request: request.import_request,
+        resolved_import: request.resolved_import,
     })
 }
 
@@ -896,8 +1092,8 @@ pub struct ArtifactSnapshot {
     package_name: String,
     package_version: String,
     package_integrity: String,
-    files: BTreeMap<String, Arc<[u8]>>,
-    directories: BTreeSet<String>,
+    files: Arc<BTreeMap<String, Arc<[u8]>>>,
+    directories: Arc<BTreeSet<String>>,
     root: String,
     provenance_root: String,
 }
@@ -1046,8 +1242,8 @@ impl ArtifactSnapshot {
             package_name,
             package_version,
             package_integrity,
-            files,
-            directories,
+            files: Arc::new(files),
+            directories: Arc::new(directories),
             root,
             provenance_root,
         })
@@ -1955,22 +2151,32 @@ mod tests {
     #[cfg(feature = "dialect-v2")]
     use super::CompilerCertificationSchedule;
     use super::{
-        ArtifactSnapshot, ArtifactSnapshotError, CertificationRequest, LocalArtifact,
-        LockPinnedArchive, PublishedArchive, SnapshotLimits, SnapshotVerifiedResolution,
-        UntrustedArtifactEnvelope, plan_certification,
+        ArtifactSnapshot, ArtifactSnapshotError, CertificationPlan,
+        CertificationPlanningTransaction, CertificationRequest, ConfiguredReceiptIssuer,
+        DependencyReceiptCompositionError, LocalArtifact, LockPinnedArchive,
+        Policy2ReceiptBindings, Policy2ReceiptProvenance, PublishedArchive,
+        PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
+        SnapshotLimits, SnapshotVerifiedResolution, UntrustedArtifactEnvelope,
+        authenticate_policy2_receipt, issue_policy2_receipt, plan_certification,
+        plan_published_contract_graph, policy2_main_semantic_digest,
+        policy2_trust_configuration_for_issuer,
     };
     use crate::artifact_resolution::{
-        ClosureEntry, ClosureFileRole, ClosureHazardKind, ClosureManifest, ImportRequest,
-        ResolutionAuthority, ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding,
-        ResolvedExportTarget, ResolvedFile, ResolvedImport,
+        AcceptedDependencyEdge, ClosureEntry, ClosureFileRole, ClosureHazardKind, ClosureManifest,
+        ImportRequest, ResolutionAuthority, ResolutionTrace, ResolutionTraceStep,
+        ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
     };
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use flate2::{Compression, write::GzEncoder};
     use sha2::{Digest as _, Sha256, Sha512};
-    use solid_reactive_ir::contract_semantics::ContractProposal;
+    use solid_reactive_ir::contract_semantics::{
+        CallClaims, CallSemantics, ContractProposal, ExportIdentity, ExportSemantics,
+        ExportTargetIdentity, GuardPartition, KnowledgeSet, StabilityKnowledge, ValueShape,
+    };
     use std::collections::BTreeMap;
 
     use std::io::Write as _;
+    use std::sync::Arc;
 
     fn archive_bytes(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
@@ -2010,13 +2216,31 @@ mod tests {
 
     fn registry_metadata(integrity: &str, name: &str, version: &str, tarball: &str) -> Vec<u8> {
         format!(
-            r#"{{"versions":{{"1.2.3":{{"name":"{name}","version":"{version}","dist":{{"integrity":"{integrity}","tarball":"{tarball}"}}}}}}}}"#
+            r#"{{"versions":{{"{version}":{{"name":"{name}","version":"{version}","dist":{{"integrity":"{integrity}","tarball":"{tarball}"}}}}}}}}"#
         )
         .into_bytes()
     }
 
     fn published_archive(files: &[(&str, &[u8])]) -> PublishedArchive {
         published_from_bytes(archive_bytes(files))
+    }
+
+    fn published_archive_for(
+        name: &str,
+        version: &str,
+        files: &[(&str, &[u8])],
+    ) -> PublishedArchive {
+        let archive = archive_bytes(files);
+        let integrity = format!("sha512-{}", STANDARD.encode(Sha512::digest(&archive)));
+        let tarball = format!("https://registry.npmjs.org/{name}/-/{name}-{version}.tgz");
+        PublishedArchive::new(
+            "https://registry.npmjs.org",
+            name,
+            version,
+            registry_metadata(&integrity, name, version, &tarball),
+            archive,
+        )
+        .expect("published coordinates")
     }
 
     fn raw_archive(members: &[(&str, u8, &str, &[u8])]) -> Vec<u8> {
@@ -2133,6 +2357,118 @@ mod tests {
             snapshot.read("dist/index.js"),
             Some(&b"export const answer = 42;"[..])
         );
+    }
+
+    #[test]
+    fn planning_transaction_reuses_only_the_exact_verified_published_archive() {
+        let archive = published_archive(&fixture_files());
+        let mut transaction = CertificationPlanningTransaction::new();
+
+        let first = transaction.published_snapshot(archive.clone()).unwrap();
+        let reused = transaction.published_snapshot(archive.clone()).unwrap();
+        assert_eq!(first.root(), reused.root());
+        assert_eq!(first.provenance_root(), reused.provenance_root());
+        assert!(Arc::ptr_eq(&first.files, &reused.files));
+        assert!(Arc::ptr_eq(&first.directories, &reused.directories));
+        assert!(Arc::ptr_eq(
+            first.files.get("dist/index.js").unwrap(),
+            reused.files.get("dist/index.js").unwrap(),
+        ));
+        assert_eq!(transaction.published_snapshots.len(), 1);
+
+        let mut independent_transaction = CertificationPlanningTransaction::new();
+        let independently_verified = independent_transaction
+            .published_snapshot(archive.clone())
+            .unwrap();
+        assert_eq!(first.root(), independently_verified.root());
+        assert_eq!(
+            first.provenance_root(),
+            independently_verified.provenance_root()
+        );
+        assert!(!Arc::ptr_eq(&first.files, &independently_verified.files));
+        assert!(!Arc::ptr_eq(
+            &first.directories,
+            &independently_verified.directories
+        ));
+        assert!(!Arc::ptr_eq(
+            first.files.get("dist/index.js").unwrap(),
+            independently_verified.files.get("dist/index.js").unwrap(),
+        ));
+        assert_eq!(independent_transaction.published_snapshots.len(), 1);
+
+        let mut changed_metadata = archive.clone();
+        changed_metadata.registry_metadata.push(b'\n');
+        let metadata_snapshot = transaction.published_snapshot(changed_metadata).unwrap();
+        assert_eq!(first.root(), metadata_snapshot.root());
+        assert_ne!(first.provenance_root(), metadata_snapshot.provenance_root());
+        assert!(!Arc::ptr_eq(&first.files, &metadata_snapshot.files));
+        assert!(!Arc::ptr_eq(
+            &first.directories,
+            &metadata_snapshot.directories
+        ));
+        assert!(!Arc::ptr_eq(
+            first.files.get("dist/index.js").unwrap(),
+            metadata_snapshot.files.get("dist/index.js").unwrap(),
+        ));
+
+        let changed_archive = published_archive(&[
+            fixture_files()[0],
+            ("package/dist/index.js", b"export const answer = 43;"),
+        ]);
+        let changed_snapshot = transaction.published_snapshot(changed_archive).unwrap();
+        assert_ne!(first.root(), changed_snapshot.root());
+        assert!(!Arc::ptr_eq(&first.files, &changed_snapshot.files));
+        assert!(!Arc::ptr_eq(
+            &first.directories,
+            &changed_snapshot.directories
+        ));
+
+        let alternate_origin = "https://registry.example.invalid";
+        let alternate = PublishedArchive::new(
+            alternate_origin,
+            "fixture-package",
+            "1.2.3",
+            registry_metadata(
+                first.package_integrity(),
+                "fixture-package",
+                "1.2.3",
+                &format!("{alternate_origin}/fixture-package/-/fixture-package-1.2.3.tgz"),
+            ),
+            archive.archive.clone(),
+        )
+        .unwrap();
+        let alternate_snapshot = transaction.published_snapshot(alternate).unwrap();
+        assert_eq!(first.root(), alternate_snapshot.root());
+        assert_ne!(
+            first.provenance_root(),
+            alternate_snapshot.provenance_root()
+        );
+        assert!(!Arc::ptr_eq(&first.files, &alternate_snapshot.files));
+        assert!(!Arc::ptr_eq(
+            &first.directories,
+            &alternate_snapshot.directories
+        ));
+        assert_eq!(transaction.published_snapshots.len(), 4);
+
+        let mismatched_origin = PublishedArchive::new(
+            alternate_origin,
+            "fixture-package",
+            "1.2.3",
+            archive.registry_metadata.clone(),
+            archive.archive.clone(),
+        )
+        .unwrap();
+        assert!(matches!(
+            transaction.published_snapshot(mismatched_origin),
+            Err(ArtifactSnapshotError::InvalidProvenance(_))
+        ));
+        let mut corrupt = archive;
+        corrupt.archive[0] ^= 1;
+        assert_eq!(
+            transaction.published_snapshot(corrupt).unwrap_err(),
+            ArtifactSnapshotError::IntegrityMismatch,
+        );
+        assert_eq!(transaction.published_snapshots.len(), 4);
     }
 
     #[test]
@@ -2537,7 +2873,8 @@ mod tests {
             leaked = 1;
         "#;
         let shared = b"export const shared = true;";
-        let chunk = b"export const chunk = true;";
+        let chunk = b"import './chunk-leaf.js'; export const chunk = true;";
+        let chunk_leaf = b"export const leaf = true;";
         let asset = br#"{"value":true}"#;
         let declarations = b"export * from './surface.js';";
         let surface = b"export declare const shared: boolean;";
@@ -2547,6 +2884,7 @@ mod tests {
             ("package/dist/shared.js", shared),
             ("package/dist/shared-copy.js", shared),
             ("package/dist/chunk.js", chunk),
+            ("package/dist/chunk-leaf.js", chunk_leaf),
             ("package/dist/asset.json", asset),
             ("package/types/index.d.ts", declarations),
             ("package/types/surface.d.ts", surface),
@@ -2569,6 +2907,11 @@ mod tests {
             closure_entry(ClosureFileRole::Runtime, "dist/index.js", runtime),
             closure_entry(ClosureFileRole::Runtime, "dist/shared.js", shared),
             closure_entry(ClosureFileRole::LiteralDynamicChunk, "dist/chunk.js", chunk),
+            closure_entry(
+                ClosureFileRole::LiteralDynamicChunk,
+                "dist/chunk-leaf.js",
+                chunk_leaf,
+            ),
             closure_entry(ClosureFileRole::ResolutionInput, "dist/asset.json", asset),
             closure_entry(
                 ClosureFileRole::Declaration,
@@ -2614,10 +2957,11 @@ mod tests {
             replayed.hazards.clone(),
         )
         .unwrap();
-        assert!(matches!(
-            super::module_closure::verify_snapshot_closure(&snapshot, &resolution, &missing_edge),
-            Err(ArtifactSnapshotError::ModuleClosure(_))
-        ));
+        let mismatch =
+            super::module_closure::verify_snapshot_closure(&snapshot, &resolution, &missing_edge)
+                .unwrap_err();
+        assert!(matches!(mismatch, ArtifactSnapshotError::ModuleClosure(_)));
+        assert!(mismatch.to_string().contains("diff={\"replayedOnly\""));
 
         let mut stale_entries = replayed.entries.clone();
         stale_entries
@@ -2652,6 +2996,131 @@ mod tests {
             ),
             Err(ArtifactSnapshotError::ModuleClosure(_))
         ));
+    }
+
+    #[test]
+    fn module_closure_resolves_extensionless_and_multi_dot_source_modules_on_both_axes() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let entry = b"export { first } from './array'; export { second } from './HeadContent.dev';";
+        let array = b"export const first = true;";
+        let multi_dot = b"export const second = true;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/src/index.ts", entry),
+            ("package/src/array.ts", array),
+            ("package/src/HeadContent.dev.tsx", multi_dot),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "src/index.ts".into(),
+            declarations_path: "src/index.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+
+        let replayed =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        for role in [ClosureFileRole::Runtime, ClosureFileRole::Declaration] {
+            assert!(
+                replayed
+                    .entries
+                    .contains(&closure_entry(role, "src/array.ts", array))
+            );
+            assert!(replayed.entries.contains(&closure_entry(
+                role,
+                "src/HeadContent.dev.tsx",
+                multi_dot,
+            )));
+        }
+    }
+
+    #[test]
+    fn module_closure_maps_explicit_source_suffix_to_declaration_file() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let runtime = b"export const value = true;";
+        let declarations = b"export { value } from './main.ts';";
+        let declaration_leaf = b"export declare const value: true;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", runtime),
+            ("package/dist/index.d.ts", declarations),
+            ("package/dist/main.d.ts", declaration_leaf),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "dist/index.js".into(),
+            declarations_path: "dist/index.d.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+
+        let replayed =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        assert!(replayed.entries.contains(&closure_entry(
+            ClosureFileRole::Declaration,
+            "dist/main.d.ts",
+            declaration_leaf,
+        )));
+    }
+
+    #[test]
+    fn module_closure_resolves_only_unshadowed_literal_require_edges() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let runtime = br#"
+            require("./loaded");
+            require(dynamicName);
+            function local(require) { require("./shadowed-parameter"); }
+            { const require = value => value; require("./shadowed-block"); }
+            export const value = true;
+        "#;
+        let loaded = b"export const loaded = true;";
+        let declarations = b"export declare const value: true;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", runtime),
+            ("package/dist/loaded.js", loaded),
+            (
+                "package/dist/shadowed-parameter.js",
+                b"throw new Error('must not load')",
+            ),
+            (
+                "package/dist/shadowed-block.js",
+                b"throw new Error('must not load')",
+            ),
+            ("package/dist/index.d.ts", declarations),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "dist/index.js".into(),
+            declarations_path: "dist/index.d.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+
+        let replayed =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        assert!(replayed.entries.contains(&closure_entry(
+            ClosureFileRole::Runtime,
+            "dist/loaded.js",
+            loaded,
+        )));
+        assert!(!replayed.entries.iter().any(|entry| {
+            entry.path.contains("shadowed-parameter") || entry.path.contains("shadowed-block")
+        }));
+        assert_eq!(
+            replayed
+                .hazards
+                .iter()
+                .filter(|hazard| hazard.kind == ClosureHazardKind::NonliteralDynamicLoading)
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -2900,5 +3369,722 @@ mod tests {
             snapshot.verify_resolved_import(&request, &reordered),
             Err(ArtifactSnapshotError::ResolutionMismatch(_))
         ));
+    }
+
+    fn synthetic_graph_certification_request(
+        name: &str,
+        version: &str,
+        package_root: &str,
+        importer: &str,
+        runtime: &[u8],
+        declarations: &[u8],
+        dependencies: Vec<AcceptedDependencyEdge>,
+    ) -> (CertificationRequest, PublishedArchive, String) {
+        let manifest = format!(
+            r#"{{"name":"{name}","version":"{version}","exports":{{".":{{"types":"./types/index.d.ts","import":"./dist/index.js"}}}}}}"#
+        );
+        let archive = published_archive_for(
+            name,
+            version,
+            &[
+                ("package/package.json", manifest.as_bytes()),
+                ("package/dist/index.js", runtime),
+                ("package/types/index.d.ts", declarations),
+            ],
+        );
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let package_manifest = resolved_file(package_root, "package.json", manifest.as_bytes());
+        let runtime_file = resolved_file(package_root, "dist/index.js", runtime);
+        let declaration_file = resolved_file(package_root, "types/index.d.ts", declarations);
+        let closure = ClosureManifest::new(
+            vec![
+                closure_entry(
+                    ClosureFileRole::Manifest,
+                    "package.json",
+                    manifest.as_bytes(),
+                ),
+                closure_entry(
+                    ClosureFileRole::ResolutionInput,
+                    "package.json",
+                    manifest.as_bytes(),
+                ),
+                closure_entry(ClosureFileRole::Runtime, "dist/index.js", runtime),
+                closure_entry(
+                    ClosureFileRole::Declaration,
+                    "types/index.d.ts",
+                    declarations,
+                ),
+            ],
+            dependencies,
+            Vec::new(),
+        )
+        .unwrap();
+        let request = ImportRequest {
+            specifier: name.into(),
+            importer: importer.into(),
+            export_conditions: vec!["import".into()],
+        };
+        let exports = BTreeMap::from([(
+            "value".into(),
+            ResolvedExportBinding {
+                runtime: ResolvedExportTarget {
+                    module: runtime_file.clone(),
+                    export_name: "value".into(),
+                },
+                declarations: ResolvedExportTarget {
+                    module: declaration_file.clone(),
+                    export_name: "value".into(),
+                },
+            },
+        )]);
+        let resolved = ResolvedImport {
+            specifier: name.into(),
+            importer: importer.into(),
+            requested_entrypoint: ".".into(),
+            package_name: name.into(),
+            package_version: version.into(),
+            package_integrity: snapshot.package_integrity().into(),
+            package_root: package_root.into(),
+            package_real_root: None,
+            package_manifest,
+            runtime: runtime_file,
+            declarations: declaration_file,
+            runtime_trace: ResolutionTrace {
+                branch: "/exports/./import".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "import".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./dist/index.js".into(),
+                    },
+                ],
+            },
+            declaration_trace: ResolutionTrace {
+                branch: "/exports/./types".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "types".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./types/index.d.ts".into(),
+                    },
+                ],
+            },
+            closure,
+            transform: None,
+            exports,
+            authority: ResolutionAuthority::Host,
+        };
+        let (package, mut artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        artifact_case.exports.insert(
+            "value".into(),
+            ExportSemantics {
+                identity: ExportIdentity {
+                    entrypoint: artifact_case.entrypoint.clone(),
+                    public_name: "value".into(),
+                    runtime: ExportTargetIdentity {
+                        module: artifact_case.runtime.clone(),
+                        export_name: "value".into(),
+                    },
+                    declarations: ExportTargetIdentity {
+                        module: artifact_case.declarations.clone(),
+                        export_name: "value".into(),
+                    },
+                },
+                shape: ValueShape::Plain,
+                stability: StabilityKnowledge::Unknown,
+                call: CallSemantics::new(
+                    CallClaims::default(),
+                    vec![],
+                    vec![],
+                    vec![],
+                    GuardPartition {
+                        cases: KnowledgeSet::Unknown,
+                    },
+                ),
+            },
+        );
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        (
+            CertificationRequest::new(candidate, request, resolved),
+            archive,
+            snapshot.package_integrity().into(),
+        )
+    }
+
+    #[test]
+    fn planning_transaction_shares_snapshot_members_but_rebuilds_request_authority() {
+        let (request, archive, _) = synthetic_graph_certification_request(
+            "fixture-package",
+            "1.2.3",
+            "/project/node_modules/fixture-package",
+            "/project/src/app.ts",
+            b"export const value = 1;",
+            b"export declare const value: number;",
+            Vec::new(),
+        );
+        let mut transaction = CertificationPlanningTransaction::new();
+
+        let first = transaction
+            .plan_certification(
+                request.clone(),
+                UntrustedArtifactEnvelope::Published(archive.clone()),
+            )
+            .unwrap();
+        let second = transaction
+            .plan_certification(request, UntrustedArtifactEnvelope::Published(archive))
+            .unwrap();
+
+        assert_eq!(first.snapshot_root(), second.snapshot_root());
+        assert_eq!(
+            first.snapshot.provenance_root(),
+            second.snapshot.provenance_root()
+        );
+        assert!(Arc::ptr_eq(&first.snapshot.files, &second.snapshot.files));
+        assert!(Arc::ptr_eq(
+            &first.snapshot.directories,
+            &second.snapshot.directories
+        ));
+        assert!(Arc::ptr_eq(
+            first.snapshot.files.get("dist/index.js").unwrap(),
+            second.snapshot.files.get("dist/index.js").unwrap(),
+        ));
+        assert!(!std::ptr::eq(
+            first.verified_closure.manifest(),
+            second.verified_closure.manifest(),
+        ));
+        assert!(!std::ptr::eq(first.demand_graph(), second.demand_graph()));
+        assert_eq!(transaction.published_snapshots.len(), 1);
+    }
+
+    fn graph_lock(name: &str, version: &str, integrity: &str) -> PublishedGraphLockSelection {
+        let lock = format!(
+            r#"{{"packages":{{"{name}@{version}":["{name}@{version}","",{{}},"{integrity}"],}},}}"#
+        );
+        PublishedGraphLockSelection::from_bun_lock(
+            lock.as_bytes(),
+            format!("{name}@{version}"),
+            name,
+            version,
+        )
+        .unwrap()
+    }
+
+    fn two_node_published_graph(
+        transplanted_leaf: bool,
+        substituted_leaf_lock: bool,
+        forged_dependency_digest: bool,
+    ) -> (PublishedGraphNodeRequest, PublishedGraphNodeRequest) {
+        let root_runtime_path = "/project/node_modules/root-package/dist/index.js";
+        let leaf_importer = if transplanted_leaf {
+            "/other/node_modules/root-package/dist/index.js"
+        } else {
+            root_runtime_path
+        };
+        let (leaf_request, leaf_archive, leaf_integrity) = synthetic_graph_certification_request(
+            "leaf-package",
+            "2.0.0",
+            "/project/node_modules/root-package/node_modules/leaf-package",
+            leaf_importer,
+            b"export const value = 1;",
+            b"export declare const value: number;",
+            Vec::new(),
+        );
+        let leaf_plan = plan_certification(
+            leaf_request.clone(),
+            UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+        )
+        .unwrap();
+        let edge = AcceptedDependencyEdge {
+            specifier: "leaf-package".into(),
+            package_name: "leaf-package".into(),
+            artifact_case: leaf_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: if forged_dependency_digest {
+                format!("sha256:{:064x}", 99)
+            } else {
+                leaf_plan
+                    .demand_graph()
+                    .candidate_semantic_digest()
+                    .as_str()
+                    .into()
+            },
+        };
+        let (root_request, root_archive, root_integrity) = synthetic_graph_certification_request(
+            "root-package",
+            "1.0.0",
+            "/project/node_modules/root-package",
+            "/project/src/app.ts",
+            b"import { value as leafValue } from 'leaf-package'; export const value = leafValue;",
+            b"import { value as leafValue } from 'leaf-package'; export declare const value: typeof leafValue;",
+            vec![edge],
+        );
+        (
+            PublishedGraphNodeRequest::new(
+                root_request,
+                root_archive,
+                graph_lock("root-package", "1.0.0", &root_integrity),
+            ),
+            PublishedGraphNodeRequest::new(
+                leaf_request,
+                leaf_archive,
+                graph_lock(
+                    "leaf-package",
+                    "2.0.0",
+                    if substituted_leaf_lock {
+                        "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+                    } else {
+                        &leaf_integrity
+                    },
+                ),
+            ),
+        )
+    }
+
+    #[test]
+    fn graph_planning_transaction_reuses_exact_node_snapshots_with_equal_roots() {
+        let mut transaction = CertificationPlanningTransaction::new();
+        let (root, leaf) = two_node_published_graph(false, false, false);
+        let first = transaction
+            .plan_published_contract_graph(root, [leaf])
+            .unwrap();
+        assert_eq!(transaction.published_snapshots.len(), 2);
+
+        let (root, leaf) = two_node_published_graph(false, false, false);
+        let second = transaction
+            .plan_published_contract_graph(root, [leaf])
+            .unwrap();
+        assert_eq!(first.graph_root(), second.graph_root());
+        assert_eq!(first.root_identity(), second.root_identity());
+        assert_eq!(transaction.published_snapshots.len(), 2);
+
+        let (root, substituted_leaf) = two_node_published_graph(false, true, false);
+        assert!(matches!(
+            transaction.plan_published_contract_graph(root, [substituted_leaf]),
+            Err(PublishedGraphPlanningError::LockDisagreement {
+                field: "integrity",
+                ..
+            })
+        ));
+        assert_eq!(transaction.published_snapshots.len(), 2);
+    }
+
+    #[test]
+    fn native_published_graph_is_dependency_first_and_rejects_missing_or_transplanted_nodes() {
+        let (root, leaf) = two_node_published_graph(false, false, false);
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let order = graph.dependency_first_identities();
+        assert_eq!(order.len(), 2);
+        assert_eq!(order[0].package_name, "leaf-package");
+        assert_eq!(order[1].package_name, "root-package");
+        assert_eq!(graph.root_identity(), order[1]);
+        assert!(graph.graph_root().starts_with("sha256:"));
+
+        let (root, _) = two_node_published_graph(false, false, false);
+        assert!(matches!(
+            plan_published_contract_graph(root, []),
+            Err(PublishedGraphPlanningError::MissingDependency { .. })
+        ));
+
+        let (root, transplanted_leaf) = two_node_published_graph(true, false, false);
+        assert!(matches!(
+            plan_published_contract_graph(root, [transplanted_leaf]),
+            Err(PublishedGraphPlanningError::MissingDependency { .. })
+        ));
+
+        let (root, substituted_leaf) = two_node_published_graph(false, true, false);
+        assert!(matches!(
+            plan_published_contract_graph(root, [substituted_leaf]),
+            Err(PublishedGraphPlanningError::LockDisagreement {
+                field: "integrity",
+                ..
+            })
+        ));
+
+        let (root, leaf) = two_node_published_graph(false, false, true);
+        assert!(matches!(
+            plan_published_contract_graph(root, [leaf]),
+            Err(
+                PublishedGraphPlanningError::DependencyIdentityDisagreement {
+                    field: "semantic digest",
+                    ..
+                }
+            )
+        ));
+    }
+
+    #[test]
+    fn native_published_graph_authenticates_an_external_export_all_target() {
+        let root_runtime_path = "/project/node_modules/root-package/dist/index.js";
+        let (leaf_request, leaf_archive, leaf_integrity) = synthetic_graph_certification_request(
+            "leaf-package",
+            "2.0.0",
+            "/project/node_modules/root-package/node_modules/leaf-package",
+            root_runtime_path,
+            b"export const value = 1;",
+            b"export declare const value: number;",
+            Vec::new(),
+        );
+        let leaf_plan = plan_certification(
+            leaf_request.clone(),
+            UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+        )
+        .unwrap();
+        let edge = AcceptedDependencyEdge {
+            specifier: "leaf-package".into(),
+            package_name: "leaf-package".into(),
+            artifact_case: leaf_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: leaf_plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        };
+        let (mut root_request, root_archive, root_integrity) =
+            synthetic_graph_certification_request(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                b"export * from 'leaf-package';",
+                b"export * from 'leaf-package';",
+                vec![edge],
+            );
+        root_request.resolved_import.exports.insert(
+            "value".into(),
+            leaf_request.resolved_import.exports["value"].clone(),
+        );
+
+        assert!(
+            plan_certification(
+                root_request.clone(),
+                UntrustedArtifactEnvelope::Published(root_archive.clone()),
+            )
+            .is_err()
+        );
+        let graph = plan_published_contract_graph(
+            PublishedGraphNodeRequest::new(
+                root_request,
+                root_archive,
+                graph_lock("root-package", "1.0.0", &root_integrity),
+            ),
+            [PublishedGraphNodeRequest::new(
+                leaf_request,
+                leaf_archive,
+                graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+            )],
+        )
+        .unwrap();
+        assert_eq!(graph.dependency_first_identities().len(), 2);
+        assert_eq!(graph.root_identity().package_name, "root-package");
+    }
+
+    #[test]
+    fn native_published_graph_authenticates_a_transitive_external_export_target() {
+        let root_runtime = "/project/node_modules/root-package/dist/index.js";
+        let middle_runtime =
+            "/project/node_modules/root-package/node_modules/middle-package/dist/index.js";
+        let (leaf_request, leaf_archive, leaf_integrity) = synthetic_graph_certification_request(
+            "leaf-package",
+            "3.0.0",
+            "/project/node_modules/root-package/node_modules/middle-package/node_modules/leaf-package",
+            middle_runtime,
+            b"export const value = 1;",
+            b"export declare const value: number;",
+            Vec::new(),
+        );
+        let leaf_plan = plan_certification(
+            leaf_request.clone(),
+            UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+        )
+        .unwrap();
+        let leaf_edge = AcceptedDependencyEdge {
+            specifier: "leaf-package".into(),
+            package_name: "leaf-package".into(),
+            artifact_case: leaf_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: leaf_plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        };
+        let (mut middle_request, middle_archive, middle_integrity) =
+            synthetic_graph_certification_request(
+                "middle-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/middle-package",
+                root_runtime,
+                b"export * from 'leaf-package';",
+                b"export * from 'leaf-package';",
+                vec![leaf_edge],
+            );
+        middle_request.resolved_import.exports.insert(
+            "value".into(),
+            leaf_request.resolved_import.exports["value"].clone(),
+        );
+        let middle_graph = plan_published_contract_graph(
+            PublishedGraphNodeRequest::new(
+                middle_request.clone(),
+                middle_archive.clone(),
+                graph_lock("middle-package", "2.0.0", &middle_integrity),
+            ),
+            [PublishedGraphNodeRequest::new(
+                leaf_request.clone(),
+                leaf_archive.clone(),
+                graph_lock("leaf-package", "3.0.0", &leaf_integrity),
+            )],
+        )
+        .unwrap();
+        let middle_plan = middle_graph
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "middle-package")
+            .and_then(|identity| middle_graph.plan(identity))
+            .unwrap();
+        let middle_edge = AcceptedDependencyEdge {
+            specifier: "middle-package".into(),
+            package_name: "middle-package".into(),
+            artifact_case: middle_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: middle_plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        };
+        let (mut root_request, root_archive, root_integrity) =
+            synthetic_graph_certification_request(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                b"export * from 'middle-package';",
+                b"export * from 'middle-package';",
+                vec![middle_edge],
+            );
+        root_request.resolved_import.exports.insert(
+            "value".into(),
+            leaf_request.resolved_import.exports["value"].clone(),
+        );
+
+        let graph = plan_published_contract_graph(
+            PublishedGraphNodeRequest::new(
+                root_request,
+                root_archive,
+                graph_lock("root-package", "1.0.0", &root_integrity),
+            ),
+            [
+                PublishedGraphNodeRequest::new(
+                    middle_request,
+                    middle_archive,
+                    graph_lock("middle-package", "2.0.0", &middle_integrity),
+                ),
+                PublishedGraphNodeRequest::new(
+                    leaf_request,
+                    leaf_archive,
+                    graph_lock("leaf-package", "3.0.0", &leaf_integrity),
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(graph.dependency_first_identities().len(), 3);
+        assert_eq!(graph.root_identity().package_name, "root-package");
+    }
+
+    fn authenticated_graph_test_receipt(
+        plan: &CertificationPlan,
+        importer: &str,
+        issuer: &ConfiguredReceiptIssuer,
+        revocation_epoch: u64,
+    ) -> super::AuthenticatedPolicy2Receipt {
+        let canonical_main = crate::contract_document::encode(
+            &plan.selected_candidate,
+            &crate::contract_document::SidecarDigests::default(),
+            false,
+        )
+        .unwrap();
+        let root = |value: u8| format!("sha256:{:064x}", value);
+        let witness_roots = [
+            "package-identity",
+            "manifest-entrypoint",
+            "export-resolution",
+            "artifact-declarations",
+            "export-identity",
+            "module-closure",
+            "selected-signature",
+            "argument-binding",
+            "rest-spread-coverage",
+            "callable-path",
+            "operation-reachability",
+            "operation-cardinality",
+            "recursive-value-shape",
+            "guard-partition",
+            "compiler-reconciliation",
+            "accepted-dependency-composition",
+            "domain-exhaustiveness",
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, family)| (family.into(), root(u8::try_from(index + 1).unwrap())))
+        .collect();
+        let semantic_digest = policy2_main_semantic_digest(&canonical_main).unwrap();
+        let bindings = Policy2ReceiptBindings {
+            importer: importer.into(),
+            specifier: plan.import_request.specifier.clone(),
+            resolved_import_root: super::policy2_resolved_import_root(&plan.resolved_import)
+                .unwrap(),
+            semantic_digest,
+            artifact_provenance_root: plan.snapshot.provenance_root().into(),
+            snapshot_root: plan.snapshot.root().into(),
+            package_root: root(20),
+            manifest_root: root(21),
+            artifacts_root: root(22),
+            declarations_root: root(23),
+            transform_root: root(24),
+            exports_root: root(25),
+            closure_root: root(26),
+            demand_graph_root: plan.demand_graph().root().as_str().into(),
+            verified_positive_root: root(27),
+            witness_roots,
+            producer_sessions_root: root(28),
+            dependency_receipts_root: root(29),
+            dependency_trust_root: root(30),
+            probe_gate_root: root(31),
+            closed_claims_root: root(32),
+            verifier_source_digest: root(33),
+            verifier_build_digest: root(34),
+        };
+        let receipt = issue_policy2_receipt(&canonical_main, &bindings, issuer).unwrap();
+        let trust = policy2_trust_configuration_for_issuer(
+            issuer,
+            &bindings.verifier_build_digest,
+            revocation_epoch,
+        )
+        .unwrap();
+        authenticate_policy2_receipt(
+            &canonical_main,
+            &receipt,
+            &bindings,
+            Policy2ReceiptProvenance::PersistentLocal {
+                trust_store: trust.trust_store(),
+                scope: issuer.scope(),
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn dependency_composition_requires_an_exact_opaque_receipt() {
+        let (root, leaf) = two_node_published_graph(false, false, false);
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let root_identity = graph.root_identity().clone();
+        let leaf_identity = graph
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "leaf-package")
+            .unwrap()
+            .clone();
+        let leaf_plan = graph.plan(&leaf_identity).unwrap();
+        assert_eq!(
+            leaf_plan.candidates().proposal().artifact_cases()[0]
+                .exports
+                .len(),
+            1
+        );
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [17; 32]).unwrap();
+        let receipt =
+            authenticated_graph_test_receipt(leaf_plan, &leaf_identity.importer, &issuer, 7);
+        let composition = graph
+            .authenticate_dependency_receipts(
+                &root_identity,
+                &[(&leaf_identity, &receipt)],
+                &issuer,
+                7,
+            )
+            .unwrap();
+        assert_eq!(composition.graph_root(), graph.graph_root());
+        assert_eq!(composition.witnesses().len(), 1);
+        assert!(matches!(
+            composition.verify_plan(leaf_plan),
+            Err(DependencyReceiptCompositionError::ParentTransplant)
+        ));
+
+        let stale_epoch = graph.authenticate_dependency_receipts(
+            &root_identity,
+            &[(&leaf_identity, &receipt)],
+            &issuer,
+            8,
+        );
+        assert!(matches!(
+            stale_epoch,
+            Err(DependencyReceiptCompositionError::TrustMismatch)
+        ));
+
+        let transplanted = authenticated_graph_test_receipt(
+            leaf_plan,
+            "/other/node_modules/root-package/dist/index.js",
+            &issuer,
+            7,
+        );
+        assert!(matches!(
+            graph.authenticate_dependency_receipts(
+                &root_identity,
+                &[(&leaf_identity, &transplanted)],
+                &issuer,
+                7,
+            ),
+            Err(DependencyReceiptCompositionError::ReceiptMismatch {
+                field: "importer",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn published_graph_certifies_bottom_up_with_the_pinned_producer() {
+        let Some(typefacts_path) = std::env::var_os("SOLID_TYPEFACTS_BIN") else {
+            return;
+        };
+        let typefacts_path = std::fs::canonicalize(typefacts_path).unwrap();
+        let executable = std::fs::read(&typefacts_path).unwrap();
+        let buildinfo: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(format!("{}.buildinfo", typefacts_path.display())).unwrap(),
+        )
+        .unwrap();
+        let source_digest = buildinfo["sourceDigest"].as_str().unwrap();
+        let pin = super::TypeFactsProducerPin::new(
+            typefacts_path,
+            format!("sha256:{:x}", Sha256::digest(executable)),
+            format!("sha256:{source_digest}"),
+        )
+        .unwrap();
+        let (root, leaf) = two_node_published_graph(false, false, false);
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [19; 32]).unwrap();
+        let finalized = graph.certify_value_only(&pin, &issuer, 9).unwrap();
+        assert_eq!(finalized.nodes().len(), 2);
+        assert_eq!(finalized.graph_root(), graph.graph_root());
+        assert_ne!(
+            finalized.root().bindings().dependency_receipts_root,
+            finalized.nodes()[0]
+                .finalized()
+                .bindings()
+                .dependency_receipts_root
+        );
     }
 }

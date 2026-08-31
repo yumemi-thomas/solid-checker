@@ -10,6 +10,7 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "artifact-case",
+      "applicability": "unsupported-condition-environment",
       "reason": ". selects no active package-export condition"
     }
   ]

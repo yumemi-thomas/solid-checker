@@ -59,7 +59,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       artifactPrerequisiteFamilies: 6,
       claimFamilies: 9,
       policyDigest:
-        "sha256:43d68db58d35311234c4d11bb0331b71aa9ad621532c26360c20415150e74f53"
+        "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278"
     });
   });
 
@@ -69,7 +69,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
 
   test("closes every baseline receipt row in the policy-2 atomic cut", () => {
     assert.deepEqual(auditPhase19Cut(), {
-      stableMainDocuments: 130,
+      // The cut audit enumerates tracked *.json via git ls-files, so this pin
+      // moves whenever a fixture main document becomes tracked. 130 was
+      // measured while three certifying fixtures (class-expression-kind,
+      // escaping-private-helper, published-export-entity) were still
+      // untracked and invisible to the audit.
+      stableMainDocuments: 133,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
@@ -84,7 +89,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       receiptVersion: 2,
       policyStatus: "active",
       policyDigest:
-        "sha256:43d68db58d35311234c4d11bb0331b71aa9ad621532c26360c20415150e74f53"
+        "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278"
     });
   });
 

@@ -25,15 +25,19 @@ use std::{
 use thiserror::Error;
 use typefacts::{
     ArgumentBindingDisposition, CallKind, Callability, CertificationInvocationContext,
-    FinitePartition, InvocationDemand, InvocationDomain, InvocationTranscript, InvocationValueFact,
-    LiveInvocationAnswer, ParameterUseKind, PathPresence, PathSegmentKind, Producer, Reachability,
-    ResolvedCallValidity, Session, SourceHash,
+    ExportValueDemand, ExportValueTranscript, FinitePartition, InvocationDemand, InvocationDomain,
+    InvocationTranscript, InvocationValueFact, LiveExportValueAnswer, LiveInvocationAnswer,
+    ParameterUseKind, PathPresence, PathSegmentKind, Producer, Reachability, ResolvedCallValidity,
+    Session, SourceHash, TranscriptSourceDigest,
 };
 
 use super::CertificationPlan;
 
 static EXECUTION_IMAGE_COUNTER: AtomicU64 = AtomicU64::new(1);
+static PRIVATE_PROJECT_COUNTER: AtomicU64 = AtomicU64::new(1);
 
+// Retained for the opaque transaction that will derive schedules in Slice 7.
+#[allow(dead_code)]
 const TYPE_FACTS_FAMILIES: [ProofFamily; 9] = [
     ProofFamily::SelectedSignature,
     ProofFamily::ArgumentBinding,
@@ -97,21 +101,54 @@ impl TypeFactsProducerPin {
             source_manifest_sha256,
         })
     }
+
+    pub(crate) fn executable_sha256(&self) -> &str {
+        self.executable_sha256.as_str()
+    }
+
+    pub(crate) fn source_manifest_sha256(&self) -> &str {
+        self.source_manifest_sha256.as_str()
+    }
 }
 
 /// One exact invocation demand plus the verifier-derived proof demands it must
 /// discharge. Every proof demand is scheduled exactly once; locations are
 /// request data, while semantic authority still comes only from the live
 /// transcript and family reconciliation.
+///
+/// The authority transaction derives this schedule from its retained opaque
+/// plan. External callers cannot assign proof demands to arbitrary source
+/// expressions.
+///
+/// ```compile_fail
+/// use solid_facts_backend::TypeFactsCertificationSchedule;
+/// use solid_reactive_ir::contract_semantics::certification::ProofDemandGraph;
+/// use typefacts::InvocationDemand;
+///
+/// fn caller_assigns_demands(
+///     graph: &ProofDemandGraph,
+///     assignments: Vec<(String, InvocationDemand)>,
+/// ) {
+///     let _ = TypeFactsCertificationSchedule::new(graph, assignments);
+/// }
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypeFactsCertificationSchedule {
     demand_graph_root: String,
     invocations: Vec<ScheduledInvocation>,
+    export_values: Vec<ScheduledExportValue>,
+    verifier_sources: Vec<TranscriptSourceDigest>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ScheduledInvocation {
     demand: InvocationDemand,
+    proof_demands: Vec<ScheduledProofDemand>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ScheduledExportValue {
+    demand: ExportValueDemand,
     proof_demands: Vec<ScheduledProofDemand>,
 }
 
@@ -122,11 +159,68 @@ struct ScheduledProofDemand {
     subject: ProofDemandSubject,
 }
 
+type ExpectedExportValueProofDemands =
+    std::collections::BTreeMap<String, (ProofFamily, ProofDemandSubject)>;
+
+fn ensure_export_value_schedule_subject(
+    demand: &str,
+    subject: &ProofDemandSubject,
+) -> Result<(), TypeFactsCertificationError> {
+    let export_root = matches!(
+        subject,
+        ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+            root: ValueRoot::Export,
+            ..
+        })
+    ) || matches!(
+        subject,
+        ProofDemandSubject::DomainClosure { subject, .. }
+            if matches!(subject.path, SemanticClaimPath::Domain(ClaimPath::Value { root: ValueRoot::Export, .. }))
+    );
+    if !export_root {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: demand.to_owned(),
+            reason: "non-export Type Facts demand cannot use an export-value transcript".into(),
+        });
+    }
+    Ok(())
+}
+
+fn export_value_schedule_proof_demands(
+    graph: &ProofDemandGraph,
+) -> Result<ExpectedExportValueProofDemands, TypeFactsCertificationError> {
+    graph
+        .demands()
+        .iter()
+        .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
+        .map(|demand| {
+            ensure_export_value_schedule_subject(demand.id().as_str(), demand.subject())?;
+            Ok((
+                demand.id().as_str().to_owned(),
+                (demand.family(), demand.subject().clone()),
+            ))
+        })
+        .collect()
+}
+
+fn preflight_export_value_schedule_compatibility(
+    graph: &ProofDemandGraph,
+) -> Result<(), TypeFactsCertificationError> {
+    graph
+        .demands()
+        .iter()
+        .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
+        .try_for_each(|demand| {
+            ensure_export_value_schedule_subject(demand.id().as_str(), demand.subject())
+        })
+}
+
 impl TypeFactsCertificationSchedule {
     /// Builds a total schedule for the Type Facts-owned portion of a demand
     /// graph. `assignments` maps each exact proof demand ID to the exact call or
     /// construct expression the verifier will ask Type Facts to inspect.
-    pub fn new(
+    #[allow(dead_code)] // Called by the retained-plan transaction added in Slice 7.
+    pub(crate) fn new(
         graph: &ProofDemandGraph,
         assignments: impl IntoIterator<Item = (String, InvocationDemand)>,
     ) -> Result<Self, TypeFactsCertificationError> {
@@ -189,6 +283,66 @@ impl TypeFactsCertificationSchedule {
         Ok(Self {
             demand_graph_root: graph.root().as_str().to_owned(),
             invocations: grouped.into_values().collect(),
+            export_values: Vec::new(),
+            verifier_sources: Vec::new(),
+        })
+    }
+
+    /// Builds a total exported-value schedule. Every Type Facts-owned demand
+    /// must name the exported value root; invocation and operation subjects
+    /// are rejected rather than silently redirected through the harness.
+    pub(crate) fn new_export_values(
+        graph: &ProofDemandGraph,
+        assignments: impl IntoIterator<Item = (String, ExportValueDemand)>,
+    ) -> Result<Self, TypeFactsCertificationError> {
+        let expected = export_value_schedule_proof_demands(graph)?;
+        let mut supplied = std::collections::BTreeMap::<String, ExportValueDemand>::new();
+        for (id, demand) in assignments {
+            if !expected.contains_key(&id) {
+                return Err(TypeFactsCertificationError::UnknownDemand(id));
+            }
+            if supplied.insert(id.clone(), demand).is_some() {
+                return Err(TypeFactsCertificationError::DuplicateDemand(id));
+            }
+        }
+        if supplied.len() != expected.len() {
+            let missing = expected
+                .keys()
+                .find(|id| !supplied.contains_key(*id))
+                .cloned()
+                .unwrap_or_else(|| "unknown".into());
+            return Err(TypeFactsCertificationError::MissingDemand(missing));
+        }
+        let mut grouped = std::collections::BTreeMap::<ExportValueKey, ScheduledExportValue>::new();
+        for (id, demand) in supplied {
+            let (family, subject) = expected
+                .get(&id)
+                .expect("supplied IDs were checked against expected demands")
+                .clone();
+            let proof = ScheduledProofDemand {
+                id,
+                family,
+                subject,
+            };
+            let key = ExportValueKey::from(&demand);
+            grouped
+                .entry(key)
+                .and_modify(|scheduled| scheduled.proof_demands.push(proof.clone()))
+                .or_insert_with(|| ScheduledExportValue {
+                    demand,
+                    proof_demands: vec![proof],
+                });
+        }
+        for scheduled in grouped.values_mut() {
+            scheduled
+                .proof_demands
+                .sort_by(|left, right| left.id.cmp(&right.id));
+        }
+        Ok(Self {
+            demand_graph_root: graph.root().as_str().to_owned(),
+            invocations: Vec::new(),
+            export_values: grouped.into_values().collect(),
+            verifier_sources: Vec::new(),
         })
     }
 
@@ -199,10 +353,22 @@ impl TypeFactsCertificationSchedule {
             .collect()
     }
 
+    fn export_value_demands(&self) -> Vec<ExportValueDemand> {
+        self.export_values
+            .iter()
+            .map(|scheduled| scheduled.demand.clone())
+            .collect()
+    }
+
     fn proof_demand_ids(&self) -> impl Iterator<Item = String> + '_ {
         self.invocations
             .iter()
             .flat_map(|scheduled| scheduled.proof_demands.iter().map(|proof| proof.id.clone()))
+            .chain(
+                self.export_values.iter().flat_map(|scheduled| {
+                    scheduled.proof_demands.iter().map(|proof| proof.id.clone())
+                }),
+            )
     }
 }
 
@@ -226,6 +392,7 @@ impl VerifiedTypeFactsEvidence {
     }
 }
 
+#[allow(dead_code)] // Schedule grouping key; construction is intentionally crate-private.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct InvocationKey {
     path: String,
@@ -233,6 +400,25 @@ struct InvocationKey {
     end: u64,
     callable_depth: usize,
     census: bool,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ExportValueKey {
+    path: String,
+    start: u64,
+    end: u64,
+    callable_depth: usize,
+}
+
+impl From<&ExportValueDemand> for ExportValueKey {
+    fn from(demand: &ExportValueDemand) -> Self {
+        Self {
+            path: demand.location.path.to_string(),
+            start: demand.location.start_byte,
+            end: demand.location.end_byte,
+            callable_depth: demand.callable_depth,
+        }
+    }
 }
 
 impl From<&InvocationDemand> for InvocationKey {
@@ -279,6 +465,9 @@ impl TypeFactsCertificationSession {
         if schedule.demand_graph_root != plan.demand_graph().root().as_str() {
             return Err(TypeFactsCertificationError::IdentityMismatch);
         }
+        if !schedule.export_values.is_empty() {
+            return Err(TypeFactsCertificationError::IdentityMismatch);
+        }
         let context = CertificationInvocationContext::new(
             plan.snapshot_root(),
             plan.demand_graph().root().as_str(),
@@ -288,6 +477,669 @@ impl TypeFactsCertificationSession {
             .session
             .certification_invocations(context, &schedule.demands())?)
     }
+
+    pub(crate) fn acquire_export_values(
+        &mut self,
+        plan: &CertificationPlan,
+        schedule: &TypeFactsCertificationSchedule,
+    ) -> Result<LiveExportValueAnswer, TypeFactsCertificationError> {
+        if schedule.demand_graph_root != plan.demand_graph().root().as_str()
+            || !schedule.invocations.is_empty()
+        {
+            return Err(TypeFactsCertificationError::IdentityMismatch);
+        }
+        let context = CertificationInvocationContext::new(
+            plan.snapshot_root(),
+            plan.demand_graph().root().as_str(),
+            schedule.proof_demand_ids(),
+        )?;
+        Ok(self
+            .session
+            .certification_export_values(context, &schedule.export_value_demands())?)
+    }
+}
+
+/// Performs the export-value acquisition as one opaque native transaction:
+/// materialize immutable bytes, derive the harness and schedule, launch the
+/// pinned producer, and reconcile the still-live answer before any temporary
+/// authority is destroyed.
+pub(super) fn acquire_and_verify_export_values(
+    plan: &CertificationPlan,
+    pin: &TypeFactsProducerPin,
+) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
+    acquire_and_verify_export_values_batch(&[plan], pin)?
+        .pop()
+        .ok_or(TypeFactsCertificationError::IdentityMismatch)
+}
+
+/// Acquires independently bound answers for a complete alternative-case set
+/// while sharing only immutable package materialization and the producer
+/// program. Every request retains its own snapshot/demand-graph context and
+/// is verified against its own opaque plan before any evidence is returned.
+pub(super) fn acquire_and_verify_export_values_batch(
+    plans: &[&CertificationPlan],
+    pin: &TypeFactsProducerPin,
+) -> Result<Vec<VerifiedTypeFactsEvidence>, TypeFactsCertificationError> {
+    acquire_and_verify_export_values_batch_with_dependencies(plans, &[], &[], pin)
+}
+
+fn preflight_export_value_plans(
+    plans: &[&CertificationPlan],
+) -> Result<(), TypeFactsCertificationError> {
+    for plan in plans {
+        preflight_export_value_schedule_compatibility(plan.demand_graph())?;
+    }
+    Ok(())
+}
+
+fn acquire_and_verify_export_values_batch_with_dependencies(
+    plans: &[&CertificationPlan],
+    dependencies: &[&CertificationPlan],
+    sources: &[super::dependencies::VerifiedGraphSourcePackage],
+    pin: &TypeFactsProducerPin,
+) -> Result<Vec<VerifiedTypeFactsEvidence>, TypeFactsCertificationError> {
+    let first = plans
+        .first()
+        .copied()
+        .ok_or(TypeFactsCertificationError::IdentityMismatch)?;
+    if plans.iter().any(|plan| {
+        plan.snapshot_root() != first.snapshot_root()
+            || plan.snapshot.package_name() != first.snapshot.package_name()
+    }) {
+        return Err(TypeFactsCertificationError::IdentityMismatch);
+    }
+    // This compatibility check consumes only the verifier-retained demand
+    // graph and is repeated by schedule construction below. An incompatible
+    // graph can never produce an export-value schedule, so reject its exact
+    // demand before copying authenticated package bytes into a private project.
+    preflight_export_value_plans(plans)
+        .map_err(|error| error.at_stage("export-value schedule derivation"))?;
+    let project = PrivateTypeFactsProject::materialize(first, dependencies, sources)
+        .map_err(|error| error.at_stage("private project materialization"))?;
+    let schedules = derive_export_value_schedules(plans, &project, false)
+        .map_err(|error| error.at_stage("export-value schedule derivation"))?;
+    let project_id = project.project_id().to_str().ok_or_else(|| {
+        TypeFactsCertificationError::ProducerProvenance(
+            "private Type Facts project path is not valid UTF-8".into(),
+        )
+    })?;
+    let mut session = TypeFactsCertificationSession::open(pin, project_id)
+        .map_err(|error| error.at_stage("pinned producer launch"))?;
+    plans
+        .iter()
+        .zip(&schedules)
+        .map(|(plan, schedule)| {
+            let live = session
+                .acquire_export_values(plan, schedule)
+                .map_err(|error| error.at_stage("live export-value acquisition"))?;
+            verify_live_export_value_answer_with_dependencies(
+                plan,
+                schedule,
+                &live,
+                dependencies,
+                sources,
+            )
+            .map_err(|error| error.at_stage("live export-value verification"))
+        })
+        .collect()
+}
+
+pub(super) struct GraphExportValueRequest<'a> {
+    pub(super) plan: &'a CertificationPlan,
+    pub(super) dependencies: Vec<&'a CertificationPlan>,
+    pub(super) sources: &'a [super::dependencies::VerifiedGraphSourcePackage],
+}
+
+/// Acquires all exported-value answers for one opaque graph through one pinned
+/// producer session. The private project contains the authenticated union of
+/// graph bytes, while verification still receives only each node's reachable
+/// dependencies and source packages; run-wide batching therefore does not
+/// widen any node's authority.
+pub(super) fn acquire_and_verify_graph_export_values(
+    project_root: &CertificationPlan,
+    requests: &[GraphExportValueRequest<'_>],
+    pin: &TypeFactsProducerPin,
+) -> Result<Vec<VerifiedTypeFactsEvidence>, TypeFactsCertificationError> {
+    if requests.is_empty() {
+        return Ok(Vec::new());
+    }
+    let plans = requests
+        .iter()
+        .map(|request| request.plan)
+        .collect::<Vec<_>>();
+    // Preserve the same graph schedule-derivation error and deterministic
+    // request ordering while avoiding graph-wide materialization for a case
+    // that the schedule constructor must refuse.
+    preflight_export_value_plans(&plans)
+        .map_err(|error| error.at_stage("graph export-value schedule derivation"))?;
+    let mut materialized = std::collections::BTreeMap::new();
+    materialized.insert(private_project_plan_key(project_root), project_root);
+    let mut source_packages = std::collections::BTreeMap::new();
+    for request in requests {
+        materialized.insert(private_project_plan_key(request.plan), request.plan);
+        for dependency in &request.dependencies {
+            materialized.insert(private_project_plan_key(dependency), *dependency);
+        }
+        for source in request.sources {
+            source_packages.insert(source.identity.clone(), source);
+        }
+    }
+    let root_key = private_project_plan_key(project_root);
+    let census_dependencies = materialized.values().copied().collect::<Vec<_>>();
+    let dependencies = materialized
+        .iter()
+        .filter_map(|(key, plan)| (key != &root_key).then_some(*plan))
+        .collect::<Vec<_>>();
+    let sources = source_packages.into_values().cloned().collect::<Vec<_>>();
+    let source_refs = sources.iter().collect::<Vec<_>>();
+    let project = PrivateTypeFactsProject::materialize_with_source_refs(
+        project_root,
+        &dependencies,
+        &source_refs,
+    )
+    .map_err(|error| error.at_stage("private graph project materialization"))?;
+    let schedules = derive_export_value_schedules(&plans, &project, true)
+        .map_err(|error| error.at_stage("graph export-value schedule derivation"))?;
+    let project_id = project.project_id().to_str().ok_or_else(|| {
+        TypeFactsCertificationError::ProducerProvenance(
+            "private Type Facts graph project path is not valid UTF-8".into(),
+        )
+    })?;
+    let mut session = TypeFactsCertificationSession::open(pin, project_id)
+        .map_err(|error| error.at_stage("pinned graph producer launch"))?;
+    requests
+        .iter()
+        .zip(&schedules)
+        .map(|(request, schedule)| {
+            let live = session
+                .acquire_export_values(request.plan, schedule)
+                .map_err(|error| {
+                    error.at_graph_node(request.plan, "live graph export-value acquisition")
+                })?;
+            verify_live_export_value_answer_with_project_census(
+                request.plan,
+                schedule,
+                &live,
+                &request.dependencies,
+                &census_dependencies,
+                &sources,
+            )
+            .map_err(|error| {
+                error.at_graph_node(request.plan, "live graph export-value verification")
+            })
+        })
+        .collect()
+}
+
+struct PrivateTypeFactsProject {
+    root: PathBuf,
+    project_id: PathBuf,
+    harness: PathBuf,
+    package_roots: std::collections::BTreeMap<(String, String), PathBuf>,
+}
+
+impl PrivateTypeFactsProject {
+    fn materialize(
+        plan: &CertificationPlan,
+        dependencies: &[&CertificationPlan],
+        sources: &[super::dependencies::VerifiedGraphSourcePackage],
+    ) -> Result<Self, TypeFactsCertificationError> {
+        let source_refs = sources.iter().collect::<Vec<_>>();
+        Self::materialize_with_source_refs(plan, dependencies, &source_refs)
+    }
+
+    fn materialize_with_source_refs(
+        plan: &CertificationPlan,
+        dependencies: &[&CertificationPlan],
+        sources: &[&super::dependencies::VerifiedGraphSourcePackage],
+    ) -> Result<Self, TypeFactsCertificationError> {
+        let requested = std::env::temp_dir().join(format!(
+            "solid-checker-typefacts-project-{}-{}",
+            std::process::id(),
+            PRIVATE_PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&requested)?;
+        set_directory_permissions(&requested)?;
+        let root = fs::canonicalize(&requested)?;
+        let package_root = root.join("node_modules").join(plan.snapshot.package_name());
+        materialize_snapshot(&plan.snapshot, &package_root)?;
+        let mut package_roots = std::collections::BTreeMap::from([(
+            private_project_plan_key(plan),
+            package_root.clone(),
+        )]);
+        let original_package_root = Path::new(&plan.resolved_import.package_root);
+        for dependency in dependencies {
+            let target = private_project_package_target(
+                &root,
+                &package_root,
+                original_package_root,
+                Path::new(&dependency.resolved_import.package_root),
+                dependency.snapshot.package_name(),
+            );
+            materialize_snapshot(&dependency.snapshot, &target)?;
+            package_roots.insert(private_project_plan_key(dependency), target);
+        }
+        for source in sources {
+            let target = private_project_package_target(
+                &root,
+                &package_root,
+                original_package_root,
+                Path::new(&source.installed_package_root),
+                source.snapshot.package_name(),
+            );
+            materialize_snapshot(&source.snapshot, &target)?;
+        }
+        let harness = root.join("solid-checker-export-values.ts");
+        let project_id = root.join("tsconfig.json");
+        let configuration = br#"{
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": false,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "jsx": "preserve",
+    "allowJs": true,
+    "checkJs": false,
+    "maxNodeModuleJsDepth": 100,
+    "allowImportingTsExtensions": true,
+    "moduleDetection": "force",
+    "types": []
+  },
+  "files": ["solid-checker-export-values.ts"]
+}
+"#;
+        write_new_private_project_file(&project_id, configuration)?;
+        Ok(Self {
+            root,
+            project_id,
+            harness,
+            package_roots,
+        })
+    }
+
+    fn project_id(&self) -> &Path {
+        &self.project_id
+    }
+
+    fn package_root(&self, plan: &CertificationPlan) -> Result<&Path, TypeFactsCertificationError> {
+        self.package_roots
+            .get(&private_project_plan_key(plan))
+            .map(PathBuf::as_path)
+            .ok_or(TypeFactsCertificationError::IdentityMismatch)
+    }
+}
+
+fn private_project_plan_key(plan: &CertificationPlan) -> (String, String) {
+    (
+        plan.snapshot_root().to_owned(),
+        plan.resolved_import.package_root.clone(),
+    )
+}
+
+fn private_project_package_target(
+    project_root: &Path,
+    projected_owner_root: &Path,
+    original_owner_root: &Path,
+    original_package_root: &Path,
+    package_name: &str,
+) -> PathBuf {
+    if let Ok(relative) = original_package_root.strip_prefix(original_owner_root)
+        && relative.starts_with("node_modules")
+    {
+        return projected_owner_root.join(relative);
+    }
+    if let Some(installation_root) = original_owner_root
+        .ancestors()
+        .find(|path| path.file_name().is_some_and(|name| name == "node_modules"))
+        && let Ok(relative) = original_package_root.strip_prefix(installation_root)
+    {
+        return project_root.join("node_modules").join(relative);
+    }
+    project_root.join("node_modules").join(package_name)
+}
+
+fn materialize_snapshot(
+    snapshot: &super::ArtifactSnapshot,
+    package_root: &Path,
+) -> Result<(), TypeFactsCertificationError> {
+    fs::create_dir_all(package_root)?;
+    for (relative, bytes) in snapshot.files.iter() {
+        let target = package_root.join(relative);
+        write_immutable_project_file(&target, bytes)?;
+    }
+    Ok(())
+}
+
+fn write_immutable_project_file(
+    target: &Path,
+    bytes: &[u8],
+) -> Result<(), TypeFactsCertificationError> {
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    match OpenOptions::new().write(true).create_new(true).open(target) {
+        Ok(mut file) => {
+            file.write_all(bytes)?;
+            // This project is private to the still-live certification transaction
+            // and is deleted when that transaction drops it. Closing the file makes
+            // the exact bytes visible to the producer; the live source census and
+            // transcript digest establish authority, so crash durability is neither
+            // required nor reused as evidence here.
+            drop(file);
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            if fs::read(target)? == bytes {
+                Ok(())
+            } else {
+                Err(TypeFactsCertificationError::SourceCensus(format!(
+                    "distinct authenticated snapshots collide at {}",
+                    target.display()
+                )))
+            }
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+impl Drop for PrivateTypeFactsProject {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+type ExportHarnessSubject = (String, String);
+type ExportResolutionVariant = (String, String, String);
+type ExportResolutionVariants = std::collections::BTreeMap<
+    ExportHarnessSubject,
+    std::collections::BTreeSet<ExportResolutionVariant>,
+>;
+
+fn derive_export_value_schedules(
+    plans: &[&CertificationPlan],
+    project: &PrivateTypeFactsProject,
+    force_exact_subjects: bool,
+) -> Result<Vec<TypeFactsCertificationSchedule>, TypeFactsCertificationError> {
+    let mut resolution_variants = ExportResolutionVariants::new();
+    for plan in plans {
+        for demand in plan
+            .demand_graph()
+            .demands()
+            .iter()
+            .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
+        {
+            let (artifact_case, export) = proof_artifact_export(demand.subject());
+            let public_specifier =
+                public_export_harness_specifier(plan, artifact_case, demand.id().as_str())?;
+            let (declaration_path, declaration_export) = plan
+                .verified_exports
+                .declaration_binding(export)
+                .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+                    demand: demand.id().as_str().to_owned(),
+                    reason: "demanded export has no snapshot-verified declaration binding".into(),
+                })?;
+            resolution_variants
+                .entry((public_specifier, export.to_owned()))
+                .or_default()
+                .insert((
+                    declaration_path.to_owned(),
+                    declaration_export.to_owned(),
+                    plan.snapshot_root().to_owned(),
+                ));
+        }
+    }
+    let mut subjects = std::collections::BTreeMap::<(String, String), String>::new();
+    for plan in plans {
+        for demand in plan
+            .demand_graph()
+            .demands()
+            .iter()
+            .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
+        {
+            let (artifact_case, export) = proof_artifact_export(demand.subject());
+            let subject = export_value_harness_subject(
+                project,
+                plan,
+                artifact_case,
+                export,
+                demand.id().as_str(),
+                &resolution_variants,
+                force_exact_subjects,
+            )?;
+            subjects.entry(subject).or_default();
+        }
+    }
+    if subjects.is_empty() {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: "export-value-schedule".into(),
+            reason: "the plan has no Type Facts-owned exported-value demand".into(),
+        });
+    }
+
+    let declaration_roots = plans
+        .iter()
+        .map(|plan| {
+            snapshot_module_harness_specifier(
+                project,
+                plan,
+                plan.verified_resolution.declarations_path(),
+            )
+        })
+        .collect::<Result<std::collections::BTreeSet<_>, _>>()?;
+    let mut harness = String::new();
+    for root in declaration_roots {
+        let quoted = serde_json::to_string(&root).map_err(|error| {
+            TypeFactsCertificationError::ProducerProvenance(format!(
+                "could not encode verifier declaration root: {error}"
+            ))
+        })?;
+        harness.push_str(&format!("import {quoted};\n"));
+    }
+    for (index, ((specifier, declaration_export), local)) in subjects.iter_mut().enumerate() {
+        if declaration_export != "default" && !is_ecmascript_identifier(declaration_export) {
+            return Err(TypeFactsCertificationError::UnsupportedDemand {
+                demand: "export-value-schedule".into(),
+                reason: format!(
+                    "declaration export name {declaration_export:?} cannot be imported by the exact harness"
+                ),
+            });
+        }
+        *local = format!("__solid_checker_export_{index}");
+        let quoted = serde_json::to_string(specifier).map_err(|error| {
+            TypeFactsCertificationError::ProducerProvenance(format!(
+                "could not encode verifier harness specifier: {error}"
+            ))
+        })?;
+        if declaration_export == "default" {
+            harness.push_str(&format!("import {} from {quoted};\n", local));
+        } else {
+            harness.push_str(&format!(
+                "import {{ {declaration_export} as {} }} from {quoted};\n",
+                local
+            ));
+        }
+    }
+    let mut locations = std::collections::BTreeMap::new();
+    for (subject, local) in &subjects {
+        harness.push_str("void ");
+        let start = harness.len();
+        harness.push_str(local);
+        let end = harness.len();
+        harness.push_str(";\n");
+        locations.insert(subject.clone(), (start, end));
+    }
+    write_new_private_project_file(&project.harness, harness.as_bytes())?;
+    let harness_digest = format!("sha256:{:x}", Sha256::digest(harness.as_bytes()));
+
+    plans
+        .iter()
+        .map(|plan| {
+            let assignments = plan
+                .demand_graph()
+                .demands()
+                .iter()
+                .filter(|demand| TYPE_FACTS_FAMILIES.contains(&demand.family()))
+                .map(|demand| {
+                    let (artifact_case, export) = proof_artifact_export(demand.subject());
+                    let subject = export_value_harness_subject(
+                        project,
+                        plan,
+                        artifact_case,
+                        export,
+                        demand.id().as_str(),
+                        &resolution_variants,
+                        force_exact_subjects,
+                    )
+                    .expect("artifact case and declaration binding were checked while building the harness");
+                    let (start, end) = locations
+                        .get(&subject)
+                        .expect("every scheduled subject has one harness expression");
+                    (
+                        demand.id().as_str().to_owned(),
+                        ExportValueDemand {
+                            location: typefacts::Location {
+                                path: project.harness.to_string_lossy().into_owned().into(),
+                                start_byte: u64::try_from(*start).unwrap_or(u64::MAX),
+                                end_byte: u64::try_from(*end).unwrap_or(u64::MAX),
+                            },
+                            callable_depth: typefacts::MAX_INVOCATION_CALLABLE_DEPTH,
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut schedule = TypeFactsCertificationSchedule::new_export_values(
+                plan.demand_graph(),
+                assignments,
+            )?;
+            schedule.verifier_sources.push(TranscriptSourceDigest {
+                path: project.harness.to_string_lossy().into_owned().into(),
+                sha256: harness_digest.clone().into(),
+            });
+            Ok(schedule)
+        })
+        .collect()
+}
+
+fn export_value_harness_subject(
+    project: &PrivateTypeFactsProject,
+    plan: &CertificationPlan,
+    artifact_case: &str,
+    export: &str,
+    demand: &str,
+    resolution_variants: &ExportResolutionVariants,
+    force_exact_subjects: bool,
+) -> Result<(String, String), TypeFactsCertificationError> {
+    let public_specifier = public_export_harness_specifier(plan, artifact_case, demand)?;
+    let public_subject = (public_specifier, export.to_owned());
+    let publicly_addressable = project.package_root(plan)?
+        == project
+            .root
+            .join("node_modules")
+            .join(plan.snapshot.package_name());
+    if (!force_exact_subjects || publicly_addressable)
+        && resolution_variants
+            .get(&public_subject)
+            .is_some_and(|variants| variants.len() == 1)
+    {
+        return Ok(public_subject);
+    }
+    exact_declaration_harness_subject(project, plan, export, demand)
+}
+
+fn public_export_harness_specifier(
+    plan: &CertificationPlan,
+    artifact_case: &str,
+    demand: &str,
+) -> Result<String, TypeFactsCertificationError> {
+    let case = plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.to_owned(),
+            reason: "demanded artifact case is absent from the candidate".into(),
+        })?;
+    Ok(if case.entrypoint == "." {
+        plan.snapshot.package_name().to_owned()
+    } else {
+        format!(
+            "{}/{}",
+            plan.snapshot.package_name(),
+            case.entrypoint.trim_start_matches("./")
+        )
+    })
+}
+
+fn exact_declaration_harness_subject(
+    project: &PrivateTypeFactsProject,
+    plan: &CertificationPlan,
+    export: &str,
+    demand: &str,
+) -> Result<(String, String), TypeFactsCertificationError> {
+    let (declaration_path, declaration_export) = plan
+        .verified_exports
+        .declaration_binding(export)
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.to_owned(),
+            reason: "demanded export has no snapshot-verified declaration binding".into(),
+        })?;
+    // Import the independently replayed declaration target, not the public
+    // package specifier. A batch can contain multiple conditional artifact
+    // cases for the same public subpath; asking TypeScript to resolve that
+    // subpath once would silently bind every case to the host's one active
+    // condition set. This relative verifier-owned path selects the immutable
+    // snapshot file each opaque plan already authenticated.
+    let specifier = snapshot_module_harness_specifier(project, plan, declaration_path)?;
+    Ok((specifier, declaration_export.to_owned()))
+}
+
+fn snapshot_module_harness_specifier(
+    project: &PrivateTypeFactsProject,
+    plan: &CertificationPlan,
+    path: &str,
+) -> Result<String, TypeFactsCertificationError> {
+    let relative = project
+        .package_root(plan)?
+        .strip_prefix(&project.root)
+        .map_err(|_| TypeFactsCertificationError::IdentityMismatch)?;
+    Ok(format!(
+        "./{}/{}",
+        relative.to_string_lossy().replace('\\', "/"),
+        declaration_import_path(path.trim_start_matches("./"))
+    ))
+}
+
+fn declaration_import_path(path: &str) -> String {
+    for (declaration, runtime) in [(".d.mts", ".mjs"), (".d.cts", ".cjs"), (".d.ts", ".js")] {
+        if let Some(stem) = path.strip_suffix(declaration) {
+            return format!("{stem}{runtime}");
+        }
+    }
+    path.to_owned()
+}
+
+fn write_new_private_project_file(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(), TypeFactsCertificationError> {
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    file.write_all(bytes)?;
+    // See `write_immutable_project_file`: these bytes are consumed only by the
+    // current live transaction and never become durable public authority.
+    drop(file);
+    Ok(())
+}
+
+fn is_ecmascript_identifier(value: &str) -> bool {
+    let mut characters = value.chars();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    (first == '_' || first == '$' || first.is_ascii_alphabetic())
+        && characters.all(|character| {
+            character == '_' || character == '$' || character.is_ascii_alphanumeric()
+        })
 }
 
 pub(super) fn verify_live_answer(
@@ -295,7 +1147,9 @@ pub(super) fn verify_live_answer(
     schedule: &TypeFactsCertificationSchedule,
     live: &LiveInvocationAnswer,
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
-    if schedule.demand_graph_root != plan.demand_graph().root().as_str() {
+    if schedule.demand_graph_root != plan.demand_graph().root().as_str()
+        || !schedule.export_values.is_empty()
+    {
         return Err(TypeFactsCertificationError::IdentityMismatch);
     }
     let identity = live.identity();
@@ -327,7 +1181,13 @@ pub(super) fn verify_live_answer(
             reason: answer.envelope.open_reasons.join(","),
         });
     }
-    let source_sites = verify_snapshot_source_census(plan, &answer.envelope.sources)?;
+    let source_sites = verify_snapshot_source_census(
+        plan,
+        &[],
+        &[],
+        &answer.envelope.sources,
+        &schedule.verifier_sources,
+    )?;
 
     let mut bindings = Vec::with_capacity(expected_ids.len());
     for (index, scheduled) in schedule.invocations.iter().enumerate() {
@@ -340,6 +1200,137 @@ pub(super) fn verify_live_answer(
         for proof in &scheduled.proof_demands {
             verify_subject_signature(plan, proof, transcript)?;
             let mut sites = verify_family(proof, transcript)?;
+            sites.extend(source_sites.iter().cloned());
+            sites.sort();
+            sites.dedup();
+            let evidence_root = super::certification_evidence_root(
+                proof_family_name(proof.family),
+                [
+                    identity.evidence_root(),
+                    proof.id.as_str(),
+                    transcript_root.as_str(),
+                    plan.snapshot_root(),
+                    plan.demand_graph().root().as_str(),
+                ],
+            );
+            bindings.push(WitnessBinding::new(
+                witness_variant(proof.family),
+                proof.id.clone(),
+                evidence_root,
+                sites,
+            ));
+        }
+    }
+    Ok(VerifiedTypeFactsEvidence {
+        bindings,
+        session_evidence_root: identity.evidence_root().to_owned(),
+    })
+}
+
+fn validate_export_envelope_open_reasons(
+    open_reasons: &[std::sync::Arc<str>],
+) -> Result<(), TypeFactsCertificationError> {
+    // Export-value transcripts carry their own type/path completeness. An
+    // unresolved module elsewhere in the TypeScript program is not evidence
+    // against a locally closed root or path: if it taints the demanded value,
+    // the producer emits `openType`, Unknown callability, or an open path and
+    // the family verifier below refuses it. Keep the program-level marker in
+    // the authenticated answer, while refusing every other envelope defect.
+    // This distinction is required by declaration surfaces such as
+    // @solidjs/html whose exact callable export is locally declared but whose
+    // unused call-result type names an external JSX module.
+    if open_reasons
+        .iter()
+        .all(|reason| reason.as_ref() == "unresolvedModule")
+    {
+        return Ok(());
+    }
+    Err(TypeFactsCertificationError::FamilyOpen {
+        demand: "source-census".into(),
+        reason: open_reasons.join(","),
+    })
+}
+
+pub(super) fn verify_live_export_value_answer(
+    plan: &CertificationPlan,
+    schedule: &TypeFactsCertificationSchedule,
+    live: &LiveExportValueAnswer,
+) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
+    verify_live_export_value_answer_with_dependencies(plan, schedule, live, &[], &[])
+}
+
+fn verify_live_export_value_answer_with_dependencies(
+    plan: &CertificationPlan,
+    schedule: &TypeFactsCertificationSchedule,
+    live: &LiveExportValueAnswer,
+    dependencies: &[&CertificationPlan],
+    sources: &[super::dependencies::VerifiedGraphSourcePackage],
+) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
+    verify_live_export_value_answer_with_project_census(
+        plan,
+        schedule,
+        live,
+        dependencies,
+        dependencies,
+        sources,
+    )
+}
+
+fn verify_live_export_value_answer_with_project_census(
+    plan: &CertificationPlan,
+    schedule: &TypeFactsCertificationSchedule,
+    live: &LiveExportValueAnswer,
+    dependencies: &[&CertificationPlan],
+    census_dependencies: &[&CertificationPlan],
+    census_sources: &[super::dependencies::VerifiedGraphSourcePackage],
+) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
+    if schedule.demand_graph_root != plan.demand_graph().root().as_str()
+        || !schedule.invocations.is_empty()
+    {
+        return Err(TypeFactsCertificationError::IdentityMismatch);
+    }
+    let identity = live.identity();
+    let answer = live.answer();
+    if identity.context().snapshot_root() != plan.snapshot_root()
+        || identity.context().demand_graph_root() != plan.demand_graph().root().as_str()
+        || identity.generation() != answer.envelope.generation
+        || identity.project_id() != &*answer.envelope.project_id
+        || identity.demand_sha256() != &*answer.envelope.demand_sha256
+        || identity.handshake_protocol() != typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        || identity.handshake_schema_sha256() != typefacts::v3::TYPE_FACTS_SCHEMA_SHA256
+        || identity.handshake_build() != typefacts::v3::TYPE_FACTS_BUILD_ID
+    {
+        return Err(TypeFactsCertificationError::IdentityMismatch);
+    }
+    let mut expected_ids = schedule.proof_demand_ids().collect::<Vec<_>>();
+    expected_ids.sort();
+    let actual_ids = identity
+        .context()
+        .proof_demand_ids()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if expected_ids != actual_ids || answer.transcripts.len() != schedule.export_values.len() {
+        return Err(TypeFactsCertificationError::IdentityMismatch);
+    }
+    validate_export_envelope_open_reasons(&answer.envelope.open_reasons)?;
+    let source_sites = verify_snapshot_source_census(
+        plan,
+        census_dependencies,
+        census_sources,
+        &answer.envelope.sources,
+        &schedule.verifier_sources,
+    )?;
+    let mut bindings = Vec::with_capacity(expected_ids.len());
+    for (index, scheduled) in schedule.export_values.iter().enumerate() {
+        let transcript = &answer.transcripts[index];
+        if transcript.location != scheduled.demand.location {
+            return Err(TypeFactsCertificationError::IdentityMismatch);
+        }
+        let transcript_bytes = typefacts::encode(transcript)?;
+        let transcript_root = format!("sha256:{:x}", Sha256::digest(&transcript_bytes));
+        for proof in &scheduled.proof_demands {
+            verify_export_value_subject(plan, proof, transcript, dependencies)?;
+            let mut sites = verify_export_value_family(proof, transcript)?;
             sites.extend(source_sites.iter().cloned());
             sites.sort();
             sites.dedup();
@@ -405,6 +1396,260 @@ fn verify_subject_signature(
     )
     .replace('\\', "/");
     let actual_path = signature.declaration.location.path.replace('\\', "/");
+    if !actual_path.ends_with(&marker) {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "selected signature is not in the snapshot-verified export declaration".into(),
+        });
+    }
+    verify_declaration_export_identity(proof, declaration_export, signature)
+}
+
+fn verify_export_value_subject(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    dependencies: &[&CertificationPlan],
+) -> Result<(), TypeFactsCertificationError> {
+    let (artifact_case, export) = proof_artifact_export(&proof.subject);
+    if plan
+        .candidates
+        .proposal()
+        .artifact_case(artifact_case)
+        .and_then(|case| case.exports.get(export))
+        .is_none()
+    {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "demanded export is absent from the selected candidate".into(),
+        });
+    }
+    if !transcript.complete
+        || transcript.target.is_empty()
+        || transcript.query_name.is_empty()
+        || !transcript.open_reasons.is_empty()
+    {
+        let mut causes = Vec::new();
+        if !transcript.complete {
+            causes.push("transcriptIncomplete".to_owned());
+        }
+        if transcript.target.is_empty() {
+            causes.push("targetMissing".to_owned());
+        }
+        if transcript.query_name.is_empty() {
+            causes.push("queryNameMissing".to_owned());
+        }
+        causes.extend(
+            transcript
+                .open_reasons
+                .iter()
+                .map(|reason| format!("producer:{reason}")),
+        );
+        return Err(TypeFactsCertificationError::FamilyOpen {
+            demand: proof.id.clone(),
+            reason: format!(
+                "export expression, alias target, or declaration identity is open for artifact case {artifact_case:?} export {export:?} ({})",
+                causes.join(",")
+            ),
+        });
+    }
+    let declaration = transcript.declaration.as_ref().ok_or_else(|| {
+        TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "export-value transcript has no compiler-resolved declaration".into(),
+        }
+    })?;
+    let (declaration_path, declaration_export) = plan
+        .verified_exports
+        .declaration_binding(export)
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "demanded export has no snapshot-verified declaration binding".into(),
+        })?;
+    let marker = format!(
+        "/node_modules/{}/{}",
+        plan.snapshot.package_name(),
+        declaration_path.trim_start_matches("./")
+    )
+    .replace('\\', "/");
+    let actual_path = declaration.location.path.replace('\\', "/");
+    let actual_name = if declaration.name.is_empty() {
+        declaration
+            .qualified_name
+            .rsplit('.')
+            .next()
+            .unwrap_or_default()
+    } else {
+        &declaration.name
+    };
+    if !actual_path.ends_with(&marker)
+        && !authenticated_dependency_declaration_target(
+            plan,
+            dependencies,
+            actual_name,
+            &actual_path,
+        )
+    {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: format!(
+                "resolved value declaration {actual_name:?} at {actual_path:?} is not the snapshot-selected export declaration suffix {marker:?}"
+            ),
+        });
+    }
+    if !actual_path.ends_with(&marker) {
+        return Ok(());
+    }
+    if declaration_export == "default" {
+        // The verifier-authored harness contains an exact default import for
+        // this package/subpath, and its bytes are part of the source census.
+        // `target` is the compiler-canonicalized alias target, while the
+        // declaration path above is independently replayed from the archive.
+        // The target's display name is intentionally irrelevant to the export
+        // alias, but an anonymous/unidentified declaration is not authority.
+        if actual_name.is_empty() {
+            return Err(TypeFactsCertificationError::SubjectMismatch {
+                demand: proof.id.clone(),
+                reason: "canonical default-export target has no declaration identity".into(),
+            });
+        }
+        return Ok(());
+    }
+    if actual_name != declaration_export {
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: proof.id.clone(),
+            reason: "resolved value declaration name disagrees with snapshot export replay".into(),
+        });
+    }
+    Ok(())
+}
+
+fn authenticated_dependency_declaration_target(
+    parent: &CertificationPlan,
+    dependencies: &[&CertificationPlan],
+    declaration_name: &str,
+    declaration_path: &str,
+) -> bool {
+    dependencies.iter().any(|dependency| {
+        let marker = private_project_package_marker(
+            parent,
+            &dependency.resolved_import.package_root,
+            dependency.snapshot.package_name(),
+        );
+        dependency.snapshot.files.keys().any(|path| {
+            declaration_path.ends_with(&format!("{}{}", marker, path.trim_start_matches("./")))
+                && dependency
+                    .verified_exports
+                    .has_declaration_target(path, declaration_name)
+        })
+    })
+}
+
+fn verify_export_value_family(
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+) -> Result<Vec<String>, TypeFactsCertificationError> {
+    let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+        demand: proof.id.clone(),
+        reason: reason.into(),
+    };
+    let mut sites = vec![format!(
+        "export-value:{}:{}:{}",
+        transcript.location.path, transcript.location.start_byte, transcript.location.end_byte
+    )];
+    match proof.family {
+        ProofFamily::CallablePath | ProofFamily::RecursiveValueShape => {
+            require_export_recursive_subject(proof, transcript, &open, &mut sites)?;
+        }
+        ProofFamily::DomainExhaustiveness => {
+            require_closed_value(&transcript.value, &open)?;
+            require_export_callable_paths_closed(transcript, &open)?;
+            sites.push("typefacts-export-value-domain:complete".into());
+        }
+        _ => {
+            return Err(TypeFactsCertificationError::UnsupportedDemand {
+                demand: proof.id.clone(),
+                reason: "this proof family requires an invocation or operation transcript".into(),
+            });
+        }
+    }
+    Ok(sites)
+}
+
+fn require_export_callable_paths_closed(
+    transcript: &ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<(), TypeFactsCertificationError> {
+    for path in &transcript.callable_paths {
+        if !path.complete || !path.open_reasons.is_empty() || path.presence == PathPresence::Unknown
+        {
+            return Err(open("export value contains an open callable path"));
+        }
+    }
+    Ok(())
+}
+
+fn require_export_recursive_subject(
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+        root: ValueRoot::Export,
+        path,
+        callable,
+        ..
+    }) = &proof.subject
+    else {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "export-value transcript was assigned to a non-export recursive subject".into(),
+        });
+    };
+    if path.0.is_empty() {
+        require_root_callability(&transcript.value, *callable, "export root", open)?;
+        sites.push("recursive-export-value:root".into());
+        return Ok(());
+    }
+    let (alternative, expected_path) = translate_value_path(&path.0).ok_or_else(|| {
+        TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "Type Facts cannot address this exported-value path exactly".into(),
+        }
+    })?;
+    let fact = transcript
+        .callable_paths
+        .iter()
+        .find(|fact| fact.alternative == alternative && fact.path == expected_path)
+        .ok_or_else(|| open("exported-value path is absent from the exact producer census"))?;
+    if !fact.complete || !fact.open_reasons.is_empty() || fact.presence == PathPresence::Unknown {
+        return Err(open("exported-value path is locally open"));
+    }
+    match (*callable, fact.callability) {
+        (true, Callability::Callable) | (false, Callability::NonCallable) => {}
+        (true, _) => return Err(open("exported-value path is not compiler-proved callable")),
+        (false, _) => {
+            return Err(open(
+                "exported-value path is not compiler-proved non-callable",
+            ));
+        }
+    }
+    sites.push(callable_path_site(fact));
+    Ok(())
+}
+
+fn verify_declaration_export_identity(
+    proof: &ScheduledProofDemand,
+    declaration_export: &str,
+    signature: &typefacts::SelectedSignature,
+) -> Result<(), TypeFactsCertificationError> {
+    if declaration_export == "default" {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: proof.id.clone(),
+            reason: "Type Facts display names cannot authenticate a default-export alias".into(),
+        });
+    }
     let actual_name = if signature.declaration.name.is_empty() {
         signature
             .declaration
@@ -415,10 +1660,11 @@ fn verify_subject_signature(
     } else {
         &signature.declaration.name
     };
-    if !actual_path.ends_with(&marker) || actual_name != declaration_export {
+    if actual_name != declaration_export {
         return Err(TypeFactsCertificationError::SubjectMismatch {
             demand: proof.id.clone(),
-            reason: "selected signature is not the snapshot-verified export declaration".into(),
+            reason: "selected signature name is not the snapshot-verified export declaration"
+                .into(),
         });
     }
     Ok(())
@@ -465,7 +1711,9 @@ fn proof_artifact_export(subject: &ProofDemandSubject) -> (&str, &str) {
                 ..
             } => (artifact_case, export),
         },
-        ProofDemandSubject::ArtifactCase(_) | ProofDemandSubject::DependencyClosure { .. } => {
+        ProofDemandSubject::ArtifactCase(_)
+        | ProofDemandSubject::DependencyArtifact { .. }
+        | ProofDemandSubject::DependencyClosure { .. } => {
             unreachable!("artifact and dependency demands are not Type Facts")
         }
     }
@@ -473,7 +1721,10 @@ fn proof_artifact_export(subject: &ProofDemandSubject) -> (&str, &str) {
 
 fn verify_snapshot_source_census(
     plan: &CertificationPlan,
+    dependencies: &[&CertificationPlan],
+    graph_sources: &[super::dependencies::VerifiedGraphSourcePackage],
     sources: &[typefacts::TranscriptSourceDigest],
+    verifier_sources: &[typefacts::TranscriptSourceDigest],
 ) -> Result<Vec<String>, TypeFactsCertificationError> {
     use crate::contract_interface::ClosureFileRole;
 
@@ -482,6 +1733,22 @@ fn verify_snapshot_source_census(
         plan.snapshot.package_name().replace('\\', "/")
     );
     let mut sites = Vec::new();
+    for expected in verifier_sources {
+        let matches = sources
+            .iter()
+            .filter(|source| source.path == expected.path)
+            .collect::<Vec<_>>();
+        if matches.len() != 1 || matches[0].sha256 != expected.sha256 {
+            return Err(TypeFactsCertificationError::SourceCensus(format!(
+                "verifier query source {} is absent, duplicated, or stale",
+                expected.path
+            )));
+        }
+        sites.push(format!(
+            "typefacts-verifier-source:{}:{}",
+            expected.path, expected.sha256
+        ));
+    }
     for entry in &plan.verified_closure.manifest().entries {
         if entry.role != ClosureFileRole::Declaration {
             continue;
@@ -493,8 +1760,15 @@ fn verify_snapshot_source_census(
             .filter(|source| source.path.replace('\\', "/").ends_with(&suffix))
             .collect::<Vec<_>>();
         if matches.len() != 1 || matches[0].sha256.as_ref() != entry.digest.as_str() {
+            let observed = matches
+                .iter()
+                .take(4)
+                .map(|source| format!("{}:{}", source.path, source.sha256))
+                .collect::<Vec<_>>();
             return Err(TypeFactsCertificationError::SourceCensus(format!(
-                "declaration {relative} is absent, duplicated, or stale"
+                "declaration {relative} is absent, duplicated, or stale; expected {}; observed(count={}, sample={observed:?})",
+                entry.digest,
+                matches.len(),
             )));
         }
         sites.push(format!(
@@ -503,15 +1777,52 @@ fn verify_snapshot_source_census(
         ));
     }
 
+    let mut dependency_markers = dependencies
+        .iter()
+        .map(|dependency| {
+            (
+                private_project_package_marker(
+                    plan,
+                    &dependency.resolved_import.package_root,
+                    dependency.snapshot.package_name(),
+                ),
+                &dependency.snapshot,
+            )
+        })
+        .chain(graph_sources.iter().map(|source| {
+            (
+                private_project_package_marker(
+                    plan,
+                    &source.installed_package_root,
+                    source.snapshot.package_name(),
+                ),
+                &source.snapshot,
+            )
+        }))
+        .collect::<Vec<_>>();
+    dependency_markers.sort_by(|(left, _), (right, _)| {
+        right.len().cmp(&left.len()).then_with(|| left.cmp(right))
+    });
+    reject_unauthenticated_external_sources(&package_marker, &dependency_markers, sources)?;
+
     // Every source attributed to this package must come from the immutable
     // snapshot. This catches a sibling/ancestor installation silently winning
     // resolution even when the demanded declaration happened to share bytes.
     for source in sources {
         let normalized = source.path.replace('\\', "/");
-        let Some((_, relative)) = normalized.rsplit_once(&package_marker) else {
+        let matched = dependency_markers
+            .iter()
+            .map(|(marker, snapshot)| (marker, *snapshot))
+            .chain(std::iter::once((&package_marker, &plan.snapshot)))
+            .find_map(|(marker, snapshot)| {
+                normalized
+                    .rsplit_once(marker)
+                    .map(|(_, relative)| (snapshot, relative))
+            });
+        let Some((snapshot, relative)) = matched else {
             continue;
         };
-        let bytes = plan.snapshot.read(relative).ok_or_else(|| {
+        let bytes = snapshot.read(relative).ok_or_else(|| {
             TypeFactsCertificationError::SourceCensus(format!(
                 "producer consulted package source outside the snapshot: {relative}"
             ))
@@ -522,6 +1833,17 @@ fn verify_snapshot_source_census(
                 "producer source digest differs from snapshot: {relative}"
             )));
         }
+        if let Some((_, snapshot)) = dependency_markers
+            .iter()
+            .find(|(marker, _)| normalized.contains(marker))
+        {
+            sites.push(format!(
+                "typefacts-source-snapshot:{}:{}:{}",
+                snapshot.provenance_root(),
+                source.path,
+                source.sha256
+            ));
+        }
     }
     if sites.is_empty() {
         return Err(TypeFactsCertificationError::SourceCensus(
@@ -529,6 +1851,49 @@ fn verify_snapshot_source_census(
         ));
     }
     Ok(sites)
+}
+
+fn private_project_package_marker(
+    parent: &CertificationPlan,
+    original_package_root: &str,
+    package_name: &str,
+) -> String {
+    let virtual_root = Path::new("/__solid_checker_private_project__");
+    let projected_owner = virtual_root
+        .join("node_modules")
+        .join(parent.snapshot.package_name());
+    let target = private_project_package_target(
+        virtual_root,
+        &projected_owner,
+        Path::new(&parent.resolved_import.package_root),
+        Path::new(original_package_root),
+        package_name,
+    );
+    let relative = target
+        .strip_prefix(virtual_root)
+        .expect("private project target is rooted under its requested project");
+    format!("/{}/", relative.to_string_lossy().replace('\\', "/"))
+}
+
+fn reject_unauthenticated_external_sources(
+    package_marker: &str,
+    dependencies: &[(String, &super::ArtifactSnapshot)],
+    sources: &[typefacts::TranscriptSourceDigest],
+) -> Result<(), TypeFactsCertificationError> {
+    for source in sources {
+        let normalized = source.path.replace('\\', "/");
+        if normalized.contains("/node_modules/")
+            && !normalized.contains(package_marker)
+            && !dependencies
+                .iter()
+                .any(|(marker, _)| normalized.contains(marker))
+        {
+            return Err(TypeFactsCertificationError::SourceCensus(format!(
+                "producer consulted unauthenticated external package source: {normalized}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn verify_family(
@@ -618,24 +1983,42 @@ fn verify_family(
                 &[InvocationDomain::Parameters, InvocationDomain::Result],
                 &open,
             )?;
-            let callable = signature
-                .parameters
-                .iter()
-                .flat_map(|parameter| &parameter.callable_paths)
-                .chain(&signature.result_callable_paths)
-                .filter(|path| {
-                    path.complete
-                        && path.open_reasons.is_empty()
-                        && path.presence != PathPresence::Unknown
-                        && path.callability != Callability::Unknown
-                })
-                .collect::<Vec<_>>();
-            if callable.is_empty() {
-                return Err(open("no complete callable path was reported"));
+            match &proof.subject {
+                ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                    callable: true,
+                    ..
+                }) => require_recursive_subject(proof, signature, None, &open, &mut sites)?,
+                ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+                    ..
+                }) => {
+                    return Err(TypeFactsCertificationError::UnsupportedDemand {
+                        demand: proof.id.clone(),
+                        reason: "Type Facts does not yet bind callback operations to an exact callable path"
+                            .into(),
+                    });
+                }
+                _ => {
+                    return Err(TypeFactsCertificationError::UnsupportedDemand {
+                        demand: proof.id.clone(),
+                        reason: "callable-path demand has no exact callable-value subject".into(),
+                    });
+                }
             }
-            sites.extend(callable.into_iter().map(callable_path_site));
         }
         ProofFamily::OperationReachability => {
+            if matches!(
+                &proof.subject,
+                ProofDemandSubject::PositiveFact(
+                    PositiveFactSubject::Operation { .. }
+                        | PositiveFactSubject::OperationEdge { .. }
+                )
+            ) {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason: "Type Facts control flow is not yet bound to an exact operation or edge subject"
+                        .into(),
+                });
+            }
             require_domains(
                 transcript,
                 &[InvocationDomain::Uses, InvocationDomain::ControlFlow],
@@ -681,9 +2064,19 @@ fn verify_family(
             });
         }
         ProofFamily::RecursiveValueShape => {
-            require_recursive_subject(proof, signature, &open, &mut sites)?;
+            require_recursive_subject(proof, signature, None, &open, &mut sites)?;
         }
         ProofFamily::GuardPartition => {
+            if matches!(
+                &proof.subject,
+                ProofDemandSubject::PositiveFact(PositiveFactSubject::GuardCase { .. })
+            ) {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason: "Type Facts partitions are not yet bound to an exact guard ordinal"
+                        .into(),
+                });
+            }
             let complete = signature
                 .parameters
                 .iter()
@@ -787,6 +2180,21 @@ fn require_closed_value(
     Ok(())
 }
 
+fn require_root_callability(
+    value: &InvocationValueFact,
+    callable: bool,
+    label: &str,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<(), TypeFactsCertificationError> {
+    match (callable, value.callability) {
+        (true, Callability::Callable) | (false, Callability::NonCallable) => Ok(()),
+        (true, _) => Err(open(&format!("{label} is not compiler-proved callable"))),
+        (false, _) => Err(open(&format!(
+            "{label} is not compiler-proved non-callable"
+        ))),
+    }
+}
+
 fn binding_sites(binding: &typefacts::ArgumentBinding) -> Vec<String> {
     if binding.slots.is_empty() {
         return vec![format!(
@@ -861,6 +2269,7 @@ fn partition_site(partition: &FinitePartition) -> String {
 fn require_recursive_subject(
     proof: &ScheduledProofDemand,
     signature: &typefacts::SelectedSignature,
+    bound_operation: Option<&str>,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
@@ -877,10 +2286,46 @@ fn require_recursive_subject(
         });
     };
     let (value, callable_paths) = match root {
-        ValueRoot::Export | ValueRoot::OperationOutput { .. } => {
+        ValueRoot::Export => {
+            return Err(TypeFactsCertificationError::UnsupportedDemand {
+                demand: proof.id.clone(),
+                reason: "selected-call Type Facts cannot stand in for the exported value root"
+                    .into(),
+            });
+        }
+        ValueRoot::OperationOutput { operation } => {
+            let Some(bound_operation) = bound_operation else {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason: "selected-call Type Facts is not yet bound to the named operation root"
+                        .into(),
+                });
+            };
+            if operation.0 != bound_operation {
+                return Err(TypeFactsCertificationError::SubjectMismatch {
+                    demand: proof.id.clone(),
+                    reason:
+                        "recursive output names a different operation than the producer binding"
+                            .into(),
+                });
+            }
             (&signature.result, &signature.result_callable_paths)
         }
-        ValueRoot::OperationInput { index, .. } => {
+        ValueRoot::OperationInput { operation, index } => {
+            let Some(bound_operation) = bound_operation else {
+                return Err(TypeFactsCertificationError::UnsupportedDemand {
+                    demand: proof.id.clone(),
+                    reason: "selected-call Type Facts is not yet bound to the named operation root"
+                        .into(),
+                });
+            };
+            if operation.0 != bound_operation {
+                return Err(TypeFactsCertificationError::SubjectMismatch {
+                    demand: proof.id.clone(),
+                    reason: "recursive input names a different operation than the producer binding"
+                        .into(),
+                });
+            }
             let parameter = signature
                 .parameters
                 .get(usize::from(*index))
@@ -889,7 +2334,7 @@ fn require_recursive_subject(
         }
     };
     if path.0.is_empty() {
-        require_closed_value(value, open)?;
+        require_root_callability(value, *callable, "recursive value root", open)?;
         sites.push("recursive-value:root".into());
         return Ok(());
     }
@@ -1202,6 +2647,19 @@ fn set_execution_permissions(_path: &Path) -> Result<(), TypeFactsCertificationE
 
 #[derive(Debug, Error)]
 pub enum TypeFactsCertificationError {
+    #[error("Type Facts certification failed during {stage}: {source}")]
+    TransactionStage {
+        stage: &'static str,
+        #[source]
+        source: Box<TypeFactsCertificationError>,
+    },
+    #[error("Type Facts certification failed for graph node {package} during {stage}: {source}")]
+    GraphNodeStage {
+        package: String,
+        stage: &'static str,
+        #[source]
+        source: Box<TypeFactsCertificationError>,
+    },
     #[error("Type Facts certification names unknown proof demand {0}")]
     UnknownDemand(String),
     #[error("Type Facts certification repeats proof demand {0}")]
@@ -1228,13 +2686,143 @@ pub enum TypeFactsCertificationError {
     Io(#[from] std::io::Error),
 }
 
+impl TypeFactsCertificationError {
+    fn at_stage(self, stage: &'static str) -> Self {
+        Self::TransactionStage {
+            stage,
+            source: Box::new(self),
+        }
+    }
+
+    fn at_graph_node(self, plan: &CertificationPlan, stage: &'static str) -> Self {
+        Self::GraphNodeStage {
+            package: format!(
+                "{}@{} ({})",
+                plan.resolved_import.package_name,
+                plan.resolved_import.package_version,
+                plan.resolved_import.requested_entrypoint
+            ),
+            stage,
+            source: Box::new(self),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    use solid_reactive_ir::contract_semantics::{
+        certification::proof_policy_2, solid2_rc3::conformance_corpus,
+    };
 
     fn digest(bytes: &[u8]) -> String {
         format!("sha256:{:x}", Sha256::digest(bytes))
+    }
+
+    #[test]
+    fn export_value_preflight_preserves_the_authoritative_schedule_refusal() {
+        let candidate = conformance_corpus()
+            .into_iter()
+            .next()
+            .expect("conformance corpus")
+            .proposal
+            .normalize()
+            .expect("normalized candidate");
+        let policy = proof_policy_2();
+        let candidates = policy
+            .inspect_candidates(&candidate)
+            .expect("candidate inventory");
+        let graph = policy
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .expect("demand graph");
+
+        let authoritative = TypeFactsCertificationSchedule::new_export_values(&graph, [])
+            .expect_err("non-export demands cannot use export-value transcripts");
+        let preflight = preflight_export_value_schedule_compatibility(&graph)
+            .expect_err("preflight must reject the same demand");
+
+        assert_eq!(preflight.to_string(), authoritative.to_string());
+        assert!(matches!(
+            preflight,
+            TypeFactsCertificationError::UnsupportedDemand { demand, reason }
+                if demand.starts_with("sha256:")
+                    && reason
+                        == "non-export Type Facts demand cannot use an export-value transcript"
+        ));
+    }
+
+    #[test]
+    fn declaration_harness_uses_runtime_spelling_for_declaration_substitution() {
+        assert_eq!(declaration_import_path("dist/index.d.ts"), "dist/index.js");
+        assert_eq!(
+            declaration_import_path("dist/index.d.mts"),
+            "dist/index.mjs"
+        );
+        assert_eq!(
+            declaration_import_path("dist/index.d.cts"),
+            "dist/index.cjs"
+        );
+        assert_eq!(declaration_import_path("src/index.tsx"), "src/index.tsx");
+    }
+
+    #[test]
+    fn private_project_materialization_deduplicates_only_identical_snapshot_files() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-typefacts-materialize-test-{}-{}",
+            std::process::id(),
+            PRIVATE_PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&root).unwrap();
+        let target = root.join("node_modules/shared/index.d.ts");
+        write_immutable_project_file(&target, b"export declare const value: 1;").unwrap();
+        write_immutable_project_file(&target, b"export declare const value: 1;").unwrap();
+        assert!(matches!(
+            write_immutable_project_file(&target, b"export declare const value: 2;"),
+            Err(TypeFactsCertificationError::SourceCensus(_))
+        ));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn private_project_preserves_hoisted_and_nested_installed_package_locations() {
+        let project = Path::new("/private-project");
+        let projected_owner = project.join("node_modules/corvu");
+        let original_owner = Path::new("/install/node_modules/corvu");
+        assert_eq!(
+            private_project_package_target(
+                project,
+                &projected_owner,
+                original_owner,
+                Path::new("/install/node_modules/@corvu/utils"),
+                "@corvu/utils",
+            ),
+            project.join("node_modules/@corvu/utils")
+        );
+        assert_eq!(
+            private_project_package_target(
+                project,
+                &projected_owner,
+                original_owner,
+                Path::new("/install/node_modules/@corvu/accordion/node_modules/@corvu/utils"),
+                "@corvu/utils",
+            ),
+            project.join("node_modules/@corvu/accordion/node_modules/@corvu/utils")
+        );
+        assert_eq!(
+            private_project_package_target(
+                project,
+                &projected_owner,
+                original_owner,
+                Path::new("/install/node_modules/corvu/node_modules/local-child"),
+                "local-child",
+            ),
+            projected_owner.join("node_modules/local-child")
+        );
     }
 
     #[test]
@@ -1378,6 +2966,26 @@ mod tests {
         })
     }
 
+    fn verify_bound_recursive(
+        proof: &ScheduledProofDemand,
+        transcript: &InvocationTranscript,
+        operation: &str,
+    ) -> Result<Vec<String>, TypeFactsCertificationError> {
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: proof.id.clone(),
+            reason: reason.into(),
+        };
+        let mut sites = Vec::new();
+        require_recursive_subject(
+            proof,
+            transcript.selected_signature.as_ref().unwrap(),
+            Some(operation),
+            &open,
+            &mut sites,
+        )?;
+        Ok(sites)
+    }
+
     #[test]
     fn family_checks_keep_open_premises_local_and_refuse_unsupported_cardinality() {
         let complete = transcript();
@@ -1425,6 +3033,65 @@ mod tests {
     }
 
     #[test]
+    fn generic_control_flow_cannot_certify_an_unbound_operation_subject() {
+        let operation = proof(
+            ProofFamily::OperationReachability,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::Operation {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                operation: "different-operation".into(),
+                has_cardinality: false,
+            }),
+        );
+        assert!(matches!(
+            verify_family(&operation, &transcript()),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+    }
+
+    #[test]
+    fn complete_partition_cannot_certify_an_unbound_guard_ordinal() {
+        let guard = proof(
+            ProofFamily::GuardPartition,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::GuardCase {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                ordinal: 99,
+            }),
+        );
+        assert!(matches!(
+            verify_family(&guard, &transcript()),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+    }
+
+    #[test]
+    fn selected_call_result_cannot_certify_an_unbound_operation_output() {
+        let operation_output = proof(
+            ProofFamily::RecursiveValueShape,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                root: ValueRoot::OperationOutput {
+                    operation: solid_reactive_ir::contract_semantics::OperationId(
+                        "different-operation".into(),
+                    ),
+                },
+                path: solid_reactive_ir::contract_semantics::ValuePath(Vec::new()),
+                callable: false,
+            }),
+        );
+        assert!(matches!(
+            verify_family(&operation_output, &transcript()),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+        assert!(matches!(
+            verify_bound_recursive(&operation_output, &transcript(), "invoke"),
+            Err(TypeFactsCertificationError::SubjectMismatch { .. })
+        ));
+    }
+
+    #[test]
     fn recursive_open_sibling_does_not_contaminate_an_exact_path() {
         let mut exact = transcript();
         let parameter = &mut exact.selected_signature.as_mut().unwrap().parameters[0];
@@ -1457,7 +3124,7 @@ mod tests {
                 callable: true,
             }),
         );
-        assert!(verify_family(&recursive, &exact).is_ok());
+        assert!(verify_bound_recursive(&recursive, &exact, "invoke").is_ok());
 
         let unresolved = proof(
             ProofFamily::RecursiveValueShape,
@@ -1475,7 +3142,129 @@ mod tests {
             }),
         );
         assert!(matches!(
-            verify_family(&unresolved, &exact),
+            verify_bound_recursive(&unresolved, &exact, "invoke"),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+    }
+
+    #[test]
+    fn unrelated_complete_callable_path_cannot_certify_the_demanded_path() {
+        let demanded = proof(
+            ProofFamily::CallablePath,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                root: ValueRoot::OperationInput {
+                    operation: solid_reactive_ir::contract_semantics::OperationId("invoke".into()),
+                    index: 0,
+                },
+                path: solid_reactive_ir::contract_semantics::ValuePath(vec![
+                    ValuePathSegment::ObjectProperty("differentCallback".into()),
+                ]),
+                callable: true,
+            }),
+        );
+        assert!(matches!(
+            verify_family(&demanded, &transcript()),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+    }
+
+    #[test]
+    fn an_export_value_demand_cannot_be_answered_by_the_selected_call_result() {
+        let export_value = proof(
+            ProofFamily::RecursiveValueShape,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                root: ValueRoot::Export,
+                path: solid_reactive_ir::contract_semantics::ValuePath(Vec::new()),
+                callable: false,
+            }),
+        );
+        assert!(matches!(
+            verify_family(&export_value, &transcript()),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+    }
+
+    #[test]
+    fn unknown_root_callability_cannot_certify_a_non_callable_operation_output() {
+        let mut locally_open_but_non_callable = transcript();
+        locally_open_but_non_callable
+            .selected_signature
+            .as_mut()
+            .unwrap()
+            .result
+            .open_reasons
+            .push("openIndex".into());
+        let operation_output = proof(
+            ProofFamily::RecursiveValueShape,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                root: ValueRoot::OperationOutput {
+                    operation: solid_reactive_ir::contract_semantics::OperationId("invoke".into()),
+                },
+                path: solid_reactive_ir::contract_semantics::ValuePath(Vec::new()),
+                callable: false,
+            }),
+        );
+        assert!(
+            verify_bound_recursive(&operation_output, &locally_open_but_non_callable, "invoke")
+                .is_ok(),
+            "an unrelated open value domain cannot contaminate exact root callability"
+        );
+
+        let mut unknown = transcript();
+        unknown
+            .selected_signature
+            .as_mut()
+            .unwrap()
+            .result
+            .callability = Callability::Unknown;
+        assert!(matches!(
+            verify_bound_recursive(&operation_output, &unknown, "invoke"),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+    }
+
+    #[test]
+    fn default_export_display_alias_cannot_stand_in_for_export_identity() {
+        let selected = proof(ProofFamily::SelectedSignature, selected_subject());
+        let transcript = transcript();
+        let signature = transcript.selected_signature.as_ref().unwrap();
+        assert!(matches!(
+            verify_declaration_export_identity(&selected, "default", signature),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+    }
+
+    #[test]
+    fn mutable_external_declaration_cannot_enter_the_source_census() {
+        let sources = vec![typefacts::TranscriptSourceDigest {
+            path: "/project/node_modules/dependency/index.d.ts".into(),
+            sha256: format!("sha256:{:064x}", 8).try_into().unwrap(),
+        }];
+        assert!(matches!(
+            reject_unauthenticated_external_sources(
+                "/node_modules/fixture-package/",
+                &[],
+                &sources,
+            ),
+            Err(TypeFactsCertificationError::SourceCensus(_))
+        ));
+    }
+
+    #[test]
+    fn export_value_envelope_defers_only_unresolved_modules_to_local_completeness() {
+        assert!(validate_export_envelope_open_reasons(&[]).is_ok());
+        assert!(validate_export_envelope_open_reasons(&["unresolvedModule".into()]).is_ok());
+        assert!(matches!(
+            validate_export_envelope_open_reasons(&[
+                "unresolvedModule".into(),
+                "sourceUnavailable".into(),
+            ]),
             Err(TypeFactsCertificationError::FamilyOpen { .. })
         ));
     }

@@ -612,6 +612,15 @@ pub fn validate_receipt_and_accept(
     })
 }
 
+fn export_has_positive_semantics(export: &super::ExportSemantics) -> bool {
+    !matches!(export.shape, super::ValueShape::Unknown)
+        || !export.call.operations.is_empty()
+        || !export.call.edges.is_empty()
+        || !export.call.resources.is_empty()
+        || !export.call.claims().callbacks.items().is_empty()
+        || !export.call.guards.cases.items().is_empty()
+}
+
 /// Receipt fields that remain authoritative only after the backend has
 /// authenticated a policy-2 issuer and its complete signed payload.
 #[doc(hidden)]
@@ -684,6 +693,65 @@ pub fn accept_authenticated_policy2(
     })
 }
 
+/// Projects one normalized proposal into the semantic query shape used only
+/// while generating another open proposal in the same native graph
+/// transaction. This is deliberately not receipt authority: the synthetic
+/// identity uses receipt version and verifier policy zero and carries no
+/// authentication. Ordinary contract discovery must never call this helper;
+/// the backend graph planner independently replays and certifies every
+/// proposal before any projected semantics can become analyzer input.
+#[doc(hidden)]
+pub fn project_untrusted_proposal_for_generation(
+    contract: NormalizedContract,
+    selected_artifact_case: &str,
+) -> Result<AcceptedContract, ReceiptValidationError> {
+    let selected_case = contract
+        .artifact_case(selected_artifact_case)
+        .ok_or_else(|| ReceiptValidationError::MissingArtifactCase {
+            artifact_case: selected_artifact_case.into(),
+        })?
+        .clone();
+    if contract.artifact_cases().len() != 1 {
+        return Err(ReceiptValidationError::Mismatch {
+            field: "selectedArtifactCase",
+        });
+    }
+    let closed_claims_root = derive_closed_claims_root(&contract, &selected_case)?;
+    let mut projection = Sha256::new();
+    projection.update(b"solid-checker:untrusted-generation-projection:v1\0");
+    projection.update(contract.semantic_digest().as_str().as_bytes());
+    projection.update(selected_artifact_case.as_bytes());
+    let projection = Digest::from_sha256(projection.finalize().into());
+    Ok(AcceptedContract {
+        package: contract.package().clone(),
+        selected_case,
+        receipt: AcceptanceReceipt {
+            receipt_version: 0,
+            wire_digest: projection.clone(),
+            semantic_model_version: contract.semantic_model_version(),
+            semantic_digest: contract.semantic_digest().clone(),
+            artifacts_digest: artifacts_digest(
+                contract.package(),
+                contract
+                    .artifact_case(selected_artifact_case)
+                    .expect("selected case exists"),
+            ),
+            closure_digest: contract
+                .artifact_case(selected_artifact_case)
+                .expect("selected case exists")
+                .dependency_closure
+                .clone(),
+            proof_root: projection,
+            closed_claims_root,
+            verifier: VerifierIdentity {
+                build: "untrusted-generation-projection-v1".into(),
+                policy: 0,
+            },
+            authentication: None,
+        },
+    })
+}
+
 /// Recomputes the closed-claim identity that a policy-2 receipt must bind.
 #[doc(hidden)]
 pub fn policy2_closed_claims_root(
@@ -714,6 +782,16 @@ fn derive_closed_claims_root(
                 .claim_id(&subject)
                 .map_err(|error| ReceiptValidationError::Claim(error.to_string()))?;
             closed.insert(claim);
+        }
+        if export_has_positive_semantics(export) {
+            let mut hash = CanonicalHash::new(b"solid-checker-positive-export-claim-v1");
+            hash.text(contract.semantic_digest().as_str());
+            hash.text(&selected_case.id);
+            hash.text(export_name);
+            closed.insert(
+                SemanticClaimId::parse(format!("claim:v1:{}", hash.finish().as_str()))
+                    .expect("canonical positive-export claim digest is valid"),
+            );
         }
     }
     if closed.is_empty() {

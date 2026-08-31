@@ -86,10 +86,21 @@ const INTEGRITY_PATTERN = /EINTEGRITY|integrity checksum failed|integrity mismat
 // diagnostics never collapse into the wrong class.
 const MARKERS = [
   { class: "checker-crash", pattern: /SIGSEGV|SIGABRT|panicked at/i },
+  // A full-generation refusal can include attribution records for earlier
+  // open callback claims before Rust emits the terminal proposal conflict.
+  // `UnknownCallbackExecution` inside those records is evidence about how the
+  // proposal was reached, not the terminal reason it was rejected. Keep this
+  // exact conflict ahead of the broader parameter marker so diagnostic line
+  // order cannot relabel the geolocation refusal.
+  {
+    class: "export-kind-conflict",
+    pattern: /package contract value export .* cannot have function effects/i
+  },
   { class: "unresolved-parameter-behavior", pattern: /unresolved parameter behavior|UnknownCallbackExecution/i },
   {
     class: "dependency-contract-obligation",
-    pattern: /cannot statically expand external export-all|dependency contract for/i
+    pattern:
+      /cannot statically expand external export-all|dependency contract for|accepted dependency .* exact .* binding/i
   },
   { class: "cjs-only-entrypoint", pattern: /has only a CJS runtime target/i },
   // Ordered before `no-esm-runtime-target`: classification takes the most
@@ -125,10 +136,6 @@ const MARKERS = [
   {
     class: "export-kind-unresolved",
     pattern: /runtime kind no closed type answers/i
-  },
-  {
-    class: "export-kind-conflict",
-    pattern: /package contract value export .* cannot have function effects/i
   },
   { class: "type-facts-failure", pattern: /native Solid compiler facts error|type facts|typefacts protocol/i },
   { class: "reactive-source-uncaptured", pattern: /ReactiveSourceUncaptured/ },
@@ -215,6 +222,11 @@ function extractDependencyContractDetail(text) {
   if (exportAll) {
     detail.module = exportAll[1];
     attachPathDetail(detail, exportAll[2]);
+    return detail;
+  }
+  const acceptedBinding = /accepted dependency (\S+) has no exact (?:runtime|declaration) binding/.exec(text);
+  if (acceptedBinding) {
+    detail.module = acceptedBinding[1];
     return detail;
   }
   const depContract = /dependency contract for (\S+) has no entrypoint matching "([^"]*)"/.exec(text);

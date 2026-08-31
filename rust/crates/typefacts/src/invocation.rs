@@ -48,6 +48,18 @@ pub struct InvocationDemand {
     pub census: bool,
 }
 
+/// One exact expression whose compiler-resolved value is needed for package
+/// certification. The caller normally points this at a deterministic import
+/// binding in a verifier-owned harness; the producer still resolves the exact
+/// expression, alias target, declaration, and recursive value tree itself.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportValueDemand {
+    pub location: Location,
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub callable_depth: usize,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ArgumentBindingDisposition {
@@ -244,6 +256,31 @@ pub struct InvocationValueFact {
     pub open_reasons: Vec<Arc<str>>,
 }
 
+/// Exact compiler answer for one demanded exported-value expression.
+///
+/// `complete` closes expression selection, alias resolution, and declaration
+/// identity only. Recursive value and callable-path closure remain local to
+/// `value` and `callable_paths`; an Unknown/open leaf can never be promoted by
+/// this outer bit.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExportValueTranscript {
+    pub location: Location,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub query_name: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target: Arc<str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<ResolvedDeclaration>,
+    pub value: InvocationValueFact,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callable_paths: Vec<CallablePathFact>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub complete: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_reasons: Vec<Arc<str>>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelectedParameter {
@@ -413,6 +450,12 @@ pub struct InvocationAnswer {
     pub envelope: InvocationEnvelope,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportValueAnswer {
+    pub transcripts: Vec<ExportValueTranscript>,
+    pub envelope: InvocationEnvelope,
+}
+
 /// Verifier-owned identity that a certification invocation must be bound to.
 ///
 /// This value is deliberately absent from the Type Facts wire model. The live
@@ -569,6 +612,26 @@ pub struct LiveInvocationAnswer {
 impl LiveInvocationAnswer {
     #[must_use]
     pub const fn answer(&self) -> &InvocationAnswer {
+        &self.answer
+    }
+
+    #[must_use]
+    pub const fn identity(&self) -> &LiveProducerSessionIdentity {
+        &self.identity
+    }
+}
+
+/// Authority-bearing answer for the distinct exported-value operation. It
+/// deliberately cannot be converted from or to [`LiveInvocationAnswer`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LiveExportValueAnswer {
+    pub(crate) answer: ExportValueAnswer,
+    pub(crate) identity: LiveProducerSessionIdentity,
+}
+
+impl LiveExportValueAnswer {
+    #[must_use]
+    pub const fn answer(&self) -> &ExportValueAnswer {
         &self.answer
     }
 

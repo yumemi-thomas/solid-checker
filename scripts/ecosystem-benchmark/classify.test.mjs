@@ -24,6 +24,8 @@ const EXPORT_KIND_UNRESOLVED_LINE =
   'solid-checker: @solid-primitives/platform has no certifiable runtime entrypoint; .: solid-checker-rust: emit package contract: entry file exports "isApple", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind "value" would certify it invokes no caller-supplied callback';
 const EXPORT_KIND_CONFLICT_LINE =
   "solid-checker: package contract value export .:createGeolocation cannot have function effects";
+const GEOLOCATION_ATTRIBUTION_LINE =
+  'solid-checker:unknown-claim-attribution={"obligation":"UnknownCallbackExecution","exports":["createGeolocation"]}';
 
 // Real captured lines from live `contract generate` runs against
 // @tanstack/solid-query, corvu, @solidjs/meta, and @solid-primitives/map (see
@@ -36,6 +38,8 @@ const EXPORT_ALL_TANSTACK =
   'solid-checker: solid-checker-rust: emit package contract: cannot statically expand external export-all "@tanstack/query-core" from /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/3ecbd094-f261-4184-87e6-30b4ed4fd56e/scratchpad/p3/_tanstack_solid-query/node_modules/@tanstack/solid-query/src/index.ts; generate and pass its dependency contract with --contract';
 const EXPORT_ALL_CORVU =
   'solid-checker: solid-checker-rust: emit package contract: cannot statically expand external export-all "@corvu/accordion" from /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/3ecbd094-f261-4184-87e6-30b4ed4fd56e/scratchpad/p3/corvu/node_modules/corvu/dist/accordion.jsx; generate and pass its dependency contract with --contract';
+const ACCEPTED_BINDING_CORVU =
+  "accepted dependency @corvu/disclosure has no exact runtime binding for export useContext";
 const CONDITIONAL_META_LINE =
   'solid-checker: @solidjs/meta .:Stylesheet has different semantics across overlapping conditional-export branches [] and ["solid"]; schema v1 cannot represent export-map fallback ordering, so split the entrypoint or review an explicit contract';
 const PARAMETER_BEHAVIOR_MAP_LINE =
@@ -257,6 +261,29 @@ test("every failure class is reachable and each documented stderr shape maps to 
     if (id === "unclassified") continue;
     assert.ok(produced.has(id), `no case reached class ${id}`);
   }
+});
+
+test("terminal export-kind conflict wins over embedded callback attribution in either line order", () => {
+  for (const stderr of [
+    `${GEOLOCATION_ATTRIBUTION_LINE}\n${EXPORT_KIND_CONFLICT_LINE}`,
+    `${EXPORT_KIND_CONFLICT_LINE}\n${GEOLOCATION_ATTRIBUTION_LINE}`
+  ]) {
+    assert.equal(
+      classifyResult({ status: 2, stdout: "", stderr, phase: "generate" }).class,
+      "export-kind-conflict"
+    );
+  }
+});
+
+test("an exact accepted-binding frontier remains a dependency-contract obligation", () => {
+  const result = classifyResult({
+    status: 2,
+    stdout: "",
+    stderr: ACCEPTED_BINDING_CORVU,
+    phase: "generate"
+  });
+  assert.equal(result.class, "dependency-contract-obligation");
+  assert.equal(result.detail.module, "@corvu/disclosure");
 });
 
 test("ordering: the most specific marker wins when a message contains two markers", () => {

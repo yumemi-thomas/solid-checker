@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "vitest";
@@ -11,8 +11,11 @@ import {
   decideExitCode,
   defaultReportPaths,
   probeOutcome,
+  recommendedCertificationInnerConcurrency,
+  recommendedCertificationConcurrency,
   recommendedConcurrency,
   resolveProbeIdFilter,
+  unknownExplicitProbeIds,
   runBenchmark,
   runScope,
   startProgressHeartbeat
@@ -154,6 +157,51 @@ test("the manifest's exact registry integrity reaches contract generation", asyn
   assert.equal(generateCalls[0].integrity, manifest.rows[0].integrity);
 });
 
+test("certification receives the proposal refusal audit from the retained generation project", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-refusal-forwarding-"));
+  const hooks = successHooks();
+  let generatedAuditPath = "";
+  let certifiedAuditPath = "";
+  hooks.mkProject = async () => {
+    const projectDir = join(temporary, "project");
+    const outputDir = join(temporary, "output");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    return { projectDir, outputDir };
+  };
+  hooks.generateContract = async ({ outputPath }) => {
+    generatedAuditPath = `${outputPath}.refusals.json`;
+    writeFileSync(generatedAuditPath, JSON.stringify({
+      format: "solid-checker-contract-proposal-refusals",
+      refusalVersion: 1,
+      package: { name: "@solid-primitives/alpha", version: "1.0.0" },
+      refusals: []
+    }));
+    return {
+      status: 0,
+      stdout: `generated pkg@1.0.0 contract with 1 entrypoints at ${outputPath}; review plan /tmp/plan.json (3 checklist items)`,
+      stderr: "",
+      timedOut: false
+    };
+  };
+  hooks.attemptCertification = async ({ proposalRefusalAudit }) => {
+    certifiedAuditPath = proposalRefusalAudit;
+    assert.equal(existsSync(proposalRefusalAudit), true);
+    return { status: 0, stdout: "", stderr: "", timedOut: false };
+  };
+  try {
+    await runBenchmark({
+      manifest,
+      hooks,
+      options: { concurrency: 1, certificationConcurrency: 1, attemptCertification: true }
+    });
+    assert.equal(certifiedAuditPath, generatedAuditPath);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 test("complete proposals retain an exact policy-2 certification refusal when attempts are enabled", async () => {
   const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
   const temporary = mkdtempSync(join(tmpdir(), "solid-checker-certification-attempt-"));
@@ -186,7 +234,15 @@ test("complete proposals retain an exact policy-2 certification refusal when att
             { family: "selected-signature", satisfiedByArtifactSnapshot: false }
           ]
         }],
-        stageDurationsMs: { artifactAcquisition: 1, demandPlanning: 2 }
+        stageDurationsMs: { artifactAcquisition: 1, demandPlanning: 2 },
+        graphPreparation: {
+          rootCases: 18,
+          canonicalNodes: 120,
+          proposalGenerations: 120,
+          graphNodeReferences: 240,
+          nativeCertificationTransactions: 1,
+          typeFactsCaseSetBatches: 1
+        }
       })
     );
     return { status: 1, stdout: "", stderr: "refused", timedOut: false };
@@ -208,6 +264,14 @@ test("complete proposals retain an exact policy-2 certification refusal when att
       refusalCount: 1,
       durationMs: 0,
       stageDurationsMs: { artifactAcquisition: 1, demandPlanning: 2 },
+      graphPreparation: {
+        rootCases: 18,
+        canonicalNodes: 120,
+        proposalGenerations: 120,
+        graphNodeReferences: 240,
+        nativeCertificationTransactions: 1,
+        typeFactsCaseSetBatches: 1
+      },
       demandCountsByFamily: { "package-identity": 1, "selected-signature": 1 },
       artifactSatisfiedDemandsByFamily: { "package-identity": 1 },
       refusalCountsByFamily: {},
@@ -216,6 +280,220 @@ test("complete proposals retain an exact policy-2 certification refusal when att
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }
+});
+
+test("the shared pool drains certification during long generation without exceeding either cap", async () => {
+  const manifest = fourProbeManifest();
+  const events = [];
+  let generatedStarted = 0;
+  let generatedFinished = 0;
+  let activeWork = 0;
+  let maximumActiveWork = 0;
+  let activeCertifications = 0;
+  let maximumActiveCertifications = 0;
+  let releaseLongGeneration;
+  const mkProjectCalls = [];
+  const installCalls = [];
+  const cleanupCalls = [];
+  const generatedPackageRoots = [];
+  const certifiedPackageRoots = [];
+  const longGeneration = new Promise(resolve => {
+    releaseLongGeneration = resolve;
+  });
+  const hooks = successHooks({ mkProjectCalls, installCalls, cleanupCalls });
+  hooks.generateContract = async ({ packageRoot }) => {
+    generatedPackageRoots.push(packageRoot);
+    events.push(`generate:${packageRoot}`);
+    generatedStarted += 1;
+    activeWork += 1;
+    maximumActiveWork = Math.max(maximumActiveWork, activeWork);
+    if (packageRoot.includes("alpha")) await longGeneration;
+    activeWork -= 1;
+    generatedFinished += 1;
+    return {
+      status: 0,
+      stdout: "generated pkg@1.0.0 contract with 1 entrypoints at /tmp/out.json; review plan /tmp/plan.json (3 checklist items)",
+      stderr: "",
+      timedOut: false
+    };
+  };
+  hooks.attemptCertification = async ({ packageRoot }) => {
+    certifiedPackageRoots.push(packageRoot);
+    assert.ok(generatedStarted >= 2, "certification follows a completed generation");
+    if (generatedFinished < 4) releaseLongGeneration();
+    activeWork += 1;
+    maximumActiveWork = Math.max(maximumActiveWork, activeWork);
+    activeCertifications += 1;
+    maximumActiveCertifications = Math.max(
+      maximumActiveCertifications,
+      activeCertifications
+    );
+    events.push(`certify:${packageRoot}`);
+    await new Promise(resolveDelay => setTimeout(resolveDelay, 5));
+    activeCertifications -= 1;
+    activeWork -= 1;
+    return { status: 0, stdout: "", stderr: "", timedOut: false };
+  };
+
+  const results = await runBenchmark({
+    manifest,
+    hooks,
+    options: {
+      concurrency: 2,
+      certificationConcurrency: 1,
+      attemptCertification: true,
+      scheduleCosts: { "@solid-primitives/alpha@1.0.0|solid1|only": 100 }
+    }
+  });
+
+  assert.equal(maximumActiveCertifications, 1);
+  assert.ok(maximumActiveWork <= 2, `shared worker pool reached ${maximumActiveWork}`);
+  assert.equal(events.filter(event => event.startsWith("generate:")).length, 4);
+  assert.equal(events.filter(event => event.startsWith("certify:")).length, 4);
+  assert.equal(mkProjectCalls.length, 4, "certification reuses each generation project");
+  assert.equal(installCalls.length, 4, "certification reuses each verified install");
+  assert.equal(cleanupCalls.length, 4, "each transferred project lease is released once");
+  assert.deepEqual(
+    [...certifiedPackageRoots].sort(),
+    [...generatedPackageRoots].sort(),
+    "fresh certification reads the exact verified generation project"
+  );
+  assert.ok(
+    events.findIndex(event => event.startsWith("certify:")) > 0,
+    "certification should run after generation work was claimed"
+  );
+  assert.ok(results.every(result => result.certificationAttempt.status === "certified"));
+});
+
+test("dedicated certification slots never displace the generation width", async () => {
+  const manifest = fourProbeManifest();
+  let activeGenerations = 0;
+  let maximumActiveGenerations = 0;
+  let activeAtFirstCertification = null;
+  let generationStarts = 0;
+  let releaseFirstGenerationWave;
+  let releaseRefilledGeneration;
+  let releaseBlockedGenerations;
+  const firstGenerationWave = new Promise(resolve => {
+    releaseFirstGenerationWave = resolve;
+  });
+  const blockedGenerations = new Promise(resolve => {
+    releaseBlockedGenerations = resolve;
+  });
+  const refilledGeneration = new Promise(resolve => {
+    releaseRefilledGeneration = resolve;
+  });
+  const hooks = successHooks();
+  hooks.generateContract = async ({ packageRoot }) => {
+    generationStarts += 1;
+    activeGenerations += 1;
+    maximumActiveGenerations = Math.max(maximumActiveGenerations, activeGenerations);
+    if (activeGenerations === 2) releaseFirstGenerationWave();
+    if (generationStarts === 3) releaseRefilledGeneration();
+    await firstGenerationWave;
+    if (!packageRoot.includes("alpha")) await blockedGenerations;
+    activeGenerations -= 1;
+    return {
+      status: 0,
+      stdout: "generated pkg@1.0.0 contract with 1 entrypoints at /tmp/out.json; review plan /tmp/plan.json (3 checklist items)",
+      stderr: "",
+      timedOut: false
+    };
+  };
+  hooks.attemptCertification = async () => {
+    if (activeAtFirstCertification === null) {
+      await refilledGeneration;
+      activeAtFirstCertification = activeGenerations;
+      releaseBlockedGenerations();
+    }
+    return { status: 0, stdout: "", stderr: "", timedOut: false };
+  };
+
+  const results = await runBenchmark({
+    manifest,
+    hooks,
+    options: {
+      concurrency: 2,
+      certificationConcurrency: 4,
+      attemptCertification: true
+    }
+  });
+
+  assert.equal(maximumActiveGenerations, 2);
+  assert.equal(
+    activeAtFirstCertification,
+    2,
+    "certification must use a dedicated slot after generation is refilled"
+  );
+  assert.ok(results.every(result => result.certificationAttempt.status === "certified"));
+});
+
+test("an unexpected generation result releases its transferred project lease", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const cleanupCalls = [];
+  const hooks = successHooks({ cleanupCalls });
+  hooks.installPackages = async () => undefined;
+
+  await assert.rejects(
+    runBenchmark({ manifest, hooks, options: { concurrency: 1 } }),
+    /installedVersions/
+  );
+  assert.equal(cleanupCalls.length, 1, "a rejected generation must not orphan its project");
+});
+
+test("an unexpected certification result still releases the reused project", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const cleanupCalls = [];
+  const hooks = successHooks({ cleanupCalls });
+  hooks.attemptCertification = async () => undefined;
+
+  await assert.rejects(
+    runBenchmark({
+      manifest,
+      hooks,
+      options: {
+        concurrency: 1,
+        certificationConcurrency: 1,
+        attemptCertification: true
+      }
+    }),
+    /status/
+  );
+  assert.equal(cleanupCalls.length, 1, "a rejected certification must not orphan its project");
+});
+
+test("certification expands past the install-safe generation width after proposal work drains", async () => {
+  const manifest = fourProbeManifest();
+  let activeCertifications = 0;
+  let maximumActiveCertifications = 0;
+  const hooks = successHooks();
+  hooks.attemptCertification = async () => {
+    activeCertifications += 1;
+    maximumActiveCertifications = Math.max(
+      maximumActiveCertifications,
+      activeCertifications
+    );
+    await new Promise(resolveDelay => setTimeout(resolveDelay, 10));
+    activeCertifications -= 1;
+    return { status: 0, stdout: "", stderr: "", timedOut: false };
+  };
+
+  const results = await runBenchmark({
+    manifest,
+    hooks,
+    options: {
+      concurrency: 2,
+      certificationConcurrency: 4,
+      attemptCertification: true
+    }
+  });
+
+  assert.ok(
+    maximumActiveCertifications > 2,
+    `certification drain stayed at generation width ${maximumActiveCertifications}`
+  );
+  assert.ok(maximumActiveCertifications <= 4);
+  assert.ok(results.every(result => result.certificationAttempt.status === "certified"));
 });
 
 test("a timeout during generation produces a timeout result and the run continues", async () => {
@@ -302,6 +580,51 @@ test("a generation that refused entrypoints is partial-success, not success", as
   }
 });
 
+test("a full generation refusal retains its structured refusal census", async () => {
+  const manifest = { ...fourProbeManifest(), rows: [fourProbeManifest().rows[0]] };
+  const temporary = mkdtempSync(join(tmpdir(), "solid-checker-benchmark-refusal-audit-"));
+  const hooks = successHooks();
+  hooks.mkProject = async () => {
+    const projectDir = join(temporary, "project");
+    const outputDir = join(temporary, "output");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    return { projectDir, outputDir };
+  };
+  hooks.generateContract = async ({ outputPath }) => {
+    writeFileSync(
+      `${outputPath}.refusals.json`,
+      JSON.stringify({
+        format: "solid-checker-contract-proposal-refusals",
+        refusalVersion: 1,
+        package: { name: "@solid-primitives/alpha", version: "1.0.0" },
+        refusals: [
+          { entrypoint: ".", conditions: [], stage: "artifact-case", reason: "first" },
+          { entrypoint: "./sub", conditions: [], stage: "proposal-merge", reason: "second" }
+        ]
+      })
+    );
+    return {
+      status: 2,
+      stdout: "",
+      stderr: "solid-checker: no certifiable artifact case; 2 case(s) refused; first refusal: .: first",
+      timedOut: false
+    };
+  };
+  try {
+    const [result] = await runBenchmark({ manifest, hooks, options: { concurrency: 1 } });
+    assert.equal(result.outcome, "failure");
+    assert.equal(result.contractContent, null);
+    assert.equal(result.refusedArtifactCases, 2);
+    assert.deepEqual(result.artifactCaseRefusals.map(refusal => refusal.stage), [
+      "artifact-case",
+      "proposal-merge"
+    ]);
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+});
+
 test("probeOutcome files a complete contract, a partial one, and a failure separately", () => {
   assert.equal(probeOutcome("success"), "success");
   assert.equal(probeOutcome("partial-success"), "partial-success");
@@ -375,6 +698,45 @@ test("results are returned in deterministic manifest order even when hooks resol
     results.map(r => r.package),
     ["@solid-primitives/alpha", "@solid-primitives/bravo", "@solid-primitives/charlie", "@solid-primitives/delta"],
     "results must follow manifest order regardless of which hook resolved first"
+  );
+});
+
+test("historical cost hints schedule long probes first without changing report order", async () => {
+  const manifest = fourProbeManifest();
+  const installCalls = [];
+  const results = await runBenchmark({
+    manifest,
+    hooks: successHooks({ installCalls }),
+    options: {
+      concurrency: 1,
+      scheduleCosts: {
+        "@solid-primitives/alpha@1.0.0|solid1|only": 1,
+        "@solid-primitives/bravo@1.0.0|solid1|only": 100,
+        "@solid-primitives/charlie@1.0.0|solid1|only": 2,
+        "@solid-primitives/delta@1.0.0|solid1|only": 50
+      }
+    }
+  });
+
+  assert.deepEqual(
+    installCalls.map(call =>
+      Object.keys(call.expected).find(name => name.startsWith("@solid-primitives"))
+    ),
+    [
+      "@solid-primitives/bravo",
+      "@solid-primitives/delta",
+      "@solid-primitives/charlie",
+      "@solid-primitives/alpha"
+    ]
+  );
+  assert.deepEqual(
+    results.map(result => result.package),
+    [
+      "@solid-primitives/alpha",
+      "@solid-primitives/bravo",
+      "@solid-primitives/charlie",
+      "@solid-primitives/delta"
+    ]
   );
 });
 
@@ -471,11 +833,33 @@ test("resolveProbeIdFilter returns null (meaning: run everything) when no filter
   assert.equal(resolveProbeIdFilter({ manifest }), null);
 });
 
-test("recommendedConcurrency follows available CPUs but caps process fan-out at eight", () => {
+test("recommendedConcurrency bounds Bun install and outer proposal contention", () => {
   assert.equal(recommendedConcurrency(1), 1);
   assert.equal(recommendedConcurrency(4), 4);
+  assert.equal(recommendedConcurrency(8), 8);
   assert.equal(recommendedConcurrency(12), 8);
+  assert.equal(recommendedConcurrency(14), 8);
+  assert.equal(recommendedConcurrency(32), 8);
   assert.equal(recommendedConcurrency(Number.NaN), 4);
+});
+
+test("recommendedCertificationConcurrency fills the bounded drain pool", () => {
+  assert.equal(recommendedCertificationConcurrency(1), 1);
+  assert.equal(recommendedCertificationConcurrency(8), 8);
+  assert.equal(recommendedCertificationConcurrency(12), 12);
+  assert.equal(recommendedCertificationConcurrency(14), 14);
+  assert.equal(recommendedCertificationConcurrency(32), 14);
+  assert.equal(recommendedCertificationConcurrency(Number.NaN), 2);
+});
+
+test("recommendedCertificationInnerConcurrency preserves a host-wide native bound", () => {
+  assert.equal(recommendedCertificationInnerConcurrency(1, 14), 8);
+  assert.equal(recommendedCertificationInnerConcurrency(2, 14), 7);
+  assert.equal(recommendedCertificationInnerConcurrency(6, 14), 2);
+  assert.equal(recommendedCertificationInnerConcurrency(12, 14), 1);
+  assert.equal(recommendedCertificationInnerConcurrency(32, 14), 1);
+  assert.equal(recommendedCertificationInnerConcurrency(0, 14), 1);
+  assert.equal(recommendedCertificationInnerConcurrency(12, Number.NaN), 1);
 });
 
 test("the CLI progress heartbeat bounds silent runs without changing benchmark results", () => {
@@ -514,6 +898,27 @@ test("resolveProbeIdFilter narrows to a sentinel subset intersected with family/
     sentinelIds: ["@solid-primitives/alpha@1.0.0|solid1|only", "@solid-primitives/bravo@1.0.0|solid1|only"]
   });
   assert.deepEqual(ids.sort(), ["@solid-primitives/alpha@1.0.0|solid1|only", "@solid-primitives/bravo@1.0.0|solid1|only"]);
+});
+
+test("resolveProbeIdFilter accepts exact repeatable probe ids", () => {
+  const manifest = fourProbeManifest();
+  const ids = resolveProbeIdFilter({
+    manifest,
+    explicitProbeIds: ["@solid-primitives/bravo@1.0.0|solid1|only"]
+  });
+  assert.deepEqual(ids, ["@solid-primitives/bravo@1.0.0|solid1|only"]);
+});
+
+test("unknownExplicitProbeIds refuses a misspelled exact probe instead of permitting an empty measurement", () => {
+  const manifest = fourProbeManifest();
+  assert.deepEqual(
+    unknownExplicitProbeIds(manifest, [
+      "@solid-primitives/bravo@1.0.0|solid1|only",
+      "@solid-primitives/brav0@1.0.0|solid1|only",
+      "@solid-primitives/brav0@1.0.0|solid1|only"
+    ]),
+    ["@solid-primitives/brav0@1.0.0|solid1|only"]
+  );
 });
 
 test("runBenchmark honors an explicit probeIds filter", async () => {
@@ -615,6 +1020,10 @@ test("a scope slug is order-independent so the same filters always name one file
   assert.equal(
     runScope({ families: ["tanstack", "corvu"], solidTargets: ["2", "1"] }).slug,
     runScope({ families: ["corvu", "tanstack"], solidTargets: ["1", "2"] }).slug
+  );
+  assert.equal(
+    runScope({ probeIds: ["probe-b", "probe-a"] }).slug,
+    runScope({ probeIds: ["probe-a", "probe-b"] }).slug
   );
 });
 

@@ -549,6 +549,64 @@ impl Connection {
         Ok(response)
     }
 
+    /// Waits only long enough for the optional graceful-close acknowledgement.
+    ///
+    /// A producer may exit after failing the preceding request. Its reader
+    /// thread can observe EOF and drain the then-current pending map just
+    /// before `Session::drop` registers the close request. An unbounded receive
+    /// in that race strands the verifier forever because no reader remains to
+    /// answer or fail the newly registered request.
+    fn wait_for_close(
+        &self,
+        sent: SentRequest,
+        timeout: Duration,
+    ) -> Result<Response, SessionError> {
+        let SentRequest {
+            request_id,
+            receiver,
+            sent_at,
+            request_send,
+            request_bytes,
+            cancellable,
+        } = sent;
+        debug_assert!(!cancellable, "close requests are never cancellable");
+        let response = match receiver.recv_timeout(timeout) {
+            Ok(response) => response.map_err(SessionError::Process),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if let Ok(mut pending) = self.pending.lock() {
+                    pending.remove(&request_id);
+                }
+                Err(SessionError::Process(
+                    "producer did not acknowledge close before termination".into(),
+                ))
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(SessionError::Process(
+                "producer response channel closed during close".into(),
+            )),
+        }?;
+        let mut response = response;
+        response.client_roundtrip_ns =
+            u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        response.client_request_send_ns =
+            u64::try_from(request_send.as_nanos()).unwrap_or(u64::MAX);
+        response.client_request_bytes = request_bytes;
+        if response.request_id != request_id {
+            return Err(SessionError::InvalidResponse(
+                "request identity mismatch".into(),
+            ));
+        }
+        if !response.ok {
+            let error = response.error.ok_or_else(|| {
+                SessionError::InvalidResponse("error response has no body".into())
+            })?;
+            return Err(SessionError::Service {
+                code: error.code,
+                message: error.message,
+            });
+        }
+        Ok(response)
+    }
+
     fn exchange(&self, request: &mut Request) -> Result<Response, SessionError> {
         let sent = self.send(request)?;
         self.wait(sent)
@@ -1100,6 +1158,100 @@ impl Session {
         })
     }
 
+    /// Returns exact compiler value and recursive callable-path facts for
+    /// verifier-owned query expressions. It never selects or invents a call.
+    pub fn export_values(
+        &mut self,
+        demands: &[crate::ExportValueDemand],
+    ) -> Result<crate::ExportValueAnswer, SessionError> {
+        self.ensure_open()?;
+        if demands
+            .iter()
+            .any(|demand| demand.callable_depth > crate::MAX_INVOCATION_CALLABLE_DEPTH)
+        {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value callable depth exceeds {}",
+                crate::MAX_INVOCATION_CALLABLE_DEPTH
+            )));
+        }
+        let mut request = request(Operation::ExportValues, &self.project_id, self.generation);
+        request.export_value_demands = demands.to_vec();
+        let response = self.exchange(request)?;
+        let envelope = response.export_value_envelope.ok_or_else(|| {
+            SessionError::InvalidResponse("export-value response has no identity envelope".into())
+        })?;
+        if response.export_value_transcripts.len() != demands.len() {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value response has {} transcripts for {} demands",
+                response.export_value_transcripts.len(),
+                demands.len()
+            )));
+        }
+        for (index, (transcript, demand)) in response
+            .export_value_transcripts
+            .iter()
+            .zip(demands)
+            .enumerate()
+        {
+            if transcript.location != demand.location {
+                return Err(SessionError::InvalidResponse(format!(
+                    "export-value transcript {index} location does not match its demand"
+                )));
+            }
+            validate_export_value_transcript(transcript)?;
+        }
+        validate_export_value_envelope(&envelope, &self.project_id, self.generation, demands)?;
+        Ok(crate::ExportValueAnswer {
+            transcripts: response.export_value_transcripts,
+            envelope,
+        })
+    }
+
+    /// Acquires an exported-value answer from this exact pinned live process.
+    pub fn certification_export_values(
+        &mut self,
+        context: crate::CertificationInvocationContext,
+        demands: &[crate::ExportValueDemand],
+    ) -> Result<crate::LiveExportValueAnswer, SessionError> {
+        let pin = self.producer.certification_pin.clone().ok_or_else(|| {
+            SessionError::ProducerProvenance(
+                "ordinary producer sessions cannot issue certification evidence".into(),
+            )
+        })?;
+        let answer = self.export_values(demands)?;
+        let connection = self.connection.as_ref().ok_or(SessionError::Closed)?;
+        let demand_sha256 = crate::SourceHash::parse(answer.envelope.demand_sha256.to_string())?;
+        let schema_sha256 = crate::SourceHash::parse(connection.handshake.schema_hash.clone())?;
+        let evidence_root = live_invocation_evidence_root(
+            &self.session_id,
+            self.restart_epoch,
+            connection,
+            &pin,
+            &self.project_id,
+            self.generation,
+            &demand_sha256,
+            &context,
+        );
+        Ok(crate::LiveExportValueAnswer {
+            answer,
+            identity: crate::LiveProducerSessionIdentity {
+                session_id: self.session_id.clone(),
+                restart_epoch: self.restart_epoch,
+                process_id: connection.child.id(),
+                executable_sha256: connection.executable_sha256.clone(),
+                source_manifest_sha256: pin.source_manifest_sha256,
+                handshake_protocol: connection.handshake.protocol,
+                handshake_schema_sha256: schema_sha256,
+                handshake_build: connection.handshake.build_id.clone().into(),
+                project_id: self.project_id.clone().into(),
+                generation: self.generation,
+                demand_sha256,
+                context,
+                evidence_root,
+            },
+        })
+    }
+
     /// Acquires a certification answer from the exact pinned process owned by
     /// this live session.
     ///
@@ -1156,7 +1308,17 @@ impl Session {
             return Ok(());
         }
         let mut close = request(Operation::Close, &self.project_id, self.generation);
-        let result = self.exchange_once(&mut close);
+        let result = self
+            .connection
+            .as_ref()
+            .ok_or(SessionError::Closed)
+            .and_then(|connection| connection.send(&mut close))
+            .and_then(|sent| {
+                self.connection
+                    .as_ref()
+                    .ok_or(SessionError::Closed)?
+                    .wait_for_close(sent, Duration::from_millis(250))
+            });
         self.closed = true;
         if let Some(mut connection) = self.connection.take() {
             connection.terminate();
@@ -1810,6 +1972,7 @@ fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
         cancel_request_id: 0,
         module_graph: None,
         invocation_demands: Vec::new(),
+        export_value_demands: Vec::new(),
     }
 }
 
@@ -1856,6 +2019,74 @@ fn validate_invocation_envelope(
             ));
         }
         previous = Some(&*source.path);
+    }
+    Ok(())
+}
+
+fn validate_export_value_envelope(
+    envelope: &crate::InvocationEnvelope,
+    project_id: &str,
+    generation: u64,
+    demands: &[crate::ExportValueDemand],
+) -> Result<(), SessionError> {
+    if &*envelope.project_id != project_id || envelope.generation != generation {
+        return Err(SessionError::InvalidResponse(
+            "export-value envelope project or generation mismatch".into(),
+        ));
+    }
+    if &*envelope.schema_sha256 != v3::TYPE_FACTS_SCHEMA_SHA256
+        || &*envelope.producer_build != v3::TYPE_FACTS_BUILD_ID
+    {
+        return Err(SessionError::InvalidResponse(
+            "export-value envelope does not match the live handshake".into(),
+        ));
+    }
+    for (name, digest) in [
+        ("demand", &*envelope.demand_sha256),
+        ("module graph", &*envelope.module_graph_sha256),
+        ("schema", &*envelope.schema_sha256),
+    ] {
+        crate::SourceHash::parse(digest.to_owned()).map_err(|_| {
+            SessionError::InvalidResponse(format!("export-value {name} digest is invalid"))
+        })?;
+    }
+    if envelope.demand_sha256.as_ref() != export_value_demand_digest(demands) {
+        return Err(SessionError::InvalidResponse(
+            "export-value envelope demand digest does not match the request".into(),
+        ));
+    }
+    let mut previous = None;
+    for source in &envelope.sources {
+        crate::SourceHash::parse(source.sha256.to_string()).map_err(|_| {
+            SessionError::InvalidResponse("export-value source digest is invalid".into())
+        })?;
+        if previous.is_some_and(|path: &str| path >= &*source.path) {
+            return Err(SessionError::InvalidResponse(
+                "export-value source digests are not uniquely sorted".into(),
+            ));
+        }
+        previous = Some(&*source.path);
+    }
+    Ok(())
+}
+
+fn validate_export_value_transcript(
+    transcript: &crate::ExportValueTranscript,
+) -> Result<(), SessionError> {
+    validate_invocation_value(&transcript.value)?;
+    validate_callable_paths(
+        &transcript.callable_paths,
+        transcript.value.alternatives.len(),
+    )?;
+    if transcript.complete
+        && (transcript.query_name.is_empty()
+            || transcript.target.is_empty()
+            || transcript.declaration.is_none()
+            || !transcript.open_reasons.is_empty())
+    {
+        return Err(SessionError::InvalidResponse(
+            "complete export-value transcript lacks exact identity or remains open".into(),
+        ));
     }
     Ok(())
 }
@@ -2179,6 +2410,18 @@ fn invocation_demand_digest(demands: &[crate::InvocationDemand]) -> String {
     format!("sha256:{:x}", hasher.finalize())
 }
 
+fn export_value_demand_digest(demands: &[crate::ExportValueDemand]) -> String {
+    let mut hasher = Sha256::new();
+    hash_invocation_field(&mut hasher, "solid-checker:typefacts:export-values:v1");
+    for demand in demands {
+        hash_invocation_field(&mut hasher, &demand.location.path);
+        hash_invocation_field(&mut hasher, &demand.location.start_byte.to_string());
+        hash_invocation_field(&mut hasher, &demand.location.end_byte.to_string());
+        hash_invocation_field(&mut hasher, &demand.callable_depth.to_string());
+    }
+    format!("sha256:{:x}", hasher.finalize())
+}
+
 fn selected_signature_digest(
     kind: crate::CallKind,
     signature: &crate::SelectedSignature,
@@ -2289,7 +2532,7 @@ fn prepare_analyze_response(
         let candidate = retained.as_ref().ok_or_else(|| {
             SessionError::InvalidResponse("reuse response has no retained table".into())
         })?;
-        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V17
+        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V18
             || candidate.project_id() != expected_project
             || candidate.generation() != response.generation
         {
@@ -2311,7 +2554,7 @@ fn prepare_analyze_response(
         .map_err(SessionError::InvalidResponse)?;
     if transition.project_id.as_ref() != response.project_id.as_str()
         || transition.target_generation != response.generation
-        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V17
+        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V18
     {
         return Err(SessionError::InvalidResponse(
             "table transition identity does not match response".into(),
@@ -2675,7 +2918,7 @@ mod tests {
         files: Vec<crate::FileFact>,
     ) -> FactTable {
         FactTable::from_parts(
-            v3::TYPE_FACTS_TABLE_SCHEMA_V17,
+            v3::TYPE_FACTS_TABLE_SCHEMA_V18,
             1,
             "/p/tsconfig.json",
             sources,
@@ -2693,7 +2936,7 @@ mod tests {
     ) -> WireTableTransition {
         WireTableTransition {
             mode: TransitionMode::Delta,
-            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V17,
+            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V18,
             base_generation,
             target_generation,
             project_id: "/p/tsconfig.json".into(),
@@ -2744,6 +2987,8 @@ mod tests {
             unknown_import_paths: Vec::new(),
             invocation_transcripts: Vec::new(),
             invocation_envelope: None,
+            export_value_transcripts: Vec::new(),
+            export_value_envelope: None,
             client_decode_ns: 0,
             client_response_bytes: 0,
             client_request_send_ns: 0,

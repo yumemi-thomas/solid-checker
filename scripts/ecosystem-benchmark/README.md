@@ -40,8 +40,19 @@ make build-checker-debug
 make build-checker-release
 ```
 
-The runner defaults to `min(available CPUs, 8)` workers. `--concurrency N`
-remains available for controlled comparisons or memory-constrained hosts.
+The runner defaults to `min(available CPUs, 8)` install/generation workers.
+Historically expensive rows start first, while each package proposal retains a
+separately bounded adaptive fan-out across its exact source programs. On hosts
+with more than eight CPUs, already-complete rows certify in the otherwise-idle
+outer slots without reducing generation below eight. Once proposal work
+drains, certification can expand to `min(available CPUs, 14)` outer workers,
+with each child's ordinary artifact-analysis width reduced to preserve a
+host-wide bound. Certification
+reuses the exact install already verified for generation; native code still
+replays every archive, lockfile, graph root, source closure, proposal, and
+policy input before issuing a receipt. `--concurrency N` and
+`--certification-concurrency N` remain available for controlled comparisons or
+memory-constrained hosts.
 
 Each JSON result records `installDurationMs` and `generationDurationMs`
 separately. The Markdown report aggregates those as worker timings, with the

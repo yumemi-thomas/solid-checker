@@ -758,6 +758,7 @@ function describeScope(scope) {
   if (scope.sentinel) filters.push("sentinel subset");
   for (const family of scope.families ?? []) filters.push(`family ${family}`);
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
+  if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} exact probe id(s)`);
   return (
     `PARTIAL -- ${filters.join(", ")} (${ran} probes run). ` +
     "Not comparable to a full-corpus run."
@@ -816,6 +817,7 @@ export function buildReport({
       sentinel: scope?.sentinel ?? false,
       families: scope?.families ?? [],
       solidTargets: scope?.solidTargets ?? [],
+      probeIds: scope?.probeIds ?? [],
       includeSupplemental: scope?.includeSupplemental ?? false,
       probesRun: everyResult.length
     },

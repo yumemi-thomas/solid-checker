@@ -9,6 +9,7 @@ import {
   CLAIM_DOMAINS,
   isUnknownClaim,
   readContractContent,
+  readProposalRefusalAudit,
   refusalPathFor,
   reviewPlanPathFor,
   summarizeContract,
@@ -61,6 +62,15 @@ test("stable-v1 unknown value leaves use the model vocabulary, not legacy sentin
 test("wire measurement counts export names, open domains, and operation kinds", () => {
   const summary = summarizeContractDocument(document());
   assert.equal(summary.exportsTotal, 2);
+  assert.deepEqual(summary.artifactCases, [
+    {
+      entrypoint: ".",
+      caseIndex: 0,
+      artifact: null,
+      declarations: null,
+      resolution: null
+    }
+  ]);
   assert.equal(summary.exportsProven, 1);
   assert.equal(summary.exportsWithUnknown, 1);
   assert.equal(summary.unknownByDomain.callbacks, 0);
@@ -106,6 +116,32 @@ test("readContractContent uses the proposal-plan sibling", () => {
     assert.equal(content.wireBytes.proposalPlan, Buffer.byteLength(JSON.stringify(plan())));
     assert.equal(content.artifactCasesRefused, 1);
     assert.equal(content.artifactCaseRefusals[0].entrypoint, "./types/*");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a refusal audit remains readable when no contract document was emitted", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-refusal-only-"));
+  const path = join(root, "solid-reactivity.json");
+  try {
+    writeFileSync(
+      refusalPathFor(path),
+      JSON.stringify({
+        format: "solid-checker-contract-proposal-refusals",
+        refusalVersion: 1,
+        package: { name: "pkg", version: "1.0.0" },
+        refusals: [
+          { entrypoint: ".", conditions: [], stage: "artifact-case", reason: "first" },
+          { entrypoint: "./sub", conditions: ["browser"], stage: "proposal-merge", reason: "second" }
+        ]
+      })
+    );
+    assert.deepEqual(readProposalRefusalAudit(path)?.refusals.map(item => item.stage), [
+      "artifact-case",
+      "proposal-merge"
+    ]);
+    assert.equal(readContractContent(path).measured, false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

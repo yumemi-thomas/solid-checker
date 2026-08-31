@@ -2,11 +2,13 @@ use sha2::{Digest, Sha256};
 use solid_facts::compiler::{AnalysisRequest, CompilerOptions, ExecutionMap};
 use solid_facts_backend::{
     ArtifactResolutionFailure, ArtifactResolver, BundledEvidenceStore, ClosureManifest,
-    ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
-    ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
-    ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
-    StandaloneResolutionAdapter, load_accepted_contract,
+    ContractFailure, ContractWorkflowError, EvidenceKey, EvidenceStore, EvidenceStoreFailure,
+    HostResolutionAdapter, ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority,
+    ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget,
+    ResolvedFile, ResolvedImport, StandaloneResolutionAdapter, encode_inferred_entrypoint_workflow,
+    load_accepted_contract, merge_contract_proposals, merge_plans,
 };
+use solid_reactive_ir::{ContractClaim, ContractExport, ContractReactiveRead};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::{
@@ -67,6 +69,129 @@ fn resolved() -> ResolvedImport {
 
 fn digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[test]
+fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpath() {
+    let mut subpath = resolved();
+    subpath.specifier = "solid-js/web".into();
+    subpath.requested_entrypoint = "./web".into();
+    let exports = BTreeMap::from([(
+        "version".into(),
+        ContractExport {
+            kind: "value".into(),
+            reactive_reads: ContractClaim::Known(Vec::new()),
+            returns: ContractClaim::Known(None),
+            callbacks: ContractClaim::Known(Vec::new()),
+            owner_requirements: ContractClaim::Known(Vec::new()),
+            async_behavior: ContractClaim::Known(String::new()),
+            open_claims: Default::default(),
+        },
+    )]);
+
+    assert!(
+        encode_inferred_entrypoint_workflow(
+            "solid-js",
+            "2.0.0-rc.3",
+            "./web",
+            exports.clone(),
+            &subpath,
+            false,
+        )
+        .is_ok()
+    );
+    assert!(matches!(
+        encode_inferred_entrypoint_workflow(
+            "solid-js",
+            "2.0.0-rc.3",
+            ".",
+            exports,
+            &subpath,
+            false,
+        ),
+        Err(ContractWorkflowError::Contract(
+            ContractFailure::IdentityMismatch { .. }
+        ))
+    ));
+}
+
+#[test]
+fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
+    let exports = BTreeMap::from([(
+        "version".into(),
+        ContractExport {
+            kind: "function".into(),
+            reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+                kind: "parameter-member".into(),
+                label: String::new(),
+                parameter: Some(0),
+                member: None,
+            }]),
+            returns: ContractClaim::Known(None),
+            callbacks: ContractClaim::Known(Vec::new()),
+            owner_requirements: ContractClaim::Known(Vec::new()),
+            async_behavior: ContractClaim::Known(String::new()),
+            open_claims: Default::default(),
+        },
+    )]);
+    let mut primary = resolved();
+    primary.runtime_trace = ResolutionTrace {
+        branch: "/exports/./node".into(),
+        steps: vec![ResolutionTraceStep {
+            condition: "node".into(),
+            target: "./dist/solid.js".into(),
+        }],
+    };
+    primary.declaration_trace = ResolutionTrace {
+        branch: "/exports/./types".into(),
+        steps: vec![ResolutionTraceStep {
+            condition: "types".into(),
+            target: "./types/index.d.ts".into(),
+        }],
+    };
+    let first = encode_inferred_entrypoint_workflow(
+        "solid-js",
+        "2.0.0-rc.3",
+        ".",
+        exports.clone(),
+        &primary,
+        false,
+    )
+    .unwrap();
+    let mut alternate = resolved();
+    alternate.runtime_trace = ResolutionTrace {
+        branch: "/exports/./browser".into(),
+        steps: vec![ResolutionTraceStep {
+            condition: "browser".into(),
+            target: "./dist/solid.js".into(),
+        }],
+    };
+    alternate.declaration_trace = primary.declaration_trace.clone();
+    let second = encode_inferred_entrypoint_workflow(
+        "solid-js",
+        "2.0.0-rc.3",
+        ".",
+        exports,
+        &alternate,
+        false,
+    )
+    .unwrap();
+    let merged = merge_contract_proposals(
+        [first.document.as_slice(), second.document.as_slice()],
+        false,
+    )
+    .unwrap();
+    let plan = merge_plans(
+        &merged,
+        [(first.document, first.plan), (second.document, second.plan)],
+    )
+    .unwrap();
+    let plan: serde_json::Value = serde_json::from_slice(&plan).unwrap();
+    assert!(
+        plan["closureCandidates"]
+            .as_array()
+            .is_some_and(|candidates| !candidates.is_empty())
+    );
 }
 
 #[test]

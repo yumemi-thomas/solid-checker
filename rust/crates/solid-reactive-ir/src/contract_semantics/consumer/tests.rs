@@ -236,7 +236,20 @@ fn analyzer_index_binds_semantics_to_the_exact_import_occurrence() {
     assert_eq!(index.semantic_identity()[0].importer, "/project/a.ts");
     assert!(index.resolve("/project/a.ts", "pkg", &export).is_ok());
     assert_eq!(
+        index.public_export_names("/project/a.ts", "pkg").unwrap(),
+        BTreeSet::from(["run".into()])
+    );
+    assert_eq!(
         index.resolve("/project/b.ts", "pkg", &export).unwrap_err(),
+        SemanticQueryError::MissingImport {
+            importer: "/project/b.ts".into(),
+            specifier: "pkg".into(),
+        }
+    );
+    assert_eq!(
+        index
+            .public_export_names("/project/b.ts", "pkg")
+            .unwrap_err(),
         SemanticQueryError::MissingImport {
             importer: "/project/b.ts".into(),
             specifier: "pkg".into(),

@@ -24,7 +24,9 @@ use solid_reactive_ir::{
 };
 
 use crate::{
-    artifact_resolution::{ResolvedImport, proposal_identity, select_and_bind},
+    artifact_resolution::{
+        ResolvedImport, proposal_identity, select_and_bind, select_and_bind_with_external_targets,
+    },
     contract_interface::ContractFailure,
 };
 
@@ -39,7 +41,19 @@ pub(crate) fn normalize_inferred_contract_with_candidates(
     inferred: &PackageContract,
     resolved: &ResolvedImport,
 ) -> Result<(NormalizedContract, Vec<SemanticClaimSubject>), ContractFailure> {
-    let selected = normalize_inferred_contract_identity(inferred, resolved)?;
+    normalize_inferred_contract_with_candidates_and_external_targets(
+        inferred,
+        resolved,
+        &BTreeSet::new(),
+    )
+}
+
+pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
+    inferred: &PackageContract,
+    resolved: &ResolvedImport,
+    external_targets: &BTreeSet<(String, String)>,
+) -> Result<(NormalizedContract, Vec<SemanticClaimSubject>), ContractFailure> {
+    let selected = normalize_inferred_contract_identity(inferred, resolved, external_targets)?;
     let package = selected.package().clone();
     let mut cases = selected.artifact_cases().to_vec();
     let mut candidates = Vec::new();
@@ -63,6 +77,7 @@ pub(crate) fn normalize_inferred_contract_with_candidates(
 fn normalize_inferred_contract_identity(
     inferred: &PackageContract,
     resolved: &ResolvedImport,
+    external_targets: &BTreeSet<(String, String)>,
 ) -> Result<NormalizedContract, ContractFailure> {
     let entrypoint = inferred
         .entrypoints
@@ -83,7 +98,11 @@ fn normalize_inferred_contract_identity(
     let normalized = ContractProposal::new(package, vec![artifact_case])
         .normalize()
         .map_err(model_failure)?;
-    select_and_bind(&normalized, resolved)
+    if external_targets.is_empty() {
+        select_and_bind(&normalized, resolved)
+    } else {
+        select_and_bind_with_external_targets(&normalized, resolved, external_targets)
+    }
 }
 
 fn normalize_export(

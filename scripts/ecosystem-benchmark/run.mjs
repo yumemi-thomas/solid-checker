@@ -31,6 +31,7 @@
 //   runner reported faithfully, it did not judge.
 
 import { spawn } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
@@ -38,7 +39,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { classifyResult, normalizeSignature } from "./lib/classify.mjs";
-import { readContractContent } from "./lib/contract-content.mjs";
+import { readContractContent, readProposalRefusalAudit } from "./lib/contract-content.mjs";
+import { planRecursiveDependencies } from "./lib/dependency-plan.mjs";
+import {
+  collectExternalEdges,
+  isDependencyCompositionRefusalText
+} from "./lib/external-edges.mjs";
 import {
   createProject,
   installPackages as bunInstall,
@@ -53,21 +59,38 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_MANIFEST = join(ROOT, "scripts/ecosystem-benchmark/manifest.json");
 const DEFAULT_SENTINEL = join(ROOT, "scripts/ecosystem-benchmark/sentinel.json");
 const DEFAULT_CLI = join(ROOT, "packages/cli/bin/solid-checker.mjs");
+const DEFAULT_SCHEDULE_REPORT = join(ROOT, "benchmarks/ecosystem/report.json");
 const DEFAULT_TIMEOUT_SECONDS = 300;
 const PROGRESS_HEARTBEAT_INTERVAL_MS = 30_000;
 
-// Each probe launches Bun and the native checker, so unconstrained fan-out
-// can exhaust memory on large hosts. Eight kept all cores busy on the measured
-// corpus without multiplying the checker process tree beyond a safe bound;
-// smaller machines follow their actual CPU availability instead of inheriting
-// a workstation-specific constant.
+// Eight generation jobs avoid the measured Bun/install and wide-proposal
+// contention cliff. Certification uses otherwise-idle host slots below, so
+// the long receipt drain does not force generation itself past this bound.
 export function recommendedConcurrency(parallelism = availableParallelism()) {
-  return Number.isInteger(parallelism) && parallelism > 0
-    ? Math.min(8, parallelism)
-    : 4;
+  if (!Number.isInteger(parallelism) || parallelism <= 0) return 4;
+  return Math.min(8, parallelism);
 }
 
 const DEFAULT_CONCURRENCY = recommendedConcurrency();
+
+// Certification is a large share of measured worker time. Let its drain phase
+// use the host directly while generation retains its smaller install-safe
+// outer pool; the child artifact-analysis width is derived separately below.
+export function recommendedCertificationConcurrency(parallelism = availableParallelism()) {
+  if (!Number.isInteger(parallelism) || parallelism <= 0) return 2;
+  return Math.min(14, parallelism);
+}
+
+const DEFAULT_CERTIFICATION_CONCURRENCY = recommendedCertificationConcurrency();
+
+export function recommendedCertificationInnerConcurrency(
+  certificationConcurrency,
+  parallelism = availableParallelism()
+) {
+  if (!Number.isInteger(certificationConcurrency) || certificationConcurrency <= 0) return 1;
+  if (!Number.isInteger(parallelism) || parallelism <= 0) return 1;
+  return Math.min(8, Math.max(1, Math.floor(parallelism / certificationConcurrency)));
+}
 
 // The real runner intentionally buffers each probe's child output so package
 // diagnostics become report data rather than interleaved console noise. Keep
@@ -235,17 +258,26 @@ export function runScope({
   sentinel = false,
   families = [],
   solidTargets = [],
+  probeIds = [],
   includeSupplemental = false
 } = {}) {
   const filters = [];
   if (sentinel) filters.push("sentinel");
   for (const family of [...families].sort()) filters.push(`family-${family}`);
   for (const target of [...solidTargets].sort()) filters.push(`solid${target}`);
+  if (probeIds.length) {
+    const digest = createHash("sha256")
+      .update([...probeIds].sort().join("\0"))
+      .digest("hex")
+      .slice(0, 12);
+    filters.push(`probes-${digest}`);
+  }
   return {
     kind: filters.length ? "filtered" : "full",
     sentinel,
     families: [...families].sort(),
     solidTargets: [...solidTargets].sort(),
+    probeIds: [...probeIds].sort(),
     includeSupplemental,
     // A stable, order-independent name for this scope. `full` owns the
     // canonical report path; every filter earns its own so it can never
@@ -270,15 +302,27 @@ function describeScopeShort(scope) {
   if (scope.sentinel) filters.push("sentinel");
   for (const family of scope.families ?? []) filters.push(`family=${family}`);
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
+  if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} explicit probe(s)`);
   return filters.length ? filters.join(" ") : "filtered";
 }
 
-export function resolveProbeIdFilter({ manifest, families = [], solidTargets = [], sentinelIds = null }) {
-  const noFilter = families.length === 0 && solidTargets.length === 0 && sentinelIds === null;
+export function resolveProbeIdFilter({
+  manifest,
+  families = [],
+  solidTargets = [],
+  sentinelIds = null,
+  explicitProbeIds = []
+}) {
+  const noFilter =
+    families.length === 0 &&
+    solidTargets.length === 0 &&
+    sentinelIds === null &&
+    explicitProbeIds.length === 0;
   if (noFilter) return null;
 
   const normalizedTargets = solidTargets.map(target => (target === "1" ? "solid1" : target === "2" ? "solid2" : target));
   const sentinelSet = sentinelIds ? new Set(sentinelIds) : null;
+  const explicitSet = explicitProbeIds.length ? new Set(explicitProbeIds) : null;
 
   const ids = [];
   // Resolving a filter over supplemental rows too is harmless -- it only maps
@@ -289,10 +333,20 @@ export function resolveProbeIdFilter({ manifest, families = [], solidTargets = [
     if (normalizedTargets.length && !normalizedTargets.includes(row.solidTarget)) continue;
     for (const probe of row.probes ?? []) {
       if (sentinelSet && !sentinelSet.has(probe.id)) continue;
+      if (explicitSet && !explicitSet.has(probe.id)) continue;
       ids.push(probe.id);
     }
   }
   return ids;
+}
+
+export function unknownExplicitProbeIds(manifest, explicitProbeIds = []) {
+  if (explicitProbeIds.length === 0) return [];
+  const known = new Set();
+  for (const row of [...(manifest?.rows ?? []), ...(manifest?.supplemental ?? [])]) {
+    for (const probe of row.probes ?? []) known.add(probe.id);
+  }
+  return [...new Set(explicitProbeIds)].filter(id => !known.has(id)).sort();
 }
 
 // Concurrency-limited map that always writes into a pre-sized array by
@@ -336,6 +390,9 @@ function buildResult({
   generatedEntrypoints,
   refusedEntrypoints = null,
   refusedArtifactCases = null,
+  artifactCaseRefusals = null,
+  externalEdges = [],
+  dependencyPlan = null,
   checklistItems,
   // What the emitted contract actually claims, as opposed to whether it was
   // emitted. Null for every probe that never wrote one; see
@@ -369,6 +426,9 @@ function buildResult({
     generatedEntrypoints,
     refusedEntrypoints,
     refusedArtifactCases,
+    artifactCaseRefusals,
+    externalEdges,
+    dependencyPlan,
     checklistItems,
     contractContent,
     outcome,
@@ -407,10 +467,12 @@ function readCertificationAttempt(result, auditPath, durationMs) {
       reason: null,
       durationMs,
       stageDurationsMs: audit?.stageDurationsMs ?? {},
+      graphPreparation: audit?.graphPreparation ?? null,
       demandCountsByFamily: {},
       artifactSatisfiedDemandsByFamily: {},
       refusalCountsByFamily: {},
-      refusalCountsByOwner: {}
+      refusalCountsByOwner: {},
+      ordinaryAnalysis: audit?.ordinaryAnalysis ?? null
     };
   }
   const countBy = (items, key) => {
@@ -439,6 +501,7 @@ function readCertificationAttempt(result, auditPath, durationMs) {
     refusalCount: refusals.length,
     durationMs,
     stageDurationsMs: audit?.stageDurationsMs ?? {},
+    graphPreparation: audit?.graphPreparation ?? null,
     demandCountsByFamily: countBy(demands, "family"),
     artifactSatisfiedDemandsByFamily: countBy(artifactSatisfied, "family"),
     refusalCountsByFamily: countBy(refusals, "family"),
@@ -474,7 +537,7 @@ function buildInfraFailureResult({ row, probe, error, phase, durationMs }) {
 
 async function runProbe(
   { row, probe },
-  { timeoutMs, keepTemp, attemptCertification },
+  { timeoutMs, keepTemp, attemptCertification, projectLease = null },
   hooks
 ) {
   const now = hooks.now ?? Date.now;
@@ -490,6 +553,7 @@ async function runProbe(
   }
 
   const { projectDir, outputDir } = project;
+  if (projectLease) projectLease.project = project;
 
   try {
     const installStart = now();
@@ -589,6 +653,46 @@ async function runProbe(
     // output directory: after cleanup there is nothing left to measure, and a
     // probe whose content went unread would be indistinguishable from a probe
     // whose contract had nothing in it.
+    const refusalAudit = readProposalRefusalAudit(outputPath);
+    const externalEdges = collectExternalEdges({
+      texts: [
+        genResult.stderr ?? "",
+        genResult.stdout ?? "",
+        ...(refusalAudit?.refusals ?? []).map(refusal => refusal.reason)
+      ],
+      projectDir,
+      packageRoot
+    });
+    const dependencyCases = (refusalAudit?.refusals ?? []).filter(refusal =>
+      isDependencyCompositionRefusalText(refusal.reason)
+    );
+    let dependencyPlan = null;
+    if (externalEdges.length > 0 && dependencyCases.length > 0) {
+      const planner = hooks.planDependencies ?? planRecursiveDependencies;
+      try {
+        dependencyPlan = planner({
+          projectDir,
+          rootPackageRoot: packageRoot,
+          rootPackage: row.package,
+          rootVersion: row.version,
+          rootIntegrity: row.integrity,
+          artifactCases: dependencyCases
+        });
+      } catch (error) {
+        dependencyPlan = {
+          schemaVersion: 1,
+          rootIdentity: { package: row.package, version: row.version, integrity: row.integrity },
+          status: "planner-failure",
+          complete: false,
+          roots: [],
+          nodes: [],
+          edges: [],
+          cycles: [],
+          leaves: [{ kind: "planner-failure", reason: error?.message ?? String(error) }],
+          graphDigest: null
+        };
+      }
+    }
     const contractContent = producedContract
       ? readContractContent(outputPath, genClass.detail?.refusedEntrypoints ?? 0)
       : null;
@@ -600,13 +704,17 @@ async function runProbe(
       const catalogPath = `${outputPath}.accepted-catalog`;
       let certificationResult;
       try {
+        const proposalRefusalAudit = `${outputPath}.refusals.json`;
         certificationResult = await hooks.attemptCertification({
           packageRoot,
           catalogPath,
           auditPath,
           timeoutMs,
           integrity: row.integrity,
-          entrypoints: probe.entrypoints ?? []
+          entrypoints: probe.entrypoints ?? [],
+          proposalRefusalAudit: existsSync(proposalRefusalAudit)
+            ? proposalRefusalAudit
+            : ""
         });
       } catch (error) {
         certificationResult = {
@@ -637,7 +745,10 @@ async function runProbe(
       refusedArtifactCases:
         genClass.detail?.refusalUnit === "artifact-case"
           ? genClass.detail.refusedCases
-          : null,
+          : refusalAudit?.refusals.length ?? null,
+      artifactCaseRefusals: refusalAudit?.refusals ?? null,
+      externalEdges,
+      dependencyPlan,
       checklistItems,
       contractContent,
       outcome: probeOutcome(genClass.class),
@@ -655,13 +766,131 @@ async function runProbe(
     // "unless --keep-temp": the decision lives here, in the run core, rather
     // than inside the hook, so a test can prove cleanup was skipped entirely
     // without needing a hook that behaves differently per flag.
-    if (!keepTemp) {
+    if (!keepTemp && !projectLease) {
       try {
         await hooks.cleanup({ projectDir, outputDir });
       } catch {
         // A cleanup failure (e.g. a file the package's install left
         // read-only) must never overwrite this probe's already-computed
         // result, and must never abort the run.
+      }
+    }
+  }
+}
+
+async function certifyCompleteProbe(item, { timeoutMs, keepTemp }, hooks) {
+  const certificationStart = hooks.now?.() ?? Date.now();
+  let project = item.project ?? null;
+  let auditPath = "";
+  let certificationResult;
+  try {
+    let installationVerified = project !== null;
+    if (!project) {
+      project = await hooks.mkProject({
+        probeId: item.result.probeId,
+        row: item.task.row,
+        probe: item.task.probe,
+        phase: "certification"
+      });
+      const specs = buildSpecs(item.task.row, item.task.probe);
+      const expected = buildExpectedVersions(item.task.row, item.task.probe);
+      let installResult;
+      try {
+        installResult = await hooks.installPackages({
+          projectDir: project.projectDir,
+          specs,
+          expected,
+          timeoutMs
+        });
+      } catch (error) {
+        installResult = {
+          status: 1,
+          stdout: "",
+          stderr: error?.stack ?? String(error),
+          timedOut: false,
+          installedVersions: {},
+          integrity: {}
+        };
+      }
+      const verification =
+        installResult.status === 0
+          ? verifyInstall({
+              expected,
+              versions: installResult.installedVersions ?? {},
+              integrity: installResult.integrity ?? {}
+            })
+          : { ok: false, problems: [] };
+      installationVerified = installResult.status === 0 && verification.ok;
+      if (!installationVerified) {
+        certificationResult = {
+          status: 1,
+          stdout: installResult.stdout ?? "",
+          stderr:
+            installResult.stderr?.trim() ||
+            verification.problems
+              .map(problem => `${problem.kind}: ${problem.package}`)
+              .join("; ") ||
+            "certification reinstall verification failed",
+          timedOut: installResult.timedOut ?? false
+        };
+      }
+    }
+    if (installationVerified) {
+      const outputPath = join(
+        project.outputDir,
+        `${sanitizeProbeId(item.result.probeId)}.json`
+      );
+      auditPath = `${outputPath}.certification-audit.json`;
+      const catalogPath = `${outputPath}.accepted-catalog`;
+      const packageRoot = packageInstallPath(
+        project.projectDir,
+        item.task.row.package
+      );
+      const proposalRefusalAudit = `${outputPath}.refusals.json`;
+      try {
+        certificationResult = await hooks.attemptCertification({
+          packageRoot,
+          catalogPath,
+          auditPath,
+          timeoutMs,
+          integrity: item.task.row.integrity,
+          entrypoints: item.task.probe.entrypoints ?? [],
+          proposalRefusalAudit: existsSync(proposalRefusalAudit)
+            ? proposalRefusalAudit
+            : ""
+        });
+      } catch (error) {
+        certificationResult = {
+          status: 1,
+          stdout: "",
+          stderr: error?.stack ?? String(error),
+          timedOut: false
+        };
+      }
+    }
+  } catch (error) {
+    certificationResult = {
+      status: 1,
+      stdout: "",
+      stderr: error?.stack ?? String(error),
+      timedOut: false
+    };
+  }
+  try {
+    const durationMs = (hooks.now?.() ?? Date.now()) - certificationStart;
+    item.result.certificationAttempt = readCertificationAttempt(
+      certificationResult,
+      auditPath,
+      durationMs
+    );
+    item.result.durationMs += durationMs;
+  } finally {
+    if (project && !keepTemp) {
+      try {
+        await hooks.cleanup(project);
+      } catch {
+        // Cleanup cannot rewrite already measured semantic results or replace
+        // a malformed certification result with a cleanup failure.
       }
     }
   }
@@ -677,6 +906,8 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
   const keepTemp = options.keepTemp ?? false;
   const attemptCertification = options.attemptCertification ?? false;
+  const certificationConcurrency =
+    options.certificationConcurrency ?? DEFAULT_CERTIFICATION_CONCURRENCY;
 
   if (attemptCertification && typeof hooks.attemptCertification !== "function") {
     throw new TypeError("attemptCertification requires an attemptCertification hook");
@@ -686,10 +917,173 @@ export async function runBenchmark({ manifest, probeIds = null, options = {}, ho
   const tasks = collectProbeTasks(manifest, idFilter, {
     includeSupplemental: Boolean(options.includeSupplemental)
   });
+  const scheduleCosts = options.scheduleCosts ?? {};
+  const scheduled = tasks
+    .map((task, manifestIndex) => ({
+      task,
+      manifestIndex,
+      cost: Number(scheduleCosts[task.probe.id]) || 0
+    }))
+    .sort((left, right) => right.cost - left.cost || left.manifestIndex - right.manifestIndex);
 
-  return mapConcurrent(tasks, concurrency, task =>
-    runProbe(task, { timeoutMs, keepTemp, attemptCertification }, hooks)
+  if (scheduled.length === 0) return [];
+
+  // Generation and certification share one host-bounded worker pool. When the
+  // certification bound is wider, its extra slots never displace the measured
+  // install-safe generation width; after proposal work drains, every slot may
+  // certify. Smaller explicit bounds retain the old shared-pool interleave.
+  const executed = [];
+  const certificationQueue = [];
+  const waiting = [];
+  let nextGeneration = 0;
+  let remainingGenerations = scheduled.length;
+  let activeGenerations = 0;
+  let activeCertifications = 0;
+  const generationWorkers = Math.max(1, Math.min(concurrency || 1, scheduled.length));
+  const certificationLimit = Math.max(1, certificationConcurrency || 1);
+  const dedicatedCertificationSlots = Math.max(
+    0,
+    certificationLimit - generationWorkers
   );
+  const workerCount = Math.max(
+    generationWorkers,
+    certificationLimit,
+    generationWorkers + dedicatedCertificationSlots
+  );
+  const interleavedCertificationLimit = dedicatedCertificationSlots > 0
+    ? dedicatedCertificationSlots
+    : Math.min(
+        certificationLimit,
+        Math.max(1, Math.floor(generationWorkers / 4))
+      );
+  const interleavedGenerationLimit = Math.max(
+    1,
+    generationWorkers - interleavedCertificationLimit
+  );
+  const wakeWorkers = () => {
+    for (const wake of waiting.splice(0)) wake();
+  };
+  const waitForWork = () => new Promise(resolve => waiting.push(resolve));
+  const takeWork = () => {
+    if (
+      dedicatedCertificationSlots === 0 &&
+      attemptCertification &&
+      certificationQueue.length > 0 &&
+      activeCertifications < interleavedCertificationLimit &&
+      activeGenerations >= interleavedGenerationLimit
+    ) {
+      activeCertifications += 1;
+      return { kind: "certification", item: certificationQueue.shift() };
+    }
+    if (nextGeneration < scheduled.length && activeGenerations < generationWorkers) {
+      activeGenerations += 1;
+      return { kind: "generation", scheduledTask: scheduled[nextGeneration++] };
+    }
+    if (
+      dedicatedCertificationSlots > 0 &&
+      attemptCertification &&
+      nextGeneration < scheduled.length &&
+      certificationQueue.length > 0 &&
+      activeCertifications < interleavedCertificationLimit
+    ) {
+      activeCertifications += 1;
+      return { kind: "certification", item: certificationQueue.shift() };
+    }
+    if (
+      attemptCertification &&
+      nextGeneration >= scheduled.length &&
+      certificationQueue.length > 0 &&
+      activeCertifications < Math.min(
+        certificationLimit,
+        Math.max(1, workerCount - activeGenerations)
+      )
+    ) {
+      activeCertifications += 1;
+      return { kind: "certification", item: certificationQueue.shift() };
+    }
+    if (remainingGenerations === 0 && certificationQueue.length === 0) return null;
+    return undefined;
+  };
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const work = takeWork();
+        if (work === null) return;
+        if (work === undefined) {
+          await waitForWork();
+          continue;
+        }
+        if (work.kind === "certification") {
+          try {
+            await certifyCompleteProbe(work.item, { timeoutMs, keepTemp }, hooks);
+          } finally {
+            activeCertifications -= 1;
+            wakeWorkers();
+          }
+          continue;
+        }
+
+        const projectLease = {};
+        let result;
+        let generationCompleted = false;
+        try {
+          result = await runProbe(
+            work.scheduledTask.task,
+            {
+              timeoutMs,
+              keepTemp,
+              attemptCertification: false,
+              projectLease
+            },
+            hooks
+          );
+          generationCompleted = true;
+        } finally {
+          activeGenerations -= 1;
+          if (!generationCompleted) {
+            remainingGenerations -= 1;
+            if (projectLease.project && !keepTemp) {
+              try {
+                await hooks.cleanup(projectLease.project);
+              } catch {
+                // Cleanup must not replace the harness failure that interrupted
+                // generation after ownership of the project was transferred.
+              }
+            }
+            wakeWorkers();
+          }
+        }
+        const item = {
+          manifestIndex: work.scheduledTask.manifestIndex,
+          task: work.scheduledTask.task,
+          result,
+          project: projectLease.project ?? null
+        };
+        executed.push(item);
+        remainingGenerations -= 1;
+        if (
+          attemptCertification &&
+          (result.class === "success" ||
+            (result.dependencyPlan?.complete === true &&
+              (result.dependencyPlan?.roots?.length ?? 0) > 0))
+        ) {
+          certificationQueue.push(item);
+        } else if (item.project && !keepTemp) {
+          try {
+            await hooks.cleanup(item.project);
+          } catch {
+            // Cleanup cannot rewrite the already measured probe result.
+          }
+        }
+        wakeWorkers();
+      }
+    })
+  );
+
+  return executed
+    .sort((left, right) => left.manifestIndex - right.manifestIndex)
+    .map(item => item.result);
 }
 
 // ---------------------------------------------------------------------------
@@ -705,6 +1099,7 @@ function usage() {
   --sentinel             run only the pinned sentinel subset
   --family <ID>          restrict to one family (repeatable)
   --solid <1|2>          restrict to one Solid target (repeatable)
+  --probe <ID>           run one exact probe id (repeatable)
   --json <FILE>          default benchmarks/ecosystem/report<-scope>.json
   --markdown <FILE>      default benchmarks/ecosystem/report<-scope>.md
                          Only an unfiltered run defaults to the canonical
@@ -714,7 +1109,11 @@ function usage() {
   --baseline <FILE>      compare against a pinned previous run
   --thresholds <FILE>    threshold mode: exit 1 when a threshold regresses
   --timeout <SECONDS>    per-probe generation timeout, default 300
-  --concurrency <N>      default min(available CPUs, 8), currently ${DEFAULT_CONCURRENCY}
+  --concurrency <N>      default caps install/generation probes at 8,
+                         currently ${DEFAULT_CONCURRENCY}
+  --certification-concurrency <N>
+                         separate certification pool, currently
+                         ${DEFAULT_CERTIFICATION_CONCURRENCY}
   --attempt-certification
                          attempt policy-2 certification for every structurally
                          complete proposal and retain its exact first refusal
@@ -737,6 +1136,7 @@ function parseArgs(argv) {
     sentinel: false,
     families: [],
     solidTargets: [],
+    probeIds: [],
     // Left null until the scope is known: the default path depends on which
     // subset the run covers. An explicit flag sets it and wins.
     json: null,
@@ -745,6 +1145,7 @@ function parseArgs(argv) {
     thresholds: null,
     timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
     concurrency: DEFAULT_CONCURRENCY,
+    certificationConcurrency: DEFAULT_CERTIFICATION_CONCURRENCY,
     attemptCertification: false,
     keepTemp: false,
     includeSupplemental: false,
@@ -777,6 +1178,9 @@ function parseArgs(argv) {
       case "--solid":
         options.solidTargets.push(takeValue(argv, index++, arg));
         break;
+      case "--probe":
+        options.probeIds.push(takeValue(argv, index++, arg));
+        break;
       case "--json":
         options.json = takeValue(argv, index++, arg);
         break;
@@ -794,6 +1198,9 @@ function parseArgs(argv) {
         break;
       case "--concurrency":
         options.concurrency = Number(takeValue(argv, index++, arg));
+        break;
+      case "--certification-concurrency":
+        options.certificationConcurrency = Number(takeValue(argv, index++, arg));
         break;
       case "--attempt-certification":
         options.attemptCertification = true;
@@ -816,6 +1223,31 @@ function readJsonFile(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
+function historicalScheduleCosts(path = DEFAULT_SCHEDULE_REPORT) {
+  if (!existsSync(path)) return {};
+  try {
+    const report = readJsonFile(path);
+    if (!Array.isArray(report?.results)) return {};
+    return Object.fromEntries(
+      report.results
+        .filter(result =>
+          typeof result?.probeId === "string" &&
+          (Number.isFinite(result.generationDurationMs) || Number.isFinite(result.durationMs))
+        )
+        .map(result => [
+          result.probeId,
+          Number.isFinite(result.durationMs) && result.durationMs > 0
+            ? result.durationMs
+            : Math.max(0, result.generationDurationMs ?? 0)
+        ])
+    );
+  } catch {
+    // Historical costs affect execution order only. A missing or pre-schema
+    // report falls back to manifest order; it never changes benchmark data.
+    return {};
+  }
+}
+
 function readSentinelIds(path) {
   const parsed = readJsonFile(path);
   if (parsed?.schemaVersion !== 1 || !Array.isArray(parsed.probes)) {
@@ -828,7 +1260,22 @@ function readSentinelIds(path) {
 // by lib/install.mjs (for npm) and a spawned CLI subprocess (for
 // generation) — never a `require`/`import` of anything under an installed
 // package's own node_modules tree.
-function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
+function buildRealHooks({
+  nativeBin,
+  typeFactsBin,
+  cliPath,
+  certificationInnerConcurrency
+}) {
+  const generationEnvironment = {
+    ...process.env,
+    SOLID_CHECKER_NATIVE_BIN: nativeBin,
+    SOLID_TYPEFACTS_BIN: typeFactsBin
+  };
+  const certificationEnvironment = {
+    ...generationEnvironment,
+    SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY:
+      String(certificationInnerConcurrency)
+  };
   return {
     now: () => Date.now(),
 
@@ -864,7 +1311,7 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
             ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
           ],
           {
-            env: { ...process.env, SOLID_CHECKER_NATIVE_BIN: nativeBin, SOLID_TYPEFACTS_BIN: typeFactsBin },
+            env: generationEnvironment,
             stdio: ["ignore", "pipe", "pipe"]
           }
         );
@@ -895,9 +1342,22 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
       auditPath,
       timeoutMs,
       integrity,
-      entrypoints = []
+      entrypoints = [],
+      proposalRefusalAudit = ""
     }) =>
       new Promise(resolvePromise => {
+        const authorityDir = `${catalogPath}.authority`;
+        mkdirSync(authorityDir, { recursive: true });
+        const issuerConfiguration = join(authorityDir, "issuer.json");
+        const trustConfiguration = join(authorityDir, "trust.json");
+        writeFileSync(issuerConfiguration, `${JSON.stringify({
+          format: "solid-checker-policy2-issuer-configuration",
+          issuerConfigurationVersion: 1,
+          kind: "persistent-local",
+          scope: `ecosystem-benchmark:${createHash("sha256").update(catalogPath).digest("hex")}`,
+          seed: randomBytes(32).toString("base64"),
+          revocationEpoch: 1
+        })}\n`, { mode: 0o600 });
         const child = spawn(
           process.execPath,
           [
@@ -910,16 +1370,19 @@ function buildRealHooks({ nativeBin, typeFactsBin, cliPath }) {
             integrity,
             "--catalog",
             catalogPath,
+            "--issuer-configuration",
+            issuerConfiguration,
+            "--trust-configuration-output",
+            trustConfiguration,
             "--audit-output",
             auditPath,
+            ...(proposalRefusalAudit
+              ? ["--proposal-refusal-audit", proposalRefusalAudit]
+              : []),
             ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
           ],
           {
-            env: {
-              ...process.env,
-              SOLID_CHECKER_NATIVE_BIN: nativeBin,
-              SOLID_TYPEFACTS_BIN: typeFactsBin
-            },
+            env: certificationEnvironment,
             stdio: ["ignore", "pipe", "pipe"]
           }
         );
@@ -995,6 +1458,12 @@ async function main(argv = process.argv.slice(2)) {
     return;
   }
 
+  const unknownProbeIds = unknownExplicitProbeIds(manifest, options.probeIds);
+  if (unknownProbeIds.length) {
+    fail(`unknown --probe id(s): ${unknownProbeIds.join(", ")}`);
+    return;
+  }
+
   let sentinelIds = null;
   if (options.sentinel) {
     try {
@@ -1009,6 +1478,7 @@ async function main(argv = process.argv.slice(2)) {
     sentinel: options.sentinel,
     families: options.families,
     solidTargets: options.solidTargets,
+    probeIds: options.probeIds,
     includeSupplemental: options.includeSupplemental
   });
   const defaults = defaultReportPaths(scope);
@@ -1019,7 +1489,8 @@ async function main(argv = process.argv.slice(2)) {
     manifest,
     families: options.families,
     solidTargets: options.solidTargets,
-    sentinelIds
+    sentinelIds,
+    explicitProbeIds: options.probeIds
   });
 
   let baseline = null;
@@ -1041,7 +1512,8 @@ async function main(argv = process.argv.slice(2)) {
         baselineScope.kind === scope.kind &&
         Boolean(baselineScope.sentinel) === scope.sentinel &&
         JSON.stringify(baselineScope.families ?? []) === JSON.stringify(scope.families) &&
-        JSON.stringify(baselineScope.solidTargets ?? []) === JSON.stringify(scope.solidTargets);
+        JSON.stringify(baselineScope.solidTargets ?? []) === JSON.stringify(scope.solidTargets) &&
+        JSON.stringify(baselineScope.probeIds ?? []) === JSON.stringify(scope.probeIds);
       if (!sameScope) {
         fail(
           `baseline ${options.baseline} covers a different scope than this run ` +
@@ -1070,7 +1542,15 @@ async function main(argv = process.argv.slice(2)) {
     }
   }
 
-  const hooks = buildRealHooks({ nativeBin: binaries.nativeBin, typeFactsBin: binaries.typeFactsBin, cliPath: DEFAULT_CLI });
+  const hooks = buildRealHooks({
+    nativeBin: binaries.nativeBin,
+    typeFactsBin: binaries.typeFactsBin,
+    cliPath: DEFAULT_CLI,
+    certificationInnerConcurrency: recommendedCertificationInnerConcurrency(
+      options.certificationConcurrency
+    )
+  });
+  const scheduleCosts = historicalScheduleCosts();
 
   const startedAt = new Date().toISOString();
   let results;
@@ -1082,16 +1562,17 @@ async function main(argv = process.argv.slice(2)) {
       options: {
         timeoutMs: options.timeoutSeconds * 1000,
         concurrency: options.concurrency,
+        certificationConcurrency: options.certificationConcurrency,
         attemptCertification: options.attemptCertification,
-        keepTemp: options.keepTemp
+        keepTemp: options.keepTemp,
+        includeSupplemental: options.includeSupplemental,
+        scheduleCosts
       },
       hooks
     });
   } catch (error) {
     // runBenchmark itself is designed to never reject over a single probe's
-    // behavior (see runProbe) — reaching here means the harness itself
-    // broke, which is exactly the infrastructure-failure case exit 2 exists
-    // for.
+    // behavior (see runProbe) — reaching here means the harness itself broke.
     fail(`benchmark harness crashed: ${error?.stack ?? error}`);
     return;
   } finally {

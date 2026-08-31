@@ -278,6 +278,9 @@ mod policy2_receipt_tests {
 
     fn bindings(main: &[u8]) -> Policy2ReceiptBindings {
         Policy2ReceiptBindings {
+            importer: "/workspace/src/App.tsx".into(),
+            specifier: "fixture-package".into(),
+            resolved_import_root: root(0),
             semantic_digest: policy2_main_semantic_digest(main).unwrap(),
             artifact_provenance_root: root(1),
             snapshot_root: root(2),

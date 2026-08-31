@@ -1,5 +1,58 @@
 # Precision backlog
 
+## Phase 21 published dependency graph transaction (2026-08-31)
+
+Published dependency certification no longer treats recursive eager child
+certification as proposal preparation. One run now deduplicates canonical nodes
+by full artifact and resolution identity, generates dependency-first frontiers,
+and submits one deduplicated case set to one native bottom-up certification
+transaction. All reuse is bounded by its authority: immutable archive snapshots
+and dependency-closure memo entries are transaction-local, closure hits rehash
+current bytes through current realpaths, package and lock identity is reread,
+and facts are shared only across independently canonicalized equal source
+programs in one native emission request. Open dependency proposals and retained
+refusal audits remain generation-only material. The final transaction replays
+every archive, lock selection, graph root, source closure, proposal, and policy
+input independently, and a fresh ordinary analyzer process must authenticate
+and select the issued policy-2 receipt.
+
+The final focused uncached Corvu graph certifies in 7.997 seconds (8.352 seconds
+end to end) with 18 roots, 42 canonical nodes, 25 acquired published artifacts,
+179 compiler-closure sources, one native transaction, and one Type Facts batch.
+Proposal generation takes 5.762 seconds and native witness acquisition 2.015
+seconds. The final focused Kobalte probe takes 21.144 seconds, including 19.564
+seconds of proposal generation for 629 artifact-case candidates. Its exact
+source programs form 621 batches and avoid only eight fact builds: no facts are
+shared across unequal programs. The earlier condition-compatible batching
+result remains rejected, and recursive eager child certification was not
+reintroduced.
+
+The final-code certified-release uncached 418-row corpus takes 112.595 seconds,
+7.405 seconds beneath the hard two-minute gate. Its report SHA-256 is
+`c4fdede40e69dcccada59749d9fec277db4a5c0a06956d4b5ed1649f41d33478`.
+It contains 52 complete-contract generator successes, 324 partials, and 42
+failures, with 41 certified and 61 exactly refused certification attempts. The
+regenerated Phase 21 ledger
+records every one of the 30 baseline fully refused rows: Corvu verifies, 15
+dependency rows retain exact semantic or proof-policy refusals, Geolocation is
+partial with an absent published target, Context is a confirmed upstream
+declaration defect, and the five missing-byte plus seven CJS/no-ESM controls
+remain fail-closed.
+
+The 15 checker-addressable exact refusals are not one bucket disguised as a
+resolution: one lacks the installed `@solidjs/router`, four lack the installed
+`@solidjs/web` layout, three reach unresolved TanStack package-import targets,
+five retain value-export/function-effect normalization contradictions, and two
+hit unsupported non-export Type Facts transcript demands. The report preserves
+six raw `unclassified` observations for provenance; the Phase 21 ledger gives
+them exact terminal classes while retaining the observed value separately.
+
+The JavaScript dependency plan digest still contains temporary absolute paths
+and omits `rootIdentity`. It is diagnostic planning evidence only; native graph
+reconstruction, authenticated inputs, receipt issuance, and fresh-process
+selection do not trust it. This limitation is not a relaxation of archive,
+lockfile, graph-root, source-closure, receipt, or policy authority.
+
 ## Uncertifiable baseline and evidence-owner matrix (2026-08-21)
 
 The dirty-worktree baseline was coherent on the current source: the Reactive
@@ -8018,3 +8071,17 @@ verified exports, verified analyzer-visible positive facts, locally closed
 domains, receipts, accepted-load samples, and accepted-query samples all remain
 zero. Null cost/byte percentiles in the Phase 19 report mean “stage not
 reached,” never zero-cost verification.
+
+## 2026-08-30 — Context 0.3.2 is a confirmed published-declaration defect
+
+The authenticated `@solid-primitives/context@0.3.2` archive imports
+`../node_modules/solid-js/types/reactive/signal.js` from `dist/index.d.ts`.
+That path requires a nested peer inside the package archive, but the archive
+contains no `node_modules` tree and the real `solid-js` peer is hoisted. A
+strict published-typing oracle reports TS2307 on that exact import. The
+`@solid-primitives/source` export condition also names unpublished
+`./src/index.ts` bytes. Phase 21 therefore retains both artifact-case refusals
+and assigns the remaining owner to the upstream package; it does not create a
+fixture-only nested layout or add a duplicate checker diagnostic. The exact
+archive, layout, and oracle are recorded in
+`docs/package-contract-v2/phase21/context-upstream-declaration-defect.md`.

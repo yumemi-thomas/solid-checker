@@ -355,6 +355,18 @@ func (p *project) SemanticDemandRuns(
 					entity.RuntimeValueDomain = &domain
 				}
 			}
+			if demand.RuntimeIdentity && demand.Callability && demand.Constructability {
+				bindingNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte)
+				if bindingNode == nil && demand.QueryLocation == nil && resultNode != nil && ast.IsIdentifier(resultNode) {
+					// Export/import specifiers are exact identifier demands but are
+					// not expression nodes in the TypeScript AST. The already located
+					// result node has the same demanded boundaries and exact symbol.
+					bindingNode = resultNode
+				}
+				if bindingNode != nil {
+					entity.RuntimeBindingKind = p.runtimeBindingKindLocked(bindingNode)
+				}
+			}
 			if demand.PrimitiveValueDomain || demand.PrimitiveLiteralCandidates {
 				if primitiveNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); primitiveNode != nil {
 					primitiveType := queryType

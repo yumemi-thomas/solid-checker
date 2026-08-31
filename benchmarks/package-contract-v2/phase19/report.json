@@ -5,12 +5,12 @@
   "authority": {
     "policyVersion": 2,
     "receiptVersion": 2,
-    "policyDigest": "sha256:43d68db58d35311234c4d11bb0331b71aa9ad621532c26360c20415150e74f53",
+    "policyDigest": "sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278",
     "proofRule": "no row, export, fact, closure, or receipt is counted as verified without authenticated policy-2 authority",
     "inputs": {
       "ecosystem": {
         "path": "benchmarks/ecosystem/report.json",
-        "sha256": "45a9dd28f6360ba9438d69d6153b99a01bdd8801dd6041f4ba230bf1b4495c15"
+        "sha256": "193294a3e9ba90963924e726d7fb026995b162f4a5a5344c73fef5f20d3c1593"
       },
       "phase16Refusals": {
         "path": "benchmarks/package-contract-v2/phase16/refusals.json",
@@ -30,22 +30,29 @@
       },
       "policy": {
         "path": "docs/package-contract-v2/phase19/proof-policy-v2.json",
-        "sha256": "dd1912f9c9caafc130a612c5e2b53b82e8772a1a770b06e96031a36a3f940b24"
+        "sha256": "9540e6381df3b0766e03ce6f67837d69804c6d25cd64f441ce4e14d3ecdabb70"
       }
     }
   },
   "artifactStatus": {
     "denominator": 418,
     "denominatorMeaning": "official ecosystem rows",
-    "completeProposal": 44,
-    "partialProposal": 314,
-    "fullRefusal": 60,
+    "completeProposal": 52,
+    "partialProposal": 324,
+    "fullRefusal": 42,
     "notApplicable": 0
+  },
+  "liveFailureClasses": {
+    "dependency-contract-obligation": 16,
+    "export-kind-conflict": 1,
+    "export-kind-unresolved": 9,
+    "no-exported-surface": 7,
+    "unclassified": 9
   },
   "policy2Issuance": {
     "packages": {
       "issued": 0,
-      "denominator": 177,
+      "denominator": 190,
       "denominatorMeaning": "ecosystem packages with a generated proposal"
     },
     "artifactCases": {
@@ -60,83 +67,85 @@
     }
   },
   "certificationAttempts": {
-    "structurallyCompleteRows": 44,
-    "attempted": 44,
+    "structurallyCompleteRows": 52,
+    "attempted": 52,
     "outcomes": {
-      "refused": 44
+      "certified": 2,
+      "refused": 50
     },
     "firstRefusalOwners": {
-      "artifact-provenance": 5,
-      "type-facts": 39
+      "artifact-provenance": 8,
+      "certifier": 42,
+      "configured-issuer": 2
     },
-    "newlyCertified": 0,
+    "newlyCertified": 2,
     "reason": "every structurally complete row reached snapshot-bound certification planning; exact missing live authorities refused issuance"
   },
   "verifiedSemantics": {
-    "proposalExports": 4562,
+    "proposalExports": 8984,
     "policy2VerifiedExports": 0,
-    "proposalPositiveFacts": 632,
+    "proposalPositiveFacts": 1355,
     "analyzerVisiblePolicy2PositiveFacts": 0,
     "locallyClosedClaimDomains": 0,
     "openClaims": [
       {
         "owner": "type-facts/call-target-and-callback-execution",
         "recursivePath": "/exports/*/callbacks",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/reactive-read-reachability",
         "recursivePath": "/exports/*/reads",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/reactive-write-reachability",
         "recursivePath": "/exports/*/writes",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/resource-creation-and-ownership",
         "recursivePath": "/exports/*/creates",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/invalidation-reachability",
         "recursivePath": "/exports/*/invalidates",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/error-edge-and-throw-census",
         "recursivePath": "/exports/*/throws",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/recursive-return-value",
         "recursivePath": "/exports/*/returns",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/cleanup-edge-and-lifetime",
         "recursivePath": "/exports/*/cleanups",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/resource-disposal-and-lifetime",
         "recursivePath": "/exports/*/disposals",
-        "count": 4562,
+        "count": 8984,
         "status": "open-proposal-claim"
       },
       {
         "owner": "type-facts/exact-recursive-value-leaf",
         "recursivePath": "/exports/*/recursiveValue",
-        "count": 14,
+        "count": 30,
         "status": "open-proposal-claim"
       }
     ]
@@ -146,34 +155,35 @@
     "byNewFactOrDependencyReceipt": [],
     "finiteWildcardCensus": {
       "historicalRows": 5,
-      "otherArtifactShapeRows": 10,
+      "otherArtifactShapeRows": 4,
       "implementationStatus": "implemented-and-remeasured",
       "currentOutcomes": {
-        "failure": 5
+        "failure": 1,
+        "partial-success": 4
       },
       "rows": [
         {
           "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
-          "outcome": "failure",
-          "class": "package-contract-export-missing",
+          "outcome": "partial-success",
+          "class": "partial-success",
           "verifiedExportsUnlocked": 0
         },
         {
           "probeId": "@kobalte/solidbase@0.6.13|solid1|only",
-          "outcome": "failure",
-          "class": "unclassified",
+          "outcome": "partial-success",
+          "class": "partial-success",
           "verifiedExportsUnlocked": 0
         },
         {
           "probeId": "@kobalte/utils@0.9.2|solid1|only",
-          "outcome": "failure",
-          "class": "export-kind-unresolved",
+          "outcome": "partial-success",
+          "class": "partial-success",
           "verifiedExportsUnlocked": 0
         },
         {
           "probeId": "@solid-devtools/shared@0.20.0|solid1|only",
-          "outcome": "failure",
-          "class": "no-exported-surface",
+          "outcome": "partial-success",
+          "class": "partial-success",
           "verifiedExportsUnlocked": 0
         },
         {
@@ -190,37 +200,43 @@
     {
       "order": 1,
       "owner": "accepted-dependency-composition",
-      "rows": 20,
+      "rows": 16,
       "disposition": "open-no-policy2-dependency-receipts"
     },
     {
       "order": 2,
       "owner": "type-facts/export-kind-census",
-      "rows": 14,
+      "rows": 9,
       "disposition": "open-producer-evidence-required"
     },
     {
       "order": 3,
-      "owner": "type-facts/parameter-behavior",
+      "owner": "type-facts/export-kind-reconciliation",
       "rows": 1,
       "disposition": "open-producer-evidence-required"
     },
     {
       "order": 4,
-      "owner": "artifact-resolver/export-identity",
-      "rows": 2,
-      "disposition": "open-resolution-repair-required"
+      "owner": "type-facts/parameter-behavior",
+      "rows": 0,
+      "disposition": "open-producer-evidence-required"
     },
     {
       "order": 5,
-      "owner": "artifact-resolver/finite-wildcard-census",
-      "rows": 15,
-      "disposition": "finite-wildcard-subset-remeasured-with-deeper-exact-refusals; other artifact shapes open"
+      "owner": "artifact-resolver/export-identity",
+      "rows": 0,
+      "disposition": "open-resolution-repair-required"
     },
     {
       "order": 6,
+      "owner": "artifact-resolver/finite-wildcard-census",
+      "rows": 9,
+      "disposition": "finite-wildcard-subset-remeasured-with-deeper-exact-refusals; other artifact shapes open"
+    },
+    {
+      "order": 7,
       "owner": "artifact-model/no-esm-surface",
-      "rows": 8,
+      "rows": 7,
       "disposition": "retained-refusal"
     }
   ],
@@ -236,13 +252,13 @@
   "refusalCategories": [
     {
       "category": "artifact-provenance",
-      "count": 5,
+      "count": 8,
       "scope": "policy2 certification attempts",
       "note": "attempts that did not reach an authenticated immutable snapshot and demand graph"
     },
     {
       "category": "producer-session",
-      "count": 1456,
+      "count": 0,
       "scope": "policy2 certification demand instances",
       "authorityDefinitionsOpen": 12,
       "note": "exact live producer demands refused across attempted rows"
@@ -274,7 +290,7 @@
     },
     {
       "category": "semantic",
-      "count": 41072,
+      "count": 80886,
       "scope": "open claim leaves in generatable ecosystem proposals",
       "note": "open is not negative proof"
     }
@@ -300,9 +316,9 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 0,
-        "observedCertificationDemands": 13,
+        "observedCertificationDemands": 33,
         "artifactSnapshotSatisfiedDemands": 0,
-        "refusedDemandInstances": 13,
+        "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
       },
@@ -312,8 +328,8 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 0,
-        "observedCertificationDemands": 71,
-        "artifactSnapshotSatisfiedDemands": 71,
+        "observedCertificationDemands": 143,
+        "artifactSnapshotSatisfiedDemands": 143,
         "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
@@ -324,9 +340,9 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 1,
-        "observedCertificationDemands": 686,
+        "observedCertificationDemands": 829,
         "artifactSnapshotSatisfiedDemands": 0,
-        "refusedDemandInstances": 686,
+        "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
       },
@@ -360,8 +376,8 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 0,
-        "observedCertificationDemands": 71,
-        "artifactSnapshotSatisfiedDemands": 71,
+        "observedCertificationDemands": 143,
+        "artifactSnapshotSatisfiedDemands": 143,
         "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
@@ -372,8 +388,8 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 0,
-        "observedCertificationDemands": 71,
-        "artifactSnapshotSatisfiedDemands": 71,
+        "observedCertificationDemands": 143,
+        "artifactSnapshotSatisfiedDemands": 143,
         "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
@@ -396,8 +412,8 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 0,
-        "observedCertificationDemands": 71,
-        "artifactSnapshotSatisfiedDemands": 71,
+        "observedCertificationDemands": 143,
+        "artifactSnapshotSatisfiedDemands": 143,
         "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
@@ -408,8 +424,8 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 1,
-        "observedCertificationDemands": 71,
-        "artifactSnapshotSatisfiedDemands": 71,
+        "observedCertificationDemands": 143,
+        "artifactSnapshotSatisfiedDemands": 143,
         "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
@@ -420,9 +436,9 @@
         "alreadyExact": 0,
         "producerExtensionRequired": 0,
         "unsupported": 1,
-        "observedCertificationDemands": 21,
+        "observedCertificationDemands": 57,
         "artifactSnapshotSatisfiedDemands": 0,
-        "refusedDemandInstances": 21,
+        "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
       },
@@ -432,9 +448,9 @@
         "alreadyExact": 1,
         "producerExtensionRequired": 1,
         "unsupported": 0,
-        "observedCertificationDemands": 21,
+        "observedCertificationDemands": 57,
         "artifactSnapshotSatisfiedDemands": 0,
-        "refusedDemandInstances": 21,
+        "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
       },
@@ -444,8 +460,8 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 1,
-        "observedCertificationDemands": 71,
-        "artifactSnapshotSatisfiedDemands": 71,
+        "observedCertificationDemands": 143,
+        "artifactSnapshotSatisfiedDemands": 143,
         "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
@@ -468,9 +484,9 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 1,
-        "observedCertificationDemands": 703,
+        "observedCertificationDemands": 848,
         "artifactSnapshotSatisfiedDemands": 0,
-        "refusedDemandInstances": 703,
+        "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
       },
@@ -480,11 +496,11 @@
         "alreadyExact": 1,
         "producerExtensionRequired": 0,
         "unsupported": 1,
-        "observedCertificationDemands": 0,
+        "observedCertificationDemands": 46,
         "artifactSnapshotSatisfiedDemands": 0,
         "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
-        "observationStatus": "not-applicable-to-attempted-rows"
+        "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
       },
       {
         "family": "selected-signature",
@@ -492,9 +508,9 @@
         "alreadyExact": 2,
         "producerExtensionRequired": 0,
         "unsupported": 0,
-        "observedCertificationDemands": 12,
+        "observedCertificationDemands": 46,
         "artifactSnapshotSatisfiedDemands": 0,
-        "refusedDemandInstances": 12,
+        "refusedDemandInstances": 0,
         "authenticatedEvidenceBytes": 0,
         "observationStatus": "attempted-opaque-authority-no-serialized-evidence-bytes"
       }
@@ -502,28 +518,28 @@
   },
   "costs": {
     "proofInput": {
-      "count": 44,
-      "p50": 722.01,
-      "p95": 5567.2699999999995,
-      "max": 62770.64,
+      "count": 52,
+      "p50": 834.4300000000001,
+      "p95": 9324.3,
+      "max": 15124.83,
       "unit": "milliseconds per policy2 certification attempt",
       "observationStatus": "observed"
     },
     "verification": {
-      "count": 0,
-      "p50": null,
-      "p95": null,
-      "max": null,
+      "count": 2,
+      "p50": 0.02,
+      "p95": 0.03,
+      "max": 0.03,
       "unit": "milliseconds per policy2 certification attempt",
-      "observationStatus": "not-observed-no-attempt-reached-certification"
+      "observationStatus": "observed"
     },
     "receipt": {
-      "count": 0,
-      "p50": null,
-      "p95": null,
-      "max": null,
+      "count": 2,
+      "p50": 0.01,
+      "p95": 0.01,
+      "max": 0.01,
       "unit": "milliseconds per policy2 receipt issuance",
-      "observationStatus": "not-observed-no-policy2-receipt-issued"
+      "observationStatus": "observed"
     },
     "load": {
       "count": 0,
@@ -545,16 +561,16 @@
   "byteDistributions": {
     "proposalArtifacts": {
       "main": {
-        "count": 358,
-        "p50": 1626,
-        "p95": 4967,
-        "max": 31860
+        "count": 376,
+        "p50": 1671,
+        "p95": 14495,
+        "max": 175942
       },
       "demandPlan": {
-        "count": 358,
-        "p50": 49252,
-        "p95": 303349,
-        "max": 2736092
+        "count": 376,
+        "p50": 49792,
+        "p95": 607115,
+        "max": 10384639
       },
       "authorityStatus": "open-proposal-not-accepted-policy2-artifact"
     },

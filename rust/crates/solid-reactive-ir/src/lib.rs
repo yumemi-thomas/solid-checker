@@ -56,7 +56,8 @@ use contracts::{
     contract_export_summaries_incremental,
 };
 pub use contracts::{
-    ExportKindProof, export_kind_proof, export_kind_proof_from_entity, raised_function_export,
+    ExportKindProof, export_kind_proof, export_kind_proof_from_entity, project_accepted_export,
+    raised_function_export,
 };
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
@@ -1017,6 +1018,38 @@ pub struct ContractExport {
     pub open_claims: BTreeSet<contract_semantics::ClaimDomain>,
 }
 
+impl ContractExport {
+    /// Whether this summary contains any domain that only a runtime function
+    /// may carry. A `value` export with one of these domains is internally
+    /// inconsistent even when the domain is open: absence of proof is not a
+    /// value-side effect summary.
+    #[must_use]
+    pub fn has_function_effects(&self) -> bool {
+        self.reactive_reads.is_open()
+            || self
+                .reactive_reads
+                .known()
+                .is_some_and(|reads| !reads.is_empty())
+            || self.returns.is_open()
+            || self.returns.known().is_some_and(Option::is_some)
+            || self.callbacks.is_open()
+            || self
+                .callbacks
+                .known()
+                .is_some_and(|callbacks| !callbacks.is_empty())
+            || self.owner_requirements.is_open()
+            || self
+                .owner_requirements
+                .known()
+                .is_some_and(|requirements| !requirements.is_empty())
+            || self.async_behavior.is_open()
+            || self
+                .async_behavior
+                .known()
+                .is_some_and(|behavior| !behavior.is_empty())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractReactiveRead {
     pub kind: String,
@@ -1098,30 +1131,7 @@ impl PackageContract {
                 summary.kind
             ));
         }
-        if summary.kind == "value"
-            && (summary.reactive_reads.is_open()
-                || summary
-                    .reactive_reads
-                    .known()
-                    .is_some_and(|reads| !reads.is_empty())
-                || summary.returns.is_open()
-                || summary.returns.known().is_some_and(Option::is_some)
-                || summary.callbacks.is_open()
-                || summary
-                    .callbacks
-                    .known()
-                    .is_some_and(|callbacks| !callbacks.is_empty())
-                || summary.owner_requirements.is_open()
-                || summary
-                    .owner_requirements
-                    .known()
-                    .is_some_and(|requirements| !requirements.is_empty())
-                || summary.async_behavior.is_open()
-                || summary
-                    .async_behavior
-                    .known()
-                    .is_some_and(|behavior| !behavior.is_empty()))
-        {
+        if summary.kind == "value" && summary.has_function_effects() {
             return Err(format!(
                 "package contract value export {entrypoint}:{name} cannot have function effects"
             ));
@@ -2465,6 +2475,7 @@ mod tests {
             resolved_call: None,
             callability: None,
             constructability: None,
+            runtime_binding_kind: None,
             runtime_value_domain: None,
             primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
             primitive_literal_candidates: None,

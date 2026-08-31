@@ -1,0 +1,24 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "class-expression-kind",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker:unresolved-dependency-module=bundled-dependency\nsolid-checker-rust: emit package contract: cannot statically expand external export-all \"bundled-dependency\" from <package-root>/index.ts; acquire a verified dependency contract and pass its receipt-issued exact import through --accepted-contracts"
+    },
+    {
+      "entrypoint": "./unresolvable",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/unresolvable.ts exports \"fromHost\", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind \"value\" would certify it invokes no caller-supplied callback"
+    }
+  ]
+}

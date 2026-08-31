@@ -66,7 +66,10 @@ pub(crate) fn canonicalize_proposal(
     let closure_candidates = closure_candidates
         .into_iter()
         .map(|subject| rebind_subject(contract, &canonical, subject))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect();
     Ok(CanonicalProposal {
         contract: canonical,
         document,
@@ -90,7 +93,7 @@ fn rebind_subject(
     original: &NormalizedContract,
     canonical: &NormalizedContract,
     mut subject: SemanticClaimSubject,
-) -> Result<SemanticClaimSubject, ContractWorkflowError> {
+) -> Result<Option<SemanticClaimSubject>, ContractWorkflowError> {
     let original_case = original
         .artifact_case(&subject.artifact_case)
         .ok_or_else(|| invalid_error("proposal candidate names an unknown artifact case"))?;
@@ -126,14 +129,19 @@ fn rebind_subject(
         || resources.len() != original_export.call.resources.len()
         || resources.len() != canonical_export.call.resources.len()
     {
-        return invalid("canonical proposal changed operation or resource cardinality");
+        return Ok(None);
     }
-    rebind_path(&mut subject.path, &operations, &resources)?;
+    if !rebind_path(&mut subject.path, &operations, &resources) {
+        return Ok(None);
+    }
     subject.artifact_case = canonical_case.id.clone();
-    canonical
-        .claim_id(&subject)
-        .map_err(|error| invalid_error(error.to_string()))?;
-    Ok(subject)
+    if canonical.claim_id(&subject).is_err() {
+        // Normalization can legitimately elide a proposed local closure when
+        // its owning operation/resource disappears. An absent subject is not
+        // a proof obligation and must not be rebound to a neighboring fact.
+        return Ok(None);
+    }
+    Ok(Some(subject))
 }
 
 fn rebind_path(
@@ -146,32 +154,40 @@ fn rebind_path(
         solid_reactive_ir::contract_semantics::ResourceId,
         solid_reactive_ir::contract_semantics::ResourceId,
     >,
-) -> Result<(), ContractWorkflowError> {
+) -> bool {
     use solid_reactive_ir::contract_semantics::{ClaimPath, ValueRoot};
     let operation = |id: &mut solid_reactive_ir::contract_semantics::OperationId| {
-        *id = operations
-            .get(id)
-            .cloned()
-            .ok_or_else(|| invalid_error("canonical proposal lost an operation identity"))?;
-        Ok::<_, ContractWorkflowError>(())
+        let Some(rebound) = operations.get(id).cloned() else {
+            return false;
+        };
+        *id = rebound;
+        true
     };
     match path {
         SemanticClaimPath::Domain(ClaimPath::Value { root, .. }) => match root {
             ValueRoot::Export => {}
             ValueRoot::OperationInput { operation: id, .. }
-            | ValueRoot::OperationOutput { operation: id } => operation(id)?,
+            | ValueRoot::OperationOutput { operation: id } => {
+                if !operation(id) {
+                    return false;
+                }
+            }
         },
         SemanticClaimPath::Domain(ClaimPath::Operation { operation: id, .. })
-        | SemanticClaimPath::Operation(id) => operation(id)?,
+        | SemanticClaimPath::Operation(id) => {
+            if !operation(id) {
+                return false;
+            }
+        }
         SemanticClaimPath::Domain(ClaimPath::Resource { resource, .. }) => {
-            *resource = resources
-                .get(resource)
-                .cloned()
-                .ok_or_else(|| invalid_error("canonical proposal lost a resource identity"))?;
+            let Some(rebound) = resources.get(resource).cloned() else {
+                return false;
+            };
+            *resource = rebound;
         }
         SemanticClaimPath::Domain(ClaimPath::Call(_) | ClaimPath::GuardPartition) => {}
     }
-    Ok(())
+    true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -331,25 +347,23 @@ pub fn encode_plan(
 
 pub fn merge_plans(
     merged_document: &[u8],
-    plans: impl IntoIterator<Item = Vec<u8>>,
+    proposal_artifacts: impl IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
 ) -> Result<Vec<u8>, ContractWorkflowError> {
     let contract = contract_document::decode(merged_document)?.normalize()?;
     let mut candidates = BTreeSet::new();
-    for bytes in plans {
+    for (document, bytes) in proposal_artifacts {
+        let source = contract_document::decode(&document)?.normalize()?;
         let plan = decode_plan(&bytes)?;
-        for claim in plan.closure_candidates {
-            let mut subject = SemanticClaimSubject::try_from(claim.subject)
-                .map_err(|error| invalid_error(error.to_string()))?;
-            subject.artifact_case = contract
-                .artifact_cases()
-                .iter()
-                .find(|artifact| artifact_key(artifact) == claim.artifact)
-                .ok_or_else(|| {
-                    invalid_error("proposal plan artifact is absent from merged contract")
-                })?
-                .id
-                .clone();
-            candidates.insert(subject);
+        validate_identity(
+            &source,
+            plan.semantic_model_version,
+            &plan.semantic_digest,
+            "source proposal plan",
+        )?;
+        for subject in validated_plan_claims(&source, plan.closure_candidates)?.into_values() {
+            if let Some(rebound) = rebind_subject(&source, &contract, subject)? {
+                candidates.insert(rebound);
+            }
         }
     }
     encode_plan(&contract, candidates)

@@ -14,12 +14,54 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 
 import { runNativeAsync } from "../bin/launcher.mjs";
-import { resolvePackageArtifacts } from "./artifact-resolution.mjs";
+import {
+  ArtifactResolutionError,
+  ArtifactResolutionSession,
+  resolvePackageExport
+} from "./artifact-resolution.mjs";
+
+export const ARTIFACT_APPLICABILITY = Object.freeze({
+  RuntimeModule: "runtime-module",
+  TypeOnlyExport: "verifier-proved-type-only",
+  MissingPublishedTarget: "unavailable-published-target",
+  UnsupportedConditionSet: "unsupported-condition-environment",
+  UnsupportedArtifactShape: "unsupported-artifact-shape"
+});
+
+export function artifactApplicabilityForRefusal(error) {
+  if (!(error instanceof ArtifactResolutionError)) {
+    return ARTIFACT_APPLICABILITY.RuntimeModule;
+  }
+  if (error.code === "target-not-found") {
+    return ARTIFACT_APPLICABILITY.MissingPublishedTarget;
+  }
+  if (["blocked", "conditions-unmatched", "not-exported"].includes(error.code)) {
+    return ARTIFACT_APPLICABILITY.UnsupportedConditionSet;
+  }
+  if (error.code === "module-not-found") {
+    return error.message.includes("node_modules/")
+      ? ARTIFACT_APPLICABILITY.UnsupportedArtifactShape
+      : ARTIFACT_APPLICABILITY.MissingPublishedTarget;
+  }
+  if (
+    [
+      "declarations-not-found",
+      "invalid-specifier",
+      "invalid-target",
+      "package-imports-unsupported",
+      "package-not-found",
+      "unmaterialized-transform"
+    ].includes(error.code)
+  ) {
+    return ARTIFACT_APPLICABILITY.UnsupportedArtifactShape;
+  }
+  return ARTIFACT_APPLICABILITY.RuntimeModule;
+}
 
 export const packageContractHelp = `Usage:
   solid-checker contract generate --integrity <SRI> [OPTIONS]
@@ -44,7 +86,8 @@ function parseArguments(arguments_) {
     output: "",
     integrity: "",
     entrypoints: [],
-    conditions: []
+    conditions: [],
+    certificationImporter: ""
   };
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -61,6 +104,8 @@ function parseArguments(arguments_) {
     else if (key === "--entrypoint") options.entrypoints.push(value);
     else if (key === "--conditions") {
       options.conditions.push(...value.split(",").map(item => item.trim()).filter(Boolean));
+    } else if (key === "--certification-importer") {
+      options.certificationImporter = resolve(value);
     } else {
       throw new Error(`unknown contract generation argument ${key}`);
     }
@@ -131,37 +176,55 @@ export function finiteEntrypoints(
   requested,
   packageRoot = null,
   {
-    conditionPartitionCount = 1,
     artifactCaseCandidateLimit = ARTIFACT_CASE_CANDIDATE_LIMIT
   } = {}
 ) {
-  const withinBudget = entrypointCount =>
-    entrypointCount * conditionPartitionCount <= artifactCaseCandidateLimit;
+  // Every entrypoint has at least one active artifact candidate. Condition
+  // variants are counted only after exact branch selection below; multiplying
+  // every entrypoint by the package-global partition count rejects packages
+  // whose many unconditional subpaths all resolve identically.
+  const withinBudget = entrypointCount => entrypointCount <= artifactCaseCandidateLimit;
   if (requested.length) {
     const entrypoints = [...new Set(requested)].sort();
     if (!withinBudget(entrypoints.length)) {
       throw new Error(
-        `${entrypoints.length * conditionPartitionCount} artifact-case candidates exceed the proof-policy resource limit of ${artifactCaseCandidateLimit}`
+        `${entrypoints.length} artifact-case candidates exceed the proof-policy resource limit of ${artifactCaseCandidateLimit}`
       );
     }
-    return { entrypoints, wildcardRefusals: [], wildcardResourceRefusals: [] };
+    return {
+      entrypoints,
+      wildcardRefusals: [],
+      wildcardBranchRefusals: [],
+      wildcardResourceRefusals: []
+    };
   }
   const exports_ = manifest.exports;
   if (!exports_ || typeof exports_ !== "object" || Array.isArray(exports_)) {
-    return { entrypoints: ["."], wildcardRefusals: [], wildcardResourceRefusals: [] };
+    return {
+      entrypoints: ["."],
+      wildcardRefusals: [],
+      wildcardBranchRefusals: [],
+      wildcardResourceRefusals: []
+    };
   }
   const keys = Object.keys(exports_);
   const subpaths = keys.filter(key => key.startsWith("."));
   if (!subpaths.length) {
-    return { entrypoints: ["."], wildcardRefusals: [], wildcardResourceRefusals: [] };
+    return {
+      entrypoints: ["."],
+      wildcardRefusals: [],
+      wildcardBranchRefusals: [],
+      wildcardResourceRefusals: []
+    };
   }
   const wildcardKeys = subpaths.filter(key => key.includes("*")).sort();
   const wildcardRefusals = [];
+  const wildcardBranchRefusals = [];
   const wildcardResourceRefusals = [];
   const entrypoints = subpaths.filter(key => !key.includes("*"));
   if (!withinBudget(new Set(entrypoints).size)) {
     throw new Error(
-      `${new Set(entrypoints).size * conditionPartitionCount} explicit artifact-case candidates exceed the proof-policy resource limit of ${artifactCaseCandidateLimit}`
+      `${new Set(entrypoints).size} explicit artifact-case candidates exceed the proof-policy resource limit of ${artifactCaseCandidateLimit}`
     );
   }
   const files = packageRoot && wildcardKeys.length ? packageFiles(packageRoot) : [];
@@ -170,19 +233,22 @@ export function finiteEntrypoints(
     const expanded = packageRoot
       ? targets.map(target => expandWildcardEntrypoint(key, target, files))
       : [];
-    if (
-      expanded.length === 0 ||
-      expanded.some(matches_ => matches_ === null || matches_.length === 0)
-    ) {
+    const materialized = expanded.filter(matches_ => matches_ !== null && matches_.length > 0);
+    if (materialized.length === 0) {
       wildcardRefusals.push(key);
       continue;
     }
-    const additions = expanded.flat();
+    for (let index = 0; index < expanded.length; index += 1) {
+      if (expanded[index] === null || expanded[index].length === 0) {
+        wildcardBranchRefusals.push({ entrypoint: key, target: targets[index] });
+      }
+    }
+    const additions = materialized.flat();
     const candidateCount = new Set([...entrypoints, ...additions]).size;
     if (!withinBudget(candidateCount)) {
       wildcardResourceRefusals.push({
         entrypoint: key,
-        candidates: candidateCount * conditionPartitionCount,
+        candidates: candidateCount,
         limit: artifactCaseCandidateLimit
       });
       continue;
@@ -198,6 +264,7 @@ export function finiteEntrypoints(
   return {
     entrypoints: [...new Set(entrypoints)],
     wildcardRefusals,
+    wildcardBranchRefusals,
     wildcardResourceRefusals
   };
 }
@@ -264,6 +331,73 @@ export function finiteConditionPartitions(manifest, requested) {
   return partitions.map(partition => partition.sort());
 }
 
+function selectedBranchIdentity({ manifest, entrypoint, conditions, packageRoot, axis }) {
+  try {
+    const selected = resolvePackageExport({
+      packageRoot,
+      manifest,
+      entrypoint,
+      conditions,
+      axis,
+      resolutionKind: "import"
+    });
+    return {
+      status: "selected",
+      path: selected.file.path,
+      digest: selected.file.digest,
+      branch: selected.trace.branch,
+      steps: selected.trace.steps
+    };
+  } catch (error) {
+    return {
+      status: "refused",
+      name: error?.name ?? "Error",
+      code: error?.code ?? null,
+      message: error?.message ?? String(error)
+    };
+  }
+}
+
+export function finiteArtifactCandidates(
+  manifest,
+  entrypoints,
+  partitions,
+  packageRoot,
+  { artifactCaseCandidateLimit = ARTIFACT_CASE_CANDIDATE_LIMIT } = {}
+) {
+  const candidates = [];
+  for (const entrypoint of entrypoints) {
+    const selected = new Set();
+    for (const conditions of partitions) {
+      const identity = JSON.stringify([
+        selectedBranchIdentity({
+          manifest,
+          entrypoint,
+          conditions,
+          packageRoot,
+          axis: "runtime"
+        }),
+        selectedBranchIdentity({
+          manifest,
+          entrypoint,
+          conditions,
+          packageRoot,
+          axis: "declarations"
+        })
+      ]);
+      if (selected.has(identity)) continue;
+      selected.add(identity);
+      candidates.push({ entrypoint, conditions });
+      if (candidates.length > artifactCaseCandidateLimit) {
+        throw new Error(
+          `${candidates.length} exact artifact-case candidates exceed the proof-policy resource limit of ${artifactCaseCandidateLimit}`
+        );
+      }
+    }
+  }
+  return candidates;
+}
+
 async function checked(args, cwd) {
   const child = await runNativeAsync("solid-checker", args, {
     cwd,
@@ -286,6 +420,77 @@ function projectFiles(resolution) {
 }
 
 const ARTIFACT_ANALYSIS_CONCURRENCY = 4;
+// Type Facts can share one TypeScript program across compatible entry files,
+// but a package-wide demand set is not linear: Kobalte's 629 exact targets in
+// one request takes longer than the former singleton total. Keep each shared
+// acquisition bounded while still amortizing process and program setup.
+const ARTIFACT_ANALYSIS_BATCH_TARGET_LIMIT = 16;
+
+export function artifactAnalysisBatchConcurrencyLimit(env = process.env) {
+  const raw = env.SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY;
+  if (raw === undefined || raw === "") return 8;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new Error(
+      "SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY must be a positive integer"
+    );
+  }
+  return Math.min(8, limit);
+}
+
+export function recommendedArtifactAnalysisBatchConcurrency(
+  batchCount,
+  parallelism = availableParallelism(),
+  configuredLimit = artifactAnalysisBatchConcurrencyLimit()
+) {
+  if (!Number.isInteger(batchCount) || batchCount < 0) {
+    throw new Error("artifact analysis batch count must be a non-negative integer");
+  }
+  if (!Number.isInteger(configuredLimit) || configuredLimit <= 0) {
+    throw new Error("artifact analysis batch concurrency limit must be a positive integer");
+  }
+  const hostLimit = Number.isInteger(parallelism) && parallelism > 0
+    ? Math.min(8, parallelism, configuredLimit)
+    : 1;
+  const demandLimit = batchCount < 32
+    ? 1
+    : batchCount < 128
+      ? 2
+      : batchCount < 512
+        ? 4
+        : 8;
+  return Math.min(hostLimit, demandLimit);
+}
+
+export function partitionArtifactAnalysisBatches(
+  candidates,
+  targetLimit = ARTIFACT_ANALYSIS_BATCH_TARGET_LIMIT
+) {
+  if (!Number.isInteger(targetLimit) || targetLimit <= 0) {
+    throw new Error("artifact analysis batch target limit must be a positive integer");
+  }
+  const compatible = new Map();
+  for (const candidate of candidates) {
+    // TypeScript answers are program-scoped. Equal export conditions do not
+    // make two entry files compatible when their exact source closures differ:
+    // opening their union can turn an unanswered fact into an answer. Batch
+    // only targets whose pinned program and runtime conditions are identical.
+    const key = JSON.stringify([
+      candidate.prepared.conditions,
+      projectFiles(candidate.prepared.resolution)
+    ]);
+    const batch = compatible.get(key) ?? [];
+    batch.push(candidate);
+    compatible.set(key, batch);
+  }
+  return [...compatible.values()].flatMap(batch => {
+    const chunks = [];
+    for (let offset = 0; offset < batch.length; offset += targetLimit) {
+      chunks.push(batch.slice(offset, offset + targetLimit));
+    }
+    return chunks;
+  });
+}
 
 async function mapConcurrent(items, concurrency, worker) {
   const results = new Array(items.length);
@@ -305,6 +510,23 @@ function stableRefusalReason(error, { packageRoot, scratch }) {
   return (error?.message ?? String(error))
     .replaceAll(packageRoot, "<package-root>")
     .replaceAll(scratch, "<scratch>");
+}
+
+function writeProposalRefusalAudit(output, manifest, refusals) {
+  mkdirSync(dirname(output), { recursive: true });
+  writeFileSync(
+    `${output}.refusals.json`,
+    `${JSON.stringify(
+      {
+        format: "solid-checker-contract-proposal-refusals",
+        refusalVersion: 1,
+        package: { name: manifest.name, version: manifest.version },
+        refusals
+      },
+      null,
+      2
+    )}\n`
+  );
 }
 
 export async function retainIndependentlyMergeableProposals(proposals, attemptMerge) {
@@ -353,22 +575,27 @@ export async function retainIndependentlyMergeableProposalBatches(
   return { merged, acceptedCount: accepted.length, rejected };
 }
 
-function prepareArtifact({
+export function prepareArtifact({
   packageRoot,
   manifest,
   integrity,
   entrypoint,
-  conditions
+  conditions,
+  resolutionSession,
+  certificationImporter,
+  acceptedDependencies
 }) {
   const specifier = specifierFor(manifest.name, entrypoint);
-  const importer = join(dirname(packageRoot), `.solid-checker-acquisition-${randomUUID()}.mjs`);
-  const resolution = resolvePackageArtifacts({
+  const importer = certificationImporter ||
+    join(dirname(packageRoot), `.solid-checker-acquisition-${randomUUID()}.mjs`);
+  const resolution = resolutionSession.resolve({
     importer,
     specifier,
     packageRoot,
     conditions: [...new Set([...conditions, "import"])],
     resolutionKind: "import",
-    integrity
+    integrity,
+    acceptedDependencies
   });
   return {
     entrypoint,
@@ -385,7 +612,16 @@ function prepareArtifact({
   };
 }
 
-async function analyzeArtifact({ packageRoot, manifest, prepared, scratch }) {
+async function analyzeArtifact({
+  packageRoot,
+  manifest,
+  prepared,
+  scratch,
+  acceptedContractCatalog,
+  receiptTrustConfiguration,
+  proposalDependencyCatalog
+}) {
+  const startedAt = performance.now();
   const { entrypoint, conditions, resolution, identity } = prepared;
   const id = randomUUID();
   const project = join(scratch, `${id}-tsconfig.json`);
@@ -414,8 +650,7 @@ async function analyzeArtifact({ packageRoot, manifest, prepared, scratch }) {
   );
   writeFileSync(resolutionPath, `${JSON.stringify(resolution, null, 2)}\n`);
   writeFileSync(runtimeResolutions, '{"schemaVersion":1,"resolutions":[]}\n');
-  await checked(
-    [
+  const analyzerArguments = [
       "--project",
       project,
       "--emit-contract",
@@ -436,7 +671,18 @@ async function analyzeArtifact({ packageRoot, manifest, prepared, scratch }) {
       packageRoot,
       "--runtime-conditions",
       [...new Set([...conditions, "import"])].sort().join(",")
-    ],
+    ];
+  if (acceptedContractCatalog) {
+    analyzerArguments.push("--accepted-contracts", acceptedContractCatalog);
+  }
+  if (receiptTrustConfiguration) {
+    analyzerArguments.push("--receipt-trust-configuration", receiptTrustConfiguration);
+  }
+  if (proposalDependencyCatalog) {
+    analyzerArguments.push("--proposal-dependencies", proposalDependencyCatalog);
+  }
+  await checked(
+    analyzerArguments,
     packageRoot
   );
   return {
@@ -445,11 +691,203 @@ async function analyzeArtifact({ packageRoot, manifest, prepared, scratch }) {
     entrypoint,
     conditions,
     resolution,
-    identity
+    identity,
+    analysisDurationMs: performance.now() - startedAt
   };
 }
 
-export async function generatePackageContract(arguments_, { quiet = false } = {}) {
+async function analyzeArtifactsBatch({
+  packageRoot,
+  manifest,
+  candidates,
+  scratch,
+  acceptedContractCatalog,
+  receiptTrustConfiguration,
+  proposalDependencyCatalog,
+  batchTargetLimit
+}) {
+  const analysisBatches = partitionArtifactAnalysisBatches(candidates, batchTargetLimit);
+  const batched = await mapConcurrent(
+    analysisBatches,
+    recommendedArtifactAnalysisBatchConcurrency(analysisBatches.length),
+    async (batch, batchIndex) => {
+      const startedAt = performance.now();
+      const id = randomUUID();
+      const project = join(scratch, `${id}-batch-tsconfig.json`);
+      const runtimeResolutions = join(scratch, `${id}-batch-runtime-resolutions.json`);
+      const batchRequest = join(scratch, `${id}-contract-batch.json`);
+      const batchResults = join(scratch, `${id}-contract-batch-results.json`);
+      const files = new Set();
+      const targets = batch.map(candidate => {
+        for (const file of projectFiles(candidate.prepared.resolution)) files.add(file);
+        const resolution = join(scratch, `${id}-${candidate.index}-resolution.json`);
+        const output = join(scratch, `${id}-${candidate.index}-proposal.json`);
+        const plan = join(scratch, `${id}-${candidate.index}-proposal-plan.json`);
+        writeFileSync(
+          resolution,
+          `${JSON.stringify(candidate.prepared.resolution, null, 2)}\n`
+        );
+        return {
+          index: candidate.index,
+          output,
+          plan,
+          resolution,
+          entryFile: candidate.prepared.resolution.runtime.path,
+          sourceFiles: projectFiles(candidate.prepared.resolution)
+        };
+      });
+      writeFileSync(project, `${JSON.stringify({
+        compilerOptions: {
+          allowJs: true,
+          checkJs: true,
+          jsx: "preserve",
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          skipLibCheck: true,
+          target: "ES2022"
+        },
+        files: [...files].sort()
+      }, null, 2)}\n`);
+      writeFileSync(runtimeResolutions, '{"schemaVersion":1,"resolutions":[]}\n');
+      writeFileSync(batchRequest, `${JSON.stringify({
+        schemaVersion: 1,
+        targets
+      }, null, 2)}\n`);
+      const analyzerArguments = [
+        "--project",
+        project,
+        "--emit-contract-batch",
+        batchRequest,
+        "--contract-batch-results",
+        batchResults,
+        "--runtime-module-resolutions",
+        runtimeResolutions,
+        "--package-name",
+        manifest.name,
+        "--package-version",
+        manifest.version,
+        "--contract-package-root",
+        packageRoot,
+        "--runtime-conditions",
+        [...new Set([...batch[0].prepared.conditions, "import"])].sort().join(",")
+      ];
+      if (acceptedContractCatalog) {
+        analyzerArguments.push("--accepted-contracts", acceptedContractCatalog);
+      }
+      if (receiptTrustConfiguration) {
+        analyzerArguments.push(
+          "--receipt-trust-configuration",
+          receiptTrustConfiguration
+        );
+      }
+      if (proposalDependencyCatalog) {
+        analyzerArguments.push("--proposal-dependencies", proposalDependencyCatalog);
+      }
+      try {
+        await checked(analyzerArguments, packageRoot);
+      } catch (error) {
+        return batch.map(candidate => ({
+          index: candidate.index,
+          candidate: candidate.prepared,
+          error
+        }));
+      }
+      const results = JSON.parse(readFileSync(batchResults, "utf8"));
+      const resultByIndex = new Map(results.map(result => [result.index, result]));
+      const duration = (performance.now() - startedAt) / Math.max(1, batch.length);
+      return batch.map(candidate => {
+        const result = resultByIndex.get(candidate.index);
+        const target = targets.find(target => target.index === candidate.index);
+        if (!result?.success) {
+          return {
+            index: candidate.index,
+            candidate: candidate.prepared,
+            error: new Error(result?.error ?? `contract batch ${batchIndex} omitted target`)
+          };
+        }
+        return {
+          index: candidate.index,
+          proposal: {
+            document: target.output,
+            plan: target.plan,
+            entrypoint: candidate.prepared.entrypoint,
+            conditions: candidate.prepared.conditions,
+            resolution: candidate.prepared.resolution,
+            identity: candidate.prepared.identity,
+            analysisDurationMs: Number.isFinite(result.durationNs)
+              ? result.durationNs / 1_000_000
+              : duration
+          }
+        };
+      });
+    }
+  );
+  return batched.flat();
+}
+
+function emitGenerationTiming(timing) {
+  if (!timing) return;
+  process.stderr.write(`${JSON.stringify({ contractGenerationTiming: timing })}\n`);
+}
+
+export async function generatePackageContract(
+  arguments_,
+  {
+    quiet = false,
+    acceptedDependencies = {},
+    acceptedContractCatalog = "",
+    receiptTrustConfiguration = "",
+    proposalDependencies = {},
+    proposalDependencyCatalog = "",
+    privateGraphPreparation = false,
+    exactConditions = null,
+    artifactAnalysisBatchTargetLimit = ARTIFACT_ANALYSIS_BATCH_TARGET_LIMIT
+  } = {}
+) {
+  if (Object.keys(acceptedDependencies).length > 0) {
+    if (!acceptedContractCatalog || !receiptTrustConfiguration) {
+      throw new Error(
+        "accepted dependency identities require an authenticated contract catalog and trust configuration"
+      );
+    }
+  }
+  if (Object.keys(proposalDependencies).length > 0 && !proposalDependencyCatalog) {
+    throw new Error(
+      "private graph proposal dependencies require a private proposal dependency catalog"
+    );
+  }
+  if (
+    Object.keys(proposalDependencies).length > 0 &&
+    (Object.keys(acceptedDependencies).length > 0 ||
+      acceptedContractCatalog ||
+      receiptTrustConfiguration)
+  ) {
+    throw new Error(
+      "private graph proposal dependencies cannot be combined with accepted receipt authority"
+    );
+  }
+  const resolutionDependencies = Object.keys(proposalDependencies).length > 0
+    ? proposalDependencies
+    : acceptedDependencies;
+  const generationStartedAt = performance.now();
+  const timing = process.env.SOLID_CHECKER_TIMINGS
+    ? {
+        censusMs: 0,
+        preparationMs: 0,
+        analysisMs: 0,
+        mergeMs: 0,
+        validationMs: 0,
+        artifactCaseCandidates: 0,
+        preparedCases: 0,
+        analysisGroups: 0,
+        exactSourceProgramBatches: 0,
+        exactSourceProgramBatchSizes: [],
+        factBuildsAvoided: 0,
+        analyzedTargets: 0,
+        targets: [],
+        totalMs: 0
+      }
+    : null;
   const options = parseArguments(arguments_);
   if (options.help) {
     process.stdout.write(packageContractHelp);
@@ -466,13 +904,27 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
   if (!manifest.name || !manifest.version) {
     throw new Error(`${manifestPath} must declare exact name and version`);
   }
-  const partitions = finiteConditionPartitions(manifest, options.conditions);
-  const { entrypoints, wildcardRefusals, wildcardResourceRefusals } = finiteEntrypoints(
+  const censusStartedAt = performance.now();
+  const partitions = exactConditions === null
+    ? finiteConditionPartitions(manifest, options.conditions)
+    : [[...new Set(exactConditions)].sort()];
+  const {
+    entrypoints,
+    wildcardRefusals,
+    wildcardBranchRefusals,
+    wildcardResourceRefusals
+  } = finiteEntrypoints(
     manifest,
     options.entrypoints,
-    packageRoot,
-    { conditionPartitionCount: partitions.length }
+    packageRoot
   );
+  const artifactCandidates = finiteArtifactCandidates(
+    manifest,
+    entrypoints,
+    partitions,
+    packageRoot
+  );
+  if (timing) timing.censusMs = performance.now() - censusStartedAt;
   const output = resolve(options.output || join(packageRoot, "solid-reactivity.json"));
   const scratch = mkdtempSync(join(tmpdir(), "solid-checker-contract-"));
   const proposals = [];
@@ -482,40 +934,58 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
     reason: "wildcard export requires an explicit finite --entrypoint census"
   }));
+  refusals.push(...wildcardBranchRefusals.map(({ entrypoint, target }) => ({
+    entrypoint,
+    conditions: null,
+    stage: "entrypoint-census",
+    applicability: ARTIFACT_APPLICABILITY.MissingPublishedTarget,
+    reason: `wildcard export branch ${JSON.stringify(target)} has no published target`
+  })));
   refusals.push(...wildcardResourceRefusals.map(({ entrypoint, candidates, limit }) => ({
     entrypoint,
     conditions: null,
     stage: "entrypoint-census",
+    applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
     reason: `finite wildcard expansion would require ${candidates} artifact-case candidates, exceeding the proof-policy resource limit of ${limit}`
   })));
   try {
+    const preparationStartedAt = performance.now();
     const preparedCases = [];
     const preparationOutcomes = [];
+    const resolutionSession = new ArtifactResolutionSession();
     let caseIndex = 0;
-    for (const entrypoint of entrypoints) {
-      for (const conditions of partitions) {
-        try {
-          preparedCases.push({
-            index: caseIndex,
-            prepared: prepareArtifact({
-              packageRoot,
-              manifest,
-              integrity: options.integrity,
-              entrypoint,
-              conditions
-            })
-          });
-        } catch (error) {
-          preparationOutcomes.push({
-            index: caseIndex,
-            candidate: { entrypoint, conditions },
-            error
-          });
-        }
-        caseIndex += 1;
+    for (const { entrypoint, conditions } of artifactCandidates) {
+      try {
+        preparedCases.push({
+          index: caseIndex,
+          prepared: prepareArtifact({
+            packageRoot,
+            manifest,
+            integrity: options.integrity,
+            entrypoint,
+            conditions,
+            resolutionSession,
+            certificationImporter: options.certificationImporter,
+            acceptedDependencies: resolutionDependencies
+          })
+        });
+      } catch (error) {
+        preparationOutcomes.push({
+          index: caseIndex,
+          candidate: { entrypoint, conditions },
+          error
+        });
       }
+      caseIndex += 1;
+    }
+    if (timing) {
+      timing.preparationMs = performance.now() - preparationStartedAt;
+      timing.artifactCaseCandidates = caseIndex;
+      timing.preparedCases = preparedCases.length;
+      timing.resolutionSession = resolutionSession.statistics();
     }
     const groups = new Map();
     for (const candidate of preparedCases) {
@@ -523,18 +993,60 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
       group.push(candidate);
       groups.set(candidate.prepared.identity, group);
     }
+    if (timing) timing.analysisGroups = groups.size;
+    const analysisStartedAt = performance.now();
+    const groupedCandidates = [...groups.values()];
+    if (timing) {
+      const exactSourceProgramBatches = partitionArtifactAnalysisBatches(
+        groupedCandidates.map(group => group[0]),
+        artifactAnalysisBatchTargetLimit
+      );
+      timing.exactSourceProgramBatches = exactSourceProgramBatches.length;
+      timing.exactSourceProgramBatchSizes = exactSourceProgramBatches.map(batch => batch.length);
+      timing.factBuildsAvoided = exactSourceProgramBatches.reduce(
+        (total, batch) => total + Math.max(0, batch.length - 1),
+        0
+      );
+    }
+    const primaryOutcomes = await analyzeArtifactsBatch({
+      packageRoot,
+      manifest,
+      candidates: groupedCandidates.map(group => group[0]),
+      scratch,
+      acceptedContractCatalog,
+      receiptTrustConfiguration,
+      proposalDependencyCatalog,
+      batchTargetLimit: artifactAnalysisBatchTargetLimit
+    });
+    const primaryOutcomeByIndex = new Map(
+      primaryOutcomes.map(outcome => [outcome.index, outcome])
+    );
     const analyzedGroups = await mapConcurrent(
-      [...groups.values()],
+      groupedCandidates,
       ARTIFACT_ANALYSIS_CONCURRENCY,
       async group => {
-        const outcomes = [];
-        for (const candidate of group) {
+        const primary = primaryOutcomeByIndex.get(group[0].index) ?? {
+          index: group[0].index,
+          candidate: group[0].prepared,
+          error: new Error("contract emission batch omitted its primary artifact case")
+        };
+        if (primary.proposal) return [primary];
+
+        // A shared analysis can reject one exact entry file without making the
+        // remaining artifact candidates for that identity equivalent. Preserve
+        // the old ordered fallback semantics, but pay the per-target process
+        // cost only on this exceptional path.
+        const outcomes = [primary];
+        for (const candidate of group.slice(1)) {
           try {
             const proposal = await analyzeArtifact({
               packageRoot,
               manifest,
               prepared: candidate.prepared,
-              scratch
+              scratch,
+              acceptedContractCatalog,
+              receiptTrustConfiguration,
+              proposalDependencyCatalog
             });
             outcomes.push({ index: candidate.index, proposal });
             break;
@@ -545,22 +1057,36 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
         return outcomes;
       }
     );
+    if (timing) timing.analysisMs = performance.now() - analysisStartedAt;
     const outcomes = [...preparationOutcomes, ...analyzedGroups.flat()]
       .sort((left, right) => left.index - right.index);
     for (const outcome of outcomes) {
       if (outcome.proposal) {
         proposals.push(outcome.proposal);
+        if (timing) {
+          timing.analyzedTargets += 1;
+          timing.targets.push({
+            entrypoint: outcome.proposal.entrypoint,
+            conditions: outcome.proposal.conditions,
+            analysisMs: outcome.proposal.analysisDurationMs
+          });
+        }
       } else {
         const { entrypoint, conditions } = outcome.candidate;
         refusals.push({
           entrypoint,
           conditions,
           stage: "artifact-case",
+          applicability: artifactApplicabilityForRefusal(outcome.error),
           reason: stableRefusalReason(outcome.error, { packageRoot, scratch })
         });
       }
     }
     if (proposals.length === 0) {
+      // The benchmark and row ledger need the complete artifact-case census,
+      // not only the first refusal repeated in the thrown message. Persist the
+      // structured audit before taking the full-refusal exit.
+      writeProposalRefusalAudit(output, manifest, refusals);
       const first = refusals[0];
       throw new Error(
         `no certifiable artifact case; ${refusals.length} case(s) refused` +
@@ -580,58 +1106,68 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
         ],
         packageRoot
       );
+    const mergeStartedAt = performance.now();
     try {
-      await merge(proposals, output, `${output}.proposal.json`);
-      emittedArtifactCases = proposals.length;
-      certificationProposals = proposals;
-    } catch (rootFailure) {
-      // One contradictory proposal must not erase unrelated exact cases. The
-      // fallback preserves greedy input-order semantics, but accepts a whole
-      // valid interval at once and bisects only failed intervals. This avoids
-      // reparsing an ever-growing prefix once per wildcard entrypoint.
-      const fallback = await retainIndependentlyMergeableProposalBatches(
-        proposals,
-        async (accepted, candidates, { start, end }) => {
-          const nextDocument = join(scratch, `merge-${start}-${end}.json`);
-          const nextPlan = `${nextDocument}.proposal.json`;
-          const proposalsToMerge = [...accepted, ...candidates];
-          await merge(proposalsToMerge, nextDocument, nextPlan);
-          return {
-            document: nextDocument,
-            plan: nextPlan,
-            certificationProposals: proposalsToMerge
-          };
-        },
-        rootFailure
-      );
-      for (const { candidate, error } of fallback.rejected) {
-        refusals.push({
-          entrypoint: candidate.entrypoint,
-          conditions: candidate.conditions,
-          stage: "proposal-merge",
-          reason: stableRefusalReason(error, { packageRoot, scratch })
-        });
+      if (privateGraphPreparation && proposals.length === 1) {
+        // The proposal remains untrusted until the one native graph
+        // transaction re-decodes it, replays its archive/resolution, and
+        // certifies its exact case. Avoid two extra native processes merely
+        // to merge a singleton and validate Rust's just-emitted open bytes.
+        copyFileSync(proposals[0].document, output);
+        copyFileSync(proposals[0].plan, `${output}.proposal.json`);
+        emittedArtifactCases = 1;
+        certificationProposals = proposals;
+      } else try {
+        await merge(proposals, output, `${output}.proposal.json`);
+        emittedArtifactCases = proposals.length;
+        certificationProposals = proposals;
+      } catch (rootFailure) {
+        // One contradictory proposal must not erase unrelated exact cases. The
+        // fallback preserves greedy input-order semantics, but accepts a whole
+        // valid interval at once and bisects only failed intervals. This avoids
+        // reparsing an ever-growing prefix once per wildcard entrypoint.
+        const fallback = await retainIndependentlyMergeableProposalBatches(
+          proposals,
+          async (accepted, candidates, { start, end }) => {
+            const nextDocument = join(scratch, `merge-${start}-${end}.json`);
+            const nextPlan = `${nextDocument}.proposal.json`;
+            const proposalsToMerge = [...accepted, ...candidates];
+            await merge(proposalsToMerge, nextDocument, nextPlan);
+            return {
+              document: nextDocument,
+              plan: nextPlan,
+              certificationProposals: proposalsToMerge
+            };
+          },
+          rootFailure
+        );
+        for (const { candidate, error } of fallback.rejected) {
+          refusals.push({
+            entrypoint: candidate.entrypoint,
+            conditions: candidate.conditions,
+            stage: "proposal-merge",
+            applicability: ARTIFACT_APPLICABILITY.RuntimeModule,
+            reason: stableRefusalReason(error, { packageRoot, scratch })
+          });
+        }
+        if (!fallback.merged) {
+          writeProposalRefusalAudit(output, manifest, refusals);
+          throw new Error("no independently mergeable artifact case remains");
+        }
+        emittedArtifactCases = fallback.acceptedCount;
+        certificationProposals = fallback.merged.certificationProposals;
+        copyFileSync(fallback.merged.document, output);
+        copyFileSync(fallback.merged.plan, `${output}.proposal.json`);
       }
-      if (!fallback.merged) throw new Error("no independently mergeable artifact case remains");
-      emittedArtifactCases = fallback.acceptedCount;
-      certificationProposals = fallback.merged.certificationProposals;
-      copyFileSync(fallback.merged.document, output);
-      copyFileSync(fallback.merged.plan, `${output}.proposal.json`);
+    } finally {
+      if (timing) timing.mergeMs = performance.now() - mergeStartedAt;
     }
-    await checked(["--validate-contract", output], packageRoot);
-    writeFileSync(
-      `${output}.refusals.json`,
-      `${JSON.stringify(
-        {
-          format: "solid-checker-contract-proposal-refusals",
-          refusalVersion: 1,
-          package: { name: manifest.name, version: manifest.version },
-          refusals
-        },
-        null,
-        2
-      )}\n`
-    );
+    const validationStartedAt = performance.now();
+    if (!privateGraphPreparation) {
+      await checked(["--validate-contract", output], packageRoot);
+    }
+    if (timing) timing.validationMs = performance.now() - validationStartedAt;
+    writeProposalRefusalAudit(output, manifest, refusals);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -659,6 +1195,10 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
           : "") +
         "; proof verification must issue its receipt\n"
     );
+  }
+  if (timing) {
+    timing.totalMs = performance.now() - generationStartedAt;
+    emitGenerationTiming(timing);
   }
   return result;
 }

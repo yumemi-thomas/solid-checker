@@ -192,6 +192,9 @@ func prepareRetainedContribution(
 		if entity.RuntimeIdentity != "" {
 			target.RuntimeIdentity = entity.RuntimeIdentity
 		}
+		if entity.RuntimeBindingKind != RuntimeBindingAbsent {
+			target.RuntimeBindingKind = entity.RuntimeBindingKind
+		}
 		if result.Structural[index] != "" {
 			contribution.structural = append(contribution.structural, result.Structural[index])
 		}

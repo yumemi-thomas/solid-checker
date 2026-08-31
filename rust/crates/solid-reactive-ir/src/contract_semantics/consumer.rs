@@ -310,6 +310,26 @@ impl AcceptedContractIndex {
                 specifier: specifier.into(),
             })
     }
+
+    /// Enumerates the runtime surface of the one receipt-authenticated
+    /// artifact case selected for this exact import occurrence.
+    ///
+    /// This is the only safe way for a consumer to expand an external
+    /// `export *`: package names alone cannot select between nested installs,
+    /// conditions, entrypoints, or artifact cases.
+    pub fn public_export_names(
+        &self,
+        importer: &str,
+        specifier: &str,
+    ) -> Result<BTreeSet<String>, SemanticQueryError> {
+        Ok(self
+            .contract(importer, specifier)?
+            .artifact_case()
+            .exports
+            .keys()
+            .cloned()
+            .collect())
+    }
 }
 
 fn hash_text(hash: &mut Sha256, value: &str) {

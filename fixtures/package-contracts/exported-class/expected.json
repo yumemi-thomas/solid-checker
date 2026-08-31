@@ -27,6 +27,94 @@
           }
         }
       ]
+    },
+    "./anonymous-default": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "244a759ceba8189801530f3602378ff1bbbfcc3f57b27cb9162ee8222430abc9",
+            "path": "./anonymous-default.ts",
+            "sha256": "901a231abce0a9e3c3fc7d6f20ad9f3f9401405a683810f57f6af6eea5671c99"
+          },
+          "declarations": {
+            "path": "./anonymous-default.ts",
+            "sha256": "901a231abce0a9e3c3fc7d6f20ad9f3f9401405a683810f57f6af6eea5671c99"
+          },
+          "exports": {
+            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1anonymous-default",
+            "typesBranch": "/exports/.~1anonymous-default"
+          }
+        }
+      ]
+    },
+    "./anonymous-extends": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "6822113ef0f41fddcbf3b9fcb417d7dd97dc6cdc67aeaf07062ed5ed53a1b58c",
+            "path": "./anonymous-extends.ts",
+            "sha256": "0c7105b5a6d0539bbe54b5e329fbf7123f09dffd3ffc1ba8bf9193ca70476baa"
+          },
+          "declarations": {
+            "path": "./anonymous-extends.ts",
+            "sha256": "0c7105b5a6d0539bbe54b5e329fbf7123f09dffd3ffc1ba8bf9193ca70476baa"
+          },
+          "exports": {
+            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1anonymous-extends",
+            "typesBranch": "/exports/.~1anonymous-extends"
+          }
+        }
+      ]
+    },
+    "./class-expression-default": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "9af16971f737e838d262e070783d6945b018085b114691197b38db8882efbc25",
+            "path": "./class-expression-default.ts",
+            "sha256": "22979ff1a21605eee6acaeb3a84aeca80a4bd015051c519f5176643b78f1a642"
+          },
+          "declarations": {
+            "path": "./class-expression-default.ts",
+            "sha256": "22979ff1a21605eee6acaeb3a84aeca80a4bd015051c519f5176643b78f1a642"
+          },
+          "exports": {
+            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1class-expression-default",
+            "typesBranch": "/exports/.~1class-expression-default"
+          }
+        }
+      ]
+    },
+    "./named-default": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7f361694c45a66550aff72dba5aee0aa76ec2312615daf2c96af631adbc3fe3c",
+            "path": "./named-default.ts",
+            "sha256": "2509c917834def14bacd63bd5fb4f906f123fbaa47d017c68e3093ec0c38c4c3"
+          },
+          "declarations": {
+            "path": "./named-default.ts",
+            "sha256": "2509c917834def14bacd63bd5fb4f906f123fbaa47d017c68e3093ec0c38c4c3"
+          },
+          "exports": {
+            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1named-default",
+            "typesBranch": "/exports/.~1named-default"
+          }
+        }
+      ]
     }
   },
   "format": "solid-reactivity-contract",

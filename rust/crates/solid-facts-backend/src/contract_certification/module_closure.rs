@@ -20,6 +20,9 @@ use super::{ArtifactSnapshot, ArtifactSnapshotError, SnapshotVerifiedResolution}
 const RUNTIME_EXTENSIONS: [&str; 8] =
     [".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"];
 const DECLARATION_EXTENSIONS: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
+const DECLARATION_MODULE_EXTENSIONS: [&str; 11] = [
+    ".ts", ".tsx", ".d.ts", ".mts", ".d.mts", ".cts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs",
+];
 
 #[derive(Clone, Debug)]
 pub struct SnapshotVerifiedClosure {
@@ -62,14 +65,47 @@ pub(super) fn verify_snapshot_closure(
     let rebuilt = replay_snapshot_closure(snapshot, resolution, &supplied.dependencies)?;
     if &rebuilt != supplied {
         return closure_mismatch(format!(
-            "supplied closure {} does not equal snapshot replay {}",
-            supplied.digest, rebuilt.digest
+            "supplied closure {} does not equal snapshot replay {}; diff={}",
+            supplied.digest,
+            rebuilt.digest,
+            closure_difference(supplied, &rebuilt)
         ));
     }
     Ok(SnapshotVerifiedClosure {
         snapshot_root: snapshot.root().into(),
         manifest: rebuilt,
     })
+}
+
+fn closure_difference(supplied: &ClosureManifest, replayed: &ClosureManifest) -> String {
+    fn set_difference<T>(left: &[T], right: &[T]) -> serde_json::Value
+    where
+        T: Ord + serde::Serialize,
+    {
+        let left = left.iter().collect::<BTreeSet<_>>();
+        let right = right.iter().collect::<BTreeSet<_>>();
+        let count = left.difference(&right).count();
+        let sample = left
+            .difference(&right)
+            .take(8)
+            .filter_map(|value| serde_json::to_value(*value).ok())
+            .collect::<Vec<_>>();
+        serde_json::json!({ "count": count, "sample": sample })
+    }
+
+    serde_json::json!({
+        "suppliedOnly": {
+            "entries": set_difference(&supplied.entries, &replayed.entries),
+            "dependencies": set_difference(&supplied.dependencies, &replayed.dependencies),
+            "hazards": set_difference(&supplied.hazards, &replayed.hazards),
+        },
+        "replayedOnly": {
+            "entries": set_difference(&replayed.entries, &supplied.entries),
+            "dependencies": set_difference(&replayed.dependencies, &supplied.dependencies),
+            "hazards": set_difference(&replayed.hazards, &supplied.hazards),
+        }
+    })
+    .to_string()
 }
 
 pub(super) fn replay_snapshot_closure(
@@ -300,22 +336,24 @@ pub(super) fn resolve_local(
         return Ok(LocalResolution::Missing);
     }
     let base = join_package_path(importer, specifier)?;
-    let extension = module_extension(&base);
-    let allowed = extension.is_none_or(|extension| match axis {
+    let observed_extension = module_extension(&base);
+    let allowed = |extension| match axis {
         ModuleAxis::Runtime => RUNTIME_EXTENSIONS.contains(&extension),
         ModuleAxis::Declarations => {
             RUNTIME_EXTENSIONS.contains(&extension) || DECLARATION_EXTENSIONS.contains(&extension)
         }
-    });
-    if !allowed {
-        return Ok(if snapshot.read(&base).is_some() {
-            LocalResolution::Asset(base)
-        } else {
-            LocalResolution::Missing
-        });
+    };
+    if observed_extension.is_some_and(|extension| !allowed(extension))
+        && snapshot.read(&base).is_some()
+    {
+        return Ok(LocalResolution::Asset(base));
     }
+    // A dotted basename with no corresponding file (for example
+    // HeadContent.dev) remains extensionless for module suffix resolution.
+    let extension = observed_extension.filter(|extension| allowed(extension));
 
     let substitutions = source_substitutions(&base);
+    let declaration_source_substitutions = declaration_source_substitutions(&base);
     let candidates = match (axis, extension) {
         (ModuleAxis::Runtime, Some(_)) => std::iter::once(base.clone())
             .chain(substitutions)
@@ -332,15 +370,26 @@ pub(super) fn resolve_local(
                     .map(|extension| format!("{base}/index{extension}")),
             )
             .collect(),
-        (ModuleAxis::Declarations, Some(_)) => super::declaration_candidate(snapshot, &base)
+        (ModuleAxis::Declarations, Some(extension))
+            if DECLARATION_EXTENSIONS.contains(&extension)
+                || [".ts", ".tsx", ".mts", ".cts"].contains(&extension) =>
+        {
+            std::iter::once(base.clone())
+                .chain(declaration_source_substitutions)
+                .collect()
+        }
+        (ModuleAxis::Declarations, Some(_)) => substitutions
             .into_iter()
-            .chain(substitutions)
+            .chain(super::declaration_candidate(snapshot, &base))
             .collect(),
-        (ModuleAxis::Declarations, None) => DECLARATION_EXTENSIONS
-            .iter()
-            .map(|extension| format!("{base}{extension}"))
+        (ModuleAxis::Declarations, None) => std::iter::once(base.clone())
             .chain(
-                DECLARATION_EXTENSIONS
+                DECLARATION_MODULE_EXTENSIONS
+                    .iter()
+                    .map(|extension| format!("{base}{extension}")),
+            )
+            .chain(
+                DECLARATION_MODULE_EXTENSIONS
                     .iter()
                     .map(|extension| format!("{base}/index{extension}")),
             )
@@ -416,6 +465,20 @@ fn source_substitutions(base: &str) -> Vec<String> {
                 .iter()
                 .map(|replacement| format!("{stem}{replacement}"))
                 .collect();
+        }
+    }
+    Vec::new()
+}
+
+fn declaration_source_substitutions(base: &str) -> Vec<String> {
+    for (extension, replacement) in [
+        (".tsx", ".d.ts"),
+        (".ts", ".d.ts"),
+        (".mts", ".d.mts"),
+        (".cts", ".d.cts"),
+    ] {
+        if let Some(stem) = base.strip_suffix(extension) {
+            return vec![format!("{stem}{replacement}")];
         }
     }
     Vec::new()

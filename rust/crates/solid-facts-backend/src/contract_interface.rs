@@ -9,7 +9,10 @@ use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
     AcceptedContract, AcceptedContractIndex, AcceptedContractInput, UncertifiableImportReason,
-    proof::{AuthenticatedPolicy2Acceptance, accept_authenticated_policy2},
+    proof::{
+        AuthenticatedPolicy2Acceptance, accept_authenticated_policy2,
+        project_untrusted_proposal_for_generation,
+    },
 };
 use std::{
     collections::BTreeMap,
@@ -23,7 +26,9 @@ use thiserror::Error;
 use crate::{
     contract_certification::{
         AuthenticatedPolicy2Receipt, BuiltInReceiptEntry, Policy2ReceiptBindings,
-        Policy2ReceiptProvenance, authenticate_policy2_receipt, canonicalize_policy2_main,
+        Policy2ReceiptProvenance, Policy2TrustConfiguration, authenticate_policy2_receipt,
+        canonicalize_policy2_main, decode_policy2_trust_configuration,
+        policy2_resolved_import_root,
     },
     contract_document,
 };
@@ -36,6 +41,7 @@ const MAX_BOUNDARY_DEPTH: usize = 128;
 const MAX_BOUNDARY_STRING_BYTES: usize = 16 * 1024;
 const MAX_RECEIPT_NODES: usize = 4_096;
 const MAX_CATALOG_NODES: usize = 1_000_000;
+const MAX_TRUST_CONFIGURATION_BYTES: usize = 64 * 1024;
 
 pub use crate::artifact_resolution::{
     AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure, ArtifactResolver,
@@ -256,6 +262,8 @@ pub struct AcceptedContractSource<'a> {
 
 const ACCEPTED_CATALOG_FORMAT: &str = "solid-checker-accepted-contract-catalog";
 const ACCEPTED_CATALOG_VERSION: u16 = 2;
+const PROPOSAL_DEPENDENCY_CATALOG_FORMAT: &str = "solid-checker-proposal-dependency-catalog";
+const PROPOSAL_DEPENDENCY_CATALOG_VERSION: u16 = 1;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -269,7 +277,31 @@ struct AcceptedCatalogDocument {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AcceptedCatalogEntry {
     document: String,
+    #[serde(default)]
+    document_digest: Option<String>,
+    #[serde(default)]
+    receipt: Option<String>,
+    #[serde(default)]
+    receipt_digest: Option<String>,
+    #[serde(default)]
+    bindings: Option<Policy2ReceiptBindings>,
     status: AcceptedCatalogStatus,
+    import: ResolvedImport,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProposalDependencyCatalogDocument {
+    format: String,
+    catalog_version: u16,
+    contracts: Vec<ProposalDependencyCatalogEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProposalDependencyCatalogEntry {
+    document: String,
+    document_digest: String,
     import: ResolvedImport,
 }
 
@@ -277,6 +309,99 @@ struct AcceptedCatalogEntry {
 #[serde(rename_all = "kebab-case")]
 enum AcceptedCatalogStatus {
     ObsoletePolicy1,
+    Policy2PersistentLocal,
+    Policy2Portable,
+}
+
+/// Loads open child proposals for one private graph-generation process. The
+/// resulting semantics are explicitly unauthenticated projection material;
+/// this reader is never used by ordinary discovery, diagnostics, or catalog
+/// publication. The final native graph transaction replays every archive,
+/// resolution, closure edge, semantic digest, receipt, and graph root before
+/// any generated parent contract can become authoritative.
+#[doc(hidden)]
+pub fn read_proposal_dependency_catalog_for_generation(
+    path: &Path,
+) -> Result<AcceptedContractIndex, ContractFailure> {
+    let bytes = read_boundary_file(
+        path,
+        MAX_CATALOG_BYTES,
+        "proposal dependency catalog",
+        false,
+    )?;
+    let catalog: ProposalDependencyCatalogDocument = crate::bounded_json::decode(
+        &bytes,
+        crate::bounded_json::Limits {
+            bytes: MAX_CATALOG_BYTES,
+            depth: MAX_BOUNDARY_DEPTH,
+            nodes: MAX_CATALOG_NODES,
+            string_bytes: MAX_BOUNDARY_STRING_BYTES,
+        },
+    )
+    .map_err(|message| ContractFailure::DocumentDecode {
+        message: format!(
+            "decode proposal dependency catalog {}: {message}",
+            path.display()
+        ),
+    })?;
+    if catalog.format != PROPOSAL_DEPENDENCY_CATALOG_FORMAT
+        || catalog.catalog_version != PROPOSAL_DEPENDENCY_CATALOG_VERSION
+    {
+        return Err(ContractFailure::DocumentDecode {
+            message: format!(
+                "proposal dependency catalog must use format {PROPOSAL_DEPENDENCY_CATALOG_FORMAT:?} version {PROPOSAL_DEPENDENCY_CATALOG_VERSION}"
+            ),
+        });
+    }
+    if catalog.contracts.len() > MAX_CATALOG_CONTRACTS {
+        return Err(ContractFailure::DocumentDecode {
+            message: format!(
+                "proposal dependency catalog exceeds the {MAX_CATALOG_CONTRACTS} contract resource limit"
+            ),
+        });
+    }
+    let base = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut projected = Vec::with_capacity(catalog.contracts.len());
+    for mut entry in catalog.contracts {
+        let document = read_boundary_file(
+            &catalog_member_path(base, &entry.document)?,
+            MAX_CONTRACT_DOCUMENT_BYTES,
+            "proposal dependency",
+            false,
+        )?;
+        if sha256_digest(&document) != entry.document_digest {
+            return Err(ContractFailure::ReceiptMismatch {
+                field: "documentDigest",
+            });
+        }
+        rebase_catalog_import(base, &mut entry.import)?;
+        let normalized = contract_document::decode(&document)?.normalize()?;
+        let external_targets =
+            crate::artifact_resolution::resolved_external_export_targets(&entry.import)?;
+        let selected = crate::artifact_resolution::select_and_bind_with_external_targets(
+            &normalized,
+            &entry.import,
+            &external_targets,
+        )?;
+        let selected_case = selected
+            .artifact_cases()
+            .first()
+            .ok_or(ContractFailure::NoArtifactCase)?
+            .id
+            .clone();
+        let contract = project_untrusted_proposal_for_generation(selected, &selected_case)
+            .map_err(|error| ContractFailure::InvalidSemanticModel {
+                reason: error.to_string(),
+            })?;
+        projected.push(AcceptedContractInput {
+            importer: entry.import.importer,
+            specifier: entry.import.specifier,
+            contract,
+        });
+    }
+    AcceptedContractIndex::new(projected).map_err(|error| ContractFailure::IdentityMismatch {
+        reason: error.to_string(),
+    })
 }
 
 /// Reads an explicit host-acquisition catalog and terminates every file and
@@ -285,11 +410,37 @@ enum AcceptedCatalogStatus {
 pub fn read_accepted_contract_catalog(
     path: &Path,
 ) -> Result<AcceptedContractIndex, ContractFailure> {
+    read_accepted_contract_catalog_with_trust(path, None)
+}
+
+/// Reads the separately configured trust authority for ordinary policy-2
+/// discovery. The path is selected by the host process, never by the analyzed
+/// project catalog.
+pub fn read_policy2_trust_configuration(
+    path: &Path,
+) -> Result<Policy2TrustConfiguration, ContractFailure> {
+    let bytes = read_boundary_file(
+        path,
+        MAX_TRUST_CONFIGURATION_BYTES,
+        "policy-2 trust configuration",
+        false,
+    )?;
+    decode_policy2_trust_configuration(&bytes).map_err(authentication_error)
+}
+
+/// Loads a normal discovery catalog with separately acquired policy-2 trust.
+/// Trust bytes are deliberately not referenced by the project catalog: doing
+/// so would let an analyzed project nominate its own issuer.
+pub fn read_accepted_contract_catalog_with_trust(
+    path: &Path,
+    trust: Option<&Policy2TrustConfiguration>,
+) -> Result<AcceptedContractIndex, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
     let mut uncertifiable = Vec::with_capacity(catalog.contracts.len());
+    let mut accepted = Vec::new();
     for mut entry in catalog.contracts {
         let document_path = catalog_member_path(&base, &entry.document)?;
-        let _document = read_boundary_file(
+        let document = read_boundary_file(
             &document_path,
             MAX_CONTRACT_DOCUMENT_BYTES,
             "contract",
@@ -301,24 +452,107 @@ pub fn read_accepted_contract_catalog(
                 entry.import.importer.clone(),
                 entry.import.specifier.clone(),
             )),
+            AcceptedCatalogStatus::Policy2PersistentLocal
+            | AcceptedCatalogStatus::Policy2Portable => {
+                let trust = trust.ok_or(ContractFailure::ReceiptAuthenticationRequired)?;
+                let receipt_path = entry
+                    .receipt
+                    .as_deref()
+                    .ok_or_else(|| catalog_field("policy-2 entry has no receipt path"))
+                    .and_then(|path| catalog_member_path(&base, path))?;
+                let receipt =
+                    read_boundary_file(&receipt_path, MAX_RECEIPT_BYTES, "receipt", true)?;
+                let bindings = entry
+                    .bindings
+                    .as_ref()
+                    .ok_or_else(|| catalog_field("policy-2 entry has no receipt bindings"))?;
+                verify_catalog_digest(
+                    &document,
+                    entry.document_digest.as_deref(),
+                    "documentDigest",
+                )?;
+                verify_catalog_digest(&receipt, entry.receipt_digest.as_deref(), "receiptDigest")?;
+                if bindings.importer != entry.import.importer
+                    || bindings.specifier != entry.import.specifier
+                {
+                    return Err(ContractFailure::ReceiptMismatch {
+                        field: if bindings.importer != entry.import.importer {
+                            "importer"
+                        } else {
+                            "specifier"
+                        },
+                    });
+                }
+                let provenance = match entry.status {
+                    AcceptedCatalogStatus::Policy2PersistentLocal => {
+                        let scope = trust
+                            .persistent_local_scope()
+                            .ok_or(ContractFailure::ReceiptAuthenticationRequired)?;
+                        Policy2ReceiptProvenance::PersistentLocal {
+                            trust_store: trust.trust_store(),
+                            scope,
+                        }
+                    }
+                    AcceptedCatalogStatus::Policy2Portable => Policy2ReceiptProvenance::Portable {
+                        trust_store: trust.trust_store(),
+                    },
+                    AcceptedCatalogStatus::ObsoletePolicy1 => unreachable!(),
+                };
+                let contract = load_authenticated_policy2_contract(
+                    &document,
+                    &receipt,
+                    &entry.import,
+                    bindings,
+                    provenance,
+                )?;
+                accepted.push(AcceptedContractInput {
+                    importer: entry.import.importer.clone(),
+                    specifier: entry.import.specifier.clone(),
+                    contract,
+                });
+            }
         }
     }
-    Ok(
-        AcceptedContractIndex::default().with_uncertifiable_import_reasons(
+    Ok(AcceptedContractIndex::new(accepted)
+        .map_err(|error| ContractFailure::IdentityMismatch {
+            reason: error.to_string(),
+        })?
+        .with_uncertifiable_import_reasons(
             uncertifiable
                 .into_iter()
                 .map(|key| (key, UncertifiableImportReason::ObsoletePolicy1)),
-        ),
-    )
+        ))
 }
 
-/// Returns the exact proposal documents referenced by the catalog. Policy-1
-/// receipt bytes are deliberately absent after the atomic cut.
+fn catalog_field(message: impl Into<String>) -> ContractFailure {
+    ContractFailure::DocumentDecode {
+        message: message.into(),
+    }
+}
+
+fn verify_catalog_digest(
+    bytes: &[u8],
+    expected: Option<&str>,
+    field: &'static str,
+) -> Result<(), ContractFailure> {
+    let expected =
+        expected.ok_or_else(|| catalog_field(format!("policy-2 entry has no {field}")))?;
+    if sha256_digest(bytes) != expected {
+        return Err(ContractFailure::ReceiptMismatch { field });
+    }
+    Ok(())
+}
+
+/// Returns every exact document and receipt referenced by the catalog so a
+/// retained analyzer cache cannot survive a content-object replacement.
 pub fn accepted_contract_catalog_members(path: &Path) -> Result<Vec<PathBuf>, ContractFailure> {
     let (catalog, base) = decode_accepted_contract_catalog(path)?;
     let mut paths = Vec::with_capacity(catalog.contracts.len());
     for entry in catalog.contracts {
         paths.push(catalog_member_path(&base, &entry.document)?);
+        if let Some(receipt) = entry.receipt {
+            paths.push(catalog_member_path(&base, &receipt)?);
+        }
     }
     paths.sort();
     paths.dedup();
@@ -499,11 +733,28 @@ pub fn load_authenticated_policy2_contract(
     let authenticated =
         authenticate_policy2_receipt(&canonical_main, receipt_bytes, expected, provenance)
             .map_err(authentication_error)?;
-    let selected = crate::artifact_resolution::select_and_bind(
-        &contract_document::decode(&canonical_main)?.normalize()?,
+    let actual_import_root = policy2_resolved_import_root(import).map_err(authentication_error)?;
+    if actual_import_root != expected.resolved_import_root {
+        return Err(ContractFailure::ReceiptMismatch {
+            field: "resolvedImportRoot",
+        });
+    }
+    let normalized = contract_document::decode(&canonical_main)?.normalize()?;
+    // Replay every selected artifact, trace, closure, and export target. The
+    // rebound object is validation-only because per-export targets are signed
+    // through `resolvedImportRoot` and deliberately are not stable-v1 fields.
+    let external_targets = crate::artifact_resolution::resolved_external_export_targets(import)?;
+    if !external_targets.is_empty() && import.closure.dependencies.is_empty() {
+        return Err(ContractFailure::IdentityMismatch {
+            reason: "an external export target has no receipt-bound dependency edge".into(),
+        });
+    }
+    let _rebound = crate::artifact_resolution::select_and_bind_with_external_targets(
+        &normalized,
         import,
+        &external_targets,
     )?;
-    accept_policy2_selected(selected, authenticated)
+    accept_policy2_selected(normalized, authenticated)
 }
 
 /// Loads an immutable compiled single-case bundle. Its receipt becomes

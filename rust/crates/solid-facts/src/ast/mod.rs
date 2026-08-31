@@ -1875,6 +1875,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         let specifier = if expression.options.is_none() {
             match &expression.source {
                 Expression::StringLiteral(source) => Some(source.value.as_str().into()),
+                Expression::TemplateLiteral(source) if source.expressions.is_empty() => source
+                    .quasis
+                    .first()
+                    .and_then(|quasi| quasi.value.cooked.as_ref())
+                    .map(|value| value.as_str().into()),
                 _ => None,
             }
         } else {
@@ -1899,6 +1904,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             if self.is_unresolved_named(callee, "require") {
                 let specifier = match call.arguments.as_slice() {
                     [Argument::StringLiteral(source)] => Some(source.value.as_str().into()),
+                    [Argument::TemplateLiteral(source)] if source.expressions.is_empty() => source
+                        .quasis
+                        .first()
+                        .and_then(|quasi| quasi.value.cooked.as_ref())
+                        .map(|value| value.as_str().into()),
                     _ => None,
                 };
                 self.module_loads.push(ModuleLoadFact {
@@ -3475,8 +3485,10 @@ renamed();"#,
             "fixture.ts",
             r#"
                 import("./literal.js");
+                import(`./template-literal.js`);
                 import(dynamicName);
                 require("./required.js");
+                require(`./template-required.js`);
                 eval(source);
                 WebAssembly.instantiate(bytes);
                 leaked = 1;
@@ -3501,14 +3513,19 @@ renamed();"#,
         )
         .unwrap();
 
-        assert_eq!(facts.module_loads.len(), 3);
+        assert_eq!(facts.module_loads.len(), 5);
         assert_eq!(
             facts
                 .module_loads
                 .iter()
                 .filter_map(|load| load.specifier.as_deref())
                 .collect::<Vec<_>>(),
-            vec!["./literal.js", "./required.js"]
+            vec![
+                "./literal.js",
+                "./template-literal.js",
+                "./required.js",
+                "./template-required.js"
+            ]
         );
         assert_eq!(facts.module_hazards.len(), 7);
     }

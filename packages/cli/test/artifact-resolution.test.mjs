@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -12,10 +14,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  ArtifactResolutionSession,
   ArtifactResolutionError,
   canonicalClosure,
   materializedGeneratedClosureEntry,
+  resolvePackageArtifactClosure,
   resolvePackageArtifacts,
+  resolvePackageDependencyPlanClosure,
   resolvePackageExport,
   selectTypeScriptApi
 } from "../scripts/artifact-resolution.mjs";
@@ -233,6 +238,118 @@ describe("standalone package-export resolution", () => {
 });
 
 describe("exact artifact records and closure", () => {
+  test("one transaction acquires identical semantic roots once while retaining condition traces", () => {
+    const manifest = {
+      name: "condition-alias",
+      version: "1.0.0",
+      exports: {
+        ".": {
+          types: "./index.d.ts",
+          browser: "./index.js",
+          import: "./index.js"
+        }
+      }
+    };
+    const root = fixture(manifest, {
+      "index.js": "export const value = 1;\n",
+      "index.d.ts": "export declare const value: 1;\n"
+    });
+    const session = new ArtifactResolutionSession();
+    const resolveCase = conditions =>
+      session.resolve({
+        importer: join(root, "consumer.mjs"),
+        specifier: "condition-alias",
+        packageRoot: root,
+        conditions,
+        integrity: "sha512:test"
+      });
+
+    const unconditioned = resolveCase([]);
+    const browser = resolveCase(["browser"]);
+
+    expect(unconditioned.runtimeTrace.branch).toBe("/exports/./import");
+    expect(browser.runtimeTrace.branch).toBe("/exports/./browser");
+    expect(browser.exports).toEqual(unconditioned.exports);
+    expect(browser.closure).toEqual(unconditioned.closure);
+    expect(session.statistics()).toEqual({
+      requests: 2,
+      semanticAcquisitions: 1,
+      semanticCacheHits: 1,
+      semanticCacheInvalidations: 0,
+      moduleDescriptionsParsed: 2,
+      typeScriptProgramsCreated: 0
+    });
+  });
+
+  test("transaction reuse invalidates when a transitive closure member changes", () => {
+    const manifest = {
+      name: "mutable-closure",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'export { value } from "./leaf.js";\n',
+      "leaf.js": "export const value = 1;\n",
+      "index.d.ts": 'export { value } from "./leaf.d.ts";\n',
+      "leaf.d.ts": "export declare const value: 1;\n"
+    });
+    const session = new ArtifactResolutionSession();
+    const resolveCase = () =>
+      session.resolve({
+        importer: join(root, "consumer.mjs"),
+        specifier: "mutable-closure",
+        packageRoot: root,
+        integrity: "sha512:test"
+      });
+
+    const first = resolveCase();
+    writeFileSync(join(root, "leaf.js"), "export const value = 2;\n");
+    const second = resolveCase();
+
+    expect(second.closure.digest).not.toBe(first.closure.digest);
+    expect(session.statistics()).toEqual({
+      requests: 2,
+      semanticAcquisitions: 2,
+      semanticCacheHits: 0,
+      semanticCacheInvalidations: 1,
+      moduleDescriptionsParsed: 5,
+      typeScriptProgramsCreated: 0
+    });
+  });
+
+  test("distinct semantic roots parse shared transitive modules once per transaction", () => {
+    const manifest = {
+      name: "shared-closure",
+      version: "1.0.0",
+      exports: {
+        ".": { types: "./index.d.ts", import: "./index.js" },
+        "./other": { types: "./other.d.ts", import: "./other.js" }
+      }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'let local = 0; local = 1; export { value } from "./shared.js";\n',
+      "index.d.ts": 'export { value } from "./shared.d.ts";\n',
+      "other.js": 'let local = 0; local = 1; export { value } from "./shared.js";\n',
+      "other.d.ts": 'export { value } from "./shared.d.ts";\n',
+      "shared.js": "let local = 0; local = 1; export const value = 1;\n",
+      "shared.d.ts": "export declare const value: 1;\n"
+    });
+    const session = new ArtifactResolutionSession();
+    const resolveCase = specifier =>
+      session.resolve({
+        importer: join(root, "consumer.mjs"),
+        specifier,
+        packageRoot: root,
+        integrity: "sha512:test"
+      });
+
+    resolveCase("shared-closure");
+    resolveCase("shared-closure/other");
+
+    expect(session.statistics().moduleDescriptionsParsed).toBe(6);
+    expect(session.statistics().typeScriptProgramsCreated).toBe(1);
+  });
+
   test("uses the shared typed closure digest framing", () => {
     expect(canonicalClosure().digest).toBe(
       "sha256:19575d19c2fadca45b8704b31f09949362bfb667a45fe12b9708825bb4aad020"
@@ -272,6 +389,253 @@ describe("exact artifact records and closure", () => {
     ]);
   });
 
+  test("dependency planning retains closure independently of unresolved external exports", () => {
+    const manifest = {
+      name: "external-frontier",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'export * from "external-runtime";\n',
+      "index.d.ts": 'export * from "external-types/subpath";\n'
+    });
+
+    const artifact = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "external-frontier",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(artifact.exports).toEqual({});
+
+    const planned = resolvePackageArtifactClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "external-frontier",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(planned.closure.hazards.map(hazard => hazard.source)).toEqual([
+      "./index.d.ts:external-types/subpath",
+      "./index.js:external-runtime"
+    ]);
+    expect(planned.externalDependencies).toEqual([
+      {
+        axis: "declarations",
+        importerPath: "./index.d.ts",
+        kind: "reexport",
+        specifier: "external-types/subpath"
+      },
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "reexport",
+        specifier: "external-runtime"
+      }
+    ]);
+    const graph = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "external-frontier",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(graph.closure.hazards.map(hazard => hazard.source)).toEqual([
+      "./index.d.ts:external-types/subpath",
+      "./index.js:external-runtime"
+    ]);
+    expect(graph.closure.frontiers).toEqual([]);
+  });
+
+  test("dependency graph planning follows exact package imports aliases inside the authenticated root", () => {
+    const manifest = {
+      name: "package-imports",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+      imports: {
+        "#server-fn-resolver": {
+          browser: "./dist/browser-resolver.js",
+          default: "./dist/default-resolver.js"
+        }
+      }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'export { resolve } from "#server-fn-resolver";\n',
+      "index.d.ts": 'export { resolve } from "#server-fn-resolver";\n',
+      "dist/browser-resolver.js": "export const resolve = () => 'browser';\n",
+      "dist/default-resolver.js": "export const resolve = () => 'default';\n"
+    });
+
+    const graph = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "package-imports",
+      packageRoot: root,
+      conditions: ["browser"],
+      integrity: "sha512:test"
+    });
+
+    expect(graph.closure.hazards).toEqual([]);
+    expect(graph.closure.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "runtime", path: "./dist/browser-resolver.js" }),
+        expect.objectContaining({ role: "declaration", path: "./dist/browser-resolver.js" })
+      ])
+    );
+    expect(graph.closure.entries).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "./dist/default-resolver.js" })
+      ])
+    );
+  });
+
+  test("dependency graph planning leaves an unmatched package imports condition open", () => {
+    const manifest = {
+      name: "package-imports-unmatched",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+      imports: {
+        "#platform": {
+          browser: "./dist/browser.js",
+          node: "./dist/node.js"
+        }
+      }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'import "#platform";\nexport const thing = 1;\n',
+      "index.d.ts": "export declare const thing: number;\n",
+      "dist/browser.js": "globalThis.platform = 'browser';\n",
+      "dist/node.js": "globalThis.platform = 'node';\n"
+    });
+
+    // No environment condition is active, so this census row cannot say which
+    // arm a consumer selects. That is an open frontier, not proof that no
+    // runtime module executes, and it must not refuse the artifact case.
+    const graph = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "package-imports-unmatched",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(graph.closure.hazards).toEqual([
+      expect.objectContaining({
+        kind: "unaccepted-external-dependency",
+        source: "./index.js:#platform"
+      })
+    ]);
+    expect(graph.closure.entries).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "./dist/browser.js" })])
+    );
+    expect(graph.closure.entries).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "./dist/node.js" })])
+    );
+
+    // A condition that does select an arm still pulls it into the closure.
+    const selected = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "package-imports-unmatched",
+      packageRoot: root,
+      conditions: ["node"],
+      integrity: "sha512:test"
+    });
+    expect(selected.closure.hazards).toEqual([]);
+    expect(selected.closure.entries).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "./dist/node.js" })])
+    );
+  });
+
+  test("dependency graph planning refuses a package imports specifier the map never defines", () => {
+    const manifest = {
+      name: "package-imports-undefined",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+      imports: { "#other": "./dist/other.js" }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'import "#platform";\nexport const thing = 1;\n',
+      "index.d.ts": "export declare const thing: number;\n",
+      "dist/other.js": "export const other = 1;\n"
+    });
+
+    expect(() =>
+      resolvePackageDependencyPlanClosure({
+        importer: join(root, "consumer.mjs"),
+        specifier: "package-imports-undefined",
+        packageRoot: root,
+        integrity: "sha512:test"
+      })
+    ).toThrow(/#platform is not defined by the package imports map/);
+  });
+
+  test("dependency graph planning stops at an exact require binding frontier", () => {
+    const manifest = {
+      name: "require-frontier",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'const value = require("external-cjs"); export { value };\n',
+      "index.d.ts": "export declare const value: unknown;\n"
+    });
+    const graph = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "require-frontier",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(graph.closure.hazards).toEqual([]);
+    expect(graph.closure.frontiers).toEqual([
+      expect.objectContaining({
+        kind: "semantic-require-binding",
+        source: "./index.js:14-37",
+        specifier: "external-cjs"
+      })
+    ]);
+  });
+
+  test("binds a lowered runtime variable to its declaration enum", () => {
+    const manifest = {
+      name: "lowered-enum",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js":
+        "export var EventType; (function (EventType) { EventType[EventType['Click'] = 0] = 'Click'; })(EventType || (EventType = {}));\n",
+      "index.d.ts": "export declare enum EventType { Click = 0 }\n"
+    });
+
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "lowered-enum",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+
+    expect(record.exports.EventType.runtime.module.path).toBe(join(root, "index.js"));
+    expect(record.exports.EventType.runtime.exportName).toBe("EventType");
+    expect(record.exports.EventType.declarations.module.path).toBe(join(root, "index.d.ts"));
+    expect(record.exports.EventType.declarations.exportName).toBe("EventType");
+  });
+
+  test("excludes explicit type-only re-exports from a source artifact's runtime surface", () => {
+    const manifest = {
+      name: "source-types",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.ts", import: "./index.ts" } }
+    };
+    const root = fixture(manifest, {
+      "index.ts": 'export { value, type Props } from "./impl";\n',
+      "impl.ts": "export const value = 1; export interface Props { label: string }\n"
+    });
+
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "source-types",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+
+    expect(Object.keys(record.exports)).toEqual(["value"]);
+  });
+
   test("records accepted external contracts and opens opaque frontiers without discarding local files", () => {
     const manifest = {
       name: "frontier",
@@ -303,6 +667,245 @@ describe("exact artifact records and closure", () => {
       expect.arrayContaining(["nonliteral-dynamic-loading", "eval"])
     );
     expect(record.exports.value).toBeDefined();
+  });
+
+  test("binds external re-exports only through accepted dependency export identities", () => {
+    const dependencyRoot = fixture(
+      { name: "accepted", version: "1.0.0" },
+      {
+        "index.js": "export const child = 1; export const renamed = 2;\n",
+        "index.d.ts": "export declare const child: number; export declare const renamed: number;\n"
+      }
+    );
+    const root = fixture(
+      {
+        name: "wrapper",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js":
+          'import { renamed as imported } from "accepted"; export * from "accepted"; export { renamed as alias } from "accepted"; export { imported as importedAlias }; export const local = 3;\n',
+        "index.d.ts":
+          'import { renamed as imported } from "accepted"; export * from "accepted"; export { renamed as alias } from "accepted"; export { imported as importedAlias }; export declare const local: number;\n'
+      }
+    );
+    const target = (axis, name) => ({
+      module: {
+        path: join(dependencyRoot, axis === "runtime" ? "index.js" : "index.d.ts"),
+        digest: `sha256:${(axis === "runtime" ? "2" : "3").repeat(64)}`
+      },
+      exportName: name
+    });
+    const exports = Object.fromEntries(
+      ["child", "renamed", "default"].map(name => [
+        name,
+        {
+          runtime: target("runtime", name),
+          declarations: target("declarations", name)
+        }
+      ])
+    );
+
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "wrapper",
+      packageRoot: root,
+      integrity: "sha512:test",
+      acceptedDependencies: {
+        accepted: {
+          packageName: "accepted",
+          artifactCase: "artifact-case:accepted",
+          acceptedContractDigest: `sha256:${"1".repeat(64)}`,
+          exports
+        }
+      }
+    });
+
+    expect(Object.keys(record.exports)).toEqual([
+      "alias",
+      "child",
+      "importedAlias",
+      "local",
+      "renamed"
+    ]);
+    expect(record.exports.child).toEqual(exports.child);
+    expect(record.exports.alias).toEqual(exports.renamed);
+    expect(record.exports.importedAlias).toEqual(exports.renamed);
+    expect(record.exports.default).toBeUndefined();
+  });
+
+  test("names the missing accepted dependency for an import-then-export binding", () => {
+    const root = fixture(
+      {
+        name: "wrapper",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js":
+          'import { useContext as useDisclosureContext } from "@corvu/disclosure"; export { useDisclosureContext };\n',
+        "index.d.ts":
+          'export { useContext as useDisclosureContext } from "@corvu/disclosure";\n'
+      }
+    );
+
+    expect(() => resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "wrapper",
+      packageRoot: root,
+      integrity: "sha512:test"
+    })).toThrow(/accepted dependency @corvu\/disclosure.*useContext/);
+
+    const planned = resolvePackageArtifactClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "wrapper",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(planned.externalDependencies).toContainEqual({
+      axis: "runtime",
+      importerPath: "./index.js",
+      kind: "reexport",
+      specifier: "@corvu/disclosure"
+    });
+  });
+
+  test("declaration closure resolves extensionless source modules", () => {
+    const manifest = {
+      name: "extensionless-source",
+      version: "1.0.0",
+      exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" } }
+    };
+    const root = fixture(manifest, {
+      "src/index.ts": 'export { value } from "./array";\n',
+      "src/array.ts": "export const value = 1;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "extensionless-source",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(record.closure.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "runtime", path: "./src/array.ts" }),
+        expect.objectContaining({ role: "declaration", path: "./src/array.ts" })
+      ])
+    );
+  });
+
+  test("declaration closure maps explicit source suffixes to declaration files", () => {
+    const manifest = {
+      name: "declaration-source-suffix",
+      version: "1.0.0",
+      exports: { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } }
+    };
+    const root = fixture(manifest, {
+      "dist/index.js": "export const value = 1;\n",
+      "dist/index.d.ts": 'export { value } from "./main.ts";\n',
+      "dist/main.d.ts": "export declare const value: 1;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "declaration-source-suffix",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(record.exports.value.declarations.module.path).toBe(
+      join(root, "dist", "main.d.ts")
+    );
+    expect(record.closure.entries).toContainEqual(
+      expect.objectContaining({ role: "declaration", path: "./dist/main.d.ts" })
+    );
+  });
+
+  test("multi-dot module basenames still try supported source suffixes", () => {
+    const manifest = {
+      name: "multi-dot-source",
+      version: "1.0.0",
+      exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" } }
+    };
+    const root = fixture(manifest, {
+      "src/index.ts": 'export { HeadContent } from "./HeadContent.dev";\n',
+      "src/HeadContent.dev.tsx": "export const HeadContent = 1;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "multi-dot-source",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(record.exports.HeadContent.runtime.module.path).toBe(
+      join(root, "src", "HeadContent.dev.tsx")
+    );
+    expect(record.exports.HeadContent.declarations.module.path).toBe(
+      join(root, "src", "HeadContent.dev.tsx")
+    );
+  });
+
+  test("literal dynamic chunk role propagates through static local children", () => {
+    const manifest = {
+      name: "dynamic-role",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'import("./chunk.js"); export const value = 1;\n',
+      "chunk.js": 'import "./leaf.js"; export const chunk = 1;\n',
+      "leaf.js": "export const leaf = 1;\n",
+      "index.d.ts": "export declare const value: 1;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "dynamic-role",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(record.closure.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "literal-dynamic-chunk", path: "./chunk.js" }),
+        expect.objectContaining({ role: "literal-dynamic-chunk", path: "./leaf.js" })
+      ])
+    );
+  });
+
+  test("ambient library symbols cannot mask mutable unbound globals", () => {
+    const manifest = {
+      name: "ambient-write",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const source =
+      "/* 😀 */ Promise = replacement; { let Promise = replacement; Promise = replacement; } export const value = 1;\n";
+    const root = fixture(manifest, {
+      "index.js": source,
+      "index.d.ts": "export declare const value: 1;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "ambient-write",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    const hazards = record.closure.hazards.filter(
+      hazard => hazard.kind === "mutable-unbound-global"
+    );
+    expect(hazards).toHaveLength(1);
+    const expression = "Promise = replacement";
+    const start = source.indexOf(expression);
+    expect(hazards[0].source).toBe(
+      `./index.js:${Buffer.byteLength(source.slice(0, start), "utf8")}-${
+        Buffer.byteLength(source.slice(0, start + expression.length), "utf8")
+      }`
+    );
+    const planned = resolvePackageArtifactClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "ambient-write",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(planned.closure.digest).toBe(record.closure.digest);
   });
 
   test("classifies native, WASM, and only genuinely unbound mutable globals", () => {

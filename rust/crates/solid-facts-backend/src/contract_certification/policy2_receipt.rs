@@ -18,7 +18,7 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::{bounded_json, contract_document};
+use crate::{artifact_resolution::ResolvedImport, bounded_json, contract_document};
 
 const RECEIPT_FORMAT: &str = "solid-checker-authenticated-acceptance-receipt";
 const SIGNATURE_ALGORITHM: &str = "ed25519";
@@ -26,6 +26,8 @@ const BUILTIN_ALGORITHM: &str = "builtin-entry-sha256";
 const PAYLOAD_DOMAIN: &[u8] = b"solid-checker:acceptance-receipt:v2";
 const TRUST_STORE_DOMAIN: &[u8] = b"solid-checker:receipt-trust-store:v2";
 const MAX_RECEIPT_BYTES: usize = 64 * 1024;
+const TRUST_CONFIGURATION_FORMAT: &str = "solid-checker-policy2-trust-configuration";
+const TRUST_CONFIGURATION_VERSION: u16 = 1;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 const MAX_ROOTS: usize = 256;
 const RECEIPT_WITNESS_FAMILIES: [&str; 17] = [
@@ -69,8 +71,12 @@ impl ReceiptIssuerKind {
 /// Every certification root the receipt must freeze. Construction validates
 /// shape only: authority comes from the opaque verifier sessions that supply
 /// these roots and from the configured issuer that signs the final payload.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Policy2ReceiptBindings {
+    pub importer: String,
+    pub specifier: String,
+    pub resolved_import_root: String,
     pub semantic_digest: String,
     pub artifact_provenance_root: String,
     pub snapshot_root: String,
@@ -96,7 +102,19 @@ pub struct Policy2ReceiptBindings {
 impl Policy2ReceiptBindings {
     fn validate(&self) -> Result<(), Policy2ReceiptError> {
         for (field, value) in [
+            ("importer", self.importer.as_str()),
+            ("specifier", self.specifier.as_str()),
+        ] {
+            if value.is_empty()
+                || value.len() > MAX_STRING_BYTES
+                || value.bytes().any(|byte| byte.is_ascii_control())
+            {
+                return Err(Policy2ReceiptError::InvalidBinding { field });
+            }
+        }
+        for (field, value) in [
             ("semanticDigest", &self.semantic_digest),
+            ("resolvedImportRoot", &self.resolved_import_root),
             ("artifactProvenanceRoot", &self.artifact_provenance_root),
             ("snapshotRoot", &self.snapshot_root),
             ("packageRoot", &self.package_root),
@@ -229,6 +247,160 @@ pub struct Policy2TrustStore {
     digest: String,
 }
 
+/// External analyzer trust configuration. The analyzed project may point at
+/// this object, but it may not author it: callers must acquire the bytes from
+/// a separately configured path and pass the authenticated result into catalog
+/// discovery.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Policy2TrustConfiguration {
+    trust_store: Policy2TrustStore,
+    persistent_local_scope: Option<String>,
+}
+
+impl Policy2TrustConfiguration {
+    pub fn new(
+        trust_store: Policy2TrustStore,
+        persistent_local_scope: Option<String>,
+    ) -> Result<Self, Policy2ReceiptError> {
+        if let Some(scope) = persistent_local_scope.as_deref() {
+            validate_scope(scope)?;
+        }
+        Ok(Self {
+            trust_store,
+            persistent_local_scope,
+        })
+    }
+
+    #[must_use]
+    pub const fn trust_store(&self) -> &Policy2TrustStore {
+        &self.trust_store
+    }
+
+    #[must_use]
+    pub fn persistent_local_scope(&self) -> Option<&str> {
+        self.persistent_local_scope.as_deref()
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TrustConfigurationDocument {
+    format: String,
+    trust_configuration_version: u16,
+    revocation_epoch: u64,
+    #[serde(default)]
+    persistent_local_scope: Option<String>,
+    entries: Vec<TrustConfigurationEntry>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TrustConfigurationEntry {
+    kind: ReceiptIssuerKind,
+    key_id: String,
+    public_key: String,
+    scope: String,
+    allowed_policy_digests: Vec<String>,
+    allowed_verifier_builds: Vec<String>,
+    #[serde(default)]
+    revoked_at_epoch: Option<u64>,
+}
+
+pub fn decode_policy2_trust_configuration(
+    bytes: &[u8],
+) -> Result<Policy2TrustConfiguration, Policy2ReceiptError> {
+    let document: TrustConfigurationDocument = bounded_json::decode(
+        bytes,
+        bounded_json::Limits {
+            bytes: MAX_RECEIPT_BYTES,
+            depth: 128,
+            nodes: 4096,
+            string_bytes: MAX_STRING_BYTES,
+        },
+    )
+    .map_err(|message| Policy2ReceiptError::Decode { message })?;
+    if document.format != TRUST_CONFIGURATION_FORMAT
+        || document.trust_configuration_version != TRUST_CONFIGURATION_VERSION
+    {
+        return Err(Policy2ReceiptError::InvalidTrustStore);
+    }
+    let entries = document
+        .entries
+        .into_iter()
+        .map(|entry| {
+            Ok(Policy2TrustEntry {
+                kind: entry.kind,
+                key_id: entry.key_id,
+                public_key: decode_public_key(&entry.public_key)?,
+                scope: entry.scope,
+                allowed_policy_digests: entry.allowed_policy_digests,
+                allowed_verifier_builds: entry.allowed_verifier_builds,
+                revoked_at_epoch: entry.revoked_at_epoch,
+            })
+        })
+        .collect::<Result<Vec<_>, Policy2ReceiptError>>()?;
+    Policy2TrustConfiguration::new(
+        Policy2TrustStore::new(entries, document.revocation_epoch)?,
+        document.persistent_local_scope,
+    )
+}
+
+/// Constructs the least-privilege trust configuration for one configured
+/// issuer and verifier build. The signing seed is not retained or serialized.
+pub fn policy2_trust_configuration_for_issuer(
+    issuer: &ConfiguredReceiptIssuer,
+    verifier_build_digest: &str,
+    revocation_epoch: u64,
+) -> Result<Policy2TrustConfiguration, Policy2ReceiptError> {
+    validate_digest(verifier_build_digest).map_err(|_| Policy2ReceiptError::InvalidTrustStore)?;
+    Policy2TrustConfiguration::new(
+        Policy2TrustStore::new(
+            [Policy2TrustEntry {
+                kind: issuer.kind(),
+                key_id: issuer.key_id().to_owned(),
+                public_key: issuer.public_key(),
+                scope: issuer.scope().to_owned(),
+                allowed_policy_digests: vec![proof_policy_2().digest().as_str().to_owned()],
+                allowed_verifier_builds: vec![verifier_build_digest.to_owned()],
+                revoked_at_epoch: None,
+            }],
+            revocation_epoch,
+        )?,
+        (issuer.kind() == ReceiptIssuerKind::PersistentLocal).then(|| issuer.scope().to_owned()),
+    )
+}
+
+/// Canonical external trust bytes for fresh-process discovery.
+pub fn encode_policy2_trust_configuration(
+    configuration: &Policy2TrustConfiguration,
+) -> Result<Vec<u8>, Policy2ReceiptError> {
+    let entries = configuration
+        .trust_store
+        .entries
+        .values()
+        .map(|entry| TrustConfigurationEntry {
+            kind: entry.kind,
+            key_id: entry.key_id.clone(),
+            public_key: STANDARD.encode(entry.public_key),
+            scope: entry.scope.clone(),
+            allowed_policy_digests: entry.allowed_policy_digests.clone(),
+            allowed_verifier_builds: entry.allowed_verifier_builds.clone(),
+            revoked_at_epoch: entry.revoked_at_epoch,
+        })
+        .collect();
+    let document = TrustConfigurationDocument {
+        format: TRUST_CONFIGURATION_FORMAT.into(),
+        trust_configuration_version: TRUST_CONFIGURATION_VERSION,
+        revocation_epoch: configuration.trust_store.revocation_epoch,
+        persistent_local_scope: configuration.persistent_local_scope.clone(),
+        entries,
+    };
+    let mut bytes = serde_json::to_vec(&document)
+        .map_err(|error| Policy2ReceiptError::Encode(error.to_string()))?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 impl Policy2TrustStore {
     pub fn new(
         entries: impl IntoIterator<Item = Policy2TrustEntry>,
@@ -294,6 +466,9 @@ pub struct AuthenticatedPolicy2Receipt {
     policy_digest: Digest,
     closed_claims_root: Digest,
     verifier_build_digest: Digest,
+    issuer_kind: ReceiptIssuerKind,
+    issuer_scope: String,
+    bindings: Policy2ReceiptBindings,
 }
 
 impl AuthenticatedPolicy2Receipt {
@@ -336,6 +511,21 @@ impl AuthenticatedPolicy2Receipt {
     pub const fn verifier_build_digest(&self) -> &Digest {
         &self.verifier_build_digest
     }
+
+    #[must_use]
+    pub const fn issuer_kind(&self) -> ReceiptIssuerKind {
+        self.issuer_kind
+    }
+
+    #[must_use]
+    pub fn issuer_scope(&self) -> &str {
+        &self.issuer_scope
+    }
+
+    #[must_use]
+    pub const fn bindings(&self) -> &Policy2ReceiptBindings {
+        &self.bindings
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -361,6 +551,9 @@ struct ReceiptPayload {
     proof_policy: u32,
     policy_digest: String,
     main_digest: String,
+    importer: String,
+    specifier: String,
+    resolved_import_root: String,
     semantic_digest: String,
     artifact_provenance_root: String,
     snapshot_root: String,
@@ -447,6 +640,29 @@ pub fn canonicalize_policy2_main(document: &[u8]) -> Result<Vec<u8>, Policy2Rece
 /// Recomputes the semantic digest from an already canonical policy-2 main.
 pub fn policy2_main_semantic_digest(canonical_main: &[u8]) -> Result<String, Policy2ReceiptError> {
     validate_canonical_main(canonical_main).map(|(_, digest)| digest)
+}
+
+/// Canonical identity of the complete resolver answer selected for one
+/// importer/specifier pair. The resolved record is already path-normalized by
+/// the host boundary; stable struct order plus BTreeMap export order makes the
+/// encoded census deterministic.
+pub fn policy2_resolved_import_root(
+    resolved: &ResolvedImport,
+) -> Result<String, Policy2ReceiptError> {
+    resolved
+        .validate()
+        .map_err(|error| Policy2ReceiptError::ResolvedImport(error.to_string()))?;
+    let encoded = serde_json::to_vec(resolved)
+        .map_err(|error| Policy2ReceiptError::Encode(error.to_string()))?;
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker:policy2-resolved-import:v1");
+    hash.update(
+        u64::try_from(encoded.len())
+            .unwrap_or(u64::MAX)
+            .to_be_bytes(),
+    );
+    hash.update(encoded);
+    Ok(format!("sha256:{:x}", hash.finalize()))
 }
 
 #[must_use]
@@ -571,6 +787,9 @@ pub fn authenticate_policy2_receipt(
             .expect("validated closed-claims root is canonical"),
         verifier_build_digest: Digest::parse(document.payload.verifier_build_digest)
             .expect("validated verifier-build digest is canonical"),
+        issuer_kind: document.payload.issuer_kind,
+        issuer_scope: document.payload.issuer_scope,
+        bindings: expected.clone(),
     })
 }
 
@@ -656,6 +875,9 @@ fn validate_payload(
 
 fn payload_bindings(payload: &ReceiptPayload) -> Policy2ReceiptBindings {
     Policy2ReceiptBindings {
+        importer: payload.importer.clone(),
+        specifier: payload.specifier.clone(),
+        resolved_import_root: payload.resolved_import_root.clone(),
         semantic_digest: payload.semantic_digest.clone(),
         artifact_provenance_root: payload.artifact_provenance_root.clone(),
         snapshot_root: payload.snapshot_root.clone(),
@@ -684,6 +906,12 @@ fn binding_mismatch(
     expected: &Policy2ReceiptBindings,
 ) -> &'static str {
     for (field, matches) in [
+        ("importer", actual.importer == expected.importer),
+        ("specifier", actual.specifier == expected.specifier),
+        (
+            "resolvedImportRoot",
+            actual.resolved_import_root == expected.resolved_import_root,
+        ),
         (
             "semanticDigest",
             actual.semantic_digest == expected.semantic_digest,
@@ -777,6 +1005,9 @@ fn payload(
         proof_policy: proof_policy_2().policy_version(),
         policy_digest: proof_policy_2().digest().as_str().into(),
         main_digest: digest_bytes(main),
+        importer: bindings.importer.clone(),
+        specifier: bindings.specifier.clone(),
+        resolved_import_root: bindings.resolved_import_root.clone(),
         semantic_digest: bindings.semantic_digest.clone(),
         artifact_provenance_root: bindings.artifact_provenance_root.clone(),
         snapshot_root: bindings.snapshot_root.clone(),
@@ -813,6 +1044,9 @@ fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
     for value in [
         &payload.policy_digest,
         &payload.main_digest,
+        &payload.importer,
+        &payload.specifier,
+        &payload.resolved_import_root,
         &payload.semantic_digest,
         &payload.artifact_provenance_root,
         &payload.snapshot_root,
@@ -971,8 +1205,12 @@ fn digest_bytes(bytes: &[u8]) -> String {
 pub enum Policy2ReceiptError {
     #[error("policy-2 receipt cannot be decoded: {message}")]
     Decode { message: String },
+    #[error("policy-2 receipt or trust configuration cannot be encoded: {0}")]
+    Encode(String),
     #[error("accepted main cannot be decoded: {0}")]
     MainDocument(String),
+    #[error("resolved import cannot be bound: {0}")]
+    ResolvedImport(String),
     #[error("policy-2 acceptance requires the canonical compact stable-v1 main encoding")]
     NonCanonicalMain,
     #[error("policy-2 receipt JSON is not canonical")]
@@ -1014,17 +1252,29 @@ pub struct PublishedPolicy2Catalog {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CatalogPointer<'a> {
+struct CatalogDocument<'a> {
     format: &'static str,
     catalog_version: u16,
-    main: CatalogObject<'a>,
-    receipt: CatalogObject<'a>,
+    contracts: [CatalogEntry<'a>; 1],
 }
 
 #[derive(Serialize)]
-struct CatalogObject<'a> {
-    path: &'a str,
-    digest: &'a str,
+#[serde(rename_all = "camelCase")]
+struct CatalogEntry<'a> {
+    document: &'a str,
+    document_digest: &'a str,
+    receipt: &'a str,
+    receipt_digest: &'a str,
+    bindings: &'a Policy2ReceiptBindings,
+    status: CatalogStatus,
+    import: &'a ResolvedImport,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum CatalogStatus {
+    Policy2PersistentLocal,
+    Policy2Portable,
 }
 
 /// Publishes content-addressed objects first and commits visibility with one
@@ -1036,6 +1286,7 @@ pub fn publish_policy2_catalog(
     canonical_main: &[u8],
     receipt: &[u8],
     authenticated: &AuthenticatedPolicy2Receipt,
+    resolved_import: &ResolvedImport,
 ) -> Result<PublishedPolicy2Catalog, ReceiptPublicationError> {
     let (_, semantic_digest) = validate_canonical_main(canonical_main)
         .map_err(|error| ReceiptPublicationError::Unauthenticated(error.to_string()))?;
@@ -1047,6 +1298,22 @@ pub fn publish_policy2_catalog(
             "authenticated receipt token does not bind the publication bytes".into(),
         ));
     }
+    if authenticated.bindings.importer != resolved_import.importer
+        || authenticated.bindings.specifier != resolved_import.specifier
+    {
+        return Err(ReceiptPublicationError::Unauthenticated(
+            "authenticated receipt token does not bind the published importer/specifier".into(),
+        ));
+    }
+    let status = match authenticated.issuer_kind {
+        ReceiptIssuerKind::PersistentLocal => CatalogStatus::Policy2PersistentLocal,
+        ReceiptIssuerKind::Portable => CatalogStatus::Policy2Portable,
+        ReceiptIssuerKind::BuiltIn => {
+            return Err(ReceiptPublicationError::Unauthenticated(
+                "built-in receipts cannot be published through a project catalog".into(),
+            ));
+        }
+    };
     fs::create_dir_all(root).map_err(publication_io)?;
     let objects = root.join("objects");
     fs::create_dir_all(&objects).map_err(publication_io)?;
@@ -1059,29 +1326,38 @@ pub fn publish_policy2_catalog(
     store_content_object(&main_path, canonical_main)?;
     store_content_object(&receipt_path, receipt)?;
 
-    let main_relative = format!("objects/{main_name}");
-    let receipt_relative = format!("objects/{receipt_name}");
-    let mut pointer = serde_json::to_vec(&CatalogPointer {
-        format: "solid-checker-policy2-catalog-pointer",
+    let object_prefix = if root
+        .file_name()
+        .is_some_and(|name| name == ".solid-checker")
+    {
+        ".solid-checker/objects"
+    } else {
+        "objects"
+    };
+    let main_relative = format!("{object_prefix}/{main_name}");
+    let receipt_relative = format!("{object_prefix}/{receipt_name}");
+    let mut pointer = serde_json::to_vec(&CatalogDocument {
+        format: "solid-checker-accepted-contract-catalog",
         catalog_version: 2,
-        main: CatalogObject {
-            path: &main_relative,
-            digest: &main_digest,
-        },
-        receipt: CatalogObject {
-            path: &receipt_relative,
-            digest: &receipt_digest,
-        },
+        contracts: [CatalogEntry {
+            document: &main_relative,
+            document_digest: &main_digest,
+            receipt: &receipt_relative,
+            receipt_digest: &receipt_digest,
+            bindings: &authenticated.bindings,
+            status,
+            import: resolved_import,
+        }],
     })
     .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?;
     pointer.push(b'\n');
-    let catalog_path = root.join("accepted-contract.json");
+    let catalog_path = root.join("accepted-contracts.json");
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| ReceiptPublicationError::Io(error.to_string()))?
         .as_nanos();
     let temporary = root.join(format!(
-        ".accepted-contract.{}.{}.tmp",
+        ".accepted-contracts.{}.{}.tmp",
         std::process::id(),
         nonce
     ));

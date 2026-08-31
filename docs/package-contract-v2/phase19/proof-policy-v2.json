@@ -236,6 +236,8 @@
   "receiptTrust": {
     "canonicalMainEncodingRequired": true,
     "policyDigestConstraintRequired": true,
+    "exactImporterAndSpecifierBindingRequired": true,
+    "exactResolvedImportBindingRequired": true,
     "receiptCarriedKeyIsTrustRoot": false,
     "builtIn": {
       "provenance": "binary-embedded",

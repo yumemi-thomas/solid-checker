@@ -1,0 +1,46 @@
+{
+  "entrypoints": {
+    "./destructured": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "cbca7482a66a55f804f68ba6af1055d55540849aed06a6d3558d8fac4ae6315d",
+            "path": "./destructured.ts",
+            "sha256": "342e9f30080a40d80c75e546b443306d2ba9a04a55d8500fe6a1ccf4c5bdffc9"
+          },
+          "declarations": {
+            "path": "./destructured.ts",
+            "sha256": "342e9f30080a40d80c75e546b443306d2ba9a04a55d8500fe6a1ccf4c5bdffc9"
+          },
+          "exports": {
+            "dependencyCacheName": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "inlineCacheName": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1destructured",
+            "typesBranch": "/exports/.~1destructured"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:bf0f29707444c93c869c9852dbaffba4b68cbea02366c8a7e9d162b60d71a59f",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "bf0f29707444c93c869c9852dbaffba4b68cbea02366c8a7e9d162b60d71a59f"
+    },
+    "name": "class-expression-kind",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    }
+  }
+}

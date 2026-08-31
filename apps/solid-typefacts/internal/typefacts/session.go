@@ -392,6 +392,25 @@ func (s *Session) lifecycle(
 		answer.Envelope.ProducerBuild = s.producerBuild
 		response.InvocationTranscripts = answer.Transcripts
 		response.InvocationEnvelope = &answer.Envelope
+	case LifecycleExportValues:
+		if request.Generation != generation {
+			return fail("generation-mismatch", ErrGenerationMismatch)
+		}
+		answer, err := s.closure.ExportValueTranscripts(ctx, request.ExportValueDemands)
+		if err != nil {
+			if ctx.Err() != nil {
+				return fail("analysis-cancelled", ctx.Err())
+			}
+			return fail("export-values-failed", err)
+		}
+		if answer.Envelope.Generation != generation || len(answer.Transcripts) != len(request.ExportValueDemands) {
+			return fail("export-values-failed", fmt.Errorf("export-value answer does not match generation or demand count"))
+		}
+		answer.Envelope.ProjectID = s.projectID
+		answer.Envelope.SchemaSHA256 = TypeFactsSchemaSHA256
+		answer.Envelope.ProducerBuild = s.producerBuild
+		response.ExportValueTranscripts = answer.Transcripts
+		response.ExportValueEnvelope = &answer.Envelope
 	case LifecycleCancel:
 		// Cancellation is delivered through the active request's context by
 		// the transport adapter. This operation acknowledges that delivery.

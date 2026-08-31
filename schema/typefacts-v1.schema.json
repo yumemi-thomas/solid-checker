@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://solid-checker.dev/schema/typefacts-v1.schema.json",
   "title": "TypeFactsSchema v1 (latest semantic vocabulary)",
-  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. Handshake protocol 4 carries the exact overload count beside the selected overload ordinal in read-only invocation transcripts. V1 is the sole active lifecycle schema. The retained table remains Wire schema v17 because invocation transcripts are demand-shaped side answers rather than retained rows. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
+  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. Handshake protocol 5 adds exact exported-value transcripts as a read-only operation distinct from invocation transcripts. V1 is the sole active lifecycle schema. The retained table remains Wire schema v17 because both transcript kinds are demand-shaped side answers rather than retained rows. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
   "oneOf": [
     { "$ref": "#/$defs/lifecycleRequest" },
     { "$ref": "#/$defs/lifecycleResponse" }
@@ -196,6 +196,15 @@
         "location": { "$ref": "#/$defs/location" },
         "callableDepth": { "type": "integer", "minimum": 0, "maximum": 8 },
         "census": { "type": "boolean" }
+      }
+    },
+    "exportValueDemand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "callableDepth": { "type": "integer", "minimum": 0, "maximum": 8 }
       }
     },
     "typeDescriptor": {
@@ -487,6 +496,21 @@
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }
     },
+    "exportValueTranscript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "value"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "queryName": { "type": "string" },
+        "target": { "type": "string" },
+        "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
+        "value": { "$ref": "#/$defs/invocationValue" },
+        "callablePaths": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/callablePath" } },
+        "complete": { "type": "boolean" },
+        "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
+      }
+    },
     "transcriptSourceDigest": {
       "type": "object",
       "additionalProperties": false,
@@ -519,7 +543,7 @@
         "schema": { "const": 1 },
         "requestId": { "type": "integer", "minimum": 1 },
         "operation": {
-          "enum": ["open", "update", "analyze", "symbols", "sources", "modules", "invocations", "cancel", "close"]
+          "enum": ["open", "update", "analyze", "symbols", "sources", "modules", "invocations", "export-values", "cancel", "close"]
         },
         "projectId": { "type": "string", "minLength": 1 },
         "generation": { "type": "integer", "minimum": 1 },
@@ -535,7 +559,8 @@
         "referencePaths": { "type": "array", "maxItems": 1000000, "items": { "type": "string", "minLength": 1 } },
         "cancelRequestId": { "type": "integer", "minimum": 0 },
         "moduleGraph": { "$ref": "#/$defs/moduleInventoryDemand" },
-        "invocationDemands": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/invocationDemand" } }
+        "invocationDemands": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/invocationDemand" } },
+        "exportValueDemands": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/exportValueDemand" } }
       }
     },
     "timings": {
@@ -620,6 +645,12 @@
           "items": { "$ref": "#/$defs/invocationTranscript" }
         },
         "invocationEnvelope": { "$ref": "#/$defs/invocationEnvelope" },
+        "exportValueTranscripts": {
+          "type": "array",
+          "maxItems": 1000000,
+          "items": { "$ref": "#/$defs/exportValueTranscript" }
+        },
+        "exportValueEnvelope": { "$ref": "#/$defs/invocationEnvelope" },
         "timings": { "$ref": "#/$defs/timings" },
         "error": {
           "type": "object",

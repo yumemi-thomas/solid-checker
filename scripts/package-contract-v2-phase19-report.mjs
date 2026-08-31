@@ -10,6 +10,7 @@ import {
   auditPhase19Cut,
   auditPhase19DemandAuthority
 } from "./package-contract-phase19.mjs";
+import { classifyResult } from "./ecosystem-benchmark/lib/classify.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const phase19 = join(root, "benchmarks/package-contract-v2/phase19");
@@ -87,6 +88,17 @@ function sumNamedCounts(attempts, field, name) {
   return attempts.reduce((total, attempt) => total + (attempt[field]?.[name] ?? 0), 0);
 }
 
+function currentFailureClass(result) {
+  if (result.outcome !== "failure") return result.class;
+  return classifyResult({
+    status: result.exitStatus,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    timedOut: result.timedOut ?? false,
+    phase: "generate"
+  }).class;
+}
+
 function demandFamilies(audit, attempts) {
   return [...new Set(audit.demands.map(demand => demand.family))]
     .sort()
@@ -133,7 +145,15 @@ export function buildPhase19Report(sources) {
   );
   const attemptStatuses = countsBy(attempts, "status");
   const attemptOwners = countsBy(attempts, "owner");
-  const failureClasses = countsBy(phase16Refusals.generatedProposalFailures, "class");
+  // Phase 16 remains historical evidence for identifying the finite-wildcard
+  // cohort, but the live owner queue must come from the current 418-row
+  // report. Reclassify its retained raw streams so classifier corrections
+  // (notably geolocation's terminal export-kind conflict) take effect without
+  // rewriting the immutable benchmark input.
+  const currentFailures = official
+    .filter(result => result.outcome === "failure")
+    .map(result => ({ ...result, class: currentFailureClass(result) }));
+  const failureClasses = countsBy(currentFailures, "class");
   const finiteWildcardBaselineRows = phase16Refusals.generatedProposalFailures.filter(
     row =>
       row.class === "unclassified" &&
@@ -146,21 +166,26 @@ export function buildPhase19Report(sources) {
     return {
       probeId: row.probeId,
       outcome: current.outcome,
-      class: current.class,
+      class: currentFailureClass(current),
       verifiedExportsUnlocked: 0
     };
   });
   const finiteWildcardOutcomes = countsBy(finiteWildcardRemeasurement, "outcome");
   const resourceLimitRefusals = official.flatMap(
-    result => result.contractContent?.artifactCaseRefusals ?? []
+    result => result.artifactCaseRefusals ?? result.contractContent?.artifactCaseRefusals ?? []
   ).filter(refusal => /resource limit/.test(refusal.reason));
   const cut = auditPhase19Cut(root);
   const authority = auditPhase19DemandAuthority(root);
 
   assert.equal(official.length, 418);
   assert.equal(status.success + status["partial-success"] + status.failure, official.length);
-  assert.ok(status.success + status["partial-success"] >= 355);
-  assert.equal(status.failure, 60);
+  // The 44/314/60 Slice-0 corpus is the non-regression floor, not a frozen
+  // outcome. Later Phase-20 repairs are expected to move fully refused rows
+  // into partial or complete proposals without editing this generator merely
+  // to permit improvement.
+  assert.ok(status.success >= 44);
+  assert.ok(status.success + status["partial-success"] >= 358);
+  assert.ok(status.failure <= 60);
   assert.equal(attempts.length, status.success);
   assert.equal(migration.rows.length, 73);
   assert.equal(migration.pending, 0);
@@ -202,6 +227,7 @@ export function buildPhase19Report(sources) {
       fullRefusal: status.failure,
       notApplicable: 0
     },
+    liveFailureClasses: failureClasses,
     policy2Issuance: {
       packages: {
         issued: 0,
@@ -267,25 +293,31 @@ export function buildPhase19Report(sources) {
       },
       {
         order: 3,
+        owner: "type-facts/export-kind-reconciliation",
+        rows: failureClasses["export-kind-conflict"] ?? 0,
+        disposition: "open-producer-evidence-required"
+      },
+      {
+        order: 4,
         owner: "type-facts/parameter-behavior",
         rows: failureClasses["unresolved-parameter-behavior"] ?? 0,
         disposition: "open-producer-evidence-required"
       },
       {
-        order: 4,
+        order: 5,
         owner: "artifact-resolver/export-identity",
         rows: failureClasses["package-contract-export-missing"] ?? 0,
         disposition: "open-resolution-repair-required"
       },
       {
-        order: 5,
+        order: 6,
         owner: "artifact-resolver/finite-wildcard-census",
         rows: failureClasses.unclassified ?? 0,
         disposition:
           "finite-wildcard-subset-remeasured-with-deeper-exact-refusals; other artifact shapes open"
       },
       {
-        order: 6,
+        order: 7,
         owner: "artifact-model/no-esm-surface",
         rows: failureClasses["no-exported-surface"] ?? 0,
         disposition: "retained-refusal"
@@ -439,7 +471,7 @@ No acceptance target weakens proof. The current zero issuance count is a result:
 | ---: | --- | ---: | --- |
 ${report.refusalOwnerQueue.map(row => `| ${row.order} | ${row.owner} | ${row.rows} | ${row.disposition} |`).join("\n")}
 
-Finite wildcard census support was remeasured across the 418-row corpus. Its five historical rows now expose deeper exact refusals and unlock zero verified exports; the eight no-ESM rows remain refusals.
+Finite wildcard census support was remeasured across the 418-row corpus. Its ${report.verifiedExportLeverage.finiteWildcardCensus.historicalRows} historical rows now expose deeper exact refusals and unlock zero verified exports; ${report.liveFailureClasses["no-exported-surface"] ?? 0} no-exported-surface rows remain refusals.
 
 ## Measurement availability
 

@@ -26,6 +26,7 @@
     "namespace-export-surface",
     "non-literal-dynamic-import",
     "parameter-member-forwarded",
+    "published-export-entity",
     "retained-callback-parameter",
     "seed-attestation-discrepancy",
     "torture-conditional-semantics",
