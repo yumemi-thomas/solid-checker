@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use solid_facts::{
-    ast::{AstFacts, ExportKind, ImportKind, extract},
+    ast::{AstFacts, ExportKind, IdentifierRole, ImportKind, extract},
     core::Span,
 };
 
@@ -47,10 +47,11 @@ impl SnapshotVerifiedExports {
         self.bindings.is_empty()
     }
 
-    pub(super) fn declaration_binding(&self, name: &str) -> Option<(&str, &str)> {
+    pub(super) fn declaration_binding(&self, name: &str) -> Option<(&str, &str, &str)> {
         self.bindings.get(name).map(|binding| {
             (
                 binding.declarations_path.as_str(),
+                binding.declarations_selector.as_str(),
                 binding.declarations_export.as_str(),
             )
         })
@@ -76,9 +77,10 @@ impl SnapshotVerifiedExports {
     }
 
     pub(super) fn has_declaration_target(&self, path: &str, name: &str) -> bool {
-        self.bindings.iter().any(|(public_name, binding)| {
+        self.bindings.values().any(|binding| {
             binding.declarations_path == path
-                && (public_name == name || binding.declarations_export == name)
+                && (binding.declarations_resolved_export == name
+                    || binding.declarations_export == name)
         })
     }
 }
@@ -87,10 +89,14 @@ impl SnapshotVerifiedExports {
 struct VerifiedExportBinding {
     runtime_path: String,
     runtime_export: String,
+    runtime_resolved_export: String,
+    runtime_selector: String,
     runtime_span: Option<Span>,
     runtime_snapshot_root: String,
     declarations_path: String,
     declarations_export: String,
+    declarations_resolved_export: String,
+    declarations_selector: String,
     declarations_span: Option<Span>,
     declarations_snapshot_root: String,
 }
@@ -182,17 +188,33 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
             VerifiedExportBinding {
                 runtime_path: runtime.file,
                 runtime_export: runtime.name,
+                runtime_resolved_export: runtime.resolved_name,
+                runtime_selector: runtime.selector,
                 runtime_span: runtime.span,
                 runtime_snapshot_root: runtime.snapshot_root,
                 declarations_path: declarations.file,
                 declarations_export: declarations.name,
+                declarations_resolved_export: declarations.resolved_name,
+                declarations_selector: declarations.selector,
                 declarations_span: declarations.span,
                 declarations_snapshot_root: declarations.snapshot_root,
             },
         );
     }
-    let mut evidence_fields = vec![snapshot.root().to_owned()];
-    for (name, binding) in &bindings {
+    let evidence_root = export_bindings_evidence_root(snapshot.root(), &bindings);
+    Ok(SnapshotVerifiedExports {
+        snapshot_root: snapshot.root().into(),
+        evidence_root,
+        bindings,
+    })
+}
+
+fn export_bindings_evidence_root(
+    snapshot_root: &str,
+    bindings: &BTreeMap<String, VerifiedExportBinding>,
+) -> String {
+    let mut evidence_fields = vec![snapshot_root.to_owned()];
+    for (name, binding) in bindings {
         evidence_fields.extend([
             name.clone(),
             binding.runtime_path.clone(),
@@ -208,16 +230,32 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
                 .map_or_else(String::new, |span| format!("{}:{}", span.start, span.end)),
             binding.declarations_snapshot_root.clone(),
         ]);
+        if binding.runtime_resolved_export != binding.runtime_export {
+            evidence_fields.extend([
+                "runtime-resolved-export".into(),
+                binding.runtime_resolved_export.clone(),
+            ]);
+        }
+        if binding.runtime_selector != binding.runtime_resolved_export {
+            evidence_fields.extend(["runtime-selector".into(), binding.runtime_selector.clone()]);
+        }
+        if binding.declarations_resolved_export != binding.declarations_export {
+            evidence_fields.extend([
+                "declarations-resolved-export".into(),
+                binding.declarations_resolved_export.clone(),
+            ]);
+        }
+        if binding.declarations_selector != binding.declarations_resolved_export {
+            evidence_fields.extend([
+                "declarations-selector".into(),
+                binding.declarations_selector.clone(),
+            ]);
+        }
     }
-    let evidence_root = super::certification_evidence_root(
+    super::certification_evidence_root(
         "export-bindings",
         evidence_fields.iter().map(String::as_str),
-    );
-    Ok(SnapshotVerifiedExports {
-        snapshot_root: snapshot.root().into(),
-        evidence_root,
-        bindings,
-    })
+    )
 }
 
 #[cfg(test)]
@@ -251,9 +289,21 @@ fn verify_binding(
         declarations,
         dependencies,
     )?;
-    if supplied.runtime.export_name != runtime.name
-        || supplied.declarations.export_name != declarations.name
-    {
+    verify_binding_names(
+        &supplied.runtime.export_name,
+        &runtime.resolved_name,
+        &supplied.declarations.export_name,
+        &declarations.resolved_name,
+    )
+}
+
+fn verify_binding_names(
+    supplied_runtime: &str,
+    replayed_runtime: &str,
+    supplied_declarations: &str,
+    replayed_declarations: &str,
+) -> Result<(), ArtifactSnapshotError> {
+    if supplied_runtime != replayed_runtime || supplied_declarations != replayed_declarations {
         return export_mismatch("supplied export target name disagrees with snapshot replay");
     }
     Ok(())
@@ -297,6 +347,11 @@ struct ModuleDescription {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct BindingTarget {
     file: String,
+    /// Export name that addresses this target from its terminal module file.
+    selector: String,
+    /// Canonical target name returned by module export resolution.
+    resolved_name: String,
+    /// Exact name the Type Facts query at `span` must report.
     name: String,
     snapshot_root: String,
     span: Option<Span>,
@@ -348,6 +403,39 @@ impl ExportReplay<'_> {
         let mut description = ModuleDescription::default();
         let mut imports = BTreeMap::<String, BindingTarget>::new();
         let mut external_imports = BTreeMap::<String, (String, String)>::new();
+        let named_default_declarations = facts
+            .module_level_exports()
+            .filter(|export| export.kind == ExportKind::Default && !export.type_only)
+            .filter_map(|export| export.declarations.first())
+            .filter(|declaration| {
+                facts.identifiers.iter().any(|identifier| {
+                    identifier.role == IdentifierRole::Binding
+                        && identifier.span == declaration.local.span
+                })
+            })
+            .map(|declaration| {
+                Ok((
+                    declaration.local.span,
+                    BindingTarget {
+                        file: path.into(),
+                        selector: "default".into(),
+                        resolved_name: "default".into(),
+                        name: if axis == ModuleAxis::Runtime {
+                            span_text(
+                                source,
+                                declaration.local.span.start,
+                                declaration.local.span.end,
+                            )?
+                            .into()
+                        } else {
+                            "default".into()
+                        },
+                        snapshot_root: self.snapshot.root().into(),
+                        span: Some(declaration.local.span),
+                    },
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, ArtifactSnapshotError>>()?;
         for import in facts.imports.iter().filter(|import| !import.type_only) {
             let resolution = resolve_local(self.snapshot, path, &import.module, axis)?;
             for binding in &import.bindings {
@@ -367,6 +455,8 @@ impl ExportReplay<'_> {
                             local.into(),
                             BindingTarget {
                                 file: target.clone(),
+                                selector: imported.to_string(),
+                                resolved_name: imported.to_string(),
                                 name: imported.to_string(),
                                 snapshot_root: self.snapshot.root().into(),
                                 span: None,
@@ -416,6 +506,8 @@ impl ExportReplay<'_> {
                                 namespace.to_string(),
                                 BindingTarget {
                                     file: target,
+                                    selector: "*".into(),
+                                    resolved_name: "*".into(),
                                     name: "*".into(),
                                     snapshot_root: self.snapshot.root().into(),
                                     span: None,
@@ -462,11 +554,21 @@ impl ExportReplay<'_> {
                         }
                         let binding = target.as_ref().map_or_else(
                             || {
-                                imports
-                                    .get(local)
-                                    .cloned()
+                                facts
+                                    .reference_declaration(specifier.local.span)
+                                    .and_then(|declaration| {
+                                        named_default_declarations.get(&declaration)
+                                    })
+                                    .map(|target| BindingTarget {
+                                        selector: specifier.exported.to_string(),
+                                        resolved_name: local.into(),
+                                        ..target.clone()
+                                    })
+                                    .or_else(|| imports.get(local).cloned())
                                     .unwrap_or_else(|| BindingTarget {
                                         file: path.into(),
+                                        selector: specifier.exported.to_string(),
+                                        resolved_name: local.into(),
                                         name: local.into(),
                                         snapshot_root: self.snapshot.root().into(),
                                         span: Some(specifier.local.span),
@@ -474,6 +576,8 @@ impl ExportReplay<'_> {
                             },
                             |target| BindingTarget {
                                 file: target.clone(),
+                                selector: local.into(),
+                                resolved_name: local.into(),
                                 name: local.into(),
                                 snapshot_root: self.snapshot.root().into(),
                                 span: None,
@@ -492,6 +596,8 @@ impl ExportReplay<'_> {
                             declaration.exported.to_string(),
                             BindingTarget {
                                 file: path.into(),
+                                selector: declaration.exported.to_string(),
+                                resolved_name: declaration.exported.to_string(),
                                 name: declaration.exported.to_string(),
                                 snapshot_root: self.snapshot.root().into(),
                                 span: Some(declaration.local.span),
@@ -501,16 +607,37 @@ impl ExportReplay<'_> {
                 }
                 ExportKind::Default => {
                     if !export.type_only {
+                        let declaration = export.declarations.first();
+                        let local_identifier = declaration
+                            .filter(|declaration| {
+                                facts
+                                    .reference_declaration(declaration.local.span)
+                                    .is_some()
+                            })
+                            .map(|declaration| {
+                                span_text(
+                                    source,
+                                    declaration.local.span.start,
+                                    declaration.local.span.end,
+                                )
+                            })
+                            .transpose()?;
+                        let query_name = local_identifier.or_else(|| {
+                            declaration.and_then(|declaration| {
+                                named_default_declarations
+                                    .get(&declaration.local.span)
+                                    .map(|target| target.name.as_str())
+                            })
+                        });
                         description.direct.insert(
                             "default".into(),
                             BindingTarget {
                                 file: path.into(),
-                                name: "default".into(),
+                                selector: "default".into(),
+                                resolved_name: "default".into(),
+                                name: query_name.unwrap_or("default").into(),
                                 snapshot_root: self.snapshot.root().into(),
-                                span: export
-                                    .declarations
-                                    .first()
-                                    .map(|declaration| declaration.local.span),
+                                span: declaration.map(|declaration| declaration.local.span),
                             },
                         );
                     }
@@ -587,13 +714,14 @@ impl ExportReplay<'_> {
             return Ok(None);
         }
 
-        let mut candidates = BTreeMap::<(String, String, String), BindingTarget>::new();
+        let mut candidates = BTreeMap::<(String, String, String, String), BindingTarget>::new();
         for target in description.stars {
             if let Some(candidate) = self.bind_export(&target, name, axis, visiting)? {
                 candidates.insert(
                     (
                         candidate.snapshot_root.clone(),
                         candidate.file.clone(),
+                        candidate.selector.clone(),
                         candidate.name.clone(),
                     ),
                     candidate,
@@ -606,6 +734,7 @@ impl ExportReplay<'_> {
                     (
                         candidate.snapshot_root.clone(),
                         candidate.file.clone(),
+                        candidate.selector.clone(),
                         candidate.name.clone(),
                     ),
                     candidate,
@@ -643,15 +772,19 @@ impl ExportReplay<'_> {
         }
         let dependency = self.external_dependency(specifier)?;
         let binding = dependency.verified_exports.bindings.get(name)?;
-        let (file, name, snapshot_root, span) = match axis {
+        let (file, selector, resolved_name, name, snapshot_root, span) = match axis {
             ModuleAxis::Runtime => (
                 &binding.runtime_path,
+                &binding.runtime_selector,
+                &binding.runtime_resolved_export,
                 &binding.runtime_export,
                 &binding.runtime_snapshot_root,
                 binding.runtime_span,
             ),
             ModuleAxis::Declarations => (
                 &binding.declarations_path,
+                &binding.declarations_selector,
+                &binding.declarations_resolved_export,
                 &binding.declarations_export,
                 &binding.declarations_snapshot_root,
                 binding.declarations_span,
@@ -659,6 +792,8 @@ impl ExportReplay<'_> {
         };
         Some(BindingTarget {
             file: file.clone(),
+            selector: selector.clone(),
+            resolved_name: resolved_name.clone(),
             name: name.clone(),
             snapshot_root: snapshot_root.clone(),
             span,
@@ -728,6 +863,8 @@ mod tests {
                 .unwrap(),
             Some(BindingTarget {
                 file: "impl.ts".into(),
+                selector: "value".into(),
+                resolved_name: "value".into(),
                 name: "value".into(),
                 snapshot_root: snapshot.root().into(),
                 span: Some(Span { start: 13, end: 18 }),
@@ -762,6 +899,8 @@ mod tests {
                 "SolidQueryDevtools".into(),
                 BindingTarget {
                     file: "build/_tsup-dts-rollup.d.ts".into(),
+                    selector: "SolidQueryDevtools".into(),
+                    resolved_name: "SolidQueryDevtools".into(),
                     name: "SolidQueryDevtools".into(),
                     snapshot_root: snapshot.root().into(),
                     span: None,
@@ -777,6 +916,8 @@ mod tests {
                 "SolidQueryDevtools".into(),
                 BindingTarget {
                     file: "build/_tsup-dts-rollup.d.ts".into(),
+                    selector: "SolidQueryDevtools".into(),
+                    resolved_name: "SolidQueryDevtools".into(),
                     name: "SolidQueryDevtools".into(),
                     snapshot_root: snapshot.root().into(),
                     span: Some(Span { start: 21, end: 39 }),
@@ -795,10 +936,323 @@ mod tests {
                 .unwrap(),
             Some(BindingTarget {
                 file: "build/_tsup-dts-rollup.d.ts".into(),
+                selector: "SolidQueryDevtools".into(),
+                resolved_name: "SolidQueryDevtools".into(),
                 name: "SolidQueryDevtools".into(),
                 snapshot_root: snapshot.root().into(),
                 span: Some(Span { start: 21, end: 39 }),
             })
         );
+    }
+
+    #[test]
+    fn default_export_replay_preserves_exact_local_declaration_identity() {
+        let sources = [
+            (
+                "identifier.js",
+                "function createX() {} export default createX;",
+            ),
+            (
+                "declaration.d.ts",
+                "export default function createX(): void; export { createX };",
+            ),
+            (
+                "named.js",
+                "export default function createRuntime() {} export { createRuntime };",
+            ),
+            ("anonymous.js", "export default (value) => value;"),
+        ];
+        let snapshot = snapshot(&sources);
+        let mut replay = ExportReplay {
+            snapshot: &snapshot,
+            dependencies: &[],
+            descriptions: BTreeMap::new(),
+        };
+
+        let identifier = replay
+            .description("identifier.js", ModuleAxis::Runtime)
+            .unwrap();
+        let identifier_target = identifier.direct.get("default").unwrap();
+        assert_eq!(identifier_target.name, "createX");
+        assert_eq!(identifier_target.resolved_name, "default");
+        assert_eq!(
+            span_text(
+                sources[0].1,
+                identifier_target.span.unwrap().start,
+                identifier_target.span.unwrap().end,
+            )
+            .unwrap(),
+            "createX"
+        );
+
+        let declaration = replay
+            .description("declaration.d.ts", ModuleAxis::Declarations)
+            .unwrap();
+        let default_target = declaration.direct.get("default").unwrap();
+        let named_target = declaration.direct.get("createX").unwrap();
+        assert_eq!(default_target.name, "default");
+        assert_eq!(default_target.resolved_name, "default");
+        assert_eq!(named_target.name, "default");
+        assert_eq!(named_target.resolved_name, "createX");
+        assert_eq!(named_target.file, default_target.file);
+        assert_eq!(named_target.span, default_target.span);
+        assert_eq!(
+            span_text(
+                sources[1].1,
+                named_target.span.unwrap().start,
+                named_target.span.unwrap().end,
+            )
+            .unwrap(),
+            "createX"
+        );
+
+        let named_runtime = replay.description("named.js", ModuleAxis::Runtime).unwrap();
+        let runtime_default = named_runtime.direct.get("default").unwrap();
+        let runtime_named = named_runtime.direct.get("createRuntime").unwrap();
+        assert_eq!(runtime_default.name, "createRuntime");
+        assert_eq!(runtime_default.resolved_name, "default");
+        assert_eq!(runtime_named.name, "createRuntime");
+        assert_eq!(runtime_named.resolved_name, "createRuntime");
+        assert_eq!(runtime_named.span, runtime_default.span);
+
+        let anonymous = replay
+            .description("anonymous.js", ModuleAxis::Runtime)
+            .unwrap();
+        let anonymous_target = anonymous.direct.get("default").unwrap();
+        assert_eq!(anonymous_target.name, "default");
+        assert_eq!(anonymous_target.resolved_name, "default");
+        assert_eq!(
+            span_text(
+                sources[3].1,
+                anonymous_target.span.unwrap().start,
+                anonymous_target.span.unwrap().end,
+            )
+            .unwrap(),
+            "(value) => value"
+        );
+
+        assert!(verify_binding_names("default", "default", "createX", "createX").is_ok());
+        assert!(matches!(
+            verify_binding_names("createX", "default", "createX", "createX"),
+            Err(ArtifactSnapshotError::ExportBindings(_))
+        ));
+        assert!(matches!(
+            verify_binding_names("default", "default", "default", "createX"),
+            Err(ArtifactSnapshotError::ExportBindings(_))
+        ));
+    }
+
+    #[test]
+    fn default_export_entry_forms_and_propagation_remain_distinct() {
+        let snapshot = snapshot(&[
+            (
+                "forward.js",
+                "export { createForward }; export default function createForward() {}",
+            ),
+            (
+                "class.js",
+                "export default class NamedClass {} export { NamedClass };",
+            ),
+            (
+                "alias-default.js",
+                "const value = () => 1; export { value as default };",
+            ),
+            (
+                "expression-default.js",
+                "const value = () => 1; export default value;",
+            ),
+            ("impl.js", "export default function implementation() {}"),
+            (
+                "barrel.js",
+                "export { default as publicName } from './impl';",
+            ),
+            (
+                "import-barrel.js",
+                "import implementation from './impl'; export { implementation as publicName };",
+            ),
+            (
+                "external.js",
+                "import externalDefault from 'unplanned'; export { externalDefault };",
+            ),
+            (
+                "fan-in-source.js",
+                "const x = 1; export default x; export { x };",
+            ),
+            (
+                "fan-in-default.js",
+                "export { default as y } from './fan-in-source';",
+            ),
+            (
+                "fan-in-named.js",
+                "export { x as y } from './fan-in-source';",
+            ),
+            (
+                "fan-in-entry.js",
+                "export * from './fan-in-default'; export * from './fan-in-named';",
+            ),
+        ]);
+        let mut replay = ExportReplay {
+            snapshot: &snapshot,
+            dependencies: &[],
+            descriptions: BTreeMap::new(),
+        };
+
+        for (path, name) in [("forward.js", "createForward"), ("class.js", "NamedClass")] {
+            let description = replay.description(path, ModuleAxis::Runtime).unwrap();
+            let default = description.direct.get("default").unwrap();
+            let named = description.direct.get(name).unwrap();
+            assert_eq!(default.name, name);
+            assert_eq!(default.selector, "default");
+            assert_eq!(default.resolved_name, "default");
+            assert_eq!(named.name, name);
+            assert_eq!(named.selector, name);
+            assert_eq!(named.resolved_name, name);
+            assert_eq!(named.span, default.span);
+        }
+
+        let alias = replay
+            .description("alias-default.js", ModuleAxis::Runtime)
+            .unwrap()
+            .direct
+            .remove("default")
+            .unwrap();
+        let expression = replay
+            .description("expression-default.js", ModuleAxis::Runtime)
+            .unwrap()
+            .direct
+            .remove("default")
+            .unwrap();
+        assert_eq!(alias.resolved_name, "value");
+        assert_eq!(expression.resolved_name, "default");
+        assert_eq!(alias.selector, "default");
+        assert_eq!(expression.selector, "default");
+        assert_eq!(alias.name, "value");
+        assert_eq!(expression.name, "value");
+        assert_ne!(alias.span, expression.span);
+        let verified = SnapshotVerifiedExports {
+            snapshot_root: snapshot.root().into(),
+            evidence_root: "sha256:test".into(),
+            bindings: BTreeMap::from([
+                (
+                    "default".into(),
+                    VerifiedExportBinding {
+                        runtime_path: "expression-default.js".into(),
+                        runtime_export: expression.name.clone(),
+                        runtime_resolved_export: expression.resolved_name.clone(),
+                        runtime_selector: expression.selector.clone(),
+                        runtime_span: expression.span,
+                        runtime_snapshot_root: snapshot.root().into(),
+                        declarations_path: "expression-default.js".into(),
+                        declarations_export: expression.name.clone(),
+                        declarations_resolved_export: expression.resolved_name.clone(),
+                        declarations_selector: expression.selector.clone(),
+                        declarations_span: expression.span,
+                        declarations_snapshot_root: snapshot.root().into(),
+                    },
+                ),
+                (
+                    "y".into(),
+                    VerifiedExportBinding {
+                        runtime_path: "alias.d.ts".into(),
+                        runtime_export: "default".into(),
+                        runtime_resolved_export: "createX".into(),
+                        runtime_selector: "y".into(),
+                        runtime_span: None,
+                        runtime_snapshot_root: snapshot.root().into(),
+                        declarations_path: "alias.d.ts".into(),
+                        declarations_export: "default".into(),
+                        declarations_resolved_export: "createX".into(),
+                        declarations_selector: "y".into(),
+                        declarations_span: None,
+                        declarations_snapshot_root: snapshot.root().into(),
+                    },
+                ),
+            ]),
+        };
+        assert_eq!(
+            verified.declaration_binding("default"),
+            Some(("expression-default.js", "default", "value"))
+        );
+        assert!(verified.has_declaration_target("expression-default.js", "default"));
+        assert!(verified.has_declaration_target("expression-default.js", "value"));
+        assert!(!verified.has_declaration_target("expression-default.js", "other"));
+        assert!(verified.has_declaration_target("alias.d.ts", "createX"));
+        assert!(verified.has_declaration_target("alias.d.ts", "default"));
+        assert!(!verified.has_declaration_target("alias.d.ts", "y"));
+        let evidence_root = export_bindings_evidence_root(snapshot.root(), &verified.bindings);
+        let mut selector_mutation = verified.bindings.clone();
+        selector_mutation
+            .get_mut("y")
+            .unwrap()
+            .declarations_selector = "other".into();
+        assert_ne!(
+            export_bindings_evidence_root(snapshot.root(), &selector_mutation),
+            evidence_root
+        );
+        let mut resolver_mutation = verified.bindings.clone();
+        resolver_mutation
+            .get_mut("y")
+            .unwrap()
+            .declarations_resolved_export = "other".into();
+        assert_ne!(
+            export_bindings_evidence_root(snapshot.root(), &resolver_mutation),
+            evidence_root
+        );
+        let mut runtime_selector_mutation = verified.bindings.clone();
+        runtime_selector_mutation
+            .get_mut("y")
+            .unwrap()
+            .runtime_selector = "other".into();
+        assert_ne!(
+            export_bindings_evidence_root(snapshot.root(), &runtime_selector_mutation),
+            evidence_root
+        );
+        let mut runtime_resolver_mutation = verified.bindings.clone();
+        runtime_resolver_mutation
+            .get_mut("y")
+            .unwrap()
+            .runtime_resolved_export = "other".into();
+        assert_ne!(
+            export_bindings_evidence_root(snapshot.root(), &runtime_resolver_mutation),
+            evidence_root
+        );
+
+        for path in ["barrel.js", "import-barrel.js"] {
+            let target = replay
+                .bind_export(
+                    path,
+                    "publicName",
+                    ModuleAxis::Runtime,
+                    &mut BTreeSet::new(),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(target.file, "impl.js");
+            assert_eq!(target.selector, "default");
+            assert_eq!(target.resolved_name, "default");
+            assert_eq!(target.name, "implementation");
+        }
+
+        assert!(
+            replay
+                .bind_export(
+                    "external.js",
+                    "externalDefault",
+                    ModuleAxis::Runtime,
+                    &mut BTreeSet::new(),
+                )
+                .unwrap()
+                .is_none(),
+            "an unplanned external default import must not acquire a local target"
+        );
+        assert!(matches!(
+            replay.bind_export(
+                "fan-in-entry.js",
+                "y",
+                ModuleAxis::Runtime,
+                &mut BTreeSet::new(),
+            ),
+            Err(ArtifactSnapshotError::ExportBindings(_))
+        ));
     }
 }

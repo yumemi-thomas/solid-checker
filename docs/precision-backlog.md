@@ -10535,3 +10535,60 @@ query/persist rows lack the undeclared `@solidjs/web` peer, and
 closure module. No protocol, schema, or generated artifact changed. The Round 2
 full 418-probe remeasurement remains deferred until the remaining bounded
 artifact slices land.
+
+## 2026-09-01 — Default-export resolver and Type Facts identities are separate
+
+M5's two default-export mismatches came from one overloaded replay field. Three
+identities are now explicit: the module resolver's canonical target name, the
+export selector that actually addresses that target from its terminal file,
+and the producer's exact query name at the replayed span. They coincide for
+ordinary exports but not for every default or aliased form. For
+`export default createX`, the resolver target and terminal selector remain
+`default` while the runtime query name is `createX`. For
+`export default function createX`, the runtime query name is `createX`, the
+declaration query name is `default`, and a same-file `export { createX }`
+retains its resolver name and selector while following the binder-selected
+default declaration span. Exact-name equality was not relaxed.
+
+The necessary AST premise is exact binder identity, not spelling:
+`ExportNamedDeclaration` local specifiers now contribute their Oxc
+`reference_id -> symbol_id -> declaration span` to the existing reference table.
+Replay recognizes a default function or class only when that exact declaration
+span is the default declaration's binding identifier. Anonymous defaults retain
+no synthetic identity. Forced-exact harnesses import with the terminal selector
+and verify with the separate producer query name; resolution-variant and
+evidence identities bind all distinct fields. Star-candidate identity also
+includes the terminal selector, so paths to `default` and to a same-named live
+binding cannot collapse.
+
+The canonical before/after rows were:
+
+- `@solid-primitives/local-store@1.1.4|solid1|only`: before, demand
+  `sha256:174bb5aa2e0dcae2c5cfd3883b5358050541f3fd8a4e559de81951ea5efefaad`
+  refused the internally inconsistent runtime identity. After, that demand is
+  discharged, but the row honestly remains refused at demand
+  `sha256:19c7d299065f90f653a83b32d2fcae879786e32da9c9942ab3a89d4dd8dcc645`:
+  the required recursive value path is locally open with
+  `unresolvedGeneric`. The diagnosis's predicted certification was therefore
+  falsified; the root-closure gate remains unchanged.
+- `@solid-primitives/tween@1.4.1|solid1|only`: before, demand
+  `sha256:53bc385769aecf2468dce0903cc8795b2d832d96f3470697742bb283c1136d49`
+  refused the declaration-name mismatch. After, the same authenticated row
+  certifies through catalog publication; there is no refusing after-demand.
+
+Adversarial review found four load-bearing gaps before final acceptance. The
+resolver name was not mutation-pinned independently from the query name, a
+forced-exact harness could incorrectly use a non-importable identity as named
+import syntax, and star fan-in could collapse paths to distinct default versus
+live bindings without a terminal-selector key. Finally, dependency declaration
+authentication treated public/selector aliases as declaration identity, which
+could accept a different same-file declaration; only exact replayed resolver or
+query identities are now authoritative. All four are pinned, along with named
+functions/classes, forward named exports,
+`export { x as default }` versus `export default x`, local re-export/import
+propagation, unplanned external defaults, exact mismatch, and anonymous-default
+refusal. The three Start Server rows, four Solid 2 TanStack
+query/persist rows, and the `@solid-primitives/context` declaration defect retain
+their exact fail-closed causes. No Type Facts protocol, schema, snapshot, or
+generated artifact changed. The Round 2 full 418-probe remeasurement remains
+deferred until the remaining bounded artifact slices land.

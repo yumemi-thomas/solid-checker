@@ -2216,6 +2216,25 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_export_named_declaration(&mut self, declaration: &ExportNamedDeclaration<'a>) {
+        // Oxc represents a local `export { value }` name as a module-export
+        // name and does not walk it through `visit_identifier_reference`.
+        // Preserve the binder-selected declaration explicitly so consumers do
+        // not have to reconnect the export by spelling. This is load-bearing
+        // for a named export of a same-file default function/class declaration:
+        // TypeScript gives that declaration the canonical export identity
+        // `default`, even though its local binding has a source-level name.
+        for specifier in &declaration.specifiers {
+            if let ModuleExportName::IdentifierReference(identifier) = &specifier.local
+                && let Some(target) = identifier
+                    .reference_id
+                    .get()
+                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                    .map(|symbol| span(self.scoping.symbol_span(symbol)))
+            {
+                self.reference_declarations
+                    .push((span(identifier.span), target));
+            }
+        }
         self.exports.push(ExportFact {
             span: span(declaration.span),
             kind: ExportKind::Named,
@@ -3654,6 +3673,22 @@ renamed();"#,
                 ("value", false),
                 ("default", false)
             ]
+        );
+    }
+
+    #[test]
+    fn resolves_local_export_specifiers_to_their_exact_declarations() {
+        let facts = extract(
+            "exports.ts",
+            "export default function createX() {} export { createX };",
+        )
+        .unwrap();
+        let default_declaration = facts.exports[0].declarations[0].local.span;
+        let named_specifier = facts.exports[1].specifiers[0].local.span;
+
+        assert_eq!(
+            facts.reference_declaration(named_specifier),
+            Some(default_declaration)
         );
     }
 

@@ -1051,7 +1051,7 @@ impl Drop for PrivateTypeFactsProject {
 }
 
 type ExportHarnessSubject = (String, String);
-type ExportResolutionVariant = (String, String, String);
+type ExportResolutionVariant = (String, String, String, String);
 type ExportResolutionVariants = std::collections::BTreeMap<
     ExportHarnessSubject,
     std::collections::BTreeSet<ExportResolutionVariant>,
@@ -1073,7 +1073,7 @@ fn derive_export_value_schedules(
             let (artifact_case, export) = proof_artifact_export(demand.subject());
             let public_specifier =
                 public_export_harness_specifier(plan, artifact_case, demand.id().as_str())?;
-            let (declaration_path, declaration_export) = plan
+            let (declaration_path, declaration_selector, declaration_export) = plan
                 .verified_exports
                 .declaration_binding(export)
                 .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
@@ -1085,6 +1085,7 @@ fn derive_export_value_schedules(
                 .or_default()
                 .insert((
                     declaration_path.to_owned(),
+                    declaration_selector.to_owned(),
                     declaration_export.to_owned(),
                     plan.snapshot_root().to_owned(),
                 ));
@@ -1454,7 +1455,7 @@ fn exact_declaration_harness_subject(
     export: &str,
     demand: &str,
 ) -> Result<(String, String), TypeFactsCertificationError> {
-    let (declaration_path, declaration_export) = plan
+    let (declaration_path, declaration_selector, _declaration_export) = plan
         .verified_exports
         .declaration_binding(export)
         .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
@@ -1468,7 +1469,7 @@ fn exact_declaration_harness_subject(
     // condition set. This relative verifier-owned path selects the immutable
     // snapshot file each opaque plan already authenticated.
     let specifier = snapshot_module_harness_specifier(project, plan, declaration_path)?;
-    Ok((specifier, declaration_export.to_owned()))
+    Ok((specifier, declaration_selector.to_owned()))
 }
 
 fn snapshot_module_harness_specifier(
@@ -1935,7 +1936,7 @@ fn verify_subject_signature(
             reason: "demanded export is absent from the selected candidate".into(),
         });
     }
-    let (declaration_path, declaration_export) = plan
+    let (declaration_path, _declaration_selector, declaration_export) = plan
         .verified_exports
         .declaration_binding(export)
         .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
@@ -2018,7 +2019,7 @@ fn verify_export_value_subject(
             reason: "export-value transcript has no compiler-resolved declaration".into(),
         }
     })?;
-    let (declaration_path, declaration_export) = plan
+    let (declaration_path, _declaration_selector, declaration_export) = plan
         .verified_exports
         .declaration_binding(export)
         .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
@@ -2059,6 +2060,14 @@ fn verify_export_value_subject(
     if !actual_path.ends_with(&marker) {
         return Ok(());
     }
+    verify_snapshot_declaration_name(&proof.id, declaration_export, actual_name)
+}
+
+fn verify_snapshot_declaration_name(
+    demand: &str,
+    declaration_export: &str,
+    actual_name: &str,
+) -> Result<(), TypeFactsCertificationError> {
     if declaration_export == "default" {
         // The verifier-authored harness contains an exact default import for
         // this package/subpath, and its bytes are part of the source census.
@@ -2068,7 +2077,7 @@ fn verify_export_value_subject(
         // alias, but an anonymous/unidentified declaration is not authority.
         if actual_name.is_empty() {
             return Err(TypeFactsCertificationError::SubjectMismatch {
-                demand: proof.id.clone(),
+                demand: demand.into(),
                 reason: "canonical default-export target has no declaration identity".into(),
             });
         }
@@ -2076,7 +2085,7 @@ fn verify_export_value_subject(
     }
     if actual_name != declaration_export {
         return Err(TypeFactsCertificationError::SubjectMismatch {
-            demand: proof.id.clone(),
+            demand: demand.into(),
             reason: "resolved value declaration name disagrees with snapshot export replay".into(),
         });
     }
@@ -8347,6 +8356,22 @@ mod tests {
         assert!(matches!(
             verify_declaration_export_identity(&selected, "default", signature),
             Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+    }
+
+    #[test]
+    fn anonymous_default_declarations_never_gain_synthetic_identity() {
+        assert!(matches!(
+            verify_snapshot_declaration_name("sha256:test", "default", ""),
+            Err(TypeFactsCertificationError::SubjectMismatch { reason, .. })
+                if reason == "canonical default-export target has no declaration identity"
+        ));
+        assert!(verify_snapshot_declaration_name("sha256:test", "default", "createX").is_ok());
+        assert!(verify_snapshot_declaration_name("sha256:test", "createX", "createX").is_ok());
+        assert!(matches!(
+            verify_snapshot_declaration_name("sha256:test", "createX", "createY"),
+            Err(TypeFactsCertificationError::SubjectMismatch { reason, .. })
+                if reason == "resolved value declaration name disagrees with snapshot export replay"
         ));
     }
 
