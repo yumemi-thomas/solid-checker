@@ -10499,3 +10499,39 @@ Solid 2 TanStack query/persist-client rows ×4 still lack the undeclared
 and authoritative report digest remain deferred until the remaining bounded
 artifact slices land; this slice changes the first refusal within one row, not
 its verdict.
+
+## 2026-09-01 — Byte-identical canonical archive duplicates are idempotent
+
+Authenticated archive ingestion now accepts a repeated canonical regular-file
+path only when the second member's bytes are exactly equal to the first. Both
+payloads still count against the expanded-byte limit and both entries count
+against the member limit; unequal bytes remain `DuplicateMember`. The logical
+file map, member count, and snapshot root are therefore identical to a
+hypothetical archive containing one copy. Repeated zero-sized directory entries
+remain inert, while file/directory kind conflicts, unsupported links, unsafe
+paths, and case-fold collisions remain fatal.
+
+Adversarial review found three archive-topology/resource defects while removing
+the blanket duplicate refusal. Explicit empty directories initially did not
+participate in ancestor topology, case-different ancestors such as a `Dist`
+file plus `dist/child` escaped that topology on case-insensitive extractors,
+and nonzero directory payloads bypassed expanded-byte accounting. The final
+ingestor validates file prefixes against both exact and folded explicit
+directory/file topology and rejects nonzero directory payloads before
+discarding the entry. Both archive orders, byte-identical case collisions,
+symlink/hardlink collisions, conflicting duplicate bytes, and a duplicate that
+crosses the expanded-byte limit are mutation-pinned. Final re-review found no
+remaining bounded M7 over-permission.
+
+The canonical `@solid-primitives/start@0.0.4|solid1|only` reproducer has no
+demand digest. Before the change certification stopped at artifact provenance
+with `duplicate archive member: dist/index.cjs`; after the change the same
+authenticated tarball certifies through catalog publication. The focused
+single-member/duplicate-member test pins the unchanged snapshot root. All eight
+artifact-mechanics must-not-clear rows retain their exact defects: the three
+Start Server rows lack `#tanstack-router-entry`, four Solid 2 TanStack
+query/persist rows lack the undeclared `@solidjs/web` peer, and
+`@solid-primitives/context@0.3.2` still refuses its absent published declaration
+closure module. No protocol, schema, or generated artifact changed. The Round 2
+full 418-probe remeasurement remains deferred until the remaining bounded
+artifact slices land.

@@ -1251,7 +1251,7 @@ impl ArtifactSnapshot {
         let decoder = GzDecoder::new(Cursor::new(archive));
         let mut tar = tar::Archive::new(decoder);
         let mut files = BTreeMap::<String, Arc<[u8]>>::new();
-        let mut seen = BTreeSet::new();
+        let mut explicit_directories = BTreeSet::new();
         let mut casefolded = BTreeMap::<String, String>::new();
         let mut expanded_bytes = 0usize;
         let entries = tar.entries().map_err(archive_error)?;
@@ -1263,9 +1263,6 @@ impl ArtifactSnapshot {
             }
             let mut entry = entry.map_err(archive_error)?;
             let package_path = canonical_member_path(&entry, limits.package_path_bytes)?;
-            if !seen.insert(package_path.clone()) {
-                return Err(ArtifactSnapshotError::DuplicateMember(package_path));
-            }
             let folded = package_path.to_lowercase();
             if let Some(first) = casefolded.insert(folded, package_path.clone())
                 && first != package_path
@@ -1278,6 +1275,15 @@ impl ArtifactSnapshot {
 
             let kind = entry.header().entry_type();
             if kind.is_dir() {
+                if entry.size() != 0 {
+                    return Err(ArtifactSnapshotError::InvalidArchive(format!(
+                        "directory member {package_path} has a nonzero payload"
+                    )));
+                }
+                if files.contains_key(&package_path) {
+                    return Err(ArtifactSnapshotError::DuplicateMember(package_path));
+                }
+                explicit_directories.insert(package_path);
                 continue;
             }
             if !kind.is_file() {
@@ -1310,6 +1316,15 @@ impl ArtifactSnapshot {
                 )));
             }
             expanded_bytes += bytes.len();
+            if explicit_directories.contains(&package_path) {
+                return Err(ArtifactSnapshotError::DuplicateMember(package_path));
+            }
+            if let Some(first) = files.get(&package_path) {
+                if first.as_ref() == bytes.as_slice() {
+                    continue;
+                }
+                return Err(ArtifactSnapshotError::DuplicateMember(package_path));
+            }
             files.insert(package_path, Arc::from(bytes));
         }
         if files.is_empty() {
@@ -1317,7 +1332,7 @@ impl ArtifactSnapshot {
                 "archive contains no package files".into(),
             ));
         }
-        validate_topology(&files)?;
+        validate_topology(&files, &explicit_directories)?;
         let directories = derive_directories(files.keys());
         validate_manifest_identity(&files, &package_name, &package_version)?;
         let root = snapshot_root(&package_name, &package_version, &files, &directories);
@@ -2166,7 +2181,14 @@ fn canonical_member_path<R: Read>(
     Ok(normalized.join("/"))
 }
 
-fn validate_topology(files: &BTreeMap<String, Arc<[u8]>>) -> Result<(), ArtifactSnapshotError> {
+fn validate_topology(
+    files: &BTreeMap<String, Arc<[u8]>>,
+    explicit_directories: &BTreeSet<String>,
+) -> Result<(), ArtifactSnapshotError> {
+    let folded_files: BTreeMap<String, &String> = files
+        .keys()
+        .map(|path| (path.to_lowercase(), path))
+        .collect();
     for path in files.keys() {
         if path.is_empty() {
             return Err(ArtifactSnapshotError::InvalidArchive(
@@ -2180,9 +2202,26 @@ fn validate_topology(files: &BTreeMap<String, Arc<[u8]>>) -> Result<(), Artifact
                 prefix.push('/');
             }
             prefix.push_str(component);
-            if files.contains_key(&prefix) {
+            if let Some(file) = folded_files.get(&prefix.to_lowercase()) {
                 return Err(ArtifactSnapshotError::InvalidArchive(format!(
-                    "{prefix} is both a file and a directory"
+                    "{file} is both a file and a directory"
+                )));
+            }
+        }
+    }
+    for directory in explicit_directories {
+        let mut prefix = String::new();
+        for component in directory
+            .split('/')
+            .filter(|component| !component.is_empty())
+        {
+            if !prefix.is_empty() {
+                prefix.push('/');
+            }
+            prefix.push_str(component);
+            if let Some(file) = folded_files.get(&prefix.to_lowercase()) {
+                return Err(ArtifactSnapshotError::InvalidArchive(format!(
+                    "{file} is both a file and a directory"
                 )));
             }
         }
@@ -2692,7 +2731,12 @@ mod tests {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
         let duplicate = published_from_bytes(raw_archive(&[
             ("package/package.json", b'0', "", manifest),
-            ("package/package.json", b'0', "", manifest),
+            (
+                "package/package.json",
+                b'0',
+                "",
+                br#"{"name":"fixture-package","version":"9.9.9"}"#,
+            ),
         ]));
         assert!(matches!(
             ArtifactSnapshot::from_published(&duplicate, SnapshotLimits::policy_2()),
@@ -2701,13 +2745,106 @@ mod tests {
 
         let collision = published_from_bytes(raw_archive(&[
             ("package/package.json", b'0', "", manifest),
-            ("package/Dist/index.js", b'0', "", b"a"),
-            ("package/dist/index.js", b'0', "", b"b"),
+            ("package/Dist/index.js", b'0', "", b"same"),
+            ("package/dist/index.js", b'0', "", b"same"),
         ]));
         assert!(matches!(
             ArtifactSnapshot::from_published(&collision, SnapshotLimits::policy_2()),
             Err(ArtifactSnapshotError::CaseCollision { .. })
         ));
+
+        for members in [
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/dist", b'5', "", b"".as_slice()),
+                ("package/dist", b'0', "", b"file".as_slice()),
+            ],
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/dist", b'0', "", b"file".as_slice()),
+                ("package/dist", b'5', "", b"".as_slice()),
+            ],
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/dist", b'0', "", b"file".as_slice()),
+                ("package/dist/child", b'5', "", b"".as_slice()),
+            ],
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/dist/child", b'5', "", b"".as_slice()),
+                ("package/dist", b'0', "", b"file".as_slice()),
+            ],
+        ] {
+            let kind_collision = published_from_bytes(raw_archive(&members));
+            assert!(
+                ArtifactSnapshot::from_published(&kind_collision, SnapshotLimits::policy_2())
+                    .is_err()
+            );
+        }
+
+        for kind in *b"12" {
+            for members in [
+                vec![
+                    ("package/package.json", b'0', "", manifest.as_slice()),
+                    ("package/link", b'0', "", b"".as_slice()),
+                    ("package/link", kind, "target", b"".as_slice()),
+                ],
+                vec![
+                    ("package/package.json", b'0', "", manifest.as_slice()),
+                    ("package/link", kind, "target", b"".as_slice()),
+                    ("package/link", b'0', "", b"".as_slice()),
+                ],
+            ] {
+                let unsupported_collision = published_from_bytes(raw_archive(&members));
+                assert!(
+                    ArtifactSnapshot::from_published(
+                        &unsupported_collision,
+                        SnapshotLimits::policy_2()
+                    )
+                    .is_err()
+                );
+            }
+        }
+
+        for members in [
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/Dist", b'0', "", b"file".as_slice()),
+                ("package/dist/child", b'0', "", b"child".as_slice()),
+            ],
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/dist/child", b'0', "", b"child".as_slice()),
+                ("package/Dist", b'0', "", b"file".as_slice()),
+            ],
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/Dist", b'0', "", b"file".as_slice()),
+                ("package/dist/child", b'5', "", b"".as_slice()),
+            ],
+            vec![
+                ("package/package.json", b'0', "", manifest.as_slice()),
+                ("package/dist/child", b'5', "", b"".as_slice()),
+                ("package/Dist", b'0', "", b"file".as_slice()),
+            ],
+        ] {
+            let folded_topology = published_from_bytes(raw_archive(&members));
+            assert!(
+                ArtifactSnapshot::from_published(&folded_topology, SnapshotLimits::policy_2())
+                    .is_err()
+            );
+        }
+
+        let directory_payload = published_from_bytes(raw_archive(&[
+            ("package/package.json", b'0', "", manifest),
+            ("package/dist", b'5', "", b"payload"),
+        ]));
+        let mut limits = SnapshotLimits::policy_2();
+        limits.expanded_archive_bytes = manifest.len();
+        assert!(
+            ArtifactSnapshot::from_published(&directory_payload, limits).is_err(),
+            "a directory payload must not bypass the expanded-byte limit"
+        );
 
         for hostile in [
             raw_archive(&[
@@ -2731,6 +2868,49 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[test]
+    fn byte_identical_duplicate_archive_files_are_idempotent_and_still_counted() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let single = published_from_bytes(raw_archive(&[
+            ("package/package.json", b'0', "", manifest),
+            ("package/dist/index.js", b'0', "", b"same"),
+        ]));
+        let duplicate = published_from_bytes(raw_archive(&[
+            ("package/package.json", b'0', "", manifest),
+            ("package/./dist/index.js", b'0', "", b"same"),
+            ("package/dist/index.js", b'0', "", b"same"),
+            ("package/dist", b'5', "", b""),
+            ("package/./dist", b'5', "", b""),
+        ]));
+
+        let single_snapshot =
+            ArtifactSnapshot::from_published(&single, SnapshotLimits::policy_2()).unwrap();
+        let duplicate_snapshot =
+            ArtifactSnapshot::from_published(&duplicate, SnapshotLimits::policy_2()).unwrap();
+        assert_eq!(single_snapshot.root(), duplicate_snapshot.root());
+        assert_eq!(
+            single_snapshot.member_count(),
+            duplicate_snapshot.member_count()
+        );
+
+        let conflicting = published_from_bytes(raw_archive(&[
+            ("package/package.json", b'0', "", manifest),
+            ("package/./dist/index.js", b'0', "", b"first"),
+            ("package/dist/index.js", b'0', "", b"second"),
+        ]));
+        assert!(matches!(
+            ArtifactSnapshot::from_published(&conflicting, SnapshotLimits::policy_2()),
+            Err(ArtifactSnapshotError::DuplicateMember(_))
+        ));
+
+        let mut limits = SnapshotLimits::policy_2();
+        limits.expanded_archive_bytes = manifest.len() + b"same".len();
+        assert!(matches!(
+            ArtifactSnapshot::from_published(&duplicate, limits),
+            Err(ArtifactSnapshotError::ResourceLimit(_))
+        ));
     }
 
     #[test]
