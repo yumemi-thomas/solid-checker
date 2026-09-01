@@ -17,7 +17,8 @@ use oxc_ast::ast::{
     JSXAttributeValue, JSXElement, JSXElementName, JSXExpression, LogicalExpression,
     LogicalOperator, ModuleExportName, NewExpression, ObjectProperty, ObjectPropertyKind,
     PropertyKey, PropertyKind, ReturnStatement, SpreadElement, StaticMemberExpression,
-    TSModuleBlock, TSModuleDeclarationName, UnaryExpression, UpdateExpression, VariableDeclarator,
+    TSGlobalDeclaration, TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName,
+    UnaryExpression, UpdateExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
@@ -27,7 +28,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 38;
+pub const AST_FACTS_SCHEMA: u32 = 39;
 
 mod span_index;
 
@@ -47,6 +48,12 @@ pub struct AstFacts {
     /// runtime kind of an exported class.
     #[serde(default)]
     pub classes: Vec<ClassFact>,
+    /// Runtime `namespace`/`module` declarations by their exact binding-name
+    /// span. This is positive declaration-kind evidence; a containing module
+    /// block is not equivalent because it may be nested inside another
+    /// declaration.
+    #[serde(default)]
+    pub namespace_declarations: Vec<NamedSpan>,
     pub imports: Vec<ImportFact>,
     pub exports: Vec<ExportFact>,
     /// Every dynamic import or unshadowed CommonJS `require` call. A missing
@@ -873,6 +880,15 @@ impl AstFacts {
         })
     }
 
+    /// Whether `span` is exactly the runtime binding name of a TypeScript
+    /// `namespace` or identifier-named `module` declaration.
+    #[must_use]
+    pub fn declares_namespace_at(&self, span: Span) -> bool {
+        self.namespace_declarations
+            .binary_search_by_key(&span, |name| name.span)
+            .is_ok()
+    }
+
     /// Whether `span` is *exactly* the target an assignment overwrites without
     /// reading the previous value — plain `=` and nothing else.
     ///
@@ -1001,6 +1017,7 @@ impl AstFacts {
             bindings: Vec::new(),
             functions: Vec::new(),
             classes: Vec::new(),
+            namespace_declarations: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
@@ -1127,11 +1144,13 @@ struct Collector<'s, 'semantic> {
     bindings: Vec<BindingFact>,
     functions: Vec<FunctionFact>,
     classes: Vec<ClassFact>,
+    namespace_declarations: Vec<NamedSpan>,
     imports: Vec<ImportFact>,
     exports: Vec<ExportFact>,
     module_loads: Vec<ModuleLoadFact>,
     module_hazards: Vec<ModuleHazardFact>,
     module_blocks: Vec<Span>,
+    ambient_module_depth: usize,
     identifiers: Vec<IdentifierFact>,
     reference_declarations: Vec<(Span, Span)>,
     awaits: Vec<Span>,
@@ -1240,11 +1259,13 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             bindings: Vec::new(),
             functions: Vec::new(),
             classes: Vec::new(),
+            namespace_declarations: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
             module_loads: Vec::new(),
             module_hazards: Vec::new(),
             module_blocks: Vec::new(),
+            ambient_module_depth: 0,
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
@@ -1278,6 +1299,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.bindings.sort_by_key(|fact| fact.declaration);
         self.functions.sort_by_key(|fact| fact.span);
         self.classes.sort_by_key(|fact| fact.span);
+        self.namespace_declarations.sort_by_key(|name| name.span);
         self.imports.sort_by_key(|fact| fact.span);
         self.exports.sort_by_key(|fact| fact.span);
         self.module_loads.sort_by_key(|fact| fact.span);
@@ -1312,6 +1334,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             bindings: self.bindings,
             functions: self.functions,
             classes: self.classes,
+            namespace_declarations: self.namespace_declarations,
             imports: self.imports,
             exports: self.exports,
             module_loads: self.module_loads,
@@ -2221,6 +2244,28 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_export_named_declaration(self, declaration);
     }
 
+    fn visit_ts_module_declaration(&mut self, declaration: &TSModuleDeclaration<'a>) {
+        let introduces_ambient_context = declaration.declare
+            || matches!(&declaration.id, TSModuleDeclarationName::StringLiteral(_));
+        if self.ambient_module_depth == 0
+            && !introduces_ambient_context
+            && let TSModuleDeclarationName::Identifier(name) = &declaration.id
+        {
+            self.namespace_declarations.push(NamedSpan {
+                span: span(name.span),
+            });
+        }
+        self.ambient_module_depth += usize::from(introduces_ambient_context);
+        walk::walk_ts_module_declaration(self, declaration);
+        self.ambient_module_depth -= usize::from(introduces_ambient_context);
+    }
+
+    fn visit_ts_global_declaration(&mut self, declaration: &TSGlobalDeclaration<'a>) {
+        self.ambient_module_depth += 1;
+        walk::walk_ts_global_declaration(self, declaration);
+        self.ambient_module_depth -= 1;
+    }
+
     /// Record the body of every `namespace`, `module`, and `declare global`
     /// declaration. One hook covers all three shapes: `namespace A.B {}` nests
     /// module declarations and only the innermost carries a block, and
@@ -3080,9 +3125,18 @@ export const real = 3;
 "#;
         let facts = extract("namespaces.ts", source).unwrap();
         let text = |span: Span| &source[span.start as usize..span.end as usize];
+        let span_of = |name: &str| {
+            let start = u32::try_from(source.find(name).expect("name occurs in source")).unwrap();
+            Span::new(start, start + u32::try_from(name.len()).unwrap())
+        };
 
         // Three blocks: the two namespaces and `declare global`.
         assert_eq!(facts.module_blocks.len(), 3);
+        assert_eq!(facts.namespace_declarations.len(), 2);
+        assert!(facts.declares_namespace_at(span_of("Config")));
+        assert!(facts.declares_namespace_at(span_of("Unexported")));
+        assert!(!facts.declares_namespace_at(span_of("ambient")));
+        assert!(!facts.declares_namespace_at(span_of("real")));
         let module_level = facts
             .module_level_exports()
             .flat_map(|export| {
@@ -3114,6 +3168,42 @@ export const real = 3;
             facts.exports.len() > facts.module_level_exports().count(),
             "nested exports must remain in the syntactic table"
         );
+    }
+
+    #[test]
+    fn namespace_declaration_identity_excludes_every_ambient_context() {
+        let source = r#"
+export {};
+namespace RuntimeOuter { namespace RuntimeInner {} }
+module RuntimeModule {}
+declare namespace Ambient { namespace HiddenAmbient {} }
+declare module "pkg" { namespace HiddenStringModule {} }
+declare global { namespace HiddenGlobal {} }
+"#;
+        let facts = extract("namespace-identity.ts", source).unwrap();
+        let span_of = |name: &str| {
+            let start = u32::try_from(source.find(name).expect("name occurs in source")).unwrap();
+            Span::new(start, start + u32::try_from(name.len()).unwrap())
+        };
+
+        for runtime in ["RuntimeOuter", "RuntimeInner", "RuntimeModule"] {
+            assert!(
+                facts.declares_namespace_at(span_of(runtime)),
+                "{runtime} is runtime namespace syntax"
+            );
+        }
+        for ambient in [
+            "Ambient",
+            "HiddenAmbient",
+            "HiddenStringModule",
+            "HiddenGlobal",
+        ] {
+            assert!(
+                !facts.declares_namespace_at(span_of(ambient)),
+                "{ambient} is inside an ambient declaration"
+            );
+        }
+        assert_eq!(facts.namespace_declarations.len(), 3);
     }
 
     /// A class **static block** is neither a function body nor a module

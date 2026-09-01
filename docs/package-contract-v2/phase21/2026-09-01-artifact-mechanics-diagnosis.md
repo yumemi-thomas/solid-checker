@@ -550,6 +550,22 @@ module:
    through it and **do not** consult that module's `export *` targets for `name`.
 2. only if no explicit entry exists, walk `ExportKind::All` targets.
 
+**Implemented result (2026-09-01).** The emission walk now applies that precedence at
+every visited module and before accepting a local program summary. It resolves an aliased
+indirect export through the source name, excludes type-only and namespace syntax from bare
+runtime-star traversal, refuses duplicate explicit runtime bindings before identity
+deduplication can hide them, preserves the reviewed TypeScript class+namespace merge as
+one runtime binding using exact AST declaration-kind spans, and preserves ambiguity between
+distinct star identities. The positive namespace fact deliberately excludes ambient and
+string-named modules; a nested namespace body cannot reclassify its containing declaration.
+The canonical `motion-solidjs@0.6.0|solid1|only` reproducer no longer stops at the
+fieldless `delay` ambiguity: `framer-motion` `./dom` emits successfully and its independent
+resolution binds public `delay` to `motion-dom`'s `delayInSeconds`. The outer probe remains
+an honest refusal at the later `motion-solidjs` local import/re-export of
+`addScaleCorrector`, because that generation pass has no accepted dependency-contract
+candidate for the target; M8 does not turn a missing accepted contract into proof. This
+artifact-stage row has no demand id or demand digest.
+
 Precedence is per-module: an explicit entry in file *F* shadows *F*'s own star exports,
 not the star exports of a module *F* itself star-re-exports from.
 

@@ -10423,3 +10423,28 @@ failing graph-node name. The identity/evidence pairing remains digest-keyed
 after acquisition. Two repeated debug probes selected the same package
 coordinate; release-profile confirmation is deferred to the Round 2 full
 remeasurement. M9 is diagnosable, not yet semantically repaired.
+
+## 2026-09-01 — Explicit re-exports take precedence over export stars during proposal emission
+
+The package-contract emission walk now mirrors ECMA-262 export precedence per
+module: one explicit runtime binding is followed without consulting that
+module's bare export stars. Aliases follow their source name; type-only and
+namespace exports cannot masquerade as runtime stars; duplicate explicit
+specifier/default/namespace-export bindings refuse before identical candidates
+can collapse; the reviewed TypeScript class+namespace merge remains one runtime
+binding through an exact AST namespace-declaration-name fact, without collapsing
+duplicate const/class/destructuring declarations; and distinct star identities
+remain ambiguous. Ambient or string-named modules provide no runtime namespace
+fact, and a nested namespace cannot reclassify its containing declaration. The same precedence check runs
+before a local program summary can bypass re-export validation.
+
+The canonical `motion-solidjs@0.6.0|solid1|only` artifact-stage reproducer has
+no demand digest. Before the change it stopped while generating
+`framer-motion` `./dom`, where public `delay` had two candidate identities.
+After the change that dependency proposal emits and the resolver binds
+`delay` to `motion-dom`'s `delayInSeconds`. The outer probe does not certify:
+it advances to `motion-solidjs`'s local `addScaleCorrector` import/re-export,
+whose generation pass lacks an accepted dependency contract. That later
+refusal is retained; missing authenticated composition is not inferred from
+matching bytes or a resolved path. The Round 2 full-corpus movement and report
+digest remain deferred until all bounded artifact-mechanics slices land.

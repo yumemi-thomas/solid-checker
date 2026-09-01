@@ -5171,8 +5171,18 @@ fn contract_exports_for_entry_file(
     let symbol_aliases = canonical_symbol_aliases(facts);
     let generated_owner_requirements =
         generated_owner_requirements_by_symbol(facts, program, &symbol_aliases);
+    let entry_facts = files_by_canonical_path
+        .get(&entry_file)
+        .copied()
+        .ok_or_else(|| {
+            format!(
+                "emit package contract: entry file {} is not part of the TypeScript project",
+                entry_file.display()
+            )
+        })?;
     let mut exports = BTreeMap::new();
     for name in names {
+        validate_module_export_precedence(&entry_facts.ast, &entry_file, &name)?;
         let summary = match program.contract_exports.get(&name).cloned() {
             Some(summary) => summary,
             None => accepted_reexport_summary_for_name(
@@ -5248,10 +5258,9 @@ fn accepted_reexport_summary_for_name(
         &mut HashSet::new(),
         &mut candidates,
     )?;
-    match candidates.len() {
-        0 => Ok(None),
-        1 => Ok(candidates.into_values().next()),
-        count => Err(format!(
+    match take_unique_reexport_candidate(candidates) {
+        Ok(candidate) => Ok(candidate),
+        Err(count) => Err(format!(
             "emit package contract: entry file {} re-exports {name:?} from {count} distinct accepted runtime identities",
             entry_file.display()
         )
@@ -5278,19 +5287,16 @@ fn collect_accepted_reexport_candidates(
             path.display()
         )
     })?;
+    let consult_export_stars = validate_module_export_precedence(&file.ast, &path, name)?;
 
-    for export in file
-        .ast
-        .module_level_exports()
-        .filter(|export| !export.type_only)
-    {
-        if export.kind == solid_facts::ast::ExportKind::All {
+    for export in reexport_entries_for_name(&file.ast, name, consult_export_stars) {
+        if is_bare_runtime_export_star(export) {
+            if !consult_export_stars {
+                continue;
+            }
             let Some(module) = export.module.as_deref() else {
                 continue;
             };
-            if name == "default" {
-                continue;
-            }
             if module.starts_with('.') {
                 let target = resolve_relative_export(facts, &path, module)?;
                 collect_accepted_reexport_candidates(
@@ -5321,7 +5327,7 @@ fn collect_accepted_reexport_candidates(
         else {
             continue;
         };
-        let imported_name = file.source_text(specifier.local.span).unwrap_or(name);
+        let imported_name = export_specifier_local_name(&file.source, specifier, name);
         if let Some(module) = export.module.as_deref() {
             if module.starts_with('.') {
                 let target = resolve_relative_export(facts, &path, module)?;
@@ -5393,6 +5399,367 @@ fn collect_accepted_reexport_candidates(
         }
     }
     Ok(())
+}
+
+fn take_unique_reexport_candidate<K: Ord, V>(
+    candidates: BTreeMap<K, V>,
+) -> Result<Option<V>, usize> {
+    match candidates.len() {
+        0 => Ok(None),
+        1 => Ok(candidates.into_values().next()),
+        count => Err(count),
+    }
+}
+
+/// Whether this syntax entry contributes every non-default name from its
+/// target module. `export * as namespace` is an explicit namespace binding,
+/// never an export-star entry.
+fn is_bare_runtime_export_star(export: &solid_facts::ast::ExportFact) -> bool {
+    !export.type_only
+        && export.kind == solid_facts::ast::ExportKind::All
+        && export.namespace.is_none()
+}
+
+fn explicit_runtime_export_binding_count(
+    export: &solid_facts::ast::ExportFact,
+    name: &str,
+) -> usize {
+    if export.type_only {
+        return 0;
+    }
+    if export.kind == solid_facts::ast::ExportKind::All {
+        return usize::from(export.namespace.as_deref() == Some(name));
+    }
+    let bindings = export
+        .specifiers
+        .iter()
+        .chain(&export.declarations)
+        .filter(|specifier| !specifier.type_only && specifier.exported == name)
+        .count();
+    if bindings == 0 && export.kind == solid_facts::ast::ExportKind::Default && name == "default" {
+        1
+    } else {
+        bindings
+    }
+}
+
+fn explicitly_exports_runtime_name(export: &solid_facts::ast::ExportFact, name: &str) -> bool {
+    explicit_runtime_export_binding_count(export, name) > 0
+}
+
+fn reexport_entries_for_name<'a>(
+    ast: &'a solid_facts::ast::AstFacts,
+    name: &str,
+    consult_export_stars: bool,
+) -> Vec<&'a solid_facts::ast::ExportFact> {
+    ast.module_level_exports()
+        .filter(|export| {
+            if is_bare_runtime_export_star(export) {
+                consult_export_stars
+            } else {
+                explicitly_exports_runtime_name(export, name)
+            }
+        })
+        .collect()
+}
+
+fn export_specifier_local_name<'a>(
+    source: &'a str,
+    specifier: &solid_facts::ast::ExportSpecifierFact,
+    fallback: &'a str,
+) -> &'a str {
+    source
+        .get(specifier.local.span.start as usize..specifier.local.span.end as usize)
+        .unwrap_or(fallback)
+}
+
+fn is_direct_runtime_namespace_declaration(
+    ast: &solid_facts::ast::AstFacts,
+    declaration: &solid_facts::ast::ExportSpecifierFact,
+) -> bool {
+    !declaration.type_only && ast.declares_namespace_at(declaration.local.span)
+}
+
+/// Enforces the per-module explicit-before-star half of ECMA-262
+/// ResolveExport and returns whether this module's bare star entries should be
+/// consulted for `name`.
+///
+/// Candidate identity cannot enforce explicit-export uniqueness: two invalid
+/// explicit entries may point at the same runtime identity and collapse in the
+/// candidate map. Refuse that syntax before choosing either a local program
+/// summary or an accepted re-export summary.
+fn validate_module_export_precedence(
+    ast: &solid_facts::ast::AstFacts,
+    path: &Path,
+    name: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    // The reviewed TypeScript class+namespace merge publishes one runtime
+    // binding through two declaration statements. Do not generalize this by
+    // name: illegal duplicate const/class declarations also share a spelling
+    // (and may share a recovery symbol on a TypeScript-error program).
+    // Specifier/default/namespace-export entries remain separate entries.
+    let mut declaration_entries = Vec::new();
+    let mut explicit_count = 0;
+    for export in ast.module_level_exports() {
+        let count = explicit_runtime_export_binding_count(export, name);
+        let declarations =
+            if export.kind == solid_facts::ast::ExportKind::Named && export.module.is_none() {
+                export
+                    .declarations
+                    .iter()
+                    .filter(|declaration| !declaration.type_only && declaration.exported == name)
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+        explicit_count += count - declarations.len();
+        declaration_entries.extend(declarations);
+    }
+    let reviewed_class_namespace_merge = match declaration_entries.as_slice() {
+        [first, second] => {
+            (ast.declares_class_at(first.local.span)
+                && is_direct_runtime_namespace_declaration(ast, second))
+                || (ast.declares_class_at(second.local.span)
+                    && is_direct_runtime_namespace_declaration(ast, first))
+        }
+        _ => false,
+    };
+    explicit_count += if reviewed_class_namespace_merge {
+        1
+    } else {
+        declaration_entries.len()
+    };
+    if explicit_count > 1 {
+        return Err(format!(
+            "emit package contract: module {} contains {explicit_count} explicit runtime export entries for {name:?}",
+            path.display()
+        )
+        .into());
+    }
+    Ok(name != "default" && explicit_count == 0)
+}
+
+#[cfg(test)]
+mod accepted_reexport_precedence_tests {
+    use super::{
+        explicit_runtime_export_binding_count, export_specifier_local_name,
+        is_bare_runtime_export_star, reexport_entries_for_name, take_unique_reexport_candidate,
+        validate_module_export_precedence,
+    };
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
+    fn ast(source: &str) -> solid_facts::ast::AstFacts {
+        solid_facts::ast::extract("/project/index.mts", source).expect("valid module")
+    }
+
+    fn consult_stars(source: &str, name: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        validate_module_export_precedence(&ast(source), Path::new("/project/index.mts"), name)
+    }
+
+    #[test]
+    fn explicit_indirect_entry_suppresses_same_module_stars_regardless_of_order() {
+        for source in [
+            "export * from 'm'; export { y as x } from 'm';",
+            "export { y as x } from 'm'; export * from 'm';",
+        ] {
+            assert!(
+                !consult_stars(source, "x").expect("one explicit entry is valid"),
+                "the explicit indirect entry must win in {source}"
+            );
+        }
+    }
+
+    #[test]
+    fn distinct_star_sources_remain_eligible_for_ambiguity() {
+        let facts = ast("export * from 'm1'; export * from 'm2';");
+        let consult =
+            validate_module_export_precedence(&facts, Path::new("/project/index.mts"), "x")
+                .expect("two stars are resolved by candidate identity");
+        let entries = reexport_entries_for_name(&facts, "x", consult);
+        assert_eq!(entries.len(), 2, "both star sources must be traversed");
+
+        let distinct = BTreeMap::from([("identity:m1", "first"), ("identity:m2", "second")]);
+        assert_eq!(take_unique_reexport_candidate(distinct), Err(2));
+
+        let mut same = BTreeMap::new();
+        same.insert("identity:shared", "first path");
+        same.insert("identity:shared", "second path");
+        assert_eq!(
+            take_unique_reexport_candidate(same),
+            Ok(Some("second path"))
+        );
+    }
+
+    #[test]
+    fn type_only_entries_do_not_hide_runtime_stars_and_default_never_comes_from_a_star() {
+        let source = "export * from 'm'; export { type T as x, y as z } from 'types';";
+        assert!(consult_stars(source, "x").expect("type-only x is not a runtime entry"));
+        assert!(!consult_stars(source, "z").expect("runtime z is an explicit entry"));
+        assert!(!consult_stars(source, "default").expect("default never comes from a star"));
+    }
+
+    #[test]
+    fn declarations_and_namespace_exports_are_explicit_entries() {
+        assert!(
+            !consult_stars("export const x = 1; export * from 'm';", "x")
+                .expect("the declaration is one explicit entry")
+        );
+        let namespace = ast("export * from 'm'; export * as x from 'n';");
+        assert!(
+            !validate_module_export_precedence(&namespace, Path::new("/project/index.mts"), "x")
+                .expect("the namespace is one explicit entry")
+        );
+        let namespace_entry = namespace
+            .module_level_exports()
+            .find(|export| export.namespace.as_deref() == Some("x"))
+            .expect("namespace export fact");
+        assert!(!is_bare_runtime_export_star(namespace_entry));
+        let only_namespace = ast("export * as ns from 'm';");
+        let consult_members = validate_module_export_precedence(
+            &only_namespace,
+            Path::new("/project/index.mts"),
+            "member",
+        )
+        .expect("a namespace export does not publish target members");
+        assert!(consult_members);
+        assert!(reexport_entries_for_name(&only_namespace, "member", consult_members).is_empty());
+    }
+
+    #[test]
+    fn duplicate_explicit_entries_refuse_before_candidate_identity_can_collapse_them() {
+        for source in [
+            "export { x } from 'm'; export { x } from 'm';",
+            "export const x = 1; export { y as x } from 'm';",
+            "export { a as x, b as x } from 'm';",
+            "export { b as x, a as x } from 'm';",
+        ] {
+            let error = consult_stars(source, "x")
+                .expect_err("duplicate explicit runtime exports must fail closed");
+            assert!(
+                error
+                    .to_string()
+                    .contains("2 explicit runtime export entries")
+            );
+        }
+    }
+
+    #[test]
+    fn typescript_declaration_merges_are_one_explicit_runtime_binding() {
+        for source in [
+            r#"
+                export * from 'm';
+                export class Merged {}
+                export namespace Merged { export const marker = 1; }
+            "#,
+            r#"
+                export * from 'm';
+                export namespace Merged { export const marker = 1; }
+                export class Merged {}
+            "#,
+        ] {
+            assert!(
+                !consult_stars(source, "Merged")
+                    .expect("a class+namespace merge binds one runtime name")
+            );
+        }
+    }
+
+    #[test]
+    fn illegal_duplicate_runtime_declarations_do_not_collapse_by_name() {
+        for (source, count) in [
+            ("export const x = 1; export const x = 2;", 2),
+            ("export class x {} export class x {}", 2),
+            ("export const x = 1; export namespace x {}", 2),
+            (
+                "export class x {} export namespace x {} export const x = 1;",
+                3,
+            ),
+            (
+                "export class x {} export function x() { namespace Hidden {} }",
+                2,
+            ),
+            (
+                "export class x {} export const [x] = [function () { namespace Hidden {} }];",
+                2,
+            ),
+        ] {
+            let error = consult_stars(source, "x")
+                .expect_err("illegal duplicate declarations must fail closed");
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("{count} explicit runtime export entries")),
+                "unexpected refusal for {source}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn anonymous_default_is_one_explicit_binding_and_duplicate_defaults_refuse() {
+        let one = ast("export default 1;");
+        let default_entry = one
+            .module_level_exports()
+            .next()
+            .expect("default export fact");
+        assert_eq!(
+            explicit_runtime_export_binding_count(default_entry, "default"),
+            1
+        );
+
+        let duplicate = ast("export default 1; export default 2;");
+        let error = validate_module_export_precedence(
+            &duplicate,
+            Path::new("/project/index.mts"),
+            "default",
+        )
+        .expect_err("duplicate default bindings must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("2 explicit runtime export entries")
+        );
+    }
+
+    #[test]
+    fn type_only_stars_never_contribute_runtime_candidates() {
+        let only_type = ast("export type * from 'types';");
+        assert!(reexport_entries_for_name(&only_type, "x", true).is_empty());
+
+        let mixed = ast("export type * from 'types'; export * from 'runtime';");
+        let entries = reexport_entries_for_name(&mixed, "x", true);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].module.as_deref(), Some("runtime"));
+    }
+
+    #[test]
+    fn module_level_type_only_named_export_does_not_suppress_a_runtime_star() {
+        let facts = ast("export * from 'runtime'; export type { T as x } from 'types';");
+        let consult =
+            validate_module_export_precedence(&facts, Path::new("/project/index.mts"), "x")
+                .expect("a module-level type export is not a runtime duplicate");
+        assert!(consult);
+        let entries = reexport_entries_for_name(&facts, "x", consult);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].module.as_deref(), Some("runtime"));
+    }
+
+    #[test]
+    fn aliased_indirect_export_resolves_the_source_name_and_excludes_its_star() {
+        let source = "export * from 'm'; export { y as x } from 'm';";
+        let facts = ast(source);
+        let consult =
+            validate_module_export_precedence(&facts, Path::new("/project/index.mts"), "x")
+                .expect("one explicit alias is valid");
+        let entries = reexport_entries_for_name(&facts, "x", consult);
+        assert_eq!(entries.len(), 1, "the same-module star must be excluded");
+        let specifier = entries[0]
+            .specifiers
+            .iter()
+            .find(|specifier| !specifier.type_only && specifier.exported == "x")
+            .expect("aliased explicit export");
+        assert_eq!(export_specifier_local_name(source, specifier, "x"), "y");
+    }
 }
 
 type FunctionKey = (String, u32, u32);
