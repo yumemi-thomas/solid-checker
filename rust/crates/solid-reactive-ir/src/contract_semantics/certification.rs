@@ -1921,16 +1921,63 @@ const fn manifest() -> PolicyManifest {
 #[cfg(test)]
 mod tests {
     use super::{
-        DemandedCallability, DependencyDemandInput, ProofDemandSubject, ProofFamily,
-        ProofWitnessVariant, WitnessBinding, WitnessCoverageError, proof_policy_2,
-        recursive_value_callability,
+        DemandedCallability, DependencyDemandInput, PositiveFactSubject, ProofDemandSubject,
+        ProofFamily, ProofWitnessVariant, WitnessBinding, WitnessCoverageError,
+        inventory_export_facts, inventory_value_shape, proof_policy_2, recursive_value_callability,
     };
     use crate::contract_semantics::{
-        KnowledgeSet, KnowledgeState, ReactiveRole, SEMANTIC_MODEL_VERSION, SemanticClaimPath,
-        ValueShape,
+        KnowledgeSet, KnowledgeState, OperationId, ReactiveRole, SEMANTIC_MODEL_VERSION,
+        SemanticClaimPath, ValuePath, ValueRoot, ValueShape,
         proof::{ACCEPTANCE_RECEIPT_VERSION, PROOF_POLICY_VERSION},
         solid2_rc3::conformance_corpus,
     };
+
+    /// A parameter-rooted operation input is a **leaf** of the value
+    /// inventory: it produces exactly one recursive-value demand, and that
+    /// demand's value path is empty.
+    ///
+    /// This is the premise that bounds the exact matchers on the certification
+    /// side. `type_facts::require_operation_recursive_subject` extends the
+    /// contract's stated parameter path with the demand's value path and then
+    /// matches it *exactly*; an empty demand path means the comparison is
+    /// against the stated path itself, never against an extension of it. Since
+    /// `indexes::member_callee_receiver` states a true prefix of the real
+    /// access (or refuses), a stated path is only ever a weaker claim — which
+    /// is exactly what an extension would destroy. Inventorying children here
+    /// would reopen that channel, so it is pinned rather than assumed.
+    #[test]
+    fn a_parameter_operation_input_inventories_one_demand_at_the_empty_path() {
+        let mut facts = Vec::new();
+        inventory_value_shape(
+            "case",
+            "export",
+            &ValueRoot::OperationInput {
+                operation: OperationId("case:export:operation:read-0".into()),
+                index: 0,
+            },
+            &ValuePath::default(),
+            &ValueShape::Parameter {
+                index: 0,
+                path: vec!["source".into(), "values".into()],
+            },
+            &mut facts,
+        );
+
+        let paths = facts
+            .iter()
+            .filter_map(|fact| match fact {
+                PositiveFactSubject::RecursiveValue { path, callable, .. } => {
+                    Some((path.clone(), *callable))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            paths,
+            vec![(ValuePath::default(), DemandedCallability::Unknown)],
+            "a parameter input inventories one demand, at the empty path, asserting no callability"
+        );
+    }
 
     const AUDIT_MANIFEST: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -1993,6 +2040,120 @@ mod tests {
         assert_eq!(
             recursive_value_callability(&ValueShape::Object(KnowledgeSet::Unknown)),
             DemandedCallability::Unknown
+        );
+    }
+
+    /// Silence about a bound is not a bound, and this is where that is visible.
+    ///
+    /// The verifier relaxes an operation's reachability floor on a *stated*
+    /// `min: 0` — the claim "this may happen, and no occurrence is asserted".
+    /// An operation that states no cardinality at all has made no such claim,
+    /// and both halves of that are pinned here: the inventory marks it
+    /// `has_cardinality: false`, and the planner then demands
+    /// `operation-reachability` for it *without* an `operation-cardinality`
+    /// demand — so nothing downstream has ever checked what its bound is. A
+    /// verifier that read absence as `min: 0` would be relaxing a floor on a
+    /// bound no demand in the graph asserts.
+    #[test]
+    fn an_operation_that_states_no_cardinality_is_demanded_no_cardinality_family() {
+        use crate::contract_semantics::{
+            CallClaims, CallSemantics, Cardinality, CardinalityScope, GuardPartition, Operation,
+            OperationId, OperationKind, OwnerRelation, Tracking, UpperBound,
+        };
+        let operation = |id: &str, cardinality: Cardinality| Operation {
+            id: OperationId(id.into()),
+            kind: OperationKind::Read,
+            guard: None,
+            trigger: None,
+            at: None,
+            schedule: None,
+            tracking: Tracking::Unknown,
+            owner: OwnerRelation::default(),
+            cardinality,
+            inputs: Vec::new(),
+            output: None,
+            resources: std::collections::BTreeSet::new(),
+        };
+        let call = CallSemantics::new(
+            CallClaims::default(),
+            vec![
+                operation(
+                    "stated-0",
+                    Cardinality {
+                        scope: Some(CardinalityScope::Call),
+                        min: Some(0),
+                        max: Some(UpperBound::Many),
+                    },
+                ),
+                operation("silent-0", Cardinality::default()),
+            ],
+            Vec::new(),
+            Vec::new(),
+            GuardPartition {
+                cases: KnowledgeSet::complete(Vec::new()),
+            },
+        );
+        let mut facts = Vec::new();
+        inventory_export_facts("case", "run", &ValueShape::Callable, &call, &mut facts);
+        let flag = |name: &str| {
+            facts
+                .iter()
+                .find_map(|fact| match fact {
+                    PositiveFactSubject::Operation {
+                        operation,
+                        has_cardinality,
+                        ..
+                    } if operation == name => Some(*has_cardinality),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{name} is absent from the inventory"))
+        };
+        assert!(flag("stated-0"), "a stated bound is a cardinality");
+        assert!(!flag("silent-0"), "an unstated bound is not a cardinality");
+
+        let complete = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let candidates = super::CertificationCandidates {
+            candidate_semantic_digest: complete.semantic_digest().clone(),
+            proposal: complete,
+            closure_candidates: Vec::new(),
+            positive_operations: Vec::new(),
+            positive_facts: facts.clone(),
+        };
+        let graph = proof_policy_2()
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+        let demanded = |family: ProofFamily, name: &str| {
+            graph.demands().iter().any(|demand| {
+                demand.family() == family
+                    && matches!(
+                        demand.subject(),
+                        ProofDemandSubject::PositiveFact(PositiveFactSubject::Operation {
+                            operation,
+                            ..
+                        }) if operation == name
+                    )
+            })
+        };
+        for name in ["stated-0", "silent-0"] {
+            assert!(
+                demanded(ProofFamily::OperationReachability, name),
+                "{name} must still be demanded its reachability"
+            );
+        }
+        assert!(demanded(ProofFamily::OperationCardinality, "stated-0"));
+        assert!(
+            !demanded(ProofFamily::OperationCardinality, "silent-0"),
+            "an operation with no stated cardinality has no bound for any family to check"
         );
     }
 

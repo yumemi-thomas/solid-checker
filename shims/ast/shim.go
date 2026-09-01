@@ -69,6 +69,11 @@ func IsClassDeclaration(node *ast.Node) bool
 //go:linkname IsClassExpression github.com/microsoft/typescript-go/internal/ast.IsClassExpression
 func IsClassExpression(node *ast.Node) bool
 
+// IsClassStaticBlockDeclaration dereferences its argument; callers guard nil.
+//
+//go:linkname IsClassStaticBlockDeclaration github.com/microsoft/typescript-go/internal/ast.IsClassStaticBlockDeclaration
+func IsClassStaticBlockDeclaration(node *ast.Node) bool
+
 //go:linkname IsConditionalExpression github.com/microsoft/typescript-go/internal/ast.IsConditionalExpression
 func IsConditionalExpression(node *ast.Node) bool
 
@@ -89,6 +94,15 @@ func IsFunctionDeclaration(node *ast.Node) bool
 
 //go:linkname IsFunctionExpression github.com/microsoft/typescript-go/internal/ast.IsFunctionExpression
 func IsFunctionExpression(node *ast.Node) bool
+
+// IsFunctionLikeDeclaration is the compiler's own closed enumeration of the
+// function-like kinds that own a body: function declarations and expressions,
+// arrows, methods, constructors, and get/set accessors. Taking it from the
+// compiler rather than restating it means a kind added by a future revision is
+// covered here without an edit.
+//
+//go:linkname IsFunctionLikeDeclaration github.com/microsoft/typescript-go/internal/ast.IsFunctionLikeDeclaration
+func IsFunctionLikeDeclaration(node *ast.Node) bool
 
 //go:linkname IsGlobalScopeAugmentation github.com/microsoft/typescript-go/internal/ast.IsGlobalScopeAugmentation
 func IsGlobalScopeAugmentation(node *ast.Node) bool

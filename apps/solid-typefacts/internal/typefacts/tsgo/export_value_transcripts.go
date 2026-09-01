@@ -258,86 +258,88 @@ func (p *project) implementationCallCensusLocked(
 		bySymbol[p.canonicalSymbol(root.symbol)] = root
 	}
 	var calls []typefacts.ImplementationCall
-	var visit func(*ast.Node, bool, typefacts.Reachability) typefacts.Reachability
-	visit = func(node *ast.Node, captured bool, reach typefacts.Reachability) typefacts.Reachability {
-		if node == nil {
-			return reach
-		}
-		nested := captured || node != implementation.Body() && isCallableDeclaration(node)
-		if ast.IsBlock(node) {
-			current := reach
-			for _, statement := range node.AsBlock().Statements.Nodes {
-				current = visit(statement, nested, current)
+	// The walk is shared with the parameter-use census on purpose: a call and a
+	// property access on the same statement must not disagree about whether
+	// invoking the export runs that statement. It hands each node the innermost
+	// callable containing it rather than a bare capture flag, so a consumer can
+	// require each link of an execution chain to be proven instead of assuming
+	// that everything inside a carried range runs.
+	p.walkImplementationBodyLocked(
+		implementation,
+		func(node *ast.Node, enclosing *ast.Node, reach typefacts.Reachability) {
+			// A construction runs what it is handed exactly as a call does —
+			// `new Promise(executor)` runs its executor before it returns — so a
+			// census that recorded call expressions only left every callable a
+			// construction carries unreachable to the execution premise. Both
+			// kinds are recorded; the kind travels with the fact so that a
+			// consumer whose claim is specifically about a *call* can refuse a
+			// construction rather than silently accept one.
+			construct := ast.IsNewExpression(node)
+			if !ast.IsCallExpression(node) && !construct {
+				return
 			}
-			return current
-		}
-		if ast.IsIfStatement(node) {
-			statement := node.AsIfStatement()
-			visit(statement.Expression, nested, reach)
-			thenReach := visit(statement.ThenStatement, nested, reach)
-			elseReach := reach
-			if statement.ElseStatement != nil {
-				elseReach = visit(statement.ElseStatement, nested, reach)
+			kind := typefacts.CallKindCall
+			if construct {
+				kind = typefacts.CallKindConstruct
 			}
-			return mergeReachability(thenReach, elseReach)
-		}
-		if ast.IsTryStatement(node) {
-			statement := node.AsTryStatement()
-			tryReach := visit(statement.TryBlock, nested, reach)
-			catchReach := typefacts.Unreachable
-			if statement.CatchClause != nil {
-				catchReach = visit(statement.CatchClause.AsCatchClause().Block, nested, reach)
-			}
-			merged := mergeReachability(tryReach, catchReach)
-			if statement.FinallyBlock != nil {
-				visit(statement.FinallyBlock, nested, reach)
-			}
-			return merged
-		}
-		if ast.IsIterationStatement(node, true) || ast.IsSwitchStatement(node) {
-			node.ForEachChild(func(child *ast.Node) bool {
-				visit(child, nested, typefacts.ReachUnknown)
-				return false
-			})
-			return typefacts.ReachUnknown
-		}
-		if ast.IsCallExpression(node) {
 			call := typefacts.ImplementationCall{
 				Location: nodeLocation(node),
 				Reach:    reach,
-				Captured: nested,
+				Kind:     kind,
+				Captured: enclosing != nil,
 			}
-			call.CalleeParameter = p.parameterValueSourceLocked(node.Expression(), bySymbol)
-			for _, argument := range node.Arguments() {
-				call.ArgumentParameters = append(
-					call.ArgumentParameters,
-					p.parameterValueSourceLocked(argument, bySymbol),
-				)
+			if enclosing != nil {
+				enclosingLocation := nodeLocation(enclosing)
+				call.EnclosingCallable = &enclosingLocation
+			}
+			// The list stays one entry per written argument, so its length
+			// remains the same syntactic count every consumer already reads
+			// — but a slot a spread has displaced names no parameter,
+			// because the runtime value at that position is not the one
+			// written there. See exactArgumentSlots.
+			exact := exactArgumentSlots(node)
+			for index, argument := range node.Arguments() {
+				var source *typefacts.ParameterValueSource
+				if index < exact {
+					source = p.parameterValueSourceLocked(argument, bySymbol)
+				}
+				call.ArgumentParameters = append(call.ArgumentParameters, source)
 			}
 			call.Target, call.TargetName, call.TargetModule, call.Declaration =
 				p.implementationCallTargetLocked(node.Expression())
+			call.ArgumentCallables = p.argumentCallableLocationsLocked(node)
+			call.DefaultLibraryInvoker, call.InvokedArguments = p.defaultLibraryInvokerLocked(node)
+			if !construct {
+				// Both remaining facts are claims about the body of a resolved
+				// *function*: which parameter this call calls, and what the
+				// callee's own body does with the parameters it is given. A
+				// constructor resolves through a class's construct signatures,
+				// which is a different resolution and was not reviewed here, so
+				// a construct site states neither and the demand stays open.
+				call.CalleeParameter = p.parameterValueSourceLocked(node.Expression(), bySymbol)
+				call.CalleeDirectlyCalledParameters,
+					call.CalleeInvokedParameters,
+					call.CalleeStronglyInvokedParameters,
+					call.CalleePendingInvocations =
+					p.calleeParameterInvocationFactsLocked(node.Expression())
+			}
 			calls = append(calls, call)
-		}
-		terminates := ast.IsReturnStatement(node) || ast.IsThrowStatement(node)
-		node.ForEachChild(func(child *ast.Node) bool {
-			visit(child, nested, reach)
-			return false
-		})
-		if terminates {
-			return typefacts.Unreachable
-		}
-		return reach
-	}
-	visit(implementation.Body(), false, typefacts.Reachable)
+		},
+	)
 	return calls
 }
 
-func (p *project) implementationCallTargetLocked(
+// callTargetIdentityLocked names the callee a call or construct expression
+// resolves to: its canonical symbol, the name it is exported under, and the
+// module it was imported from when it was imported at all. It is the identity
+// half of implementationCallTargetLocked, factored out because the callee-body
+// walk needs the identity without paying for the resolved declaration.
+func (p *project) callTargetIdentityLocked(
 	expression *ast.Node,
-) (typefacts.SymbolID, string, string, *typefacts.ResolvedDeclaration) {
+) (*ast.Symbol, string, string) {
 	symbol := p.checker.GetSymbolAtLocation(expression)
 	if symbol == nil {
-		return "", "", "", nil
+		return nil, "", ""
 	}
 	targetName := symbol.Name
 	targetModule, importedName := importedAliasIdentity(symbol)
@@ -347,7 +349,13 @@ func (p *project) implementationCallTargetLocked(
 	if !utf8.ValidString(targetName) || strings.HasPrefix(targetName, ast.InternalSymbolNamePrefix) {
 		targetName = ""
 	}
-	target := p.canonicalSymbol(symbol)
+	return p.canonicalSymbol(symbol), targetName, targetModule
+}
+
+func (p *project) implementationCallTargetLocked(
+	expression *ast.Node,
+) (typefacts.SymbolID, string, string, *typefacts.ResolvedDeclaration) {
+	target, targetName, targetModule := p.callTargetIdentityLocked(expression)
 	if target == nil {
 		return "", targetName, targetModule, nil
 	}

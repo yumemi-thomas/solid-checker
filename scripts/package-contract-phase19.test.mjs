@@ -80,8 +80,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // package-contract fixtures were registered in the generator corpus --
       // twenty rather than twenty-three, because legacy-cjs-entrypoint,
       // external-reexport and solid-reexport are fail-closed refusals and pin
-      // an expected-refusal.txt instead of a main document.
-      stableMainDocuments: 163,
+      // an expected-refusal.txt instead of a main document. 167 adds the four
+      // fixtures of the invoking-position round: callback-slot-derived-store,
+      // callback-slot-derived-store-server, callback-slot-props-forwarding,
+      // and parameter-member-read-path.
+      stableMainDocuments: 167,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

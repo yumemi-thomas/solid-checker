@@ -1917,7 +1917,8 @@ fn verify_export_value_family(
             let (export, implementation) =
                 require_export_implementation(plan, proof, transcript, &open)?;
             let source = callback_parameter_source(export, proof)?;
-            require_parameter_flow(implementation, &source, &open, &mut sites)?;
+            let floor = callback_reachability_floor(export, proof);
+            require_parameter_flow(implementation, &source, floor, &open, &mut sites)?;
         }
         ProofFamily::CallablePath => match &proof.subject {
             ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
@@ -1931,6 +1932,7 @@ fn verify_export_value_family(
                 let (export, implementation) =
                     require_export_implementation(plan, proof, transcript, &open)?;
                 let source = callback_parameter_source(export, proof)?;
+                let floor = callback_reachability_floor(export, proof);
                 // Every overload has to declare the parameter callable at this
                 // path. One overload that does is not the export's promise.
                 //
@@ -1954,9 +1956,15 @@ fn verify_export_value_family(
                 );
                 if typed.is_ok() {
                     sites.append(&mut typed_sites);
-                    require_parameter_flow(implementation, &source, &open, &mut sites)?;
+                    require_parameter_flow(implementation, &source, floor, &open, &mut sites)?;
                 } else {
-                    require_parameter_callback_flow(implementation, &source, &open, &mut sites)?;
+                    require_parameter_callback_flow(
+                        implementation,
+                        &source,
+                        floor,
+                        &open,
+                        &mut sites,
+                    )?;
                 }
             }
             _ => {
@@ -2235,12 +2243,31 @@ fn parameter_value_source_matches(
     actual: &typefacts::ParameterValueSource,
     expected: &ValueSource,
 ) -> bool {
-    let ValueSource::Parameter { index, path } = expected else {
+    parameter_binding_matches(actual.parameter_index, &actual.path, expected)
+}
+
+/// Whether an observed parameter-rooted path answers the demanded one.
+///
+/// The observed path may be *longer*: reading `props.of.keys` is reading
+/// `props`, and a use of the destructured `{ children }` is a use of the object
+/// it was destructured from. It may never be shorter, and every segment the
+/// demand names has to be that exact property — a tuple or computed segment
+/// where a property is demanded answers nothing.
+fn parameter_binding_matches(
+    index: usize,
+    path: &[typefacts::PathSegment],
+    expected: &ValueSource,
+) -> bool {
+    let ValueSource::Parameter {
+        index: expected_index,
+        path: expected_path,
+    } = expected
+    else {
         return false;
     };
-    actual.parameter_index == usize::from(*index)
-        && actual.path.len() >= path.len()
-        && actual.path.iter().zip(path).all(|(actual, expected)| {
+    index == usize::from(*expected_index)
+        && path.len() >= expected_path.len()
+        && path.iter().zip(expected_path).all(|(actual, expected)| {
             actual.kind == PathSegmentKind::Property && actual.property.as_ref() == expected
         })
 }
@@ -2255,14 +2282,104 @@ fn parameter_value_source_exact(
     actual.path.len() == path.len() && parameter_value_source_matches(actual, expected)
 }
 
+/// How much execution evidence the operation a demand is bound to requires of a
+/// call.
+///
+/// The two floors answer different claims. An operation that asserts an
+/// occurrence — `min >= 1` — is witnessed only by a call the implementation
+/// provably reaches. An operation that asserts no lower bound (`min: 0`, or no
+/// cardinality at all) claims exactly "this may happen": a call in a `for … of`
+/// or `do … while` body, which the producer reports as `Unknown` because the
+/// body may run zero times, is that claim's own shape and discharges it.
+///
+/// `Reachability::Unreachable` clears neither floor. Code after a `return` or a
+/// `throw` never runs, so it witnesses nothing for any claim.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReachabilityFloor {
+    /// Only a call the implementation provably reaches counts.
+    Reachable,
+    /// A call the implementation may reach counts as well, because the bound
+    /// operation asserts no lower bound.
+    MayExecute,
+}
+
+impl ReachabilityFloor {
+    fn admits(self, reach: Reachability) -> bool {
+        match self {
+            Self::Reachable => reach == Reachability::Reachable,
+            Self::MayExecute => reach_admits_zero_lower_bound(reach),
+        }
+    }
+}
+
+/// Whether this reachability is adequate evidence for a claim whose lower bound
+/// is zero. Deliberately spelled out rather than folded into the enum: the
+/// premise is that "may execute" is what a zero lower bound asserts, and
+/// `Unreachable` is not "may execute".
+fn reach_admits_zero_lower_bound(reach: Reachability) -> bool {
+    matches!(reach, Reachability::Reachable | Reachability::Unknown)
+}
+
+/// The floor an operation sets for the evidence that witnesses it.
+///
+/// Relaxing the floor takes **positive evidence that the operation asserts no
+/// lower bound**, which is an explicit `min: Some(0)` and nothing else. An
+/// operation carrying no cardinality at all has said nothing about how often it
+/// happens, and silence is not a claim of "zero or more": `has_cardinality` is
+/// false for exactly that operation, and the demand builder then requests
+/// `operation-reachability` for it *without* an `operation-cardinality` demand,
+/// so no bound was ever stated for this floor to read. It keeps the strict
+/// floor.
+///
+/// This is deliberately narrower than `Cardinality::strength`, which folds the
+/// absent case in with `min: 0` because it is answering a different question —
+/// "may this be assumed guaranteed", where absence and zero agree. Here absence
+/// and zero disagree: one is a claim, the other is its lack.
+fn operation_reachability_floor(
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+) -> ReachabilityFloor {
+    if operation.cardinality.min == Some(0) {
+        return ReachabilityFloor::MayExecute;
+    }
+    ReachabilityFloor::Reachable
+}
+
+/// The floor the operation this callback binding invokes sets.
+///
+/// Fails closed to the strict floor: a callback whose operation the export does
+/// not carry has no bound whose lower end could be read, and an unread bound is
+/// never a relaxation.
+fn callback_reachability_floor(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    proof: &ScheduledProofDemand,
+) -> ReachabilityFloor {
+    let ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+        ordinal,
+        operation,
+        ..
+    }) = &proof.subject
+    else {
+        return ReachabilityFloor::Reachable;
+    };
+    export
+        .callbacks()
+        .items()
+        .get(usize::try_from(*ordinal).unwrap_or(usize::MAX))
+        .filter(|callback| callback.operation.0 == *operation)
+        .and_then(|callback| export.operation(&callback.operation.0))
+        .map_or(ReachabilityFloor::Reachable, operation_reachability_floor)
+}
+
 fn require_parameter_flow(
     implementation: &typefacts::ExportImplementationTranscript,
     source: &ValueSource,
+    floor: ReachabilityFloor,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
     let matching = implementation.calls.iter().filter(|call| {
-        implementation_call_is_executed(implementation, call)
+        is_call_expression(call)
+            && implementation_call_is_executed(implementation, call, floor)
             && (call
                 .callee_parameter
                 .as_ref()
@@ -2290,11 +2407,14 @@ fn require_parameter_flow(
 fn require_parameter_callback_flow(
     implementation: &typefacts::ExportImplementationTranscript,
     source: &ValueSource,
+    floor: ReachabilityFloor,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
     for call in &implementation.calls {
-        if !implementation_call_is_executed(implementation, call) {
+        if !is_call_expression(call)
+            || !implementation_call_is_executed(implementation, call, floor)
+        {
             continue;
         }
         if call
@@ -2307,6 +2427,45 @@ fn require_parameter_callback_flow(
                 call.location.path, call.location.start_byte, call.location.end_byte
             ));
             return Ok(());
+        }
+        // The callee's own body calls the parameter at this slot, and every hop
+        // that got it there is a plain identifier forward. That is the same
+        // claim an in-body direct call makes, one resolved call away:
+        // `createIntervalCounter` forwards its `timeout` to `createPolled`,
+        // which forwards it to `createTimer`, whose body calls `delay()`.
+        //
+        // `callee_strongly_invoked_parameters` and not the weak
+        // `callee_invoked_parameters`, deliberately. The weak fact is satisfied
+        // by a chain that ends at `addEventListener`, which proves the value
+        // runs but says nothing about whether the callee treats the position as
+        // a function — and accepting it here would quietly turn this family
+        // into `require_parameter_flow`.
+        //
+        // The pending form is the same claim with its last premise still open.
+        // `createTimer` calls `delay()` inside the closure it hands to
+        // `createEffect`, so whether that call runs depends on whether
+        // `createEffect`'s slot 0 is a callback position — a dialect fact the
+        // producer may not decide and this side owns. Only the *strong* pending
+        // claims are read here, on the same reasoning: composing through an
+        // invoking position changes where the terminal call may sit, never what
+        // the chain proves.
+        for (argument, actual) in call.argument_parameters.iter().enumerate() {
+            if actual
+                .as_ref()
+                .is_some_and(|actual| parameter_value_source_exact(actual, source))
+                && (call.callee_strongly_invoked_parameters.contains(&argument)
+                    || callee_pending_invocation_holds(call, argument, true))
+            {
+                sites.push(format!(
+                    "implementation-callee-direct-callback:{}:{}:{}:{}:{}",
+                    call.location.path,
+                    call.location.start_byte,
+                    call.location.end_byte,
+                    call.target,
+                    argument
+                ));
+                return Ok(());
+            }
         }
         if call.target.is_empty() || call.target_module.as_ref() != "solid-js" {
             continue;
@@ -2342,42 +2501,246 @@ fn require_parameter_callback_flow(
 ///
 /// A call the implementation makes directly is executed by the call itself. A
 /// call *inside a nested callable* is executed only if something invokes that
-/// callable, and the one such thing the census proves is the value the export
-/// returns. So the premise is containment, not mention: the call site must lie
-/// within the source range of a callable that a reachable return site provably
-/// carries.
+/// very callable — the one immediately containing it, named by the producer as
+/// `enclosingCallable`. Two things can invoke it:
 ///
-/// Containment rather than an immediately-enclosing match, because a returned
-/// debounced function schedules the callback from an arrow it hands to
-/// `setTimeout`; invoking the returned value still reaches that call. What
-/// containment refuses is the shape a parameter-index union could not: a call in
-/// a closure the implementation never returns, discharged by a returned closure
-/// that merely names the same parameter.
+///   - the export's caller, when a reachable return site carries that exact
+///     callable;
+///   - an already-executed call of this same implementation, when it hands that
+///     exact callable to a slot proven to be invoked. That premise is what
+///     `@solid-primitives/autofocus` needs, whose whole body is
+///     `createEffect(() => { const el = ref(); … })` and which returns nothing
+///     at all: the closure runs because `createEffect` runs it, not because
+///     anything is handed back.
+///
+/// What "proven to be invoked" may mean is deliberately narrow and is spelled
+/// out in [`argument_slot_is_proven_invoking`]. Nothing here infers an invoking
+/// position from a callee's name, from the shape of the argument, or from a
+/// package being well known.
+///
+/// **The premise composes; it never nests.** A returned debounced function
+/// schedules its callback two callables deep —
+/// `return (…) => { setTimeout(() => callback(…), wait) }` — and that call is
+/// executed here, but only because two facts meet: the returned closure is
+/// carried by the return site, and the arrow immediately containing
+/// `callback(…)` is carried at slot 0 of a `setTimeout` whose own enclosing
+/// callable is that returned closure. Each link is proven separately, and the
+/// recursion is what joins them.
+///
+/// Byte containment alone would be unsound, and this is the shape that proves
+/// it: in
+///
+/// ```js
+/// createEffect(() => {
+///   const inner = () => { callback(); };
+///   registry.push(inner);
+/// });
+/// ```
+///
+/// the `callback()` site lies inside the range `createEffect` invokes, and yet
+/// `callback` never runs — the effect only stores `inner`. Containment cannot
+/// tell that apart from the debounce shape; requiring the *immediately*
+/// enclosing callable to be carried, and every callable above it to be proven
+/// in turn, can. A callable that is merely defined, stored, pushed, or assigned
+/// breaks the chain, and the demand stays open.
+/// Whether this census entry is a call expression rather than a construction.
+///
+/// Both kinds are in the census, because both run the callables they are handed
+/// and the execution premise must be able to compose through either. They are
+/// not interchangeable anywhere else: every claim whose witness says the
+/// implementation *calls* a value — the invoke flow, the callback flow, the
+/// parameter-read evidence, the owner-primitive call, the recursive-parameter
+/// call — asks this first. `new Cls(cb)` is a different claim about `cb` and
+/// none of those families was reviewed for it.
+///
+/// An unknown kind answers false. A producer that did not state the kind stated
+/// no call. A producer that stated a kind this side does not recognize never
+/// reaches here at all: `CallKind` has no catch-all arm, so an unrecognized
+/// spelling fails deserialization and the whole transcript is refused.
+fn is_call_expression(call: &typefacts::ImplementationCall) -> bool {
+    call.kind == typefacts::CallKind::Call
+}
+
+/// Whether a conditional callee-parameter claim about `argument` holds, with
+/// every premise it defers answered here.
+///
+/// The producer knows the syntax and refuses to guess the semantics: it reports
+/// that the callee calls its parameter from inside a callable handed to slot
+/// *s* of `module::name`, and this side decides whether that slot is a callback
+/// position — the same dialect gate `argument_slot_is_proven_invoking`'s first
+/// tier applies, on the same table, so a package that is not `solid-js` and a
+/// slot no dialect agrees about are both refused.
+///
+/// A claim with no premises proves nothing. The unconditional claims travel in
+/// the index lists; an empty requirement list here is a malformed fact, not a
+/// fact that needs nothing.
+fn callee_pending_invocation_holds(
+    call: &typefacts::ImplementationCall,
+    argument: usize,
+    strong: bool,
+) -> bool {
+    call.callee_pending_invocations.iter().any(|pending| {
+        pending.parameter == argument
+            && (!strong || pending.strong)
+            && !pending.requires.is_empty()
+            && pending.requires.iter().all(|premise| {
+                premise.module.as_ref() == "solid-js"
+                    && solid_dialect::unambiguous_callback_argument(
+                        &premise.name,
+                        premise.slot,
+                        premise.argument_count,
+                    )
+            })
+    })
+}
+
+/// Whether invoking the export reaches this call site.
+///
+/// `floor` carries what the demand's own bound operation asks of the call
+/// site's reachability; see [`ReachabilityFloor`]. It applies to every *call*
+/// link of the chain, because the chain states one claim and the claim's
+/// strength is the demand's.
+///
+/// The **return site** that carries a captured call is a separate question and
+/// stays strict: a callable only some paths return is not a callable invoking
+/// the export reaches, whatever the demanded operation's lower bound is.
 fn implementation_call_is_executed(
     implementation: &typefacts::ExportImplementationTranscript,
     call: &typefacts::ImplementationCall,
+    floor: ReachabilityFloor,
 ) -> bool {
-    if call.reach != Reachability::Reachable {
+    let mut budget = MAX_EXECUTION_PREMISE_NODES;
+    implementation_call_is_executed_within(implementation, call, floor, 0, &mut budget)
+}
+
+/// Bounds on the invoking-position recursion. A closure inside a closure inside
+/// an argument is real, so the walk is transitive; both bounds match the
+/// producer's carried-callable descent, and exceeding either answers "not
+/// executed" rather than guessing.
+const MAX_EXECUTION_PREMISE_DEPTH: usize = 8;
+const MAX_EXECUTION_PREMISE_NODES: usize = 256;
+
+fn implementation_call_is_executed_within(
+    implementation: &typefacts::ExportImplementationTranscript,
+    call: &typefacts::ImplementationCall,
+    floor: ReachabilityFloor,
+    depth: usize,
+    budget: &mut usize,
+) -> bool {
+    if depth > MAX_EXECUTION_PREMISE_DEPTH || *budget == 0 {
+        return false;
+    }
+    *budget -= 1;
+    if !floor.admits(call.reach) {
         return false;
     }
     if !call.captured {
         return true;
     }
-    implementation.control_flow.as_ref().is_some_and(|flow| {
+    // A captured call whose enclosing callable the producer did not name is a
+    // call whose chain cannot be built. Absence is not evidence either way, so
+    // the premise refuses.
+    let Some(enclosing) = call.enclosing_callable.as_ref() else {
+        return false;
+    };
+    let carried_by_return = implementation.control_flow.as_ref().is_some_and(|flow| {
         flow.returns
             .iter()
             .filter(|site| site.reach == Reachability::Reachable)
             .flat_map(|site| site.carried_callables.iter())
-            .any(|carried| location_contains(carried, &call.location))
+            .any(|carried| carried == enclosing)
+    });
+    if carried_by_return {
+        return true;
+    }
+    implementation.calls.iter().any(|outer| {
+        outer
+            .argument_callables
+            .iter()
+            .filter(|carried| {
+                carried
+                    .locations
+                    .iter()
+                    .any(|location| location == enclosing)
+            })
+            .any(|carried| argument_slot_is_proven_invoking(outer, carried.argument))
+            // Every link of the chain answers to the *same* floor, because the
+            // chain carries one claim: "invoking the export can reach this
+            // call". Under a zero lower bound an outer link that may run is
+            // consistent with a callback that may be invoked; under a lower
+            // bound of one every link must be reachable, which is exactly the
+            // strict premise the argument route was built with. Holding the
+            // outer links strict while relaxing the subject was measured and
+            // costs `@solid-primitives/marker@0.2.2` the frontier the
+            // reachability-floor slice measured for it, with nothing gained.
+            && implementation_call_is_executed_within(
+                implementation,
+                outer,
+                floor,
+                depth + 1,
+                budget,
+            )
     })
 }
 
-/// Whether `outer` spans `inner` in the same file. Byte ranges come from one
-/// producer census, so an exact path match is required rather than a suffix.
-fn location_contains(outer: &typefacts::Location, inner: &typefacts::Location) -> bool {
-    outer.path == inner.path
-        && outer.start_byte <= inner.start_byte
-        && inner.end_byte <= outer.end_byte
+/// Whether argument slot `argument` of `call` is proven to invoke whatever
+/// callable it carries.
+///
+/// Three premises, each an exact fact and none of them a name match:
+///
+///   - a dialect primitive. The callee resolves to an exact `solid-js` import
+///     and every dialect that canonically owns that name agrees the slot is a
+///     callback. This is the same gate `require_parameter_callback_flow`
+///     already applies, so `createEffect(fn, initialValue)` at slot 1 stays
+///     refused and a locally shadowed `createMemo` — whose `target_module` is
+///     not `solid-js` — never reaches it.
+///   - a reviewed default-library member. The producer resolved the callee by
+///     default-library symbol identity, and the verifier re-checks both the
+///     member's name against its own closed enum and the slot against its own
+///     table. An unrecognized invoker string is refused rather than trusted,
+///     and a slot the verifier's table does not list is refused even when the
+///     transmitted list carries it.
+///   - the callee's own body. The producer proved the resolved local callee
+///     sends its parameter at that slot to an invoking position. The verifier
+///     consumes that fact and never re-derives semantics from a location.
+///
+/// An external package's helper satisfies none of the three, and that is the
+/// intended answer: `@solid-primitives/until` hands its condition to
+/// `createBranch` from `@solid-primitives/rootless`, and nothing in this
+/// artifact's transcript can prove what that function does. It needs an
+/// accepted dependency contract, not a well-known-name list.
+///
+/// # Strength: this is a *can execute* premise, deliberately
+///
+/// Every tier here asserts that invoking the export *can* reach the call, not
+/// that it always does or that it does exactly once. `p.then(onOk, onErr)`
+/// lists both slots though at most one handler ever runs and neither runs if
+/// the promise never settles; `items.forEach(cb)` invokes nothing when `items`
+/// is empty, and `.some` / `.find` / `.sort` short-circuit. That matches what
+/// the fact is for: the demands it feeds are `Invoke` operations whose
+/// inventory records a zero-or-more callback position, so a consumer may read
+/// "this argument is a callback this implementation runs" and may not read "it
+/// is run at least once". Nothing downstream may derive a lower bound from it,
+/// and the tier tables must stay membership-reviewed rather than grown by
+/// analogy.
+fn argument_slot_is_proven_invoking(call: &typefacts::ImplementationCall, argument: usize) -> bool {
+    if !call.target.is_empty()
+        && call.target_module.as_ref() == "solid-js"
+        && solid_dialect::unambiguous_callback_argument(
+            &call.target_name,
+            argument,
+            call.argument_parameters.len(),
+        )
+    {
+        return true;
+    }
+    let default_library_invokes = typefacts::DefaultLibraryInvoker::from_wire(
+        &call.default_library_invoker,
+    )
+    .is_some_and(|invoker| invoker.invokes(argument) && call.invoked_arguments.contains(&argument));
+    default_library_invokes
+        || call.callee_invoked_parameters.contains(&argument)
+        || callee_pending_invocation_holds(call, argument, false)
 }
 
 fn require_signature_parameter_callable(
@@ -2455,6 +2818,7 @@ fn require_operation_evidence(
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
+    let floor = operation_reachability_floor(operation);
     match operation.kind {
         OperationKind::Invoke => {
             let callback = export
@@ -2463,7 +2827,7 @@ fn require_operation_evidence(
                 .iter()
                 .find(|callback| callback.operation == operation.id)
                 .ok_or_else(|| open("invoke operation has no exact callback source"))?;
-            require_parameter_flow(implementation, &callback.from, open, sites)
+            require_parameter_flow(implementation, &callback.from, floor, open, sites)
         }
         OperationKind::Read => {
             let source = operation
@@ -2471,28 +2835,7 @@ fn require_operation_evidence(
                 .first()
                 .ok_or_else(|| open("read operation has no input"))
                 .and_then(parameter_source)?;
-            let mut found = false;
-            for call in &implementation.calls {
-                if call.reach == Reachability::Reachable
-                    && !call.captured
-                    && call
-                        .callee_parameter
-                        .as_ref()
-                        .is_some_and(|actual| parameter_value_source_matches(actual, &source))
-                {
-                    found = true;
-                    sites.push(format!(
-                        "implementation-read:{}:{}:{}",
-                        call.location.path, call.location.start_byte, call.location.end_byte
-                    ));
-                }
-            }
-            if !found {
-                return Err(open(
-                    "parameter-rooted read has no exact implementation call",
-                ));
-            }
-            Ok(())
+            require_parameter_read_evidence(implementation, &source, floor, open, sites)
         }
         OperationKind::Return => {
             let flow = implementation
@@ -2518,7 +2861,7 @@ fn require_operation_evidence(
             Ok(())
         }
         OperationKind::Create => {
-            require_owner_operation_call(operation, proof, implementation, open, sites)
+            require_owner_operation_call(operation, proof, implementation, floor, open, sites)
         }
         _ => Err(TypeFactsCertificationError::UnsupportedDemand {
             demand: proof.id.clone(),
@@ -2528,10 +2871,135 @@ fn require_operation_evidence(
     Ok(())
 }
 
+/// Evidence that the exact parameter value is the *callee* of a call the
+/// implementation itself makes — one of the two witnesses a `Read` operation
+/// accepts.
+///
+/// The kind gate is load-bearing rather than decorative even though today's
+/// producer states no `calleeParameter` for a construction: this side does not
+/// certify against a producer's habits, and `new cb()` is a different claim
+/// about `cb` than `cb()` in every one of the reviewed families. The captured
+/// gate is the same discipline about *where* the call sits: a call written
+/// inside a nested callable is a call something else runs.
+///
+/// `floor` is the demand's own bound; see [`ReachabilityFloor`]. A call in a
+/// loop body witnesses an operation whose lower bound is zero and nothing else.
+fn require_parameter_read_call(
+    implementation: &typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+    floor: ReachabilityFloor,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let mut found = false;
+    for call in &implementation.calls {
+        if is_call_expression(call)
+            && floor.admits(call.reach)
+            && !call.captured
+            && call
+                .callee_parameter
+                .as_ref()
+                .is_some_and(|actual| parameter_value_source_matches(actual, source))
+        {
+            found = true;
+            sites.push(format!(
+                "implementation-read:{}:{}:{}",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            ));
+        }
+    }
+    if !found {
+        return Err(open(
+            "parameter-rooted read has no exact implementation call",
+        ));
+    }
+    Ok(())
+}
+
+/// Implementation evidence that the export reads the demanded parameter-rooted
+/// value.
+///
+/// Two witnesses, because reading is not calling. A call whose callee is the
+/// value is one — `props.of.keys()` reads `props`; that half is
+/// [`require_parameter_read_call`]. The other is the use census's own record of
+/// the read: an uncaptured `propertyAccess`, `directCall`, or `aliasCall` rooted
+/// at that parameter, which is what `const mapFn = props.children` leaves behind
+/// and what the call census, by construction, never sees.
+///
+/// The kinds this refuses are the ones that are not reads. `storage` and
+/// `return` hand the value somewhere without looking into it; `argumentKnown`,
+/// `argumentUnknown`, and `capture` do the same through a call or a closure;
+/// `unknownEscape` is the census saying it could not classify the use at all,
+/// which is never evidence of anything. A captured use is refused for the reason
+/// the call census refuses a captured call: nothing here proves the closure
+/// holding it runs.
+///
+/// Both witnesses answer to the same `floor`, and to the same reachability fact:
+/// the producer answers a use's position from the very walk that answers a
+/// call's. A `props.children` after a `return`, after a `throw`, or in a branch a
+/// literal condition excludes is `Unreachable` and witnesses nothing for any
+/// claim; a use in a loop body is `Unknown` and witnesses only an operation whose
+/// own lower bound is zero. Exempting the use loop from the floor is precisely
+/// how a `min >= 1` demand came to be discharged from dead code.
+fn require_parameter_read_evidence(
+    implementation: &typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+    floor: ReachabilityFloor,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let mut found = require_parameter_read_call(implementation, source, floor, open, sites).is_ok();
+    for use_site in &implementation.parameter_uses {
+        if !floor.admits(use_site.reach)
+            || use_site.captured
+            || !matches!(
+                use_site.kind,
+                ParameterUseKind::PropertyAccess
+                    | ParameterUseKind::DirectCall
+                    | ParameterUseKind::AliasCall
+            )
+            || !parameter_binding_matches(use_site.parameter_index, &use_site.binding_path, source)
+        {
+            continue;
+        }
+        found = true;
+        sites.push(format!(
+            "implementation-read-use:{}:{}:{}:{}",
+            use_site.location.path,
+            use_site.location.start_byte,
+            use_site.location.end_byte,
+            parameter_use_kind_site(use_site.kind)
+        ));
+    }
+    if !found {
+        return Err(open(
+            "parameter-rooted read has no exact implementation call or use",
+        ));
+    }
+    Ok(())
+}
+
+/// The stable spelling of a use kind inside a witness site. Written out rather
+/// than derived from `Debug`, which is not a wire format.
+const fn parameter_use_kind_site(kind: ParameterUseKind) -> &'static str {
+    match kind {
+        ParameterUseKind::DirectCall => "directCall",
+        ParameterUseKind::AliasCall => "aliasCall",
+        ParameterUseKind::ArgumentKnown => "argumentKnown",
+        ParameterUseKind::ArgumentUnknown => "argumentUnknown",
+        ParameterUseKind::PropertyAccess => "propertyAccess",
+        ParameterUseKind::Return => "return",
+        ParameterUseKind::Storage => "storage",
+        ParameterUseKind::Capture => "capture",
+        ParameterUseKind::UnknownEscape => "unknownEscape",
+    }
+}
+
 fn require_owner_operation_call(
     operation: &solid_reactive_ir::contract_semantics::Operation,
     proof: &ScheduledProofDemand,
     implementation: &typefacts::ExportImplementationTranscript,
+    floor: ReachabilityFloor,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
@@ -2547,7 +3015,8 @@ fn require_owner_operation_call(
     };
     let mut found = false;
     for call in &implementation.calls {
-        if call.reach != Reachability::Reachable
+        if !is_call_expression(call)
+            || !floor.admits(call.reach)
             || call.captured
             || call.target.is_empty()
             || call.target_module.as_ref() != "solid-js"
@@ -2584,6 +3053,7 @@ fn require_owner_operation_call(
         let observed = implementation
             .calls
             .iter()
+            .filter(|call| is_call_expression(call))
             .filter_map(|call| {
                 if !call.target_name.is_empty() {
                     Some(call.target_name.as_ref())
@@ -2609,6 +3079,87 @@ fn require_owner_operation_call(
         )));
     }
     Ok(())
+}
+
+/// The reachable call whose *callee* is exactly this parameter value, if the
+/// implementation makes one.
+///
+/// Same discipline as [`require_parameter_read_call`], for the witness
+/// `recursive-operation-parameter:`: the kind gate keeps a construction of the
+/// parameter from answering a claim about calling it, and the captured gate
+/// keeps a call written inside a nested callable from answering a claim about
+/// what *this* body does.
+fn recursive_parameter_call_site<'a>(
+    implementation: &'a typefacts::ExportImplementationTranscript,
+    source: &ValueSource,
+) -> Option<&'a typefacts::ImplementationCall> {
+    implementation.calls.iter().find(|call| {
+        is_call_expression(call)
+            && call.reach == Reachability::Reachable
+            && !call.captured
+            && !call.target.is_empty()
+            && call
+                .callee_parameter
+                .as_ref()
+                .is_some_and(|actual| parameter_value_source_exact(actual, source))
+    })
+}
+
+/// Which of the two implementation-evidence arms a recursive value-shape demand
+/// rooted at an operation input takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RecursiveValueEvidence {
+    /// The demand names the input's root and asserts nothing about its
+    /// callability. A reachable call whose callee *is* that exact parameter
+    /// value answers it.
+    RootUnasserted,
+    /// The demand names an exact property path and asserts the value there is
+    /// callable. The callback-flow census answers it.
+    ShapeAsserted,
+}
+
+/// Implementation evidence for a recursive value-shape demand rooted at an
+/// operation input, split from the plan lookup so the floor it imposes is a
+/// decision a test can hold rather than a literal in the middle of a lookup.
+///
+/// Returns `Ok(true)` when the branch discharged the demand, `Ok(false)` when
+/// the evidence is absent but the signature census may still answer, and `Err`
+/// when the branch owns the answer and the evidence is not there.
+///
+/// **Both arms keep the strict floor, deliberately.** A recursive value-shape
+/// demand asserts what a position *is*, not how often the implementation
+/// reaches it, so the zero-lower-bound reading that relaxes the occurrence
+/// families has nothing to stand on here: a call in a loop body proves the
+/// parameter is callable no more than it proves the loop runs.
+fn operation_input_value_shape_evidence(
+    source: &ValueSource,
+    evidence: RecursiveValueEvidence,
+    implementation: &typefacts::ExportImplementationTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<bool, TypeFactsCertificationError> {
+    match evidence {
+        RecursiveValueEvidence::RootUnasserted => {
+            let Some(call) = recursive_parameter_call_site(implementation, source) else {
+                return Ok(false);
+            };
+            sites.push(format!(
+                "recursive-operation-parameter:{}:{}:{}:{}",
+                call.location.path, call.location.start_byte, call.location.end_byte, call.target
+            ));
+            Ok(true)
+        }
+        RecursiveValueEvidence::ShapeAsserted => {
+            require_parameter_callback_flow(
+                implementation,
+                source,
+                ReachabilityFloor::Reachable,
+                open,
+                sites,
+            )?;
+            Ok(true)
+        }
+    }
 }
 
 fn require_operation_recursive_subject(
@@ -2646,31 +3197,6 @@ fn require_operation_recursive_subject(
             .get(usize::from(*index))
             .ok_or_else(|| open("recursive input index is absent"))
             .and_then(parameter_source)?;
-        // Implementation evidence that the exact parameter value is itself the
-        // callee of a reachable call. That answers a demand which does not
-        // assert callability; a demand that does assert it is answered by the
-        // callback-flow branch below or by the signature census.
-        if path.0.is_empty() && !callable.asserts_callable() {
-            let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
-            if let Some(call) = implementation.calls.iter().find(|call| {
-                call.reach == Reachability::Reachable
-                    && !call.captured
-                    && !call.target.is_empty()
-                    && call
-                        .callee_parameter
-                        .as_ref()
-                        .is_some_and(|actual| parameter_value_source_exact(actual, &source))
-            }) {
-                sites.push(format!(
-                    "recursive-operation-parameter:{}:{}:{}:{}",
-                    call.location.path,
-                    call.location.start_byte,
-                    call.location.end_byte,
-                    call.target
-                ));
-                return Ok(());
-            }
-        }
         let path_is_exact_properties = if let ValueSource::Parameter {
             path: source_path, ..
         } = &mut source
@@ -2686,10 +3212,21 @@ fn require_operation_recursive_subject(
         } else {
             false
         };
-        if path_is_exact_properties && callable.asserts_callable() {
+        // A root path appends nothing above, so `source` is the same value the
+        // unasserted arm has always read.
+        let evidence = if path.0.is_empty() && !callable.asserts_callable() {
+            Some(RecursiveValueEvidence::RootUnasserted)
+        } else if path_is_exact_properties && callable.asserts_callable() {
+            Some(RecursiveValueEvidence::ShapeAsserted)
+        } else {
+            None
+        };
+        if let Some(evidence) = evidence {
             let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
-            require_parameter_callback_flow(implementation, &source, open, sites)?;
-            return Ok(());
+            if operation_input_value_shape_evidence(&source, evidence, implementation, open, sites)?
+            {
+                return Ok(());
+            }
         }
     }
     // An overloaded export is proved by proving every overload. Nothing here
@@ -4101,7 +4638,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use solid_reactive_ir::contract_semantics::{
-        certification::proof_policy_2, solid2_rc3::conformance_corpus,
+        CallbackInvocation, certification::proof_policy_2, solid2_rc3::conformance_corpus,
     };
 
     fn digest(bytes: &[u8]) -> String {
@@ -4396,6 +4933,734 @@ mod tests {
         })
     }
 
+    fn operation(
+        id: &str,
+        kind: OperationKind,
+        cardinality: solid_reactive_ir::contract_semantics::Cardinality,
+    ) -> solid_reactive_ir::contract_semantics::Operation {
+        solid_reactive_ir::contract_semantics::Operation {
+            id: solid_reactive_ir::contract_semantics::OperationId(id.into()),
+            kind,
+            guard: None,
+            trigger: None,
+            at: None,
+            schedule: None,
+            tracking: solid_reactive_ir::contract_semantics::Tracking::Unknown,
+            owner: solid_reactive_ir::contract_semantics::OwnerRelation::default(),
+            cardinality,
+            inputs: Vec::new(),
+            output: None,
+            resources: std::collections::BTreeSet::new(),
+        }
+    }
+
+    fn per_call_cardinality(
+        min: Option<u32>,
+    ) -> solid_reactive_ir::contract_semantics::Cardinality {
+        solid_reactive_ir::contract_semantics::Cardinality {
+            scope: Some(CardinalityScope::Call),
+            min,
+            max: Some(UpperBound::Many),
+        }
+    }
+
+    fn parameter_source_at(index: u16, path: &[&str]) -> ValueSource {
+        ValueSource::Parameter {
+            index,
+            path: path.iter().map(|segment| (*segment).to_string()).collect(),
+        }
+    }
+
+    // A demand's own bound decides how much execution evidence its witness owes.
+    // "May run zero or more times per call" is exactly what a loop body is, so a
+    // call the producer reports as Unknown discharges it; an operation that
+    // asserts an occurrence is owed a call the implementation provably reaches.
+    // Neither reading admits code that never runs.
+    #[test]
+    fn reachability_floor_follows_the_bound_operation_lower_bound() {
+        assert!(reach_admits_zero_lower_bound(Reachability::Reachable));
+        assert!(reach_admits_zero_lower_bound(Reachability::Unknown));
+        assert!(!reach_admits_zero_lower_bound(Reachability::Unreachable));
+
+        assert!(ReachabilityFloor::Reachable.admits(Reachability::Reachable));
+        assert!(!ReachabilityFloor::Reachable.admits(Reachability::Unknown));
+        assert!(!ReachabilityFloor::Reachable.admits(Reachability::Unreachable));
+        assert!(ReachabilityFloor::MayExecute.admits(Reachability::Reachable));
+        assert!(ReachabilityFloor::MayExecute.admits(Reachability::Unknown));
+        assert!(!ReachabilityFloor::MayExecute.admits(Reachability::Unreachable));
+
+        // Relaxing takes positive evidence, and `min: Some(0)` is the whole of
+        // it. This is the trap of this tier: an operation carrying *no*
+        // cardinality looks like the same relaxation and is not — it stated no
+        // bound at all, so there is nothing here to read as "zero or more".
+        assert_eq!(
+            operation_reachability_floor(&operation(
+                "invoke-0",
+                OperationKind::Invoke,
+                per_call_cardinality(Some(0))
+            )),
+            ReachabilityFloor::MayExecute,
+            "an explicit zero lower bound accepts a call that may execute"
+        );
+        for cardinality in [
+            solid_reactive_ir::contract_semantics::Cardinality::default(),
+            per_call_cardinality(None),
+        ] {
+            assert_eq!(
+                operation_reachability_floor(&operation(
+                    "invoke-0",
+                    OperationKind::Invoke,
+                    cardinality.clone()
+                )),
+                ReachabilityFloor::Reachable,
+                "silence about a bound is not a claim of zero: {cardinality:?}"
+            );
+        }
+        for min in [1_u32, 2, 7] {
+            assert_eq!(
+                operation_reachability_floor(&operation(
+                    "invoke-0",
+                    OperationKind::Invoke,
+                    per_call_cardinality(Some(min))
+                )),
+                ReachabilityFloor::Reachable,
+                "a claim asserting an occurrence keeps the strict floor: min {min}"
+            );
+        }
+    }
+
+    // `callback_reachability_floor` is the floor `argument-binding` and
+    // `callable-path` take — the two families that assert no occurrence of their
+    // own and therefore read the bound of the operation their callback is bound
+    // to. Every arm of that lookup fails closed, and each fail-closed default is
+    // pinned here: a mutation flipping either one to `MayExecute` would
+    // otherwise pass the whole suite.
+    #[test]
+    fn callback_floor_reads_the_bound_operation_and_fails_closed_everywhere_else() {
+        let read = operation("read-0", OperationKind::Read, per_call_cardinality(Some(0)));
+        let export = export_semantics(
+            vec![CallbackInvocation {
+                from: parameter_source_at(0, &[]),
+                operation: read.id.clone(),
+            }],
+            vec![read.clone()],
+        );
+        let bound = proof(
+            ProofFamily::ArgumentBinding,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                ordinal: 0,
+                operation: "read-0".into(),
+            }),
+        );
+        assert_eq!(
+            callback_reachability_floor(&export, &bound),
+            ReachabilityFloor::MayExecute,
+            "the bound operation's explicit zero lower bound is the floor"
+        );
+
+        // The bound operation's own bound decides, not the callback's position.
+        let guaranteed = export_semantics(
+            vec![CallbackInvocation {
+                from: parameter_source_at(0, &[]),
+                operation: read.id.clone(),
+            }],
+            vec![operation(
+                "read-0",
+                OperationKind::Read,
+                per_call_cardinality(Some(1)),
+            )],
+        );
+        assert_eq!(
+            callback_reachability_floor(&guaranteed, &bound),
+            ReachabilityFloor::Reachable
+        );
+
+        // Fail-closed default 1: a subject that is not a callback binding has no
+        // bound operation to read at all.
+        assert_eq!(
+            callback_reachability_floor(
+                &export,
+                &proof(ProofFamily::ArgumentBinding, selected_subject())
+            ),
+            ReachabilityFloor::Reachable,
+            "a non-callback subject names no operation whose bound could relax the floor"
+        );
+
+        // Fail-closed default 2, three ways to miss: an ordinal past the end,
+        // an ordinal naming a callback bound to a different operation, and a
+        // callback whose operation the export does not carry.
+        let out_of_range = proof(
+            ProofFamily::ArgumentBinding,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                ordinal: 7,
+                operation: "read-0".into(),
+            }),
+        );
+        assert_eq!(
+            callback_reachability_floor(&export, &out_of_range),
+            ReachabilityFloor::Reachable,
+            "an ordinal past the callback list reads no bound"
+        );
+        let mismatched = proof(
+            ProofFamily::ArgumentBinding,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                ordinal: 0,
+                operation: "read-1".into(),
+            }),
+        );
+        assert_eq!(
+            callback_reachability_floor(&export, &mismatched),
+            ReachabilityFloor::Reachable,
+            "the demand and the callback must name the same operation"
+        );
+        let absent = export_semantics(
+            vec![CallbackInvocation {
+                from: parameter_source_at(0, &[]),
+                operation: read.id.clone(),
+            }],
+            Vec::new(),
+        );
+        assert_eq!(
+            callback_reachability_floor(&absent, &bound),
+            ReachabilityFloor::Reachable,
+            "an operation absent from the export has no bound whose lower end could be read"
+        );
+    }
+
+    // The recursive value-shape branch keeps the strict floor on purpose: it
+    // asserts what a position *is*, not how often the implementation reaches it.
+    // Pinned here because nothing else exercises that decision — the mutation
+    // that relaxes it passed the whole suite before this test existed.
+    #[test]
+    fn recursive_value_shape_evidence_keeps_the_strict_floor() {
+        let implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 30, "endByte": 40},
+                    "reach": "unknown",
+                    "kind": "call",
+                    "target": "symbol:callback",
+                    "calleeParameter": {"parameterIndex": 0}
+                }]
+            }))
+            .unwrap();
+        let source = parameter_source_at(0, &[]);
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "recursive".into(),
+            reason: reason.into(),
+        };
+
+        operation_input_value_shape_evidence(
+            &source,
+            RecursiveValueEvidence::ShapeAsserted,
+            &implementation,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a call the implementation may not reach does not fix what a position is");
+
+        let mut reached = implementation.clone();
+        reached.calls[0].reach = Reachability::Reachable;
+        let mut sites = Vec::new();
+        assert!(
+            operation_input_value_shape_evidence(
+                &source,
+                RecursiveValueEvidence::ShapeAsserted,
+                &reached,
+                &open,
+                &mut sites,
+            )
+            .expect("a reachable direct call of the parameter is the evidence this branch wants"),
+            "the branch discharges the demand when it applies and the evidence is there"
+        );
+        assert_eq!(sites.len(), 1);
+
+        // The unasserted-root arm keeps its own explicit `Reachable` premise,
+        // and reports "not discharged" rather than an error so the signature
+        // census still gets its turn.
+        assert!(
+            !operation_input_value_shape_evidence(
+                &source,
+                RecursiveValueEvidence::RootUnasserted,
+                &implementation,
+                &open,
+                &mut Vec::new(),
+            )
+            .expect("an absent witness leaves the root to the signature census"),
+        );
+        let mut root_sites = Vec::new();
+        assert!(
+            operation_input_value_shape_evidence(
+                &source,
+                RecursiveValueEvidence::RootUnasserted,
+                &reached,
+                &open,
+                &mut root_sites,
+            )
+            .expect("a reachable call witnesses the root"),
+        );
+        assert_eq!(root_sites.len(), 1);
+    }
+
+    fn export_semantics(
+        callbacks: Vec<CallbackInvocation>,
+        operations: Vec<solid_reactive_ir::contract_semantics::Operation>,
+    ) -> solid_reactive_ir::contract_semantics::ExportSemantics {
+        use solid_reactive_ir::contract_semantics::{
+            ArtifactIdentity, CallClaims, CallSemantics, Digest, ExportIdentity, ExportSemantics,
+            ExportTargetIdentity, GuardPartition, KnowledgeSet, StabilityKnowledge, ValueShape,
+        };
+        let module = ArtifactIdentity {
+            path: "dist/index.js".into(),
+            digest: Digest::parse(format!("sha256:{:064x}", 3)).expect("a valid digest"),
+        };
+        ExportSemantics {
+            identity: ExportIdentity {
+                entrypoint: ".".into(),
+                public_name: "run".into(),
+                runtime: ExportTargetIdentity {
+                    module: module.clone(),
+                    export_name: "run".into(),
+                },
+                declarations: ExportTargetIdentity {
+                    module,
+                    export_name: "run".into(),
+                },
+            },
+            shape: ValueShape::Callable,
+            stability: StabilityKnowledge::Unknown,
+            call: CallSemantics::new(
+                CallClaims {
+                    callbacks: KnowledgeSet::complete(callbacks),
+                    ..CallClaims::default()
+                },
+                operations,
+                Vec::new(),
+                Vec::new(),
+                GuardPartition {
+                    cases: KnowledgeSet::complete(Vec::new()),
+                },
+            ),
+        }
+    }
+
+    // marker's `mapMatch(text)` sits in a `do … while`, so the producer reports
+    // it Unknown. Its demand claims 0..many per call, and that claim is
+    // discharged by a call that may run — captured inside the returned closure
+    // or not. Dead code still discharges nothing.
+    #[test]
+    fn loop_body_call_executes_only_under_the_zero_lower_bound_floor() {
+        let mut implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": [{
+                    "location": {"path": "/project/index.js", "startByte": 42, "endByte": 52},
+                    "reach": "reachable",
+                    "carriedCallables": [
+                        {"path": "/project/index.js", "startByte": 5, "endByte": 40}
+                    ]
+                }]},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 10, "endByte": 15},
+                    "reach": "unknown",
+                    "kind": "call",
+                    "calleeParameter": {"parameterIndex": 0},
+                    "captured": true,
+                    "enclosingCallable":
+                        {"path": "/project/index.js", "startByte": 5, "endByte": 40}
+                }]
+            }))
+            .unwrap();
+        assert!(implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+
+        // The carried chain is still required under the relaxed floor: a
+        // loop-body call in a closure nothing returns remains unexecuted. The
+        // link is the enclosing callable's identity, not the call's own bytes,
+        // so this moves the closure rather than the call site.
+        let carried = implementation.calls[0]
+            .enclosing_callable
+            .clone()
+            .expect("the fixture states one");
+        if let Some(enclosing) = implementation.calls[0].enclosing_callable.as_mut() {
+            enclosing.start_byte = 60;
+            enclosing.end_byte = 65;
+        }
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+        implementation.calls[0].enclosing_callable = Some(carried);
+
+        implementation.calls[0].captured = false;
+        assert!(implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+        implementation.calls[0].reach = Reachability::Unreachable;
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+    }
+
+    // `@tanstack/hotkeys::formatHotkey` reads its parameter only from inside a
+    // `for … of`. The read is Unknown by construction, and its demand claims no
+    // lower bound.
+    #[test]
+    fn parameter_read_accepts_a_loop_body_call_only_for_a_zero_lower_bound() {
+        let implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/format.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/format.js", "startByte": 30, "endByte": 60},
+                    "reach": "unknown",
+                    "kind": "call",
+                    "calleeParameter": {
+                        "parameterIndex": 0,
+                        "path": [
+                            {"kind": "property", "property": "modifiers"},
+                            {"kind": "property", "property": "includes"}
+                        ]
+                    }
+                }]
+            }))
+            .unwrap();
+        let source = parameter_source_at(0, &[]);
+        let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+            demand: "read".into(),
+            reason: reason.into(),
+        };
+
+        let mut sites = Vec::new();
+        require_parameter_read_evidence(
+            &implementation,
+            &source,
+            ReachabilityFloor::MayExecute,
+            &open,
+            &mut sites,
+        )
+        .expect("a may-execute read discharges a claim with no lower bound");
+        assert_eq!(sites, vec!["implementation-read:/project/format.js:30:60"]);
+
+        let mut sites = Vec::new();
+        require_parameter_read_evidence(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect_err("an occurrence claim is not discharged by a loop-body read");
+    }
+
+    // `MapEntries` reads `props` at `const mapFn = props.children` — a property
+    // access, not a call. The use census records exactly that, and the read
+    // branch has to consume it; the call census by construction never will.
+    #[test]
+    fn parameter_read_accepts_an_uncaptured_property_access_use() {
+        let mut implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "parameterUses": [{
+                    "parameterIndex": 0,
+                    "location": {"path": "/project/index.js", "startByte": 20, "endByte": 25},
+                    "reach": "reachable",
+                    "kind": "propertyAccess"
+                }]
+            }))
+            .unwrap();
+        let source = parameter_source_at(0, &[]);
+        let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+            demand: "read".into(),
+            reason: reason.into(),
+        };
+
+        let mut sites = Vec::new();
+        require_parameter_read_evidence(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect("an uncaptured property access is a read");
+        assert_eq!(
+            sites,
+            vec!["implementation-read-use:/project/index.js:20:25:propertyAccess"]
+        );
+
+        // A direct or alias call of the parameter reads it too.
+        for kind in [ParameterUseKind::DirectCall, ParameterUseKind::AliasCall] {
+            implementation.parameter_uses[0].kind = kind;
+            let mut sites = Vec::new();
+            require_parameter_read_evidence(
+                &implementation,
+                &source,
+                ReachabilityFloor::Reachable,
+                &open,
+                &mut sites,
+            )
+            .unwrap_or_else(|_| panic!("{kind:?} is a read of the parameter"));
+        }
+
+        // Being handed somewhere is not being read, and a use the census could
+        // not classify is evidence of nothing at all.
+        for kind in [
+            ParameterUseKind::Storage,
+            ParameterUseKind::Return,
+            ParameterUseKind::ArgumentKnown,
+            ParameterUseKind::ArgumentUnknown,
+            ParameterUseKind::Capture,
+            ParameterUseKind::UnknownEscape,
+        ] {
+            implementation.parameter_uses[0].kind = kind;
+            let mut sites = Vec::new();
+            require_parameter_read_evidence(
+                &implementation,
+                &source,
+                ReachabilityFloor::Reachable,
+                &open,
+                &mut sites,
+            )
+            .expect_err(&format!("{kind:?} is not a read"));
+        }
+
+        // A captured use is refused for the reason a captured call is: nothing
+        // here proves the closure holding it runs.
+        implementation.parameter_uses[0].kind = ParameterUseKind::PropertyAccess;
+        implementation.parameter_uses[0].captured = true;
+        let mut sites = Vec::new();
+        require_parameter_read_evidence(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect_err("a captured property access proves no read of the export's own call");
+
+        // Another parameter, and a path the demand does not name, answer
+        // nothing. A deeper binding path does: destructuring `{ children }` off
+        // parameter 0 and using it is a use of parameter 0.
+        implementation.parameter_uses[0].captured = false;
+        require_parameter_read_evidence(
+            &implementation,
+            &parameter_source_at(1, &[]),
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a use of parameter 0 is not a read of parameter 1");
+        require_parameter_read_evidence(
+            &implementation,
+            &parameter_source_at(0, &["children"]),
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a use of the parameter root does not name the demanded property");
+        implementation.parameter_uses[0].binding_path = vec![typefacts::PathSegment {
+            kind: PathSegmentKind::Property,
+            property: "children".into(),
+            index: None,
+        }];
+        require_parameter_read_evidence(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("using a destructured property of the parameter reads the parameter");
+    }
+
+    // The hole this closed: the use witness consulted `captured`, `kind`, and
+    // the path, and nothing about where the use sits. A `props.children` after a
+    // `return`, after a `throw`, or in a branch a literal condition excludes is
+    // `Unreachable` and discharged a `min >= 1` read demand, which is exactly
+    // what the call witness has always refused. Each row is a producer shape the
+    // review reproduced against the real census.
+    #[test]
+    fn parameter_read_use_answers_to_the_same_floor_as_a_call() {
+        let source = parameter_source_at(0, &[]);
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "read".into(),
+            reason: reason.into(),
+        };
+        let use_at = |reach: &str| -> typefacts::ExportImplementationTranscript {
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "parameterUses": [{
+                    "parameterIndex": 0,
+                    "location": {"path": "/project/index.js", "startByte": 20, "endByte": 25},
+                    "reach": reach,
+                    "kind": "propertyAccess"
+                }]
+            }))
+            .unwrap()
+        };
+
+        // `void props.children;` after a `return` or a `throw`, and the same in
+        // an `if (false)` branch: the producer answers `unreachable` for all
+        // three, and neither floor admits dead code.
+        for floor in [ReachabilityFloor::Reachable, ReachabilityFloor::MayExecute] {
+            require_parameter_read_evidence(
+                &use_at("unreachable"),
+                &source,
+                floor,
+                &open,
+                &mut Vec::new(),
+            )
+            .expect_err("a property access in dead code reads nothing, for any claim");
+        }
+
+        // In a loop body the producer answers `unknown`: that discharges a read
+        // whose own lower bound is zero, and never one asserting an occurrence.
+        let loop_body = use_at("unknown");
+        let mut sites = Vec::new();
+        require_parameter_read_evidence(
+            &loop_body,
+            &source,
+            operation_reachability_floor(&operation(
+                "read-0",
+                OperationKind::Read,
+                per_call_cardinality(Some(0)),
+            )),
+            &open,
+            &mut sites,
+        )
+        .expect("a use that may execute discharges a claim with no lower bound");
+        assert_eq!(
+            sites,
+            vec!["implementation-read-use:/project/index.js:20:25:propertyAccess"]
+        );
+        require_parameter_read_evidence(
+            &loop_body,
+            &source,
+            operation_reachability_floor(&operation(
+                "read-0",
+                OperationKind::Read,
+                per_call_cardinality(Some(1)),
+            )),
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a use in a loop body does not witness an asserted occurrence");
+
+        // And the witness still works where it should: a reachable use answers
+        // the strict floor, so the gate is not simply refusing every use.
+        require_parameter_read_evidence(
+            &use_at("reachable"),
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("a reachable property access is a read under either floor");
+    }
+
+    // The owner branch asks the same reachability question the flow branches do,
+    // and takes the same answer from the demand's bound: `createRenderEffect`
+    // after a `for … of` witnesses a 0..many create claim.
+    #[test]
+    fn owner_operation_call_follows_the_demanded_lower_bound() {
+        let implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 30, "endByte": 60},
+                    "reach": "unknown",
+                    "kind": "call",
+                    "target": "symbol:createRenderEffect",
+                    "targetName": "createRenderEffect",
+                    "targetModule": "solid-js"
+                }]
+            }))
+            .unwrap();
+        let mut effect = operation(
+            "create-0",
+            OperationKind::Create,
+            per_call_cardinality(Some(0)),
+        );
+        effect.owner.requirements.child_owners = Requirement::Required;
+        let demand = proof(ProofFamily::OperationReachability, selected_subject());
+        let open = |reason: &str| TypeFactsCertificationError::UnsupportedDemand {
+            demand: "create".into(),
+            reason: reason.into(),
+        };
+
+        let mut sites = Vec::new();
+        require_owner_operation_call(
+            &effect,
+            &demand,
+            &implementation,
+            operation_reachability_floor(&effect),
+            &open,
+            &mut sites,
+        )
+        .expect("a may-execute dialect owner call witnesses a claim with no lower bound");
+        assert_eq!(
+            sites,
+            vec!["implementation-owner-call:/project/index.js:30:60:createRenderEffect"]
+        );
+
+        let mut guaranteed = effect.clone();
+        guaranteed.cardinality = per_call_cardinality(Some(1));
+        require_owner_operation_call(
+            &guaranteed,
+            &demand,
+            &implementation,
+            operation_reachability_floor(&guaranteed),
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("an occurrence claim still demands a provably reached owner call");
+
+        // Neither floor admits a call the implementation never reaches, and the
+        // module gate is untouched: a same-named local is not the dialect's.
+        let mut dead = implementation.clone();
+        dead.calls[0].reach = Reachability::Unreachable;
+        require_owner_operation_call(
+            &effect,
+            &demand,
+            &dead,
+            ReachabilityFloor::MayExecute,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("dead code witnesses nothing for any claim");
+        let mut local = implementation.clone();
+        local.calls[0].target_module = "".into();
+        require_owner_operation_call(
+            &effect,
+            &demand,
+            &local,
+            ReachabilityFloor::MayExecute,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a call outside the dialect module is not a dialect primitive call");
+    }
+
     #[test]
     fn implementation_flow_requires_direct_or_returned_closure_execution() {
         // The call at bytes 10..15 sits inside the callable at 5..40, which the
@@ -4413,41 +5678,82 @@ mod tests {
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 10, "endByte": 15},
                     "reach": "reachable",
+                    "kind": "call",
                     "calleeParameter": {"parameterIndex": 0},
-                    "captured": true
+                    "captured": true,
+                    "enclosingCallable": {
+                        "path": "/project/index.js", "startByte": 5, "endByte": 40
+                    }
                 }]
             }))
             .unwrap();
         assert!(implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0]
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
         ));
 
-        // A call in a closure the implementation never returns is outside every
-        // carried range, and no amount of what the returned closure *mentions*
-        // puts it back inside one.
-        implementation.calls[0].location.start_byte = 60;
-        implementation.calls[0].location.end_byte = 65;
+        // A call in a closure the implementation never returns is enclosed by a
+        // callable no return site carries, and no amount of what the returned
+        // closure *mentions* changes which callable contains it.
+        implementation.calls[0].enclosing_callable = Some(
+            serde_json::from_value(json!({
+                "path": "/project/index.js", "startByte": 60, "endByte": 70
+            }))
+            .unwrap(),
+        );
         assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0]
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
         ));
-        // Same bytes, another file: containment is per file, never a suffix.
-        implementation.calls[0].location.start_byte = 10;
-        implementation.calls[0].location.end_byte = 15;
-        implementation.calls[0].location.path = "/project/other.js".into();
+        // A closure *containing* the carried one is not the carried one either:
+        // the match is the exact enclosing callable, never a range that spans it.
+        implementation.calls[0].enclosing_callable = Some(
+            serde_json::from_value(json!({
+                "path": "/project/index.js", "startByte": 4, "endByte": 41
+            }))
+            .unwrap(),
+        );
         assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0]
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
         ));
-        implementation.calls[0].location.path = "/project/index.js".into();
+        // Same bytes, another file: identity is per file, never a suffix.
+        implementation.calls[0].enclosing_callable = Some(
+            serde_json::from_value(json!({
+                "path": "/project/other.js", "startByte": 5, "endByte": 40
+            }))
+            .unwrap(),
+        );
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        // A captured call the producer did not place inside any callable has no
+        // chain to build, so it is refused rather than assumed.
+        implementation.calls[0].enclosing_callable = None;
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        implementation.calls[0].enclosing_callable = Some(
+            serde_json::from_value(json!({
+                "path": "/project/index.js", "startByte": 5, "endByte": 40
+            }))
+            .unwrap(),
+        );
 
         implementation.control_flow.as_mut().unwrap().returns[0]
             .carried_callables
             .clear();
         assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0]
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
         ));
         // An unreachable return carries no authority even when it does carry
         // the callable.
@@ -4463,19 +5769,1014 @@ mod tests {
         }
         assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0]
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
         ));
 
         implementation.calls[0].captured = false;
         assert!(implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0]
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
         ));
         implementation.calls[0].reach = Reachability::Unknown;
         assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0]
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
         ));
+    }
+
+    /// An implementation whose only structure is `outer(<arrow containing the
+    /// inner call>)`. The arrow spans 20..80, the captured inner call sits at
+    /// 30..40 and names that arrow as its enclosing callable, and nothing is
+    /// returned at all — so the returned-closure premise can never fire and the
+    /// verdict is decided purely by whether slot 0 of `outer` is proven
+    /// invoking.
+    fn invoking_argument_implementation(
+        outer: serde_json::Value,
+    ) -> typefacts::ExportImplementationTranscript {
+        let mut outer_call = json!({
+            "location": {"path": "/project/index.js", "startByte": 10, "endByte": 90},
+            "reach": "reachable",
+            "kind": "call",
+            "argumentCallables": [{
+                "argument": 0,
+                "locations": [{"path": "/project/index.js", "startByte": 20, "endByte": 80}]
+            }]
+        });
+        let (serde_json::Value::Object(fields), serde_json::Value::Object(overrides)) =
+            (&mut outer_call, outer)
+        else {
+            unreachable!("both literals are objects");
+        };
+        fields.extend(overrides);
+        serde_json::from_value(json!({
+            "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+            "controlFlow": {"returns": []},
+            "calls": [
+                outer_call,
+                {
+                    "location": {"path": "/project/index.js", "startByte": 30, "endByte": 40},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "calleeParameter": {"parameterIndex": 0},
+                    "captured": true,
+                    "enclosingCallable": {
+                        "path": "/project/index.js", "startByte": 20, "endByte": 80
+                    }
+                }
+            ]
+        }))
+        .unwrap()
+    }
+
+    fn inner_call_is_executed(implementation: &typefacts::ExportImplementationTranscript) -> bool {
+        implementation_call_is_executed(
+            implementation,
+            &implementation.calls[1],
+            ReachabilityFloor::Reachable,
+        )
+    }
+
+    /// Tier A. `@solid-primitives/autofocus` is the whole case: its body is
+    /// `createEffect(() => { const el = ref(); … })` and it returns nothing, so
+    /// the call on the parameter is executed because `createEffect` executes
+    /// the closure it is handed — not because anything is handed back.
+    #[test]
+    fn dialect_callback_argument_executes_the_callable_it_carries() {
+        let implementation = invoking_argument_implementation(json!({
+            "target": "symbol:createEffect",
+            "targetName": "createEffect",
+            "targetModule": "solid-js",
+            "argumentParameters": [null]
+        }));
+        assert!(inner_call_is_executed(&implementation));
+
+        // `createEffect(fn, initialValue)` at slot 1 is the initial value, not a
+        // callback, and the dialect gate already says so.
+        let slot_one = invoking_argument_implementation(json!({
+            "target": "symbol:createEffect",
+            "targetName": "createEffect",
+            "targetModule": "solid-js",
+            "argumentParameters": [null, null],
+            "argumentCallables": [{
+                "argument": 1,
+                "locations": [{"path": "/project/index.js", "startByte": 20, "endByte": 80}]
+            }]
+        }));
+        assert!(!inner_call_is_executed(&slot_one));
+
+        // A locally defined `createMemo` shadowing the import is a different
+        // function with the same name. The module gate is what refuses it.
+        let shadowed = invoking_argument_implementation(json!({
+            "target": "symbol:localCreateMemo",
+            "targetName": "createMemo",
+            "targetModule": "",
+            "argumentParameters": [null]
+        }));
+        assert!(!inner_call_is_executed(&shadowed));
+
+        // A namespace member the producer could not resolve to an exact import
+        // carries neither target nor module.
+        let namespace = invoking_argument_implementation(json!({
+            "targetName": "createMemo",
+            "argumentParameters": [null]
+        }));
+        assert!(!inner_call_is_executed(&namespace));
+
+        // And an argument slot that carries nothing proven is not an invoking
+        // position no matter what the callee is.
+        let uncarried = invoking_argument_implementation(json!({
+            "target": "symbol:createEffect",
+            "targetName": "createEffect",
+            "targetModule": "solid-js",
+            "argumentParameters": [null],
+            "argumentCallables": []
+        }));
+        assert!(!inner_call_is_executed(&uncarried));
+    }
+
+    /// Tier B. The verifier owns the invoker table too, so a member it does not
+    /// recognize and a slot its own table does not list are both refused even
+    /// though the producer transmitted them.
+    #[test]
+    fn default_library_invoker_is_a_closed_table_on_both_sides() {
+        let listener = invoking_argument_implementation(json!({
+            "target": "symbol:addEventListener",
+            "targetName": "addEventListener",
+            "defaultLibraryInvoker": "addEventListener",
+            "invokedArguments": [1],
+            "argumentParameters": [null, null],
+            "argumentCallables": [{
+                "argument": 1,
+                "locations": [{"path": "/project/index.js", "startByte": 20, "endByte": 80}]
+            }]
+        }));
+        assert!(inner_call_is_executed(&listener));
+
+        // `requestAnimationFrame` invokes slot 0 — the `utils::afterPaint` case.
+        let frame = invoking_argument_implementation(json!({
+            "target": "symbol:requestAnimationFrame",
+            "targetName": "requestAnimationFrame",
+            "defaultLibraryInvoker": "requestAnimationFrame",
+            "invokedArguments": [0],
+            "argumentParameters": [null]
+        }));
+        assert!(inner_call_is_executed(&frame));
+
+        // An invoker string nobody reviewed is not evidence. `watchPosition`
+        // really does invoke its callback; it is not on the table, so it stays
+        // open, and the same refusal covers a renamed or forged value.
+        let unreviewed = invoking_argument_implementation(json!({
+            "target": "symbol:watchPosition",
+            "targetName": "watchPosition",
+            "defaultLibraryInvoker": "watchPosition",
+            "invokedArguments": [0],
+            "argumentParameters": [null]
+        }));
+        assert!(!inner_call_is_executed(&unreviewed));
+
+        // A recognized member with a slot its own runtime does not invoke. The
+        // transmitted list says 0; `addEventListener` invokes 1, and the
+        // verifier's table is what decides.
+        let widened = invoking_argument_implementation(json!({
+            "target": "symbol:addEventListener",
+            "targetName": "addEventListener",
+            "defaultLibraryInvoker": "addEventListener",
+            "invokedArguments": [0],
+            "argumentParameters": [null]
+        }));
+        assert!(!inner_call_is_executed(&widened));
+
+        // A recognized member whose transmitted list omits the slot. Both
+        // halves must agree.
+        let omitted = invoking_argument_implementation(json!({
+            "target": "symbol:requestAnimationFrame",
+            "targetName": "requestAnimationFrame",
+            "defaultLibraryInvoker": "requestAnimationFrame",
+            "invokedArguments": [],
+            "argumentParameters": [null]
+        }));
+        assert!(!inner_call_is_executed(&omitted));
+    }
+
+    /// Tier C. `@solidjs/signals::createRevealOrder` runs its callback inside
+    /// `runWithOwner(owner, () => { const value = fn(); … })`, and
+    /// `runWithOwner` is package-local — no dialect module, no library symbol.
+    /// The producer's fact about that callee's own body is the whole premise.
+    #[test]
+    fn package_local_invoking_callee_executes_the_callable_it_carries() {
+        let local = invoking_argument_implementation(json!({
+            "target": "symbol:runWithOwner",
+            "targetName": "runWithOwner",
+            "argumentParameters": [null],
+            "calleeInvokedParameters": [0],
+            "calleeStronglyInvokedParameters": [0],
+            "calleeDirectlyCalledParameters": [0]
+        }));
+        assert!(inner_call_is_executed(&local));
+
+        // `function store(fn) { registry.push(fn); }` and
+        // `function maybe(fn) { return fn; }` produce no fact, and no fact is
+        // no evidence.
+        let stores = invoking_argument_implementation(json!({
+            "target": "symbol:store",
+            "targetName": "store",
+            "argumentParameters": [null]
+        }));
+        assert!(!inner_call_is_executed(&stores));
+
+        // A slot the callee does not invoke, on a callee that invokes another.
+        let other_slot = invoking_argument_implementation(json!({
+            "target": "symbol:runWithOwner",
+            "targetName": "runWithOwner",
+            "argumentParameters": [null],
+            "calleeInvokedParameters": [1]
+        }));
+        assert!(!inner_call_is_executed(&other_slot));
+    }
+
+    /// The falsifier for byte containment, and the reason the premise composes.
+    ///
+    /// Both halves below are the *same* nesting: a `createEffect` whose arrow
+    /// contains an inner arrow that calls the parameter. They differ only in
+    /// what the inner arrow is handed to. Stored in a registry, it never runs
+    /// and the call must stay open; handed to `setTimeout`, it runs and the
+    /// call is executed. A premise that read containment could not tell them
+    /// apart, and would certify "calling this export invokes your callback"
+    /// against a package that only ever stores it.
+    #[test]
+    fn a_merely_stored_inner_closure_breaks_the_invoking_chain() {
+        // effect(() => {                        // the arrow, 20..90
+        //   const inner = () => { cb(); };      // the inner arrow, 30..60
+        //   <second call>(inner);               // 62..85
+        // });
+        let composition = |second: serde_json::Value| -> typefacts::ExportImplementationTranscript {
+            let mut inner_carrier = json!({
+                "location": {"path": "/project/index.js", "startByte": 62, "endByte": 85},
+                "reach": "reachable",
+                "kind": "call",
+                "captured": true,
+                "enclosingCallable": {"path": "/project/index.js", "startByte": 20, "endByte": 90},
+                "argumentCallables": [{
+                    "argument": 0,
+                    "locations": [{"path": "/project/index.js", "startByte": 30, "endByte": 60}]
+                }]
+            });
+            let (serde_json::Value::Object(fields), serde_json::Value::Object(overrides)) =
+                (&mut inner_carrier, second)
+            else {
+                unreachable!("both literals are objects");
+            };
+            fields.extend(overrides);
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": []},
+                "calls": [
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 10, "endByte": 95},
+                        "reach": "reachable",
+                        "kind": "call",
+                        "target": "symbol:createEffect",
+                        "targetName": "createEffect",
+                        "targetModule": "solid-js",
+                        "argumentParameters": [null],
+                        "argumentCallables": [{
+                            "argument": 0,
+                            "locations": [
+                                {"path": "/project/index.js", "startByte": 20, "endByte": 90}
+                            ]
+                        }]
+                    },
+                    inner_carrier,
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 40, "endByte": 52},
+                        "reach": "reachable",
+                        "kind": "call",
+                        "calleeParameter": {"parameterIndex": 0},
+                        "captured": true,
+                        "enclosingCallable": {
+                            "path": "/project/index.js", "startByte": 30, "endByte": 60
+                        }
+                    }
+                ]
+            }))
+            .unwrap()
+        };
+
+        // `registry.push(inner)` carries the inner arrow at a slot no tier
+        // proves invoking. The chain breaks there, and byte nesting does not
+        // repair it: the call site still lies inside the range `createEffect`
+        // runs.
+        let stored = composition(json!({
+            "target": "symbol:push",
+            "targetName": "push",
+            "argumentParameters": [null]
+        }));
+        assert!(!implementation_call_is_executed(
+            &stored,
+            &stored.calls[2],
+            ReachabilityFloor::Reachable
+        ));
+
+        // `setTimeout(inner, 0)` is the identical shape with one link proven,
+        // and it composes: the inner arrow is carried at a slot the reviewed
+        // table invokes, and the call carrying it is itself executed because the
+        // arrow enclosing *it* is the one `createEffect` invokes.
+        let scheduled = composition(json!({
+            "target": "symbol:setTimeout",
+            "targetName": "setTimeout",
+            "defaultLibraryInvoker": "setTimeout",
+            "invokedArguments": [0],
+            "argumentParameters": [null, null]
+        }));
+        assert!(implementation_call_is_executed(
+            &scheduled,
+            &scheduled.calls[2],
+            ReachabilityFloor::Reachable
+        ));
+    }
+
+    /// The premise is transitive — a closure inside a closure inside an
+    /// argument is real code — and it is bounded, because an unbounded walk over
+    /// producer-supplied ranges is a denial of service rather than a proof.
+    #[test]
+    fn invoking_argument_recursion_is_transitive_and_bounded() {
+        // Three nested effect closures: the outermost is a direct call, and each
+        // inner one is carried by the one above it.
+        let mut calls = Vec::new();
+        for depth in 0..3usize {
+            let start = depth * 10;
+            let end = 100 - depth * 10;
+            let enclosing = (depth != 0).then(|| {
+                json!({
+                    "path": "/project/index.js",
+                    "startByte": (depth - 1) * 10 + 1,
+                    "endByte": 100 - (depth - 1) * 10 - 1
+                })
+            });
+            calls.push(json!({
+                "location": {"path": "/project/index.js", "startByte": start, "endByte": end},
+                "reach": "reachable",
+                "kind": "call",
+                "captured": depth != 0,
+                "enclosingCallable": enclosing,
+                "target": "symbol:createEffect",
+                "targetName": "createEffect",
+                "targetModule": "solid-js",
+                "argumentParameters": [null],
+                "argumentCallables": [{
+                    "argument": 0,
+                    "locations": [{
+                        "path": "/project/index.js",
+                        "startByte": start + 1,
+                        "endByte": end - 1
+                    }]
+                }]
+            }));
+        }
+        let nested: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+            "controlFlow": {"returns": []},
+            "calls": calls
+        }))
+        .unwrap();
+        assert!(implementation_call_is_executed(
+            &nested,
+            &nested.calls[2],
+            ReachabilityFloor::Reachable
+        ));
+
+        // Real nesting is transitively contained, so genuine source can never
+        // make the walk long: the outermost call's own argument range already
+        // spans the innermost call. The bound therefore guards against
+        // *producer-supplied ranges*, which are just numbers and need not nest
+        // at all. This builds the adversarial shape directly — a chain of
+        // disjoint one-byte calls where call k carries only call k+1 — and pins
+        // that the bound, and not the construction, is what refuses it.
+        let chain = |length: usize| -> typefacts::ExportImplementationTranscript {
+            let calls = (0..length)
+                .map(|link| {
+                    json!({
+                        "location": {
+                            "path": "/project/index.js",
+                            "startByte": link * 2,
+                            "endByte": link * 2 + 1
+                        },
+                        "reach": "reachable",
+                        "kind": "call",
+                        "captured": link != 0,
+                        "enclosingCallable": (link != 0).then(|| json!({
+                            "path": "/project/index.js",
+                            "startByte": link * 2,
+                            "endByte": link * 2 + 1
+                        })),
+                        "target": "symbol:createEffect",
+                        "targetName": "createEffect",
+                        "targetModule": "solid-js",
+                        "argumentParameters": [null],
+                        "argumentCallables": [{
+                            "argument": 0,
+                            "locations": [{
+                                "path": "/project/index.js",
+                                "startByte": (link + 1) * 2,
+                                "endByte": (link + 1) * 2 + 1
+                            }]
+                        }]
+                    })
+                })
+                .collect::<Vec<_>>();
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": []},
+                "calls": calls
+            }))
+            .unwrap()
+        };
+        let within = chain(MAX_EXECUTION_PREMISE_DEPTH);
+        assert!(implementation_call_is_executed(
+            &within,
+            &within.calls[MAX_EXECUTION_PREMISE_DEPTH - 1],
+            ReachabilityFloor::Reachable
+        ));
+        let beyond = chain(MAX_EXECUTION_PREMISE_DEPTH + 3);
+        assert!(!implementation_call_is_executed(
+            &beyond,
+            &beyond.calls[MAX_EXECUTION_PREMISE_DEPTH + 2],
+            ReachabilityFloor::Reachable
+        ));
+    }
+
+    /// S4-strong. The strong family accepts a chain that terminates in a direct
+    /// call of the parameter and refuses the weak transitive variant — otherwise
+    /// `callable-path` silently becomes `argument-binding`.
+    #[test]
+    fn strong_callback_flow_requires_a_terminating_direct_call() {
+        let source = ValueSource::Parameter {
+            index: 0,
+            path: Vec::new(),
+        };
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "callable-path".into(),
+            reason: reason.to_string(),
+        };
+        let mut implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "target": "symbol:createPolled",
+                    "targetName": "createPolled",
+                    "argumentParameters": [null, {"parameterIndex": 0}],
+                    "calleeDirectlyCalledParameters": [],
+                    "calleeInvokedParameters": [1],
+                    "calleeStronglyInvokedParameters": [1]
+                }]
+            }))
+            .unwrap();
+        let mut sites = Vec::new();
+        require_parameter_callback_flow(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect("a chain of plain forwards ending in `delay()` is a direct-call claim");
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.starts_with("implementation-callee-direct-callback:")),
+            "witness = {sites:?}"
+        );
+
+        // The weak fact alone is not the strong claim. A chain that ends at
+        // `addEventListener` proves the value runs and says nothing about
+        // whether the callee treats the position as a function.
+        implementation.calls[0]
+            .callee_strongly_invoked_parameters
+            .clear();
+        let mut weak_sites = Vec::new();
+        require_parameter_callback_flow(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut weak_sites,
+        )
+        .expect_err("the weak transitive fact must not satisfy the strong claim");
+
+        // And the slot has to be the one the callback occupies.
+        implementation.calls[0].callee_strongly_invoked_parameters = vec![0];
+        let mut wrong_slot = Vec::new();
+        require_parameter_callback_flow(
+            &implementation,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut wrong_slot,
+        )
+        .expect_err("a strong claim about another slot is not about this callback");
+    }
+
+    /// A construction runs what it carries, and is still not a call.
+    ///
+    /// `@solidjs/signals::action` is the whole case:
+    /// `return (…args) => new Promise((resolve, reject) => { const it = genFn(…args); … })`.
+    /// The `genFn` call runs — the executor runs synchronously — but nothing in
+    /// a census of call expressions could say so, because the callable that
+    /// immediately contains it is carried by a `new` expression.
+    #[test]
+    fn a_construction_executes_what_it_carries_and_is_still_not_a_call() {
+        // (…args) => {                          // the returned arrow, 20..90
+        //   new Promise((resolve, reject) => {  // 30..80, executor 45..75
+        //     const it = genFn(…args);          // 50..70
+        //   });
+        // }
+        let implementation = |kind: &str,
+                              invoker: &str,
+                              slots: serde_json::Value|
+         -> typefacts::ExportImplementationTranscript {
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": [{
+                    "location": {"path": "/project/index.js", "startByte": 12, "endByte": 92},
+                    "reach": "reachable",
+                    "carriedCallables": [
+                        {"path": "/project/index.js", "startByte": 20, "endByte": 90}
+                    ]
+                }]},
+                "calls": [
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 30, "endByte": 80},
+                        "reach": "reachable",
+                        "kind": kind,
+                        "target": "symbol:Promise",
+                        "targetName": "Promise",
+                        "argumentParameters": [null],
+                        "captured": true,
+                        "enclosingCallable": {
+                            "path": "/project/index.js", "startByte": 20, "endByte": 90
+                        },
+                        "defaultLibraryInvoker": invoker,
+                        "invokedArguments": slots,
+                        "argumentCallables": [{
+                            "argument": 0,
+                            "locations": [
+                                {"path": "/project/index.js", "startByte": 45, "endByte": 75}
+                            ]
+                        }]
+                    },
+                    {
+                        "location": {"path": "/project/index.js", "startByte": 50, "endByte": 70},
+                        "reach": "reachable",
+                        "kind": "call",
+                        "target": "symbol:genFn",
+                        "calleeParameter": {"parameterIndex": 0},
+                        "captured": true,
+                        "enclosingCallable": {
+                            "path": "/project/index.js", "startByte": 45, "endByte": 75
+                        }
+                    }
+                ]
+            }))
+            .unwrap()
+        };
+        let source = ValueSource::Parameter {
+            index: 0,
+            path: Vec::new(),
+        };
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "operation-cardinality".into(),
+            reason: reason.to_string(),
+        };
+
+        // The chain: the returned arrow is carried by a reachable return, it
+        // encloses the construction, and the construction's slot 0 carries the
+        // executor that immediately encloses `genFn(…)`.
+        let action = implementation("construct", "promiseConstructor", json!([0]));
+        assert!(implementation_call_is_executed(
+            &action,
+            &action.calls[1],
+            ReachabilityFloor::Reachable
+        ));
+        let mut sites = Vec::new();
+        require_parameter_flow(
+            &action,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect("the executor runs, so the call inside it runs");
+
+        // The construction itself is not a call, and no witness may say it is.
+        // `new Cls(cb)` is a different claim about `cb` than `cls(cb)` and this
+        // family was not reviewed for it, so the argument branch must not see
+        // the construction at all.
+        let mut passed = implementation("construct", "promiseConstructor", json!([0]));
+        passed.calls[0].argument_parameters = vec![Some(
+            serde_json::from_value(json!({"parameterIndex": 0})).unwrap(),
+        )];
+        passed.calls.truncate(1);
+        let mut construct_sites = Vec::new();
+        require_parameter_flow(
+            &passed,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut construct_sites,
+        )
+        .expect_err("a parameter handed to a construction is not a called parameter");
+
+        // The verifier owns the table on its own side. An unreviewed invoker
+        // string is refused outright; the reviewed one is refused at a slot its
+        // own table does not list, however the producer spelled the list.
+        let unreviewed = implementation("construct", "promiseAny", json!([0]));
+        assert!(!implementation_call_is_executed(
+            &unreviewed,
+            &unreviewed.calls[1],
+            ReachabilityFloor::Reachable
+        ));
+        let widened = implementation("construct", "promiseConstructor", json!([0, 1]));
+        assert!(!argument_slot_is_proven_invoking(&widened.calls[0], 1));
+        assert!(argument_slot_is_proven_invoking(&widened.calls[0], 0));
+        let omitted = implementation("construct", "promiseConstructor", json!([]));
+        assert!(!argument_slot_is_proven_invoking(&omitted.calls[0], 0));
+
+        // A census entry that states no kind states no call. It still carries
+        // its executor for the execution premise — that premise is about
+        // whether code runs, and the reviewed invoker row already fixes what
+        // this site is — but every claim whose witness says "call" refuses it.
+        let unstated = implementation("unknown", "promiseConstructor", json!([0]));
+        assert!(implementation_call_is_executed(
+            &unstated,
+            &unstated.calls[1],
+            ReachabilityFloor::Reachable
+        ));
+        let mut unstated_carrier = implementation("unknown", "promiseConstructor", json!([0]));
+        unstated_carrier.calls[0].argument_parameters = vec![Some(
+            serde_json::from_value(json!({"parameterIndex": 0})).unwrap(),
+        )];
+        unstated_carrier.calls.truncate(1);
+        let mut unstated_sites = Vec::new();
+        require_parameter_flow(
+            &unstated_carrier,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut unstated_sites,
+        )
+        .expect_err("a site of unstated kind is not a call");
+    }
+
+    /// Every remaining consumer whose witness says *call* refuses a
+    /// construction, and each gate is pinned on its own.
+    ///
+    /// `require_parameter_flow` was the only one with a test. The other five
+    /// sites survived a mutation exercise that neutralised each in turn, and
+    /// three of them are load-bearing today rather than defensive: `target`,
+    /// `targetName`, `targetModule` and `argumentParameters` *are* stated for a
+    /// construction, so an ungated `require_parameter_callback_flow` discharges
+    /// the `callable-path` family for `new X(cb)` whenever `X` resolves to a
+    /// `solid-js` import with an unambiguous callback slot, an ungated
+    /// `require_owner_operation_call` reaches `unambiguous_owner_requirement_role`
+    /// the same way, and its ungated `observed` list moves a refusal tail.
+    ///
+    /// The two that are redundant with the producer today — the `Read`
+    /// witness and the recursive-parameter witness, both of which need a
+    /// `calleeParameter` a construction does not carry — are pinned anyway.
+    /// This side certifies against the wire contract, not against a producer's
+    /// current habits, and a fact stated by a future or hostile producer must
+    /// hit the same wall.
+    #[test]
+    fn a_construction_satisfies_no_claim_whose_witness_says_call() {
+        // One census entry with everything a call of `createEffect(cb)` would
+        // carry, parameterized only by the kind. Each consumer below must
+        // accept it as `"call"` and refuse it as `"construct"` — a refusal that
+        // held for both spellings would pin nothing.
+        let dialect_call = |kind: &str| -> typefacts::ExportImplementationTranscript {
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
+                    "reach": "reachable",
+                    "kind": kind,
+                    "target": "symbol:createEffect",
+                    "targetName": "createEffect",
+                    "targetModule": "solid-js",
+                    "argumentParameters": [{"parameterIndex": 0}]
+                }]
+            }))
+            .unwrap()
+        };
+        // The same, for the two witnesses that read `calleeParameter`: the
+        // parameter value is itself the callee.
+        let callee_call = |kind: &str| -> typefacts::ExportImplementationTranscript {
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
+                    "reach": "reachable",
+                    "kind": kind,
+                    "target": "symbol:cb",
+                    "calleeParameter": {"parameterIndex": 0}
+                }]
+            }))
+            .unwrap()
+        };
+        // And for the owner-primitive witness.
+        let owner_call = |kind: &str| -> typefacts::ExportImplementationTranscript {
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
+                    "reach": "reachable",
+                    "kind": kind,
+                    "target": "symbol:onCleanup",
+                    "targetName": "onCleanup",
+                    "targetModule": "solid-js"
+                }]
+            }))
+            .unwrap()
+        };
+        let source = ValueSource::Parameter {
+            index: 0,
+            path: Vec::new(),
+        };
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "construct-kind".into(),
+            reason: reason.to_string(),
+        };
+
+        // `require_parameter_callback_flow` — the `callable-path` family.
+        require_parameter_callback_flow(
+            &dialect_call("call"),
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("`createEffect`'s slot 0 is a callback position");
+        require_parameter_callback_flow(
+            &dialect_call("construct"),
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("`new createEffect(cb)` is not a callback flow");
+
+        // `require_parameter_read_call` — the `Read` operation's witness.
+        require_parameter_read_call(
+            &callee_call("call"),
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect("the parameter is the callee of a reachable call");
+        require_parameter_read_call(
+            &callee_call("construct"),
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("`new cb()` is not a read of `cb` as a callee");
+
+        // `recursive_parameter_call_site` — the `recursive-operation-parameter:`
+        // witness.
+        assert!(recursive_parameter_call_site(&callee_call("call"), &source).is_some());
+        assert!(
+            recursive_parameter_call_site(&callee_call("construct"), &source).is_none(),
+            "a construction of the parameter is not a call of it"
+        );
+
+        // `require_owner_operation_call` — both its match loop and the
+        // `observed` list it builds when nothing matched, which is a refusal
+        // tail a reader compares across runs.
+        let cleanup_operation = solid_reactive_ir::contract_semantics::Operation {
+            id: solid_reactive_ir::contract_semantics::OperationId("create".into()),
+            kind: OperationKind::Create,
+            guard: None,
+            trigger: None,
+            at: None,
+            schedule: None,
+            tracking: solid_reactive_ir::contract_semantics::Tracking::Unknown,
+            owner: solid_reactive_ir::contract_semantics::OwnerRelation {
+                requirements: solid_reactive_ir::contract_semantics::OwnerRequirements {
+                    cleanup: Requirement::Required,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            cardinality: solid_reactive_ir::contract_semantics::Cardinality::default(),
+            inputs: Vec::new(),
+            output: None,
+            resources: std::collections::BTreeSet::new(),
+        };
+        let demand = proof(ProofFamily::OperationReachability, selected_subject());
+        let mut owner_sites = Vec::new();
+        require_owner_operation_call(
+            &cleanup_operation,
+            &demand,
+            &owner_call("call"),
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut owner_sites,
+        )
+        .expect("a reachable `onCleanup(…)` call satisfies the cleanup requirement");
+        assert!(
+            owner_sites
+                .iter()
+                .any(|site| site.starts_with("implementation-owner-call:")),
+            "witness = {owner_sites:?}"
+        );
+        let refused = require_owner_operation_call(
+            &cleanup_operation,
+            &demand,
+            &owner_call("construct"),
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("`new onCleanup()` is not a call of the owner primitive");
+        let TypeFactsCertificationError::FamilyOpen { reason, .. } = &refused else {
+            panic!("unexpected refusal: {refused:?}");
+        };
+        assert!(
+            !reason.contains("onCleanup"),
+            "the observed list must not name a construction either: {reason}"
+        );
+    }
+
+    /// What an unrecognized kind actually does, as opposed to what the field's
+    /// documentation used to claim.
+    ///
+    /// An *absent* kind defaults to `Unknown`, which every kind-gated consumer
+    /// refuses. An *unrecognized* one is not mapped to `Unknown` at all:
+    /// `CallKind` carries no catch-all arm, so deserialization fails and the
+    /// whole transcript is rejected. The earlier pin used `"unknown"` — a
+    /// *recognized* variant — so nothing tested the sentence as written.
+    #[test]
+    fn an_unrecognized_call_kind_rejects_the_transcript_rather_than_defaulting() {
+        let census = |kind: serde_json::Value| {
+            let mut call = json!({
+                "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
+                "reach": "reachable"
+            });
+            if let (serde_json::Value::Object(fields), serde_json::Value::String(kind)) =
+                (&mut call, &kind)
+            {
+                fields.insert("kind".into(), json!(kind));
+            }
+            json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "calls": [call]
+            })
+        };
+
+        // Absent: `Unknown`, and refused by every claim that says "call".
+        let absent: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(census(serde_json::Value::Null)).unwrap();
+        assert_eq!(absent.calls[0].kind, typefacts::CallKind::Unknown);
+        assert!(!is_call_expression(&absent.calls[0]));
+
+        // Unrecognized: not a fact this side can read at all.
+        for spelling in ["newExpression", "CALL", "invoke", ""] {
+            serde_json::from_value::<typefacts::ExportImplementationTranscript>(census(json!(
+                spelling
+            )))
+            .expect_err(&format!("`{spelling}` is not a kind this side recognizes"));
+        }
+
+        // And the two it does recognize still deserialize.
+        for (spelling, expected) in [
+            ("call", typefacts::CallKind::Call),
+            ("construct", typefacts::CallKind::Construct),
+            ("unknown", typefacts::CallKind::Unknown),
+        ] {
+            let parsed: typefacts::ExportImplementationTranscript =
+                serde_json::from_value(census(json!(spelling))).unwrap();
+            assert_eq!(parsed.calls[0].kind, expected);
+        }
+    }
+
+    /// The deferred dialect premise. The producer states which imported slot a
+    /// callee-body chain depends on; this side decides whether that slot is a
+    /// callback position, on the same table the first tier already uses.
+    ///
+    /// `@solid-primitives/timer` is the case: `createTimer` calls `delay()`
+    /// inside the closure it hands to `createEffect`, and two plain forwards
+    /// carry the claim out to `createIntervalCounter`.
+    #[test]
+    fn a_deferred_dialect_premise_is_answered_here_or_the_claim_stays_open() {
+        let implementation =
+            |pending: serde_json::Value| -> typefacts::ExportImplementationTranscript {
+                serde_json::from_value(json!({
+                    "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                    "calls": [{
+                        "location": {"path": "/project/index.js", "startByte": 10, "endByte": 40},
+                        "reach": "reachable",
+                        "kind": "call",
+                        "target": "symbol:createPolled",
+                        "targetName": "createPolled",
+                        "argumentParameters": [null, {"parameterIndex": 0}],
+                        "calleePendingInvocations": pending
+                    }]
+                }))
+                .unwrap()
+            };
+        let source = ValueSource::Parameter {
+            index: 0,
+            path: Vec::new(),
+        };
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "callable-path".into(),
+            reason: reason.to_string(),
+        };
+        let premise = |module: &str, name: &str, slot: usize, count: usize| json!({"module": module, "name": name, "slot": slot, "argumentCount": count});
+
+        let timer = implementation(json!([{
+            "parameter": 1, "strong": true,
+            "requires": [premise("solid-js", "createEffect", 0, 1)]
+        }]));
+        let mut sites = Vec::new();
+        require_parameter_callback_flow(
+            &timer,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut sites,
+        )
+        .expect("`createEffect` slot 0 is a callback position in every dialect that owns it");
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.starts_with("implementation-callee-direct-callback:")),
+            "witness = {sites:?}"
+        );
+        assert!(argument_slot_is_proven_invoking(&timer.calls[0], 1));
+
+        // Every refusal is a refusal of the *premise*, decided here rather than
+        // believed from the wire: another package's function is not a dialect
+        // primitive however it is named; `createEffect`'s second argument is a
+        // callback in 2.0 and absent in 1.x, so no dialect answer is unanimous
+        // and the slot stays open; and a claim that defers nothing is malformed
+        // rather than unconditional — the unconditional claims travel in the
+        // index lists.
+        for refusal in [
+            json!([{"parameter": 1, "strong": true,
+                    "requires": [premise("@solid-primitives/timer", "createEffect", 0, 1)]}]),
+            json!([{"parameter": 1, "strong": true,
+                    "requires": [premise("solid-js", "createEffect", 1, 2)]}]),
+            json!([{"parameter": 1, "strong": true, "requires": []}]),
+            json!([{"parameter": 0, "strong": true,
+                    "requires": [premise("solid-js", "createEffect", 0, 1)]}]),
+            // Every requirement of a conjunction must hold: one answered
+            // premise does not carry an unanswerable one.
+            json!([{"parameter": 1, "strong": true, "requires": [
+                premise("solid-js", "createEffect", 0, 1),
+                premise("mystery", "run", 0, 1)
+            ]}]),
+        ] {
+            let refused = implementation(refusal.clone());
+            let mut refused_sites = Vec::new();
+            require_parameter_callback_flow(
+                &refused,
+                &source,
+                ReachabilityFloor::Reachable,
+                &open,
+                &mut refused_sites,
+            )
+            .expect_err(&format!("this premise is not discharged here: {refusal}"));
+            assert!(
+                !argument_slot_is_proven_invoking(&refused.calls[0], 1),
+                "{refusal} must not prove an invoking slot either"
+            );
+        }
+
+        // The strong/weak split survives the deferral exactly as it survives an
+        // unconditional fact: a chain that only proves the value runs proves an
+        // invoking slot and never a callable position.
+        let weak = implementation(json!([{
+            "parameter": 1,
+            "requires": [premise("solid-js", "createEffect", 0, 1)]
+        }]));
+        assert!(argument_slot_is_proven_invoking(&weak.calls[0], 1));
+        let mut weak_sites = Vec::new();
+        require_parameter_callback_flow(
+            &weak,
+            &source,
+            ReachabilityFloor::Reachable,
+            &open,
+            &mut weak_sites,
+        )
+        .expect_err("a weak deferred claim is not a callable-position claim");
     }
 
     #[test]
@@ -5078,6 +7379,7 @@ mod tests {
             parameter_index: 0,
             binding_path: Vec::new(),
             location: escaped.location.clone(),
+            reach: Reachability::Reachable,
             kind: ParameterUseKind::UnknownEscape,
             alias: false,
             captured: false,

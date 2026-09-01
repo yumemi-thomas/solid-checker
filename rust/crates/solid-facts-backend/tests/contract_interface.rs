@@ -125,7 +125,7 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(0),
-                member: None,
+                path: None,
             }]),
             returns: ContractClaim::Known(None),
             callbacks: ContractClaim::Known(Vec::new()),

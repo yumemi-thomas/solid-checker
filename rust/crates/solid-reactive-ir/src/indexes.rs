@@ -358,6 +358,29 @@ pub(super) type CrossFileProofDigest = [u8; 32];
 const PROBED_ARGUMENTS: usize = 8;
 const PROBED_RESULT_SLOTS: usize = 4;
 
+/// The longest access path [`SemanticLookup::member_callee_receiver`] reports.
+///
+/// A deeper chain is **truncated to its first segments from the root, never
+/// dropped**. The reads domain is emitted `Complete` once it is known at all,
+/// so answering `None` for an over-long chain would turn an unreported access
+/// into the negative claim "this export performs no parameter read". Cutting
+/// the path is the same fail-closed move an unnameable segment already makes
+/// -- keep the longest exact prefix from the root -- and 32 matches the depth
+/// bound `interproc::member_root_is_parameter` applies to the same chains.
+const MEMBER_CALLEE_PATH_LIMIT: usize = 32;
+
+/// The member fact at an exact span, if that span is a member expression.
+///
+/// `FileFacts` sorts `members` by span, the same invariant the sibling
+/// `computed_members` binary searches rely on.
+fn member_at(file: &FileFacts, span: Span) -> Option<&solid_facts::ast::MemberFact> {
+    file.ast
+        .members
+        .binary_search_by_key(&span, |member| member.span)
+        .ok()
+        .map(|index| &file.ast.members[index])
+}
+
 /// Resolved Solid primitive names for one file's calls and JSX elements,
 /// index-aligned with `file.ast.calls` / `file.ast.jsx_elements`. Computed
 /// once per file per build so per-call classifier scans stop re-resolving
@@ -1129,34 +1152,109 @@ impl<'a> SemanticLookup<'a> {
         symbols
     }
 
-    /// The receiver symbol and property name of a non-computed member callee.
+    /// The root symbol of a non-computed member callee, and the access path
+    /// reaching it from that root.
     ///
-    /// `reader.read(value)` answers `(reader, "read")`. A computed member or a
-    /// callee with no member fact answers `None`, the same conservative gate
-    /// [`Self::callee_symbols`] applies -- `handlers[i]()` must never be read
-    /// as a property named `i`.
+    /// `reader.read(value)` answers `(reader, ["read"])`, and
+    /// `parsed.modifiers.includes(m)` answers `(parsed, ["modifiers",
+    /// "includes"])` -- **not** `(parsed, ["includes"])`. Rooting a whole
+    /// chain at its last segment names a property the receiver does not have,
+    /// and a consumer matches a contract's path as a *prefix* of the observed
+    /// access (`type_facts::parameter_value_source_matches`), so a wrong first
+    /// segment is a demand no runtime can witness.
+    ///
+    /// A computed member or a callee with no member fact answers `None`, the
+    /// same conservative gate [`Self::callee_symbols`] applies -- `handlers[i]()`
+    /// must never be read as a property named `i`.
+    ///
+    /// **The chain's root must be a plain identifier.** `EntitySymbols::at`
+    /// answers a symbol for any span the compiler emitted an entity at, and at
+    /// a conditional, sequence, logical, or call expression that symbol is some
+    /// *operand's* -- not the value the chain walks through. Trusting it
+    /// attaches properties of the chain's result to a binding that never has
+    /// them: `(k ? options.a : options.b).c.slice(n)` would be reported as `k`
+    /// reading `["c", "slice"]`. Those are refused, and so is
+    /// `options().slice(n)`, whose `slice` is a property of the call's result.
+    ///
+    /// Segments *inside* the chain fail closed to the longest exact prefix
+    /// rather than being guessed or skipped: `props[key].values()` cannot name
+    /// anything and answers an empty path, and `props.of[key].values()` answers
+    /// `["of"]`. A chain longer than [`MEMBER_CALLEE_PATH_LIMIT`] is cut the
+    /// same way. With the root pinned to an identifier, a shorter path is
+    /// always a true prefix of the real access, and so a strictly weaker claim
+    /// under both the prefix matcher and the exact one
+    /// (`type_facts::parameter_value_source_matches` and its `_exact` sibling
+    /// compare a witness against *this* stated path, never against the access
+    /// it was cut from). An empty path claims only "read through this
+    /// parameter".
     pub(super) fn member_callee_receiver(
         &self,
         file: &FileFacts,
         callee: Span,
-    ) -> Option<(SymbolId, String)> {
+    ) -> Option<(SymbolId, Vec<String>)> {
         let callee = file.ast.peel_ts_sugar_span(callee);
         if file.ast.computed_members.binary_search(&callee).is_ok() {
             return None;
         }
-        let property = self
-            .ast_indexes
-            .get(file.path.as_str())?
-            .member_property(callee)?;
-        let property_name = file.source_text(property)?.to_owned();
-        let member = file
+        let ast_index = self.ast_indexes.get(file.path.as_str())?;
+        // The callee must itself be a named member. `notify(callback)` is a
+        // plain identifier: it is a call *of* a value, not a call *through* a
+        // property of one, and answering it with a zero-segment path would
+        // make every ordinary call read as a member access on its callee.
+        let leaf = member_at(file, callee)?;
+        let leaf_property = ast_index
+            .member_property(callee)
+            .and_then(|property| file.source_text(property))?
+            .to_owned();
+        // Walk leaf -> root, then reverse: the model orders a path outwards
+        // from the parameter. An unnameable segment discards everything
+        // collected so far -- those sit *outside* it, and only the segments
+        // still to be walked form an exact prefix of the real access.
+        let mut segments = vec![leaf_property];
+        let mut current = file.ast.peel_ts_sugar_span(leaf.object);
+        let root = loop {
+            let Some(member) = member_at(file, current) else {
+                break current;
+            };
+            if file.ast.computed_members.binary_search(&current).is_ok() {
+                segments.clear();
+            } else if let Some(name) = ast_index
+                .member_property(current)
+                .and_then(|property| file.source_text(property))
+            {
+                segments.push(name.to_owned());
+            } else {
+                segments.clear();
+            }
+            let next = file.ast.peel_ts_sugar_span(member.object);
+            // A member's object is a strict sub-span of the member itself, so
+            // every step shrinks the span and the walk terminates. The depth
+            // it terminates at bounds the *path*, not the walk: cutting the
+            // walk short would lose the root and force a drop, and a dropped
+            // row is the negative claim this must never make. A fact table
+            // that does not shrink is malformed, and refused rather than
+            // walked forever.
+            if next.start < current.start || next.end >= current.end {
+                return None;
+            }
+            current = next;
+        };
+        // Refuse a root that is not a plain identifier: see the doc comment.
+        // Everything collected above sits on the chain's *result*, so a
+        // symbol answered at a compound span would be given a path of
+        // properties it does not have.
+        if file
             .ast
-            .members
-            .iter()
-            .find(|member| member.span == callee)?;
-        let object = file.ast.peel_ts_sugar_span(member.object);
-        let receiver = self.entities.at(file.path.as_str(), object)?;
-        Some((receiver.clone(), property_name))
+            .identifiers
+            .binary_search_by_key(&root, |identifier| identifier.span)
+            .is_err()
+        {
+            return None;
+        }
+        segments.reverse();
+        segments.truncate(MEMBER_CALLEE_PATH_LIMIT);
+        let receiver = self.entities.at(file.path.as_str(), root)?;
+        Some((receiver.clone(), segments))
     }
 
     /// Every exact implementation `value.property` may resolve to.
@@ -2587,6 +2685,261 @@ mod tests {
             destructured,
             vec![SymbolId::from("symbol:href")],
             "a destructured local is its own binding, never the object it came from"
+        );
+    }
+
+    /// The receiver symbol and access path `member_callee_receiver` answers
+    /// for `callee`.
+    ///
+    /// This builds its own lookup because `with_lookup` deliberately carries
+    /// no AST indexes, and the member walk reads property spans out of one.
+    fn member_callee_path(
+        source: &str,
+        callee: Span,
+        spans: &[(Span, &str)],
+    ) -> Option<(String, Vec<String>)> {
+        let facts = project(source);
+        let ast_indexes = facts
+            .files
+            .iter()
+            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
+            .collect::<HashMap<_, _>>();
+        let entities = entity_symbols(spans);
+        let symbol_names = HashMap::new();
+        let dialect = solid_dialect::Solid2;
+        let contracts = crate::contracts::ResolvedContracts {
+            bindings: Vec::new(),
+            by_symbol: HashMap::new(),
+            missing_exports: Vec::new(),
+            counts: crate::ContractBindingCounts::default(),
+        };
+        let lookup = SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &entities,
+            &symbol_names,
+            &dialect,
+            &contracts,
+            false,
+        );
+        lookup
+            .member_callee_receiver(&facts.files[0], callee)
+            .map(|(receiver, path)| (receiver.to_string(), path))
+    }
+
+    /// `props` and the body reference to it, the entity pair every chain
+    /// rooted at the first parameter needs.
+    fn props_entities(source: &str) -> Vec<(Span, &'static str)> {
+        vec![
+            (span_of(source, "props", 0), "symbol:props"),
+            (span_of(source, "props", 1), "symbol:props"),
+        ]
+    }
+
+    /// The whole chain, not its last segment.
+    ///
+    /// Reverting the walk to the pre-fix rooting — resolve the immediate
+    /// object, report one property — answers `["includes"]` here, a property
+    /// of `props.modifiers` attributed to `props`. That claim can never be
+    /// witnessed, because a consumer matches the stated path as a *prefix* of
+    /// the observed access.
+    #[test]
+    fn a_member_chain_reads_the_whole_path_from_its_root() {
+        let source = "function f(props, m) {\n  return props.modifiers.includes(m);\n}\n";
+        let callee = span_of(source, "props.modifiers.includes", 0);
+
+        assert_eq!(
+            member_callee_path(source, callee, &props_entities(source)),
+            Some((
+                "symbol:props".to_owned(),
+                vec!["modifiers".to_owned(), "includes".to_owned()]
+            ))
+        );
+    }
+
+    #[test]
+    fn a_one_segment_chain_reads_that_one_property() {
+        let source = "function f(props) {\n  return props.of();\n}\n";
+        let callee = span_of(source, "props.of", 0);
+
+        assert_eq!(
+            member_callee_path(source, callee, &props_entities(source)),
+            Some(("symbol:props".to_owned(), vec!["of".to_owned()]))
+        );
+    }
+
+    /// A segment that cannot be named exactly cuts the path back to the
+    /// longest exact prefix *from the root*, and never invents the segments
+    /// outside it.
+    #[test]
+    fn an_unnameable_segment_truncates_to_the_prefix_from_the_root() {
+        let inside = "function f(props, key) {\n  return props.of[key].values();\n}\n";
+        let at_root = "function f(props, key) {\n  return props[key].values();\n}\n";
+
+        assert_eq!(
+            member_callee_path(
+                inside,
+                span_of(inside, "props.of[key].values", 0),
+                &props_entities(inside)
+            ),
+            Some(("symbol:props".to_owned(), vec!["of".to_owned()])),
+            "the segment outside the computed one is not a property of `props`"
+        );
+        assert_eq!(
+            member_callee_path(
+                at_root,
+                span_of(at_root, "props[key].values", 0),
+                &props_entities(at_root)
+            ),
+            Some(("symbol:props".to_owned(), Vec::new())),
+            "nothing can be named, so the row claims only a read through `props`"
+        );
+    }
+
+    /// A chain deeper than the path limit keeps its row, cut to the limit.
+    ///
+    /// Dropping it would publish the negative claim "this export performs no
+    /// parameter read" into a `Complete` reads set. The pair pins both sides
+    /// of the boundary so neither a smaller limit nor a reinstated refusal
+    /// survives.
+    #[test]
+    fn an_over_long_chain_is_truncated_and_never_dropped() {
+        let chain = |segments: usize| {
+            let names = (0..segments)
+                .map(|index| format!("s{index}"))
+                .collect::<Vec<_>>();
+            let source = format!(
+                "function f(props) {{\n  return props.{}();\n}}\n",
+                names.join(".")
+            );
+            let callee_text = format!("props.{}", names.join("."));
+            let entities = props_entities(&source);
+            let callee = span_of(&source, &callee_text, 0);
+            let answer = member_callee_path(&source, callee, &entities);
+            (names, answer)
+        };
+
+        let (exact_names, exact) = chain(MEMBER_CALLEE_PATH_LIMIT);
+        assert_eq!(
+            exact,
+            Some(("symbol:props".to_owned(), exact_names)),
+            "a chain at the limit is reported whole"
+        );
+
+        let (over_names, over) = chain(MEMBER_CALLEE_PATH_LIMIT + 1);
+        assert_eq!(
+            over,
+            Some((
+                "symbol:props".to_owned(),
+                over_names[..MEMBER_CALLEE_PATH_LIMIT].to_vec()
+            )),
+            "one segment past the limit keeps the row at the prefix from the root"
+        );
+    }
+
+    /// A chain whose root is a compound expression publishes nothing.
+    ///
+    /// The compiler's entity table answers a symbol at a conditional,
+    /// sequence, or logical span — the *leftmost operand's*. Trusting it makes
+    /// `k`, a boolean condition, read `["c", "slice"]`: every segment is a
+    /// property of the chain's result, and none is a property of `k`. Each
+    /// case registers that entity, so removing the identifier gate makes this
+    /// test report the fabricated row rather than `None`.
+    #[test]
+    fn a_compound_chain_root_is_refused_rather_than_attributed() {
+        let conditional =
+            "function f(props, k, n) {\n  return (k ? props.a : props.b).c.slice(n);\n}\n";
+        let sequence = "function f(props, k, n) {\n  return (k, props.a).c.slice(n);\n}\n";
+        let logical =
+            "function f(props, fallback, n) {\n  return (props.a || fallback).c.slice(n);\n}\n";
+
+        assert_eq!(
+            member_callee_path(
+                conditional,
+                span_of(conditional, "(k ? props.a : props.b).c.slice", 0),
+                &[
+                    (span_of(conditional, "k ? props.a : props.b", 0), "symbol:k"),
+                    (span_of(conditional, "k", 1), "symbol:k"),
+                ]
+            ),
+            None,
+            "a ternary's condition does not own the ternary result's properties"
+        );
+        assert_eq!(
+            member_callee_path(
+                sequence,
+                span_of(sequence, "(k, props.a).c.slice", 0),
+                &[
+                    (span_of(sequence, "k, props.a", 0), "symbol:k"),
+                    (span_of(sequence, "k", 1), "symbol:k"),
+                ]
+            ),
+            None,
+            "a discarded sequence operand does not own the result's properties"
+        );
+        assert_eq!(
+            member_callee_path(
+                logical,
+                span_of(logical, "(props.a || fallback).c.slice", 0),
+                &[
+                    (span_of(logical, "props.a || fallback", 0), "symbol:props"),
+                    (span_of(logical, "props", 1), "symbol:props"),
+                ]
+            ),
+            None,
+            "either branch of a logical may supply the value the chain walks"
+        );
+    }
+
+    /// `props().slice(n)` names a property of the *call's result*.
+    ///
+    /// The call is not the parameter, so the row that would be published here
+    /// says `props` has a `slice` property when nothing establishes that.
+    #[test]
+    fn a_call_at_the_chain_root_is_refused() {
+        let source = "function f(props, n) {\n  return props().slice(n);\n}\n";
+
+        assert_eq!(
+            member_callee_path(
+                source,
+                span_of(source, "props().slice", 0),
+                &[
+                    (span_of(source, "props()", 0), "symbol:props"),
+                    (span_of(source, "props", 1), "symbol:props"),
+                ]
+            ),
+            None
+        );
+    }
+
+    /// A callee that is not a member at all, and one whose own property is
+    /// computed, are both refused — the two gates that keep an ordinary call
+    /// from reading as a member access.
+    #[test]
+    fn a_non_member_or_computed_callee_is_refused() {
+        let plain = "function f(notify, cb) {\n  return notify(cb);\n}\n";
+        let computed = "function f(props, key) {\n  return props.of[key]();\n}\n";
+
+        assert_eq!(
+            member_callee_path(
+                plain,
+                span_of(plain, "notify", 1),
+                &[
+                    (span_of(plain, "notify", 0), "symbol:notify"),
+                    (span_of(plain, "notify", 1), "symbol:notify"),
+                ]
+            ),
+            None,
+            "a call of a value is not a call through a property of one"
+        );
+        assert_eq!(
+            member_callee_path(
+                computed,
+                span_of(computed, "props.of[key]", 0),
+                &props_entities(computed)
+            ),
+            None,
+            "`handlers[i]()` must never be read as a property named `i`"
         );
     }
 }

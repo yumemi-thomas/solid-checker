@@ -1,0 +1,232 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "f3940ba95793f3ee537f22ca284e1f88e2e88014d2ddf2944366b6acf3902e9c",
+            "path": "./index.js",
+            "sha256": "ea636f9ab60ed96f0cb27e6fd5bb62f90d67dafcb13d30eabe1b64c90a8807b7"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "ea636f9ab60ed96f0cb27e6fd5bb62f90d67dafcb13d30eabe1b64c90a8807b7"
+          },
+          "exports": {
+            "computedInside": "summary-727ca00293381462803319304db5cdfa633ff798b1664628da75d234bfc92057",
+            "computedRoot": "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690",
+            "disagreeingPaths": "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690",
+            "oneSegment": "summary-a37ff153126039ec122f9cab4d84ac7e59a46e3e605aeba1d24559f39bc74162",
+            "readModuleLocal": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "threeSegments": "summary-2c9fe53b9060246879346b8cd158d1e1b161fdbe30fa89bf644317897e2ff50d",
+            "twoSegments": "summary-5726ceffc5bd09482d970fc69fced485e6b7887a3c42aaa9d74e0f9feda73574"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:34858f98ae7f72a34b7cf2f5f38c59b439699310cbaa34797d10caaa21a27031",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "34858f98ae7f72a34b7cf2f5f38c59b439699310cbaa34797d10caaa21a27031"
+    },
+    "name": "parameter-member-read-path",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-243c0896345b0138a9d564a5638badaf87e6867df08a1e1b7dbfaf540cb1b690": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": []
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-2c9fe53b9060246879346b8cd158d1e1b161fdbe30fa89bf644317897e2ff50d": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "input",
+                  "source",
+                  "slice"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-5726ceffc5bd09482d970fc69fced485e6b7887a3c42aaa9d74e0f9feda73574": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "source",
+                  "slice"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-727ca00293381462803319304db5cdfa633ff798b1664628da75d234bfc92057": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "source"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-a37ff153126039ec122f9cab4d84ac7e59a46e3e605aeba1d24559f39bc74162": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "slice"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

@@ -9,8 +9,8 @@
 use std::collections::BTreeSet;
 
 use solid_reactive_ir::{
-    ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement, ContractReturn,
-    OwnerRequirementOperation, PackageContract,
+    CallbackSchedule, ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
+    ContractReturn, OwnerRequirementOperation, PackageContract,
     contract_semantics::{
         ArrayLength, ArtifactCase, CallClaims, CallSemantics, CallbackInvocation,
         CapabilityKnowledge, Cardinality, CardinalityScope, ContractProposal, Event,
@@ -150,8 +150,8 @@ fn normalize_export(
                 .enumerate()
                 .map(|(index, read)| {
                     let id = OperationId(format!("{prefix}read-{index}"));
-                    let input = match (read.parameter, read.member.as_ref()) {
-                        (Some(parameter), member) => ValueShape::Parameter {
+                    let input = match (read.parameter, read.path.as_ref()) {
+                        (Some(parameter), path) => ValueShape::Parameter {
                             index: u16::try_from(parameter).map_err(|_| {
                                 ContractFailure::InvalidSemanticModel {
                                     reason: format!(
@@ -159,7 +159,11 @@ fn normalize_export(
                                     ),
                                 }
                             })?,
-                            path: member.cloned().into_iter().collect(),
+                            // The whole access path from the parameter. An
+                            // absent path named no segment exactly and stays
+                            // empty, which claims only "read through this
+                            // parameter" -- the weakest claim the model has.
+                            path: path.cloned().unwrap_or_default(),
                         },
                         (None, _) => ValueShape::Reactive {
                             role: ReactiveRole::Accessor,
@@ -266,10 +270,31 @@ fn callback_operation(
     callback: &ContractCallback,
     resources: &mut Vec<Resource>,
 ) -> Result<Operation, ContractFailure> {
+    // `inline` and `deferred` carry their schedule in the word. `tracked` does
+    // not: it is an attribution word, and 1.x `createMemo`/`mergeProps` have
+    // already run the callback when the export returns while 1.x `createEffect`
+    // has not. Reading `queued` out of `tracked` published that falsehood for
+    // every retained row; the schedule now travels with the row, from
+    // [`solid_dialect::Dialect::tracked_callback_timing`] by way of
+    // `composed_tracked_schedule`. `Unestablished` is the dialect refusing to
+    // say, and emits no execution point rather than a guessed one -- the
+    // attribution claim survives on its own.
     let (schedule, tracking) = match callback.execution.as_str() {
         "inline" => (Some(Schedule::SameStack), Tracking::Untracked),
         "deferred" => (Some(Schedule::Queued), Tracking::Untracked),
-        "tracked" => (Some(Schedule::Queued), Tracking::Tracked),
+        "tracked" => (
+            match callback.schedule {
+                Some(CallbackSchedule::SameStack) => Some(Schedule::SameStack),
+                Some(CallbackSchedule::External) => Some(Schedule::External),
+                Some(CallbackSchedule::Unestablished) => None,
+                // A producer that stated no schedule for the row keeps the
+                // consumer's historical default. Recorded in
+                // docs/precision-backlog.md: the compiler-lowering callback
+                // roles are the remaining path that reaches here.
+                Some(CallbackSchedule::Queued) | None => Some(Schedule::Queued),
+            },
+            Tracking::Tracked,
+        ),
         other => return invalid(format!("unknown callback execution {other:?}")),
     };
     let mut operation = operation(
@@ -287,6 +312,11 @@ fn callback_operation(
         None,
     );
     operation.schedule = schedule;
+    // The execution point and the schedule are one fact in the document format
+    // and must be known together, so an unestablished schedule drops both.
+    if schedule.is_none() {
+        operation.at = None;
+    }
     operation.tracking = tracking;
     operation.owner = match callback.owner.as_deref() {
         Some("none" | "unowned") => owner_none(),

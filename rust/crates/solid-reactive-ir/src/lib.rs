@@ -1055,17 +1055,55 @@ pub struct ContractReactiveRead {
     pub kind: String,
     pub label: String,
     pub parameter: Option<usize>,
-    /// Exact invoked property for a `parameter-member` read when every path
-    /// contributing to the row names the same static member. Older contracts
-    /// omit it and remain valid, but only a named member can be runtime-probed
-    /// without guessing which property to instrument.
-    pub member: Option<String>,
+    /// Exact access path from the parameter for a `parameter-member` read,
+    /// when every access contributing to the row walks the same static
+    /// properties. `parsed.modifiers.includes(m)` is `["modifiers",
+    /// "includes"]`, not `["includes"]`: a consumer matches this as a *prefix*
+    /// of the observed access, so naming only the last segment describes a
+    /// property the parameter does not have and can never be witnessed.
+    ///
+    /// `None` where contributing accesses disagree, or where no segment could
+    /// be named exactly. Older contracts omit it and remain valid, but only a
+    /// named path can be runtime-probed without guessing which property to
+    /// instrument.
+    pub path: Option<Vec<String>>,
+}
+
+/// When a `tracked` callback row runs, relative to the export returning.
+///
+/// `execution: "tracked"` is an *attribution* word: it says the runtime
+/// subscribes the callback's reads, and says nothing about whether the export
+/// has already run it. `inline` and `deferred` carry their schedule in the word
+/// itself; `tracked` cannot, because 1.x `createMemo` runs its compute during
+/// the creating call while 1.x `createEffect` queues it, and 2.0 disagrees with
+/// 1.x on `createEffect`. The schedule is
+/// [`solid_dialect::Dialect::tracked_callback_timing`]'s to answer, and it is
+/// carried here rather than re-derived from the word — a consumer that reads
+/// "queued" out of "tracked" publishes a promise the runtime breaks, which is
+/// what `mergeProps` and `createMemo` rows did before this field existed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CallbackSchedule {
+    /// The callback has run by the time the export returns.
+    SameStack,
+    /// The export queued it; it has not run when the export returns.
+    Queued,
+    /// The runtime hands it to an external scheduler.
+    External,
+    /// The dialect states no timing for this slot, so no schedule word is
+    /// honest. The emitted operation carries no execution point at all rather
+    /// than a guessed one.
+    Unestablished,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractCallback {
     pub parameter: usize,
     pub execution: String,
+    /// The schedule of a `tracked` row, where the producer established one.
+    /// `None` is a producer that did not compute a schedule for this row and
+    /// leaves the consumer's historical default in place; it is meaningless
+    /// for `inline` and `deferred`, whose word already carries the schedule.
+    pub schedule: Option<CallbackSchedule>,
     /// Runtime arguments supplied when this callback is invoked. `null`
     /// preserves an unmodeled ordinary value at that position; a structured
     /// descriptor uses the same bounded accessor/store/tuple/object vocabulary
@@ -1139,12 +1177,18 @@ impl PackageContract {
         for read in summary.reactive_reads.known().into_iter().flatten() {
             let valid = match read.kind.as_str() {
                 "accessor" | "store-path" => {
-                    !read.label.is_empty() && read.parameter.is_none() && read.member.is_none()
+                    !read.label.is_empty() && read.parameter.is_none() && read.path.is_none()
                 }
+                // A stated path must name every one of its segments: an empty
+                // segment names no property, and the spelling for "no segment
+                // could be named" is an absent path, not a blank one.
                 "parameter-member" => {
                     read.label.is_empty()
                         && read.parameter.is_some()
-                        && read.member.as_ref().is_none_or(|member| !member.is_empty())
+                        && read
+                            .path
+                            .as_ref()
+                            .is_none_or(|path| path.iter().all(|segment| !segment.is_empty()))
                 }
                 _ => false,
             };

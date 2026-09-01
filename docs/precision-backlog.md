@@ -1,5 +1,1119 @@
 # Precision backlog
 
+## Reachability floors, and reading a parameter without calling it (2026-09-01)
+
+The certifier was refusing evidence it already had, and the fix for that turned
+out to depend on a fact the producer was not recording. Two changes consume a
+fact the producer already emitted; one repairs a disagreement between two
+censuses over the same syntax; and one — the reachability of a parameter use —
+adds the missing fact, at the cost of a wire protocol break, because admitting a
+read witness without it meant admitting reads from dead code.
+
+An adversarial review of the first three found exactly that hole and four
+smaller ones. What follows is the corrected round; every claim below is pinned by
+a test that fails without it.
+
+### One walk, so two censuses cannot disagree
+
+The call census and the parameter-use census both classify a node by where it
+sits in an implementation body, and they used to walk it separately — the call
+census threading reachability, the use census threading nothing at all. They now
+share `walkImplementationBodyLocked`
+(`apps/solid-typefacts/internal/typefacts/tsgo/invocation_transcripts.go`), which
+threads the two facts either census reads (nested-callable capture, fall-through
+reachability) and hands each node to an `observe` callback. A `ParameterUse`
+carries a `reach` field answered by that walk, so a `props.children` and a
+`sink(…)` on the same statement can never be given different answers.
+
+This is a wire break: **Type Facts handshake protocol 7 → 8**, frozen schema
+digest `sha256:f1ecaab6c1e0f4369f34490a06b262cc01cc1e9a867946e93fb26def3aa7c494`,
+`reach` required on `parameterUse`. A protocol-7 client refuses unknown
+transcript fields and a protocol-7 producer omits a field this protocol
+requires, so neither direction is a compatible extension.
+
+Three correctness repairs came with the shared walk, each pinned:
+
+- **`try { … } finally { return; }` no longer leaves the following statement
+  reachable.** The finally block's own completion is conjoined into the arms'
+  merge instead of being discarded (`conjoinReachability`), because a jump in a
+  `finally` overrides the one it interrupted. Its *contents* are still visited at
+  the reachability the `try` statement had, so `try { return } finally
+  { cleanup() }` still reports `cleanup()` as reached
+  (`TestCallCensusStopsAtAFinallyThatReturns`,
+  `TestCallCensusRunsAFinallyThatFollowsAReturn`). `controlFlowCensusLocked` did
+  **not** have this defect and was not changed: it treats a `try` as an opaque
+  construct and `constructCompletesNormally` refuses any `return` inside one, so
+  it answers `unknown` where the call census now answers `unreachable`. The two
+  still differ there, in the safe direction — the control-flow census never
+  claims more than the call census. Making it precise would mean giving it a real
+  `try` arm, which also owns its `tryReachability` unsupported marker; that is
+  not this slice.
+- **A construct entered from dead code stays dead.** Both censuses returned
+  `ReachUnknown` after a loop reached at `Unreachable`, quietly promoting code
+  after a `throw` to "may execute". They now return `Unreachable`.
+- **A branch a literal condition excludes is dead code.** `if (false) { … }` is
+  as unreachable as code after a `return`, and calling it reachable is what let a
+  property access there witness a read the export never performs.
+  `literalBranchReachLocked` rules out the arm a decidable literal condition
+  excludes — including the implicit `else`, so nothing falls through
+  `if (true) { return }`. Applied identically in both censuses.
+
+### The call census poisoned every statement after a loop; the control-flow census did not
+
+`implementationCallCensusLocked`
+(`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`)
+returned `ReachUnknown` after *any* iteration or switch statement, so a single
+`for (const [k, v] of Object.entries(props))` made every later call in the
+implementation unusable as execution evidence. `controlFlowCensusLocked` had
+already answered exactly this question for return sites — reachability *inside*
+a construct stays unknown, reachability *after* one that can only complete
+normally is what it was before it — with `constructCompletesNormally`. The call
+census simply never received that fix, so the two censuses disagreed about the
+same syntax.
+
+It now calls the same helper: `Reachable` after the construct when the census
+arrived `Reachable` and the construct provably completes normally; `ReachUnknown`
+for the construct's children, and for a construct that cannot complete normally
+(`while (true)` with no `break` out, a `return`/`throw`/escaping jump inside, a
+nested construct control can never leave). Pinned by nineteen shapes in
+`TestImplementationCallCensusKeepsCallsAfterAFallThroughConstructReachable`,
+which also asserts that every call *inside* the construct stays `ReachUnknown`,
+and by `TestImplementationCallCensusNeverPromotesAnUnreachableConstruct` for the
+one-way direction. This lifts `createRenderEffect` and `onCleanup` in
+`@solid-primitives/script-loader@3.0.0-next.2` back to `Reachable`, which is
+what `require_owner_operation_call` asks for; that row now certifies.
+
+**Which loop headers cannot end their loop** is read from the program's own
+text, and two indirections were reading as exitable when they are not:
+`const ALWAYS = true; while (ALWAYS)` (a unique, never-written `const`
+declaration, the same gate `collectReturnedCallablesThroughBindingLocked` uses)
+and `while (1 === 1)` (an equality comparison of two operands that each reduce
+to a primitive the text spells, refused across primitive kinds so no coercion
+rule is modelled). Both are now decided, so the dead code after such a loop is no
+longer promoted.
+
+**Retained approximation, stated rather than left implicit.** A condition no
+literal reading decides — `while (flag)`, `while (fn())` — is still treated as
+having an exit edge, so the statements after it keep the reachability they had.
+A `flag` that is provably always true therefore still yields "reachable" for code
+that never runs. This is deliberate: the alternative is asking the type checker
+whether an arbitrary expression is truthy, which would make reachability depend
+on inference rather than on the program's text. It is pinned as a decision by the
+`nonLiteralConditionStaysOptimistic` row, and the doc comment on
+`alwaysTruthyLiteralConditionLocked` — which previously described this direction
+backwards — now states it. Closing it needs a real value analysis, not a wider
+literal reader.
+
+### `ReachUnknown` is adequate evidence for a claim whose lower bound is zero
+
+`implementation_call_is_executed`, the `OperationKind::Read` branch, and
+`require_owner_operation_call`
+(`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`)
+required `Reachability::Reachable` of every witness, for every demand. A call in
+a `do … while` or `for … of` body is `Unknown` by construction — the body may run
+zero times — so a demand claiming *"may happen, zero or more times per call"* was
+refused by evidence of exactly the shape it claims.
+
+**Policy decision** (signed off by the policy owner, and it is a claim-strength
+decision, not a bug fix): a demand whose bound operation asserts no lower bound
+is witnessed by a call the implementation *may* execute. `ReachabilityFloor`
+names the two readings, `reach_admits_zero_lower_bound` states the premise, and
+the floor is derived from the demand's own bound and plumbed to each call site.
+It is never global.
+
+**Relaxing takes positive evidence, and `min == Some(0)` is the whole of it.**
+An operation carrying no cardinality at all has stated no bound, and silence is
+not the claim "zero or more": it keeps the strict floor. This is deliberately
+narrower than `Cardinality::strength`, which folds absence in with zero because
+it answers a different question ("may this be assumed guaranteed", where the two
+agree). The planner is where the difference is visible, and it is pinned there:
+an operation with no stated cardinality is marked `has_cardinality: false` by
+`inventory_export_facts` and is then demanded `operation-reachability` *without*
+an `operation-cardinality` demand, so no bound of its is ever checked by anything
+(`an_operation_that_states_no_cardinality_is_demanded_no_cardinality_family` in
+`solid-reactive-ir`). No emitted demand was found where absent cardinality
+coexists with occurrence semantics.
+
+What keeps refusing, each with a test:
+
+- `Reachability::Unreachable`, for any claim. Code after a `return` or a `throw`
+  never runs and witnesses nothing. Neither floor admits it.
+- an operation with `min >= 1`. The strict floor stands. This is the trap of the
+  tier: it looks like the same relaxation and is not
+  (`reachability_floor_follows_the_bound_operation_lower_bound`).
+- the reachable-return-site premise inside `implementation_call_is_executed`,
+  unchanged: a captured call still has to lie inside a callable a **reachable**
+  return site carries (`loop_body_call_executes_only_under_the_zero_lower_bound_floor`).
+- the `OperationKind::Return` branch's reachable-return requirement, untouched.
+- recursive value-shape demands, which assert what a position *is* rather than
+  how often it is reached, keep the strict floor explicitly. That decision now
+  lives in `operation_input_value_shape_evidence`, split from the plan lookup so
+  a test can hold it: `recursive_value_shape_evidence_keeps_the_strict_floor`
+  fails if the floor there is relaxed.
+- every fail-closed default in `callback_reachability_floor` — the floor
+  `argument-binding` and `callable-path` take, the two families that assert no
+  occurrence of their own. A non-callback subject, an ordinal past the callback
+  list, an ordinal naming a callback bound to a different operation, and an
+  operation absent from the export all read no bound and keep the strict floor
+  (`callback_floor_reads_the_bound_operation_and_fails_closed_everywhere_else`).
+
+`demand_id` does not move: it hashes the static policy manifest, the candidate
+semantic digest and the artifact roots, never the verifier's implementation.
+`@solid-primitives/marker`'s `mapMatch(text)` inside a `do … while` is the row
+this clears.
+
+### Reading a parameter is not calling it
+
+`require_operation_evidence`'s `Read` branch inspected `implementation.calls`
+only, so the only read it could see was one where the parameter *was the callee*.
+`const mapFn = props.children` reads `props` and calls nothing;
+`parameterUseCensusLocked` has been recording that exact fact all along
+(`ParameterUse{kind: propertyAccess, captured: false}`), and the branch never
+looked at `parameterUses`.
+
+It now accepts either witness. A `Read` operation whose input is
+`Parameter{index, path}` is discharged by a `ParameterUse` with a matching
+parameter index and binding path, `captured == false`, and kind in
+`{propertyAccess, directCall, aliasCall}`. Path matching is the same rule the
+call branch uses: the observed path may be *longer* (reading `props.of.keys` is
+reading `props`; using a destructured `{ children }` is using the object) and
+never shorter, and every segment the demand names has to be that exact property.
+
+**The use witness answers to the same floor as the call witness.** It reads the
+`reach` the producer now records for every use, so a `props.children` after a
+`return`, after a `throw`, or in a branch a literal condition excludes is
+`Unreachable` and witnesses nothing for any claim, and a use in a loop body is
+`Unknown` and witnesses only an operation whose own lower bound is zero
+(`parameter_read_use_answers_to_the_same_floor_as_a_call`). Exempting this loop
+from the floor was how a `min >= 1` read demand came to be dischargeable from
+dead code.
+
+What keeps refusing (`parameter_read_accepts_an_uncaptured_property_access_use`):
+`storage` and `return`, which hand the value somewhere without looking into it;
+`argumentKnown`, `argumentUnknown`, and `capture`, which do the same through a
+call or a closure; `unknownEscape`, which is the census saying it could not
+classify the use at all; and any captured use, for the reason a captured call is
+refused — nothing proves the closure holding it runs. `@solid-primitives/keyed`'s
+`MapEntries` is the row this clears; its only parameter-rooted *call*,
+`props.of.keys()`, is captured inside the `mapArray` source arrow and stays
+refused as such.
+
+The refusal tail moved with the branch: `parameter-rooted read has no exact
+implementation call` is now `… no exact implementation call or use`.
+
+### Still open, and two of them are not what the diagnosis thought
+
+- **`@tanstack/hotkeys@0.8.0::formatHotkey`** (demand
+  `sha256:12a42717…`) stays refused, and *not* for a reachability reason: with the
+  floor forced relaxed it still refuses. The read operation's input is
+  `Parameter{index: 0, path: ["includes"]}` while the shipped access is
+  `parsed.modifiers.includes(…)` — the demanded path drops the intermediate
+  `modifiers` segment. The census is refusing correctly.
+- **`@solid-primitives/keyed`'s `SetValues`** (`sha256:1ac6a2dd…` /
+  `sha256:0baa9fc5…`) is the same defect: the demand asks for
+  `Parameter{0, ["values"]}` where the code accesses `props.of.values()`. The
+  transcript records the uncaptured `props` property access, which does not name
+  `values`, so nothing witnesses it.
+
+  Both belong with the wrong-demand class already filed against
+  contract-proposal generation (`rust/crates/solid-reactive-ir`) — a read input
+  path built from the last segment of a nested member access rather than the whole
+  path. They leave the refusal list by being corrected, not by being discharged,
+  and widening the match to "the demanded segment appears somewhere in the
+  observed path" would be a guess, not a proof.
+- **`@solid-primitives/marker`**'s next demand refuses with `operation-input is
+  unsupported: implementation census only binds exact parameter-rooted operation
+  inputs` — a pre-existing fail-closed path this slice does not touch.
+- **An object rest element is named after its binding, not after a property that
+  exists.** `parameterCensusRootsLocked` takes `element.Name()` as the property
+  segment for every object binding element, so `function f({ a, ...rest })`
+  yields the root path `["rest"]` — but `rest` is the remainder object, not
+  `props.rest`. A demand for `Parameter{0, ["rest"]}` would therefore be
+  witnessed by any use of `rest`. **Pre-existing**: the call census builds
+  `bySymbol` from these same roots, so `parameter_value_source_matches` has
+  always had it; the read-use witness is now a *second* consumer of the same
+  roots, which widens the blast radius without introducing the defect. The fix is
+  to emit no path segment for a rest element (or a distinct segment kind that no
+  property demand can satisfy) — a producer change with its own fixture, not a
+  verifier one. Unmeasured: no probed row is known to demand such a path.
+- **A write to a property is recorded as a `propertyAccess` read of the object.**
+  `props.children = 1` records `kind: propertyAccess, captured: false` on
+  `props`, because `parameterUseKindLocked` classifies on the parent being a
+  property access without asking whether that access is an assignment target or a
+  `delete` operand. **Reviewed and deliberately not changed**: evaluating `props`
+  is required to store into it, so the record is a true read of `props` at path
+  `[]`, which is the only demand it can witness. Excluding it would need the
+  observed path to *name* the written property, and it never does — the recorded
+  path is the parameter's binding root, and `parameter_binding_matches` requires
+  the observed path to be at least as long as the demanded one, so a write to
+  `props.children` cannot witness a demand at `["children"]` today. The exclusion
+  is vacuous until some matcher admits an observed path shorter than the demanded
+  one; if that ever changes, this becomes real and the fix is a `write` flag on
+  the use plus the written segment.
+- The rows whose refusal is over-claimed inventory (`flux-store` ×3,
+  `@solidjs/meta@0.29.4`) and whose invoking position is in another package
+  (`@solid-primitives/until@0.1.1`) still refuse, with the same demand digests and
+  reason tails. Every generated contract in the probed set is byte-identical
+  before and after, including the newly certified `script-loader` row: the
+  verdict moved, the contract did not.
+
+
+## A callback invoked from a closure that flows into an invoking position (2026-09-01)
+
+`implementation_call_is_executed` had exactly one premise for a *captured* call —
+a call inside some nested callable: the call site lies **somewhere inside** a
+callable that a reachable **return site** provably carries. That premise is the
+whole of the returned-closure family, but it is not the only way a nested
+closure runs, and — as the review of this entry's first draft established — byte
+containment was never the right join for either half of it.
+`@solid-primitives/autofocus` is the clean counterexample for the missing
+premise: its entire body is
+
+```js
+createEffect(() => { const el = ref(); … })
+```
+
+and it returns nothing at all. The closure runs because `createEffect` runs it.
+Every carried-callable list is empty, so `ref()` was refused as unexecuted and
+the export's `invoke` claim stayed open — a missing premise, not an imprecise
+one.
+
+### The added premise, and the join that replaced containment
+
+A captured call is also executed when the callable **immediately containing it**
+is one an **already-executed call of the same implementation** hands to an
+argument slot *proven to be invoked*.
+
+The join is exact identity of that enclosing callable, not containment. A new
+producer fact, `ImplementationCall.enclosingCallable`, names the innermost
+callable containing each call (absent exactly when `captured` is false), and the
+premise asks whether *that* range is carried — by a reachable return site, or at
+a proven-invoking argument slot. Longer paths are reached by **composing** links,
+never by observing that bytes nest, and the recursion is what composes them.
+
+Containment was unsound, and one shape shows why:
+
+```js
+function storesInner(callback) {
+  effect(() => {
+    const inner = () => { callback(); };
+    registry.push(inner);
+  });
+}
+```
+
+`callback()` lies inside the range `effect` invokes, and `callback` never runs:
+the effect only *stores* `inner`. Containment cannot separate that from the
+debounce shape, which nests identically —
+`return (…) => { setTimeout(() => callback(…), wait) }` — and really does run.
+Under composition they separate cleanly: the debounce case is two proven links
+(the returned closure is carried by the return site; the arrow immediately
+containing `callback(…)` is carried at slot 0 of a `setTimeout` whose own
+enclosing callable is that returned closure), and the storing case has no
+second link, because `Array.prototype.push` is on no invoking table. **A callable
+that is merely defined, stored, pushed, or assigned breaks the chain**, and the
+demand stays open. Pinned by
+`a_merely_stored_inner_closure_breaks_the_invoking_chain`, which runs both
+shapes through the same fact skeleton, and by
+`TestEnclosingCallableNamesTheImmediatelyContainingCallable` on the producer
+side.
+
+The same discipline applies to the **return** branch: it too matches the exact
+enclosing callable rather than containment, and the debounce/scheduled controls
+still certify because they compose. The producer reports the argument side as
+`ImplementationCall.argumentCallables`; a spread ends the exact slots — see
+"What a nesting boundary is, what a slot index means" below.
+The outer-call recursion is bounded at depth 8 / 256 nodes, and exceeding a
+bound answers "not executed".
+
+**The argument descent is narrower than a return site's.** A returned value hands
+the caller everything inside it, so `carriedCallableLocationsLocked` may credit
+every element of `[fn, clear]`, every property of an object literal, and
+`Object.assign`'s target. An invoking argument slot may not:
+`addEventListener("click", { handleEvent, spare })` calls exactly `handleEvent`
+and never `spare`, so crediting both would assert execution of code the runtime
+cannot reach. `singleCallableLocationsLocked` keeps only the identity-preserving
+single-callable forms — the callable expression itself, the wrappers that erase
+at runtime, and a single-declaration binding naming exactly one callable — and
+the two descents are one function parameterized by `carriedCallableDescent` so
+the difference is stated rather than drifted into. An object or array literal at
+an argument slot therefore carries **nothing at all**, refusing the construction
+rather than trying to pick the right member out of it.
+
+### The three tiers, and where each stops
+
+- **Tier A — dialect primitive.** The callee resolves to an exact `solid-js`
+  import and `solid_dialect::unambiguous_callback_argument` fixes the slot as a
+  callback. This is byte-for-byte the gate `require_parameter_callback_flow`
+  already applied, so it adds no dialect surface. It refuses
+  `createEffect(fn, initialValue)` at slot 1, a locally shadowed `createMemo`
+  (whose `target_module` is not `solid-js`), and an unresolvable namespace member
+  (which carries neither target nor module).
+- **Tier B — reviewed default-library member.** A new producer fact,
+  `defaultLibraryInvoker` + `invokedArguments`, emitted only when the callee
+  resolves **by default-library symbol identity** — the way
+  `isDefaultLibraryObjectAssignLocked` resolves `Object.assign` — to a member of
+  the fixed table in `invoking_positions.go`. The verifier owns the table too:
+  `DefaultLibraryInvoker::from_wire` refuses an unrecognized name outright, and
+  the slot must appear in *both* the transmitted list and the verifier's own
+  table, so a widened or forged claim from the producer process is not evidence.
+  Refused on their merits: `removeEventListener` (removing a handler is not
+  evidence anything runs), a user type's own `forEach`, an `any`-typed receiver,
+  a locally shadowed `setTimeout`, and — the named trap —
+  `navigator.geolocation.watchPosition`, which really does invoke its callback
+  and is deliberately absent. Growing the table is an act of review; "the
+  browser probably calls it" is never a premise.
+- **Tier C — package-local helper.** The producer proves what the resolved local
+  callee's own body does with its parameters (below) and the verifier consumes
+  that fact rather than re-deriving semantics from a location. It refuses a
+  callee that stores its parameter, one that returns it, one whose
+  implementation is outside the analysed program, and any member or computed
+  callee — `handlers[key](cb)` names no single canonical symbol.
+- **Tier D — external package. Still open, deliberately.**
+  `@solid-primitives/until` hands its condition to `createBranch` from
+  `@solid-primitives/rootless`, and nothing in this artifact's transcript can
+  prove what that function does. The only sound route is an accepted dependency
+  contract for `@solid-primitives/rootless` composed through
+  `ProofFamily::AcceptedDependencyComposition`. A "well-known package" name list
+  is exactly the shortcut the precision contract forbids, so
+  `sha256:18a2f9ab…` stays refused.
+
+### The callee-parameter facts, and the strong/weak split
+
+For a call whose callee resolves to a callable with a body in the analysed
+program, the producer records three nested sets:
+
+- `calleeDirectlyCalledParameters` — the parameter appears as the **callee** of a
+  call in that body. The only one that by itself says the position is used as a
+  function.
+- `calleeStronglyInvokedParameters` — directly called, or forwarded as a **bare
+  identifier** at slot *j* of a further local callee whose slot *j* is itself
+  strongly invoked. Every hop is a plain forward and the chain terminates in a
+  direct call.
+- `calleeInvokedParameters` — the weak closure: strongly invoked, or the
+  parameter reaches a reviewed default-library invoker, or it is forwarded to a
+  local callee whose slot is merely invoked. This says the value *runs*; it does
+  not say the callee calls it.
+
+The split is load-bearing. `require_parameter_callback_flow` — the strong
+`callable-path` fallback — accepts only
+`calleeStronglyInvokedParameters`. Accepting the weak fact there would let a
+chain that terminates in `addEventListener` discharge a claim that the position
+is *callable*, which silently turns the `callable-path` family into
+`argument-binding`. `require_parameter_flow` gains nothing: its argument branch
+already accepts "argument of an executed call with a resolved target", so adding
+S4 there would be redundant width. Bounds: depth 4, a per-body node budget, a
+symbol cycle guard, and a per-callee-symbol memo that stores only an *exact*
+answer — one reached with no depth cut, cycle cut, or exhausted budget — because
+a truncated answer is bound to the context that truncated it.
+
+A parameter that is returned, stored on a property, or pushed onto an array
+appears in none of the three, including behind a condition
+(`function maybe(fn, on) { if (on) queue.push(fn); }`): every credit is a call
+position or a plain forward into one, never "flows somewhere".
+
+Two restrictions on *where in the body* a credit may come from carry the weight
+of all three sets, and both were review findings against the first draft:
+
+- **A call site inside a nested callable is credited only by composition.** A
+  call the body writes down is not a call the body makes.
+  `function storeLater(fn) { registry.push(() => { fn(); }); }` never invokes
+  `fn`, and crediting the call site because its bytes sit inside the body made
+  the closure-wrapped forward indistinguishable from a direct call — defeating
+  the property-storage refusal above by the single act of wrapping the stored
+  value in an arrow, and feeding both the Tier-C execution premise and the
+  S4-strong `callable-path` branch. So the site counts exactly when the callable
+  *immediately* containing it is handed to a slot something proves invoking, on
+  a call the body itself executes, recursively (see "Composition inside the
+  callee body" below). `registry.push` proves nothing about what it is handed,
+  so the stored closure still breaks the chain and the demand stays open.
+
+  There is deliberately **no return-site route** inside a callee body. A callee
+  that returns a closure hands it to its own caller, which here is the body
+  being analysed — and that body only *called* the callee, so nothing runs the
+  closure. `function returnsClosure(fn) { return () => fn(); }` proves nothing
+  about `fn`.
+- **An unreachable call site contributes nothing.** Statements after a `return`
+  or a `throw` are text, not execution. `ReachUnknown` is still credited, which
+  is deliberate and consistent with the in-body guarded-call precedent below and
+  with the claim strength stated in the next section. The walk mirrors
+  `implementationCallCensusLocked`'s reachability so the two agree about what
+  "this body executes that call" means.
+
+### Claim strength: this premise says *can execute*, and nothing may read more
+
+The Tier-B table is a **may-invoke** table by construction — the producer's own
+comment says "zero or more times" — and the premise it feeds is a *can execute*
+premise. That is a deliberate match, not an oversight, and it is written down
+here so no consumer quietly reads a lower bound out of it:
+
+- `p.then(onFulfilled, onRejected)` lists **both** slots. At most one handler
+  ever runs, and neither runs if the promise never settles.
+- `items.forEach(cb)` invokes nothing when `items` is empty; `.some` / `.find`
+  / `.findIndex` / `.every` short-circuit, and `.sort` never calls its
+  comparator for length ≤ 1.
+- A guarded call inside a callee body (`if (flag) fn()`) is credited at
+  `ReachUnknown`, the same strength the in-body direct-call premise has always
+  had.
+
+What the premise licenses is exactly the `Invoke` operation's own claim: this
+argument is a callback position the implementation runs, with **no lower bound
+on how many times**. `OperationKind::Invoke` demands nothing stronger, and the
+inventory records min 0 / max many. Anything that later wants "at least once"
+needs a different fact, not a stronger reading of this one — and the tier tables
+stay membership-reviewed rather than grown by analogy, because a table entry is
+a statement about a specific member's runtime.
+
+### Open policy question, inherited rather than introduced
+
+`callable-path` asserts the callback binding's value **is callable**.
+`@solid-primitives/utils` ships `access` as
+`(v) => typeof v === "function" ? v() : v`, and discharging
+`@solid-primitives/date-difference::createDateDifference` through it proves "the
+implementation calls this position as a function on some path", not "this
+position is always a function" — the published typing is
+`MaybeAccessor<number | Date | string>`, which genuinely is not always callable.
+
+That looseness is **not new**: an in-body `typeof date === "function" ? date() : date`
+passes `require_parameter_callback_flow` today, unchanged, and has since the
+family existed. S4-strong inherits exactly that strength through
+`calleeStronglyInvokedParameters` and introduces nothing weaker. The open
+question for the policy owner is whether `callable-path` should instead mean
+"always callable"; if it should, the *existing* guarded direct-call acceptance
+needs tightening first and `createDateDifference` becomes a wrong demand rather
+than a discharged one. Recorded here rather than silently settled.
+
+### `addEventListener` cannot be resolved in a shipped bundle
+
+`@solid-primitives/gestures@1.2.1::registerPointerListener`
+(`sha256:08be4b78…`) was expected to clear through Tier B and does **not**. Its
+runtime artifact is bundled JavaScript, and certification's private project runs
+it with `allowJs: true, checkJs: false`, so `registerPointerListener`'s own
+`node` parameter is `any` and `node.addEventListener` resolves to no symbol at
+all. That is the same `any`-typed receiver Tier B already refuses by design, so
+the row stays open with no fact emitted — the table declining to assert what it
+cannot resolve, not a gap in the table.
+
+The consequence is general: **the member half of the Tier-B table is largely
+unreachable for bundled artifacts**, and only bare globals (`setTimeout`,
+`requestAnimationFrame`, …) survive the erasure, because a global's own
+declarations are in the default library however the calling file is typed. That
+is why `@solid-primitives/utils::afterPaint` is provable and
+`registerPointerListener` is not. Pinned by
+`TestDefaultLibraryInvokerOverAShippedRuntimeArtifact`, which runs both shapes
+through a real `.js` artifact with the certification project's options. Closing
+it would need the *declared* signature's parameter type transferred into the
+untyped implementation — a new cross-artifact semantic claim, out of scope here
+and not attempted.
+
+### A construction runs what it carries, and is still not a call
+
+The implementation call census recorded call expressions only, so a `new`
+expression was not in `implementation.calls` at all and the ES executor position
+had nothing to carry a fact — the `PromiseConstructor` row the Tier-B table
+lists was dropped as unreachable. Under containment that gap was invisible;
+under composition it cost a row outright, because
+`@solidjs/signals::action` is
+
+```js
+function action(genFn) {
+  return (...args) => { … return new Promise((resolve, reject) => { const it = genFn(…args); … }); };
+}
+```
+
+`genFn(…)` is enclosed by the Promise executor arrow, and with no fact saying
+that arrow runs the chain stopped there. (Containment had "discharged" it by
+never asking what runs the executor — the same unsound step, on a case where the
+answer happens to be right.)
+
+**Construct expressions are now in the census**, with the same fields a call
+carries: reachability, `enclosingCallable`, target resolution through the same
+exact-symbol machinery, and the argument facts. The reviewed table gains its one
+construct row, in its own table keyed separately from the call tables, because
+the two questions differ: `Promise(fn)` is not a call the language allows and
+`new setTimeout(fn)` is not a construction it allows. `new Promise(executor)`
+invokes argument 0 — the ES specification requires the executor to run
+synchronously, before the constructor returns — resolved by default-library
+symbol identity like every other row. Still refused: `new UserClass(cb)` (not
+the library symbol), a locally shadowed `class Promise`, and
+`new Promise(...args)`, whose spread fixes no slot and therefore carries no
+proven callable.
+
+**Both kinds run what they carry; only one of them is a call.** The kind travels
+with every census entry (`ImplementationCall.kind`), and the two halves of the
+verifier read it differently on purpose:
+
+- the execution premise — `implementation_call_is_executed` and
+  `argument_slot_is_proven_invoking` — is kind-agnostic. It asks whether code
+  runs, and a construction runs its executor.
+- every claim whose witness says the implementation *calls* a value asks
+  `is_call_expression` first: the invoke flow, the callback flow, the
+  parameter-read evidence, the owner-primitive call, and the recursive-parameter
+  call. `new Cls(cb)` is a different claim about `cb` than `cls(cb)` and none of
+  those families was reviewed for it, so a construction satisfies none of them —
+  including the observed-callee list in the owner-requirement refusal message,
+  so a refusal tail does not move either. A construct site also states **no**
+  callee-parameter facts: those are claims about a resolved *function's* body,
+  and a constructor resolves differently.
+
+An *absent* kind deserializes to `CallKind::Unknown`, which those consumers
+refuse: absence is never read as "call". An *unrecognized* one does not become
+`Unknown` at all — `CallKind` carries no `#[serde(other)]` arm, so it fails
+deserialization and the whole transcript is rejected, which is the harder of the
+two failures and the intended one. (An earlier draft of this entry claimed both
+spellings default to `Unknown`; they do not, and the pin that was supposed to
+cover it used `"unknown"`, a *recognized* variant. Corrected and pinned by
+`an_unrecognized_call_kind_rejects_the_transcript_rather_than_defaulting`.)
+Pinned by `TestConstructExpressionsJoinTheCensusUnderTheirOwnTable`,
+`a_construction_executes_what_it_carries_and_is_still_not_a_call`, and
+`a_construction_satisfies_no_claim_whose_witness_says_call`, which mutation-kills
+each of the six kind gates on its own.
+
+`@solidjs/signals::action` clears as a result, and the three probes it was
+masking return to their earlier frontier: `@solidjs/signals@2.0.0-rc.3` and both
+`@solid-primitives/intersection-observer@3.0.0-next.3` probes are refused on
+`flatten`'s `callable-path` again (`sha256:14ebad21…`, `sha256:71e902d9…`,
+`sha256:b84ccad6…`).
+
+### Composition inside the callee body, and the premise the producer refuses to decide
+
+The Tier-C / S4 producer facts used to stop at every nested callable, and one
+real chain paid for it. `@solid-primitives/timer` proves
+`createIntervalCounter`'s `timeout` callable through
+`createPolled` → `createTimer`, and `createTimer` calls its `delay` parameter at
+
+```js
+createEffect(prevDelay => { … const currDelay = delay(); … });
+```
+
+— a direct call, but inside the arrow `createEffect` runs, not in `createTimer`'s
+own body.
+
+The callee-body walk now applies **the same composition premise the verifier
+applies to an exported implementation**, one body further in: a parameter call
+site inside a nested callable counts exactly when that callable is carried — by
+the same identity-preserving single-callable descent — at a proven-invoking slot
+of a call or construction in the callee body whose own site composes in turn.
+Same bounds as the verifier's premise (depth ≤ 8, 256 nodes), plus a cycle guard
+on the call sites themselves, which a self-referential
+`const f = () => { g(f); }` makes reachable. The invariant the fixer round
+established is preserved rather than weakened: the chain asks each link
+separately, so `registry.push(() => { fn(); })`, the closure-wrapped forward, and
+the expression-bodied `fn => () => fn()` all still emit **nothing**.
+
+The strength ladder is untouched. Composition changes *where* a call may sit,
+never what a chain proves: the terminal must still be a direct call of the
+parameter and every interprocedural hop a plain identifier forward, so a chain
+that reaches `addEventListener` inside an effect closure is invoked and still not
+strongly invoked. `calleeDirectlyCalledParameters` also keeps its narrow meaning
+— the parameter is called in the body's **own frame** — because a call the body
+reaches only through a closure it hands away is a different claim.
+
+**The last link is often a dialect fact, and the producer may not decide it.**
+`createEffect`'s slot 0 is a callback position; the producer knows no framework
+vocabulary, and reading one out of a module and a name is exactly the shortcut
+the precision contract forbids. So it states the syntax exactly and defers:
+`calleePendingInvocations` carries the same two claims, each with the
+invoking-slot premises it still needs — module, exported name, slot, argument
+count — and the verifier answers them on the table Tier A already owns
+(`unambiguous_callback_argument`, `solid-js` only). A premise it does not
+recognize leaves the claim unproven, an entry with no premises is malformed
+rather than unconditional, and a conjunction holds only if every premise does. A
+callee that names no module carries no premise at all, so a local helper, a
+member call, a computed callee and a bare global stay refused. Alternatives are
+capped at four routes of at most four premises each; a claim needing more is
+refused rather than transmitted.
+
+`sha256:209b1b7f…` (`timer@1.4.4`) certifies again, and `sha256:7f353a40…`
+(`timer@1.4.5-next.1`, floor and head) clears back to its own next frontier,
+*"operation-input is unsupported: implementation census only binds exact
+parameter-rooted operation inputs"*. Pinned by
+`TestCalleeBodyComposesThroughProvenInvokingPositions` and
+`a_deferred_dialect_premise_is_answered_here_or_the_claim_stays_open`.
+
+One consequence worth naming: the earlier note that "dialect invoking positions
+inside a callee body are not part of the producer's weak closure" no longer
+holds — a helper that hands its parameter to `createEffect` is now credited
+(weakly), through the same deferred premise. What stays open is anything whose
+missing premise is *not* a dialect slot: an external package's helper is Tier D
+either way.
+
+The array-iteration row is also narrower than "`Array.prototype`'s iteration
+methods": it is gated on the `Array` and `ReadonlyArray` containers, and the
+typed arrays' identically shaped methods are not on the reviewed table, so they
+stay open.
+
+### What a nesting boundary is, what a slot index means, and why the answer must not depend on the demand order
+
+Three defects in the extension's own machinery, all of the same family the
+rounds before them closed: a *syntactic* fact standing in for a *semantic* one.
+
+**Every function-like body is a nesting boundary.** `isCallableDeclaration` was
+`ArrowFunction | FunctionExpression | FunctionDeclaration | MethodDeclaration`,
+and every walk that asks "is this a nested callable" asked it — the call census,
+the parameter-use census, the control-flow censuses, and the extension's own
+callee-body walk. A getter, a setter, a constructor and a class's static block
+own bodies too, and none of them was one:
+
+```ts
+function stashGetter(cb: () => void) {
+  registry.push({ get value() { cb(); return 1; } });
+}
+```
+
+stores an object and calls nothing, and the census reported `cb()` as an
+uncaptured call `stashGetter` itself makes — `captured == false` with
+`reach == reachable` is the *strongest* form of every claim built on the census,
+and `calleeDirectlyCalledParameters = [0]` discharged the S4-strong branch for
+every caller of `stashGetter`. This is not an exotic shape: object-literal
+getters are the standard compiled-JSX lowering for a lazy prop
+(`createComponent(X, { get children() { … } })`), so every certified artifact
+shipping compiled JSX is in it. The predicate is now the compiler's own closed
+enumeration — `ast.IsFunctionLikeDeclaration` plus
+`ast.IsClassStaticBlockDeclaration`, shimmed for the purpose — so a kind a
+future compiler revision adds is covered without an edit here, rather than a
+hand-kept list that omits whichever kind has not bitten yet. Pinned in both
+walks and in all four member shapes by
+`TestEveryFunctionLikeBodyIsANestingBoundary`.
+
+**A spread ends the exact slots.** Every producer site that turned an argument
+expression into a slot index counted a `SpreadElement` as exactly one slot, so a
+spread of *n ≠ 1* elements understated every later position by *n − 1* — toward
+*lower* slots, which is the over-proof direction, because the reviewed tables
+list low slots as invoking. `target.addEventListener(...pair, cb)` writes `cb`
+second and passes it third, where the runtime reads an options bag and invokes
+nothing; the producer credited it as the listener. The producer cannot repair the
+shift, because a spread's length is a runtime property of the spread expression.
+So the answer is a **floor, never a renumbering** (`exactArgumentSlots`): slots
+before the first spread keep their exact meaning and are stated normally, and
+nothing at or after it is stated at all. Applied at all five positional sites —
+`argumentCallableLocationsLocked`, the census's `argumentParameters` (which keeps
+one entry per written argument, so its length still means the syntactic count
+every consumer reads, and withholds only the displaced entries),
+`calleeBodyWalk.carriedLocked`, `creditForwardedParametersLocked`, and
+`slotInvokingProofLocked`. The deferred premise is stricter still: it transmits an
+argument *count* as well as a slot, and a dialect answer can turn on that count
+(`mergeProps` reads every source below it; `createResource` gives argument 0 a
+different role at one argument than at two), so a spread anywhere in the list
+withholds the premise entirely — no prefix makes the runtime count knowable.
+Pinned, including the do-not-over-poison direction (a spread *after* a slot
+leaves that slot exact), by `TestASpreadEndsTheExactArgumentSlots` and
+`TestASpreadWithholdsTheDeferredPremise`.
+
+**The callee fact set is a pure function of the program.** The callee memo
+answered per callee symbol, and stored only *exact* answers — but whether an
+answer is exact depends on the depth it was computed at, because the walk
+refuses below `maxCalleeInvocationDepth`. A warm entry therefore lent its
+headroom to a later, deeper question: over one unchanged program and unchanged
+binaries, an export eight forwarding hops deep carried a pending fact when the
+seven shallower exports had been demanded before it in the same session, and
+carried none when it was demanded alone or first. The demand list is named by no
+receipt, no gate-cache key and no proof digest, so a package could certify in one
+run and be refused in the next with nothing changed. The memo is now keyed by
+**callee symbol and depth**, which is the whole question: an exact answer met no
+cut, so it depends on neither the interprocedural cycle guard's contents nor the
+caller's history, and a hit returns exactly what recomputing at that depth would.
+
+The alternative — dropping the depth bound in favour of the cycle guard and the
+node budget — was rejected deliberately: it is also deterministic, but it makes
+deep chains *productive* that the reviewed bound refuses, which is a soundness
+widening, and this round's job is to close over-proofs rather than open new
+reach. Keying by depth is the strictly narrowing repair (a warm entry could only
+ever have strengthened an answer, so nothing can newly certify), and the cost is
+recomputation at up to four depths. Pinned by
+`TestCalleeFactsDoNotDependOnDemandOrder`, which answers one program in three
+demand orders — deepest alone, ascending, deepest first — and compares the
+emitted facts byte for byte.
+
+### The census's concise-body exemption, removed
+
+`implementationCallCensusLocked` used to exempt the implementation's own body
+from the nesting test, which for a `const`-declared arrow export with a concise
+body means exempting the callable that *is* the return value. On
+`export const wrap = (cb: () => void) => () => cb();` the census stamped the
+`cb()` site `captured: false` — and three consumers read that field directly and
+mean *this body calls it*: the `Read` operation's evidence, the owner-primitive
+call, and the recursive-parameter subject. `wrapOwner = cb => () => { onCleanup(cb); … }`
+satisfied `implementation-owner-call:` for an implementation that only *returns*
+a closure that would.
+
+The exemption is gone: every callable is a boundary. Nothing is lost on the
+premise side, and that is why the change is safe rather than merely stricter —
+the reachable return site carries exactly the arrow that now encloses the call,
+so `implementation_call_is_executed` still composes through `enclosingCallable`
+and the returned-closure family is unchanged. Only the claims whose witness says
+*call* refuse it now. The two walks that disagreed by intent — the callee-body
+walk never copied the exemption — now agree by construction. Pinned by
+`TestAConciseCallableBodyIsStillANestedCallable`, which asserts both halves: the
+honest `captured`, and the return site carrying exactly that callable.
+
+`parameterUseCensusLocked` keeps the exemption, deliberately and narrowly: it is
+a different fact with a different consumer set (`ParameterUseKind::Capture` is a
+*refusal* trigger for operation reachability, so the exemption there costs
+reach rather than soundness in the families reviewed here), and moving it was not
+part of this round. Named below as open.
+
+### Still open after the extensions
+
+- **Tier D — an external package's invoking position.** `sha256:18a2f9ab…`
+  (`@solid-primitives/until`) needs an accepted dependency contract, not a name
+  list.
+- **`addEventListener` in bundled JavaScript**, `sha256:08be4b78…` and the
+  member half of the Tier-B table generally.
+- **A construct site states no callee-parameter facts.** A constructor whose
+  body invokes its own parameter proves nothing here; that resolution was not
+  reviewed. No probe in this set depends on it.
+- **An object or array literal at an argument slot carries nothing**, so a
+  bundle handed to an invoking slot proves nothing about any member of it.
+- **A `new` expression's dialect tier.** The deferred premise is emitted for
+  call sites only: no construct-position dialect vocabulary was reviewed.
+- **Any slot at or after a spread is refused rather than resolved**, and a call
+  with a spread anywhere states no deferred premise. `schedule(...pair, cb)`
+  really does put `cb` at a fixed position when `pair` has a fixed length; the
+  producer cannot read that length, so the honest answer is silence. This is an
+  over-refusal, and it is the one the precision contract asks for.
+- **A static block is treated as a nesting boundary though it runs eagerly.**
+  `class Holder { static { cb(); } }` inside a function body really does run
+  `cb()` when the class is evaluated. Stamping it `captured` costs reach and
+  never soundness, and the eager-evaluation claim was not reviewed; recorded so
+  that a later round widens it on purpose rather than by accident.
+- **`parameterUseCensusLocked` still exempts a concise callable body.** The call
+  census no longer does. The parameter-use fact feeds a different family, and
+  changing it would move `ParameterUseKind::DirectCall` to `Capture` for
+  `const`-declared concise-arrow exports, which the operation-reachability family
+  reads as an open escape. Not measured in this round's acceptance set, so not
+  changed in it.
+
+
+## A parameter-member read was rooted at its last segment (2026-09-01)
+
+A generated read operation's input is `Parameter { index, path }`, and the
+implementation census matches that `path` as a **prefix** of the access it
+observes (`type_facts::parameter_value_source_matches`). The generator built the
+path from the *last* segment of the member chain alone, so a read of
+`parsed.modifiers.includes(m)` published `["includes"]` — a claim that the
+parameter has an `includes` property. The observed access begins with
+`modifiers`, so the prefix never matched: the demand was not merely imprecise,
+it was unwitnessable by any runtime, and the row could only ever refuse.
+
+Two independent packages surfaced it:
+
+- `@tanstack/hotkeys@0.8.0::formatHotkey`, whose shipped `dist/format.js:34`
+  reads `parsed.modifiers.includes(modifier)`. The demand
+  `sha256:12a42717da8d6151…` carried `["includes"]`; it now carries
+  `["modifiers", "includes"]`. That digest is gone from the certification audit.
+- `@solid-primitives/keyed`'s `SetValues`, whose `props.of.values()` published
+  `["values"]` and now publishes `["of", "values"]`.
+
+`indexes::member_callee_receiver` now walks the whole chain from the callee to
+its root and answers the path from that root outward. The rules that keep every
+emitted segment a real property of the parameter:
+
+- **the root must be a plain identifier.** `EntitySymbols::at` answers a symbol
+  for any span the compiler emitted an entity at, and at a conditional,
+  sequence, logical, or call expression that symbol is some *operand's* — not
+  the value the chain walks through. Trusting it attributed properties of the
+  chain's *result* to a binding that never has them:
+  `(k ? options.a : options.b).c.slice(n)` was published as parameter `k`
+  reading `["c", "slice"]`, and `options().slice(n)` as `options` having a
+  `slice` property. Both are refused now, and the refusal is what makes the
+  truncation rule below sound: a path is only ever a true prefix of the real
+  access, never a path through a different value;
+- a segment the walk cannot name exactly — a computed access `a[b]`, or a
+  property whose source text the fact table does not carry — truncates the path
+  to the **longest exact prefix from the root**, and never skips a segment or
+  guesses one. `props[key].values()` answers `[]`; `props.of[key].values()`
+  answers `["of"]`;
+- a chain longer than `MEMBER_CALLEE_PATH_LIMIT` (32 segments) is truncated the
+  same way, to its first 32 segments from the root;
+- the read row is **kept in every one of those cases, not dropped**. Dropping it
+  would turn an unresolved access into the negative claim "this export performs
+  no parameter read", because the reads domain is emitted `Complete` once it is
+  known at all. (Refusing the *whole* access, as the compound-root and
+  computed-callee gates do, is a different thing: the export's other accesses
+  still publish, and an access that no row describes leaves the parameter
+  unclaimed rather than negated.);
+- a computed *callee* (`props.of[key]()`) is still refused outright, unchanged;
+- a callee that is not a member expression at all is refused, so an ordinary
+  `notify(callback)` is never read as a member access on its callee.
+
+**Why a truncated path stays sound under the exact matcher too.** The prefix
+argument covers `type_facts::parameter_value_source_matches`
+(`actual.path.len() >= expected.path.len()`), which is what the read
+operation's own evidence uses (`require_operation_evidence`, `OperationKind::Read`).
+Its sibling `parameter_value_source_exact` adds `actual.path.len() == path.len()`,
+and read inputs do reach it — at `require_operation_recursive_subject`, where a
+recursive-value demand rooted at an `OperationInput` is discharged by a
+reachable call whose callee is *exactly* the stated source. That is still a
+comparison against the path this contract **states**, never against the access
+the path was cut from, so a shorter path remains a weaker claim rather than a
+different one. The dangerous shape would be a demand that *extends* the stated
+path before matching it exactly, and that is unreachable for a parameter-rooted
+read input:
+
+- `contract_semantics::certification::inventory_value_shape` treats
+  `ValueShape::Parameter` as a **leaf**, so the only recursive-value demand a
+  parameter input produces carries an empty value path — pinned by
+  `a_parameter_operation_input_inventories_one_demand_at_the_empty_path`;
+- a demand rooted at an `OperationInput` with a *non-empty* value path exists
+  only for a structured input (object, tuple, array, choice, promise), and there
+  `type_facts::parameter_source` answers `UnsupportedDemand`, which the `?` in
+  `require_operation_recursive_subject` propagates — the demand fails rather
+  than being discharged, so the `source_path.push(property)` extension below it
+  never runs on a truncated read path;
+- the `require_parameter_callback_flow` route is additionally gated on
+  `callable.asserts_callable()`, and `recursive_value_callability` answers
+  `DemandedCallability::Unknown` for every `Parameter` shape;
+- the remaining exact-match consumers take `callback.from`, which
+  `inferred_contract::normalize_export` always builds with an empty path.
+
+The argument is therefore bounded by two premises rather than by the prefix rule
+alone: `Parameter` stays a leaf of the value inventory, and the chain root stays
+an identifier. A change to either reopens the channel.
+
+The row still names a path only when every contributing access agrees on it
+exactly, and agreement is now decided on whole paths rather than last segments —
+`props.source.slice()` and `props.other.slice()` no longer collapse into one
+agreed claim about `slice`. `contracts::project_reactive_reads` also stopped
+truncating with `path.last()` when reading an accepted contract back in, which
+would otherwise have round-tripped a correct path down to its last segment.
+
+Pinned by `fixtures/package-contracts/parameter-member-read-path`, and by unit
+tests in `indexes.rs` covering the full-path emission, the single-segment
+control, both unnameable-segment truncations, both sides of the 32-segment
+boundary, all three compound roots, a call at the root, and the two callee
+gates. Reverting the walk to last-segment rooting, dropping the identifier gate,
+or turning the depth limit back into a refusal each fails those tests.
+
+Remaining approximations, all deliberate and all fail-closed:
+
+- **Disagreeing accesses publish no path rather than their longest common
+  prefix.** `props.of.keys()` and `props.of.get(k)` in the same export agree on
+  `["of"]`, and an LCP would be a sound and stronger claim than the empty path
+  published today. It is left alone here because
+  `@solid-primitives/keyed@1.5.3`'s `MapEntries` read row is the pinned control
+  for the unnamed spelling; moving to an LCP is a separate precision slice.
+- **Optional links are invisible to the fact model.** `solid-facts` records no
+  optionality on `MemberFact`, so `props.of?.values()` is rooted identically to
+  `props.of.values()` and publishes `["of", "values"]`. The claim stays sound —
+  when the chain short-circuits the access never happens and the demand simply
+  goes unwitnessed — but the generator cannot currently distinguish the two. A
+  dedicated optionality fact is the follow-up.
+- **A multi-segment path is not resolved at consumer call sites.**
+  `interproc`'s per-call-site resolution of `parameter.member()` answers for one
+  property of the argument. A longer path needs the value at the intermediate
+  segment first, so it now records a `parameter-member-path-unresolved` dispatch
+  obligation and contributes no read, where it previously resolved the last
+  segment against the argument itself — a different property of a different
+  value.
+- **A truncated access weakens the whole row when it disagrees with a sibling.**
+  An export that both reads `options.good.slice(n)` and walks a chain past the
+  depth limit publishes two disagreeing paths, so the row names none — the
+  export's `["good", "slice"]` claim is lost to the truncation of the other
+  access. Keeping the deeper access as a row is still the right trade (dropping
+  it would negate it), but a longest-common-prefix rule would recover both; it
+  is the same follow-up as the disagreement item above.
+- **Producer and consumer peel different TypeScript sugar.**
+  `AstFacts::peel_ts_sugar_span` peels parentheses, `as`, `satisfies`, type
+  assertions and `!`, so the IR correctly roots `(options as Opts).source.slice(n)`
+  and `options!.source.slice(n)` at `options`. The Type Facts producer's
+  `parameterValueSourceLocked`
+  (`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`)
+  unwraps only `ParenthesizedExpression` and answers `nil` for the rest, so
+  those *correct* demands can never be witnessed and the row refuses. Pre-existing
+  and fail-closed, and it belongs beside the optional-chaining note above: both
+  are populations of structurally unwitnessable read demands, not wrong ones.
+  Closing it means teaching the producer the same peeling.
+
+
+## 2026-09-01 — A primitive callback slot no longer roots an ungrounded invoke claim
+
+`primitive_callback_execution` in
+`rust/crates/solid-reactive-ir/src/interproc.rs` answers *how* a callback at a
+primitive's argument would run relative to the exported call. The contract
+inventory in the same module read a row there as permission to publish an
+`invoke` operation rooted at whatever exported parameter was forwarded into that
+slot. The row says nothing about whether the slot holds a callback, and two
+shapes in the measured ecosystem published claims about values the shipped code
+never invokes:
+
+- `@solid-primitives/flux-store`'s
+  `createFluxStore(initialState, createMethods)` claimed
+  `callbacks: [{from: {arg: 0, path: []}}]`, `kind: invoke`, `tracking: tracked`,
+  `at: {schedule: queued}`. The body's only use of argument 0 is
+  `createStore(initialState)` (`0.1.1 dist/index.js:25-32`,
+  `1.0.0-next.2 dist/index.js:24-31`). Solid 1.x has no compute form for
+  `createStore` at all; Solid 2.0 has one, but only in the derived
+  `createStore(fn, initial, options?)` overload, whose plain twin declares its
+  first parameter `NoFn<T> | Store<NoFn<T>>`.
+- `@solidjs/meta@0.29.4`'s
+  `Stylesheet = props => createComponent(Link, mergeProps({rel}, props))`,
+  declared `Component<Omit<JSX.LinkHTMLAttributes<HTMLLinkElement>, "rel">>`,
+  claimed the same shape on its props parameter, from a `(MergeProps, _)` row
+  that matched every argument index. `@solidjs/router@1.0.0`'s `A` and `Route`
+  are the same shape.
+
+The certification census refused all four, correctly and permanently: `invoke`
+evidence for a value nothing invokes cannot exist, so no widening of the proof
+side could ever have discharged them. These rows leave the refusal set by
+**withdrawal**, not by discharge.
+
+`primitive_slot_roots_parameter_invoke` now requires three premises before the
+inventory constructs the claim. The value must not be *proven* non-callable
+(`Callability::Unknown` is the absence of an answer and withdraws nothing, so
+untyped JavaScript distributions are unaffected). A slot whose behavior is
+conditional on callability — `mergeProps`, and 2.0's `createSignal`,
+`createStore`, `createOptimistic`, `createOptimisticStore`, each of which has a
+plain form declared to exclude functions beside a derived form that takes a
+compute — additionally requires callability *proven*, because an unproven answer
+is the missing premise rather than a licence to assert. And the dialect must own
+the slot, which is what separates 1.x's `createStore(store?, options?)` and
+`createSignal(value, options?)` from their 2.0 namesakes.
+
+**There is deliberately no arity premise, and an earlier draft's was wrong.**
+It dropped the store pair's row at `argument_count < 2`, on the ground that 2.0's
+derived form requires the seed store at argument 1. The runtime does not
+dispatch on arity: `createStore(first, second, third)` returns the derived store
+whenever `typeof first === "function"` (`@solidjs/signals` `dist/dev.js:9371`;
+`solid-js@2.0.0-rc.3 dist/server.js:896` routes the same shape through
+`createProjection`, and `createOptimisticStore` at `:912` delegates to
+`createStore`). The premise's own justification — that `NoFn<T>` makes a
+one-argument callable `createStore` a type error, so no `tsc`-clean fixture could
+contain it — was also wrong: `NoFn` is the *client* entrypoint's. The published
+**server** entrypoint (`types/server/signals.d.ts:136-143`) declares the plain
+form `createStore<T extends object>(store: T | Store<T>, options?)` with no
+`NoFn`, and a function type satisfies `T extends object`, so
+`createStore(compute)` compiles clean there and really is derived. That case is
+now pinned end to end by
+`fixtures/package-contracts/callback-slot-derived-store-server`
+(`projectSeedless`), beside its `plainStore` negative at the same arity. The rule
+is callability and only callability.
+
+`createMemo`, `createProjection`, `createTrackedEffect` and `dynamic` take the
+compute at argument 0 in every overload, so they keep the weak premise and keep
+publishing on untyped artifacts. The row table itself is unchanged: it is also
+the reach of the wrapper-chain fold, where a *missing* row makes the chain refuse
+and the inner slot's own answer stand — a stronger claim, not a weaker one
+(`fixtures/package-contracts/callback-deferred-untracked-chain`'s
+`unestablishedScheduleShape` pins that, and deleting the `mergeProps` row
+regressed it from open to a false same-stack claim before the premises were moved
+to the inventory).
+
+Named negative cases, pinned by the dialect fixture pair
+`fixtures/package-contracts/callback-slot-props-forwarding` (1.x) and
+`callback-slot-derived-store` (2.0), plus
+`callback-slot-derived-store-server` for the server entrypoint: a props object at
+either `mergeProps` argument; `createStore(initial)` and
+`createStore(initial, options)` under 1.x even with a provably callable argument;
+`createSignal(fn)` under 1.x, which stores the function as the signal's value;
+`createStore(initial)` and `createStore(initial, {name})` under 2.0, at both the
+plain form's arity and the derived form's; `createOptimisticStore(initial)` and
+`createOptimistic(initial)` under 2.0; and `createSignal(initial)` under 2.0 with
+an object-typed argument. The positives that must survive: a `mergeProps` source
+proven callable through a read signature (`WithLazyExtras`) *and* one proven
+through the signature-less `Function` supertype
+(`WithOpaqueExtras`, `Callability::UntypedCallable`); 2.0's
+`createStore(compute, seed)`, `createStore(compute)` on the server typings,
+`createOptimisticStore(compute, seed)`, `createSignal(fn)` and
+`createOptimistic(fn)`; and `createMemo` in both dialects.
+
+### Remaining approximations
+
+- **`createFluxStore`'s real callbacks are still not inventoried.**
+  `createMethods.getters` and `createMethods.actions` are argument 1 behind a
+  property path, and the generator's `ContractCallback` carries a parameter index
+  with no path (`inferred_contract.rs` hard-codes `path: Vec::new()`). Withdrawing
+  the false row leaves the export's callback domain **open**, not closed-empty, so
+  nothing false is asserted in the other direction — but the export remains
+  uncertifiable rather than correctly described. Re-rooting needs the model to
+  grow a path, which is a separate change.
+- **An artifact with no types at all keeps nothing at a conditional slot.**
+  The conditional premise is a pure function of the compiler's callability
+  answer for the argument span, and a JavaScript distribution whose parameters
+  carry no inline annotation and no JSDoc answers nothing at all — a sibling
+  `index.d.ts` types the *declaration* file, not the runtime artifact's parameter
+  spans. Measured, at this branch's base, on a package whose `index.js` is
+  compiled from the same source as `callback-slot-derived-store-server`'s
+  `index.ts`: both the seedless and the seeded derived `createStore` lose their
+  row, and both come back the moment the same `index.js` carries
+  `@param {(store: Cart) => void}` (proven `Callable`) or `@param {Function}`
+  (proven `UntypedCallable`). So the withdrawal is exactly the
+  absent-proof case and is the fail-closed direction — but any package that
+  genuinely forwards a callback into `mergeProps` or 2.0's
+  `createSignal`/`createStore` family from an untyped distribution silently
+  loses a true claim, and nothing in the repository would notice. Closing it
+  needs a callability fact the runtime artifact's own shape can supply.
+- **The `MergeProps` row is not a dialect inconsistency**, contrary to an
+  earlier draft of this entry. `Solid1x::callback_execution_at` answers
+  `Some(Execution::Tracked)` for `MergeProps` at every
+  `argument < argument_count`, *ahead* of the `callback_executions` lookup,
+  because `mergeProps(...sources)` is variadic and the flat table cannot say so;
+  `merge_props_function_sources_are_variadic_tracked_computations`
+  (`rust/crates/solid-dialect/src/solid_1x.rs`) pins exactly that, and it makes
+  the `MergeProps => DuringCall` arm of `Solid1x::tracked_callback_timing`
+  reachable rather than dead. Solid 2.0 spells its own primitive
+  `Primitive::Merge` and carries no `MergeProps` row, so no 1.x row leaks across
+  the dialect seam. Nothing here is open; the note is retained because the
+  earlier claim sent the dialect owner after a non-problem.
+
+## 2026-09-01 — A `tracked` callback row takes its schedule from the dialect, not from the word
+
+`inferred_contract.rs`'s `callback_operation` mapped every `execution:
+"tracked"` row onto `(Schedule::Queued, Tracking::Tracked)`, hardcoded, with no
+consultation of `Dialect::tracked_callback_timing`. `tracked` is an
+*attribution* word — it says the runtime subscribes the callback's reads — and it
+carries no schedule column at all, deliberately: 1.x `createMemo` and
+`createRenderEffect` run their compute during the creating call while 1.x
+`createEffect` queues it, and 2.0 disagrees with 1.x on `createEffect`. Reading
+`queued` out of the word published a promise the runtime breaks before the
+export even returns. `Solid1x::tracked_callback_timing` states
+`CreateMemo | CreateRenderEffect | CreateComputed | CreateResource | MergeProps
+=> DuringCall`; `Solid2` states
+`CreateMemo | CreateSignal | CreateOptimistic | CreateProjection | CreateEffect |
+CreateRenderEffect => DuringCall` and `CreateTrackedEffect => AfterCall`.
+
+`ContractCallback` now carries a `schedule: Option<CallbackSchedule>` beside the
+word. `interproc.rs`'s `composed_tracked_schedule` derives it from the wrappers
+the callback actually sits under: a wrapper the dialect says merely queues wins
+outright, a chain whose tracked wrappers all run during their own call is
+`same-stack`, and a wrapper the dialect states no timing for leaves the schedule
+`Unestablished`. `Unestablished` emits the invoke operation with **no execution
+point at all** rather than a guessed one — the attribution claim is proven and
+survives on its own. `contracts.rs`'s `project_callbacks` carries an ingested
+contract row's own schedule through the same field, so re-emitting a row
+republishes what the contract said instead of the default.
+
+Rows this corrected, all measured at this branch's base:
+
+| row | was | is | dialect fact |
+| --- | --- | --- | --- |
+| `callback-slot-props-forwarding` `WithLazyExtras` / `WithOpaqueExtras` (1.x `mergeProps`) | `queued` | `same-stack` | `MergeProps => DuringCall` |
+| `callback-slot-props-forwarding` `derive` (1.x `createMemo`) | `queued` | `same-stack` | `CreateMemo => DuringCall` |
+| `callback-slot-derived-store` `derive` (2.0 `createMemo`) | `queued` | `same-stack` | `CreateMemo => DuringCall` |
+| `callback-slot-derived-store` `makeDerivedSignal` / `makeDerivedOptimistic` (2.0) | `queued` | `same-stack` | `CreateSignal`/`CreateOptimistic` `=> DuringCall` |
+| `callback-slot-derived-store` `projectStore` / `projectOptimisticStore` (2.0 store pair) | `queued` | *no execution point* | 2.0 states none for either store primitive |
+| `@solidjs/router@1.0.0` `createAsync` / `createAsyncStore` (ecosystem, not a repository snapshot) | `queued` | `same-stack` | the chain's tracked wrappers are all `DuringCall` |
+
+### Remaining approximations
+
+- **Two other producers of the word still leave the schedule unstated, and the
+  consumer's `queued` default stands for them.** Both are pre-existing and
+  neither is an inventory claim:
+  - the *direct-invocation* rung of `interprocedural_contributions` (the
+    `chain_execution` fallback around `interproc.rs:1211`), which is why
+    `fixtures/package-contracts/callback-deferred-untracked-chain`'s
+    `memoInsideUntrack` — `untrack(() => createMemo(() => handle()))`, a chain
+    whose only tracked wrapper is 1.x `createMemo`'s `DuringCall` — still
+    publishes `queued` where `same-stack` is the true answer. Its sibling
+    `trackedShape` (`createEffect`) publishes `queued` correctly, so the fixture
+    does not distinguish the two today;
+  - `contract_callback_execution`'s `ExecutionRole::TrackedJsx` arm
+    (`lib.rs`), a compiler-lowering role with no wrapper chain to compose.
+- **The `Unestablished` schedule is not yet represented in the certification
+  census.** An invoke operation with no execution point states less than one
+  with a schedule, which is the honest reading, but no proof family currently
+  demands or discharges the missing column.
+
 ## Six ways the demand-honesty round proved less than it claimed (2026-09-01)
 
 An adversarial review of the round below found two facts that were *false*, one
@@ -9163,3 +10277,40 @@ It is not dead: it is one of the twenty-one tracked catalogs
 `auditPhase19Cut().obsoletePolicy1Catalogs` counts, and that count already
 describes those catalogs as policy-1. The claim needs a certification gate, or a
 policy-2 reissue of the fixture's catalog, before it asserts anything again.
+
+## 2026-09-01 — The invoking-position round re-measured: 331 verified, every movement owned
+
+The full 418-probe re-measure after the invoking-position round (chain
+composition, reach-carrying parameter uses, dialect-derived schedules,
+full-chain read rooting) moved seventeen verdicts: 320/73/25 became
+**331 verified / 62 exact refusals / 25 not attempted**. Fourteen gains, three
+losses, all attributed:
+
+- Twelve gains were the round's named acceptance targets (async ×2, autofocus,
+  date-difference, flux-store ×3, meta 0.29.4, router 1.0.0, script-loader ×2,
+  timer 1.4.4). flux-store and meta certify by *withdrawal* of the ungrounded
+  arg-0 invoke claims — their callback domains stay open, nothing false is
+  asserted.
+- `solid-js@2.0.0-rc.3` was a bonus of the read-rooting repair: its old
+  `$$component` demand pinned path `["set"]` — the same last-member-segment
+  defect as hotkeys — and the corrected full path is witnessable by the
+  signature census.
+- `@kobalte/utils@0.9.2` left the open-root-observation class because the
+  generation changes re-rooted/withdrew the `debugPolygon` demand whose root
+  observation was open (`Polygon = Point[]`, the M1c array `openIndex`
+  misattribution). It left by claim movement, not by the producer closing the
+  observation; the M1c producer defect itself is still open and still owns the
+  remaining rows of that class.
+- **Three honest losses**, both premised on the unsound deep-containment rule
+  the adversarial review killed (a call site credited through byte containment
+  alone): `@solid-primitives/input-mask@1.0.0-next.2` floor+head — `replacer`
+  runs inside an arrow handed to `String.prototype.replace`, which is
+  deliberately not on the reviewed default-library invoker table; recover by
+  adding `String.prototype.replace`/`replaceAll` (replacer at slot 1) as a
+  reviewed table row with shadow/user-typed negative pins. And
+  `@solid-primitives/jsx-parser@0.2.0` — `render` runs inside a closure
+  returned by the *returned* closure; the chain premise models return-carry
+  only at the export implementation's own return sites, so a second-order
+  return needs a per-callable return-carry fact before it can compose. Both
+  old certifications drew the right conclusion from a premise the review
+  proved unsound in general; they stay refused until the sound premise exists.

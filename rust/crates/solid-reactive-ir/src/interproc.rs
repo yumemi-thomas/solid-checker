@@ -15,7 +15,7 @@ use std::{
 use solid_dialect::{Primitive, TrackedCallbackTiming};
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
-use typefacts::{CallKind, Location, ResolvedCallValidity};
+use typefacts::{CallKind, Callability, Location, ResolvedCallValidity};
 
 use super::runtime_semantics::{
     RuntimeArgumentBehavior, argument_behavior, literal_argument_is_not_callable,
@@ -23,11 +23,11 @@ use super::runtime_semantics::{
     retains_argument_value,
 };
 use super::{
-    ContractAnalysis, ContractCallback, ContractExport, ContractGenerationObligation,
-    ContractGraph, ContractReturn, ContractSemantics, EntitySymbols, ExecutionRole,
-    FunctionBoundary, FunctionLookup, ProjectIndexes, ReactiveRead, ReactiveSourceKind,
-    SemanticLookup, StaticDefect, StaticDefectKind, SymbolId, allowed_callback_spans,
-    assigned_member_function_contains, containing_summary_function_indexed,
+    CallbackSchedule, ContractAnalysis, ContractCallback, ContractExport,
+    ContractGenerationObligation, ContractGraph, ContractReturn, ContractSemantics, EntitySymbols,
+    ExecutionRole, FunctionBoundary, FunctionLookup, ProjectIndexes, ReactiveRead,
+    ReactiveSourceKind, SemanticLookup, StaticDefect, StaticDefectKind, SymbolId,
+    allowed_callback_spans, assigned_member_function_contains, containing_summary_function_indexed,
     contract_callback_execution, contract_export_summaries, contract_export_summaries_incremental,
     function_indices_by_path, function_lookup_for_path, functions_for_path,
     items_by_containing_function, location, location_order, primitive_name,
@@ -983,13 +983,13 @@ fn discover_interprocedural_graph(
         // its own argument. Pooling every site into one summary here is what
         // makes an unambiguous site uncertifiable because a sibling site is
         // not.
-        if let Some((receiver, property)) = lookup.member_callee_receiver(file, call.callee)
+        if let Some((receiver, path)) = lookup.member_callee_receiver(file, call.callee)
             && let Some(parameter) = nodes[owner]
                 .parameters
                 .iter()
                 .position(|candidate| *candidate == receiver)
         {
-            let entry = (owner_span, parameter, property);
+            let entry = (owner_span, parameter, path);
             if !contribution.invoked_parameter_members.contains(&entry) {
                 contribution.invoked_parameter_members.push(entry);
             }
@@ -1073,7 +1073,9 @@ fn discover_interprocedural_graph(
                     .iter()
                     .position(|candidate| candidate == argument_symbol)
                 {
-                    let entry = (owner_span, owner_parameter, String::new());
+                    // The parameter's own value is read, not a property of it,
+                    // so the access path is empty.
+                    let entry = (owner_span, owner_parameter, Vec::new());
                     if !contribution.invoked_parameter_members.contains(&entry) {
                         contribution.invoked_parameter_members.push(entry);
                     }
@@ -1254,6 +1256,9 @@ fn discover_interprocedural_graph(
                     ContractCallback {
                         parameter,
                         execution: execution.into(),
+                        // Only `inline` and `deferred` reach here, and both
+                        // carry their schedule in the word.
+                        schedule: None,
                         arguments: callback_argument_contracts(
                             file,
                             call,
@@ -1328,6 +1333,7 @@ fn discover_interprocedural_graph(
                             ContractCallback {
                                 parameter,
                                 execution: callback.execution.clone(),
+                                schedule: callback.schedule,
                                 arguments: callback.arguments.clone(),
                                 owner: None,
                             },
@@ -1463,6 +1469,25 @@ fn discover_interprocedural_graph(
                 call.arguments.len(),
                 lookup.dialect,
             ) {
+                // A row in that table says how a callback at this slot would run
+                // relative to the export. It does not say there *is* a callback
+                // at this slot, and this branch used to publish the row as
+                // though it did -- see
+                // [`primitive_slot_roots_parameter_invoke`], which carries the
+                // three premises and the two ecosystem over-claims that came
+                // from their absence. When the premises fail the slot is not a
+                // callback position for this parameter, so no row is written and
+                // no unknown-callback obligation is opened either: this is a
+                // proven absence, not an unclassified invocation.
+                if !primitive_slot_roots_parameter_invoke(
+                    lookup.dialect,
+                    primitive,
+                    argument_index,
+                    call.arguments.len(),
+                    runtime_argument_callability,
+                ) {
+                    continue;
+                }
                 // The primitive's own slot says how the callback runs relative
                 // to *this* call; the row says how it runs relative to the
                 // export. `onMount(fn) { createEffect(() => untrack(fn)) }` is
@@ -1481,7 +1506,7 @@ fn discover_interprocedural_graph(
                 // the sentinel rather than fall back, because the slot's answer
                 // is relative to the wrapping call and the row is relative to
                 // the export.
-                let composed: Option<Option<&'static str>> =
+                let composed: Option<(Option<&'static str>, Vec<CallbackWrapper>)> =
                     enclosing_callback_chain(file, call.span, &contracts, lookup)
                         .filter(|chain| {
                             chain.wrappers.is_empty()
@@ -1500,14 +1525,33 @@ fn discover_interprocedural_graph(
                                 lookup,
                             )?];
                             wrappers.extend(chain.wrappers);
-                            Some(compose_callback_chain(&wrappers))
+                            Some((compose_callback_chain(&wrappers), wrappers))
                         });
-                if let Some(execution) = composed.unwrap_or(Some(execution)) {
+                // The wrappers, not just their composed word: `tracked` is an
+                // attribution word with no schedule column, and the schedule is
+                // the dialect's to state for each wrapper the callback sits
+                // under. Without the chain there is one wrapper -- this slot.
+                let (word, wrappers) = match composed {
+                    Some((word, wrappers)) => (word, wrappers),
+                    None => (
+                        Some(execution),
+                        vec![CallbackWrapper::Tracked(
+                            lookup.dialect.tracked_callback_timing(
+                                primitive.expect("a slot row requires a resolved primitive"),
+                                argument_index,
+                                call.arguments.len(),
+                            ),
+                        )],
+                    ),
+                };
+                if let Some(execution) = word {
                     contribution.callbacks.push((
                         nodes[callback_owner].span,
                         ContractCallback {
                             parameter,
                             execution: execution.into(),
+                            schedule: (execution == "tracked")
+                                .then(|| composed_tracked_schedule(&wrappers)),
                             arguments: Vec::new(),
                             owner: None,
                         },
@@ -1610,6 +1654,7 @@ fn discover_interprocedural_graph(
                                     RuntimeArgumentBehavior::ValueOnly => unreachable!(),
                                 }
                                 .into(),
+                                schedule: None,
                                 arguments: Vec::new(),
                                 owner: None,
                             },
@@ -2466,6 +2511,46 @@ fn compose_callback_chain(wrappers: &[CallbackWrapper]) -> Option<&'static str> 
     Some(execution)
 }
 
+/// The export-relative schedule of a chain that composes to `tracked`.
+///
+/// [`compose_callback_chain`] answers *attribution* -- whose reads the callback
+/// subscribes -- and the word `tracked` carries no schedule column, which is
+/// why one is computed here instead of read out of it. Every wrapper between
+/// the callback and the export body contributes, and only the dialect knows
+/// which:
+///
+/// - a tracked wrapper the dialect says merely *queues* its computation
+///   ([`TrackedCallbackTiming::AfterCall`] -- 1.x `createEffect`, 2.0
+///   `createTrackedEffect`) puts the callback after the export's return
+///   whatever else stands around it, so it wins outright;
+/// - a chain whose tracked wrappers all run during their own call
+///   ([`TrackedCallbackTiming::DuringCall`] -- 1.x `createMemo`/`mergeProps`,
+///   2.0 `createSignal`/`createMemo`/`createOptimistic`) leaves the callback on
+///   the export's own stack;
+/// - a wrapper the dialect states no timing for
+///   ([`solid_dialect::Dialect::tracked_callback_timing`] answering `None`, as
+///   2.0 does for `createStore` because no measurement backs a claim) leaves
+///   the schedule unestablished. The row survives -- attribution is proven and
+///   is a real claim -- but it is emitted with no execution point at all rather
+///   than with a guessed one.
+///
+/// `Transparent`, `Detaching` and `Deferred` wrappers do not appear: the first
+/// two run their code during their own call and the third would have made the
+/// composed word `deferred`, not `tracked`.
+fn composed_tracked_schedule(wrappers: &[CallbackWrapper]) -> CallbackSchedule {
+    let mut schedule = CallbackSchedule::SameStack;
+    for wrapper in wrappers {
+        if let CallbackWrapper::Tracked(timing) = wrapper {
+            match timing {
+                Some(TrackedCallbackTiming::AfterCall) => return CallbackSchedule::Queued,
+                Some(TrackedCallbackTiming::DuringCall) => {}
+                None => schedule = CallbackSchedule::Unestablished,
+            }
+        }
+    }
+    schedule
+}
+
 /// What the wrappers around a forwarding call say about a callback the callee's
 /// own summary reports as `inline`.
 ///
@@ -2478,8 +2563,13 @@ pub(crate) enum ForwardedAmbientExecution {
     /// existed. The ambient adjustment is an override, and there is nothing to
     /// override with.
     Callee,
-    /// The wrappers compose to this export-relative execution.
-    Composed(String),
+    /// The wrappers compose to this export-relative execution. `schedule` is
+    /// `Some` only for a `tracked` word, whose attribution carries no schedule
+    /// column of its own -- see [`composed_tracked_schedule`].
+    Composed {
+        execution: String,
+        schedule: Option<CallbackSchedule>,
+    },
     /// A wrapper in the chain has no established schedule, so no
     /// export-relative word is honest. The callee's `inline` rows must not be
     /// republished and the callback leaf stays open instead.
@@ -2545,7 +2635,10 @@ fn forwarded_callback_ambient_execution(
     let mut wrappers = own.into_iter().collect::<Vec<_>>();
     wrappers.extend(above);
     match compose_callback_chain(&wrappers) {
-        Some(execution) => ForwardedAmbientExecution::Composed(execution.to_owned()),
+        Some(execution) => ForwardedAmbientExecution::Composed {
+            execution: execution.to_owned(),
+            schedule: (execution == "tracked").then(|| composed_tracked_schedule(&wrappers)),
+        },
         None => ForwardedAmbientExecution::Unknown,
     }
 }
@@ -2580,6 +2673,17 @@ fn forwarded_callback_ambient_execution(
 /// avoid. `batch`, `createComputed`, `onMount`, `catchError`, `children` and the
 /// rest are absent because nobody has established their schedule here yet,
 /// which is a precision residue recorded in docs/precision-backlog.md.
+///
+/// **A row here is not permission to publish a callback claim.** This table has
+/// two consumers whose polarity is opposite. The wrapper-chain fold needs a row
+/// to classify the position at all, and a *missing* row makes the chain refuse
+/// so the inner slot's own answer stands -- a stronger claim, not a weaker one
+/// (`fixtures/package-contracts/callback-deferred-untracked-chain`'s
+/// `unestablishedScheduleShape` pins exactly that). The contract inventory in
+/// [`interprocedural_contributions`] wants the opposite reading, so the premises
+/// it needs before rooting an `invoke` claim on a forwarded parameter live
+/// there, in [`primitive_slot_roots_parameter_invoke`], and never by deleting a
+/// row from here.
 fn primitive_callback_execution(
     primitive: Option<Primitive>,
     parameter: usize,
@@ -2635,6 +2739,128 @@ fn primitive_callback_execution(
         (P::CreateRoot | P::Untrack | P::Flush, 0) | (P::RunWithOwner, 1) => Some("inline"),
         _ => None,
     }
+}
+
+/// Whether a primitive callback slot may *root* an export-level `invoke` claim
+/// on a parameter forwarded into it.
+///
+/// [`primitive_callback_execution`] answers "how would a callback at this slot
+/// run relative to the export", which presupposes there is a callback there. The
+/// contract inventory needs that presupposition established, and it used to
+/// publish the row without it. Two shapes in the measured ecosystem produced an
+/// `invoke` claim about a value the shipped code never invokes -- a demand no
+/// evidence can ever discharge, so the certification census refuses it forever
+/// and correctly:
+///
+/// - `@solid-primitives/flux-store`'s
+///   `createFluxStore(initialState, createMethods)` claimed to invoke
+///   `initialState`, because `createStore(initialState)` sits at
+///   `(CreateStore, 0)`. Its real callbacks are `createMethods.getters` and
+///   `createMethods.actions` -- argument 1 behind a property path, which the
+///   generator's [`ContractCallback`] cannot spell at all (recorded in
+///   docs/precision-backlog.md).
+/// - `@solidjs/meta`'s
+///   `Stylesheet = props => createComponent(Link, mergeProps({rel}, props))`,
+///   declared `Component<Omit<JSX.LinkHTMLAttributes<HTMLLinkElement>, "rel">>`,
+///   claimed to invoke `props`, because `(MergeProps, _)` matches every
+///   argument. `@solidjs/router`'s `A` and `Route` are the same shape, and so is
+///   every other Solid component that forwards its props through `mergeProps`.
+///
+/// Three premises, each about the artifact rather than about a package name.
+///
+/// **The value must be able to hold a function.** A parameter the artifact's
+/// types prove non-callable is invoked by no slot. `Callability::Unknown` is the
+/// absence of an answer and withdraws nothing, so an untyped JavaScript
+/// distribution keeps whatever its shape earns below. The general
+/// (non-primitive) branch further down this same loop already requires exactly
+/// this; the primitive branch short-circuited past it.
+///
+/// **A slot whose behavior is conditional on callability needs callability
+/// proven, not merely un-refuted.** `mergeProps` memoizes a merge source *if*
+/// that source is a function and copies it otherwise; 2.0's `createSignal`,
+/// `createStore`, `createOptimistic` and `createOptimisticStore` each have a
+/// plain form whose first parameter is declared to exclude functions
+/// (`Exclude<T, Function>`, `NoFn<T>`) beside a derived form that takes a
+/// compute. For those, an unproven callability is the *missing* premise, and
+/// publishing the row anyway is manufacturing a positive claim out of absent
+/// knowledge. `createMemo`, `createProjection`, `createTrackedEffect` and
+/// `dynamic` are unconditional -- argument 0 is the compute in every overload --
+/// so they keep the weak premise and keep working on untyped artifacts.
+///
+/// **The dialect must own the slot.** These are 2.0's names and positions.
+/// Solid 1.x has `createStore` too, but only as
+/// `createStore(store?, options?)`: no compute form exists, and 1.x's own
+/// [`solid_dialect::Dialect::callback_executions`] publishes no row for it, nor
+/// for `createSignal`, whose 1.x form *stores* a function argument as the
+/// signal's value
+/// ([`solid_dialect::Dialect::stores_function_argument_as_value`]).
+///
+/// `mergeProps` never reaches that check, and not because the dialects are
+/// silent about it. Solid 1.x answers it *ahead* of the
+/// [`solid_dialect::Dialect::callback_executions`] table:
+/// `Solid1x::callback_execution_at` returns [`solid_dialect::Execution::Tracked`]
+/// for every `argument < argument_count`, because `mergeProps(...sources)` is
+/// variadic and the flat table cannot say so
+/// (`merge_props_function_sources_are_variadic_tracked_computations` pins it).
+/// Solid 2.0 spells its own primitive [`Primitive::Merge`] and carries no
+/// `MergeProps` row at all. So the check would answer `true` under 1.x and
+/// `false` under 2.0 for a name 2.0 never resolves here -- neither of which is
+/// the question. What actually decides `mergeProps` is the conditional-callability
+/// premise above, which is the runtime's own dispatch.
+///
+/// **There is deliberately no arity premise.** The 2.0 runtime dispatches
+/// `createStore`'s first argument on `typeof first === "function"` alone
+/// (`@solidjs/signals` `dist/dev.js:9371`;
+/// `solid-js@2.0.0-rc.3 dist/server.js:896` routes the same shape through
+/// `createProjection`, and `createOptimisticStore` at `:912` delegates to
+/// `createStore`), with no seed-argument condition -- and the published *server*
+/// entrypoint declares the plain form `createStore<T extends object>(store: T |
+/// Store<T>, options?)` with no `NoFn`, so a one-argument
+/// `createStore(compute)` is `tsc`-clean and really is the derived form. An
+/// arity clause here therefore dropped a true claim, which is why the premise
+/// is callability and only callability: claim exactly when the slot's value is
+/// *proven* callable.
+fn primitive_slot_roots_parameter_invoke(
+    dialect: &dyn solid_dialect::Dialect,
+    primitive: Option<Primitive>,
+    argument_index: usize,
+    argument_count: usize,
+    callability: Option<Callability>,
+) -> bool {
+    use Primitive as P;
+    if !potentially_callable(callability) {
+        return false;
+    }
+    let Some(primitive) = primitive else {
+        return true;
+    };
+    let conditional_on_callability = matches!(primitive, P::MergeProps)
+        || (argument_index == 0
+            && matches!(
+                primitive,
+                P::CreateSignal | P::CreateStore | P::CreateOptimistic | P::CreateOptimisticStore
+            ));
+    if conditional_on_callability
+        && !matches!(
+            callability,
+            Some(Callability::Callable | Callability::UntypedCallable)
+        )
+    {
+        return false;
+    }
+    // 1.x owns `createStore` and `createSignal` with no compute form at all, so
+    // its own slot table is the authority on whether the slot exists here.
+    // `mergeProps` never reaches this check: 1.x answers it above the table and
+    // 2.0 does not carry the name at all, so callability alone carries it.
+    if matches!(
+        primitive,
+        P::CreateSignal | P::CreateStore | P::CreateOptimistic | P::CreateOptimisticStore
+    ) {
+        return dialect
+            .callback_execution_at(primitive, argument_index, argument_count)
+            .is_some();
+    }
+    true
 }
 
 struct StructuredReturnDiscovery<'a, 'facts> {
@@ -3912,7 +4138,7 @@ struct InterproceduralGraphAssembly<'a> {
     edges: &'a mut [Vec<usize>],
     invoked_parameters: &'a mut [Vec<usize>],
     escaped_parameters: &'a mut [Vec<usize>],
-    invoked_parameter_members: &'a mut [Vec<(usize, String)>],
+    invoked_parameter_members: &'a mut [Vec<(usize, Vec<String>)>],
     returned_bindings: &'a mut Vec<(SymbolId, SymbolId)>,
     factory_calls: &'a mut Vec<(usize, SymbolId)>,
 }
@@ -4037,7 +4263,7 @@ pub(super) struct InterproceduralResultView<'a> {
     pub(super) by_symbol: &'a HashMap<SymbolId, usize>,
     pub(super) summaries: &'a [SummaryReads],
     pub(super) invoked_parameters: &'a [Vec<usize>],
-    pub(super) invoked_parameter_members: &'a [Vec<(usize, String)>],
+    pub(super) invoked_parameter_members: &'a [Vec<(usize, Vec<String>)>],
     pub(super) returned_bindings: &'a HashMap<SymbolId, Vec<SummaryRead>>,
 }
 
@@ -4329,11 +4555,11 @@ fn interprocedural_result_reads_for_file(
             // argument that is exactly one object proves what runs; anything
             // else -- unresolved, or a conditional over two objects -- proves
             // nothing and contributes no read.
-            for (parameter, property) in &invoked_parameter_members[target] {
+            for (parameter, path) in &invoked_parameter_members[target] {
                 let Some(argument) = call.arguments.get(*parameter) else {
                     continue;
                 };
-                if property.is_empty() {
+                if path.is_empty() {
                     let argument_location = location(file.path.shared(), argument.span);
                     let argument_symbol = entities.get(&argument_location);
                     if let Some(argument_symbol) = argument_symbol
@@ -4378,6 +4604,27 @@ fn interprocedural_result_reads_for_file(
                     }
                     continue;
                 }
+                // Resolution below answers for exactly one property of the
+                // argument. A longer path (`reader.source.read()`) needs the
+                // value at `argument.source` first, and resolving its last
+                // segment against the argument would answer for
+                // `argument.read` -- a different property of a different
+                // value. Record the obligation instead of guessing.
+                let [property] = path.as_slice() else {
+                    if valid_call {
+                        dispatch_obligations.push(StaticDefect {
+                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: label.clone(),
+                                member: Some(path.join(".")),
+                            },
+                            location: location(file.path.shared(), argument.span),
+                            analysis_context: "parameter-member-path-unresolved".into(),
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
+                    continue;
+                };
                 let implementations = lookup.member_value_symbols_at(file, argument.span, property);
                 let mut member_summaries = Vec::with_capacity(implementations.len());
                 for implementation in &implementations {
@@ -4913,7 +5160,7 @@ fn interprocedural_reads(
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut escaped_parameters = vec![Vec::<usize>::new(); nodes.len()];
-    let mut invoked_parameter_members = vec![Vec::<(usize, String)>::new(); nodes.len()];
+    let mut invoked_parameter_members = vec![Vec::<(usize, Vec<String>)>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
     let mut factory_call_candidates = Vec::new();
     let mut graph_reused_files = 0;
@@ -5052,12 +5299,22 @@ fn interprocedural_reads(
                 {
                     continue;
                 }
+                let restated = match (callback.execution.as_str(), ambient_execution) {
+                    (
+                        "inline",
+                        ForwardedAmbientExecution::Composed {
+                            execution,
+                            schedule,
+                        },
+                    ) => Some((execution.clone(), *schedule)),
+                    _ => None,
+                };
+                let (execution, schedule) =
+                    restated.unwrap_or((callback.execution, callback.schedule));
                 let forwarded = ContractCallback {
                     parameter: *owner_parameter,
-                    execution: match (callback.execution.as_str(), ambient_execution) {
-                        ("inline", ForwardedAmbientExecution::Composed(ambient)) => ambient.clone(),
-                        _ => callback.execution,
-                    },
+                    execution,
+                    schedule,
                     arguments: callback.arguments.clone(),
                     owner: callback.owner.clone(),
                 };
@@ -5688,20 +5945,24 @@ fn interprocedural_reads(
             {
                 return None;
             }
-            let (receiver, property) = context.lookup.member_callee_receiver(file, call.callee)?;
+            let (receiver, path) = context.lookup.member_callee_receiver(file, call.callee)?;
             node.parameters
                 .iter()
                 .any(|parameter| parameter == &receiver)
-                .then_some(property)
+                .then_some(path)
         });
-        if let Some(property) = direct_member {
+        if let Some(path) = direct_member {
             dispatch_obligations.push(StaticDefect {
                 kind: StaticDefectKind::ReactiveDispatchUnresolved {
                     callee: node
                         .name
                         .clone()
                         .unwrap_or_else(|| "exported helper".into()),
-                    member: Some(property),
+                    // The whole chain names the dispatch: `reader.source.read`
+                    // is not a dispatch on `read`. An empty path named no
+                    // segment exactly, which is what `None` already spells --
+                    // the obligation still stands either way.
+                    member: (!path.is_empty()).then(|| path.join(".")),
                 },
                 location: location(Arc::from(node.path.as_str()), node.span),
                 analysis_context: crate::EXPORTED_PARAMETER_MEMBER_DISPATCH.into(),
@@ -5904,10 +6165,11 @@ mod tests {
     use typefacts::Location;
 
     use super::{
-        CallbackWrapper, ContractCallback, SummaryRead, SummaryReads, SymbolId,
+        CallbackSchedule, CallbackWrapper, ContractCallback, SummaryRead, SummaryReads, SymbolId,
         add_interprocedural_dependency_user, cached_reactive_source, compose_callback_chain,
-        equivalent_callbacks, equivalent_summary_reads, primitive_callback_execution,
-        reactive_source_order, remove_interprocedural_dependency_user, retained_reactive_sources,
+        composed_tracked_schedule, equivalent_callbacks, equivalent_summary_reads,
+        primitive_callback_execution, primitive_slot_roots_parameter_invoke, reactive_source_order,
+        remove_interprocedural_dependency_user, retained_reactive_sources,
     };
     use crate::cache::InterproceduralResultDependency;
 
@@ -5973,6 +6235,7 @@ mod tests {
         let callback = |parameter, execution: &str| ContractCallback {
             parameter,
             execution: execution.to_owned(),
+            schedule: None,
             arguments: Vec::new(),
             owner: None,
         };
@@ -5990,6 +6253,7 @@ mod tests {
         let inherited = ContractCallback {
             parameter: 0,
             execution: "deferred".into(),
+            schedule: None,
             arguments: Vec::new(),
             owner: Some("inherited".into()),
         };
@@ -6081,6 +6345,214 @@ mod tests {
             primitive_callback_execution(Some(Primitive::CreateEffect), 1, 2, &solid1x),
             None
         );
+    }
+
+    /// The table above answers "how would a callback here run"; this answers
+    /// "is there one". `@solid-primitives/flux-store`'s `createFluxStore` and
+    /// `@solidjs/meta`'s `Stylesheet` published `invoke` claims because the
+    /// second question was never asked.
+    #[test]
+    fn a_primitive_slot_roots_an_invoke_claim_only_with_its_premises() {
+        use typefacts::Callability as C;
+        let solid1x = solid_dialect::Solid1x;
+        let solid2 = solid_dialect::Solid2;
+        let roots =
+            |dialect: &dyn solid_dialect::Dialect, primitive, argument, count, callability| {
+                primitive_slot_roots_parameter_invoke(
+                    dialect,
+                    Some(primitive),
+                    argument,
+                    count,
+                    callability,
+                )
+            };
+
+        // A parameter the types prove non-callable is invoked by no slot, not
+        // even an unconditional one.
+        assert!(!roots(
+            &solid2,
+            Primitive::CreateMemo,
+            0,
+            1,
+            Some(C::NonCallable)
+        ));
+        // ... and an unconditional slot keeps working with no answer at all,
+        // which is every argument of an untyped JavaScript distribution.
+        assert!(roots(&solid2, Primitive::CreateMemo, 0, 1, None));
+        assert!(roots(
+            &solid2,
+            Primitive::CreateMemo,
+            0,
+            1,
+            Some(C::Unknown)
+        ));
+        assert!(roots(&solid1x, Primitive::CreateMemo, 0, 1, None));
+
+        // `mergeProps` memoizes a merge source only *if* it is a function, so an
+        // unproven callability is the missing premise -- the `@solidjs/meta`
+        // `Stylesheet` and `@solidjs/router` `A`/`Route` shape. A parameter the
+        // types prove callable still roots the claim.
+        for argument in [0, 1] {
+            assert!(!roots(
+                &solid1x,
+                Primitive::MergeProps,
+                argument,
+                2,
+                Some(C::Unknown)
+            ));
+            assert!(!roots(&solid1x, Primitive::MergeProps, argument, 2, None));
+            assert!(roots(
+                &solid1x,
+                Primitive::MergeProps,
+                argument,
+                2,
+                Some(C::Callable)
+            ));
+        }
+
+        // 1.x's `createStore(store?, options?)` has no compute form at all, and
+        // its own slot table says so. This is `createFluxStore` under 0.1.1.
+        assert!(!roots(
+            &solid1x,
+            Primitive::CreateStore,
+            0,
+            1,
+            Some(C::Callable)
+        ));
+        assert!(!roots(
+            &solid1x,
+            Primitive::CreateStore,
+            0,
+            2,
+            Some(C::Callable)
+        ));
+        // 1.x `createSignal(() => value)` stores the function as the value.
+        assert!(!roots(
+            &solid1x,
+            Primitive::CreateSignal,
+            0,
+            1,
+            Some(C::Callable)
+        ));
+
+        // 2.0's store and signal pairs are separated by callability and by
+        // nothing else. The runtime dispatches on `typeof first === "function"`
+        // with no arity condition (`@solidjs/signals` `dist/dev.js:9371`), and
+        // the published server entrypoint's plain form carries no `NoFn`, so a
+        // one-argument `createStore(compute)` is `tsc`-clean *and* derived. An
+        // arity clause here dropped that true claim.
+        for count in [1, 2, 3] {
+            assert!(roots(
+                &solid2,
+                Primitive::CreateStore,
+                0,
+                count,
+                Some(C::Callable)
+            ));
+            assert!(roots(
+                &solid2,
+                Primitive::CreateOptimisticStore,
+                0,
+                count,
+                Some(C::Callable)
+            ));
+            // ... and the plain form of the same pair is withdrawn at the same
+            // arities, which is `createFluxStore` under 1.0.0-next.2: the
+            // proof is the callability answer, never the argument count.
+            assert!(!roots(
+                &solid2,
+                Primitive::CreateStore,
+                0,
+                count,
+                Some(C::Unknown)
+            ));
+            assert!(!roots(&solid2, Primitive::CreateStore, 0, count, None));
+            assert!(!roots(
+                &solid2,
+                Primitive::CreateOptimisticStore,
+                0,
+                count,
+                Some(C::Unknown)
+            ));
+        }
+        // 2.0's `createSignal(fn, options?)` and `createOptimistic(fn)` are the
+        // same shape one primitive over.
+        for primitive in [Primitive::CreateSignal, Primitive::CreateOptimistic] {
+            assert!(roots(&solid2, primitive, 0, 1, Some(C::Callable)));
+            assert!(!roots(&solid2, primitive, 0, 1, None));
+            assert!(!roots(&solid2, primitive, 0, 1, Some(C::Unknown)));
+        }
+        // 1.x carries neither optimistic primitive, so its slot table refuses
+        // them even for a provably callable argument.
+        for primitive in [
+            Primitive::CreateOptimistic,
+            Primitive::CreateOptimisticStore,
+        ] {
+            assert!(!roots(&solid1x, primitive, 0, 2, Some(C::Callable)));
+        }
+
+        // `UntypedCallable` -- the signature-less `Function` supertype -- is a
+        // *positive* callability proof with nothing to read from the
+        // signature, so it satisfies the conditional premise exactly as
+        // `Callable` does. This is the answer an artifact whose declaration
+        // types the slot `Function` yields.
+        for (dialect, primitive) in [
+            (
+                &solid1x as &dyn solid_dialect::Dialect,
+                Primitive::MergeProps,
+            ),
+            (
+                &solid2 as &dyn solid_dialect::Dialect,
+                Primitive::CreateStore,
+            ),
+            (
+                &solid2 as &dyn solid_dialect::Dialect,
+                Primitive::CreateSignal,
+            ),
+        ] {
+            assert!(roots(dialect, primitive, 0, 2, Some(C::UntypedCallable)));
+        }
+        // `Mixed` is the opposite: a *proven* union holding both a callable and
+        // a non-callable constituent -- a real `Partial<P> | (() => Partial<P>)`
+        // merge source. The runtime invokes it on one side of that union and
+        // copies it on the other, so no `invoke` claim is proven and the
+        // conditional slots withdraw. The unconditional slots keep it, because
+        // premise 1 only ever refuses a *proven non-callable* value.
+        assert!(!roots(
+            &solid1x,
+            Primitive::MergeProps,
+            0,
+            2,
+            Some(C::Mixed)
+        ));
+        assert!(!roots(
+            &solid2,
+            Primitive::CreateStore,
+            0,
+            2,
+            Some(C::Mixed)
+        ));
+        assert!(!roots(
+            &solid2,
+            Primitive::CreateSignal,
+            0,
+            1,
+            Some(C::Mixed)
+        ));
+        assert!(roots(&solid2, Primitive::CreateMemo, 0, 1, Some(C::Mixed)));
+
+        // An unresolved callee is not a primitive at all; the general branch
+        // downstream owns it, and only the non-callable proof applies here.
+        assert!(primitive_slot_roots_parameter_invoke(
+            &solid2, None, 0, 1, None
+        ));
+        assert!(!primitive_slot_roots_parameter_invoke(
+            &solid2,
+            None,
+            0,
+            1,
+            Some(C::NonCallable)
+        ));
     }
 
     #[test]
@@ -6213,6 +6685,66 @@ mod tests {
         // is asked for too, so an unknown outer wrapper refuses even when the
         // inner one is established.
         assert_eq!(compose_callback_chain(&[Detaching, EAGER, UNKNOWN]), None);
+    }
+
+    /// The word `tracked` says who owns the reads, never when the callback
+    /// runs. Emission asked the word and got `queued` for every retained row,
+    /// which 1.x `createMemo` and `mergeProps` -- both `DuringCall` -- break
+    /// before the export even returns.
+    #[test]
+    fn a_tracked_chain_takes_its_schedule_from_the_dialect_not_the_word() {
+        use CallbackWrapper::{Detaching, Tracked, Transparent};
+        const EAGER: CallbackWrapper = Tracked(Some(TrackedCallbackTiming::DuringCall));
+        const LATER: CallbackWrapper = Tracked(Some(TrackedCallbackTiming::AfterCall));
+        const UNKNOWN: CallbackWrapper = Tracked(None);
+
+        // 1.x `createMemo(compute)` and `mergeProps(base, extras)`, and 2.0's
+        // `createSignal(compute)` / `createOptimistic(compute)`: the compute has
+        // already run when the creating call returns, so the export's own
+        // stack is where it happened.
+        assert_eq!(
+            composed_tracked_schedule(&[EAGER]),
+            CallbackSchedule::SameStack
+        );
+        assert_eq!(
+            composed_tracked_schedule(&[Transparent, EAGER]),
+            CallbackSchedule::SameStack
+        );
+        // 1.x `createEffect` and 2.0 `createTrackedEffect` only queue, and a
+        // queueing wrapper anywhere in the chain puts the callback after the
+        // export's return whatever else stands around it.
+        assert_eq!(
+            composed_tracked_schedule(&[LATER]),
+            CallbackSchedule::Queued
+        );
+        assert_eq!(
+            composed_tracked_schedule(&[EAGER, LATER]),
+            CallbackSchedule::Queued
+        );
+        assert_eq!(
+            composed_tracked_schedule(&[UNKNOWN, LATER]),
+            CallbackSchedule::Queued
+        );
+        // 2.0's `createStore`/`createOptimisticStore` state no timing -- their
+        // derived overloads never accepted the probe's call shape, so no
+        // measurement backs a claim. The attribution row survives; the schedule
+        // does not, and the emitted operation carries no execution point.
+        assert_eq!(
+            composed_tracked_schedule(&[UNKNOWN]),
+            CallbackSchedule::Unestablished
+        );
+        assert_eq!(
+            composed_tracked_schedule(&[EAGER, UNKNOWN]),
+            CallbackSchedule::Unestablished
+        );
+        // Wrappers that run their code during their own call contribute
+        // nothing: an empty chain and a purely transparent one are the
+        // export's own stack.
+        assert_eq!(composed_tracked_schedule(&[]), CallbackSchedule::SameStack);
+        assert_eq!(
+            composed_tracked_schedule(&[Detaching, Transparent]),
+            CallbackSchedule::SameStack
+        );
     }
 
     #[test]

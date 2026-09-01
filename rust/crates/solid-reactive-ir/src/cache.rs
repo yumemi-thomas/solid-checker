@@ -218,11 +218,15 @@ pub(crate) struct InterproceduralGraphContribution {
     /// it on, or returns it. See
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(crate) escaped_parameters: Vec<(Span, usize)>,
-    /// A member invoked on a parameter: `(owner, parameter index, property)`
-    /// for `function invoke(reader) { reader.read() }`. The implementation is
-    /// not a property of the owner -- each call site supplies it -- so this
-    /// records the obligation and leaves resolution to the site.
-    pub(crate) invoked_parameter_members: Vec<(Span, usize, String)>,
+    /// A member invoked on a parameter: `(owner, parameter index, access
+    /// path)` for `function invoke(reader) { reader.read() }`. The path is the
+    /// whole chain from the parameter -- `reader.source.read()` records
+    /// `["source", "read"]`, not `["read"]` -- and is empty when the
+    /// parameter's own value is read, or when no segment could be named
+    /// exactly. The implementation is not a property of the owner -- each call
+    /// site supplies it -- so this records the obligation and leaves
+    /// resolution to the site.
+    pub(crate) invoked_parameter_members: Vec<(Span, usize, Vec<String>)>,
     pub(crate) callbacks: Vec<(Span, ContractCallback)>,
     pub(crate) callback_forwardings: Vec<(
         Span,
@@ -256,7 +260,7 @@ pub(crate) enum InterproceduralResultDependencyState {
         name: Option<String>,
         summary: Vec<SummaryRead>,
         invoked_parameters: Vec<usize>,
-        invoked_parameter_members: Vec<(usize, String)>,
+        invoked_parameter_members: Vec<(usize, Vec<String>)>,
     },
     Returned(Vec<SummaryRead>),
     Inline(Vec<SummaryRead>),

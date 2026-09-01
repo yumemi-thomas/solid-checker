@@ -1008,39 +1008,50 @@ func (p *project) parameterUseCensusLocked(
 		})
 	}
 	uses := make([]typefacts.ParameterUse, 0)
-	var visit func(*ast.Node, bool)
-	visit = func(node *ast.Node, captured bool) {
-		if node == nil || ctx.Err() != nil {
-			return
-		}
-		nested := captured || node != implementation.Body() && isCallableDeclaration(node)
-		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) && !ast.IsPartOfTypeNode(node) {
-			symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
-			if root, ok := bySymbol[symbol]; ok {
-				_, alias := aliases[symbol]
-				kind := p.parameterUseKindLocked(node)
-				if alias && kind == typefacts.ParameterUseDirectCall {
-					kind = typefacts.ParameterUseAliasCall
-				}
-				if nested {
-					kind = typefacts.ParameterUseCapture
-				}
-				uses = append(uses, typefacts.ParameterUse{
-					ParameterIndex: root.index,
-					BindingPath:    append([]typefacts.PathSegment(nil), root.path...),
-					Location:       nodeLocation(node),
-					Kind:           kind,
-					Alias:          alias,
-					Captured:       nested,
-				})
+	body := implementation.Body()
+	p.walkImplementationBodyLocked(
+		implementation,
+		func(node *ast.Node, enclosing *ast.Node, reach typefacts.Reachability) {
+			if ctx.Err() != nil {
+				return
 			}
-		}
-		node.ForEachChild(func(child *ast.Node) bool {
-			visit(child, nested)
-			return false
-		})
-	}
-	visit(implementation.Body(), false)
+			if !ast.IsIdentifier(node) || ast.IsDeclarationNameOrImportPropertyName(node) ||
+				ast.IsPartOfTypeNode(node) {
+				return
+			}
+			// The use census exempts an implementation whose own body *is* a
+			// callable, where the call census does not. The shared walk answers
+			// the honest question — the innermost callable containing the node,
+			// the body included — and each census reads the answer its own
+			// consumers need. Moving this exemption would turn `DirectCall` into
+			// `Capture` for a `const`-declared concise-arrow export, which
+			// operation reachability reads as an open escape; that is a separate
+			// measured decision, recorded in docs/precision-backlog.md.
+			captured := enclosing != nil && enclosing != body
+			symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+			root, ok := bySymbol[symbol]
+			if !ok {
+				return
+			}
+			_, alias := aliases[symbol]
+			kind := p.parameterUseKindLocked(node)
+			if alias && kind == typefacts.ParameterUseDirectCall {
+				kind = typefacts.ParameterUseAliasCall
+			}
+			if captured {
+				kind = typefacts.ParameterUseCapture
+			}
+			uses = append(uses, typefacts.ParameterUse{
+				ParameterIndex: root.index,
+				BindingPath:    append([]typefacts.PathSegment(nil), root.path...),
+				Location:       nodeLocation(node),
+				Reach:          reach,
+				Kind:           kind,
+				Alias:          alias,
+				Captured:       captured,
+			})
+		},
+	)
 	sort.Slice(uses, func(i, j int) bool {
 		if uses[i].Location.Path != uses[j].Location.Path {
 			return uses[i].Location.Path < uses[j].Location.Path
@@ -1136,9 +1147,41 @@ func isArgumentOfCall(node, parent *ast.Node) bool {
 	return false
 }
 
+// isCallableDeclaration reports whether a node opens a function-like frame of
+// its own: it owns a body, and the statements in that body run when *it* is
+// invoked rather than when the code around it runs.
+//
+// Every walk that asks "is this a nested callable" asks this, so the
+// enumeration has to be exhaustive rather than a list of the shapes that came
+// up. It is taken from the compiler's own `IsFunctionLikeDeclaration` — the
+// closed set of body-bearing function-like declaration kinds: arrows, function
+// expressions and declarations, methods, **constructors**, and **get/set
+// accessors** — plus a class's static block, which the compiler classifies
+// separately and which is likewise a body of its own.
+//
+// Listing only arrows, function expressions, function declarations and methods
+// was a soundness hole rather than an omission: `registry.push({ get value() {
+// cb(); return 1; } })` stores an object, and the getter's body runs only when
+// somebody reads the property. A walk that did not stop at the accessor
+// reported `cb()` as a call the *enclosing* body makes, which is the strongest
+// form of every claim built on the census. `class Holder { constructor() {
+// cb(); } }` and `class Holder { static { cb(); } }` are the same shape.
+//
+// A signature or type kind (`FunctionType`, `MethodSignature`, …) is
+// deliberately *not* here: it has no body, so nothing inside it is a call site
+// in the first place, and treating a type node as a callable value would be a
+// different mistake.
+//
+// The descent that asks the neighbouring question — "is this node a callable
+// *value*", in returnedCallablesLocked and calleeImplementationLocked — reads
+// the same predicate. The two readings coincide in reach because those sites
+// only ever see expressions and value declarations, and no accessor,
+// constructor or static block can appear in either position: an object
+// literal's accessors are filtered out by objectLiteralPropertyValue, which
+// accepts a property assignment and nothing else.
 func isCallableDeclaration(node *ast.Node) bool {
-	return node != nil && (ast.IsArrowFunction(node) || ast.IsFunctionExpression(node) ||
-		ast.IsFunctionDeclaration(node) || ast.IsMethodDeclaration(node))
+	return node != nil &&
+		(ast.IsFunctionLikeDeclaration(node) || ast.IsClassStaticBlockDeclaration(node))
 }
 
 func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.ControlFlowCensus {
@@ -1150,7 +1193,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			Location:         nodeLocation(body),
 			Reach:            typefacts.Reachable,
 			Value:            &value,
-			CarriedCallables: p.returnedCallableLocationsLocked(body),
+			CarriedCallables: p.carriedCallableLocationsLocked(body),
 			Sources:          p.returnValueSourcesLocked(body),
 		})
 		return census
@@ -1176,7 +1219,7 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			if expression := node.Expression(); expression != nil {
 				fact := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(expression))
 				value = &fact
-				carried = p.returnedCallableLocationsLocked(expression)
+				carried = p.carriedCallableLocationsLocked(expression)
 			}
 			census.Returns = append(census.Returns, typefacts.ReturnSite{
 				Location: nodeLocation(node), Reach: reach, Value: value, CarriedCallables: carried,
@@ -1198,10 +1241,12 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			census.Branches = append(census.Branches, typefacts.BranchSite{
 				Location: nodeLocation(node), Reach: reach, Partitions: partitions,
 			})
-			thenReach := scan(statement.ThenStatement, reach)
-			elseReach := reach
+			thenReach := scan(
+				statement.ThenStatement, p.literalBranchReachLocked(reach, expression, true),
+			)
+			elseReach := p.literalBranchReachLocked(reach, expression, false)
 			if statement.ElseStatement != nil {
-				elseReach = scan(statement.ElseStatement, reach)
+				elseReach = scan(statement.ElseStatement, elseReach)
 			}
 			return mergeReachability(thenReach, elseReach)
 		}
@@ -1240,10 +1285,17 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			// control arrives at the following statement either way. Answering it
 			// keeps a single `for (const key of …)` from poisoning every remaining
 			// statement of the implementation.
-			if reach == typefacts.Reachable && constructCompletesNormally(node) {
+			//
+			// An unreachable construct is never promoted: nothing that follows dead
+			// code becomes live by having a loop in between.
+			switch {
+			case reach == typefacts.Unreachable:
+				return typefacts.Unreachable
+			case reach == typefacts.Reachable && p.constructCompletesNormallyLocked(node):
 				return typefacts.Reachable
+			default:
+				return typefacts.ReachUnknown
 			}
-			return typefacts.ReachUnknown
 		}
 		current := reach
 		node.ForEachChild(func(child *ast.Node) bool {
@@ -1256,6 +1308,171 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	sort.Strings(census.Unsupported)
 	census.Unsupported = compactStrings(census.Unsupported)
 	return census
+}
+
+// walkImplementationBodyLocked visits every node of an implementation body once,
+// threading the two facts every implementation census classifies a node by:
+// which callable frame the node sits in, and whether invoking the
+// implementation reaches it by falling through.
+//
+// One walk on purpose. The call census and the parameter-use census answer the
+// same question about the same statement — does invoking the export run this? —
+// and a use census that carried no answer at all is how a property access in
+// code after a `return` came to witness a read the export never performs. There
+// is one reachability notion here, and both censuses read it from this walk.
+//
+// `observe` sees each node before its children, with the *innermost callable
+// containing it* and the reachability in effect at that node. Nested callables
+// are descended into rather than skipped, exactly as both censuses always have.
+//
+// The walk carries the containing callable rather than a bare "is captured"
+// flag. A consumer that only knows a call is captured somewhere inside a
+// carried range must assume the callables in between run; one that knows
+// *which* callable immediately contains it can require each link of the chain
+// to be proven on its own.
+//
+// *Every* callable is a boundary here, the implementation's own body included
+// when that body is itself a callable. `export const wrap = cb => () => cb();`
+// has a concise body that is an arrow, and exempting it stamped the `cb()` site
+// as a call the implementation makes, for an implementation that only hands a
+// closure back. The walk states the honest answer; a census that wants the
+// exemption applies it to this answer itself (parameterUseCensusLocked does,
+// deliberately, and says why).
+func (p *project) walkImplementationBodyLocked(
+	implementation *ast.Node,
+	observe func(node *ast.Node, enclosing *ast.Node, reach typefacts.Reachability),
+) {
+	body := implementation.Body()
+	if body == nil {
+		return
+	}
+	var visit func(*ast.Node, *ast.Node, typefacts.Reachability) typefacts.Reachability
+	visit = func(
+		node *ast.Node, enclosing *ast.Node, reach typefacts.Reachability,
+	) typefacts.Reachability {
+		if node == nil {
+			return reach
+		}
+		nested := enclosing
+		if isCallableDeclaration(node) {
+			nested = node
+		}
+		observe(node, nested, reach)
+		switch {
+		case ast.IsBlock(node):
+			current := reach
+			for _, statement := range node.AsBlock().Statements.Nodes {
+				current = visit(statement, nested, current)
+			}
+			return current
+		case ast.IsIfStatement(node):
+			statement := node.AsIfStatement()
+			visit(statement.Expression, nested, reach)
+			thenReach := visit(
+				statement.ThenStatement,
+				nested,
+				p.literalBranchReachLocked(reach, statement.Expression, true),
+			)
+			// The arm that is not written is still a path out of the `if`, and it
+			// is excluded by exactly the same literal condition that excludes a
+			// written one: after `if (true) { return }` nothing falls through.
+			elseReach := p.literalBranchReachLocked(reach, statement.Expression, false)
+			if statement.ElseStatement != nil {
+				elseReach = visit(statement.ElseStatement, nested, elseReach)
+			}
+			return mergeReachability(thenReach, elseReach)
+		case ast.IsTryStatement(node):
+			statement := node.AsTryStatement()
+			tryReach := visit(statement.TryBlock, nested, reach)
+			catchReach := typefacts.Unreachable
+			if statement.CatchClause != nil {
+				catchReach = visit(statement.CatchClause.AsCatchClause().Block, nested, reach)
+			}
+			completes := mergeReachability(tryReach, catchReach)
+			if statement.FinallyBlock != nil {
+				// A `finally` runs on every path out of the `try`, so its own
+				// contents are reached exactly when the `try` statement was —
+				// `reach`, not the merge, because `try { return x } finally
+				// { cleanup() }` does run `cleanup`. What follows the `try` is a
+				// different question: it is reached only if the finally block
+				// completes too, since a `return` there overrides the jump it
+				// interrupted. Discarding that answer is what let
+				// `try {…} finally { return }` claim its successor runs.
+				completes = conjoinReachability(
+					completes, visit(statement.FinallyBlock, nested, reach),
+				)
+			}
+			return completes
+		case ast.IsIterationStatement(node, true), ast.IsSwitchStatement(node):
+			node.ForEachChild(func(child *ast.Node) bool {
+				visit(child, nested, typefacts.ReachUnknown)
+				return false
+			})
+			// The same question controlFlowCensusLocked answers, answered the same
+			// way: reachability *inside* the construct stays unknown, because a
+			// loop body may never run; reachability *after* a construct that can
+			// only complete normally is whatever it was before it, because control
+			// arrives at the following statement either way. Without this a single
+			// `for (const [k, v] of …)` poisons every remaining statement of the
+			// implementation.
+			//
+			// An unreachable construct is never promoted: nothing that follows dead
+			// code becomes live by having a loop in between.
+			switch {
+			case reach == typefacts.Unreachable:
+				return typefacts.Unreachable
+			case reach == typefacts.Reachable && p.constructCompletesNormallyLocked(node):
+				return typefacts.Reachable
+			default:
+				return typefacts.ReachUnknown
+			}
+		}
+		terminates := ast.IsReturnStatement(node) || ast.IsThrowStatement(node)
+		node.ForEachChild(func(child *ast.Node) bool {
+			visit(child, nested, reach)
+			return false
+		})
+		if terminates {
+			return typefacts.Unreachable
+		}
+		return reach
+	}
+	visit(body, nil, typefacts.Reachable)
+}
+
+// conjoinReachability answers "reached only if both of these are", which is what
+// a `finally` imposes on the statement after its `try`: the try or catch has to
+// complete normally *and* so does the finally block.
+func conjoinReachability(left, right typefacts.Reachability) typefacts.Reachability {
+	switch {
+	case left == typefacts.Unreachable || right == typefacts.Unreachable:
+		return typefacts.Unreachable
+	case left == typefacts.ReachUnknown || right == typefacts.ReachUnknown:
+		return typefacts.ReachUnknown
+	default:
+		return typefacts.Reachable
+	}
+}
+
+// literalBranchReachLocked is the reachability of one arm of an `if` whose
+// condition may be a decidable literal. `if (false) { … }` is dead code exactly
+// as code after a `return` is, and a census calling it reachable is what would
+// let a property access there witness a read the export never performs.
+//
+// Only a decidable literal condition (including the `const` indirection and the
+// literal comparison literalTruthiness reads) rules an arm out. Every other
+// condition leaves both arms at the reachability the `if` itself had — the
+// optimistic reading this walk has always taken, retained deliberately and
+// recorded as an approximation in docs/precision-backlog.md.
+func (p *project) literalBranchReachLocked(
+	reach typefacts.Reachability,
+	condition *ast.Node,
+	taken bool,
+) typefacts.Reachability {
+	if truthy, known := p.literalTruthinessLocked(condition, 0); known && truthy != taken {
+		return typefacts.Unreachable
+	}
+	return reach
 }
 
 // maxNestedConstructDepth bounds the recursion through nested loop / `try` /
@@ -1297,19 +1514,22 @@ const maxNestedConstructDepth = 32
 //     the census admits the labeled statement as the construct itself, so
 //     `outer: for (…) { for (…) { break outer } }` falls through.
 //   - A loop condition that is truthy without being a literal (`while (fn())`,
-//     `while (flag)`), which is treated as an ordinary exit edge. Only literal
-//     conditions are read here; the type checker's truthiness of an arbitrary
-//     expression is not consulted, and a condition this cannot classify keeps its
-//     exit edge, which is the Unknown-preserving direction.
+//     `while (flag)`), which is treated as an ordinary exit edge. Only conditions
+//     literalTruthiness can decide are read here; the type checker's truthiness
+//     of an arbitrary expression is not consulted. Note the direction: an
+//     undecided condition is treated as *having* an exit edge, so the construct
+//     looks completable and the code after it keeps the reachability it already
+//     had. That is the optimistic arm, retained deliberately — see the note on
+//     alwaysTruthyLiteralConditionLocked.
 //
 // Jumps inside a nested callable are not this function's control flow and are
 // skipped, exactly as the surrounding census skips them.
-func constructCompletesNormally(construct *ast.Node) bool {
-	flow := scanConstructControlFlow(construct, 0, map[*ast.Node]bool{})
+func (p *project) constructCompletesNormallyLocked(construct *ast.Node) bool {
+	flow := p.scanConstructControlFlowLocked(construct, 0, map[*ast.Node]bool{})
 	if flow.escapes || flow.nestedTraps {
 		return false
 	}
-	return !loopWithoutExitEdge(construct) || flow.breaksConstruct
+	return !p.loopWithoutExitEdgeLocked(construct) || flow.breaksConstruct
 }
 
 // constructTraps reports that control entering `construct` may never leave it:
@@ -1320,7 +1540,9 @@ func constructCompletesNormally(construct *ast.Node) bool {
 // It is deliberately one-sided. Over-reporting a trap costs precision only —
 // today's ReachUnknown — while under-reporting it is what let `try { while (true)
 // {…} } finally {…}` claim its successor was reached.
-func constructTraps(construct *ast.Node, depth int, memo map[*ast.Node]bool) bool {
+func (p *project) constructTrapsLocked(
+	construct *ast.Node, depth int, memo map[*ast.Node]bool,
+) bool {
 	if construct == nil {
 		return false
 	}
@@ -1333,9 +1555,9 @@ func constructTraps(construct *ast.Node, depth int, memo map[*ast.Node]bool) boo
 	// Bound the recursion before descending: a malformed parent chain must not
 	// make this re-enter the same node forever.
 	memo[construct] = true
-	flow := scanConstructControlFlow(construct, depth, memo)
+	flow := p.scanConstructControlFlowLocked(construct, depth, memo)
 	answer := !flow.escapes && !flow.breaksConstruct &&
-		(loopWithoutExitEdge(construct) || flow.nestedTraps)
+		(p.loopWithoutExitEdgeLocked(construct) || flow.nestedTraps)
 	memo[construct] = answer
 	return answer
 }
@@ -1349,7 +1571,7 @@ type constructControlFlow struct {
 	nestedTraps     bool
 }
 
-func scanConstructControlFlow(
+func (p *project) scanConstructControlFlowLocked(
 	construct *ast.Node,
 	depth int,
 	memo map[*ast.Node]bool,
@@ -1364,7 +1586,7 @@ func scanConstructControlFlow(
 			return
 		}
 		if node != construct && isNestedFallThroughConstruct(node) &&
-			constructTraps(node, depth+1, memo) {
+			p.constructTrapsLocked(node, depth+1, memo) {
 			flow.nestedTraps = true
 		}
 		switch {
@@ -1476,7 +1698,7 @@ func isContinueStatement(node *ast.Node) bool {
 // statement after them is reached only through a `break`. A labeled loop is
 // unwrapped first, because ast.IsIterationStatement admits the label as the
 // construct.
-func loopWithoutExitEdge(construct *ast.Node) bool {
+func (p *project) loopWithoutExitEdgeLocked(construct *ast.Node) bool {
 	node := construct
 	for range maxReturnedCallableDepth {
 		if node == nil || node.KindString() != "KindLabeledStatement" {
@@ -1489,12 +1711,12 @@ func loopWithoutExitEdge(construct *ast.Node) bool {
 	}
 	switch node.KindString() {
 	case "KindWhileStatement":
-		return alwaysTruthyLiteralCondition(node.AsWhileStatement().Expression)
+		return p.alwaysTruthyLiteralConditionLocked(node.AsWhileStatement().Expression)
 	case "KindDoStatement":
-		return alwaysTruthyLiteralCondition(node.AsDoStatement().Expression)
+		return p.alwaysTruthyLiteralConditionLocked(node.AsDoStatement().Expression)
 	case "KindForStatement":
 		return node.AsForStatement().Condition == nil ||
-			alwaysTruthyLiteralCondition(node.AsForStatement().Condition)
+			p.alwaysTruthyLiteralConditionLocked(node.AsForStatement().Condition)
 	default:
 		// `for … in` and `for … of` always have an exit edge — an exhausted
 		// iterator — and `switch`/`try` are not loops at all.
@@ -1502,26 +1724,34 @@ func loopWithoutExitEdge(construct *ast.Node) bool {
 	}
 }
 
-// alwaysTruthyLiteralCondition reports whether a loop header can never end the
-// loop because its condition is a *literal* the language always evaluates to
-// true: `true`, a non-zero numeric literal, a non-empty string literal, or a `!`
-// applied to a literal that is always falsy.
+// alwaysTruthyLiteralConditionLocked reports whether a loop header can never end
+// the loop because its condition always evaluates to true: `true`, a non-zero
+// numeric literal, a non-empty string literal, a `!` applied to a literal that is
+// always falsy, a `const` that uniquely names one of those, or a comparison of
+// two such literals.
 //
-// Only literals are read. The type checker's opinion of an arbitrary
-// expression's truthiness is deliberately not consulted: an unclassifiable
-// condition keeps its exit edge, which makes the construct look like it can fall
-// through and therefore leaves reachability after it at today's answer rather
-// than promoting it.
-func alwaysTruthyLiteralCondition(expression *ast.Node) bool {
-	truthy, known := literalTruthiness(expression, 0)
+// The type checker's opinion of an arbitrary expression's truthiness is
+// deliberately not consulted, and the direction of that refusal matters. An
+// undecided condition is treated as *having* an exit edge, so the loop looks
+// completable and the statements after it keep the reachability they already
+// had. That is the optimistic arm: `while (flag) {}` where `flag` is provably
+// true leaves the following code "reachable" when it is not. It is retained
+// because the alternative — asking the checker whether an arbitrary expression
+// is truthy — would make reachability depend on inference rather than on the
+// program's own text. The two indirections below exist because they are decided
+// by the text: they were the shapes that reached this in practice.
+func (p *project) alwaysTruthyLiteralConditionLocked(expression *ast.Node) bool {
+	truthy, known := p.literalTruthinessLocked(expression, 0)
 	return known && truthy
 }
 
-// literalTruthiness evaluates a literal condition, reporting the value and
-// whether it was decidable at all. Anything that is not a literal — an
-// identifier, a call, a template with substitutions, a numeric literal whose
-// text this cannot read exactly — reports undecided.
-func literalTruthiness(expression *ast.Node, depth int) (truthy bool, known bool) {
+// literalTruthinessLocked evaluates a condition the program spells out, reporting
+// the value and whether it was decidable at all. Anything that is not decided by
+// the text — a call, a template with substitutions, a reassignable binding, a
+// numeric literal whose text this cannot read exactly — reports undecided.
+func (p *project) literalTruthinessLocked(
+	expression *ast.Node, depth int,
+) (truthy bool, known bool) {
 	if depth > maxNestedConstructDepth {
 		return false, false
 	}
@@ -1547,10 +1777,130 @@ func literalTruthiness(expression *ast.Node, depth int) (truthy bool, known bool
 		return expression.Text() != "", true
 	case ast.IsPrefixUnaryExpression(expression) &&
 		expression.AsPrefixUnaryExpression().Operator == ast.KindExclamationToken:
-		operand, decided := literalTruthiness(expression.AsPrefixUnaryExpression().Operand, depth+1)
+		operand, decided := p.literalTruthinessLocked(
+			expression.AsPrefixUnaryExpression().Operand, depth+1,
+		)
 		return !operand, decided
+	case ast.IsIdentifier(expression):
+		return p.constBindingTruthinessLocked(expression, depth)
+	case ast.IsBinaryExpression(expression):
+		return p.literalComparisonTruthinessLocked(expression, depth)
 	}
 	return false, false
+}
+
+// constBindingTruthinessLocked reads a condition that names a binding instead of
+// spelling the literal. `const ALWAYS = true; while (ALWAYS) {}` is `while
+// (true)`, and a census that does not see that calls the loop exitable and
+// promotes the dead code after it to reachable.
+//
+// The gate is the one collectReturnedCallablesThroughBindingLocked already uses
+// for the same reason: exactly one declaration, `const`, and never written to.
+// A reassignable binding proves nothing about the value the header reads, and
+// merged or repeated declarations leave no single initializer.
+func (p *project) constBindingTruthinessLocked(
+	identifier *ast.Node, depth int,
+) (truthy bool, known bool) {
+	target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(identifier))
+	if target == nil || len(target.Declarations) != 1 {
+		return false, false
+	}
+	declaration := target.Declarations[0]
+	if !ast.IsVariableDeclaration(declaration) || !ast.IsVarConst(declaration) ||
+		p.symbolIsAssignedLocked(target, declaration) {
+		return false, false
+	}
+	return p.literalTruthinessLocked(declaration.Initializer(), depth+1)
+}
+
+// literalComparisonTruthinessLocked decides `while (1 === 1)` and its relatives:
+// a comparison whose *both* operands reduce to a primitive the text spells out.
+//
+// Only the four equality operators, and only between operands of the same
+// primitive kind. A loose comparison of a number with a string has coercion
+// rules this does not model and stays undecided, as does every relational and
+// arithmetic operator.
+//
+// The operator kinds are matched by the compiler's own generated names because
+// they are outside this repository's pinned ast shim surface — the same reason
+// objectLiteralPropertyValue matches "KindPropertyAssignment" by name. An
+// unrecognized spelling falls through to undecided, which is the safe arm.
+func (p *project) literalComparisonTruthinessLocked(
+	expression *ast.Node, depth int,
+) (truthy bool, known bool) {
+	binary := expression.AsBinaryExpression()
+	if binary == nil || binary.OperatorToken == nil {
+		return false, false
+	}
+	var negated bool
+	switch binary.OperatorToken.KindString() {
+	case "KindEqualsEqualsToken", "KindEqualsEqualsEqualsToken":
+	case "KindExclamationEqualsToken", "KindExclamationEqualsEqualsToken":
+		negated = true
+	default:
+		return false, false
+	}
+	left, leftKnown := p.literalComparandLocked(binary.Left, depth+1)
+	right, rightKnown := p.literalComparandLocked(binary.Right, depth+1)
+	if !leftKnown || !rightKnown || left.kind != right.kind {
+		return false, false
+	}
+	equal := left == right
+	return equal != negated, true
+}
+
+// literalComparand is the exact primitive value an expression spells, reduced to
+// something comparable by value. `kind` separates the primitive types so that a
+// cross-kind comparison is refused rather than answered by Go's own equality.
+type literalComparand struct {
+	kind    string
+	boolean bool
+	number  float64
+	text    string
+}
+
+// literalComparandLocked reduces one side of a comparison to the primitive it
+// spells, following the same `const` indirection the truthiness read follows.
+// Anything else — a call, an object literal, a template with substitutions, a
+// numeric literal ParseFloat refuses — reports undecided.
+func (p *project) literalComparandLocked(
+	expression *ast.Node, depth int,
+) (literalComparand, bool) {
+	if depth > maxNestedConstructDepth {
+		return literalComparand{}, false
+	}
+	expression = identityPreservingUnwrap(expression)
+	if expression == nil {
+		return literalComparand{}, false
+	}
+	switch {
+	case expression.Kind == ast.KindTrueKeyword:
+		return literalComparand{kind: "boolean", boolean: true}, true
+	case expression.Kind == ast.KindFalseKeyword:
+		return literalComparand{kind: "boolean"}, true
+	case expression.Kind == ast.KindNullKeyword:
+		return literalComparand{kind: "null"}, true
+	case ast.IsNumericLiteral(expression):
+		value, err := strconv.ParseFloat(expression.Text(), 64)
+		if err != nil {
+			return literalComparand{}, false
+		}
+		return literalComparand{kind: "number", number: value}, true
+	case ast.IsStringLiteral(expression), ast.IsNoSubstitutionTemplateLiteral(expression):
+		return literalComparand{kind: "string", text: expression.Text()}, true
+	case ast.IsIdentifier(expression):
+		target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(expression))
+		if target == nil || len(target.Declarations) != 1 {
+			return literalComparand{}, false
+		}
+		declaration := target.Declarations[0]
+		if !ast.IsVariableDeclaration(declaration) || !ast.IsVarConst(declaration) ||
+			p.symbolIsAssignedLocked(target, declaration) {
+			return literalComparand{}, false
+		}
+		return p.literalComparandLocked(declaration.Initializer(), depth+1)
+	}
+	return literalComparand{}, false
 }
 
 func mergeReachability(left, right typefacts.Reachability) typefacts.Reachability {
@@ -1563,29 +1913,62 @@ func mergeReachability(left, right typefacts.Reachability) typefacts.Reachabilit
 	return typefacts.ReachUnknown
 }
 
-// returnedCallableLocationsLocked reports the exact source ranges of the
-// callables a returned value provably carries.
+// carriedCallableLocationsLocked reports the exact source ranges of the
+// callables an expression provably carries.
 //
-// The returned value is rarely the callable itself. Real packages hand back
+// The descent is argument-agnostic in its core: the question "which callable
+// does this expression carry" is the same one whether the expression is
+// returned from an implementation or handed to one of its calls at an argument
+// slot. Return sites were simply the first consumer. The one place the two
+// questions part company is a value that bundles several callables, which
+// [carriedCallableDescent] names; use singleCallableLocationsLocked for the
+// argument-slot question.
+//
+// The carried value is rarely the callable itself. Real packages hand back
 // `Object.assign(fn, { clear })`, `[fn, clear]`, or a `const` naming an arrow, and
 // every one of those constructions preserves the callable's identity: whatever the
 // caller invokes is the very function object whose body sits in one of these
 // ranges. Reporting the ranges rather than a set of captured parameter indices is
 // what makes the fact *bind*: a consumer asking whether a call inside some nested
-// callable can be reached through the returned value answers it by containment —
-// the call site lies within one of these ranges, or it does not. A union of
-// parameter indices could not answer that, because it says nothing about which
-// callable mentioned the parameter, and a call in a never-returned closure would
-// discharge on a returned closure that merely names the same parameter.
+// callable can be reached through the returned value answers it by naming that
+// callable — the call's EnclosingCallable is one of these ranges, or it is not. A
+// union of parameter indices could not answer that, because it says nothing about
+// which callable mentioned the parameter, and a call in a never-returned closure
+// would discharge on a returned closure that merely names the same parameter.
 //
-// Containment is transitive on purpose. A call nested two callables deep inside a
-// carried closure — `setTimeout(() => callback(…), wait)` inside a returned
-// debounced function — is still reached by invoking the returned value.
+// These are ranges, not a reachability claim about everything inside them. A call
+// two callables deep inside a carried closure — `setTimeout(() => callback(…), wait)`
+// inside a returned debounced function — is reached by *composing* two facts, this
+// range and the invoking position of `setTimeout`, and never by observing that its
+// bytes nest. The intervening callable might just as well have been stored in a
+// registry and never run.
 //
 // Absence of a range is never proof that nothing is carried: the descent is a
 // whitelist and stops at the first construction it cannot vouch for.
-func (p *project) returnedCallableLocationsLocked(expression *ast.Node) []typefacts.Location {
-	closures := p.returnedCallablesLocked(expression)
+func (p *project) carriedCallableLocationsLocked(expression *ast.Node) []typefacts.Location {
+	return p.callableLocationsLocked(expression, carriedCallableDescentWholeValue)
+}
+
+// singleCallableLocationsLocked is the same descent restricted to the
+// constructions that carry *one* callable and carry it by identity.
+//
+// The two descents answer different questions and must not be shared. A
+// returned value hands the caller everything it contains, so an array or object
+// literal is a faithful carrier there: the caller receives every element. An
+// argument slot whose runtime invokes it does not. `addEventListener` accepts an
+// `EventListenerObject` and calls exactly its `handleEvent` member; crediting
+// every property of that literal would assert execution of code the runtime
+// never reaches, which is why the literal arms and `Object.assign` are absent
+// here rather than merely discouraged.
+func (p *project) singleCallableLocationsLocked(expression *ast.Node) []typefacts.Location {
+	return p.callableLocationsLocked(expression, carriedCallableDescentSingleCallable)
+}
+
+func (p *project) callableLocationsLocked(
+	expression *ast.Node,
+	descent carriedCallableDescent,
+) []typefacts.Location {
+	closures := p.returnedCallablesLocked(expression, descent)
 	if len(closures) == 0 {
 		return nil
 	}
@@ -1623,6 +2006,23 @@ const (
 	maxReturnedCallableBudget = 256
 )
 
+// carriedCallableDescent names which of the two questions the descent is
+// answering, because they differ in exactly one place: whether a construction
+// that bundles several callables into one value carries them all.
+type carriedCallableDescent int
+
+const (
+	// carriedCallableDescentWholeValue is the return-site question. Whatever the
+	// caller receives, it receives entirely, so an array literal, an object
+	// literal and `Object.assign`'s target all hand their callables on.
+	carriedCallableDescentWholeValue carriedCallableDescent = iota
+	// carriedCallableDescentSingleCallable is the invoking-argument question.
+	// The claim being built is that a proven invoking slot *runs* the callable
+	// it is given, and a bundle is not one callable: the runtime picks a member
+	// and the rest never run.
+	carriedCallableDescentSingleCallable
+)
+
 // returnedCallablesLocked collects the callable declarations a returned value
 // provably carries, descending only through constructions that keep the
 // callable's runtime identity intact:
@@ -1642,17 +2042,21 @@ const (
 // conditional, a spread, a shorthand property, an element access — contributes
 // nothing and leaves the demand a fail-closed open premise. Nothing here reports
 // absence, so refusing a construction is always the safe answer.
-func (p *project) returnedCallablesLocked(expression *ast.Node) []*ast.Node {
+func (p *project) returnedCallablesLocked(
+	expression *ast.Node,
+	descent carriedCallableDescent,
+) []*ast.Node {
 	var closures []*ast.Node
 	budget := maxReturnedCallableBudget
 	p.collectReturnedCallablesLocked(
-		expression, 0, &budget, make(map[*ast.Node]struct{}), &closures,
+		expression, descent, 0, &budget, make(map[*ast.Node]struct{}), &closures,
 	)
 	return closures
 }
 
 func (p *project) collectReturnedCallablesLocked(
 	expression *ast.Node,
+	descent carriedCallableDescent,
 	depth int,
 	budget *int,
 	visiting map[*ast.Node]struct{},
@@ -1680,7 +2084,16 @@ func (p *project) collectReturnedCallablesLocked(
 		return
 	}
 	if ast.IsIdentifier(node) {
-		p.collectReturnedCallablesThroughBindingLocked(node, depth, budget, visiting, closures)
+		p.collectReturnedCallablesThroughBindingLocked(
+			node, descent, depth, budget, visiting, closures,
+		)
+		return
+	}
+	// A bundle of callables is one value with several functions in it. The
+	// caller of a returning implementation receives them all; a proven invoking
+	// argument slot runs at most the one member its runtime names, so the
+	// bundling arms stop here for that question.
+	if descent == carriedCallableDescentSingleCallable {
 		return
 	}
 	if ast.IsArrayLiteralExpression(node) {
@@ -1691,7 +2104,7 @@ func (p *project) collectReturnedCallablesLocked(
 			if element == nil || ast.IsSpreadElement(element) {
 				continue
 			}
-			p.collectReturnedCallablesLocked(element, depth+1, budget, visiting, closures)
+			p.collectReturnedCallablesLocked(element, descent, depth+1, budget, visiting, closures)
 		}
 		return
 	}
@@ -1705,7 +2118,7 @@ func (p *project) collectReturnedCallablesLocked(
 				continue
 			}
 			p.collectReturnedCallablesLocked(
-				objectLiteralPropertyValue(property), depth+1, budget, visiting, closures,
+				objectLiteralPropertyValue(property), descent, depth+1, budget, visiting, closures,
 			)
 		}
 		return
@@ -1713,7 +2126,9 @@ func (p *project) collectReturnedCallablesLocked(
 	if ast.IsCallExpression(node) && p.isDefaultLibraryObjectAssignLocked(node) {
 		arguments := node.Arguments()
 		if len(arguments) != 0 && !ast.IsSpreadElement(arguments[0]) {
-			p.collectReturnedCallablesLocked(arguments[0], depth+1, budget, visiting, closures)
+			p.collectReturnedCallablesLocked(
+				arguments[0], descent, depth+1, budget, visiting, closures,
+			)
 		}
 	}
 }
@@ -1733,6 +2148,7 @@ func (p *project) collectReturnedCallablesLocked(
 // refusal emits nothing.
 func (p *project) collectReturnedCallablesThroughBindingLocked(
 	identifier *ast.Node,
+	descent carriedCallableDescent,
 	depth int,
 	budget *int,
 	visiting map[*ast.Node]struct{},
@@ -1762,7 +2178,7 @@ func (p *project) collectReturnedCallablesThroughBindingLocked(
 		return
 	}
 	p.collectReturnedCallablesLocked(
-		declaration.Initializer(), depth+1, budget, visiting, closures,
+		declaration.Initializer(), descent, depth+1, budget, visiting, closures,
 	)
 }
 

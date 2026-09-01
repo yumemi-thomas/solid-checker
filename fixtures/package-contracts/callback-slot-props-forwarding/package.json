@@ -1,0 +1,9 @@
+{
+  "name": "callback-slot-props-forwarding",
+  "version": "1.0.0",
+  "type": "module",
+  "peerDependencies": {
+    "solid-js": "^1.9.14"
+  },
+  "exports": "./index.ts"
+}

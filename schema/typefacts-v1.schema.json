@@ -429,11 +429,12 @@
     "parameterUse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["parameterIndex", "location", "kind"],
+      "required": ["parameterIndex", "location", "reach", "kind"],
       "properties": {
         "parameterIndex": { "type": "integer", "minimum": 0 },
         "bindingPath": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/pathSegment" } },
         "location": { "$ref": "#/$defs/location" },
+        "reach": { "enum": ["reachable", "unreachable", "unknown"] },
         "kind": { "enum": ["directCall", "aliasCall", "argumentKnown", "argumentUnknown", "propertyAccess", "return", "storage", "capture", "unknownEscape"] },
         "alias": { "type": "boolean" },
         "captured": { "type": "boolean" }
@@ -555,13 +556,52 @@
       "properties": {
         "location": { "$ref": "#/$defs/location" },
         "reach": { "enum": ["reachable", "unreachable", "unknown"] },
+        "kind": { "enum": ["unknown", "call", "construct"] },
         "target": { "type": "string" },
         "targetName": { "type": "string" },
         "targetModule": { "type": "string" },
         "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
         "calleeParameter": { "$ref": "#/$defs/parameterValueSource" },
         "argumentParameters": { "type": "array", "maxItems": 1000000, "items": { "anyOf": [{ "$ref": "#/$defs/parameterValueSource" }, { "type": "null" }] } },
-        "captured": { "type": "boolean" }
+        "captured": { "type": "boolean" },
+        "enclosingCallable": { "$ref": "#/$defs/location" },
+        "argumentCallables": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationArgumentCallable" } },
+        "defaultLibraryInvoker": { "enum": ["setTimeout", "setInterval", "queueMicrotask", "requestAnimationFrame", "requestIdleCallback", "addEventListener", "promiseThen", "promiseCatch", "promiseFinally", "arrayIteration", "promiseConstructor"] },
+        "invokedArguments": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "calleeDirectlyCalledParameters": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "calleeInvokedParameters": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "calleeStronglyInvokedParameters": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "calleePendingInvocations": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/calleePendingInvocation" } }
+      }
+    },
+    "implementationArgumentCallable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argument"],
+      "properties": {
+        "argument": { "type": "integer", "minimum": 0 },
+        "locations": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } }
+      }
+    },
+    "calleePendingInvocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parameter"],
+      "properties": {
+        "parameter": { "type": "integer", "minimum": 0 },
+        "strong": { "type": "boolean" },
+        "requires": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/invokingSlotPremise" } }
+      }
+    },
+    "invokingSlotPremise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "name", "slot", "argumentCount"],
+      "properties": {
+        "module": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "slot": { "type": "integer", "minimum": 0 },
+        "argumentCount": { "type": "integer", "minimum": 0 }
       }
     },
     "exportImplementationTranscript": {

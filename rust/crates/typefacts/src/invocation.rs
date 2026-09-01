@@ -337,6 +337,25 @@ pub struct ParameterValueSource {
 pub struct ImplementationCall {
     pub location: Location,
     pub reach: Reachability,
+    /// Whether the site is `f(x)` or `new F(x)`.
+    ///
+    /// Both are recorded, because both run the callables they are handed —
+    /// `new Promise(executor)` runs its executor synchronously — so an
+    /// execution premise that ignored constructions could not reach the body
+    /// of one. They are not interchangeable, though: a claim that the
+    /// implementation *calls* a value is not answered by a construction of it,
+    /// so every consumer whose witness says "call" checks this first.
+    ///
+    /// An *absent* kind deserializes to [`CallKind::Unknown`], which those
+    /// consumers refuse: absence is never read as "call". An *unrecognized*
+    /// kind is not mapped to `Unknown` at all — [`CallKind`] carries no
+    /// `#[serde(other)]` arm, so deserialization fails and the whole transcript
+    /// is rejected. That is deliberately the harder of the two failures: a
+    /// producer that invented a third kind is a producer this side does not
+    /// understand, and reading its census as a set of unknown-kind sites would
+    /// keep every *other* field of those sites in play.
+    #[serde(default = "unknown_call_kind")]
+    pub kind: CallKind,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub target: Arc<str>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -351,6 +370,179 @@ pub struct ImplementationCall {
     pub argument_parameters: Vec<Option<ParameterValueSource>>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub captured: bool,
+    /// The exact source range of the *innermost* callable containing this call,
+    /// absent when the call sits directly in the implementation's own body.
+    /// `captured` is true exactly when this is present.
+    ///
+    /// It is what lets an execution premise compose rather than assume. Knowing
+    /// only that a call's bytes sit somewhere inside a carried closure says
+    /// nothing about the callables in between, which may have been stored in a
+    /// registry and never run; knowing which callable immediately contains it
+    /// makes every link of the chain a claim that has to be proven on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enclosing_callable: Option<Location>,
+    /// Per argument slot, the exact source ranges of the callables that slot
+    /// provably carries, and carries by identity — the callable expression
+    /// itself, the wrappers that erase at runtime, and a single-declaration
+    /// binding naming exactly one callable. A value that bundles several
+    /// callables is deliberately absent: an invoking slot whose runtime picks
+    /// one named member does not run the rest. An empty list is never proof
+    /// that a slot carries nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub argument_callables: Vec<ImplementationArgumentCallable>,
+    /// The reviewed standard-library member this call's callee resolves to, by
+    /// default-library symbol identity rather than by spelling. An unrecognized
+    /// string is not a member of the reviewed table and must be refused, which
+    /// is why the wire form stays a string and
+    /// [`DefaultLibraryInvoker::from_wire`] is the only way in.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub default_library_invoker: Arc<str>,
+    /// The argument slots the named member's runtime invokes zero or more
+    /// times.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invoked_arguments: Vec<usize>,
+    /// Parameter indices the callee calls directly in its own body — the only
+    /// one of the three that by itself says the position is used as a function.
+    ///
+    /// "In its own body" excludes every callable nested inside it and every
+    /// statement its own control flow cannot reach, so a parameter called from
+    /// a closure the callee merely stores is credited to nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callee_directly_called_parameters: Vec<usize>,
+    /// Parameter indices the callee's body sends to *some* proven invoking
+    /// position, a reviewed default-library invoker included. This says the
+    /// value runs; it does not say the callee calls it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callee_invoked_parameters: Vec<usize>,
+    /// Parameter indices whose forwarding chain is a plain identifier forward
+    /// at every hop and terminates in a direct call. A chain that ends at
+    /// `addEventListener` is invoked but not strongly invoked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callee_strongly_invoked_parameters: Vec<usize>,
+    /// The same two claims, each still missing one premise the producer may not
+    /// decide: whether a named argument slot of a named imported function is a
+    /// callback position. The callee's body calls its parameter from inside a
+    /// callable it hands to that slot, so the claim holds exactly when the slot
+    /// invokes what it is given.
+    ///
+    /// The producer states the syntax and refuses to state the semantics: it
+    /// knows no framework vocabulary, and reading one out of a module and a
+    /// name is the shortcut the precision contract forbids. This side owns that
+    /// table and answers each requirement itself, so an entry whose premises it
+    /// does not recognize proves nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callee_pending_invocations: Vec<CalleePendingInvocation>,
+}
+
+/// One conditional callee-parameter claim: parameter `parameter` of this call's
+/// callee is invoked — and, when `strong`, invoked by a chain of plain forwards
+/// terminating in a direct call — provided every slot in `requires` really does
+/// invoke the callable handed to it.
+///
+/// An entry with no requirements is not an unconditional claim, it is a
+/// malformed one: the unconditional claims travel in the index lists above.
+/// Consumers refuse it rather than reading it as a fact that needs nothing.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CalleePendingInvocation {
+    pub parameter: usize,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub strong: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<InvokingSlotPremise>,
+}
+
+/// One argument slot of one resolved imported callee, exactly as the source
+/// spells it — the module it was imported from, the name it was exported under,
+/// the slot, and the call's argument count. It is everything a dialect owner
+/// needs to answer "does this position run what it is given", and nothing that
+/// presumes the answer.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InvokingSlotPremise {
+    pub module: Arc<str>,
+    pub name: Arc<str>,
+    pub slot: usize,
+    pub argument_count: usize,
+}
+
+fn unknown_call_kind() -> CallKind {
+    CallKind::Unknown
+}
+
+/// One argument slot of a call bound to the exact source ranges of the
+/// callables it provably carries.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImplementationArgumentCallable {
+    pub argument: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locations: Vec<Location>,
+}
+
+/// The closed set of standard-library members the producer will vouch for as
+/// invoking one of their arguments, and the slots each one invokes.
+///
+/// The verifier owns this table as well as the producer, and both must agree
+/// before a slot counts. That is not redundancy: the wire value is a string
+/// from another process, and a member nobody here reviewed — or a slot list
+/// wider than the reviewed one — is not evidence. `from_wire` refuses an
+/// unrecognized name outright, and `invokes` answers from this table rather
+/// than from the transmitted list.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DefaultLibraryInvoker {
+    SetTimeout,
+    SetInterval,
+    QueueMicrotask,
+    RequestAnimationFrame,
+    RequestIdleCallback,
+    AddEventListener,
+    PromiseThen,
+    PromiseCatch,
+    PromiseFinally,
+    ArrayIteration,
+    /// The one construct-expression row. `new Promise(executor)` runs its
+    /// executor synchronously, before the constructor returns.
+    PromiseConstructor,
+}
+
+impl DefaultLibraryInvoker {
+    /// The reviewed member this wire value names, or `None` for anything else.
+    #[must_use]
+    pub fn from_wire(value: &str) -> Option<Self> {
+        match value {
+            "setTimeout" => Some(Self::SetTimeout),
+            "setInterval" => Some(Self::SetInterval),
+            "queueMicrotask" => Some(Self::QueueMicrotask),
+            "requestAnimationFrame" => Some(Self::RequestAnimationFrame),
+            "requestIdleCallback" => Some(Self::RequestIdleCallback),
+            "addEventListener" => Some(Self::AddEventListener),
+            "promiseThen" => Some(Self::PromiseThen),
+            "promiseCatch" => Some(Self::PromiseCatch),
+            "promiseFinally" => Some(Self::PromiseFinally),
+            "arrayIteration" => Some(Self::ArrayIteration),
+            "promiseConstructor" => Some(Self::PromiseConstructor),
+            _ => None,
+        }
+    }
+
+    /// Whether this member's runtime invokes the value at `argument`.
+    #[must_use]
+    pub fn invokes(self, argument: usize) -> bool {
+        match self {
+            Self::SetTimeout
+            | Self::SetInterval
+            | Self::QueueMicrotask
+            | Self::RequestAnimationFrame
+            | Self::RequestIdleCallback
+            | Self::PromiseCatch
+            | Self::PromiseFinally
+            | Self::ArrayIteration
+            | Self::PromiseConstructor => argument == 0,
+            Self::AddEventListener => argument == 1,
+            Self::PromiseThen => argument == 0 || argument == 1,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -442,6 +634,12 @@ pub struct ParameterUse {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub binding_path: Vec<PathSegment>,
     pub location: Location,
+    /// Whether invoking the implementation reaches this use, answered by the
+    /// same body walk that answers it for a call in the same position. A use
+    /// after a `return` or a `throw`, or in a branch a literal condition
+    /// excludes, is [`Reachability::Unreachable`]; a use inside a loop body,
+    /// a `switch`, or a `try` is [`Reachability::Unknown`].
+    pub reach: Reachability,
     pub kind: ParameterUseKind,
     #[serde(default, skip_serializing_if = "is_false")]
     pub alias: bool,

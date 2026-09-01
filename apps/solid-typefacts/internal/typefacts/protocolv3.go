@@ -4,17 +4,32 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 7 because an exported-value transcript now
-// reports the complete call-signature set of an overloaded value, and a return
-// site reports the source ranges of the callables it carries in place of the
-// parameter indices they mention. A protocol-6 client rejects unknown
-// transcript fields outright and reads `captures` as a fact that no longer
-// exists, so both are breaks rather than compatible extensions, and the number
-// is what says so. The digest and build id still move with it, and the
-// handshake refuses on any mismatch.
+// TypeFactsHandshakeProtocol is 8 because an implementation census now states
+// two families of fact it could not state at 7.
+//
+// A parameter use carries the reachability of the position it was observed at,
+// answered by the same implementation-body walk that answers it for a call, so
+// a read witness can be held to the same execution floor a call witness is.
+//
+// An implementation call reports the invoking positions among its own
+// arguments: the callables each argument slot carries, the reviewed
+// default-library member the callee resolves to and which of its slots that
+// member invokes, what the callee's own body does with its parameters, and —
+// the link that lets a consumer compose those rather than assume them — the
+// innermost callable that contains the call. It also records construct
+// expressions alongside calls, tagged by kind so that a claim specifically
+// about a call can refuse a construction, and it carries the callee-body claims
+// that are complete but for one invoking-slot premise the producer may not
+// decide, spelled out for the verifier that owns the dialect to answer.
+//
+// A protocol-7 client rejects unknown transcript fields outright, and a
+// protocol-7 producer omits a field this protocol requires, so the additions
+// are a break rather than a compatible extension and the number is what says
+// so. The digest and build id still move with it, and the handshake refuses on
+// any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 7
-	TypeFactsSchemaSHA256             = "sha256:fe1ed89ba9c60cf3ccaed82bfff6f6161a55f84c362356d69dca797512f85554"
+	TypeFactsHandshakeProtocol uint64 = 8
+	TypeFactsSchemaSHA256             = "sha256:0f7006980f58f1910e8def7e08139aa16db40b073b083e0aff65828396008fb4"
 )
 
 type ServiceHandshake struct {

@@ -232,8 +232,20 @@ type ParameterValueSource struct {
 }
 
 type ImplementationCall struct {
-	Location           Location                `cbor:"location" json:"location"`
-	Reach              Reachability            `cbor:"reach" json:"reach"`
+	Location Location     `cbor:"location" json:"location"`
+	Reach    Reachability `cbor:"reach" json:"reach"`
+	// Kind separates `f(x)` from `new F(x)`. Both are recorded, because both
+	// run the callables they are handed — `new Promise(executor)` runs its
+	// executor synchronously, and a census that omitted it would leave the
+	// executor's body unprovable — but they are not interchangeable: a
+	// consumer whose claim is "this implementation *calls* the value" must be
+	// able to refuse a construction, so the distinction is always transmitted
+	// rather than left implicit in the absence of a field.
+	//
+	// A construct site deliberately carries no callee-parameter facts: the
+	// three CalleeXxxParameters fields below are about the body of a resolved
+	// *function*, and a constructor's resolution was not reviewed here.
+	Kind               CallKind                `cbor:"kind" json:"kind"`
 	Target             SymbolID                `cbor:"target,omitempty" json:"target,omitempty"`
 	TargetName         string                  `cbor:"targetName,omitempty" json:"targetName,omitempty"`
 	TargetModule       string                  `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
@@ -241,7 +253,123 @@ type ImplementationCall struct {
 	CalleeParameter    *ParameterValueSource   `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
 	ArgumentParameters []*ParameterValueSource `cbor:"argumentParameters,omitempty" json:"argumentParameters,omitempty"`
 	Captured           bool                    `cbor:"captured,omitempty" json:"captured,omitempty"`
+	// EnclosingCallable is the exact source range of the *innermost* callable
+	// that contains this call, or nil when the call sits directly in the
+	// implementation's own body. It is the link a consumer needs to compose a
+	// chain: a call is reached through a carried callable only when that
+	// callable is the one immediately containing it, so that every callable
+	// between must be shown to run on its own merits rather than assumed from
+	// byte nesting. Captured is true exactly when this is non-nil.
+	EnclosingCallable *Location `cbor:"enclosingCallable,omitempty" json:"enclosingCallable,omitempty"`
+	// ArgumentCallables are, per argument slot, the exact source ranges of the
+	// callables that slot provably carries — and carries by identity: the
+	// callable expression itself, the wrappers that erase at runtime, and a
+	// single-declaration binding naming exactly one callable. A literal that
+	// stores several callables in one value is deliberately absent, because a
+	// slot whose runtime picks one named property does not run the others.
+	// Absence is never proof that a slot carries nothing.
+	ArgumentCallables []ImplementationArgumentCallable `cbor:"argumentCallables,omitempty" json:"argumentCallables,omitempty"`
+	// DefaultLibraryInvoker names the exact standard-library member this call's
+	// callee resolves to, and InvokedArguments the argument slots that member's
+	// runtime invokes zero or more times. Both are emitted only for a member of
+	// a fixed reviewed table, resolved by default-library symbol identity
+	// rather than by spelling; every other callee emits neither.
+	DefaultLibraryInvoker DefaultLibraryInvoker `cbor:"defaultLibraryInvoker,omitempty" json:"defaultLibraryInvoker,omitempty"`
+	InvokedArguments      []int                 `cbor:"invokedArguments,omitempty" json:"invokedArguments,omitempty"`
+	// CalleeDirectlyCalledParameters are the parameter indices this call's
+	// callee calls directly in its own body — the strongest of the three, and
+	// the only one that by itself proves the argument at that slot is used as a
+	// function.
+	CalleeDirectlyCalledParameters []int `cbor:"calleeDirectlyCalledParameters,omitempty" json:"calleeDirectlyCalledParameters,omitempty"`
+	// CalleeInvokedParameters are the parameter indices the callee's body sends
+	// to *some* proven invoking position: called directly, forwarded to a
+	// further local callee that invokes that slot, or handed to a reviewed
+	// default-library invoker. Reaching a default-library invoker proves the
+	// value runs; it does not prove the callee itself calls it.
+	CalleeInvokedParameters []int `cbor:"calleeInvokedParameters,omitempty" json:"calleeInvokedParameters,omitempty"`
+	// CalleeStronglyInvokedParameters are the parameter indices whose forwarding
+	// chain is a plain identifier forward at every hop and *terminates in a
+	// direct call*. A chain that ends at `addEventListener` is invoked but not
+	// strongly invoked: it proves execution, not that this callee treats the
+	// position as a function.
+	CalleeStronglyInvokedParameters []int `cbor:"calleeStronglyInvokedParameters,omitempty" json:"calleeStronglyInvokedParameters,omitempty"`
+	// CalleePendingInvocations are the same two claims, each still missing one
+	// premise this producer may not decide: whether a named argument slot of a
+	// named imported function is a callback position. The callee's body calls
+	// its parameter from inside a callable it hands to that slot, so the claim
+	// holds exactly when the slot invokes what it is given.
+	//
+	// The producer states the syntax and refuses to state the semantics: it
+	// knows no framework vocabulary, and inferring one from a module and a
+	// name is exactly the shortcut the precision contract forbids. The
+	// verifier owns that table and answers each requirement itself; a
+	// requirement it does not recognize leaves the claim unproven.
+	//
+	// An entry with no requirements is not an unconditional claim — it is a
+	// malformed one, and a consumer must refuse it rather than read it as a
+	// fact that needs nothing.
+	CalleePendingInvocations []CalleePendingInvocation `cbor:"calleePendingInvocations,omitempty" json:"calleePendingInvocations,omitempty"`
 }
+
+// CalleePendingInvocation is one conditional callee-parameter claim: parameter
+// Parameter of this call's callee is invoked (and, when Strong, invoked by a
+// chain of plain forwards terminating in a direct call) provided every slot in
+// Requires really does invoke the callable handed to it.
+type CalleePendingInvocation struct {
+	Parameter int                   `cbor:"parameter" json:"parameter"`
+	Strong    bool                  `cbor:"strong,omitempty" json:"strong,omitempty"`
+	Requires  []InvokingSlotPremise `cbor:"requires,omitempty" json:"requires,omitempty"`
+}
+
+// InvokingSlotPremise names one argument slot of one resolved imported callee,
+// exactly as the source spells it: the module the callee was imported from,
+// the name it was exported under, the slot, and the call's argument count —
+// everything a dialect owner needs to answer "does this position run what it
+// is given", and nothing that presumes the answer.
+type InvokingSlotPremise struct {
+	Module        string `cbor:"module" json:"module"`
+	Name          string `cbor:"name" json:"name"`
+	Slot          int    `cbor:"slot" json:"slot"`
+	ArgumentCount int    `cbor:"argumentCount" json:"argumentCount"`
+}
+
+// ImplementationArgumentCallable binds one argument slot of a call to the exact
+// source ranges of the callables that slot provably carries.
+type ImplementationArgumentCallable struct {
+	Argument  int        `cbor:"argument" json:"argument"`
+	Locations []Location `cbor:"locations,omitempty" json:"locations,omitempty"`
+}
+
+// DefaultLibraryInvoker is the closed set of standard-library members this
+// producer will vouch for as invoking one of their arguments. It is a closed
+// enum rather than a free string because a consumer must be able to refuse an
+// unrecognized value outright: an invoker nobody reviewed is not evidence.
+//
+// Membership is a reviewed act. `EventTarget.removeEventListener` is absent
+// because removing a handler is not evidence anything runs, and
+// `navigator.geolocation.watchPosition` is absent because "the browser probably
+// calls it" is not a premise — growing this table means auditing the member,
+// not noticing it.
+type DefaultLibraryInvoker string
+
+const (
+	DefaultLibraryInvokerSetTimeout            DefaultLibraryInvoker = "setTimeout"
+	DefaultLibraryInvokerSetInterval           DefaultLibraryInvoker = "setInterval"
+	DefaultLibraryInvokerQueueMicrotask        DefaultLibraryInvoker = "queueMicrotask"
+	DefaultLibraryInvokerRequestAnimationFrame DefaultLibraryInvoker = "requestAnimationFrame"
+	DefaultLibraryInvokerRequestIdleCallback   DefaultLibraryInvoker = "requestIdleCallback"
+	DefaultLibraryInvokerAddEventListener      DefaultLibraryInvoker = "addEventListener"
+	DefaultLibraryInvokerPromiseThen           DefaultLibraryInvoker = "promiseThen"
+	DefaultLibraryInvokerPromiseCatch          DefaultLibraryInvoker = "promiseCatch"
+	DefaultLibraryInvokerPromiseFinally        DefaultLibraryInvoker = "promiseFinally"
+	DefaultLibraryInvokerArrayIteration        DefaultLibraryInvoker = "arrayIteration"
+	// DefaultLibraryInvokerPromiseConstructor is the one construct-expression
+	// row: `new Promise(executor)` runs its executor synchronously, before the
+	// constructor returns. It is emitted only for the exact default-library
+	// `Promise` symbol, so a user class of that name and a locally shadowed
+	// binding both stay open.
+	DefaultLibraryInvokerPromiseConstructor DefaultLibraryInvoker = "promiseConstructor"
+)
 
 type ImplementationValueSourceKind string
 
@@ -303,12 +431,19 @@ const (
 )
 
 type ParameterUse struct {
-	ParameterIndex int              `cbor:"parameterIndex" json:"parameterIndex"`
-	BindingPath    []PathSegment    `cbor:"bindingPath,omitempty" json:"bindingPath,omitempty"`
-	Location       Location         `cbor:"location" json:"location"`
-	Kind           ParameterUseKind `cbor:"kind" json:"kind"`
-	Alias          bool             `cbor:"alias,omitempty" json:"alias,omitempty"`
-	Captured       bool             `cbor:"captured,omitempty" json:"captured,omitempty"`
+	ParameterIndex int           `cbor:"parameterIndex" json:"parameterIndex"`
+	BindingPath    []PathSegment `cbor:"bindingPath,omitempty" json:"bindingPath,omitempty"`
+	Location       Location      `cbor:"location" json:"location"`
+	// Reach is whether invoking the implementation reaches this use, answered by
+	// the same body walk that answers it for a call in the same position. A use
+	// after a `return`, after a `throw`, or in a branch a literal condition
+	// excludes is `unreachable`; a use inside a loop body, a `switch`, or a
+	// `try` is `unknown`, because control may not enter. Without it a consumer
+	// cannot tell an executed read from one in dead code.
+	Reach    Reachability     `cbor:"reach" json:"reach"`
+	Kind     ParameterUseKind `cbor:"kind" json:"kind"`
+	Alias    bool             `cbor:"alias,omitempty" json:"alias,omitempty"`
+	Captured bool             `cbor:"captured,omitempty" json:"captured,omitempty"`
 }
 
 type Reachability string

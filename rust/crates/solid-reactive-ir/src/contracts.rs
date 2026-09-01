@@ -16,7 +16,7 @@ use solid_facts::ProjectFacts;
 use typefacts::{Callability, Constructability, Location, ReferenceSpace, RuntimeBindingKind};
 
 use super::{
-    ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
+    CallbackSchedule, ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
     ContractReactiveRead, ContractReturn, EntitySymbols, OwnerRequirementOperation,
     PackageContract, ReactiveSourceKind, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead,
     SummaryReads, SymbolId, location, location_order,
@@ -140,6 +140,18 @@ fn project_callbacks(
         callbacks.push(ContractCallback {
             parameter: usize::from(index),
             execution: execution.into(),
+            // `projected_execution` collapses a tracked operation onto one
+            // attribution word, which has no schedule column. Carry the
+            // operation's own schedule beside it so re-emitting an ingested row
+            // republishes what the contract said rather than a default: a
+            // tracked row with no execution point means the producer
+            // established none, which is a different fact from `queued`.
+            schedule: (execution == "tracked").then_some(match operation.schedule {
+                Some(Schedule::SameStack) => CallbackSchedule::SameStack,
+                Some(Schedule::Queued) => CallbackSchedule::Queued,
+                Some(Schedule::External) => CallbackSchedule::External,
+                None => CallbackSchedule::Unestablished,
+            }),
             arguments: operation.inputs.iter().map(project_return_shape).collect(),
             owner: match operation.owner.source {
                 OwnerSource::None => Some("none".into()),
@@ -192,23 +204,26 @@ fn project_reactive_reads(
             continue;
         };
         match operation.inputs.first() {
+            // Carry the whole path back. Keeping only `path.last()` would
+            // round-trip an accepted `["modifiers", "includes"]` down into a
+            // claim about a `includes` property of the parameter itself.
             Some(ValueShape::Parameter { index, path }) => reads.push(ContractReactiveRead {
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(usize::from(*index)),
-                member: path.last().cloned(),
+                path: Some(path.clone()),
             }),
             Some(ValueShape::Reactive { .. }) => reads.push(ContractReactiveRead {
                 kind: "accessor".into(),
                 label: "normalized reactive read".into(),
                 parameter: None,
-                member: None,
+                path: None,
             }),
             Some(ValueShape::Store { .. }) => reads.push(ContractReactiveRead {
                 kind: "store-path".into(),
                 label: "normalized store read".into(),
                 parameter: None,
-                member: None,
+                path: None,
             }),
             _ => {
                 open.insert(ClaimDomain::Reads);
@@ -1130,7 +1145,7 @@ pub(super) struct ContractAnalysis<'a> {
     /// its callback domain open — see
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(super) escaped_parameters: &'a [Vec<usize>],
-    pub(super) invoked_parameter_members: &'a [Vec<(usize, String)>],
+    pub(super) invoked_parameter_members: &'a [Vec<(usize, Vec<String>)>],
     pub(super) semantics: ContractSemantics<'a>,
 }
 
@@ -1143,7 +1158,7 @@ struct ContractExportNode<'a> {
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
     escaped_parameters: &'a [usize],
-    invoked_parameter_members: &'a [(usize, String)],
+    invoked_parameter_members: &'a [(usize, Vec<String>)],
 }
 
 impl<'a> ContractExportNode<'a> {
@@ -1188,28 +1203,32 @@ fn contract_export_function(
                         |returned| returned.label.clone(),
                     ),
                 parameter: None,
-                member: None,
+                path: None,
             };
             seen_reactive_reads
                 .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
                 .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
-    let mut members_by_parameter = BTreeMap::<usize, HashSet<&str>>::new();
-    for (parameter, member) in invoked_parameter_members {
-        members_by_parameter
+    // One row per parameter, carrying the access path only when every
+    // contributing access agrees on it exactly. Paths are compared whole:
+    // `props.of.values()` and `props.other.values()` are two different
+    // accesses that a last-segment comparison would have collapsed into one
+    // claim about `values`.
+    let mut paths_by_parameter = BTreeMap::<usize, HashSet<&[String]>>::new();
+    for (parameter, path) in invoked_parameter_members {
+        paths_by_parameter
             .entry(*parameter)
             .or_default()
-            .insert(member.as_str());
+            .insert(path.as_slice());
     }
-    for (parameter, members) in members_by_parameter {
+    for (parameter, paths) in paths_by_parameter {
         if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string())) {
             reactive_reads.push(ContractReactiveRead {
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(parameter),
-                member: (members.len() == 1)
-                    .then(|| members.into_iter().next().unwrap().to_owned()),
+                path: (paths.len() == 1).then(|| paths.into_iter().next().unwrap().to_vec()),
             });
         }
     }
@@ -2148,6 +2167,7 @@ mod native_overlay_tests {
             callbacks: ContractClaim::Known(vec![ContractCallback {
                 parameter: 1,
                 execution: "inline".into(),
+                schedule: None,
                 arguments: Vec::new(),
                 owner: None,
             }]),
@@ -2198,6 +2218,7 @@ mod callback_contradiction_tests {
         ContractCallback {
             parameter,
             execution: execution.into(),
+            schedule: None,
             arguments: Vec::new(),
             owner: None,
         }
