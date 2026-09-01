@@ -268,6 +268,152 @@ fn semantic_claim_ids_ignore_unrelated_meaning_but_bind_exact_identity_and_path(
 }
 
 #[test]
+fn closed_claim_lookup_is_exact_across_domain_package_and_knowledge_state() {
+    let contract = proposal_with(
+        ValueShape::Plain,
+        CallSemantics::new(
+            CallClaims {
+                callbacks: KnowledgeSet::complete(vec![]),
+                ..CallClaims::default()
+            },
+            vec![],
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        ),
+    )
+    .normalize()
+    .unwrap();
+    let callbacks = contract
+        .claim_id(&claim_subject(SemanticClaimPath::Domain(ClaimPath::Call(
+            ClaimDomain::Callbacks,
+        ))))
+        .unwrap();
+    let throws = contract
+        .claim_id(&claim_subject(SemanticClaimPath::Domain(ClaimPath::Call(
+            ClaimDomain::Throws,
+        ))))
+        .unwrap();
+
+    assert!(contract.contains_closed_claim_id(callbacks.as_str()));
+    assert!(!contract.contains_closed_claim_id(throws.as_str()));
+    assert!(!contract.contains_closed_claim_id("sha256:not-a-claim"));
+
+    let mut other_package = package();
+    other_package.version = "2.0.0-rc.4".into();
+    let mut case = artifact_case("server-import");
+    case.exports.insert(
+        "createResource".into(),
+        export(
+            &case,
+            "createResource",
+            ValueShape::Plain,
+            CallSemantics::new(
+                CallClaims {
+                    callbacks: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+                vec![],
+                vec![],
+                vec![],
+                GuardPartition::default(),
+            ),
+        ),
+    );
+    let other = ContractProposal::new(other_package, vec![case])
+        .normalize()
+        .unwrap();
+    assert!(!other.contains_closed_claim_id(callbacks.as_str()));
+
+    let mut other_case = artifact_case("client-import");
+    other_case.exports.insert(
+        "createResource".into(),
+        export(
+            &other_case,
+            "createResource",
+            ValueShape::Plain,
+            CallSemantics::new(
+                CallClaims {
+                    callbacks: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+                vec![],
+                vec![],
+                vec![],
+                GuardPartition::default(),
+            ),
+        ),
+    );
+    let other_case = ContractProposal::new(package(), vec![other_case])
+        .normalize()
+        .unwrap();
+    assert!(!other_case.contains_closed_claim_id(callbacks.as_str()));
+
+    let mut other_export = artifact_case("server-import");
+    other_export.exports.insert(
+        "other".into(),
+        export(
+            &other_export,
+            "other",
+            ValueShape::Plain,
+            CallSemantics::new(
+                CallClaims {
+                    callbacks: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+                vec![],
+                vec![],
+                vec![],
+                GuardPartition::default(),
+            ),
+        ),
+    );
+    let other_export = ContractProposal::new(package(), vec![other_export])
+        .normalize()
+        .unwrap();
+    assert!(!other_export.contains_closed_claim_id(callbacks.as_str()));
+
+    let one_item = proposal_with(
+        ValueShape::Tuple(KnowledgeSet::complete(vec![ValueShape::Tuple(
+            KnowledgeSet::complete(vec![]),
+        )])),
+        call(vec![], vec![]),
+    )
+    .normalize()
+    .unwrap();
+    let first_item = one_item
+        .claim_id(&claim_subject(SemanticClaimPath::Domain(
+            ClaimPath::Value {
+                root: ValueRoot::Export,
+                path: ValuePath(vec![ValuePathSegment::TupleItem(0)]),
+                domain: ValueClaimDomain::TupleItems,
+            },
+        )))
+        .unwrap();
+    let two_items = proposal_with(
+        ValueShape::Tuple(KnowledgeSet::complete(vec![
+            ValueShape::Plain,
+            ValueShape::Tuple(KnowledgeSet::complete(vec![])),
+        ])),
+        call(vec![], vec![]),
+    )
+    .normalize()
+    .unwrap();
+    let second_item = two_items
+        .claim_id(&claim_subject(SemanticClaimPath::Domain(
+            ClaimPath::Value {
+                root: ValueRoot::Export,
+                path: ValuePath(vec![ValuePathSegment::TupleItem(1)]),
+                domain: ValueClaimDomain::TupleItems,
+            },
+        )))
+        .unwrap();
+    assert!(one_item.contains_closed_claim_id(first_item.as_str()));
+    assert!(two_items.contains_closed_claim_id(second_item.as_str()));
+    assert!(!one_item.contains_closed_claim_id(second_item.as_str()));
+}
+
+#[test]
 fn semantic_claim_ids_reject_orphan_subjects_and_noncanonical_spellings() {
     let contract = proposal_with(
         ValueShape::Tuple(KnowledgeSet::Complete(vec![ValueShape::Plain])),

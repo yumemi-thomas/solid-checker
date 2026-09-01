@@ -398,6 +398,30 @@ impl NormalizedContract {
             &subject.path,
         ))
     }
+
+    /// Answers whether one exact semantic claim is closed in this contract.
+    ///
+    /// Claim identity binds the package, artifact case, export, and semantic
+    /// path. Callers must not substitute a matching domain name or receipt
+    /// digest for this lookup.
+    #[must_use]
+    pub fn contains_closed_claim_id(&self, value: &str) -> bool {
+        let Ok(expected) = SemanticClaimId::parse(value.to_owned()) else {
+            return false;
+        };
+        self.artifact_cases.iter().any(|artifact_case| {
+            artifact_case.exports.iter().any(|(export_name, export)| {
+                validate::closed_claims(export).into_iter().any(|path| {
+                    let subject = SemanticClaimSubject {
+                        artifact_case: artifact_case.id.clone(),
+                        export: export_name.clone(),
+                        path: SemanticClaimPath::Domain(path),
+                    };
+                    self.claim_id(&subject).is_ok_and(|claim| claim == expected)
+                })
+            })
+        })
+    }
 }
 
 /// A semantic proposition address, independent of compact-wire layout.

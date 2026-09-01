@@ -2007,7 +2007,38 @@ fn authenticate_dependency_receipt(
     {
         return Err(DependencyReceiptCompositionError::TrustMismatch);
     }
+    if let Some(semantic_claim_id) = requirement.semantic_claim_id()
+        && !receipt.contains_closed_claim_id(semantic_claim_id)
+    {
+        return Err(DependencyReceiptCompositionError::MissingClosedClaim {
+            demand_id: requirement.demand_id().into(),
+            semantic_claim_id: semantic_claim_id.into(),
+        });
+    }
     Ok(())
+}
+
+#[cfg(test)]
+pub(super) fn authenticate_dependency_claim_for_test(
+    parent: &CertificationPlan,
+    requirement: &DependencyCompositionRequirement,
+    dependency: &CanonicalDependencyNodeIdentity,
+    receipt: &AuthenticatedPolicy2Receipt,
+    issuer: &ConfiguredReceiptIssuer,
+    revocation_epoch: u64,
+    semantic_claim_id: &str,
+) -> Result<(), DependencyReceiptCompositionError> {
+    let mut requirement = requirement.clone();
+    requirement.parent_export = Some("test-parent".into());
+    requirement.semantic_claim_id = Some(semantic_claim_id.into());
+    authenticate_dependency_receipt(
+        parent,
+        &requirement,
+        dependency,
+        receipt,
+        issuer,
+        revocation_epoch,
+    )
 }
 
 fn dependency_composition_evidence_root(
@@ -2070,6 +2101,13 @@ pub enum DependencyReceiptCompositionError {
     },
     #[error("dependency receipt trust identity does not match the graph transaction")]
     TrustMismatch,
+    #[error(
+        "dependency demand {demand_id} requires closed semantic claim {semantic_claim_id}, which the authenticated dependency contract does not contain"
+    )]
+    MissingClosedClaim {
+        demand_id: String,
+        semantic_claim_id: String,
+    },
     #[error("dependency receipts disagree on verifier build identity")]
     VerifierBuildDisagreement,
     #[error("dependency composition evidence was transplanted to another parent plan")]

@@ -8,7 +8,9 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ed25519_dalek::{Signature, Signer as _, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
-use solid_reactive_ir::contract_semantics::{Digest, certification::proof_policy_2};
+use solid_reactive_ir::contract_semantics::{
+    Digest, NormalizedContract, certification::proof_policy_2,
+};
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
@@ -469,6 +471,7 @@ pub struct AuthenticatedPolicy2Receipt {
     issuer_kind: ReceiptIssuerKind,
     issuer_scope: String,
     bindings: Policy2ReceiptBindings,
+    contract: NormalizedContract,
 }
 
 impl AuthenticatedPolicy2Receipt {
@@ -520,6 +523,11 @@ impl AuthenticatedPolicy2Receipt {
     #[must_use]
     pub fn issuer_scope(&self) -> &str {
         &self.issuer_scope
+    }
+
+    #[must_use]
+    pub(super) fn contains_closed_claim_id(&self, semantic_claim_id: &str) -> bool {
+        self.contract.contains_closed_claim_id(semantic_claim_id)
     }
 
     #[must_use]
@@ -595,7 +603,8 @@ pub fn issue_policy2_receipt(
     bindings: &Policy2ReceiptBindings,
     issuer: &ConfiguredReceiptIssuer,
 ) -> Result<Vec<u8>, Policy2ReceiptError> {
-    let (_, semantic_digest) = validate_canonical_main(canonical_main)?;
+    let (_, normalized) = validate_canonical_main(canonical_main)?;
+    let semantic_digest = normalized.semantic_digest().as_str();
     bindings.validate()?;
     if semantic_digest != bindings.semantic_digest {
         return Err(Policy2ReceiptError::BindingMismatch {
@@ -639,7 +648,8 @@ pub fn canonicalize_policy2_main(document: &[u8]) -> Result<Vec<u8>, Policy2Rece
 
 /// Recomputes the semantic digest from an already canonical policy-2 main.
 pub fn policy2_main_semantic_digest(canonical_main: &[u8]) -> Result<String, Policy2ReceiptError> {
-    validate_canonical_main(canonical_main).map(|(_, digest)| digest)
+    validate_canonical_main(canonical_main)
+        .map(|(_, contract)| contract.semantic_digest().as_str().to_owned())
 }
 
 /// Canonical identity of the complete resolver answer selected for one
@@ -679,7 +689,8 @@ pub fn issue_builtin_policy2_receipt(
     bindings: &Policy2ReceiptBindings,
     built_in_scope: &str,
 ) -> Result<Vec<u8>, Policy2ReceiptError> {
-    let (_, semantic_digest) = validate_canonical_main(canonical_main)?;
+    let (_, normalized) = validate_canonical_main(canonical_main)?;
+    let semantic_digest = normalized.semantic_digest().as_str();
     bindings.validate()?;
     validate_scope(built_in_scope)?;
     if semantic_digest != bindings.semantic_digest {
@@ -714,7 +725,8 @@ pub fn authenticate_policy2_receipt(
     expected: &Policy2ReceiptBindings,
     provenance: Policy2ReceiptProvenance<'_>,
 ) -> Result<AuthenticatedPolicy2Receipt, Policy2ReceiptError> {
-    let (_, semantic_digest) = validate_canonical_main(canonical_main)?;
+    let (_, normalized) = validate_canonical_main(canonical_main)?;
+    let semantic_digest = normalized.semantic_digest().as_str();
     expected.validate()?;
     let limits = bounded_json::Limits {
         bytes: MAX_RECEIPT_BYTES,
@@ -737,12 +749,7 @@ pub fn authenticate_policy2_receipt(
     {
         return Err(Policy2ReceiptError::ObsoletePolicy);
     }
-    validate_payload(
-        &document.payload,
-        canonical_main,
-        &semantic_digest,
-        expected,
-    )?;
+    validate_payload(&document.payload, canonical_main, semantic_digest, expected)?;
     let signed = canonical_payload(&document.payload);
     let (trust_store_digest, revocation_epoch) = match provenance {
         Policy2ReceiptProvenance::BuiltIn(entry) => {
@@ -779,8 +786,7 @@ pub fn authenticate_policy2_receipt(
         main_digest: document.payload.main_digest,
         trust_store_digest,
         revocation_epoch,
-        semantic_digest: Digest::parse(semantic_digest)
-            .expect("validated stable main has a canonical semantic digest"),
+        semantic_digest: normalized.semantic_digest().clone(),
         policy_digest: Digest::parse(document.payload.policy_digest)
             .expect("validated policy digest is canonical"),
         closed_claims_root: Digest::parse(document.payload.closed_claims_root)
@@ -790,6 +796,7 @@ pub fn authenticate_policy2_receipt(
         issuer_kind: document.payload.issuer_kind,
         issuer_scope: document.payload.issuer_scope,
         bindings: expected.clone(),
+        contract: normalized,
     })
 }
 
@@ -1085,7 +1092,9 @@ fn canonical_payload(payload: &ReceiptPayload) -> Vec<u8> {
     bytes
 }
 
-fn validate_canonical_main(bytes: &[u8]) -> Result<(Vec<u8>, String), Policy2ReceiptError> {
+fn validate_canonical_main(
+    bytes: &[u8],
+) -> Result<(Vec<u8>, NormalizedContract), Policy2ReceiptError> {
     let decoded = contract_document::decode(bytes)
         .map_err(|error| Policy2ReceiptError::MainDocument(error.to_string()))?;
     let sidecars = decoded
@@ -1094,13 +1103,12 @@ fn validate_canonical_main(bytes: &[u8]) -> Result<(Vec<u8>, String), Policy2Rec
     let normalized = decoded
         .normalize()
         .map_err(|error| Policy2ReceiptError::MainDocument(error.to_string()))?;
-    let semantic_digest = normalized.semantic_digest().as_str().to_owned();
     let canonical = contract_document::encode(&normalized, &sidecars, false)
         .map_err(|error| Policy2ReceiptError::MainDocument(error.to_string()))?;
     if canonical != bytes {
         return Err(Policy2ReceiptError::NonCanonicalMain);
     }
-    Ok((canonical, semantic_digest))
+    Ok((canonical, normalized))
 }
 
 fn encode_receipt(document: ReceiptDocument) -> Result<Vec<u8>, Policy2ReceiptError> {
@@ -1288,11 +1296,11 @@ pub fn publish_policy2_catalog(
     authenticated: &AuthenticatedPolicy2Receipt,
     resolved_import: &ResolvedImport,
 ) -> Result<PublishedPolicy2Catalog, ReceiptPublicationError> {
-    let (_, semantic_digest) = validate_canonical_main(canonical_main)
+    let (_, normalized) = validate_canonical_main(canonical_main)
         .map_err(|error| ReceiptPublicationError::Unauthenticated(error.to_string()))?;
     if authenticated.receipt_digest != digest_bytes(receipt)
         || authenticated.main_digest != digest_bytes(canonical_main)
-        || authenticated.semantic_digest.as_str() != semantic_digest
+        || authenticated.semantic_digest.as_str() != normalized.semantic_digest().as_str()
     {
         return Err(ReceiptPublicationError::Unauthenticated(
             "authenticated receipt token does not bind the publication bytes".into(),

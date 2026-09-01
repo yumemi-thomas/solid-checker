@@ -2361,8 +2361,9 @@ mod tests {
     use flate2::{Compression, write::GzEncoder};
     use sha2::{Digest as _, Sha256, Sha512};
     use solid_reactive_ir::contract_semantics::{
-        CallClaims, CallSemantics, ContractProposal, ExportIdentity, ExportSemantics,
-        ExportTargetIdentity, GuardPartition, KnowledgeSet, StabilityKnowledge, ValueShape,
+        CallClaims, CallSemantics, ClaimDomain, ClaimPath, ContractProposal, ExportIdentity,
+        ExportSemantics, ExportTargetIdentity, GuardPartition, KnowledgeSet, SemanticClaimPath,
+        SemanticClaimSubject, StabilityKnowledge, ValueShape,
     };
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -4966,21 +4967,59 @@ mod tests {
         substituted_leaf_lock: bool,
         forged_dependency_digest: bool,
     ) -> (PublishedGraphNodeRequest, PublishedGraphNodeRequest) {
+        two_node_published_graph_with_root_callbacks(
+            transplanted_leaf,
+            substituted_leaf_lock,
+            forged_dependency_digest,
+            false,
+            false,
+        )
+    }
+
+    fn close_candidate_callbacks(request: &mut CertificationRequest) {
+        let mut artifact_cases = request.candidate.artifact_cases().to_vec();
+        artifact_cases[0].exports.get_mut("value").unwrap().call = CallSemantics::new(
+            CallClaims {
+                callbacks: KnowledgeSet::complete(vec![]),
+                ..CallClaims::default()
+            },
+            vec![],
+            vec![],
+            vec![],
+            GuardPartition::default(),
+        );
+        request.candidate =
+            ContractProposal::new(request.candidate.package().clone(), artifact_cases)
+                .normalize()
+                .unwrap();
+    }
+
+    fn two_node_published_graph_with_root_callbacks(
+        transplanted_leaf: bool,
+        substituted_leaf_lock: bool,
+        forged_dependency_digest: bool,
+        close_root_callbacks: bool,
+        close_leaf_callbacks: bool,
+    ) -> (PublishedGraphNodeRequest, PublishedGraphNodeRequest) {
         let root_runtime_path = "/project/node_modules/root-package/dist/index.js";
         let leaf_importer = if transplanted_leaf {
             "/other/node_modules/root-package/dist/index.js"
         } else {
             root_runtime_path
         };
-        let (leaf_request, leaf_archive, leaf_integrity) = synthetic_graph_certification_request(
-            "leaf-package",
-            "2.0.0",
-            "/project/node_modules/root-package/node_modules/leaf-package",
-            leaf_importer,
-            b"export const value = 1;",
-            b"export declare const value: number;",
-            Vec::new(),
-        );
+        let (mut leaf_request, leaf_archive, leaf_integrity) =
+            synthetic_graph_certification_request(
+                "leaf-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/leaf-package",
+                leaf_importer,
+                b"export const value = 1;",
+                b"export declare const value: number;",
+                Vec::new(),
+            );
+        if close_leaf_callbacks {
+            close_candidate_callbacks(&mut leaf_request);
+        }
         let leaf_plan = plan_certification(
             leaf_request.clone(),
             UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
@@ -5000,7 +5039,8 @@ mod tests {
                     .into()
             },
         };
-        let (root_request, root_archive, root_integrity) = synthetic_graph_certification_request(
+        let (mut root_request, root_archive, root_integrity) =
+            synthetic_graph_certification_request(
             "root-package",
             "1.0.0",
             "/project/node_modules/root-package",
@@ -5009,6 +5049,9 @@ mod tests {
             b"import { value as leafValue } from 'leaf-package'; export declare const value: typeof leafValue;",
             vec![edge],
         );
+        if close_root_callbacks {
+            close_candidate_callbacks(&mut root_request);
+        }
         (
             PublishedGraphNodeRequest::new(
                 root_request,
@@ -5426,6 +5469,120 @@ mod tests {
                 field: "importer",
                 ..
             })
+        ));
+    }
+
+    #[test]
+    fn dependency_composition_requires_the_receipt_to_close_the_exact_claim() {
+        let (root, leaf) =
+            two_node_published_graph_with_root_callbacks(false, false, false, true, false);
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let root_identity = graph.root_identity().clone();
+        let leaf_identity = graph
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "leaf-package")
+            .unwrap()
+            .clone();
+        let leaf_plan = graph.plan(&leaf_identity).unwrap();
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [17; 32]).unwrap();
+        let receipt =
+            authenticated_graph_test_receipt(leaf_plan, &leaf_identity.importer, &issuer, 7);
+
+        let result = graph.authenticate_dependency_receipts(
+            &root_identity,
+            &[(&leaf_identity, &receipt)],
+            &issuer,
+            7,
+        );
+        assert!(matches!(
+            result,
+            Err(DependencyReceiptCompositionError::MissingClosedClaim { .. })
+        ));
+
+        let transplanted = authenticated_graph_test_receipt(
+            leaf_plan,
+            "/other/node_modules/root-package/dist/index.js",
+            &issuer,
+            7,
+        );
+        assert!(matches!(
+            graph.authenticate_dependency_receipts(
+                &root_identity,
+                &[(&leaf_identity, &transplanted)],
+                &issuer,
+                7,
+            ),
+            Err(DependencyReceiptCompositionError::ReceiptMismatch {
+                field: "importer",
+                ..
+            })
+        ));
+        assert!(matches!(
+            graph.authenticate_dependency_receipts(
+                &root_identity,
+                &[(&leaf_identity, &receipt)],
+                &issuer,
+                8,
+            ),
+            Err(DependencyReceiptCompositionError::TrustMismatch)
+        ));
+    }
+
+    #[test]
+    fn one_dependency_receipt_cannot_exchange_callbacks_for_throws() {
+        let (root, leaf) =
+            two_node_published_graph_with_root_callbacks(false, false, false, false, true);
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let root_identity = graph.root_identity().clone();
+        let root_plan = graph.plan(&root_identity).unwrap();
+        let leaf_identity = graph
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "leaf-package")
+            .unwrap()
+            .clone();
+        let leaf_plan = graph.plan(&leaf_identity).unwrap();
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [17; 32]).unwrap();
+        let receipt =
+            authenticated_graph_test_receipt(leaf_plan, &leaf_identity.importer, &issuer, 7);
+        let schedule = root_plan.dependency_composition_schedule().unwrap();
+        let requirement = &schedule.requirements()[0];
+        assert!(requirement.authenticates_dependency_artifact());
+        let claim_id = |domain| {
+            leaf_plan
+                .selected_candidate
+                .claim_id(&SemanticClaimSubject {
+                    artifact_case: leaf_plan.selected_artifact_case_id().into(),
+                    export: "value".into(),
+                    path: SemanticClaimPath::Domain(ClaimPath::Call(domain)),
+                })
+                .unwrap()
+        };
+        let callbacks = claim_id(ClaimDomain::Callbacks);
+        let throws = claim_id(ClaimDomain::Throws);
+
+        super::dependencies::authenticate_dependency_claim_for_test(
+            root_plan,
+            requirement,
+            &leaf_identity,
+            &receipt,
+            &issuer,
+            7,
+            callbacks.as_str(),
+        )
+        .unwrap();
+        assert!(matches!(
+            super::dependencies::authenticate_dependency_claim_for_test(
+                root_plan,
+                requirement,
+                &leaf_identity,
+                &receipt,
+                &issuer,
+                7,
+                throws.as_str(),
+            ),
+            Err(DependencyReceiptCompositionError::MissingClosedClaim { .. })
         ));
     }
 

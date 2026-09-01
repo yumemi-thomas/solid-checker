@@ -10816,3 +10816,40 @@ over-permission; both were fixed before the final 418-probe run. The final
 Solid 2 floor and head rows are again verified, so neither is a verdict
 movement in the authoritative report. No Type Facts protocol or public contract
 schema changed in this repair.
+
+## 2026-09-01 — Dependency receipts prove exact closed claims, not interchangeable bytes
+
+Authenticated dependency composition no longer treats receipt identity as
+semantic authority for every `DependencyClosure` demand. Receipt
+authentication retains the normalized contract decoded from the exact signed
+canonical main, and composition resolves the demanded semantic claim ID
+against that contract's actual closed-claim census after all dependency-node,
+binding, policy, issuer, scope, and revocation checks succeed. A closed
+`callbacks` claim therefore cannot discharge an open `throws` claim merely
+because both attempts use the same receipt bytes. Package, artifact-case,
+export, domain, and nested value path remain part of exact claim identity;
+malformed IDs and open claims refuse.
+
+The current demand graph names the parent contract's claim ID. Claim IDs bind
+package and artifact identity, and the graph carries no authenticated mapping
+from that parent claim to a dependency export/path. Cross-package semantic
+composition therefore now fails closed with `MissingClosedClaim`; inventing a
+name- or domain-based correspondence would recreate the defect in a different
+form. Artifact-only dependency demands continue to authenticate, and a direct
+composition regression proves that an exact dependency claim is accepted when
+the requirement carries that dependency's own ID. An authenticated
+parent-to-dependency semantic mapping remains prerequisite work for the later
+composition recovery.
+
+Adversarial review required mutation pins at the full seam rather than only at
+the normalized-model helper. Tests now authenticate one receipt whose exact
+closed callbacks claim succeeds and whose exact open throws claim refuses;
+combine a missing claim with a wrong importer or stale revocation epoch to pin
+identity/trust precedence; and vary package, artifact case, export, domain,
+nested tuple path, and ID spelling independently. Existing artifact-only
+composition remains the positive control. No Type Facts protocol, public
+contract schema, snapshot, benchmark report, or generated artifact changed.
+The full 418-probe Round 3 remeasurement is deferred until the remaining Round
+3 slices land; the authenticated composition lane is not currently used by the
+ecosystem runner, so this repair is expected to unlock zero rows and may only
+remove any future verdict that depended on the vacuous witness.
