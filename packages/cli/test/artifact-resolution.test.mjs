@@ -246,6 +246,167 @@ describe("standalone package-export resolution", () => {
     expect(declarations.trace.branch).toBe("/exports/./types");
   });
 
+  test("substitutes declaration extensions from the selected runtime module format", () => {
+    for (const [runtimeExtension, declarationExtension] of [
+      [".mjs", ".d.mts"],
+      [".mts", ".d.mts"],
+      [".cjs", ".d.cts"],
+      [".cts", ".d.cts"],
+      [".js", ".d.ts"],
+      [".jsx", ".d.ts"],
+      [".ts", ".d.ts"],
+      [".tsx", ".d.ts"]
+    ]) {
+      const manifest = {
+        name: `format-${runtimeExtension.slice(1)}`,
+        version: "1.0.0",
+        exports: { ".": { import: `./dist/index${runtimeExtension}` } }
+      };
+      const root = fixture(manifest, {
+        [`dist/index${runtimeExtension}`]: "export const value = 1;\n",
+        "dist/index.d.ts": "export declare const value: 'd.ts';\n",
+        "dist/index.d.mts": "export declare const value: 'd.mts';\n",
+        "dist/index.d.cts": "export declare const value: 'd.cts';\n"
+      });
+
+      expect(target(root, manifest, [], "declarations").file.path).toBe(
+        join(root, `dist/index${declarationExtension}`)
+      );
+    }
+  });
+
+  test("keeps JavaScript and TypeScript sources as declaration fallbacks", () => {
+    for (const extension of [".js", ".jsx", ".ts", ".tsx"]) {
+      const manifest = {
+        name: `source-fallback-${extension.slice(1)}`,
+        version: "1.0.0",
+        exports: { ".": { import: `./dist/index${extension}` } }
+      };
+      const root = fixture(manifest, {
+        [`dist/index${extension}`]: "export const value = 1;\n"
+      });
+
+      expect(target(root, manifest, [], "declarations").file.path).toBe(
+        join(root, `dist/index${extension}`)
+      );
+    }
+  });
+
+  test("does not borrow a cross-format declaration when the matching sibling is absent", () => {
+    for (const [runtimeExtension, wrongDeclarationExtensions] of [
+      [".mjs", [".d.ts", ".d.cts"]],
+      [".mts", [".d.ts", ".d.cts"]],
+      [".cjs", [".d.ts", ".d.mts"]],
+      [".cts", [".d.ts", ".d.mts"]]
+    ]) {
+      const manifest = {
+        name: `missing-format-declaration-${runtimeExtension.slice(1)}`,
+        version: "1.0.0",
+        exports: { ".": { import: `./dist/index${runtimeExtension}` } }
+      };
+      const root = fixture(
+        manifest,
+        Object.fromEntries([
+          [`dist/index${runtimeExtension}`, "export const value = 1;\n"],
+          ...wrongDeclarationExtensions.map(extension => [
+            `dist/index${extension}`,
+            "export declare const value: number;\n"
+          ])
+        ])
+      );
+
+      expect(() => target(root, manifest, [], "declarations")).toThrowError(
+        expect.objectContaining({ code: "declarations-not-found" })
+      );
+    }
+  });
+
+  test("selects direct declaration targets without substituting their format", () => {
+    for (const extension of [".d.ts", ".d.mts", ".d.cts"]) {
+      const manifest = {
+        name: `direct-${extension.slice(1).replaceAll(".", "-")}`,
+        version: "1.0.0",
+        exports: { ".": { types: `./dist/index${extension}` } }
+      };
+      const root = fixture(manifest, {
+        [`dist/index${extension}`]: "export declare const value: number;\n"
+      });
+
+      expect(target(root, manifest, [], "declarations").file.path).toBe(
+        join(root, `dist/index${extension}`)
+      );
+    }
+  });
+
+  test("substitutes only the final suffix of a multi-dot entrypoint", () => {
+    const manifest = {
+      name: "multi-dot-entrypoint",
+      version: "1.0.0",
+      exports: { ".": { import: "./dist/index.browser.mjs" } }
+    };
+    const root = fixture(manifest, {
+      "dist/index.browser.mjs": "export const value = 1;\n",
+      "dist/index.browser.d.mts": "export declare const value: number;\n",
+      "dist/index.d.mts": "export declare const wrong: number;\n"
+    });
+
+    expect(target(root, manifest, [], "declarations").file.path).toBe(
+      join(root, "dist/index.browser.d.mts")
+    );
+  });
+
+  test("treats a leading-dot-only basename as extensionless like node:path.extname", () => {
+    for (const [basename, incorrectlyFormattedSibling] of [
+      [".mjs", ".d.mts"],
+      [".js", ".d.ts"]
+    ]) {
+      const manifest = {
+        name: `dotfile-${basename.slice(1)}`,
+        version: "1.0.0",
+        exports: { ".": { import: `./dist/${basename}` } }
+      };
+      const root = fixture(manifest, {
+        [`dist/${basename}`]: "export const value = 1;\n",
+        [`dist/${basename}.d.ts`]: "export declare const selected: 'extensionless';\n",
+        [`dist/${incorrectlyFormattedSibling}`]: "export declare const wrong: 'format';\n"
+      });
+
+      expect(target(root, manifest, [], "declarations").file.path).toBe(
+        join(root, `dist/${basename}.d.ts`)
+      );
+    }
+  });
+
+  test("preserves extensionless declaration-candidate precedence", () => {
+    const manifest = {
+      name: "extensionless-entrypoint",
+      version: "1.0.0",
+      exports: { ".": { import: "./dist/index" } }
+    };
+    const candidates = [
+      "dist/index.d.ts",
+      "dist/index.d.mts",
+      "dist/index.d.cts",
+      "dist/index/index.d.ts",
+      "dist/index/index.d.mts",
+      "dist/index/index.d.cts"
+    ];
+
+    for (let firstPresent = 0; firstPresent < candidates.length; firstPresent += 1) {
+      const files = Object.fromEntries(
+        candidates.slice(firstPresent).map(path => [
+          path,
+          `export declare const selected: ${firstPresent};\n`
+        ])
+      );
+      const root = fixture(manifest, files);
+
+      expect(target(root, manifest, [], "declarations").file.path).toBe(
+        join(root, candidates[firstPresent])
+      );
+    }
+  });
+
   test("uses node pattern precedence and refuses zero matches and invalid targets", () => {
     const manifest = {
       name: "patterns",

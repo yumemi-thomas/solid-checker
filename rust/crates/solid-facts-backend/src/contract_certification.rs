@@ -1929,33 +1929,61 @@ fn validate_target_segments(relative: &str, rendered: &str) -> Result<(), Artifa
 
 fn declaration_candidate(snapshot: &ArtifactSnapshot, path: &str) -> Option<String> {
     const DECLARATIONS: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
-    const RUNTIME: [&str; 8] = [".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"];
     if DECLARATIONS
         .iter()
         .any(|extension| path.ends_with(extension))
     {
         return snapshot.read(path).is_some().then(|| path.into());
     }
-    let slash = path.rfind('/');
-    let dot = path
-        .rfind('.')
-        .filter(|dot| slash.is_none_or(|slash| dot > &slash));
-    let stem = dot.map_or(path, |dot| &path[..dot]);
-    for candidate in DECLARATIONS
-        .iter()
-        .map(|extension| format!("{stem}{extension}"))
-        .chain(
-            DECLARATIONS
-                .iter()
-                .map(|extension| format!("{path}/index{extension}")),
-        )
-    {
+    let extension = node_path_extension(path);
+    let stem = &path[..path.len() - extension.len()];
+    if let Some((declaration_extension, source_fallback)) = match extension {
+        ".mjs" | ".mts" => Some((".d.mts", false)),
+        ".cjs" | ".cts" => Some((".d.cts", false)),
+        ".js" | ".jsx" | ".ts" | ".tsx" => Some((".d.ts", true)),
+        _ => None,
+    } {
+        let candidate = format!("{stem}{declaration_extension}");
         if snapshot.read(&candidate).is_some() {
             return Some(candidate);
         }
+        return (source_fallback && snapshot.read(path).is_some()).then(|| path.into());
     }
-    (RUNTIME.iter().any(|extension| path.ends_with(extension)) && snapshot.read(path).is_some())
-        .then(|| path.into())
+
+    if extension.is_empty() {
+        for candidate in DECLARATIONS
+            .iter()
+            .map(|extension| format!("{path}{extension}"))
+            .chain(
+                DECLARATIONS
+                    .iter()
+                    .map(|extension| format!("{path}/index{extension}")),
+            )
+        {
+            if snapshot.read(&candidate).is_some() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Mirrors `node:path.extname` for validated package-relative POSIX paths.
+/// A basename made of one leading dot plus non-dot characters is extensionless
+/// (`.mjs`), while a second dot starts an extension (`.index.mjs`). Snapshot
+/// replay must classify the selected target exactly as the JavaScript generator.
+fn node_path_extension(path: &str) -> &str {
+    let basename = path.rsplit('/').next().unwrap_or(path);
+    if matches!(basename, "." | "..") {
+        return "";
+    }
+    let Some(dot) = basename.rfind('.') else {
+        return "";
+    };
+    if dot == 0 {
+        return "";
+    }
+    &basename[dot..]
 }
 
 fn pattern_capture(pattern: &str, candidate: &str) -> Option<String> {
@@ -2280,9 +2308,9 @@ mod tests {
         PublishedGraphLockSelection, PublishedGraphNodeRequest, PublishedGraphPlanningError,
         PublishedGraphSourceRequest, ResolutionAxis, SnapshotLimits, SnapshotPackageManifest,
         SnapshotVerifiedResolution, UntrustedArtifactEnvelope, authenticate_policy2_receipt,
-        issue_policy2_receipt, plan_certification, plan_published_contract_graph,
-        policy2_main_semantic_digest, policy2_trust_configuration_for_issuer,
-        resolve_snapshot_export,
+        declaration_candidate, issue_policy2_receipt, plan_certification,
+        plan_published_contract_graph, policy2_main_semantic_digest,
+        policy2_trust_configuration_for_issuer, resolve_snapshot_export,
     };
     use crate::artifact_resolution::{
         AcceptedDependencyEdge, AffectedClaimDomain, ClosureEntry, ClosureFileRole, ClosureHazard,
@@ -2796,6 +2824,183 @@ mod tests {
         let active: BTreeSet<&str> = conditions.iter().copied().collect();
         let selected = resolve_snapshot_export(&snapshot, &parsed, entrypoint, &active, axis)?;
         Ok((selected.path, selected.trace))
+    }
+
+    fn declaration_snapshot(files: &[(&str, &[u8])]) -> ArtifactSnapshot {
+        let mut members = vec![(
+            "package/package.json",
+            br#"{"name":"fixture-package","version":"1.2.3"}"# as &[u8],
+        )];
+        members.extend(files.iter().copied());
+        ArtifactSnapshot::from_published(&published_archive(&members), SnapshotLimits::policy_2())
+            .unwrap()
+    }
+
+    #[test]
+    fn declaration_candidates_follow_the_selected_module_format() {
+        for (runtime_extension, declaration_extension) in [
+            (".mjs", ".d.mts"),
+            (".mts", ".d.mts"),
+            (".cjs", ".d.cts"),
+            (".cts", ".d.cts"),
+            (".js", ".d.ts"),
+            (".jsx", ".d.ts"),
+            (".ts", ".d.ts"),
+            (".tsx", ".d.ts"),
+        ] {
+            let runtime = format!("dist/index{runtime_extension}");
+            let matching = format!("dist/index{declaration_extension}");
+            let package_runtime = format!("package/{runtime}");
+            let files = [
+                (
+                    package_runtime.as_str(),
+                    b"export const value = 1;" as &[u8],
+                ),
+                (
+                    "package/dist/index.d.ts",
+                    b"export declare const value: 'd.ts';",
+                ),
+                (
+                    "package/dist/index.d.mts",
+                    b"export declare const value: 'd.mts';",
+                ),
+                (
+                    "package/dist/index.d.cts",
+                    b"export declare const value: 'd.cts';",
+                ),
+            ];
+            let snapshot = declaration_snapshot(&files);
+
+            assert_eq!(declaration_candidate(&snapshot, &runtime), Some(matching));
+        }
+    }
+
+    #[test]
+    fn declaration_candidates_preserve_source_fallbacks() {
+        for extension in [".js", ".jsx", ".ts", ".tsx"] {
+            let path = format!("dist/fallback{extension}");
+            let package_path = format!("package/{path}");
+            let snapshot =
+                declaration_snapshot(&[(package_path.as_str(), b"export const value = 1;")]);
+
+            assert_eq!(declaration_candidate(&snapshot, &path), Some(path));
+        }
+    }
+
+    #[test]
+    fn declaration_candidates_do_not_cross_module_formats() {
+        for extension in [".mjs", ".mts"] {
+            let path = format!("dist/index{extension}");
+            let package_path = format!("package/{path}");
+            let snapshot = declaration_snapshot(&[
+                (package_path.as_str(), b"export const value = 1;"),
+                ("package/dist/index.d.ts", b"export declare const value: 1;"),
+                (
+                    "package/dist/index.d.cts",
+                    b"export declare const value: 1;",
+                ),
+            ]);
+            assert_eq!(declaration_candidate(&snapshot, &path), None);
+        }
+        for extension in [".cjs", ".cts"] {
+            let path = format!("dist/index{extension}");
+            let package_path = format!("package/{path}");
+            let snapshot = declaration_snapshot(&[
+                (package_path.as_str(), b"exports.value = 1;"),
+                ("package/dist/index.d.ts", b"export declare const value: 1;"),
+                (
+                    "package/dist/index.d.mts",
+                    b"export declare const value: 1;",
+                ),
+            ]);
+            assert_eq!(declaration_candidate(&snapshot, &path), None);
+        }
+    }
+
+    #[test]
+    fn declaration_candidates_keep_direct_multidot_and_extensionless_behavior() {
+        let direct_snapshot = declaration_snapshot(&[
+            (
+                "package/dist/direct.d.mts",
+                b"export declare const esm: true;",
+            ),
+            (
+                "package/dist/direct.d.cts",
+                b"export declare const cjs: true;",
+            ),
+            ("package/dist/index.browser.mjs", b"export const value = 1;"),
+            (
+                "package/dist/index.browser.d.mts",
+                b"export declare const value: 1;",
+            ),
+        ]);
+
+        assert_eq!(
+            declaration_candidate(&direct_snapshot, "dist/direct.d.mts"),
+            Some("dist/direct.d.mts".into())
+        );
+        assert_eq!(
+            declaration_candidate(&direct_snapshot, "dist/direct.d.cts"),
+            Some("dist/direct.d.cts".into())
+        );
+        assert_eq!(
+            declaration_candidate(&direct_snapshot, "dist/index.browser.mjs"),
+            Some("dist/index.browser.d.mts".into())
+        );
+
+        let candidates = [
+            "dist/index.d.ts",
+            "dist/index.d.mts",
+            "dist/index.d.cts",
+            "dist/index/index.d.ts",
+            "dist/index/index.d.mts",
+            "dist/index/index.d.cts",
+        ];
+        for first_present in 0..candidates.len() {
+            let package_paths: Vec<String> = candidates[first_present..]
+                .iter()
+                .map(|path| format!("package/{path}"))
+                .collect();
+            let files: Vec<(&str, &[u8])> = package_paths
+                .iter()
+                .map(|path| {
+                    (
+                        path.as_str(),
+                        b"export declare const selected: true;" as &[u8],
+                    )
+                })
+                .collect();
+            let snapshot = declaration_snapshot(&files);
+
+            assert_eq!(
+                declaration_candidate(&snapshot, "dist/index"),
+                Some(candidates[first_present].into())
+            );
+        }
+    }
+
+    #[test]
+    fn declaration_candidates_treat_leading_dot_basenames_as_extensionless() {
+        for (basename, incorrectly_formatted_sibling) in [(".mjs", ".d.mts"), (".js", ".d.ts")] {
+            let runtime = format!("dist/{basename}");
+            let extensionless_declaration = format!("dist/{basename}.d.ts");
+            let package_runtime = format!("package/{runtime}");
+            let package_extensionless = format!("package/{extensionless_declaration}");
+            let wrong_format = format!("package/dist/{incorrectly_formatted_sibling}");
+            let snapshot = declaration_snapshot(&[
+                (package_runtime.as_str(), b"export const value = 1;"),
+                (
+                    package_extensionless.as_str(),
+                    b"export declare const selected: true;",
+                ),
+                (wrong_format.as_str(), b"export declare const wrong: true;"),
+            ]);
+
+            assert_eq!(
+                declaration_candidate(&snapshot, &runtime),
+                Some(extensionless_declaration)
+            );
+        }
     }
 
     /// Node's PACKAGE_TARGET_RESOLVE continues to the next key when a matched

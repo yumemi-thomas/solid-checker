@@ -4,13 +4,13 @@
       "cases": [
         {
           "artifact": {
-            "closureSha256": "c90bbeb3cd6c4e17a12f8b6199f0e64e1d5421c7014fba320154860c001ddef8",
+            "closureSha256": "048521fdd0e7feb34e3880d6470d51eec8115be8741ba0bc0e08697d02c17786",
             "path": "./index.mjs",
             "sha256": "219b82db367bb0581469313258b65ab5f35d5f7fb6c237af310e9c826dac670f"
           },
           "declarations": {
-            "path": "./index.mjs",
-            "sha256": "219b82db367bb0581469313258b65ab5f35d5f7fb6c237af310e9c826dac670f"
+            "path": "./index.d.mts",
+            "sha256": "01ef698a55b332151747460c0d1f6582fb7c5fc81186c53deb9dc60472d5c0dc"
           },
           "exports": {
             "packageName": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",

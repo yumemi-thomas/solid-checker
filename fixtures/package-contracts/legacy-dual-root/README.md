@@ -13,7 +13,7 @@ pins that selection on a package this one deliberately is not.
 
 This package publishes no `types` and no `typings`. The declarations axis is
 not affected by `module` and falls back to `main`, so it lands on the CJS build,
-which carries no declaration binding for `observe` -- and the package is refused
-on the declaration axis instead. That is the fail-closed answer, not a
-placeholder: nothing in the artifact declares the ESM build's surface, and the
-generator does not get to assume the two builds agree.
+which has no format-matching `.d.cts` sibling. The package is refused before the
+runtime source can masquerade as its own declaration. That is the fail-closed
+answer, not a placeholder: nothing in the artifact declares the ESM build's
+surface, and the generator does not get to assume the two builds agree.

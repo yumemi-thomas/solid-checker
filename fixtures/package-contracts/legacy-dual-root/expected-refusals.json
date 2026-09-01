@@ -10,8 +10,8 @@
       "entrypoint": ".",
       "conditions": [],
       "stage": "artifact-case",
-      "applicability": "runtime-module",
-      "reason": "solid-checker-rust: contract identity does not match the resolved import: resolved artifact has no exact runtime/declaration binding for export \"observe\""
+      "applicability": "unsupported-artifact-shape",
+      "reason": "no declaration target exists for <package-root>/dist/node.cjs"
     }
   ],
   "inapplicable": []

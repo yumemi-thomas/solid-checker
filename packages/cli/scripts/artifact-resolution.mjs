@@ -487,11 +487,23 @@ function declarationCandidate(path) {
   if (DECLARATION_EXTENSIONS.some(extension => path.endsWith(extension))) return isFile(path) ? path : undefined;
   const extension = extname(path);
   const stem = extension ? path.slice(0, -extension.length) : path;
-  const candidates = [
-    ...DECLARATION_EXTENSIONS.map(candidate => `${stem}${candidate}`),
-    ...DECLARATION_EXTENSIONS.map(candidate => join(path, `index${candidate}`))
-  ];
-  return candidates.find(isFile) ?? (RUNTIME_EXTENSIONS.some(candidate => path.endsWith(candidate)) && isFile(path) ? path : undefined);
+  const candidates =
+    extension === ".mjs" || extension === ".mts"
+      ? [`${stem}.d.mts`]
+      : extension === ".cjs" || extension === ".cts"
+        ? [`${stem}.d.cts`]
+        : [".js", ".jsx", ".ts", ".tsx"].includes(extension)
+          ? [`${stem}.d.ts`]
+          : extension === ""
+            ? [
+                ...DECLARATION_EXTENSIONS.map(candidate => `${stem}${candidate}`),
+                ...DECLARATION_EXTENSIONS.map(candidate => join(path, `index${candidate}`))
+              ]
+            : [];
+  return (
+    candidates.find(isFile) ??
+    ([".js", ".jsx", ".ts", ".tsx"].includes(extension) && isFile(path) ? path : undefined)
+  );
 }
 
 function resolvedFile(path) {

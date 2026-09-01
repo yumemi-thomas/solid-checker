@@ -10448,3 +10448,54 @@ whose generation pass lacks an accepted dependency contract. That later
 refusal is retained; missing authenticated composition is not inferred from
 matching bytes or a resolved path. The Round 2 full-corpus movement and report
 digest remain deferred until all bounded artifact-mechanics slices land.
+
+## 2026-09-01 — Declaration extension substitution follows the selected module format
+
+The live package resolver and authenticated snapshot replay now substitute
+declaration extensions from the selected module format: `.mjs`/`.mts` can use
+only `.d.mts`, `.cjs`/`.cts` only `.d.cts`, and ordinary JavaScript/TypeScript
+suffixes use `.d.ts` before retaining the pre-existing source fallback. Direct
+`.d.*` targets and the six extensionless stem/directory candidates keep their
+prior order. No identity or suffix comparison was relaxed, so a missing
+format-matching declaration still refuses instead of borrowing a declaration
+the compiler did not read.
+
+Adversarial review found that the first Rust implementation disagreed with
+Node's `extname` for legal leading-dot basenames such as `dist/.mjs`, and that
+the extensionless test protected only the first candidate. Snapshot replay now
+uses the same leading-dot and multi-dot extension classification as the
+JavaScript resolver. Both implementations pin all six extensionless candidates
+as successively first-present, and dotfile tests include the wrongly formatted
+sibling that the rejected implementation would have selected. Re-review found
+no remaining live/replay divergence or over-proof.
+
+The canonical `@tanstack/ai-solid@0.19.1|solid1|only` reproducer advanced from
+the `@ag-ui/core` exact-subject mismatch at demand
+`2dd8afbd69ebe886683183c10f6e080712c0de1d0e21362540280f7fe8f4048f`
+(`events-Bg2nO3O2.d.mts` live versus snapshot-selected
+`events-JPFRVbr9.d.ts`) to demand
+`54f2616d91b9d1f7f571f5b77919feccd0dd20c036afed72c214a9ee5180cf46`
+on `@tanstack/ai`'s `parseWithStandardSchema`. That later root observation is
+open and therefore remains an exact refusal. The diagnosis's prediction that
+M2 alone would certify the row was falsified by the byte-reproducer; the M2
+selection defect is gone, but the unrelated open producer premise is not
+inferred. The parallel proposal refusal for `@tanstack/ai-client`'s missing
+exact `StorageUnavailableError` runtime binding also remains unchanged.
+
+The non-updating contract-corpus run exposed two expected fixture movements.
+`json-import` had used its `.mjs` runtime file as its declaration; it now carries
+an exact `index.d.mts`, remains a successful JSON-import fixture, and its
+generated contract/proposal snapshots name that declaration and digest.
+`legacy-dual-root` deliberately publishes no declarations, so its `.cjs` main
+now refuses earlier at `declarations-not-found` instead of analyzing the CJS
+runtime bytes and failing later on export identity. Both snapshots were
+reviewed at their non-updating failures before being regenerated; no other
+corpus snapshot moved.
+
+All seven artifact-mechanics publisher-defect controls remain refused:
+`@tanstack/solid-start-server` ×3 still lacks `#tanstack-router-entry`, and the
+Solid 2 TanStack query/persist-client rows ×4 still lack the undeclared
+`@solidjs/web` peer that `tsc` reports. The Round 2 full 418-probe remeasurement
+and authoritative report digest remain deferred until the remaining bounded
+artifact slices land; this slice changes the first refusal within one row, not
+its verdict.
