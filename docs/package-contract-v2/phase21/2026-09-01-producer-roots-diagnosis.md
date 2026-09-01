@@ -439,3 +439,32 @@ OpenReasons: ["valueUnavailable"]` and produces *exactly* this message. Dump
 proposing anything. If it is `identifierNotExact`, the bug is in the byte range
 the Rust declaration census hands the producer for a re-exported binding, and it
 plausibly affects more rows than this one.
+
+---
+
+## 11. Implementation addendum (2026-09-01)
+
+The implementation round byte-reproduced every targeted digest before changing
+the producer, then exposed two corrections to this diagnosis.
+
+First, the two Corvu demands do not describe the package-root `default`. Their
+artifact case is the exported subpath `./create/controllableSignal`; its selected
+declaration (`dist/create/controllableSignal.d.ts`) and both selected runtime
+files explicitly default-export the same callable. The table's class-c premise
+was therefore attached to the wrong declaration file. Both rows legitimately
+certify after the tuple root becomes closed; retaining an invented missing-export
+refusal would contradict the authenticated artifact-case identity.
+
+Second, the favicon transcript is not an early refusal. A temporary producer
+dump, removed immediately after the one reproducer, showed a completed export
+observation whose root is `openType`, with unknown callability and
+constructability. The remaining mismatch is therefore inside the producer's
+type observation for that exact export, not the Rust declaration span or an
+early `valueUnavailable` path. Both favicon rows remain refused; no speculative
+fix was made.
+
+M4 also revealed that `createDomCollection.items` is locally callable and its
+subtree is enumerated after the wire split, but the next exact requested union
+alternative is absent. Its demand moved from `32c3e7f3…` (`depthLimit`) to
+`1808f351…` (`presence=Absent`) and correctly remains refused. This supersedes
+the M4 acceptance claim above without weakening the consumer.

@@ -1,11 +1,11 @@
 # Phase 21 ecosystem refusal-reduction ledger
 
 - Baseline fully refused rows: 30
-- Current report SHA-256: 00d5ea2a70a89db31e36393dbca96b7b9ad26b06a112472d871ab0d7d9870536
+- Current report SHA-256: c23caf2b0816ce759e473e66252dd1e841775eaaa9a1b255a01659d489f33519
 - Upstream missing-byte controls: 5
 - CJS/no-ESM controls: 7
 - Checker-addressable rows: 18
-- Newly verified rows: 6
+- Newly verified rows: 8
 - Confirmed upstream declaration defects: 1
 
 ## Current terminal classes
@@ -25,10 +25,10 @@
 | --- | ---: |
 | retained-unsupported-runtime-model | 7 |
 | exact-refusal-authenticated-layout | 5 |
-| exact-refusal-semantic-model | 5 |
 | retained-upstream-missing-bytes | 5 |
+| exact-refusal-semantic-model | 4 |
 | exact-refusal-package-import-resolution | 3 |
-| pending-phase21-checker-work | 2 |
+| pending-phase21-checker-work | 3 |
 | confirmed-upstream-declaration-defect | 1 |
 | exact-refusal-type-facts-capability | 1 |
 | verified-through-ordinary-receipt-load | 1 |
@@ -66,7 +66,7 @@
 | @solidjs/testing-library@0.8.10\|solid1\|only | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-db@0.2.40\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
 | @tanstack/solid-form@2.0.0-alpha.2\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
-| @tanstack/solid-hotkeys@0.10.0\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
+| @tanstack/solid-hotkeys@0.10.0\|solid1\|only | pending-phase21-checker-work | checker-semantic-model | dependency-contract-obligation |
 | @tanstack/solid-query@5.102.5\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
 | @tanstack/solid-query@6.0.0-rc.0\|solid2\|floor | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-query@6.0.0-rc.0\|solid2\|head | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |

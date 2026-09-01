@@ -188,6 +188,673 @@ choose(1);
 	}
 }
 
+func TestInvocationValueClosesOnlyFixedTupleIndexAndKeepsPathIndexOnItsOwner(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function fixed(): [() => void, number];
+declare function optional(): [() => void, number?];
+declare function rest(): [() => void, ...number[]];
+declare function tupleUnion(): [() => void] | [() => void, number];
+declare function array(): number[];
+declare function indexed(): { fixed: { nested: () => void }; [key: string]: unknown };
+declare function singleOptional(): [number?];
+declare function singleRest(): [...number[]];
+fixed();
+optional();
+rest();
+tupleUnion();
+array();
+indexed();
+singleOptional();
+singleRest();
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	sourcePath := filepath.Join(dir, "facts.ts")
+	needles := []string{
+		"fixed()", "optional()", "rest()", "tupleUnion()", "array()", "indexed()",
+		"singleOptional()", "singleRest()",
+	}
+	demands := make([]typefacts.InvocationDemand, len(needles))
+	for index, needle := range needles {
+		start := strings.LastIndex(source, needle)
+		demands[index] = typefacts.InvocationDemand{
+			Location:      typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: 2,
+		}
+	}
+	answer, err := analyzer.InvocationTranscripts(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := make([]typefacts.SelectedSignature, len(answer.Transcripts))
+	for index, transcript := range answer.Transcripts {
+		if transcript.SelectedSignature == nil {
+			t.Fatalf("transcript %d has no selected signature: %#v", index, transcript)
+		}
+		results[index] = *transcript.SelectedSignature
+	}
+	if slices.Contains(results[0].Result.OpenReasons, "openIndex") {
+		t.Fatalf("fixed tuple result stayed open: %#v", results[0].Result)
+	}
+	for _, index := range []int{1, 2, 3, 5, 6} {
+		if !slices.Contains(results[index].Result.OpenReasons, "openIndex") {
+			t.Fatalf("result %d lost its open index: %#v", index, results[index].Result)
+		}
+	}
+	for _, index := range []int{4, 7} {
+		if slices.Contains(results[index].Result.OpenReasons, "openIndex") {
+			t.Fatalf("array-normalized result %d stayed root-open: %#v", index, results[index].Result)
+		}
+	}
+	for index, wantOpen := range []bool{false, true, true} {
+		var root *typefacts.CallablePathFact
+		for pathIndex := range results[index].ResultCallablePaths {
+			path := &results[index].ResultCallablePaths[pathIndex]
+			if len(path.Path) == 0 {
+				root = path
+				break
+			}
+		}
+		if root == nil || slices.Contains(root.OpenReasons, "openIndex") != wantOpen ||
+			root.Complete == wantOpen || (wantOpen && root.SubtreeEnumerated) {
+			t.Fatalf("tuple result %d root = %#v, want openIndex=%v", index, root, wantOpen)
+		}
+	}
+	for _, resultIndex := range []int{4, 7} {
+		var arrayRoot *typefacts.CallablePathFact
+		for index := range results[resultIndex].ResultCallablePaths {
+			path := &results[resultIndex].ResultCallablePaths[index]
+			if len(path.Path) == 0 {
+				arrayRoot = path
+				break
+			}
+		}
+		if arrayRoot == nil || arrayRoot.Complete || arrayRoot.SubtreeEnumerated ||
+			!slices.Contains(arrayRoot.OpenReasons, "openIndex") {
+			t.Fatalf("array-normalized result %d path root = %#v, want openIndex", resultIndex, arrayRoot)
+		}
+	}
+
+	var root, nested *typefacts.CallablePathFact
+	for index := range results[5].ResultCallablePaths {
+		path := &results[5].ResultCallablePaths[index]
+		switch {
+		case len(path.Path) == 0:
+			root = path
+		case pathNamesEqual(path.Path, "fixed", "nested"):
+			nested = path
+		}
+	}
+	if root == nil || root.Complete || root.SubtreeEnumerated || !slices.Contains(root.OpenReasons, "openIndex") {
+		t.Fatalf("indexed root = %#v, want its own openIndex", root)
+	}
+	if nested == nil || !nested.Complete || slices.Contains(nested.OpenReasons, "openIndex") {
+		t.Fatalf("indexed descendant = %#v, want closed callable without ancestor openIndex", nested)
+	}
+
+	augmentedDir := t.TempDir()
+	augmentedSource := `
+interface Array<T> { [key: symbol]: unknown }
+declare function augmentedFixed(): [() => void, number];
+augmentedFixed();
+`
+	writeInvocationProject(t, augmentedDir, map[string]string{"facts.ts": augmentedSource})
+	augmentedAnalyzer, closeAugmentedProject := openInvocationAnalyzer(t, augmentedDir)
+	defer closeAugmentedProject()
+	augmentedPath := filepath.Join(augmentedDir, "facts.ts")
+	needle := "augmentedFixed()"
+	start := strings.LastIndex(augmentedSource, needle)
+	augmentedAnswer, err := augmentedAnalyzer.InvocationTranscripts(
+		context.Background(),
+		[]typefacts.InvocationDemand{{
+			Location:      typefacts.Location{Path: augmentedPath, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: 2,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	augmented := augmentedAnswer.Transcripts[0].SelectedSignature
+	if augmented == nil || !slices.Contains(augmented.Result.OpenReasons, "openIndex") {
+		t.Fatalf("fixed tuple with an augmented symbol index = %#v, want openIndex", augmented)
+	}
+	var augmentedRoot *typefacts.CallablePathFact
+	for index := range augmented.ResultCallablePaths {
+		path := &augmented.ResultCallablePaths[index]
+		if len(path.Path) == 0 {
+			augmentedRoot = path
+			break
+		}
+	}
+	if augmentedRoot == nil || augmentedRoot.Complete || augmentedRoot.SubtreeEnumerated ||
+		!slices.Contains(augmentedRoot.OpenReasons, "openIndex") {
+		t.Fatalf("fixed tuple with an augmented symbol index path root = %#v, want openIndex", augmentedRoot)
+	}
+
+	nonNumericDir := t.TempDir()
+	nonNumericSource := `
+declare function nonNumericFixed(): [number, number];
+nonNumericFixed();
+`
+	nonNumericFiles := map[string]string{
+		"globals.d.ts": `
+interface Array<T> { length: number; readonly [key: symbol]: unknown }
+interface Boolean {}
+interface CallableFunction extends Function {}
+interface Function {}
+interface IArguments {}
+interface NewableFunction extends Function {}
+interface Number {}
+interface Object {}
+interface RegExp {}
+interface String {}
+`,
+		"facts.ts": nonNumericSource,
+	}
+	for name, contents := range nonNumericFiles {
+		if err := os.WriteFile(filepath.Join(nonNumericDir, name), []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(
+		filepath.Join(nonNumericDir, "tsconfig.json"),
+		[]byte(`{"compilerOptions":{"strict":true,"noLib":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	nonNumericAnalyzer, closeNonNumericProject := openInvocationAnalyzer(t, nonNumericDir)
+	defer closeNonNumericProject()
+	nonNumericPath := filepath.Join(nonNumericDir, "facts.ts")
+	nonNumericNeedle := "nonNumericFixed()"
+	nonNumericStart := strings.LastIndex(nonNumericSource, nonNumericNeedle)
+	nonNumericAnswer, err := nonNumericAnalyzer.InvocationTranscripts(
+		context.Background(),
+		[]typefacts.InvocationDemand{{
+			Location: typefacts.Location{
+				Path:      nonNumericPath,
+				StartByte: nonNumericStart,
+				EndByte:   nonNumericStart + len(nonNumericNeedle),
+			},
+			CallableDepth: 1,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonNumeric := nonNumericAnswer.Transcripts[0].SelectedSignature
+	if nonNumeric == nil || !slices.Contains(nonNumeric.Result.OpenReasons, "openIndex") {
+		t.Fatalf("fixed tuple with a sole non-numeric index = %#v, want openIndex", nonNumeric)
+	}
+	var nonNumericRoot *typefacts.CallablePathFact
+	for index := range nonNumeric.ResultCallablePaths {
+		path := &nonNumeric.ResultCallablePaths[index]
+		if len(path.Path) == 0 {
+			nonNumericRoot = path
+			break
+		}
+	}
+	if nonNumericRoot == nil || nonNumericRoot.Complete || nonNumericRoot.SubtreeEnumerated ||
+		!slices.Contains(nonNumericRoot.OpenReasons, "openIndex") {
+		t.Fatalf("fixed tuple with a sole non-numeric index path root = %#v, want openIndex", nonNumericRoot)
+	}
+}
+
+func TestInvocationValueClosesOnlyIntrinsicStringApparentIndex(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function text(): string;
+declare function boxed(): String;
+declare function constrained<T extends string>(): T;
+function preserve<T extends string>() { return constrained<T>(); }
+text();
+boxed();
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	sourcePath := filepath.Join(dir, "facts.ts")
+	needles := []string{"text()", "boxed()", "constrained<T>()"}
+	demands := make([]typefacts.InvocationDemand, len(needles))
+	for index, needle := range needles {
+		start := strings.LastIndex(source, needle)
+		demands[index] = typefacts.InvocationDemand{
+			Location:      typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: 1,
+		}
+	}
+	answer, err := analyzer.InvocationTranscripts(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results := make([]typefacts.InvocationValueFact, len(answer.Transcripts))
+	paths := make([][]typefacts.CallablePathFact, len(answer.Transcripts))
+	for index, transcript := range answer.Transcripts {
+		if transcript.SelectedSignature == nil {
+			t.Fatalf("transcript %d has no selected signature: %#v", index, transcript)
+		}
+		results[index] = transcript.SelectedSignature.Result
+		paths[index] = transcript.SelectedSignature.ResultCallablePaths
+	}
+	if slices.Contains(results[0].OpenReasons, "openIndex") {
+		t.Fatalf("primitive string stayed root-open: %#v", results[0])
+	}
+	if !slices.Contains(results[1].OpenReasons, "openIndex") {
+		t.Fatalf("boxed String lost its open index: %#v", results[1])
+	}
+	if slices.Contains(results[2].OpenReasons, "openIndex") ||
+		!slices.Contains(results[2].OpenReasons, "unresolvedGeneric") {
+		t.Fatalf("constrained generic = %#v, want only unresolvedGeneric to keep it open", results[2])
+	}
+	for index := range paths {
+		var root *typefacts.CallablePathFact
+		for pathIndex := range paths[index] {
+			candidate := &paths[index][pathIndex]
+			if len(candidate.Path) == 0 {
+				root = candidate
+				break
+			}
+		}
+		if root == nil || root.Complete || !slices.Contains(root.OpenReasons, "openIndex") {
+			t.Fatalf("string-shaped result %d path root = %#v, want member-enumeration openIndex", index, root)
+		}
+	}
+
+	augmentedDir := t.TempDir()
+	augmentedSource := `
+interface String { readonly [key: symbol]: unknown }
+declare function augmentedText(): string;
+augmentedText();
+`
+	writeInvocationProject(t, augmentedDir, map[string]string{"facts.ts": augmentedSource})
+	augmentedAnalyzer, closeAugmentedProject := openInvocationAnalyzer(t, augmentedDir)
+	defer closeAugmentedProject()
+	augmentedPath := filepath.Join(augmentedDir, "facts.ts")
+	needle := "augmentedText()"
+	start := strings.LastIndex(augmentedSource, needle)
+	augmentedAnswer, err := augmentedAnalyzer.InvocationTranscripts(
+		context.Background(),
+		[]typefacts.InvocationDemand{{
+			Location:      typefacts.Location{Path: augmentedPath, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: 1,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	augmented := augmentedAnswer.Transcripts[0].SelectedSignature
+	if augmented == nil || !slices.Contains(augmented.Result.OpenReasons, "openIndex") {
+		t.Fatalf("primitive string with an augmented wrapper index = %#v, want openIndex", augmented)
+	}
+
+	assertNoLibRootOpen := func(name, stringMembers, numberMembers, returnType string) {
+		t.Helper()
+		projectDir := t.TempDir()
+		globals := `
+interface Array<T> { readonly length: number }
+interface Boolean {}
+interface CallableFunction extends Function {}
+interface Function {}
+interface IArguments {}
+interface NewableFunction extends Function {}
+interface Number { ` + numberMembers + ` }
+interface Object {}
+interface RegExp {}
+interface String { ` + stringMembers + ` }
+`
+		projectSource := `
+declare function observed(): ` + returnType + `;
+observed();
+`
+		writeInvocationProject(t, projectDir, map[string]string{
+			"globals.d.ts": globals,
+			"facts.ts":     projectSource,
+			"tsconfig.json": `{
+  "compilerOptions": { "strict": true, "target": "ESNext", "module": "ESNext", "noLib": true },
+  "include": ["*.ts"]
+}`,
+		})
+		projectAnalyzer, closeNoLibProject := openInvocationAnalyzer(t, projectDir)
+		defer closeNoLibProject()
+		projectPath := filepath.Join(projectDir, "facts.ts")
+		projectNeedle := "observed()"
+		projectStart := strings.LastIndex(projectSource, projectNeedle)
+		projectAnswer, projectErr := projectAnalyzer.InvocationTranscripts(
+			context.Background(),
+			[]typefacts.InvocationDemand{{
+				Location: typefacts.Location{
+					Path:      projectPath,
+					StartByte: projectStart,
+					EndByte:   projectStart + len(projectNeedle),
+				},
+				CallableDepth: 1,
+			}},
+		)
+		if projectErr != nil {
+			t.Fatal(projectErr)
+		}
+		selected := projectAnswer.Transcripts[0].SelectedSignature
+		if selected == nil || !slices.Contains(selected.Result.OpenReasons, "openIndex") {
+			t.Fatalf("%s result = %#v, want root openIndex", name, selected)
+		}
+		var root *typefacts.CallablePathFact
+		for index := range selected.ResultCallablePaths {
+			candidate := &selected.ResultCallablePaths[index]
+			if len(candidate.Path) == 0 {
+				root = candidate
+				break
+			}
+		}
+		if root == nil || root.Complete || !slices.Contains(root.OpenReasons, "openIndex") {
+			t.Fatalf("%s callable-path root = %#v, want openIndex", name, root)
+		}
+	}
+
+	assertNoLibRootOpen(
+		"sole symbol wrapper index",
+		"readonly [key: symbol]: string",
+		"",
+		"string",
+	)
+	assertNoLibRootOpen(
+		"sole non-string wrapper index value",
+		"readonly [key: number]: unknown",
+		"",
+		"string",
+	)
+	assertNoLibRootOpen(
+		"mixed primitive domain",
+		"readonly [key: number]: string",
+		"readonly [key: number]: string",
+		"string | number",
+	)
+}
+
+func TestInvocationValueClosesOnlyExactArrayIndexAtRoot(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function mutable(): string[];
+declare function readonly(): ReadonlyArray<string>;
+declare function arrayLike(): { readonly [key: number]: string };
+interface Indexed<T> { readonly [key: number]: T }
+declare function genericArrayLike(): Indexed<string>;
+declare function mixed(): string[] | { readonly [key: number]: string };
+mutable();
+readonly();
+arrayLike();
+genericArrayLike();
+mixed();
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	path := filepath.Join(dir, "facts.ts")
+	needles := []string{"mutable()", "readonly()", "arrayLike()", "genericArrayLike()", "mixed()"}
+	demands := make([]typefacts.InvocationDemand, len(needles))
+	for index, needle := range needles {
+		start := strings.LastIndex(source, needle)
+		demands[index] = typefacts.InvocationDemand{
+			Location:      typefacts.Location{Path: path, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: 1,
+		}
+	}
+	answer, err := analyzer.InvocationTranscripts(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, transcript := range answer.Transcripts {
+		selected := transcript.SelectedSignature
+		if selected == nil {
+			t.Fatalf("transcript %d has no selected signature: %#v", index, transcript)
+		}
+		rootHasOpenIndex := slices.Contains(selected.Result.OpenReasons, "openIndex")
+		if index < 2 && rootHasOpenIndex {
+			t.Fatalf("exact array result %d stayed root-open: %#v", index, selected.Result)
+		}
+		if index >= 2 && !rootHasOpenIndex {
+			t.Fatalf("non-array result %d lost root openIndex: %#v", index, selected.Result)
+		}
+		var root *typefacts.CallablePathFact
+		for pathIndex := range selected.ResultCallablePaths {
+			candidate := &selected.ResultCallablePaths[pathIndex]
+			if len(candidate.Path) == 0 {
+				root = candidate
+				break
+			}
+		}
+		if root == nil || root.Complete || !slices.Contains(root.OpenReasons, "openIndex") {
+			t.Fatalf("array-shaped result %d path root = %#v, want member-enumeration openIndex", index, root)
+		}
+	}
+
+	augmentedDir := t.TempDir()
+	augmentedSource := `
+interface Array<T> { readonly [key: symbol]: T }
+declare function augmented(): string[];
+augmented();
+`
+	writeInvocationProject(t, augmentedDir, map[string]string{"facts.ts": augmentedSource})
+	augmentedAnalyzer, closeAugmentedProject := openInvocationAnalyzer(t, augmentedDir)
+	defer closeAugmentedProject()
+	augmentedPath := filepath.Join(augmentedDir, "facts.ts")
+	augmentedNeedle := "augmented()"
+	augmentedStart := strings.LastIndex(augmentedSource, augmentedNeedle)
+	augmentedAnswer, err := augmentedAnalyzer.InvocationTranscripts(
+		context.Background(),
+		[]typefacts.InvocationDemand{{
+			Location: typefacts.Location{
+				Path:      augmentedPath,
+				StartByte: augmentedStart,
+				EndByte:   augmentedStart + len(augmentedNeedle),
+			},
+			CallableDepth: 1,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	augmented := augmentedAnswer.Transcripts[0].SelectedSignature
+	if augmented == nil || !slices.Contains(augmented.Result.OpenReasons, "openIndex") {
+		t.Fatalf("array with augmented index = %#v, want root openIndex", augmented)
+	}
+
+	assertNoLibArrayRootOpen := func(name, arrayMembers string) {
+		t.Helper()
+		projectDir := t.TempDir()
+		globals := `
+interface Array<T> { ` + arrayMembers + ` }
+interface Boolean {}
+interface CallableFunction extends Function {}
+interface Function {}
+interface IArguments {}
+interface NewableFunction extends Function {}
+interface Number {}
+interface Object {}
+interface RegExp {}
+interface String {}
+`
+		projectSource := `
+declare function observed(): string[];
+observed();
+`
+		writeInvocationProject(t, projectDir, map[string]string{
+			"globals.d.ts": globals,
+			"facts.ts":     projectSource,
+			"tsconfig.json": `{
+  "compilerOptions": { "strict": true, "target": "ESNext", "module": "ESNext", "noLib": true },
+  "include": ["*.ts"]
+}`,
+		})
+		projectAnalyzer, closeNoLibProject := openInvocationAnalyzer(t, projectDir)
+		defer closeNoLibProject()
+		projectPath := filepath.Join(projectDir, "facts.ts")
+		projectNeedle := "observed()"
+		projectStart := strings.LastIndex(projectSource, projectNeedle)
+		projectAnswer, projectErr := projectAnalyzer.InvocationTranscripts(
+			context.Background(),
+			[]typefacts.InvocationDemand{{
+				Location: typefacts.Location{
+					Path:      projectPath,
+					StartByte: projectStart,
+					EndByte:   projectStart + len(projectNeedle),
+				},
+				CallableDepth: 1,
+			}},
+		)
+		if projectErr != nil {
+			t.Fatal(projectErr)
+		}
+		selected := projectAnswer.Transcripts[0].SelectedSignature
+		if selected == nil || !slices.Contains(selected.Result.OpenReasons, "openIndex") {
+			t.Fatalf("%s result = %#v, want root openIndex", name, selected)
+		}
+	}
+
+	assertNoLibArrayRootOpen("sole symbol Array index", "readonly [key: symbol]: T")
+	assertNoLibArrayRootOpen("sole non-element Array index value", "readonly [key: number]: unknown")
+}
+
+func TestCallablePathSeparatesLocalShapeFromSubtreeEnumeration(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+interface Recursive { next: Recursive }
+declare function nested(): { child: () => void };
+declare function leaf(): void;
+declare function recursive(): Recursive;
+declare function choice(): { map: () => void } | { other: number };
+declare function deepChoice(): { next: { callback: () => void } } | Recursive;
+declare function genericWrapper<T extends { child: number }>(): { node: T };
+function preserve<T extends { child: number }>() { return genericWrapper<T>(); }
+nested();
+leaf();
+recursive();
+choice();
+deepChoice();
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	path := filepath.Join(dir, "facts.ts")
+	needles := []string{
+		"nested()", "leaf()", "recursive()", "choice()", "genericWrapper<T>()", "deepChoice()",
+	}
+	depths := []int{0, 0, 4, 1, 1, 2}
+	demands := make([]typefacts.InvocationDemand, len(needles))
+	for index, needle := range needles {
+		start := strings.LastIndex(source, needle)
+		demands[index] = typefacts.InvocationDemand{
+			Location:      typefacts.Location{Path: path, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: depths[index],
+		}
+	}
+	answer, err := analyzer.InvocationTranscripts(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := make([]*typefacts.SelectedSignature, len(answer.Transcripts))
+	for index := range answer.Transcripts {
+		selected[index] = answer.Transcripts[index].SelectedSignature
+		if selected[index] == nil {
+			t.Fatalf("transcript %d has no selected signature: %#v", index, answer.Transcripts[index])
+		}
+	}
+	findPath := func(paths []typefacts.CallablePathFact, names ...string) *typefacts.CallablePathFact {
+		t.Helper()
+		for index := range paths {
+			if pathNamesEqual(paths[index].Path, names...) {
+				return &paths[index]
+			}
+		}
+		return nil
+	}
+
+	nestedRoot := findPath(selected[0].ResultCallablePaths)
+	if nestedRoot == nil || !nestedRoot.Complete || nestedRoot.SubtreeEnumerated || len(nestedRoot.OpenReasons) != 0 {
+		t.Fatalf("depth-cut root = %#v, want locally complete with subtreeEnumerated=false", nestedRoot)
+	}
+	leafRoot := findPath(selected[1].ResultCallablePaths)
+	if leafRoot == nil || !leafRoot.Complete || !leafRoot.SubtreeEnumerated || len(leafRoot.OpenReasons) != 0 {
+		t.Fatalf("true leaf root = %#v, want local and subtree closure", leafRoot)
+	}
+	cyclePath := findPath(selected[2].ResultCallablePaths, "next")
+	if cyclePath == nil || !cyclePath.Complete || cyclePath.SubtreeEnumerated || len(cyclePath.OpenReasons) != 0 {
+		t.Fatalf("cycle-cut path = %#v, want locally complete with subtreeEnumerated=false", cyclePath)
+	}
+	var absent *typefacts.CallablePathFact
+	for index := range selected[3].ResultCallablePaths {
+		candidate := &selected[3].ResultCallablePaths[index]
+		if candidate.Presence == typefacts.PathAbsent {
+			absent = candidate
+			break
+		}
+	}
+	if absent == nil || !absent.Complete || !absent.SubtreeEnumerated || len(absent.OpenReasons) != 0 {
+		t.Fatalf("synthetic absent alternative = %#v, want a closed empty subtree", absent)
+	}
+	genericPath := findPath(selected[4].ResultCallablePaths, "node")
+	if genericPath == nil || genericPath.Complete ||
+		!slices.Contains(genericPath.OpenReasons, "unresolvedGeneric") {
+		t.Fatalf("depth-cut constrained generic path = %#v, want unresolvedGeneric", genericPath)
+	}
+	var cutAlternative *typefacts.CallablePathFact
+	for index := range selected[5].ResultCallablePaths {
+		candidate := &selected[5].ResultCallablePaths[index]
+		if pathNamesEqual(candidate.Path, "next", "callback") &&
+			candidate.Presence == typefacts.PathUnknown {
+			cutAlternative = candidate
+			break
+		}
+	}
+	if cutAlternative == nil || cutAlternative.Complete || cutAlternative.SubtreeEnumerated ||
+		!slices.Contains(cutAlternative.OpenReasons, "openAlternative") {
+		t.Fatalf("path below a cycle-cut alternative = %#v, want unknown/openAlternative", cutAlternative)
+	}
+	for index, signature := range selected {
+		for _, fact := range signature.ResultCallablePaths {
+			if slices.Contains(fact.OpenReasons, "depthLimit") || slices.Contains(fact.OpenReasons, "cycle") {
+				t.Fatalf("transcript %d retained a census reason as local openness: %#v", index, fact)
+			}
+		}
+	}
+}
+
+func TestCallablePathAbsenceRequiresAClosedRequiredEnumeratedPrefix(t *testing.T) {
+	target := []typefacts.PathSegment{{Kind: typefacts.PathSegmentProperty, Property: "child"}}
+	prefix := typefacts.CallablePathFact{
+		Alternative:       0,
+		Presence:          typefacts.PathRequired,
+		Callability:       typefacts.CallabilityNonCallable,
+		Constructability:  typefacts.InvocationNonConstructable,
+		Complete:          true,
+		SubtreeEnumerated: true,
+	}
+	if !callablePathPrefixProvesAbsence([]typefacts.CallablePathFact{prefix}, 0, target) {
+		t.Fatal("closed required enumerated prefix did not prove absence")
+	}
+	mutations := []struct {
+		name   string
+		mutate func(*typefacts.CallablePathFact)
+	}{
+		{"optional prefix", func(fact *typefacts.CallablePathFact) { fact.Presence = typefacts.PathOptional }},
+		{"incomplete prefix", func(fact *typefacts.CallablePathFact) { fact.Complete = false }},
+		{"reason-bearing prefix", func(fact *typefacts.CallablePathFact) {
+			fact.OpenReasons = []string{"openType"}
+		}},
+		{"unenumerated prefix", func(fact *typefacts.CallablePathFact) { fact.SubtreeEnumerated = false }},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			candidate := prefix
+			mutation.mutate(&candidate)
+			if callablePathPrefixProvesAbsence([]typefacts.CallablePathFact{candidate}, 0, target) {
+				t.Fatalf("%s proved absence: %#v", mutation.name, candidate)
+			}
+		})
+	}
+}
+
 func TestInvocationTranscriptDistinguishesOverloadsThroughAnImportAlias(t *testing.T) {
 	dir := t.TempDir()
 	writeInvocationProject(t, dir, map[string]string{

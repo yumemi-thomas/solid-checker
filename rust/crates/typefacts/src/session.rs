@@ -2397,7 +2397,8 @@ fn validate_callable_paths(
             && (fact.callability != Callability::Unknown
                 || fact.constructability != InvocationConstructability::Unknown
                 || fact.declaration.is_some()
-                || !fact.complete)
+                || !fact.complete
+                || !fact.subtree_enumerated)
         {
             return Err(SessionError::InvalidResponse(
                 "absent callable path carries a positive or open fact".into(),
@@ -2823,6 +2824,24 @@ mod tests {
             start_byte: start,
             end_byte: start + 1,
         }
+    }
+
+    #[test]
+    fn absent_callable_path_requires_an_enumerated_empty_subtree() {
+        let mut fact = crate::CallablePathFact {
+            alternative: 0,
+            path: Vec::new(),
+            presence: crate::PathPresence::Absent,
+            callability: crate::Callability::Unknown,
+            constructability: crate::InvocationConstructability::Unknown,
+            declaration: None,
+            complete: true,
+            subtree_enumerated: false,
+            open_reasons: Vec::new(),
+        };
+        assert!(validate_callable_paths(std::slice::from_ref(&fact), 1).is_err());
+        fact.subtree_enumerated = true;
+        assert!(validate_callable_paths(&[fact], 1).is_ok());
     }
 
     #[test]

@@ -4,32 +4,21 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 8 because an implementation census now states
-// two families of fact it could not state at 7.
+// TypeFactsHandshakeProtocol is 9 because callable-path facts now distinguish
+// the demanded node's own local shape from whether its descendant census was
+// fully enumerated. A depth or cycle cut leaves Complete about the node intact
+// and reports SubtreeEnumerated=false, so exact-node consumers do not confuse
+// census budget with an unknown local answer while whole-census consumers still
+// fail closed.
 //
-// A parameter use carries the reachability of the position it was observed at,
-// answered by the same implementation-body walk that answers it for a call, so
-// a read witness can be held to the same execution floor a call witness is.
-//
-// An implementation call reports the invoking positions among its own
-// arguments: the callables each argument slot carries, the reviewed
-// default-library member the callee resolves to and which of its slots that
-// member invokes, what the callee's own body does with its parameters, and —
-// the link that lets a consumer compose those rather than assume them — the
-// innermost callable that contains the call. It also records construct
-// expressions alongside calls, tagged by kind so that a claim specifically
-// about a call can refuse a construction, and it carries the callee-body claims
-// that are complete but for one invoking-slot premise the producer may not
-// decide, spelled out for the verifier that owns the dialect to answer.
-//
-// A protocol-7 client rejects unknown transcript fields outright, and a
-// protocol-7 producer omits a field this protocol requires, so the additions
-// are a break rather than a compatible extension and the number is what says
+// A protocol-8 client rejects unknown transcript fields outright, and a
+// protocol-8 producer omits a field this protocol requires, so the addition
+// is a break rather than a compatible extension and the number is what says
 // so. The digest and build id still move with it, and the handshake refuses on
 // any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 8
-	TypeFactsSchemaSHA256             = "sha256:0f7006980f58f1910e8def7e08139aa16db40b073b083e0aff65828396008fb4"
+	TypeFactsHandshakeProtocol uint64 = 9
+	TypeFactsSchemaSHA256             = "sha256:1a9cda6d1e2423bf9c07d42b56718c2b63f63584ca9db357f51772e09d59cf7b"
 )
 
 type ServiceHandshake struct {

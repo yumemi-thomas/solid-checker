@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://solid-checker.dev/schema/typefacts-v1.schema.json",
   "title": "TypeFactsSchema v1 (latest semantic vocabulary)",
-  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. Handshake protocol 5 adds exact exported-value transcripts as a read-only operation distinct from invocation transcripts. V1 is the sole active lifecycle schema. The retained table remains Wire schema v17 because both transcript kinds are demand-shaped side answers rather than retained rows. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
+  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. Handshake protocol 9 separates a callable path's locally complete node shape from whether its descendant census was fully enumerated. V1 is the sole active lifecycle schema. The retained table remains Wire schema v18 because invocation and exported-value transcripts are demand-shaped side answers rather than retained rows. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
   "oneOf": [
     { "$ref": "#/$defs/lifecycleRequest" },
     { "$ref": "#/$defs/lifecycleResponse" }
@@ -286,7 +286,7 @@
     "callablePath": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["alternative", "presence", "callability", "constructability"],
+      "required": ["alternative", "presence", "callability", "constructability", "subtreeEnumerated"],
       "properties": {
         "alternative": { "type": "integer", "minimum": 0 },
         "path": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/pathSegment" } },
@@ -295,6 +295,7 @@
         "constructability": { "enum": ["constructable", "nonConstructable", "mixed", "unknown"] },
         "declaration": { "$ref": "#/$defs/declaration" },
         "complete": { "type": "boolean" },
+        "subtreeEnumerated": { "type": "boolean" },
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
       }
     },

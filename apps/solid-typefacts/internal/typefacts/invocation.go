@@ -133,14 +133,15 @@ type Discriminant struct {
 }
 
 type CallablePathFact struct {
-	Alternative      int                        `cbor:"alternative" json:"alternative"`
-	Path             []PathSegment              `cbor:"path,omitempty" json:"path,omitempty"`
-	Presence         PathPresence               `cbor:"presence" json:"presence"`
-	Callability      Callability                `cbor:"callability" json:"callability"`
-	Constructability InvocationConstructability `cbor:"constructability" json:"constructability"`
-	Declaration      *Declaration               `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Complete         bool                       `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons      []string                   `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	Alternative       int                        `cbor:"alternative" json:"alternative"`
+	Path              []PathSegment              `cbor:"path,omitempty" json:"path,omitempty"`
+	Presence          PathPresence               `cbor:"presence" json:"presence"`
+	Callability       Callability                `cbor:"callability" json:"callability"`
+	Constructability  InvocationConstructability `cbor:"constructability" json:"constructability"`
+	Declaration       *Declaration               `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Complete          bool                       `cbor:"complete,omitempty" json:"complete,omitempty"`
+	SubtreeEnumerated bool                       `cbor:"subtreeEnumerated" json:"subtreeEnumerated"`
+	OpenReasons       []string                   `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 type FinitePartitionAxis string

@@ -519,10 +519,74 @@ func (p *project) invocationValueFactLocked(value *checker.Type) typefacts.Invoc
 	if value.Flags()&checker.TypeFlagsInstantiable != 0 {
 		fact.OpenReasons = append(fact.OpenReasons, "unresolvedGeneric")
 	}
-	if len(p.checker.GetIndexInfosOfType(value)) != 0 {
+	if value != nil && len(p.checker.GetIndexInfosOfType(value)) != 0 &&
+		!invocationValueHasClosedExactTupleIndex(p.checker, value) &&
+		!invocationValueHasClosedPrimitiveApparentIndex(p.checker, value, primitive) &&
+		!invocationValueHasClosedArrayIndex(p.checker, value) {
 		fact.OpenReasons = append(fact.OpenReasons, "openIndex")
 	}
 	return fact
+}
+
+// invocationValueHasClosedExactTupleIndex distinguishes a tuple's synthesized
+// numeric index from an author-declared open key space. A single fixed tuple's
+// index value is exactly the union of the slots the callable-path walk already
+// enumerates. Optional and rest elements keep the index open, as does every
+// non-tuple (including a union whose constituents happen to be tuples).
+func invocationValueHasClosedExactTupleIndex(typeChecker *checker.Checker, value *checker.Type) bool {
+	if value == nil || value.Flags()&checker.TypeFlagsUnion != 0 {
+		return false
+	}
+	indexInfos := typeChecker.GetIndexInfosOfType(value)
+	if len(indexInfos) != 1 || !checker.Checker_isTypeIdenticalTo(
+		typeChecker,
+		indexInfos[0].KeyType(),
+		typeChecker.GetNumberType(),
+	) {
+		return false
+	}
+	shape := tupleShapeOfType(typeChecker, value)
+	return shape != nil && shape.ExactLengthKnown && !shape.HasRest
+}
+
+// invocationValueHasClosedPrimitiveApparentIndex recognizes only the
+// intrinsic String wrapper's synthesized numeric index. The primitive value's
+// own shape is still string; the wrapper index answers member enumeration, not
+// whether the value itself is callable, constructable, or primitive. Any
+// augmentation, boxed String object, mixed primitive domain, or changed index
+// value keeps the root open.
+func invocationValueHasClosedPrimitiveApparentIndex(
+	typeChecker *checker.Checker,
+	value *checker.Type,
+	primitive typefacts.PrimitiveValueDomain,
+) bool {
+	pureString := typefacts.NewPrimitiveValueDomain(true, false, false, false, false, false, false, false, false)
+	if primitive != pureString {
+		return false
+	}
+	indexInfos := typeChecker.GetIndexInfosOfType(value)
+	return len(indexInfos) == 1 &&
+		checker.Checker_isTypeIdenticalTo(typeChecker, indexInfos[0].KeyType(), typeChecker.GetNumberType()) &&
+		checker.Checker_isTypeIdenticalTo(typeChecker, indexInfos[0].ValueType(), typeChecker.GetStringType())
+}
+
+// invocationValueHasClosedArrayIndex recognizes only the global Array and
+// ReadonlyArray references whose sole numeric index has exactly their element
+// type. This closes the value's own shape, not its unbounded member census;
+// callable-path facts deliberately retain openIndex. Tuples are handled by the
+// stricter fixed-length arm above, and author-defined array-like interfaces do
+// not satisfy the checker's array-or-tuple predicate.
+func invocationValueHasClosedArrayIndex(typeChecker *checker.Checker, value *checker.Type) bool {
+	if value == nil || value.Flags()&checker.TypeFlagsUnion != 0 ||
+		!checker.Checker_isArrayOrTupleType(typeChecker, value) ||
+		checker.IsTupleType(value) {
+		return false
+	}
+	indexInfos := typeChecker.GetIndexInfosOfType(value)
+	elements := checker.Checker_getTypeArguments(typeChecker, value)
+	return len(indexInfos) == 1 && len(elements) == 1 &&
+		checker.Checker_isTypeIdenticalTo(typeChecker, indexInfos[0].KeyType(), typeChecker.GetNumberType()) &&
+		checker.Checker_isTypeIdenticalTo(typeChecker, indexInfos[0].ValueType(), elements[0])
 }
 
 func invocationConstituents(value *checker.Type) []*checker.Type {
@@ -755,11 +819,7 @@ func (p *project) discriminantsOfTypeLocked(value *checker.Type) []typefacts.Dis
 func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefacts.CallablePathFact {
 	constituents := invocationConstituents(value)
 	paths := make([]typefacts.CallablePathFact, 0)
-	closedAlternatives := make([]bool, len(constituents))
 	for alternative, constituent := range constituents {
-		closedAlternatives[alternative] = constituent != nil &&
-			constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError|checker.TypeFlagsInstantiable) == 0 &&
-			len(p.checker.GetIndexInfosOfType(constituent)) == 0
 		p.walkCallablePathsLocked(
 			constituent,
 			alternative,
@@ -770,9 +830,11 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 		)
 	}
 	// A fixed path discovered in one closed alternative must be represented in
-	// every alternative. Closed alternatives prove absence; open alternatives
-	// retain an explicit unknown instead. This is what prevents a union sibling
-	// from inheriting another sibling's callback.
+	// every alternative. The nearest observed prefix proves absence only when
+	// its own shape is closed and its children were enumerated. A depth, cycle,
+	// index, or generic cut retains an explicit unknown instead. This prevents a
+	// union sibling from inheriting another sibling's callback without claiming
+	// a path absent below an unenumerated parent.
 	type pathTemplate struct {
 		path []typefacts.PathSegment
 	}
@@ -797,20 +859,23 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 			presence := typefacts.PathUnknown
 			complete := false
 			var reasons []string
-			if closedAlternatives[alternative] {
+			subtreeEnumerated := false
+			if callablePathPrefixProvesAbsence(paths, alternative, template.path) {
 				presence = typefacts.PathAbsent
 				complete = true
+				subtreeEnumerated = true
 			} else {
 				reasons = []string{"openAlternative"}
 			}
 			paths = append(paths, typefacts.CallablePathFact{
-				Alternative:      alternative,
-				Path:             append([]typefacts.PathSegment(nil), template.path...),
-				Presence:         presence,
-				Callability:      typefacts.CallabilityUnknown,
-				Constructability: typefacts.InvocationConstructUnknown,
-				Complete:         complete,
-				OpenReasons:      reasons,
+				Alternative:       alternative,
+				Path:              append([]typefacts.PathSegment(nil), template.path...),
+				Presence:          presence,
+				Callability:       typefacts.CallabilityUnknown,
+				Constructability:  typefacts.InvocationConstructUnknown,
+				Complete:          complete,
+				SubtreeEnumerated: subtreeEnumerated,
+				OpenReasons:       reasons,
 			})
 		}
 	}
@@ -824,6 +889,41 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 	return paths
 }
 
+func callablePathPrefixProvesAbsence(
+	paths []typefacts.CallablePathFact,
+	alternative int,
+	path []typefacts.PathSegment,
+) bool {
+	nearest := -1
+	proven := false
+	for index := range paths {
+		fact := &paths[index]
+		if fact.Alternative != alternative || len(fact.Path) >= len(path) ||
+			!callablePathSegmentsPrefix(fact.Path, path) || len(fact.Path) <= nearest {
+			continue
+		}
+		nearest = len(fact.Path)
+		proven = fact.Presence == typefacts.PathRequired && fact.Complete &&
+			fact.SubtreeEnumerated && len(fact.OpenReasons) == 0
+	}
+	return nearest >= 0 && proven
+}
+
+func callablePathSegmentsPrefix(prefix, path []typefacts.PathSegment) bool {
+	if len(prefix) > len(path) {
+		return false
+	}
+	for index := range prefix {
+		left, right := prefix[index], path[index]
+		if left.Kind != right.Kind || left.Property != right.Property ||
+			(left.Index == nil) != (right.Index == nil) ||
+			(left.Index != nil && *left.Index != *right.Index) {
+			return false
+		}
+	}
+	return true
+}
+
 func (p *project) walkCallablePathsLocked(
 	value *checker.Type,
 	alternative int,
@@ -832,6 +932,7 @@ func (p *project) walkCallablePathsLocked(
 	seen map[*checker.Type]struct{},
 	paths *[]typefacts.CallablePathFact,
 ) {
+	factIndex := len(*paths)
 	callability := callabilityOfType(p.checker, value)
 	constructability := invocationConstructabilityOfType(p.checker, value)
 	fact := typefacts.CallablePathFact{
@@ -841,26 +942,33 @@ func (p *project) walkCallablePathsLocked(
 		Callability:      callability,
 		Constructability: constructability,
 		Complete: value != nil &&
-			value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError) == 0 &&
+			value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError|checker.TypeFlagsInstantiable) == 0 &&
 			callability != typefacts.CallabilityUnknown &&
 			constructability != typefacts.InvocationConstructUnknown,
+		SubtreeEnumerated: true,
 	}
-	if !fact.Complete {
+	if value != nil && value.Flags()&checker.TypeFlagsInstantiable != 0 {
+		fact.OpenReasons = append(fact.OpenReasons, "unresolvedGeneric")
+	}
+	if !fact.Complete && len(fact.OpenReasons) == 0 {
 		fact.OpenReasons = append(fact.OpenReasons, "openType")
 	}
 	*paths = append(*paths, fact)
+	if value != nil && len(p.checker.GetIndexInfosOfType(value)) != 0 &&
+		!invocationValueHasClosedExactTupleIndex(p.checker, value) {
+		fact := &(*paths)[factIndex]
+		fact.Complete = false
+		fact.SubtreeEnumerated = false
+		fact.OpenReasons = append(fact.OpenReasons, "openIndex")
+	}
 	if value == nil || remaining == 0 {
 		if value != nil && (len(p.checker.GetPropertiesOfType(value)) != 0 || checker.IsTupleType(value)) {
-			last := &(*paths)[len(*paths)-1]
-			last.Complete = false
-			last.OpenReasons = append(last.OpenReasons, "depthLimit")
+			(*paths)[factIndex].SubtreeEnumerated = false
 		}
 		return
 	}
 	if _, cycling := seen[value]; cycling {
-		last := &(*paths)[len(*paths)-1]
-		last.Complete = false
-		last.OpenReasons = append(last.OpenReasons, "cycle")
+		(*paths)[factIndex].SubtreeEnumerated = false
 		return
 	}
 	seen[value] = struct{}{}
@@ -895,11 +1003,6 @@ func (p *project) walkCallablePathsLocked(
 				child.Declaration = &declarations[0]
 			}
 		}
-	}
-	if len(p.checker.GetIndexInfosOfType(value)) != 0 {
-		last := &(*paths)[len(*paths)-1]
-		last.Complete = false
-		last.OpenReasons = append(last.OpenReasons, "openIndex")
 	}
 }
 

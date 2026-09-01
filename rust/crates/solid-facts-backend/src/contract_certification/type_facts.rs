@@ -2792,9 +2792,7 @@ fn require_signature_parameter_callable(
     let mut found = false;
     for fact in matches {
         found = true;
-        if !fact.complete
-            || !fact.open_reasons.is_empty()
-            || fact.presence == PathPresence::Unknown
+        if !callable_path_is_present_and_locally_closed(fact)
             || fact.callability != Callability::Callable
         {
             return Err(open("callback parameter path is not closed and callable"));
@@ -3330,9 +3328,7 @@ fn require_operation_recursive_signature(
     {
         return Ok(());
     }
-    if (!fact.complete || !fact.open_reasons.is_empty() || fact.presence == PathPresence::Unknown)
-        && !callable_local_closure
-    {
+    if !callable_path_is_present_and_locally_closed(fact) && !callable_local_closure {
         return Err(open(&format!(
             "operation value path is locally open (complete={}, presence={:?}, callability={:?}, reasons={:?})",
             fact.complete, fact.presence, fact.callability, fact.open_reasons
@@ -3405,13 +3401,28 @@ fn require_return_callable_source(
     true
 }
 
+fn callable_path_has_closed_local_observation(path: &typefacts::CallablePathFact) -> bool {
+    path.complete && path.open_reasons.is_empty() && path.presence != PathPresence::Unknown
+}
+
+fn callable_path_is_present_and_locally_closed(path: &typefacts::CallablePathFact) -> bool {
+    callable_path_has_closed_local_observation(path)
+        && matches!(
+            path.presence,
+            PathPresence::Required | PathPresence::Optional
+        )
+}
+
+fn callable_path_census_is_closed(path: &typefacts::CallablePathFact) -> bool {
+    callable_path_has_closed_local_observation(path) && path.subtree_enumerated
+}
+
 fn require_export_callable_paths_closed(
     transcript: &ExportValueTranscript,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
 ) -> Result<(), TypeFactsCertificationError> {
     for path in &transcript.callable_paths {
-        if !path.complete || !path.open_reasons.is_empty() || path.presence == PathPresence::Unknown
-        {
+        if !callable_path_census_is_closed(path) {
             return Err(open("export value contains an open callable path"));
         }
     }
@@ -3453,7 +3464,7 @@ fn require_export_recursive_subject(
         .iter()
         .find(|fact| fact.alternative == alternative && fact.path == expected_path)
         .ok_or_else(|| open("exported-value path is absent from the exact producer census"))?;
-    if !fact.complete || !fact.open_reasons.is_empty() || fact.presence == PathPresence::Unknown {
+    if !callable_path_is_present_and_locally_closed(fact) {
         return Err(open("exported-value path is locally open"));
     }
     require_path_callability(*callable, fact, "exported-value path", open)?;
@@ -3994,8 +4005,7 @@ fn require_all_callable_paths_closed(
         .flat_map(|parameter| &parameter.callable_paths)
         .chain(&signature.result_callable_paths)
     {
-        if !path.complete || !path.open_reasons.is_empty() || path.presence == PathPresence::Unknown
-        {
+        if !callable_path_census_is_closed(path) {
             return Err(open("selected signature contains an open callable path"));
         }
     }
@@ -4273,7 +4283,7 @@ fn require_recursive_subject(
         .iter()
         .find(|fact| fact.alternative == alternative && fact.path == expected_path)
         .ok_or_else(|| open("recursive path is absent from the exact producer census"))?;
-    if !fact.complete || !fact.open_reasons.is_empty() || fact.presence == PathPresence::Unknown {
+    if !callable_path_is_present_and_locally_closed(fact) {
         return Err(open("recursive path is locally open"));
     }
     if callable.asserts_callable() && fact.callability != Callability::Callable {
@@ -4885,7 +4895,8 @@ mod tests {
                         "presence": "required",
                         "callability": "callable",
                         "constructability": "nonConstructable",
-                        "complete": true
+                        "complete": true,
+                        "subtreeEnumerated": true
                     }]
                 }],
                 "result": {
@@ -6867,7 +6878,8 @@ mod tests {
                 "presence": "required",
                 "callability": "callable",
                 "constructability": "nonConstructable",
-                "complete": true
+                "complete": true,
+                "subtreeEnumerated": true
             }],
             "complete": true
         });
@@ -6947,6 +6959,52 @@ mod tests {
         );
         assert_eq!(sites.len(), 1, "the path premise still produces a witness");
 
+        let mut depth_cut = transcript.clone();
+        depth_cut.callable_paths[0].subtree_enumerated = false;
+        let mut local_sites = Vec::new();
+        assert!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    path.clone(),
+                    DemandedCallability::Unknown,
+                ),
+                &depth_cut,
+                &open,
+                &mut local_sites,
+            )
+            .is_ok(),
+            "an exact export path must ignore descendant-census exhaustion"
+        );
+        assert!(
+            require_export_callable_paths_closed(&depth_cut, &open).is_err(),
+            "a whole export census must refuse subtreeEnumerated=false"
+        );
+
+        let mut absent_alternative = transcript.clone();
+        let absent = &mut absent_alternative.callable_paths[0];
+        absent.presence = PathPresence::Absent;
+        absent.callability = Callability::Unknown;
+        absent.constructability = typefacts::InvocationConstructability::Unknown;
+        assert!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    path.clone(),
+                    DemandedCallability::Unknown,
+                ),
+                &absent_alternative,
+                &open,
+                &mut Vec::new(),
+            )
+            .is_err(),
+            "a positive exact-path demand must refuse a proven-absent alternative"
+        );
+        assert!(
+            require_export_callable_paths_closed(&absent_alternative, &open).is_ok(),
+            "a proven-absent alternative is still a closed whole-census entry"
+        );
+
         // The premise the boolean forced -- and the exact refusal the whole
         // ecosystem row hit.
         let mut refused = Vec::new();
@@ -7000,6 +7058,27 @@ mod tests {
             ),
             "an unasserted callability must not weaken the path's own closure premise"
         );
+    }
+
+    #[test]
+    fn callable_path_closure_rejects_unknown_presence_and_open_reasons() {
+        let mut fact = export_value_transcript(json!({})).callable_paths.remove(0);
+        let mut optional = fact.clone();
+        optional.presence = PathPresence::Optional;
+        assert!(callable_path_has_closed_local_observation(&optional));
+        assert!(callable_path_is_present_and_locally_closed(&optional));
+        assert!(callable_path_census_is_closed(&optional));
+
+        fact.presence = PathPresence::Unknown;
+        assert!(!callable_path_has_closed_local_observation(&fact));
+        assert!(!callable_path_is_present_and_locally_closed(&fact));
+        assert!(!callable_path_census_is_closed(&fact));
+
+        fact.presence = PathPresence::Required;
+        fact.open_reasons.push("openType".into());
+        assert!(!callable_path_has_closed_local_observation(&fact));
+        assert!(!callable_path_is_present_and_locally_closed(&fact));
+        assert!(!callable_path_census_is_closed(&fact));
     }
 
     /// The adversarial input for F3: a transcript that concedes everything it
@@ -7330,6 +7409,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn exact_callable_parameter_path_ignores_descendant_census_exhaustion() {
+        let mut signature = transcript().selected_signature.unwrap();
+        signature.parameters[0].callable_paths[0].subtree_enumerated = false;
+        let source = ValueSource::Parameter {
+            index: 0,
+            path: vec!["callback".into()],
+        };
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        assert!(
+            require_signature_parameter_callable(&signature, &source, &open, &mut Vec::new())
+                .is_ok(),
+            "the parameter's exact callable shape does not require its descendants"
+        );
+        assert!(require_all_callable_paths_closed(&signature, &open).is_err());
+
+        let absent = &mut signature.parameters[0].callable_paths[0];
+        absent.presence = PathPresence::Absent;
+        absent.callability = Callability::Unknown;
+        absent.constructability = typefacts::InvocationConstructability::Unknown;
+        absent.subtree_enumerated = true;
+        assert!(
+            require_signature_parameter_callable(&signature, &source, &open, &mut Vec::new())
+                .is_err()
+        );
+        assert!(require_all_callable_paths_closed(&signature, &open).is_ok());
+    }
+
     fn verify_bound_recursive(
         proof: &ScheduledProofDemand,
         transcript: &InvocationTranscript,
@@ -7457,6 +7567,92 @@ mod tests {
     }
 
     #[test]
+    fn exact_operation_path_ignores_descendant_census_exhaustion() {
+        let mut operation = operation(
+            "invoke",
+            OperationKind::Invoke,
+            per_call_cardinality(Some(0)),
+        );
+        operation.inputs.push(
+            solid_reactive_ir::contract_semantics::ValueShape::Parameter {
+                index: 0,
+                path: Vec::new(),
+            },
+        );
+        let exported = export_semantics(Vec::new(), vec![operation]);
+        let export_transcript = export_value_transcript(json!({}));
+        let mut signature = transcript().selected_signature.unwrap();
+        signature.parameters[0].callable_paths[0].subtree_enumerated = false;
+        let proof = proof(
+            ProofFamily::RecursiveValueShape,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                root: ValueRoot::OperationInput {
+                    operation: solid_reactive_ir::contract_semantics::OperationId("invoke".into()),
+                    index: 0,
+                },
+                path: solid_reactive_ir::contract_semantics::ValuePath(vec![
+                    ValuePathSegment::ObjectProperty("callback".into()),
+                ]),
+                callable: DemandedCallability::Callable,
+            }),
+        );
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let mut sites = Vec::new();
+        assert!(
+            require_operation_recursive_signature(
+                &proof,
+                &export_transcript,
+                &exported,
+                &ValueRoot::OperationInput {
+                    operation: solid_reactive_ir::contract_semantics::OperationId("invoke".into()),
+                    index: 0,
+                },
+                &solid_reactive_ir::contract_semantics::ValuePath(vec![
+                    ValuePathSegment::ObjectProperty("callback".into()),
+                ]),
+                DemandedCallability::Callable,
+                &signature,
+                &open,
+                &mut sites,
+            )
+            .is_ok(),
+            "the operation path's exact shape does not require its descendants"
+        );
+        assert!(require_all_callable_paths_closed(&signature, &open).is_err());
+
+        let absent = &mut signature.parameters[0].callable_paths[0];
+        absent.presence = PathPresence::Absent;
+        absent.callability = Callability::Unknown;
+        absent.constructability = typefacts::InvocationConstructability::Unknown;
+        absent.subtree_enumerated = true;
+        assert!(
+            require_operation_recursive_signature(
+                &proof,
+                &export_transcript,
+                &exported,
+                &ValueRoot::OperationInput {
+                    operation: solid_reactive_ir::contract_semantics::OperationId("invoke".into()),
+                    index: 0,
+                },
+                &solid_reactive_ir::contract_semantics::ValuePath(vec![
+                    ValuePathSegment::ObjectProperty("callback".into()),
+                ]),
+                DemandedCallability::Unknown,
+                &signature,
+                &open,
+                &mut Vec::new(),
+            )
+            .is_err()
+        );
+        assert!(require_all_callable_paths_closed(&signature, &open).is_ok());
+    }
+
+    #[test]
     fn recursive_open_sibling_does_not_contaminate_an_exact_path() {
         let mut exact = transcript();
         let parameter = &mut exact.selected_signature.as_mut().unwrap().parameters[0];
@@ -7472,6 +7668,7 @@ mod tests {
             constructability: typefacts::InvocationConstructability::Unknown,
             declaration: None,
             complete: false,
+            subtree_enumerated: false,
             open_reasons: vec!["unresolvedGeneric".into()],
         });
         let recursive = proof(
@@ -7490,6 +7687,54 @@ mod tests {
             }),
         );
         assert!(verify_bound_recursive(&recursive, &exact, "invoke").is_ok());
+
+        let mut depth_cut = transcript();
+        depth_cut.selected_signature.as_mut().unwrap().parameters[0].callable_paths[0]
+            .subtree_enumerated = false;
+        assert!(verify_bound_recursive(&recursive, &depth_cut, "invoke").is_ok());
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        assert!(
+            require_all_callable_paths_closed(
+                depth_cut.selected_signature.as_ref().unwrap(),
+                &open,
+            )
+            .is_err()
+        );
+
+        let mut absent_alternative = transcript();
+        let absent = &mut absent_alternative
+            .selected_signature
+            .as_mut()
+            .unwrap()
+            .parameters[0]
+            .callable_paths[0];
+        absent.presence = PathPresence::Absent;
+        absent.callability = Callability::Unknown;
+        absent.constructability = typefacts::InvocationConstructability::Unknown;
+        assert!(verify_bound_recursive(&recursive, &absent_alternative, "invoke").is_err());
+        assert!(
+            require_all_callable_paths_closed(
+                absent_alternative.selected_signature.as_ref().unwrap(),
+                &open,
+            )
+            .is_ok(),
+            "a proven-absent alternative is a closed census entry"
+        );
+
+        assert!(
+            serde_json::from_value::<typefacts::CallablePathFact>(json!({
+                "alternative": 0,
+                "presence": "required",
+                "callability": "callable",
+                "constructability": "nonConstructable",
+                "complete": true
+            }))
+            .is_err(),
+            "protocol-8 callable paths without subtreeEnumerated must fail closed"
+        );
 
         let unresolved = proof(
             ProofFamily::RecursiveValueShape,

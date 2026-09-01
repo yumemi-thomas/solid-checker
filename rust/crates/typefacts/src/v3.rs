@@ -36,32 +36,18 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:0f7006980f58f1910e8def7e08139aa16db40b073b083e0aff65828396008fb4";
-/// 8 states two families of fact protocol 7 could not.
+    "sha256:1a9cda6d1e2423bf9c07d42b56718c2b63f63584ca9db357f51772e09d59cf7b";
+/// 9 distinguishes a callable path's locally complete node shape from a fully
+/// enumerated descendant census. Depth and cycle cuts preserve the former and
+/// set `subtreeEnumerated` false, so exact-path consumers can use the local fact
+/// while whole-census consumers continue to fail closed.
 ///
-/// A parameter use reports the reachability of the position it was observed at
-/// (`reach`), answered by the same implementation-body walk that answers it for
-/// a call, so a read witness can be held to the same execution floor a call
-/// witness is.
-///
-/// An implementation call reports the invoking positions among its own
-/// arguments: the callables each argument slot carries, the reviewed
-/// default-library member the callee resolves to together with the slots that
-/// member invokes, what the callee's own body does with its parameters, and the
-/// innermost callable containing the call — the link that lets an execution
-/// premise compose those facts instead of concluding execution from byte
-/// nesting. Construct expressions join that census, tagged by kind so a claim
-/// specifically about a call can refuse a construction, and a callee-body claim
-/// that is complete but for an invoking-slot premise the producer may not
-/// decide travels as that premise spelled out, for the verifier that owns the
-/// dialect to answer.
-///
-/// A protocol-7 client rejects unknown transcript fields outright and a
-/// protocol-7 producer omits a field this protocol requires, so it is a break
+/// A protocol-8 client rejects the new field and a protocol-8 producer omits
+/// it, so this is a break
 /// rather than a compatible extension and the number is what says so. The
 /// digest and build id still move with it, and the handshake refuses a producer
 /// that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 8;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 9;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

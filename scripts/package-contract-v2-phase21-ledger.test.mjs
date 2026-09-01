@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "00d5ea2a70a89db31e36393dbca96b7b9ad26b06a112472d871ab0d7d9870536"
+    sha256: "c23caf2b0816ce759e473e66252dd1e841775eaaa9a1b255a01659d489f33519"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:
@@ -104,13 +104,18 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // closed producer observation; that node's root is not exhaustively
   // observed). An honest fail-closed refusal, recoverable by the producer
   // answering constructability/primitive for that shape.
+  // @tanstack/solid-hotkeys moved exact-refusal-semantic-model ->
+  // pending-phase21-checker-work because the producer can close the apparent
+  // primitive-string root of `Hotkey | (string & {})`; the ordinary policy-2
+  // receipt now verifies, while this historical disposition function has no
+  // verified case for that row.
   assert.deepEqual(ledger.summary.dispositionStates, {
     "confirmed-upstream-declaration-defect": 1,
     "exact-refusal-authenticated-layout": 5,
     "exact-refusal-package-import-resolution": 3,
-    "exact-refusal-semantic-model": 5,
+    "exact-refusal-semantic-model": 4,
     "exact-refusal-type-facts-capability": 1,
-    "pending-phase21-checker-work": 2,
+    "pending-phase21-checker-work": 3,
     "retained-unsupported-runtime-model": 7,
     "retained-upstream-missing-bytes": 5,
     "verified-through-ordinary-receipt-load": 1

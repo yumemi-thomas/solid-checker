@@ -55,23 +55,22 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // These counts are a live read of benchmarks/ecosystem/report.json and move
   // whenever that report is regenerated against changed proposal semantics.
   // Re-pin them only from a report whose movement is attributable; the current
-  // values follow four generator fixes landed 2026-08-31 (see
-  // docs/precision-backlog.md): legacy `module` resolution, `?raw` opacity,
-  // the two recorded-inapplicable artifact-case dispositions
-  // (`unpublished-conditional-target`, `non-module-target`), and Node-correct
-  // backtracking when a nested conditional selection matches nothing. Each one
-  // removes artifact-case refusals that were never proof of a defect, so rows
-  // move partial -> complete, certification is then attempted, and the
-  // verified census grows with it.
+  // values follow the producer-root round landed 2026-09-01 (see
+  // docs/precision-backlog.md): exact fixed tuples, intrinsic primitive-string
+  // indexing, and exact Array/ReadonlyArray roots no longer inherit the
+  // member-census `openIndex` signal; local node completeness is independent
+  // from subtree enumeration on protocol 9. The same round deliberately
+  // removes the two flux-store certifications after finding that instantiable
+  // generic path nodes had been emitted locally complete.
   assert.deepEqual(ledger.summary.proposalStates, {
     complete: 344,
     "fully-refused": 37,
     partial: 37
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 62,
+    "exact-refusal": 53,
     "not-attempted": 25,
-    verified: 331
+    verified: 340
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -79,7 +78,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 331);
+  assert.equal(ledger.summary.verifiedRows, 340);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -99,6 +98,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@corvu-next/resizable@0.1.5|solid2|only",
       "@corvu-next/tooltip@0.1.5|solid2|only",
       "@corvu-next/transition-size@0.1.5|solid2|only",
+      "@corvu-next/utils@0.1.5|solid2|only",
       "@corvu/accordion@0.2.5|solid1|only",
       "@corvu/calendar@0.1.2|solid1|only",
       "@corvu/dialog@0.2.4|solid1|only",
@@ -108,6 +108,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@corvu/popover@0.2.0|solid1|only",
       "@corvu/resizable@0.2.5|solid1|only",
       "@corvu/tooltip@0.2.2|solid1|only",
+      "@corvu/utils@0.4.2|solid1|only",
       "@kobalte/utils@0.9.2|solid1|only",
       "@solid-devtools/extension-adapter@0.12.1|solid1|only",
       "@solid-devtools/frontend@0.15.4|solid1|only",
@@ -142,9 +143,12 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/connectivity@1.0.0-next.2|solid2|head",
       "@solid-primitives/context@2.0.0-next.2|solid2|floor",
       "@solid-primitives/context@2.0.0-next.2|solid2|head",
+      "@solid-primitives/controlled-props@0.1.4|solid1|only",
       "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|floor",
       "@solid-primitives/controlled-signal@1.0.0-next.3|solid2|head",
       "@solid-primitives/cookies@0.0.3|solid1|only",
+      "@solid-primitives/cookies@1.0.0-next.2|solid2|floor",
+      "@solid-primitives/cookies@1.0.0-next.2|solid2|head",
       "@solid-primitives/cookies-store@1.1.11|solid1|only",
       "@solid-primitives/countdown@1.0.9|solid1|only",
       "@solid-primitives/cursor@0.1.4|solid1|only",
@@ -183,8 +187,6 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/filesystem@3.0.0-next.3|solid2|floor",
       "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
       "@solid-primitives/flux-store@0.1.1|solid1|only",
-      "@solid-primitives/flux-store@1.0.0-next.2|solid2|floor",
-      "@solid-primitives/flux-store@1.0.0-next.2|solid2|head",
       "@solid-primitives/focus@1.0.0-next.4|solid2|floor",
       "@solid-primitives/focus@1.0.0-next.4|solid2|head",
       "@solid-primitives/form@1.0.0-next.2|solid2|floor",
@@ -285,6 +287,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/range@0.2.5|solid1|only",
       "@solid-primitives/range@1.0.0-next.3|solid2|floor",
       "@solid-primitives/range@1.0.0-next.3|solid2|head",
+      "@solid-primitives/reducer@0.0.101|solid1|only",
       "@solid-primitives/refs@1.1.4|solid1|only",
       "@solid-primitives/refs@3.0.0-next.2|solid2|floor",
       "@solid-primitives/refs@3.0.0-next.2|solid2|head",
@@ -304,6 +307,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/scroll@2.1.6|solid1|only",
       "@solid-primitives/scroll@3.0.0-next.4|solid2|floor",
       "@solid-primitives/scroll@3.0.0-next.4|solid2|head",
+      "@solid-primitives/selection@0.1.3|solid1|only",
       "@solid-primitives/selection@1.0.0-next.2|solid2|floor",
       "@solid-primitives/selection@1.0.0-next.2|solid2|head",
       "@solid-primitives/sensors@1.0.0-next.3|solid2|floor",
@@ -311,6 +315,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/set@0.7.4|solid1|only",
       "@solid-primitives/set@1.0.0-next.2|solid2|floor",
       "@solid-primitives/set@1.0.0-next.2|solid2|head",
+      "@solid-primitives/share@2.2.5|solid1|only",
       "@solid-primitives/share@4.0.0-next.4|solid2|floor",
       "@solid-primitives/share@4.0.0-next.4|solid2|head",
       "@solid-primitives/signal-builders@0.2.4|solid1|only",
@@ -359,6 +364,8 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/virtual@0.2.5|solid1|only",
       "@solid-primitives/visibility-observer@2.0.1|solid1|only",
       "@solid-primitives/websocket@1.4.0|solid1|only",
+      "@solid-primitives/websocket@2.0.0-next.3|solid2|floor",
+      "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
       "@solid-primitives/workers@2.0.1-next.1|solid2|floor",
       "@solid-primitives/workers@2.0.1-next.1|solid2|head",
       "@solidjs/html@2.0.0-rc.3|solid2|only",
@@ -382,6 +389,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@tanstack/solid-charts@0.15.0|solid1|only",
       "@tanstack/solid-devtools@0.8.12|solid1|only",
       "@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only",
+      "@tanstack/solid-hotkeys@0.10.0|solid1|only",
       "@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only",
       "@tanstack/solid-pacer@0.22.0|solid1|only",
       "@tanstack/solid-pacer-devtools@0.14.0|solid1|only",

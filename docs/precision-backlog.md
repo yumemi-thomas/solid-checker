@@ -10314,3 +10314,91 @@ losses, all attributed:
   return needs a per-callable return-carry fact before it can compose. Both
   old certifications drew the right conclusion from a premise the review
   proved unsound in general; they stay refused until the sound premise exists.
+
+## 2026-09-01 — Producer roots distinguish local answers from subtree enumeration
+
+The producer-root round remeasured the complete 418-probe corpus at **340
+verified / 53 exact refusals / 25 not attempted**, from 331/62/25. Every status
+or first-refusal movement is attributed below. The canonical debug checker was
+rebuilt before focused probes, the Type Facts producer was rebuilt after the
+wire change, and the full report is bound by SHA-256
+`c23caf2b0816ce759e473e66252dd1e841775eaaa9a1b255a01659d489f33519`.
+
+The Type Facts protocol is now 9, with schema digest
+`sha256:1a9cda6d1e2423bf9c07d42b56718c2b63f63584ca9db357f51772e09d59cf7b`.
+`CallablePathFact.complete` once again means that the node itself was answered;
+the new required `subtreeEnumerated` field says whether the producer exhausted
+its descendants. Exact positive demands require a present, locally closed
+node. Whole-census demands additionally require an enumerated subtree. Missing
+wire data is rejected rather than defaulted, and an absent node cannot claim a
+non-enumerated subtree.
+
+The producer no longer stamps the root-shape observation with `openIndex` for
+three exact cases where the index belongs to TypeScript's apparent member
+surface: a fixed tuple without optional/rest elements, the intrinsic index of a
+known primitive string domain, and an exact global `Array`/`ReadonlyArray`
+numeric index whose value is the element type. Path facts retain `openIndex`, so
+this closes no hidden member census. A separate latent defect stamped an
+index-signature owner's openness on its last recursively visited descendant;
+the owner now receives the reason. String/symbol author indexes, augmented
+tuples/arrays, unions with an open constituent, optional/rest tuples, boxed
+`String`, generic array-likes, and shadowed declarations remain open.
+
+Adversarial review found three permissive defects while splitting the wire, and
+all three were repaired before remeasurement: exact positive consumers had
+accepted `Absent`; instantiable generic path nodes were emitted locally
+complete; and synthetic union absence was invented below cycle/depth/open
+prefixes. Required and optional present nodes can discharge exact positive
+demands only when locally closed. Synthetic absence is emitted only below a
+required, reasonless, locally complete, subtree-enumerated prefix. No
+`require_verifiable_root_premise` guard was relaxed.
+
+Eleven rows became verified, with their prior first demand digests:
+
+- fixed tuple roots: reducer `d01d94212fb4701ac719bdd00cf8f9b5b92f5e0da5097bbac761cf6f512325b9`,
+  selection `59c2bdc4e38a0f0ec9e36d23be21c6794327c1fbf57a3d414fd3d7f78f18f29b`,
+  share `cca72a938c3337e5fe0cb39fcb576584c31d7d4df7164b47d1ca20acd02fd160`,
+  controlled-props `2275b99fa1c2153803f4c41371bf94a033868f06423ec696ae170b2d86185c36`,
+  and cookies floor+head
+  `16f840b92d4ab22f01ab0be4fc1a1651450ffab2883354c8b7d065a490e47d48`;
+- tuple root plus the local/subtree split: websocket floor+head
+  `5108bf30341276093d839251f86ee093a0277bb39289f2deb10bfe8600c2044e`;
+- primitive-string apparent indexing: TanStack solid-hotkeys
+  `b378eced209d466d4fdd56c0da3ab5080667d1efb367cc1423a7692fab7bd923`;
+- Corvu utils 1.x
+  `6435189c4f5db8b6ffa1e800120cae4ff79e9a7014934e78dd712f22d4bcf88c`
+  and Corvu-next utils
+  `b381a04cd73ab6bbc28fd91a24cd5b077bef5335819861bcfe5062ff61481441`.
+  These two were unexpected but are not over-proof: the demand belongs to
+  exported subpath `./create/controllableSignal`, whose authenticated `.d.ts`,
+  `.js`, and `.jsx` all explicitly default-export the callable. The diagnosis
+  had inspected the unrelated package-root declaration.
+
+Two previous certifications were deliberately removed: flux-store floor and
+head now stop at
+`a73e5975ad750e6a1856af4f0dd44840aab011b46e09f30bbe89a82241e5a84f`
+because the required path is instantiable and carries `unresolvedGeneric`.
+Those rows were false certifications produced by local completeness on a
+caller-chosen generic. Recovery requires a real generic premise, not another
+consumer exception.
+
+Six refused rows advanced to later exact blockers without certifying:
+
+- db-store: `d5d6bbc4…` open tuple root -> `3bb4a83e…` an actual descendant
+  `openIndex`;
+- i18n 1.x: `5d48e2da…` -> `8e2a7a25…`, absent `proxyTranslator.bind`;
+- i18n 2.x floor+head: `2bd38ac7…` -> `bb9c0374…`, open
+  `missingKeyAsPath` root;
+- utils 2.x floor+head: `83483402…` -> `ecbf77c9…`, absent
+  `wrapSetter.slice`;
+- Kobalte core: `32c3e7f3…` depth truncation -> `1808f351…`, the requested
+  alternative is locally `Absent`.
+
+The producer transcript dump for favicon falsified the diagnosis's early-
+refusal hypothesis: the transcript completes, but its exact export root is
+still `openType` with unknown callability/constructability. Both
+`1df2f037…` rows remain refused and need a narrower producer investigation.
+The published-typing must-not-clear controls (`@solid-devtools/ui`,
+`solid-devtools`, `@solidjs/web`, TanStack store/form, and the generic i18n
+inputs) remain refused. The five certified control probes remain certified.
+All 25 not-attempted rows are unchanged.

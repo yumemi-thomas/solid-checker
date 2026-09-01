@@ -179,6 +179,7 @@ pub struct CallablePathFact {
     pub declaration: Option<Declaration>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub complete: bool,
+    pub subtree_enumerated: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_reasons: Vec<Arc<str>>,
 }
