@@ -10853,3 +10853,35 @@ The full 418-probe Round 3 remeasurement is deferred until the remaining Round
 3 slices land; the authenticated composition lane is not currently used by the
 ecosystem runner, so this repair is expected to unlock zero rows and may only
 remove any future verdict that depended on the vacuous witness.
+
+## 2026-09-01 — String replacement remains refused without runtime-method identity
+
+The proposed `String.prototype.replace` / `replaceAll` default-library invoker
+rows were implemented, byte-reproduced, adversarially reviewed, and reverted.
+Static default-library symbol identity does not authenticate either writable
+runtime method. A package can assign a function that stores replacer slot 1 to
+`String.prototype.replace` or `replaceAll` without adding or changing a
+TypeScript declaration; primitive-string receiver and search-value guards then
+still resolve the default-library symbol while the runtime callback never
+executes. `Object.defineProperty` provides the same counterexample without an
+assignment to the named property. Adding the rows would therefore widen Tier B
+past its proof and is not an admissible recovery.
+
+The trial also falsified the expected direct recovery for both
+`@solid-primitives/input-mask@1.0.0-next.2` Solid 2 probes. Before and after the
+narrowed trial, floor and head both refuse operation-reachability demand
+`sha256:1d45f9b9cc61b8e9646b4981f78fbbc43464ed0843385ea2859613f07ac3a1df`
+for `regexMaskToFn` with `callback parameter has no exact direct-call or
+resolved-argument flow`. The shipped JavaScript's returned-arrow `value`
+parameter is untyped under `allowJs: true, checkJs: false`, so its member call
+does not resolve an exact receiver symbol; independently, its `regex` search
+value retains the `@@replace` dispatch frontier. Recovering these rows now
+requires both an authenticated declaration-to-runtime callable/parameter bridge
+and a premise that binds the actual replacement method and search dispatch. A
+name table or apparent receiver type is insufficient.
+
+The protocol-10 and schema-vocabulary trial was reverted with the producer and
+consumer rows. Protocol 9 and its existing schema digest remain authoritative.
+No benchmark report, snapshot, generated ledger, or tracked binary changed.
+The full 418-probe Round 3 remeasurement remains deferred until the remaining
+Round 3 slices land; these two probes remain exact fail-closed cases.
