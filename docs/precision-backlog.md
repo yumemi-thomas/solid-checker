@@ -10592,3 +10592,47 @@ query/persist rows, and the `@solid-primitives/context` declaration defect retai
 their exact fail-closed causes. No Type Facts protocol, schema, snapshot, or
 generated artifact changed. The Round 2 full 418-probe remeasurement remains
 deferred until the remaining bounded artifact slices land.
+
+## 2026-09-01 — Namespace exports retain their exact module-object identity
+
+Declaration replay now preserves a local `import * as N` followed by
+`export { N }` as the exact namespace target module instead of falling back to
+the entry declaration file. Direct `export * as N from "./module"` uses the
+same identity. The private verifier harness imports that terminal target with
+`import * as`, and Type Facts accepts it only when the compiler returns a
+quoted module name equal to the exact snapshot-selected declaration/source
+path with its TypeScript-supported extension removed. Ordinary named exports
+still require their exact declaration name and path; a quoted name by itself
+is not authority.
+
+The canonical `@tanstack/solid-db@0.2.40|solid1|only` before-demand was
+`sha256:b9a804368e8a7fd546f0ae1b10915131d9da2afa32b01915542628df38da366b`.
+It refused because `@tanstack/db`'s `IR` resolved to
+`dist/esm/query/ir.d.ts` while replay had incorrectly selected
+`dist/esm/index.d.ts`. The final canonical reproducer discharges that demand
+and advances to a distinct artifact-resolution refusal: the public runtime
+resolution names `dist/esm/index.js` while exact namespace replay selects
+`dist/esm/query/ir.js`. The outer row consequently remains an honest
+dependency-contract refusal at missing exact runtime binding
+`createTransaction`; there is no after-demand digest because the later stop is
+before Type Facts demand verification.
+
+Adversarial mutation review exposed two pre-existing fallback
+over-permissions while pinning M3. An unplanned external namespace import could
+be reclassified as a declaration local to the exporting file, and a type-only
+namespace import followed by an unmarked export specifier could take the same
+fallback. External namespaces now retain an explicit `*` sentinel that
+dependency replay rejects fail-closed, and type-only imported locals cannot
+enter only a local export-specifier fallback. Indirect re-exports with the same
+spelling remain valid because their source module, not the unrelated local
+type-only import, owns the specifier. Tests pin local/direct namespaces,
+type-only and external refusals, same-spelling indirect re-exports, every
+accepted declaration/source extension, quoted-name/path disagreement, and the
+exact namespace harness form. Final re-review found no remaining bounded M3
+over-proof.
+
+All eight artifact-mechanics must-not-clear probes remain refused: the three
+Start Server rows, the four Solid 2 TanStack query/persist rows, and
+`@solid-primitives/context@0.3.2`. No protocol, schema, snapshot, or generated
+artifact changed. The Round 2 full 418-probe remeasurement remains deferred
+until the remaining bounded artifact slices land.

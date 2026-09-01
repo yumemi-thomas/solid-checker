@@ -403,6 +403,20 @@ impl ExportReplay<'_> {
         let mut description = ModuleDescription::default();
         let mut imports = BTreeMap::<String, BindingTarget>::new();
         let mut external_imports = BTreeMap::<String, (String, String)>::new();
+        let type_only_imports = facts
+            .imports
+            .iter()
+            .flat_map(|import| {
+                import.bindings.iter().filter(move |binding| {
+                    binding.kind != ImportKind::SideEffect
+                        && (import.type_only || binding.type_only)
+                })
+            })
+            .map(|binding| {
+                span_text(source, binding.local.span.start, binding.local.span.end)
+                    .map(ToOwned::to_owned)
+            })
+            .collect::<Result<BTreeSet<_>, _>>()?;
         let named_default_declarations = facts
             .module_level_exports()
             .filter(|export| export.kind == ExportKind::Default && !export.type_only)
@@ -439,13 +453,38 @@ impl ExportReplay<'_> {
         for import in facts.imports.iter().filter(|import| !import.type_only) {
             let resolution = resolve_local(self.snapshot, path, &import.module, axis)?;
             for binding in &import.bindings {
-                if binding.type_only
-                    || binding.kind == ImportKind::SideEffect
-                    || binding.kind == ImportKind::Namespace
-                {
+                if binding.type_only || binding.kind == ImportKind::SideEffect {
                     continue;
                 }
                 let local = span_text(source, binding.local.span.start, binding.local.span.end)?;
+                if binding.kind == ImportKind::Namespace {
+                    match &resolution {
+                        LocalResolution::Module(target) => {
+                            imports.insert(
+                                local.into(),
+                                BindingTarget {
+                                    file: target.clone(),
+                                    selector: "*".into(),
+                                    resolved_name: "*".into(),
+                                    name: "*".into(),
+                                    snapshot_root: self.snapshot.root().into(),
+                                    span: None,
+                                },
+                            );
+                        }
+                        LocalResolution::External | LocalResolution::OpaqueAsset => {
+                            // Preserve the fact that this local came from an
+                            // external namespace. `external_binding` rejects
+                            // `*` fail-closed; omitting the entry would let the
+                            // later export-specifier fallback misclassify the
+                            // imported namespace as a declaration in this file.
+                            external_imports
+                                .insert(local.into(), (import.module.to_string(), "*".into()));
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
                 let Some(imported) = &binding.imported else {
                     continue;
                 };
@@ -539,6 +578,9 @@ impl ExportReplay<'_> {
                             specifier.local.span.start,
                             specifier.local.span.end,
                         )?;
+                        if export.module.is_none() && type_only_imports.contains(local) {
+                            continue;
+                        }
                         if let Some(external) = external {
                             description.external_direct.insert(
                                 specifier.exported.to_string(),
@@ -943,6 +985,101 @@ mod tests {
                 span: Some(Span { start: 21, end: 39 }),
             })
         );
+    }
+
+    #[test]
+    fn namespace_exports_replay_the_exact_module_object_target() {
+        let snapshot = snapshot(&[
+            (
+                "index.d.ts",
+                concat!(
+                    "import * as IR from './query/ir.js'; ",
+                    "import { value } from './query/ir.js'; ",
+                    "import type * as Types from './query/ir.js'; ",
+                    "import * as ExternalImported from 'unplanned'; ",
+                    "export { IR, value, Types as LeakedTypes, ExternalImported }; ",
+                    "export type { Types }; ",
+                    "export { Types as RuntimeTypes } from './query/ir.js'; ",
+                    "export * as Direct from './query/ir.js'; ",
+                    "export type * as DirectTypes from './query/ir.js'; ",
+                    "export * as ExternalDirect from 'unplanned';",
+                ),
+            ),
+            (
+                "query/ir.d.ts",
+                "export declare const value: number; export declare const other: string; export declare const Types: symbol;",
+            ),
+        ]);
+        let mut replay = ExportReplay {
+            snapshot: &snapshot,
+            dependencies: &[],
+            descriptions: BTreeMap::new(),
+        };
+
+        for name in ["IR", "Direct"] {
+            let target = replay
+                .bind_export(
+                    "index.d.ts",
+                    name,
+                    ModuleAxis::Declarations,
+                    &mut BTreeSet::new(),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(target.file, "query/ir.d.ts");
+            assert_eq!(target.selector, "*");
+            assert_eq!(target.resolved_name, "*");
+            assert_eq!(target.name, "*");
+        }
+
+        let ordinary = replay
+            .bind_export(
+                "index.d.ts",
+                "value",
+                ModuleAxis::Declarations,
+                &mut BTreeSet::new(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(ordinary.file, "query/ir.d.ts");
+        assert_eq!(ordinary.selector, "value");
+        assert_eq!(ordinary.resolved_name, "value");
+        assert_eq!(ordinary.name, "value");
+
+        let same_spelling_reexport = replay
+            .bind_export(
+                "index.d.ts",
+                "RuntimeTypes",
+                ModuleAxis::Declarations,
+                &mut BTreeSet::new(),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(same_spelling_reexport.file, "query/ir.d.ts");
+        assert_eq!(same_spelling_reexport.selector, "Types");
+        assert_eq!(same_spelling_reexport.resolved_name, "Types");
+        assert_eq!(same_spelling_reexport.name, "Types");
+
+        for name in [
+            "Types",
+            "LeakedTypes",
+            "DirectTypes",
+            "ExternalImported",
+            "ExternalDirect",
+        ] {
+            assert!(
+                replay
+                    .bind_export(
+                        "index.d.ts",
+                        name,
+                        ModuleAxis::Declarations,
+                        &mut BTreeSet::new(),
+                    )
+                    .unwrap()
+                    .is_none(),
+                "{name} must not become an authenticated namespace binding"
+            );
+        }
     }
 
     #[test]

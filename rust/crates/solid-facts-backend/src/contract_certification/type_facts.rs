@@ -1139,28 +1139,7 @@ fn derive_export_value_schedules(
         harness.push_str(&format!("import {quoted};\n"));
     }
     for (index, ((specifier, declaration_export), local)) in subjects.iter_mut().enumerate() {
-        if declaration_export != "default" && !is_ecmascript_identifier(declaration_export) {
-            return Err(TypeFactsCertificationError::UnsupportedDemand {
-                demand: "export-value-schedule".into(),
-                reason: format!(
-                    "declaration export name {declaration_export:?} cannot be imported by the exact harness"
-                ),
-            });
-        }
-        *local = format!("__solid_checker_export_{index}");
-        let quoted = serde_json::to_string(specifier).map_err(|error| {
-            TypeFactsCertificationError::ProducerProvenance(format!(
-                "could not encode verifier harness specifier: {error}"
-            ))
-        })?;
-        if declaration_export == "default" {
-            harness.push_str(&format!("import {} from {quoted};\n", local));
-        } else {
-            harness.push_str(&format!(
-                "import {{ {declaration_export} as {} }} from {quoted};\n",
-                local
-            ));
-        }
+        *local = append_exact_harness_import(&mut harness, index, specifier, declaration_export)?;
     }
     let mut locations = std::collections::BTreeMap::new();
     for (subject, local) in &subjects {
@@ -1247,6 +1226,38 @@ fn derive_export_value_schedules(
             Ok(schedule)
         })
         .collect()
+}
+
+fn append_exact_harness_import(
+    harness: &mut String,
+    index: usize,
+    specifier: &str,
+    declaration_export: &str,
+) -> Result<String, TypeFactsCertificationError> {
+    if !matches!(declaration_export, "default" | "*")
+        && !is_ecmascript_identifier(declaration_export)
+    {
+        return Err(TypeFactsCertificationError::UnsupportedDemand {
+            demand: "export-value-schedule".into(),
+            reason: format!(
+                "declaration export name {declaration_export:?} cannot be imported by the exact harness"
+            ),
+        });
+    }
+    let local = format!("__solid_checker_export_{index}");
+    let quoted = serde_json::to_string(specifier).map_err(|error| {
+        TypeFactsCertificationError::ProducerProvenance(format!(
+            "could not encode verifier harness specifier: {error}"
+        ))
+    })?;
+    match declaration_export {
+        "default" => harness.push_str(&format!("import {local} from {quoted};\n")),
+        "*" => harness.push_str(&format!("import * as {local} from {quoted};\n")),
+        _ => harness.push_str(&format!(
+            "import {{ {declaration_export} as {local} }} from {quoted};\n"
+        )),
+    }
+    Ok(local)
 }
 
 fn export_value_callable_depth(
@@ -2060,14 +2071,25 @@ fn verify_export_value_subject(
     if !actual_path.ends_with(&marker) {
         return Ok(());
     }
-    verify_snapshot_declaration_name(&proof.id, declaration_export, actual_name)
+    verify_snapshot_declaration_name(&proof.id, declaration_export, actual_name, &actual_path)
 }
 
 fn verify_snapshot_declaration_name(
     demand: &str,
     declaration_export: &str,
     actual_name: &str,
+    actual_path: &str,
 ) -> Result<(), TypeFactsCertificationError> {
+    if declaration_export == "*" {
+        if namespace_declaration_name_matches_path(actual_name, actual_path) {
+            return Ok(());
+        }
+        return Err(TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.into(),
+            reason: "resolved namespace declaration identity disagrees with its replayed module"
+                .into(),
+        });
+    }
     if declaration_export == "default" {
         // The verifier-authored harness contains an exact default import for
         // this package/subpath, and its bytes are part of the source census.
@@ -2090,6 +2112,23 @@ fn verify_snapshot_declaration_name(
         });
     }
     Ok(())
+}
+
+fn namespace_declaration_name_matches_path(name: &str, path: &str) -> bool {
+    let Some(name) = name
+        .strip_prefix('"')
+        .and_then(|name| name.strip_suffix('"'))
+    else {
+        return false;
+    };
+    let normalized_name = name.replace('\\', "/");
+    let normalized_path = path.replace('\\', "/");
+    [
+        ".d.mts", ".d.cts", ".d.ts", ".mts", ".cts", ".tsx", ".ts", ".mjs", ".cjs", ".jsx", ".js",
+    ]
+    .iter()
+    .find_map(|suffix| normalized_path.strip_suffix(suffix))
+    .is_some_and(|stem| stem == normalized_name)
 }
 
 fn authenticated_dependency_declaration_target(
@@ -3706,6 +3745,24 @@ fn verify_declaration_export_identity(
     declaration_export: &str,
     signature: &typefacts::SelectedSignature,
 ) -> Result<(), TypeFactsCertificationError> {
+    if declaration_export == "*" {
+        let actual_name = if signature.declaration.name.is_empty() {
+            signature
+                .declaration
+                .qualified_name
+                .rsplit('.')
+                .next()
+                .unwrap_or_default()
+        } else {
+            &signature.declaration.name
+        };
+        return verify_snapshot_declaration_name(
+            &proof.id,
+            declaration_export,
+            actual_name,
+            &signature.declaration.location.path,
+        );
+    }
     if declaration_export == "default" {
         return Err(TypeFactsCertificationError::UnsupportedDemand {
             demand: proof.id.clone(),
@@ -8362,17 +8419,104 @@ mod tests {
     #[test]
     fn anonymous_default_declarations_never_gain_synthetic_identity() {
         assert!(matches!(
-            verify_snapshot_declaration_name("sha256:test", "default", ""),
+            verify_snapshot_declaration_name("sha256:test", "default", "", "/pkg/index.d.ts"),
             Err(TypeFactsCertificationError::SubjectMismatch { reason, .. })
                 if reason == "canonical default-export target has no declaration identity"
         ));
-        assert!(verify_snapshot_declaration_name("sha256:test", "default", "createX").is_ok());
-        assert!(verify_snapshot_declaration_name("sha256:test", "createX", "createX").is_ok());
+        assert!(
+            verify_snapshot_declaration_name(
+                "sha256:test",
+                "default",
+                "createX",
+                "/pkg/index.d.ts",
+            )
+            .is_ok()
+        );
+        for path in [
+            "/pkg/query/ir.d.mts",
+            "/pkg/query/ir.d.cts",
+            "/pkg/query/ir.d.ts",
+            "/pkg/query/ir.mts",
+            "/pkg/query/ir.cts",
+            "/pkg/query/ir.tsx",
+            "/pkg/query/ir.ts",
+            "/pkg/query/ir.mjs",
+            "/pkg/query/ir.cjs",
+            "/pkg/query/ir.jsx",
+            "/pkg/query/ir.js",
+        ] {
+            assert!(
+                verify_snapshot_declaration_name("sha256:test", "*", "\"/pkg/query/ir\"", path,)
+                    .is_ok()
+            );
+        }
+        assert!(
+            verify_snapshot_declaration_name(
+                "sha256:test",
+                "createX",
+                "createX",
+                "/pkg/index.d.ts",
+            )
+            .is_ok()
+        );
         assert!(matches!(
-            verify_snapshot_declaration_name("sha256:test", "createX", "createY"),
+            verify_snapshot_declaration_name(
+                "sha256:test",
+                "createX",
+                "createY",
+                "/pkg/index.d.ts",
+            ),
             Err(TypeFactsCertificationError::SubjectMismatch { reason, .. })
                 if reason == "resolved value declaration name disagrees with snapshot export replay"
         ));
+        assert!(
+            verify_snapshot_declaration_name(
+                "sha256:test",
+                "*",
+                "\"/pkg/query/ir\"",
+                "/pkg/query/ir.d.ts",
+            )
+            .is_ok()
+        );
+        for (name, path) in [
+            ("ir", "/pkg/query/ir.d.ts"),
+            ("\"/pkg/query/other\"", "/pkg/query/ir.d.ts"),
+            ("\"/pkg/query/ir\"", "/pkg/query/other.d.ts"),
+        ] {
+            assert!(matches!(
+                verify_snapshot_declaration_name("sha256:test", "*", name, path),
+                Err(TypeFactsCertificationError::SubjectMismatch { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn exact_harness_preserves_namespace_import_identity() {
+        let mut harness = String::new();
+        let namespace = append_exact_harness_import(&mut harness, 0, "./query/ir", "*").unwrap();
+        let default = append_exact_harness_import(&mut harness, 1, "./default", "default").unwrap();
+        let named = append_exact_harness_import(&mut harness, 2, "./named", "value").unwrap();
+        assert_eq!(namespace, "__solid_checker_export_0");
+        assert_eq!(default, "__solid_checker_export_1");
+        assert_eq!(named, "__solid_checker_export_2");
+        assert_eq!(
+            harness,
+            concat!(
+                "import * as __solid_checker_export_0 from \"./query/ir\";\n",
+                "import __solid_checker_export_1 from \"./default\";\n",
+                "import { value as __solid_checker_export_2 } from \"./named\";\n",
+            )
+        );
+
+        let before = harness.clone();
+        assert!(matches!(
+            append_exact_harness_import(&mut harness, 3, "./bad", "not-valid!"),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+        assert_eq!(
+            harness, before,
+            "an invalid selector must not alter the harness"
+        );
     }
 
     #[test]
