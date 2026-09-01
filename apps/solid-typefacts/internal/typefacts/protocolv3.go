@@ -4,12 +4,17 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 6 because exported-value demands can now bind
-// an independently replayed runtime implementation census. The digest and
-// build id still move with it, and the handshake refuses on any mismatch.
+// TypeFactsHandshakeProtocol is 7 because an exported-value transcript now
+// reports the complete call-signature set of an overloaded value, and a return
+// site reports the source ranges of the callables it carries in place of the
+// parameter indices they mention. A protocol-6 client rejects unknown
+// transcript fields outright and reads `captures` as a fact that no longer
+// exists, so both are breaks rather than compatible extensions, and the number
+// is what says so. The digest and build id still move with it, and the
+// handshake refuses on any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 6
-	TypeFactsSchemaSHA256             = "sha256:c94ee6da50a44562910b111cee58e0e7e344d4b50ee89fc068221fe1ab41d5aa"
+	TypeFactsHandshakeProtocol uint64 = 7
+	TypeFactsSchemaSHA256             = "sha256:fe1ed89ba9c60cf3ccaed82bfff6f6161a55f84c362356d69dca797512f85554"
 )
 
 type ServiceHandshake struct {

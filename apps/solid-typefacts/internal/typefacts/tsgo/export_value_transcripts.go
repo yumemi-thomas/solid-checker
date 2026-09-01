@@ -128,7 +128,8 @@ func (p *project) exportValueTranscriptLocked(
 	valueType := p.checker.GetTypeAtLocation(node)
 	transcript.Value = p.invocationValueFactLocked(valueType)
 	transcript.CallablePaths = p.callablePathsLocked(valueType, demand.CallableDepth)
-	if signatures := p.checker.GetSignaturesOfType(valueType, checker.SignatureKindCall); len(signatures) == 1 {
+	signatures := p.checker.GetSignaturesOfType(valueType, checker.SignatureKindCall)
+	if len(signatures) == 1 {
 		declaration := p.currentSignatureDeclaration(signatures[0], target)
 		if declaration != nil {
 			selected := p.selectedSignatureLocked(
@@ -136,6 +137,26 @@ func (p *project) exportValueTranscriptLocked(
 			)
 			transcript.CallSignature = &selected
 		}
+	} else if len(signatures) > 1 {
+		// An overload set has no single signature, and inventing one would
+		// answer a different question than the one asked. Report the complete
+		// set instead so a consumer can require its premise of *every*
+		// overload: a claim that holds for all of them holds for the export.
+		// The set is all-or-nothing. Dropping a signature whose current
+		// declaration cannot be selected would silently narrow "every
+		// overload" to "every overload we could describe", so the whole field
+		// stays empty and the consumer's demand stays open.
+		selected := make([]typefacts.SelectedSignature, 0, len(signatures))
+		for _, signature := range signatures {
+			declaration := p.currentSignatureDeclaration(signature, target)
+			if declaration == nil {
+				continue
+			}
+			selected = append(selected, p.selectedSignatureLocked(
+				signature, declaration, target, typefacts.CallKindCall, demand.CallableDepth,
+			))
+		}
+		transcript.CallSignatures = completeOverloadSet(selected, len(signatures))
 	}
 	if demand.ImplementationLocation != nil {
 		implementation := p.exportImplementationTranscriptLocked(
@@ -147,6 +168,24 @@ func (p *project) exportValueTranscriptLocked(
 	}
 	transcript.Complete = true
 	return transcript
+}
+
+// completeOverloadSet is the all-or-nothing gate on a reported overload set: it
+// answers `selected` only when it describes every one of the `count` call
+// signatures the type has, and nothing otherwise.
+//
+// The gate is a single decision rather than loop control flow on purpose. "Every
+// overload" narrowing to "every overload we could describe" is a silent
+// soundness loss, and a `break` that becomes a `continue` is exactly how that
+// happens; here the count is what decides, and one test pins it.
+func completeOverloadSet(
+	selected []typefacts.SelectedSignature,
+	count int,
+) []typefacts.SelectedSignature {
+	if len(selected) != count {
+		return nil
+	}
+	return selected
 }
 
 func (p *project) exportImplementationTranscriptLocked(

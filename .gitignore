@@ -118,6 +118,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/parameter-member-forwarded/node_modules/**
 !fixtures/package-contracts/callback-execution-boundary/node_modules/
 !fixtures/package-contracts/callback-execution-boundary/node_modules/**
+!fixtures/package-contracts/destructured-parameter-callback/node_modules/
+!fixtures/package-contracts/destructured-parameter-callback/node_modules/**
 !fixtures/package-contracts/unreached-private-obligation/node_modules/
 !fixtures/package-contracts/unreached-private-obligation/node_modules/**
 !fixtures/package-contracts/uncaptured-source-return/node_modules/

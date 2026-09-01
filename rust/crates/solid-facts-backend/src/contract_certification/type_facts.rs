@@ -13,8 +13,8 @@ use solid_reactive_ir::contract_semantics::{
     CardinalityScope, ClaimDomain, ClaimPath, OperationKind, Requirement, SemanticClaimPath,
     UpperBound, ValuePathSegment, ValueRoot, ValueShape, ValueSource,
     certification::{
-        PositiveFactSubject, ProofDemand, ProofDemandGraph, ProofDemandSubject, ProofFamily,
-        ProofWitnessVariant, WitnessBinding,
+        DemandedCallability, PositiveFactSubject, ProofDemand, ProofDemandGraph,
+        ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
     },
 };
 use std::{
@@ -612,7 +612,7 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
     // demand before copying authenticated package bytes into a private project.
     preflight_export_value_plans(plans)
         .map_err(|error| error.at_stage("export-value schedule derivation"))?;
-    let project = PrivateTypeFactsProject::materialize(first, dependencies, sources)
+    let project = PrivateTypeFactsProject::materialize(first, dependencies, plans, sources)
         .map_err(|error| error.at_stage("private project materialization"))?;
     let schedules = derive_export_value_schedules(plans, &project, false)
         .map_err(|error| error.at_stage("export-value schedule derivation"))?;
@@ -690,9 +690,20 @@ pub(super) fn acquire_and_verify_graph_export_values(
         .collect::<Vec<_>>();
     let sources = source_packages.into_values().cloned().collect::<Vec<_>>();
     let source_refs = sources.iter().collect::<Vec<_>>();
+    // Every plan whose exports this one project must be able to transcribe.
+    // Materialization deduplicates by installed identity, so a package's
+    // alternative artifact cases collapse to a single `package_roots` entry;
+    // the program's file census must still cover each case's own runtime
+    // closure. See `PrivateTypeFactsProject::materialize_with_source_refs`.
+    let mut program_plans = vec![project_root];
+    for request in requests {
+        program_plans.push(request.plan);
+        program_plans.extend(request.dependencies.iter().copied());
+    }
     let project = PrivateTypeFactsProject::materialize_with_source_refs(
         project_root,
         &dependencies,
+        &program_plans,
         &source_refs,
     )
     .map_err(|error| error.at_stage("private graph project materialization"))?;
@@ -740,15 +751,22 @@ impl PrivateTypeFactsProject {
     fn materialize(
         plan: &CertificationPlan,
         dependencies: &[&CertificationPlan],
+        program_plans: &[&CertificationPlan],
         sources: &[super::dependencies::VerifiedGraphSourcePackage],
     ) -> Result<Self, TypeFactsCertificationError> {
         let source_refs = sources.iter().collect::<Vec<_>>();
-        Self::materialize_with_source_refs(plan, dependencies, &source_refs)
+        Self::materialize_with_source_refs(plan, dependencies, program_plans, &source_refs)
     }
 
+    /// `program_plans` names every plan whose exports this project must be able
+    /// to transcribe an implementation for. It is not an authority input: the
+    /// bytes come from the snapshots `plan`, `dependencies`, and `sources`
+    /// already materialize, and a plan listed here that materialized no package
+    /// root is refused rather than guessed at.
     fn materialize_with_source_refs(
         plan: &CertificationPlan,
         dependencies: &[&CertificationPlan],
+        program_plans: &[&CertificationPlan],
         sources: &[&super::dependencies::VerifiedGraphSourcePackage],
     ) -> Result<Self, TypeFactsCertificationError> {
         let requested = std::env::temp_dir().join(format!(
@@ -790,7 +808,10 @@ impl PrivateTypeFactsProject {
         let harness = root.join("solid-checker-export-values.ts");
         let project_id = root.join("tsconfig.json");
         let mut files = vec![harness.to_string_lossy().into_owned()];
-        for candidate in std::iter::once(plan).chain(dependencies.iter().copied()) {
+        for candidate in std::iter::once(plan)
+            .chain(dependencies.iter().copied())
+            .chain(program_plans.iter().copied())
+        {
             let candidate_root = package_roots
                 .get(&private_project_plan_key(candidate))
                 .ok_or(TypeFactsCertificationError::IdentityMismatch)?;
@@ -798,6 +819,11 @@ impl PrivateTypeFactsProject {
                 candidate
                     .verified_exports
                     .runtime_paths()
+                    .map(|path| candidate_root.join(path).to_string_lossy().into_owned()),
+            );
+            files.extend(
+                closure_runtime_modules(candidate)
+                    .into_iter()
                     .map(|path| candidate_root.join(path).to_string_lossy().into_owned()),
             );
         }
@@ -851,6 +877,53 @@ fn private_project_plan_key(plan: &CertificationPlan) -> (String, String) {
         plan.snapshot_root().to_owned(),
         plan.resolved_import.package_root.clone(),
     )
+}
+
+/// Package-relative runtime modules this plan's independently replayed module
+/// closure reaches, entrypoints included.
+///
+/// The witness program's roots are declaration modules: TypeScript resolves
+/// every re-export specifier to the sibling `.d.ts`, so a runtime chunk that
+/// only a re-export names is never a program member and the producer has no
+/// source file to transcribe its implementation from — the transcript comes
+/// back open with `sourceUnavailable` even though the package ships the file.
+/// Listing the closure's runtime modules as program roots repairs exactly that
+/// and asserts nothing on its own: program membership is not a flow, a fact, or
+/// a claim, and every remaining premise is still proved against the snapshot.
+///
+/// The closure is this package's own module graph — `resolve_local` classifies
+/// every bare specifier as external and records it as a dependency edge or an
+/// opaque frontier instead of visiting it — so this never widens the program
+/// with a dependency's internals beyond what materialization already placed.
+/// Non-module resolution inputs (assets) carry a different closure role and are
+/// excluded; a path the snapshot does not carry is skipped, so a demand whose
+/// module is genuinely absent stays open exactly as before.
+fn closure_runtime_modules(plan: &CertificationPlan) -> Vec<&str> {
+    closure_runtime_module_paths(&plan.verified_closure.manifest().entries, &|path| {
+        plan.snapshot.read(path).is_some()
+    })
+}
+
+/// The runtime-axis modules of one verified closure, keeping only the paths
+/// `materialized` confirms the private project actually carries. Listing a path
+/// the snapshot never supplied would ask the producer for a file outside the
+/// authenticated bytes, so absence is dropped rather than asserted.
+fn closure_runtime_module_paths<'a>(
+    entries: &'a [crate::contract_interface::ClosureEntry],
+    materialized: &impl Fn(&str) -> bool,
+) -> Vec<&'a str> {
+    entries
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.role,
+                crate::contract_interface::ClosureFileRole::Runtime
+                    | crate::contract_interface::ClosureFileRole::LiteralDynamicChunk
+            )
+        })
+        .map(|entry| entry.path.trim_start_matches("./"))
+        .filter(|path| materialized(path))
+        .collect()
 }
 
 fn private_project_package_target(
@@ -1233,6 +1306,31 @@ fn export_implementation_location(
     }))
 }
 
+/// Test-only entry point: materialize the private witness project for `plans`
+/// and return the package-relative program roots its written `tsconfig.json`
+/// lists, harness excluded. Used by the sibling module's regression test that a
+/// runtime module reachable only through a re-export becomes a program member.
+#[cfg(test)]
+pub(super) fn private_project_program_files_for_test(
+    plans: &[&CertificationPlan],
+    owner: &CertificationPlan,
+) -> Result<Vec<String>, TypeFactsCertificationError> {
+    let project = PrivateTypeFactsProject::materialize(owner, &[], plans, &[])?;
+    let configuration: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.project_id())?).expect("written tsconfig is JSON");
+    let package_root = project.package_root(owner)?.to_string_lossy().into_owned();
+    Ok(configuration["files"]
+        .as_array()
+        .expect("tsconfig files array")
+        .iter()
+        .map(|value| value.as_str().expect("tsconfig file entry").to_owned())
+        .filter_map(|path| {
+            path.strip_prefix(&package_root)
+                .map(|relative| relative.trim_start_matches('/').to_owned())
+        })
+        .collect())
+}
+
 /// Test-only entry point: materialize `owner`'s package and resolve the
 /// implementation location for `export` against the full `plans` set. Used by
 /// the sibling module's regression test that a value-only case set carrying
@@ -1244,7 +1342,7 @@ pub(super) fn export_implementation_location_for_test(
     owner: &CertificationPlan,
     export: &str,
 ) -> Result<Option<typefacts::Location>, TypeFactsCertificationError> {
-    let project = PrivateTypeFactsProject::materialize(owner, &[], &[])?;
+    let project = PrivateTypeFactsProject::materialize(owner, &[], plans, &[])?;
     export_implementation_location(plans, &project, owner, export, "test-demand")
 }
 
@@ -1805,14 +1903,15 @@ fn verify_export_value_family(
     )];
     match proof.family {
         ProofFamily::SelectedSignature | ProofFamily::RestSpreadCoverage => {
-            let signature = require_export_call_signature(proof, transcript, &open)?;
-            sites.push(format!(
-                "export-signature:{}:overload:{}/{}:rest:{}",
-                signature.identity,
-                signature.overload_ordinal,
-                signature.overload_count,
-                signature.has_rest
-            ));
+            for signature in require_export_call_signatures(proof, transcript, &open)? {
+                sites.push(format!(
+                    "export-signature:{}:overload:{}/{}:rest:{}",
+                    signature.identity,
+                    signature.overload_ordinal,
+                    signature.overload_count,
+                    signature.has_rest
+                ));
+            }
         }
         ProofFamily::ArgumentBinding => {
             let (export, implementation) =
@@ -1832,13 +1931,29 @@ fn verify_export_value_family(
                 let (export, implementation) =
                     require_export_implementation(plan, proof, transcript, &open)?;
                 let source = callback_parameter_source(export, proof)?;
-                let typed = require_signature_parameter_callable(
-                    require_export_call_signature(proof, transcript, &open)?,
-                    &source,
-                    &open,
-                    &mut sites,
+                // Every overload has to declare the parameter callable at this
+                // path. One overload that does is not the export's promise.
+                //
+                // The universal check writes into a buffer, not into the
+                // witness: it can fail partway, and the sites of the overloads
+                // it did clear are not evidence for the weaker proof the
+                // fallback then builds. They are committed only when every
+                // overload passed.
+                let mut typed_sites = Vec::new();
+                let typed = require_export_call_signatures(proof, transcript, &open).and_then(
+                    |signatures| {
+                        signatures.iter().try_for_each(|signature| {
+                            require_signature_parameter_callable(
+                                signature,
+                                &source,
+                                &open,
+                                &mut typed_sites,
+                            )
+                        })
+                    },
                 );
                 if typed.is_ok() {
+                    sites.append(&mut typed_sites);
                     require_parameter_flow(implementation, &source, &open, &mut sites)?;
                 } else {
                     require_parameter_callback_flow(implementation, &source, &open, &mut sites)?;
@@ -1918,22 +2033,68 @@ fn verify_export_value_family(
     Ok(sites)
 }
 
-fn require_export_call_signature<'a>(
+/// The complete set of call signatures a demand about this exported callable
+/// must hold for.
+///
+/// An overload set has no single signature, and demanding "the" one of a
+/// two-overload export — `@solid-primitives/cookies` `createServerCookie`,
+/// `@corvu/utils`'s default — asks for an object that does not exist. The sound
+/// generalization is universal, not existential: a premise that holds for every
+/// overload holds for the export, whichever one a caller selects. Callers must
+/// therefore require their premise of *all* returned signatures, never the
+/// first.
+///
+/// The producer reports an overload set all-or-nothing, but "the producer
+/// promises" is not a premise a verifier may lean on: the completeness of the
+/// set is checked here from the set itself. Every signature has to agree that
+/// the declared overload count is the number of signatures present, and the
+/// ordinals have to be exactly `0..len` with no repeat — the only shape in which
+/// no declared overload is missing. The two fields are also mutually exclusive,
+/// so a transcript populating both is refused rather than silently answered from
+/// one of them.
+fn require_export_call_signatures<'a>(
     proof: &ScheduledProofDemand,
     transcript: &'a ExportValueTranscript,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
-) -> Result<&'a typefacts::SelectedSignature, TypeFactsCertificationError> {
-    let signature = transcript
-        .call_signature
-        .as_ref()
-        .ok_or_else(|| open("exported callable has no unique compiler signature"))?;
-    if signature.overload_count != 1 || signature.overload_ordinal != 0 {
+) -> Result<&'a [typefacts::SelectedSignature], TypeFactsCertificationError> {
+    if transcript.call_signature.is_some() && !transcript.call_signatures.is_empty() {
         return Err(TypeFactsCertificationError::UnsupportedDemand {
             demand: proof.id.clone(),
-            reason: "exported callable proof requires one exact overload".into(),
+            reason: "exported callable reports both a single signature and an overload set".into(),
         });
     }
-    Ok(signature)
+    if let Some(signature) = transcript.call_signature.as_ref() {
+        if signature.overload_count != 1 || signature.overload_ordinal != 0 {
+            return Err(TypeFactsCertificationError::UnsupportedDemand {
+                demand: proof.id.clone(),
+                reason: "exported callable proof requires one exact overload".into(),
+            });
+        }
+        return Ok(std::slice::from_ref(signature));
+    }
+    if transcript.call_signatures.is_empty() {
+        return Err(open("exported callable has no compiler signature"));
+    }
+    require_complete_overload_set(&transcript.call_signatures, open)?;
+    Ok(&transcript.call_signatures)
+}
+
+/// Refuses an overload set that is not provably the whole declared set.
+fn require_complete_overload_set(
+    signatures: &[typefacts::SelectedSignature],
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<(), TypeFactsCertificationError> {
+    let mut ordinals = vec![false; signatures.len()];
+    for signature in signatures {
+        if signature.overload_count != signatures.len()
+            || signature.overload_ordinal >= ordinals.len()
+            || ordinals[signature.overload_ordinal]
+        {
+            return Err(open("overload set is not the complete declared set"));
+        }
+        ordinals[signature.overload_ordinal] = true;
+    }
+    Ok(())
 }
 
 fn require_export_implementation<'a>(
@@ -2101,7 +2262,7 @@ fn require_parameter_flow(
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
     let matching = implementation.calls.iter().filter(|call| {
-        implementation_call_executes_parameter(implementation, call, source)
+        implementation_call_is_executed(implementation, call)
             && (call
                 .callee_parameter
                 .as_ref()
@@ -2133,7 +2294,7 @@ fn require_parameter_callback_flow(
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
     for call in &implementation.calls {
-        if !implementation_call_executes_parameter(implementation, call, source) {
+        if !implementation_call_is_executed(implementation, call) {
             continue;
         }
         if call
@@ -2177,10 +2338,24 @@ fn require_parameter_callback_flow(
     ))
 }
 
-fn implementation_call_executes_parameter(
+/// Whether invoking the export can execute this call.
+///
+/// A call the implementation makes directly is executed by the call itself. A
+/// call *inside a nested callable* is executed only if something invokes that
+/// callable, and the one such thing the census proves is the value the export
+/// returns. So the premise is containment, not mention: the call site must lie
+/// within the source range of a callable that a reachable return site provably
+/// carries.
+///
+/// Containment rather than an immediately-enclosing match, because a returned
+/// debounced function schedules the callback from an arrow it hands to
+/// `setTimeout`; invoking the returned value still reaches that call. What
+/// containment refuses is the shape a parameter-index union could not: a call in
+/// a closure the implementation never returns, discharged by a returned closure
+/// that merely names the same parameter.
+fn implementation_call_is_executed(
     implementation: &typefacts::ExportImplementationTranscript,
     call: &typefacts::ImplementationCall,
-    source: &ValueSource,
 ) -> bool {
     if call.reach != Reachability::Reachable {
         return false;
@@ -2188,14 +2363,21 @@ fn implementation_call_executes_parameter(
     if !call.captured {
         return true;
     }
-    let ValueSource::Parameter { index, .. } = source else {
-        return false;
-    };
     implementation.control_flow.as_ref().is_some_and(|flow| {
-        flow.returns.iter().any(|site| {
-            site.reach == Reachability::Reachable && site.captures.contains(&usize::from(*index))
-        })
+        flow.returns
+            .iter()
+            .filter(|site| site.reach == Reachability::Reachable)
+            .flat_map(|site| site.carried_callables.iter())
+            .any(|carried| location_contains(carried, &call.location))
     })
+}
+
+/// Whether `outer` spans `inner` in the same file. Byte ranges come from one
+/// producer census, so an exact path match is required rather than a suffix.
+fn location_contains(outer: &typefacts::Location, inner: &typefacts::Location) -> bool {
+    outer.path == inner.path
+        && outer.start_byte <= inner.start_byte
+        && inner.end_byte <= outer.end_byte
 }
 
 fn require_signature_parameter_callable(
@@ -2229,7 +2411,12 @@ fn require_signature_parameter_callable(
             ));
             return Ok(());
         }
-        require_root_callability(&parameter.value, true, "callback parameter", open)?;
+        require_root_callability(
+            &parameter.value,
+            DemandedCallability::Callable,
+            "callback parameter",
+            open,
+        )?;
         sites.push(format!("callback-parameter:{}:root", index));
         return Ok(());
     }
@@ -2459,7 +2646,11 @@ fn require_operation_recursive_subject(
             .get(usize::from(*index))
             .ok_or_else(|| open("recursive input index is absent"))
             .and_then(parameter_source)?;
-        if path.0.is_empty() && !*callable {
+        // Implementation evidence that the exact parameter value is itself the
+        // callee of a reachable call. That answers a demand which does not
+        // assert callability; a demand that does assert it is answered by the
+        // callback-flow branch below or by the signature census.
+        if path.0.is_empty() && !callable.asserts_callable() {
             let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
             if let Some(call) = implementation.calls.iter().find(|call| {
                 call.reach == Reachability::Reachable
@@ -2495,13 +2686,35 @@ fn require_operation_recursive_subject(
         } else {
             false
         };
-        if path_is_exact_properties && *callable {
+        if path_is_exact_properties && callable.asserts_callable() {
             let (_, implementation) = require_export_implementation(plan, proof, transcript, open)?;
             require_parameter_callback_flow(implementation, &source, open, sites)?;
             return Ok(());
         }
     }
-    let signature = require_export_call_signature(proof, transcript, open)?;
+    // An overloaded export is proved by proving every overload. Nothing here
+    // may short-circuit on the first: the demand is about the export, and a
+    // caller may select any of them.
+    for signature in require_export_call_signatures(proof, transcript, open)? {
+        require_operation_recursive_signature(
+            proof, transcript, exported, root, path, *callable, signature, open, sites,
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn require_operation_recursive_signature(
+    proof: &ScheduledProofDemand,
+    transcript: &ExportValueTranscript,
+    exported: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    root: &ValueRoot,
+    path: &solid_reactive_ir::contract_semantics::ValuePath,
+    callable: DemandedCallability,
+    signature: &typefacts::SelectedSignature,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
     let (value, callable_paths, prefix) = match root {
         ValueRoot::OperationInput { operation, index } => {
             let operation = exported
@@ -2554,7 +2767,8 @@ fn require_operation_recursive_subject(
     })?;
     expected.extend(suffix);
     if expected.is_empty() {
-        require_root_callability(&value, *callable, "operation value root", open)?;
+        require_verifiable_root_premise(&value, callable, "operation value", open)?;
+        require_root_callability(&value, callable, "operation value root", open)?;
         sites.push("recursive-operation-value:root".into());
         return Ok(());
     }
@@ -2566,14 +2780,16 @@ fn require_operation_recursive_subject(
                 "operation value path is absent from the signature census (alternative={alternative}, path={expected:?})"
             ))
         })?;
-    let callable_local_closure = *callable
+    let callable_local_closure = callable.asserts_callable()
         && fact.presence == PathPresence::Required
         && fact.callability == Callability::Callable
         && fact
             .open_reasons
             .iter()
             .all(|reason| reason.as_ref() == "openType");
-    if *callable && alternative == 0 && require_return_callable_source(transcript, &expected, sites)
+    if callable.asserts_callable()
+        && alternative == 0
+        && require_return_callable_source(transcript, &expected, sites)
     {
         return Ok(());
     }
@@ -2585,10 +2801,7 @@ fn require_operation_recursive_subject(
             fact.complete, fact.presence, fact.callability, fact.open_reasons
         )));
     }
-    match (*callable, fact.callability) {
-        (true, Callability::Callable) | (false, Callability::NonCallable) => {}
-        _ => return Err(open("operation value path has the wrong callability")),
-    }
+    require_path_callability(callable, fact, "operation value path", open)?;
     sites.push(callable_path_site(fact));
     Ok(())
 }
@@ -2687,6 +2900,7 @@ fn require_export_recursive_subject(
         });
     };
     if path.0.is_empty() {
+        require_verifiable_root_premise(&transcript.value, *callable, "exported value", open)?;
         require_root_callability(&transcript.value, *callable, "export root", open)?;
         sites.push("recursive-export-value:root".into());
         return Ok(());
@@ -2705,15 +2919,7 @@ fn require_export_recursive_subject(
     if !fact.complete || !fact.open_reasons.is_empty() || fact.presence == PathPresence::Unknown {
         return Err(open("exported-value path is locally open"));
     }
-    match (*callable, fact.callability) {
-        (true, Callability::Callable) | (false, Callability::NonCallable) => {}
-        (true, _) => return Err(open("exported-value path is not compiler-proved callable")),
-        (false, _) => {
-            return Err(open(
-                "exported-value path is not compiler-proved non-callable",
-            ));
-        }
-    }
+    require_path_callability(*callable, fact, "exported-value path", open)?;
     sites.push(callable_path_site(fact));
     Ok(())
 }
@@ -3080,7 +3286,7 @@ fn verify_family(
             )?;
             match &proof.subject {
                 ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
-                    callable: true,
+                    callable: DemandedCallability::Callable,
                     ..
                 }) => require_recursive_subject(proof, signature, None, &open, &mut sites)?,
                 ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding {
@@ -3275,21 +3481,104 @@ fn require_closed_value(
     Ok(())
 }
 
+/// Supplies the premise for the one recursive-value demand that would otherwise
+/// have none: the empty path with no callability assertion.
+///
+/// Every other combination already carries one. A non-empty path must be found
+/// in the producer census, be closed, and match its demanded callability — the
+/// sibling premises stand on their own, so an unasserted callability there is
+/// merely one premise fewer. At the root there is no census entry to find and,
+/// without an assertion, no callability to check either, so
+/// `require_root_callability` returns `Ok` on its first arm and the positive
+/// fact is recorded as proved by nothing.
+///
+/// The premise the root does have is the producer's *observation* of it. This
+/// requires that observation to be closed: no open reason anywhere in the value
+/// or its alternatives, every finite partition complete, the primitive domain
+/// not the explicit `unknown` marker, and a callability actually answered. A
+/// producer that says "I did not finish looking at this value" proves nothing,
+/// and the fact stays open.
+///
+/// Why that is sound rather than a weakened check. The fact being discharged is
+/// the IR's *shape* claim — "this operation returns a Reactive", "this export
+/// returns a tuple" — and the demand deliberately asserts nothing about
+/// callability, so nothing is being asserted onto the declaration. The keyed
+/// class of contradiction (an implementation-derived shape demanding
+/// non-callability of a declaration that says otherwise) cannot recur here,
+/// because there is no assertion for the producer to disagree with. What the
+/// closed answer establishes is the one thing the root needs: that the producer
+/// exhaustively observed the value this fact is about.
+fn require_verifiable_root_premise(
+    value: &InvocationValueFact,
+    callable: DemandedCallability,
+    label: &str,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<(), TypeFactsCertificationError> {
+    if callable.is_asserted() {
+        return Ok(());
+    }
+    require_closed_value(value, open).map_err(|_| {
+        open(&format!(
+            "{label} root shape has no verifiable premise: the demand asserts no callability and the producer's root observation is open"
+        ))
+    })?;
+    if value.callability == Callability::Unknown
+        || value.constructability == InvocationConstructability::Unknown
+        || value.primitive.unknown
+    {
+        return Err(open(&format!(
+            "{label} root shape has no verifiable premise: the demand asserts no callability and the producer did not exhaustively observe the root"
+        )));
+    }
+    Ok(())
+}
+
 fn require_root_callability(
     value: &InvocationValueFact,
-    callable: bool,
+    callable: DemandedCallability,
     label: &str,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
 ) -> Result<(), TypeFactsCertificationError> {
     match (callable, value.callability, value.constructability) {
-        (true, Callability::Callable | Callability::UntypedCallable, _)
-        | (true, _, InvocationConstructability::Constructable)
-        | (false, Callability::NonCallable, InvocationConstructability::NonConstructable) => Ok(()),
-        (true, _, _) => Err(open(&format!(
+        (DemandedCallability::Unknown, _, _)
+        | (
+            DemandedCallability::Callable,
+            Callability::Callable | Callability::UntypedCallable,
+            _,
+        )
+        | (DemandedCallability::Callable, _, InvocationConstructability::Constructable)
+        | (
+            DemandedCallability::NonCallable,
+            Callability::NonCallable,
+            InvocationConstructability::NonConstructable,
+        ) => Ok(()),
+        (DemandedCallability::Callable, _, _) => Err(open(&format!(
             "{label} is not compiler-proved callable or constructable"
         ))),
-        (false, _, _) => Err(open(&format!(
+        (DemandedCallability::NonCallable, _, _) => Err(open(&format!(
             "{label} is not compiler-proved non-callable and non-constructable"
+        ))),
+    }
+}
+
+/// Verifies a demanded callability against one exact callable-path census
+/// entry. An unasserted callability leaves the entry's own closure premises —
+/// checked by the caller — as the whole of the demand.
+fn require_path_callability(
+    callable: DemandedCallability,
+    fact: &typefacts::CallablePathFact,
+    label: &str,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<(), TypeFactsCertificationError> {
+    match (callable, fact.callability) {
+        (DemandedCallability::Unknown, _)
+        | (DemandedCallability::Callable, Callability::Callable)
+        | (DemandedCallability::NonCallable, Callability::NonCallable) => Ok(()),
+        (DemandedCallability::Callable, _) => {
+            Err(open(&format!("{label} is not compiler-proved callable")))
+        }
+        (DemandedCallability::NonCallable, _) => Err(open(&format!(
+            "{label} is not compiler-proved non-callable"
         ))),
     }
 }
@@ -3450,7 +3739,7 @@ fn require_recursive_subject(
     if !fact.complete || !fact.open_reasons.is_empty() || fact.presence == PathPresence::Unknown {
         return Err(open("recursive path is locally open"));
     }
-    if *callable && fact.callability != Callability::Callable {
+    if callable.asserts_callable() && fact.callability != Callability::Callable {
         return Err(open(
             "recursive callable positive is not compiler-proved callable",
         ));
@@ -3883,6 +4172,52 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    // A witness program's roots are declaration modules, so a runtime chunk
+    // that only a re-export names never becomes a program member and its
+    // implementation transcript comes back open with `sourceUnavailable`. The
+    // closure's runtime-axis entries are what repairs that; declarations,
+    // manifests, and non-module resolution inputs are not program roots, and a
+    // path the materialized snapshot does not carry must never be listed.
+    #[test]
+    fn private_project_program_roots_select_materialized_runtime_closure_modules() {
+        use crate::contract_interface::{ClosureEntry, ClosureFileRole};
+
+        let entry = |role, path: &str| ClosureEntry {
+            role,
+            path: format!("./{path}"),
+            digest: digest(path.as_bytes()),
+            transform_digest: None,
+        };
+        let entries = vec![
+            entry(ClosureFileRole::Manifest, "package.json"),
+            entry(ClosureFileRole::ResolutionInput, "dist/data.json"),
+            entry(ClosureFileRole::Runtime, "dist/index.js"),
+            entry(
+                ClosureFileRole::Runtime,
+                "dist/create/controllableSignal.js",
+            ),
+            entry(ClosureFileRole::LiteralDynamicChunk, "dist/lazy/panel.js"),
+            entry(ClosureFileRole::Declaration, "dist/index.d.ts"),
+            entry(ClosureFileRole::Runtime, "dist/absent.js"),
+        ];
+
+        let materialized = |path: &str| path != "dist/absent.js";
+        assert_eq!(
+            closure_runtime_module_paths(&entries, &materialized),
+            vec![
+                "dist/index.js",
+                "dist/create/controllableSignal.js",
+                "dist/lazy/panel.js",
+            ],
+            "only runtime-axis closure modules the snapshot carries are program roots"
+        );
+
+        // Nothing at all is listed when the snapshot carries none of them, so a
+        // demand whose module is genuinely absent stays open rather than
+        // pointing the producer at a file outside the authenticated bytes.
+        assert!(closure_runtime_module_paths(&entries, &|_| false).is_empty());
+    }
+
     #[test]
     fn private_project_preserves_hoisted_and_nested_installed_package_locations() {
         let project = Path::new("/private-project");
@@ -4063,13 +4398,17 @@ mod tests {
 
     #[test]
     fn implementation_flow_requires_direct_or_returned_closure_execution() {
+        // The call at bytes 10..15 sits inside the callable at 5..40, which the
+        // reachable return site carries.
         let mut implementation: typefacts::ExportImplementationTranscript =
             serde_json::from_value(json!({
                 "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
                 "controlFlow": {"returns": [{
-                    "location": {"path": "/project/index.js", "startByte": 20, "endByte": 30},
+                    "location": {"path": "/project/index.js", "startByte": 42, "endByte": 52},
                     "reach": "reachable",
-                    "captures": [0]
+                    "carriedCallables": [
+                        {"path": "/project/index.js", "startByte": 5, "endByte": 40}
+                    ]
                 }]},
                 "calls": [{
                     "location": {"path": "/project/index.js", "startByte": 10, "endByte": 15},
@@ -4079,35 +4418,63 @@ mod tests {
                 }]
             }))
             .unwrap();
-        let source = ValueSource::Parameter {
-            index: 0,
-            path: Vec::new(),
-        };
-        assert!(implementation_call_executes_parameter(
+        assert!(implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0],
-            &source
+            &implementation.calls[0]
         ));
 
-        implementation.control_flow.as_mut().unwrap().returns[0]
-            .captures
-            .clear();
-        assert!(!implementation_call_executes_parameter(
+        // A call in a closure the implementation never returns is outside every
+        // carried range, and no amount of what the returned closure *mentions*
+        // puts it back inside one.
+        implementation.calls[0].location.start_byte = 60;
+        implementation.calls[0].location.end_byte = 65;
+        assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0],
-            &source
+            &implementation.calls[0]
         ));
-        implementation.calls[0].captured = false;
-        assert!(implementation_call_executes_parameter(
+        // Same bytes, another file: containment is per file, never a suffix.
+        implementation.calls[0].location.start_byte = 10;
+        implementation.calls[0].location.end_byte = 15;
+        implementation.calls[0].location.path = "/project/other.js".into();
+        assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0],
-            &source
+            &implementation.calls[0]
+        ));
+        implementation.calls[0].location.path = "/project/index.js".into();
+
+        implementation.control_flow.as_mut().unwrap().returns[0]
+            .carried_callables
+            .clear();
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0]
+        ));
+        // An unreachable return carries no authority even when it does carry
+        // the callable.
+        {
+            let returns = &mut implementation.control_flow.as_mut().unwrap().returns;
+            returns[0].carried_callables = vec![
+                serde_json::from_value(
+                    json!({"path": "/project/index.js", "startByte": 5, "endByte": 40}),
+                )
+                .unwrap(),
+            ];
+            returns[0].reach = Reachability::Unknown;
+        }
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0]
+        ));
+
+        implementation.calls[0].captured = false;
+        assert!(implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0]
         ));
         implementation.calls[0].reach = Reachability::Unknown;
-        assert!(!implementation_call_executes_parameter(
+        assert!(!implementation_call_is_executed(
             &implementation,
-            &implementation.calls[0],
-            &source
+            &implementation.calls[0]
         ));
     }
 
@@ -4185,6 +4552,419 @@ mod tests {
         ));
     }
 
+    fn export_value_transcript(signatures: serde_json::Value) -> ExportValueTranscript {
+        let mut document = json!({
+            "location": {"path": "/project/index.d.ts", "startByte": 0, "endByte": 4},
+            "value": {
+                "callability": "callable",
+                "constructability": "nonConstructable",
+                "primitive": {"mayBeObject": true}
+            },
+            "callablePaths": [{
+                "alternative": 0,
+                "path": [{"kind": "property", "property": "map"}],
+                "presence": "required",
+                "callability": "callable",
+                "constructability": "nonConstructable",
+                "complete": true
+            }],
+            "complete": true
+        });
+        let object = document.as_object_mut().expect("transcript object");
+        for (key, value) in signatures.as_object().expect("signature fields") {
+            object.insert(key.clone(), value.clone());
+        }
+        serde_json::from_value(document).expect("export-value transcript")
+    }
+
+    fn export_signature(ordinal: usize, count: usize, result_callable: &str) -> serde_json::Value {
+        json!({
+            "identity": format!("sha256:{:064x}", 40 + ordinal),
+            "declaration": {
+                "symbol": "symbol:createServerCookie",
+                "name": "createServerCookie",
+                "kind": "function",
+                "location": {"path": "/project/index.d.ts", "startByte": 0, "endByte": 30},
+                "originModule": "pkg",
+                "sourceFile": "/project/index.d.ts"
+            },
+            "overloadOrdinal": ordinal,
+            "overloadCount": count,
+            "minimumArgumentCount": 1,
+            "parameters": [],
+            "result": {
+                "callability": result_callable,
+                "constructability": "nonConstructable",
+                "primitive": {"mayBeObject": true}
+            }
+        })
+    }
+
+    fn export_recursive_proof(
+        family: ProofFamily,
+        path: Vec<ValuePathSegment>,
+        callable: DemandedCallability,
+    ) -> ScheduledProofDemand {
+        proof(
+            family,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "browser".into(),
+                export: "run".into(),
+                root: ValueRoot::Export,
+                path: solid_reactive_ir::contract_semantics::ValuePath(path),
+                callable,
+            }),
+        )
+    }
+
+    #[test]
+    fn an_unasserted_callability_verifies_the_path_without_a_callability_premise() {
+        let transcript = export_value_transcript(json!({}));
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let path = vec![ValuePathSegment::ObjectProperty("map".into())];
+
+        // `Parameter { path: ["map"] }` is `Array.prototype.map`. The IR never
+        // classified its callability, so the demand asserts none -- and the
+        // producer's exact `callable` answer can no longer contradict it.
+        let mut sites = Vec::new();
+        assert!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    path.clone(),
+                    DemandedCallability::Unknown
+                ),
+                &transcript,
+                &open,
+                &mut sites,
+            )
+            .is_ok(),
+            "an unasserted callability must not be refused by the producer's own answer"
+        );
+        assert_eq!(sites.len(), 1, "the path premise still produces a witness");
+
+        // The premise the boolean forced -- and the exact refusal the whole
+        // ecosystem row hit.
+        let mut refused = Vec::new();
+        assert!(matches!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    path.clone(),
+                    DemandedCallability::NonCallable
+                ),
+                &transcript,
+                &open,
+                &mut refused,
+            ),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+
+        // Unknown drops only the callability premise. An absent path, or one
+        // that is locally open, still refuses.
+        let mut absent = Vec::new();
+        assert!(matches!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    vec![ValuePathSegment::ObjectProperty("missing".into())],
+                    DemandedCallability::Unknown
+                ),
+                &transcript,
+                &open,
+                &mut absent,
+            ),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+
+        let mut locally_open = export_value_transcript(json!({}));
+        locally_open.callable_paths[0].complete = false;
+        let mut open_sites = Vec::new();
+        assert!(
+            matches!(
+                require_export_recursive_subject(
+                    &export_recursive_proof(
+                        ProofFamily::RecursiveValueShape,
+                        path,
+                        DemandedCallability::Unknown
+                    ),
+                    &locally_open,
+                    &open,
+                    &mut open_sites,
+                ),
+                Err(TypeFactsCertificationError::FamilyOpen { .. })
+            ),
+            "an unasserted callability must not weaken the path's own closure premise"
+        );
+    }
+
+    /// The adversarial input for F3: a transcript that concedes everything it
+    /// can. Callability unknown, constructability unknown, the primitive domain
+    /// unknown, an open reason attached, no callable-path census at all, and the
+    /// transcript itself marked incomplete. Nothing in it establishes anything.
+    fn maximally_open_export_value_transcript() -> ExportValueTranscript {
+        serde_json::from_value(json!({
+            "location": {"path": "/project/index.d.ts", "startByte": 0, "endByte": 4},
+            "value": {
+                "callability": "unknown",
+                "constructability": "unknown",
+                "primitive": {"unknown": true},
+                "openReasons": ["openType"]
+            }
+        }))
+        .expect("export-value transcript")
+    }
+
+    #[test]
+    fn a_root_shape_without_a_callability_assertion_needs_a_closed_producer_observation() {
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let transcript = maximally_open_export_value_transcript();
+
+        // Empty path, unasserted callability: there is no census entry to find
+        // and no callability to check, so the only premise left is that the
+        // producer exhaustively observed the root. This transcript did not.
+        let mut vacuous = Vec::new();
+        assert!(
+            matches!(
+                require_export_recursive_subject(
+                    &export_recursive_proof(
+                        ProofFamily::RecursiveValueShape,
+                        Vec::new(),
+                        DemandedCallability::Unknown
+                    ),
+                    &transcript,
+                    &open,
+                    &mut vacuous,
+                ),
+                Err(TypeFactsCertificationError::FamilyOpen { .. })
+            ),
+            "a root demand asserting no callability must not discharge against an open transcript"
+        );
+        assert!(vacuous.is_empty(), "an open family produces no witness");
+
+        // The recovery: a closed root observation *is* the premise. The shape
+        // fact ("this value is what the IR modelled") is retained on the
+        // strength of the producer having exhaustively answered for the root,
+        // and nothing about callability is asserted onto the declaration.
+        let mut closed_root = Vec::new();
+        assert!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    Vec::new(),
+                    DemandedCallability::Unknown
+                ),
+                &export_value_transcript(json!({})),
+                &open,
+                &mut closed_root,
+            )
+            .is_ok(),
+            "a closed producer observation discharges the root by evidence"
+        );
+        assert_eq!(closed_root, vec!["recursive-export-value:root".to_string()]);
+
+        // Each half of "closed" on its own refuses. An answered callability
+        // with an open reason attached is not an exhaustive observation, and
+        // neither is a silent transcript that never answered.
+        for spoiled in [
+            json!({"callability": "callable", "constructability": "nonConstructable",
+                   "primitive": {"mayBeObject": true}, "openReasons": ["openType"]}),
+            json!({"callability": "unknown", "constructability": "nonConstructable",
+                   "primitive": {"mayBeObject": true}}),
+            json!({"callability": "callable", "constructability": "nonConstructable",
+                   "primitive": {"unknown": true}}),
+        ] {
+            let mut transcript = export_value_transcript(json!({}));
+            transcript.value = serde_json::from_value(spoiled.clone()).expect("value fact");
+            let mut refused = Vec::new();
+            assert!(
+                matches!(
+                    require_export_recursive_subject(
+                        &export_recursive_proof(
+                            ProofFamily::RecursiveValueShape,
+                            Vec::new(),
+                            DemandedCallability::Unknown
+                        ),
+                        &transcript,
+                        &open,
+                        &mut refused,
+                    ),
+                    Err(TypeFactsCertificationError::FamilyOpen { .. })
+                ),
+                "a partially observed root is not a premise: {spoiled}"
+            );
+        }
+
+        // The root *with* an assertion still has a premise, and this transcript
+        // refuses it because it proves nothing.
+        let mut asserted = Vec::new();
+        assert!(matches!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    Vec::new(),
+                    DemandedCallability::Callable
+                ),
+                &transcript,
+                &open,
+                &mut asserted,
+            ),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+
+        // The companion: a *non-empty* path with an unasserted callability
+        // keeps verifying its sibling premises — presence, closure, and being
+        // in the census at all — and discharges on a transcript that has them.
+        let mut sibling = Vec::new();
+        assert!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    vec![ValuePathSegment::ObjectProperty("map".into())],
+                    DemandedCallability::Unknown
+                ),
+                &export_value_transcript(json!({})),
+                &open,
+                &mut sibling,
+            )
+            .is_ok(),
+            "a non-empty path verifies its own census premises without a callability assertion"
+        );
+        assert_eq!(sibling.len(), 1);
+
+        // And a root demand that *does* assert callability discharges against a
+        // transcript that proves it, so the guard is not simply refusing roots.
+        let mut proved = Vec::new();
+        assert!(
+            require_export_recursive_subject(
+                &export_recursive_proof(
+                    ProofFamily::RecursiveValueShape,
+                    Vec::new(),
+                    DemandedCallability::Callable
+                ),
+                &export_value_transcript(json!({})),
+                &open,
+                &mut proved,
+            )
+            .is_ok()
+        );
+        assert_eq!(proved, vec!["recursive-export-value:root".to_string()]);
+    }
+
+    #[test]
+    fn an_overload_set_is_proved_by_every_overload_and_never_by_one() {
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let unique = proof(ProofFamily::SelectedSignature, selected_subject());
+
+        // No signature at all stays open: the export has none to prove.
+        assert!(matches!(
+            require_export_call_signatures(&unique, &export_value_transcript(json!({})), &open),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+
+        // One signature is still exactly one, and still has to be the only
+        // overload; a lone member of an overload set is not "the" signature.
+        let single = export_value_transcript(json!({
+            "callSignature": export_signature(0, 1, "nonCallable")
+        }));
+        assert_eq!(
+            require_export_call_signatures(&unique, &single, &open)
+                .expect("a unique signature")
+                .len(),
+            1
+        );
+        let masquerading = export_value_transcript(json!({
+            "callSignature": export_signature(1, 2, "nonCallable")
+        }));
+        assert!(matches!(
+            require_export_call_signatures(&unique, &masquerading, &open),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+
+        // A real overload set: `@solid-primitives/cookies`'s
+        // `createServerCookie` has two, and demanding "the" one asked for an
+        // object that does not exist. Every overload is returned so a caller
+        // can require its premise of all of them.
+        let overloaded = export_value_transcript(json!({
+            "callSignatures": [
+                export_signature(0, 2, "nonCallable"),
+                export_signature(1, 2, "nonCallable")
+            ]
+        }));
+        let signatures =
+            require_export_call_signatures(&unique, &overloaded, &open).expect("the overload set");
+        assert_eq!(signatures.len(), 2);
+        assert_eq!(
+            signatures
+                .iter()
+                .map(|signature| signature.overload_ordinal)
+                .collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+
+        // Completeness is verified here, not trusted. A set short of the
+        // declared overload count is what a dropped signature looks like, and
+        // it is exactly the shape that would narrow "every overload" to "every
+        // overload the producer could describe".
+        let partial = export_value_transcript(json!({
+            "callSignatures": [export_signature(0, 2, "nonCallable")]
+        }));
+        assert!(matches!(
+            require_export_call_signatures(&unique, &partial, &open),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+        let dropped_head = export_value_transcript(json!({
+            "callSignatures": [export_signature(1, 2, "nonCallable")]
+        }));
+        assert!(matches!(
+            require_export_call_signatures(&unique, &dropped_head, &open),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+        let repeated = export_value_transcript(json!({
+            "callSignatures": [
+                export_signature(0, 2, "nonCallable"),
+                export_signature(0, 2, "nonCallable")
+            ]
+        }));
+        assert!(matches!(
+            require_export_call_signatures(&unique, &repeated, &open),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+        let disagreeing = export_value_transcript(json!({
+            "callSignatures": [
+                export_signature(0, 3, "nonCallable"),
+                export_signature(1, 2, "nonCallable")
+            ]
+        }));
+        assert!(matches!(
+            require_export_call_signatures(&unique, &disagreeing, &open),
+            Err(TypeFactsCertificationError::FamilyOpen { .. })
+        ));
+
+        // The two fields are mutually exclusive. A transcript populating both
+        // is answered by neither.
+        let both = export_value_transcript(json!({
+            "callSignature": export_signature(0, 1, "nonCallable"),
+            "callSignatures": [
+                export_signature(0, 2, "nonCallable"),
+                export_signature(1, 2, "nonCallable")
+            ]
+        }));
+        assert!(matches!(
+            require_export_call_signatures(&unique, &both, &open),
+            Err(TypeFactsCertificationError::UnsupportedDemand { .. })
+        ));
+    }
+
     #[test]
     fn runtime_function_shape_accepts_constructable_but_needs_both_negatives_for_values() {
         let mut value: InvocationValueFact = serde_json::from_value(json!({
@@ -4197,13 +4977,23 @@ mod tests {
             demand: "test".into(),
             reason: reason.into(),
         };
-        assert!(require_root_callability(&value, true, "export", &open).is_ok());
-        assert!(require_root_callability(&value, false, "export", &open).is_err());
+        let callable = DemandedCallability::Callable;
+        let non_callable = DemandedCallability::NonCallable;
+        assert!(require_root_callability(&value, callable, "export", &open).is_ok());
+        assert!(require_root_callability(&value, non_callable, "export", &open).is_err());
+        // An unasserted callability has no premise here, in either direction.
+        assert!(
+            require_root_callability(&value, DemandedCallability::Unknown, "export", &open).is_ok()
+        );
 
         value.constructability = InvocationConstructability::NonConstructable;
-        assert!(require_root_callability(&value, false, "export", &open).is_ok());
+        assert!(require_root_callability(&value, non_callable, "export", &open).is_ok());
         value.callability = Callability::Unknown;
-        assert!(require_root_callability(&value, false, "export", &open).is_err());
+        assert!(require_root_callability(&value, non_callable, "export", &open).is_err());
+        assert!(
+            require_root_callability(&value, DemandedCallability::Unknown, "export", &open).is_ok(),
+            "an unknown producer callability cannot refuse a demand that asserts nothing"
+        );
     }
 
     #[test]
@@ -4351,7 +5141,7 @@ mod tests {
                     ),
                 },
                 path: solid_reactive_ir::contract_semantics::ValuePath(Vec::new()),
-                callable: false,
+                callable: DemandedCallability::NonCallable,
             }),
         );
         assert!(matches!(
@@ -4394,7 +5184,7 @@ mod tests {
                 path: solid_reactive_ir::contract_semantics::ValuePath(vec![
                     ValuePathSegment::ObjectProperty("callback".into()),
                 ]),
-                callable: true,
+                callable: DemandedCallability::Callable,
             }),
         );
         assert!(verify_bound_recursive(&recursive, &exact, "invoke").is_ok());
@@ -4411,7 +5201,7 @@ mod tests {
                 path: solid_reactive_ir::contract_semantics::ValuePath(vec![
                     ValuePathSegment::ObjectProperty("unknownSibling".into()),
                 ]),
-                callable: true,
+                callable: DemandedCallability::Callable,
             }),
         );
         assert!(matches!(
@@ -4434,7 +5224,7 @@ mod tests {
                 path: solid_reactive_ir::contract_semantics::ValuePath(vec![
                     ValuePathSegment::ObjectProperty("differentCallback".into()),
                 ]),
-                callable: true,
+                callable: DemandedCallability::Callable,
             }),
         );
         assert!(matches!(
@@ -4452,7 +5242,7 @@ mod tests {
                 export: "run".into(),
                 root: ValueRoot::Export,
                 path: solid_reactive_ir::contract_semantics::ValuePath(Vec::new()),
-                callable: false,
+                callable: DemandedCallability::NonCallable,
             }),
         );
         assert!(matches!(
@@ -4480,7 +5270,7 @@ mod tests {
                     operation: solid_reactive_ir::contract_semantics::OperationId("invoke".into()),
                 },
                 path: solid_reactive_ir::contract_semantics::ValuePath(Vec::new()),
-                callable: false,
+                callable: DemandedCallability::NonCallable,
             }),
         );
         assert!(

@@ -36,12 +36,14 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:c94ee6da50a44562910b111cee58e0e7e344d4b50ee89fc068221fe1ab41d5aa";
-/// 6 binds an independently replayed runtime implementation census to each
-/// exported-value demand that needs function or operation evidence. The digest
-/// and build id still move with it, and the handshake refuses a producer that
+    "sha256:fe1ed89ba9c60cf3ccaed82bfff6f6161a55f84c362356d69dca797512f85554";
+/// 7 reports the *complete* call-signature set of an overloaded exported value
+/// (`callSignatures`) instead of nothing at all. A protocol-6 client rejects
+/// unknown transcript fields outright, so the addition is a break rather than
+/// a compatible extension, and the number is what says so. The digest and
+/// build id still move with it, and the handshake refuses a producer that
 /// differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 6;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 7;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

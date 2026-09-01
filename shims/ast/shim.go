@@ -202,6 +202,7 @@ const KindAmpersandAmpersandToken = ast.KindAmpersandAmpersandToken
 const KindBarBarToken = ast.KindBarBarToken
 const KindCommaToken = ast.KindCommaToken
 const KindEqualsToken = ast.KindEqualsToken
+const KindExclamationToken = ast.KindExclamationToken
 const KindFalseKeyword = ast.KindFalseKeyword
 const KindNullKeyword = ast.KindNullKeyword
 const KindDefaultClause = ast.KindDefaultClause

@@ -75,7 +75,9 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // escaping-private-helper, published-export-entity) were still
       // untracked and invisible to the audit. 141 includes the generated
       // Type Facts implementation-transcript main document added by Phase 21.
-      stableMainDocuments: 142,
+      // 143 adds the destructured-parameter-callback generator fixture's main
+      // document.
+      stableMainDocuments: 143,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

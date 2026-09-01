@@ -289,15 +289,55 @@ void retained;
 	if returned == nil || len(returned.Calls) != 1 || !returned.Calls[0].Captured {
 		t.Fatalf("returned implementation = %#v, want one captured call", returned)
 	}
-	if returned.ControlFlow == nil || len(returned.ControlFlow.Returns) != 1 || len(returned.ControlFlow.Returns[0].Captures) != 1 || returned.ControlFlow.Returns[0].Captures[0] != 0 {
-		t.Fatalf("returned control flow = %#v, want returned closure capture of parameter 0", returned.ControlFlow)
+	if returned.ControlFlow == nil || len(returned.ControlFlow.Returns) != 1 ||
+		len(returned.ControlFlow.Returns[0].CarriedCallables) != 1 {
+		t.Fatalf("returned control flow = %#v, want one carried callable", returned.ControlFlow)
+	}
+	if !locationWithinAny(returned.Calls[0].Location, returned.ControlFlow.Returns[0].CarriedCallables) {
+		t.Fatalf(
+			"returned captured call %#v is not inside the carried callable %#v",
+			returned.Calls[0].Location, returned.ControlFlow.Returns[0].CarriedCallables,
+		)
 	}
 	retained := answer.Transcripts[2].Implementation
 	if retained == nil || len(retained.Calls) != 1 || !retained.Calls[0].Captured {
 		t.Fatalf("retained implementation = %#v, want one captured call", retained)
 	}
-	if retained.ControlFlow == nil || len(retained.ControlFlow.Returns) != 1 || len(retained.ControlFlow.Returns[0].Captures) != 0 {
-		t.Fatalf("retained control flow = %#v, want no returned capture authority", retained.ControlFlow)
+	// The retained closure is never returned. Its call sits outside every
+	// carried range, which is exactly the authority a consumer must not find.
+	if retained.ControlFlow == nil || len(retained.ControlFlow.Returns) != 1 ||
+		len(retained.ControlFlow.Returns[0].CarriedCallables) != 1 {
+		t.Fatalf("retained control flow = %#v, want the returned arrow carried", retained.ControlFlow)
+	}
+	if locationWithinAny(retained.Calls[0].Location, retained.ControlFlow.Returns[0].CarriedCallables) {
+		t.Fatalf(
+			"retained call %#v was placed inside a carried callable %#v",
+			retained.Calls[0].Location, retained.ControlFlow.Returns[0].CarriedCallables,
+		)
+	}
+}
+
+// TestReportedOverloadSetIsAllOrNothing pins the producer half of the overload
+// guard: a set that describes fewer signatures than the type has is not a
+// smaller answer to the same question, it is a different one. "Every overload"
+// silently becoming "every overload we could describe" is the soundness loss,
+// so the gate answers nothing at all.
+func TestReportedOverloadSetIsAllOrNothing(t *testing.T) {
+	complete := []typefacts.SelectedSignature{
+		{OverloadOrdinal: 0, OverloadCount: 2},
+		{OverloadOrdinal: 1, OverloadCount: 2},
+	}
+	if got := completeOverloadSet(complete, 2); len(got) != 2 {
+		t.Fatalf("complete set = %#v, want both signatures", got)
+	}
+	for _, missing := range [][]typefacts.SelectedSignature{
+		nil,
+		complete[:1],
+		complete[1:],
+	} {
+		if got := completeOverloadSet(missing, 2); got != nil {
+			t.Fatalf("partial set %#v was reported as %#v, want nothing", missing, got)
+		}
 	}
 }
 
@@ -404,7 +444,7 @@ void returnsNamespace;
 	if returned == nil || returned.ControlFlow == nil || len(returned.ControlFlow.Returns) != 1 {
 		t.Fatalf("implementation = %#v, want one return site", returned)
 	}
-	if captures := returned.ControlFlow.Returns[0].Captures; len(captures) != 0 {
-		t.Fatalf("returned captures = %#v, want no proven captures for a nil closure", captures)
+	if carried := returned.ControlFlow.Returns[0].CarriedCallables; len(carried) != 0 {
+		t.Fatalf("carried callables = %#v, want none proven for a nil closure", carried)
 	}
 }

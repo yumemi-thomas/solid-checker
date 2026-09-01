@@ -447,7 +447,7 @@
         "location": { "$ref": "#/$defs/location" },
         "reach": { "enum": ["reachable", "unreachable", "unknown"] },
         "value": { "$ref": "#/$defs/invocationValue" },
-        "captures": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "carriedCallables": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } },
         "sources": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/implementationValueSource" } }
       }
     },
@@ -511,6 +511,7 @@
         "value": { "$ref": "#/$defs/invocationValue" },
         "callablePaths": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/callablePath" } },
         "callSignature": { "$ref": "#/$defs/selectedSignature" },
+        "callSignatures": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/selectedSignature" } },
         "implementation": { "$ref": "#/$defs/exportImplementationTranscript" },
         "complete": { "type": "boolean" },
         "openReasons": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }

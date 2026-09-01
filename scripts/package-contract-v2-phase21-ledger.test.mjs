@@ -73,7 +73,7 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // passes against the rewritten ledger.
   assert.deepEqual(ledger.authority.currentReport, {
     path: "benchmarks/ecosystem/report.json",
-    sha256: "88608007f66761fab2817164ba76a17fa267e5f9436cb0e68300637fc6215812"
+    sha256: "fdc7b37d2c1bb7d5aa0f6d589aade0df7a649f33cf076ef3a3bc3565511267e8"
   });
   assert.equal(ledger.rows.filter(row => row.phase21Disposition == null).length, 0);
   // One row moved, `@solid-primitives/geolocation@1.5.5|solid1|only`:
@@ -97,12 +97,20 @@ test("the frozen Phase 20 cohort remains the exact authority for the Phase 21 le
   // Known gap this pin records rather than endorses: unlike the corvu arm,
   // the geolocation arm has no `verified` case, so it labels a row that now
   // holds an authenticated ordinary receipt as pending checker work.
+  // @tanstack/solid-store moved pending-phase21-checker-work ->
+  // exact-refusal-type-facts-capability: its @tanstack/store graph node now
+  // refuses at the corrected root-shape gate (a root recursive-value-shape
+  // demand with no callability assertion discharges only against a fully
+  // closed producer observation; that node's root is not exhaustively
+  // observed). An honest fail-closed refusal, recoverable by the producer
+  // answering constructability/primitive for that shape.
   assert.deepEqual(ledger.summary.dispositionStates, {
     "confirmed-upstream-declaration-defect": 1,
     "exact-refusal-authenticated-layout": 5,
     "exact-refusal-package-import-resolution": 3,
     "exact-refusal-semantic-model": 5,
-    "pending-phase21-checker-work": 3,
+    "exact-refusal-type-facts-capability": 1,
+    "pending-phase21-checker-work": 2,
     "retained-unsupported-runtime-model": 7,
     "retained-upstream-missing-bytes": 5,
     "verified-through-ordinary-receipt-load": 1

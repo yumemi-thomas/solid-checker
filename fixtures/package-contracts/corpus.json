@@ -19,6 +19,7 @@
     "conditional-returns-divergence-both",
     "conditional-targets",
     "declaration-sibling-reach",
+    "destructured-parameter-callback",
     "entry-reexport-identity",
     "escaping-private-helper",
     "export-identity-join",

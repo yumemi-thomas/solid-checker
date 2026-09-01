@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-08-31T15:31:02.149Z
-- Finished: 2026-08-31T15:37:09.097Z
-- Duration: 366948 ms
+- Started: 2026-09-01T00:49:14.796Z
+- Finished: 2026-09-01T00:53:19.796Z
+- Duration: 245000 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Manifest generated at: 2026-08-26T14:21:49.573Z (rows: 307, probes: 418)
@@ -861,8 +861,8 @@ None.
 | Pretty main | 381 | 2186 | 12864 | 668201 |
 | Canonical minified main | 381 | 1632 | 9602 | 495730 |
 | Proposal plan (not evidence) | 381 | 49252 | 540062 | 19529867 |
-| Canonical bytes per export | 381 | 356 | 1085 | 1936 |
-| Canonical bytes per operation | 92 | 813 | 2628.5 | 15491.56 |
+| Canonical bytes per export | 381 | 356 | 1085 | 1696 |
+| Canonical bytes per operation | 92 | 844.5 | 2628.5 | 15491.56 |
 
 Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate.
 
@@ -888,7 +888,7 @@ Read the domain columns together, not separately: 31 of the 8682 unknown exports
 
 | Row kind | Count |
 | --- | --- |
-| invoke | 420 |
+| invoke | 418 |
 | return | 285 |
 | read | 391 |
 | write | 0 |
@@ -936,8 +936,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 5005707 ms
-- Phases: install 189334 ms, generation 385802 ms, harness 4430571 ms
+- Worker time: 3347121 ms
+- Phases: install 74322 ms, generation 457927 ms, harness 2814872 ms
 
 ### Top failure signatures
 

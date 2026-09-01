@@ -193,13 +193,21 @@ type InvocationValueFact struct {
 }
 
 type ExportValueTranscript struct {
-	Location       Location                        `cbor:"location" json:"location"`
-	QueryName      string                          `cbor:"queryName,omitempty" json:"queryName,omitempty"`
-	Target         SymbolID                        `cbor:"target,omitempty" json:"target,omitempty"`
-	Declaration    *ResolvedDeclaration            `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Value          InvocationValueFact             `cbor:"value" json:"value"`
-	CallablePaths  []CallablePathFact              `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
-	CallSignature  *SelectedSignature              `cbor:"callSignature,omitempty" json:"callSignature,omitempty"`
+	Location      Location             `cbor:"location" json:"location"`
+	QueryName     string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
+	Target        SymbolID             `cbor:"target,omitempty" json:"target,omitempty"`
+	Declaration   *ResolvedDeclaration `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Value         InvocationValueFact  `cbor:"value" json:"value"`
+	CallablePaths []CallablePathFact   `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
+	// The exported value's one call signature, present only when its type has
+	// exactly one. An overload set reports CallSignatures instead; the two are
+	// never both populated, so no consumer can mistake one overload for "the"
+	// signature.
+	CallSignature *SelectedSignature `cbor:"callSignature,omitempty" json:"callSignature,omitempty"`
+	// Every call signature of an overloaded exported value, in declaration
+	// order. Populated only when the type has more than one, and only when
+	// every one of them could be described.
+	CallSignatures []SelectedSignature             `cbor:"callSignatures,omitempty" json:"callSignatures,omitempty"`
 	Implementation *ExportImplementationTranscript `cbor:"implementation,omitempty" json:"implementation,omitempty"`
 	Complete       bool                            `cbor:"complete,omitempty" json:"complete,omitempty"`
 	OpenReasons    []string                        `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
@@ -312,11 +320,16 @@ const (
 )
 
 type ReturnSite struct {
-	Location Location                    `cbor:"location" json:"location"`
-	Reach    Reachability                `cbor:"reach" json:"reach"`
-	Value    *InvocationValueFact        `cbor:"value,omitempty" json:"value,omitempty"`
-	Captures []int                       `cbor:"captures,omitempty" json:"captures,omitempty"`
-	Sources  []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
+	Location Location             `cbor:"location" json:"location"`
+	Reach    Reachability         `cbor:"reach" json:"reach"`
+	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
+	// CarriedCallables are the exact source ranges of the callables this
+	// returned value provably carries. A consumer asking whether a call inside
+	// a nested callable is reachable through the returned value answers it by
+	// containment: the call site lies within one of these ranges, or it does
+	// not. An empty list is never proof that nothing is carried.
+	CarriedCallables []Location                  `cbor:"carriedCallables,omitempty" json:"carriedCallables,omitempty"`
+	Sources          []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
 }
 
 type ThrowSite struct {

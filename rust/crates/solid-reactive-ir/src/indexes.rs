@@ -1504,7 +1504,21 @@ impl<'a> SemanticLookup<'a> {
         if binding.initializer_function {
             return vec![symbol.clone()];
         }
-        if let Some(initializer) = &binding.initializer_identifier {
+        // A destructuring pattern is not an alias of its initializer. `const
+        // { href } = props` binds `props.href`; `const [first] = pair` binds
+        // `pair[0]`. Carrying the initializer's identity across the pattern
+        // made every destructured local *be* the whole object, which is how
+        // `@solidjs/router`'s `Navigate` published a callback claim saying the
+        // props object itself is invoked -- a claim no adapter can verify,
+        // because `href({ navigate })` invokes a member. Only an identifier
+        // binding may inherit its initializer's callable identity; the object
+        // slot below resolves a destructured property on its own evidence, and
+        // a slot with no inspectable value stays this binding's own symbol so
+        // the claim is never made.
+        let inherits_initializer_identity =
+            binding.shape == solid_facts::ast::BindingShape::Identifier;
+        if inherits_initializer_identity && let Some(initializer) = &binding.initializer_identifier
+        {
             let aliases = self.direct_value_symbols(binding_file, initializer.span, visited);
             if !aliases.is_empty() {
                 return aliases;
@@ -1533,7 +1547,7 @@ impl<'a> SemanticLookup<'a> {
                 return aliases;
             }
         }
-        if let Some(initializer) = binding.initializer {
+        if inherits_initializer_identity && let Some(initializer) = binding.initializer {
             let aliases = self.direct_value_symbols(binding_file, initializer, visited);
             if aliases.len() > 1 {
                 return aliases;
@@ -2529,5 +2543,50 @@ mod tests {
 
         assert!(call_sites(source, &entities).is_empty());
         assert!(accounted_references(source, &entities, panel).is_empty());
+    }
+
+    /// Both directions of the alias gate, so neither forcing can survive.
+    ///
+    /// Forcing it true republishes the claim `@solidjs/router`'s `Navigate`
+    /// made: the destructured `href` *is* `props`, so a call of `href` reads as
+    /// a call of the props object. Forcing it false drops the identifier alias,
+    /// so `alias()` stops resolving to `handler` and every claim about the
+    /// aliased callable disappears.
+    #[test]
+    fn only_an_identifier_binding_inherits_its_initializer_identity() {
+        let source = concat!(
+            "const alias = handler;\n",
+            "const { href } = props;\n",
+            "alias();\n",
+            "href();\n",
+        );
+        let entities = [
+            (span_of(source, "alias", 0), "symbol:alias"),
+            (span_of(source, "alias", 1), "symbol:alias"),
+            (span_of(source, "handler", 0), "symbol:handler"),
+            (span_of(source, "href", 0), "symbol:href"),
+            (span_of(source, "href", 1), "symbol:href"),
+            (span_of(source, "props", 0), "symbol:props"),
+        ];
+        let (aliased, destructured) = with_lookup(source, &entities, |lookup| {
+            let file = &lookup.facts.files[0];
+            let mut visited = HashSet::new();
+            let aliased =
+                lookup.direct_value_symbols(file, span_of(source, "alias", 1), &mut visited);
+            let mut visited = HashSet::new();
+            let destructured =
+                lookup.direct_value_symbols(file, span_of(source, "href", 1), &mut visited);
+            (aliased, destructured)
+        });
+        assert_eq!(
+            aliased,
+            vec![SymbolId::from("symbol:handler")],
+            "an identifier binding is an alias of its initializer"
+        );
+        assert_eq!(
+            destructured,
+            vec![SymbolId::from("symbol:href")],
+            "a destructured local is its own binding, never the object it came from"
+        );
     }
 }

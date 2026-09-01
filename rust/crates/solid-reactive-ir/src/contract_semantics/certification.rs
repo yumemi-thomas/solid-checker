@@ -46,6 +46,60 @@ pub struct CertificationCandidates {
     positive_facts: Vec<PositiveFactSubject>,
 }
 
+/// What a recursive-value demand asserts about the *runtime callability* of
+/// the value it names.
+///
+/// This is deliberately a tri-state rather than a boolean. A boolean forces
+/// every shape the IR does not classify by type kind into the assertion
+/// "provably non-callable", which is a claim about the runtime value that the
+/// IR never made: `Parameter { path: ["map"] }` is `Array.prototype.map`, and
+/// `Tuple`/`Object`/`Array`/`Reactive` are structural or reactive-graph claims
+/// derived from the *implementation*, verified here against the *declaration*.
+/// Demanding non-callability there asks the adapter to confirm something false.
+///
+/// `Unknown` is not a weaker premise: it is the absence of a callability
+/// premise. Every other part of the same demand — the value path existing in
+/// the producer census, being closed, and its flow evidence — still verifies.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum DemandedCallability {
+    /// The IR asserts nothing about this value's callability.
+    Unknown,
+    /// The value's declared type carries a call or construct signature.
+    Callable,
+    /// The value's declared type carries neither.
+    NonCallable,
+}
+
+impl DemandedCallability {
+    /// Whether the demand asserts callability, i.e. whether an adapter must
+    /// confirm the value *is* callable.
+    #[must_use]
+    pub const fn asserts_callable(self) -> bool {
+        matches!(self, Self::Callable)
+    }
+
+    /// Whether the demand asserts non-callability.
+    #[must_use]
+    pub const fn asserts_non_callable(self) -> bool {
+        matches!(self, Self::NonCallable)
+    }
+
+    /// Whether the demand makes any callability claim at all. A demand that
+    /// makes none has no callability premise for an adapter to verify.
+    #[must_use]
+    pub const fn is_asserted(self) -> bool {
+        !matches!(self, Self::Unknown)
+    }
+
+    const fn discriminant(self) -> u8 {
+        match self {
+            Self::Unknown => 0,
+            Self::Callable => 1,
+            Self::NonCallable => 2,
+        }
+    }
+}
+
 /// Exact analyzer-visible positive facts retained when proposed completeness
 /// is withdrawn. Each variant has a distinct proof subject; no generic claim
 /// ID can be reused to stand for a structurally different fact.
@@ -90,7 +144,7 @@ pub enum PositiveFactSubject {
         export: String,
         root: ValueRoot,
         path: ValuePath,
-        callable: bool,
+        callable: DemandedCallability,
     },
 }
 
@@ -372,7 +426,11 @@ impl ProofPolicy2 {
                 }
                 PositiveFactSubject::RecursiveValue { callable, .. } => {
                     insert_positive(&mut requested, ProofFamily::RecursiveValueShape, positive);
-                    if *callable {
+                    // A callable-path demand exists to prove the value *is*
+                    // callable. Without that assertion there is no callable
+                    // path to prove, so the family does not apply; the value's
+                    // shape and closure are still demanded above.
+                    if callable.asserts_callable() {
                         insert_positive(&mut requested, ProofFamily::CallablePath, positive);
                     }
                 }
@@ -600,7 +658,7 @@ fn inventory_value_shape(
         export: export.into(),
         root: root.clone(),
         path: path.clone(),
-        callable: recursive_value_is_callable(shape),
+        callable: recursive_value_callability(shape),
     });
     match shape {
         ValueShape::Tuple(items) | ValueShape::Choice(items) => {
@@ -667,8 +725,42 @@ fn inventory_value_shape(
     }
 }
 
-fn recursive_value_is_callable(shape: &ValueShape) -> bool {
-    matches!(shape, ValueShape::Callable | ValueShape::Reactive { .. })
+/// The callability a value shape actually carries evidence for.
+///
+/// Only three constructors are grounded in a *type-kind* observation, and they
+/// are exactly the three the analyzer reaches through a closed
+/// `ExportKindProof` (a call or construct signature, or the closed absence of
+/// both) or through a wire contract's `ValueKind`: `Callable`, `Component` and
+/// `Plain`. Every other constructor is produced from implementation analysis —
+/// `Parameter` names a formal's member, `Tuple`/`Object`/`Array` name a
+/// destructured or literal structure, `Reactive`/`Store`/`Action`/`Cleanup`
+/// name a reactive-graph role — and none of them observes the declared type at
+/// the address this demand is verified against. Asserting `false` for those was
+/// asserting "provably non-callable" about values the IR never classified:
+/// `@solid-primitives/utils` `accessArray` demanded non-callability of
+/// `Array.prototype.map`, and `@solid-primitives/keyed` `Entries` demanded
+/// callability of a declared `JSX.Element` because its *implementation*
+/// returns `createMemo(...)`. Declaration and implementation may legitimately
+/// disagree, so a shape derived from one cannot assert about the other.
+const fn recursive_value_callability(shape: &ValueShape) -> DemandedCallability {
+    match shape {
+        ValueShape::Callable | ValueShape::Component => DemandedCallability::Callable,
+        ValueShape::Plain => DemandedCallability::NonCallable,
+        ValueShape::Unknown
+        | ValueShape::Parameter { .. }
+        | ValueShape::Tuple(_)
+        | ValueShape::Array { .. }
+        | ValueShape::Object(_)
+        | ValueShape::Choice(_)
+        | ValueShape::Promise(_)
+        | ValueShape::AsyncIterable(_)
+        | ValueShape::Reactive { .. }
+        | ValueShape::Store { .. }
+        | ValueShape::Action { .. }
+        | ValueShape::Cleanup { .. }
+        | ValueShape::RefApplication
+        | ValueShape::ServerFunctionReference { .. } => DemandedCallability::Unknown,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -832,7 +924,7 @@ fn hash_positive_subject(hash: &mut Sha256, subject: &PositiveFactSubject) {
             hash_artifact_export(hash, artifact_case, export);
             hash_value_root(hash, root);
             hash_value_path(hash, path);
-            hash.update([u8::from(*callable)]);
+            hash.update([callable.discriminant()]);
         }
     }
 }
@@ -1829,8 +1921,9 @@ const fn manifest() -> PolicyManifest {
 #[cfg(test)]
 mod tests {
     use super::{
-        DependencyDemandInput, ProofDemandSubject, ProofFamily, ProofWitnessVariant,
-        WitnessBinding, WitnessCoverageError, proof_policy_2, recursive_value_is_callable,
+        DemandedCallability, DependencyDemandInput, ProofDemandSubject, ProofFamily,
+        ProofWitnessVariant, WitnessBinding, WitnessCoverageError, proof_policy_2,
+        recursive_value_callability,
     };
     use crate::contract_semantics::{
         KnowledgeSet, KnowledgeState, ReactiveRole, SEMANTIC_MODEL_VERSION, SemanticClaimPath,
@@ -1845,20 +1938,151 @@ mod tests {
     ));
 
     #[test]
-    fn recursive_reactive_values_are_callable_but_plain_values_are_not() {
+    fn only_type_kind_shapes_assert_a_demanded_callability() {
+        // Grounded in a closed `ExportKindProof` or a wire `ValueKind`.
+        assert_eq!(
+            recursive_value_callability(&ValueShape::Callable),
+            DemandedCallability::Callable
+        );
+        assert_eq!(
+            recursive_value_callability(&ValueShape::Component),
+            DemandedCallability::Callable
+        );
+        assert_eq!(
+            recursive_value_callability(&ValueShape::Plain),
+            DemandedCallability::NonCallable
+        );
+
+        // Reactive-graph and structural shapes come from implementation
+        // analysis. They must not assert about the declared type this demand
+        // is checked against: `keyed`'s `Entries` returns `createMemo(...)`
+        // while declaring `JSX.Element`, and `spring`'s `createDerivedSpring`
+        // declares `Accessor<T>` while the IR models a destructured tuple.
         for role in [ReactiveRole::Accessor, ReactiveRole::Setter] {
-            assert!(recursive_value_is_callable(&ValueShape::Reactive {
-                role,
+            assert_eq!(
+                recursive_value_callability(&ValueShape::Reactive {
+                    role,
+                    resource: None,
+                    capabilities: KnowledgeSet::Unknown,
+                }),
+                DemandedCallability::Unknown
+            );
+        }
+        assert_eq!(
+            recursive_value_callability(&ValueShape::Store {
                 resource: None,
                 capabilities: KnowledgeSet::Unknown,
-            }));
+            }),
+            DemandedCallability::Unknown
+        );
+        // `Array.prototype.map` reached through a formal parameter: the IR
+        // tracks the access path, never the member's callability.
+        assert_eq!(
+            recursive_value_callability(&ValueShape::Parameter {
+                index: 0,
+                path: vec!["map".into()],
+            }),
+            DemandedCallability::Unknown
+        );
+        assert_eq!(
+            recursive_value_callability(&ValueShape::Tuple(KnowledgeSet::Complete(vec![
+                ValueShape::Plain
+            ]))),
+            DemandedCallability::Unknown
+        );
+        assert_eq!(
+            recursive_value_callability(&ValueShape::Object(KnowledgeSet::Unknown)),
+            DemandedCallability::Unknown
+        );
+    }
+
+    /// The policy's own planning branch, both directions.
+    ///
+    /// This drives `derive_demand_graph` rather than re-running the production
+    /// condition in the test: a test that repeats `if callable.asserts_callable()`
+    /// passes whatever the policy does, which is no test of the policy at all.
+    /// Forcing the branch on republishes a callable-path demand for a value the
+    /// IR never called callable; forcing it off drops the demand for one it did.
+    #[test]
+    fn an_unasserted_callability_demands_no_callable_path_family() {
+        let complete = conformance_corpus()
+            .into_iter()
+            .next()
+            .unwrap()
+            .proposal
+            .normalize()
+            .unwrap();
+        let policy = proof_policy_2();
+        let subject = |callable| super::PositiveFactSubject::RecursiveValue {
+            artifact_case: "case".into(),
+            export: "run".into(),
+            root: crate::contract_semantics::ValueRoot::Export,
+            path: crate::contract_semantics::ValuePath::default(),
+            callable,
+        };
+        let candidates = super::CertificationCandidates {
+            candidate_semantic_digest: complete.semantic_digest().clone(),
+            proposal: complete,
+            closure_candidates: Vec::new(),
+            positive_operations: Vec::new(),
+            positive_facts: vec![
+                subject(DemandedCallability::Unknown),
+                subject(DemandedCallability::Callable),
+                subject(DemandedCallability::NonCallable),
+            ],
+        };
+        let graph = policy
+            .derive_demand_graph(
+                &candidates,
+                &format!("sha256:{:064x}", 1),
+                &format!("sha256:{:064x}", 2),
+            )
+            .unwrap();
+        let demanded = |family: ProofFamily, callable| {
+            graph.demands().iter().any(|demand| {
+                demand.family() == family
+                    && demand.subject() == &ProofDemandSubject::PositiveFact(subject(callable))
+            })
+        };
+
+        // Every recursive value is demanded a shape, whatever it asserts.
+        for callable in [
+            DemandedCallability::Unknown,
+            DemandedCallability::Callable,
+            DemandedCallability::NonCallable,
+        ] {
+            assert!(
+                demanded(ProofFamily::RecursiveValueShape, callable),
+                "{callable:?} must still be demanded its value shape"
+            );
         }
-        assert!(recursive_value_is_callable(&ValueShape::Callable));
-        assert!(!recursive_value_is_callable(&ValueShape::Plain));
-        assert!(!recursive_value_is_callable(&ValueShape::Store {
-            resource: None,
-            capabilities: KnowledgeSet::Unknown,
-        }));
+        // Only the callable assertion adds the callable-path family.
+        assert!(demanded(
+            ProofFamily::CallablePath,
+            DemandedCallability::Callable
+        ));
+        assert!(!demanded(
+            ProofFamily::CallablePath,
+            DemandedCallability::Unknown
+        ));
+        assert!(!demanded(
+            ProofFamily::CallablePath,
+            DemandedCallability::NonCallable
+        ));
+        assert_eq!(
+            graph
+                .demands()
+                .iter()
+                .filter(|demand| demand.family() == ProofFamily::CallablePath
+                    && matches!(
+                        demand.subject(),
+                        ProofDemandSubject::PositiveFact(
+                            super::PositiveFactSubject::RecursiveValue { .. }
+                        )
+                    ))
+                .count(),
+            1
+        );
     }
 
     #[test]

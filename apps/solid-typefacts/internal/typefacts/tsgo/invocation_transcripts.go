@@ -1147,11 +1147,11 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	if body != nil && !ast.IsBlock(body) {
 		value := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(body))
 		census.Returns = append(census.Returns, typefacts.ReturnSite{
-			Location: nodeLocation(body),
-			Reach:    typefacts.Reachable,
-			Value:    &value,
-			Captures: p.returnedClosureCapturesLocked(implementation, body),
-			Sources:  p.returnValueSourcesLocked(body),
+			Location:         nodeLocation(body),
+			Reach:            typefacts.Reachable,
+			Value:            &value,
+			CarriedCallables: p.returnedCallableLocationsLocked(body),
+			Sources:          p.returnValueSourcesLocked(body),
 		})
 		return census
 	}
@@ -1172,14 +1172,14 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 		}
 		if ast.IsReturnStatement(node) {
 			var value *typefacts.InvocationValueFact
-			var captures []int
+			var carried []typefacts.Location
 			if expression := node.Expression(); expression != nil {
 				fact := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(expression))
 				value = &fact
-				captures = p.returnedClosureCapturesLocked(implementation, expression)
+				carried = p.returnedCallableLocationsLocked(expression)
 			}
 			census.Returns = append(census.Returns, typefacts.ReturnSite{
-				Location: nodeLocation(node), Reach: reach, Value: value, Captures: captures,
+				Location: nodeLocation(node), Reach: reach, Value: value, CarriedCallables: carried,
 				Sources: p.returnValueSourcesLocked(node.Expression()),
 			})
 			return typefacts.Unreachable
@@ -1232,6 +1232,17 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				scan(child, typefacts.ReachUnknown)
 				return false
 			})
+			// Reachability *inside* the construct stays unknown — a loop body may
+			// never run, a catch clause may never be entered — which is why the
+			// children above are scanned with ReachUnknown and the marker stands.
+			// Reachability *after* it is a separate question, and for a construct
+			// that can only complete normally it has the same answer as before it:
+			// control arrives at the following statement either way. Answering it
+			// keeps a single `for (const key of …)` from poisoning every remaining
+			// statement of the implementation.
+			if reach == typefacts.Reachable && constructCompletesNormally(node) {
+				return typefacts.Reachable
+			}
 			return typefacts.ReachUnknown
 		}
 		current := reach
@@ -1247,6 +1258,301 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	return census
 }
 
+// maxNestedConstructDepth bounds the recursion through nested loop / `try` /
+// `switch` constructs. Real implementations nest a handful deep; an input that
+// exceeds this answers "does not provably complete", which is the conservative
+// direction.
+const maxNestedConstructDepth = 32
+
+// constructCompletesNormally reports whether a loop, `try`, or `switch` can only
+// finish by falling out of its bottom — in which case the statement after it is
+// reached exactly when the construct itself was.
+//
+// Three things can falsify that. The first is a jump out: a `return` or `throw`
+// anywhere inside, or a `break`/`continue` whose target is outside. The second is
+// a loop with no exit edge — `while (true)`, `while (1)`, `do … while (!0)`,
+// `for (;;)` — for which the following statement is reached only through a
+// `break` aimed at the loop, so the loop must contain one. The third is a *nested*
+// construct that itself cannot complete: a `while (true)` inside a `try`, a
+// `for (;;)` inside a `for … of`, an endless loop in a `switch` clause. Control
+// that enters one never reaches the bottom of the construct wrapping it, so the
+// nested answer is required before the outer one can be given.
+//
+// The nested descent asks a different question than the top-level one. It asks
+// whether control can leave the nested construct *at all* — not whether it leaves
+// by falling out the bottom. A `break outer` inside a nested `while (true)` never
+// reaches that loop's bottom, yet it lands exactly where the enclosing construct
+// falls through to, and the scan below classifies that jump itself. Only a
+// construct with no way out at all stops the statement after the enclosing one
+// from being reached.
+//
+// Deliberately conservative shapes, each answering false and leaving today's
+// ReachUnknown in place:
+//
+//   - Any `throw`, including one a sibling `catch` would swallow (`try { throw x }
+//     catch {}` does reach the next statement, and is still refused here).
+//   - Any `return`, including one in a `finally` that would override the jump.
+//   - A `break L` or `continue L` naming a label declared *outside* the construct,
+//     which is a jump past it. A label that wraps the construct is not that case:
+//     the census admits the labeled statement as the construct itself, so
+//     `outer: for (…) { for (…) { break outer } }` falls through.
+//   - A loop condition that is truthy without being a literal (`while (fn())`,
+//     `while (flag)`), which is treated as an ordinary exit edge. Only literal
+//     conditions are read here; the type checker's truthiness of an arbitrary
+//     expression is not consulted, and a condition this cannot classify keeps its
+//     exit edge, which is the Unknown-preserving direction.
+//
+// Jumps inside a nested callable are not this function's control flow and are
+// skipped, exactly as the surrounding census skips them.
+func constructCompletesNormally(construct *ast.Node) bool {
+	flow := scanConstructControlFlow(construct, 0, map[*ast.Node]bool{})
+	if flow.escapes || flow.nestedTraps {
+		return false
+	}
+	return !loopWithoutExitEdge(construct) || flow.breaksConstruct
+}
+
+// constructTraps reports that control entering `construct` may never leave it:
+// no `return`, no `throw`, no jump aimed anywhere outside it, and either a header
+// that cannot end the loop or a nested construct that traps in the same way. The
+// statement after whatever contains it is then not reached by falling through.
+//
+// It is deliberately one-sided. Over-reporting a trap costs precision only —
+// today's ReachUnknown — while under-reporting it is what let `try { while (true)
+// {…} } finally {…}` claim its successor was reached.
+func constructTraps(construct *ast.Node, depth int, memo map[*ast.Node]bool) bool {
+	if construct == nil {
+		return false
+	}
+	if depth > maxNestedConstructDepth {
+		return true
+	}
+	if answer, computed := memo[construct]; computed {
+		return answer
+	}
+	// Bound the recursion before descending: a malformed parent chain must not
+	// make this re-enter the same node forever.
+	memo[construct] = true
+	flow := scanConstructControlFlow(construct, depth, memo)
+	answer := !flow.escapes && !flow.breaksConstruct &&
+		(loopWithoutExitEdge(construct) || flow.nestedTraps)
+	memo[construct] = answer
+	return answer
+}
+
+// constructControlFlow is one construct's own classification: whether control
+// leaves it upward, whether a `break` aimed at it lets control out of its bottom,
+// and whether it contains a construct control can never leave.
+type constructControlFlow struct {
+	escapes         bool
+	breaksConstruct bool
+	nestedTraps     bool
+}
+
+func scanConstructControlFlow(
+	construct *ast.Node,
+	depth int,
+	memo map[*ast.Node]bool,
+) constructControlFlow {
+	var flow constructControlFlow
+	var scan func(*ast.Node)
+	scan = func(node *ast.Node) {
+		if node == nil || flow.escapes {
+			return
+		}
+		if node != construct && isCallableDeclaration(node) {
+			return
+		}
+		if node != construct && isNestedFallThroughConstruct(node) &&
+			constructTraps(node, depth+1, memo) {
+			flow.nestedTraps = true
+		}
+		switch {
+		case ast.IsReturnStatement(node), ast.IsThrowStatement(node):
+			flow.escapes = true
+			return
+		case ast.IsBreakStatement(node), isContinueStatement(node):
+			switch target := jumpTargetWithin(node, construct); {
+			case target == nil:
+				flow.escapes = true
+				return
+			case target == construct && ast.IsBreakStatement(node):
+				flow.breaksConstruct = true
+			}
+		}
+		node.ForEachChild(func(child *ast.Node) bool {
+			scan(child)
+			return false
+		})
+	}
+	scan(construct)
+	return flow
+}
+
+// isNestedFallThroughConstruct names the nodes whose own completion has to be
+// established before the construct containing them can claim to complete.
+//
+// A labeled loop is the construct, not the loop under the label: the census
+// admits the labeled statement (ast.IsIterationStatement looks through labels)
+// and loopWithoutExitEdge unwraps them, so counting the inner loop as a second
+// nested construct would evaluate `break L` against the wrong construct and
+// refuse a shape the label makes legitimate. A label wrapping a `try` or a
+// `switch` is not admitted that way, so those are still reached through the
+// label.
+func isNestedFallThroughConstruct(node *ast.Node) bool {
+	if node == nil {
+		return false
+	}
+	if parent := node.Parent; parent != nil &&
+		parent.KindString() == "KindLabeledStatement" &&
+		parent.Statement() == node &&
+		ast.IsIterationStatement(parent, true) {
+		return false
+	}
+	return ast.IsTryStatement(node) || ast.IsIterationStatement(node, true) ||
+		ast.IsSwitchStatement(node)
+}
+
+// jumpTargetWithin resolves a `break`/`continue` to the statement it transfers
+// control to, and returns nil when that target is not the construct or something
+// nested inside it — the definition of leaving.
+//
+// The search climbs parents from the jump and stops at the construct, so a target
+// found on the way is necessarily the construct or a descendant. A labeled jump
+// matches the nearest enclosing label of that name; an unlabeled `continue`
+// matches the nearest iteration statement; an unlabeled `break` matches the
+// nearest iteration or `switch` statement.
+//
+// No callable boundary is tested on the way up because none can be crossed: the
+// only caller hands this a jump found by a scan that stops at every nested
+// callable, so the jump is a descendant of the construct with no callable in
+// between, and the walk terminates at the construct itself.
+func jumpTargetWithin(jump *ast.Node, construct *ast.Node) *ast.Node {
+	label := jumpLabelText(jump)
+	continues := isContinueStatement(jump)
+	for current := jump.Parent; current != nil; current = current.Parent {
+		switch {
+		case label != "":
+			if current.KindString() == "KindLabeledStatement" &&
+				current.AsLabeledStatement().Label != nil &&
+				current.AsLabeledStatement().Label.Text() == label {
+				return current
+			}
+		case continues:
+			if ast.IsIterationStatement(current, false) {
+				return current
+			}
+		default:
+			if ast.IsIterationStatement(current, false) || ast.IsSwitchStatement(current) {
+				return current
+			}
+		}
+		if current == construct {
+			return nil
+		}
+	}
+	return nil
+}
+
+func jumpLabelText(jump *ast.Node) string {
+	switch jump.KindString() {
+	case "KindBreakStatement":
+		if label := jump.AsBreakStatement().Label; label != nil {
+			return label.Text()
+		}
+	case "KindContinueStatement":
+		if label := jump.AsContinueStatement().Label; label != nil {
+			return label.Text()
+		}
+	}
+	return ""
+}
+
+func isContinueStatement(node *ast.Node) bool {
+	return node != nil && node.KindString() == "KindContinueStatement"
+}
+
+// loopWithoutExitEdge names the loops whose header cannot end the loop, so the
+// statement after them is reached only through a `break`. A labeled loop is
+// unwrapped first, because ast.IsIterationStatement admits the label as the
+// construct.
+func loopWithoutExitEdge(construct *ast.Node) bool {
+	node := construct
+	for range maxReturnedCallableDepth {
+		if node == nil || node.KindString() != "KindLabeledStatement" {
+			break
+		}
+		node = node.Statement()
+	}
+	if node == nil {
+		return false
+	}
+	switch node.KindString() {
+	case "KindWhileStatement":
+		return alwaysTruthyLiteralCondition(node.AsWhileStatement().Expression)
+	case "KindDoStatement":
+		return alwaysTruthyLiteralCondition(node.AsDoStatement().Expression)
+	case "KindForStatement":
+		return node.AsForStatement().Condition == nil ||
+			alwaysTruthyLiteralCondition(node.AsForStatement().Condition)
+	default:
+		// `for … in` and `for … of` always have an exit edge — an exhausted
+		// iterator — and `switch`/`try` are not loops at all.
+		return false
+	}
+}
+
+// alwaysTruthyLiteralCondition reports whether a loop header can never end the
+// loop because its condition is a *literal* the language always evaluates to
+// true: `true`, a non-zero numeric literal, a non-empty string literal, or a `!`
+// applied to a literal that is always falsy.
+//
+// Only literals are read. The type checker's opinion of an arbitrary
+// expression's truthiness is deliberately not consulted: an unclassifiable
+// condition keeps its exit edge, which makes the construct look like it can fall
+// through and therefore leaves reachability after it at today's answer rather
+// than promoting it.
+func alwaysTruthyLiteralCondition(expression *ast.Node) bool {
+	truthy, known := literalTruthiness(expression, 0)
+	return known && truthy
+}
+
+// literalTruthiness evaluates a literal condition, reporting the value and
+// whether it was decidable at all. Anything that is not a literal — an
+// identifier, a call, a template with substitutions, a numeric literal whose
+// text this cannot read exactly — reports undecided.
+func literalTruthiness(expression *ast.Node, depth int) (truthy bool, known bool) {
+	if depth > maxNestedConstructDepth {
+		return false, false
+	}
+	expression = identityPreservingUnwrap(expression)
+	if expression == nil {
+		return false, false
+	}
+	switch {
+	case expression.Kind == ast.KindTrueKeyword:
+		return true, true
+	case expression.Kind == ast.KindFalseKeyword, expression.Kind == ast.KindNullKeyword:
+		return false, true
+	case ast.IsNumericLiteral(expression):
+		// Decimal literals are read exactly; a radix prefix or a numeric
+		// separator that ParseFloat refuses stays undecided rather than
+		// guessing.
+		value, err := strconv.ParseFloat(expression.Text(), 64)
+		if err != nil {
+			return false, false
+		}
+		return value != 0, true
+	case ast.IsStringLiteral(expression), ast.IsNoSubstitutionTemplateLiteral(expression):
+		return expression.Text() != "", true
+	case ast.IsPrefixUnaryExpression(expression) &&
+		expression.AsPrefixUnaryExpression().Operator == ast.KindExclamationToken:
+		operand, decided := literalTruthiness(expression.AsPrefixUnaryExpression().Operand, depth+1)
+		return !operand, decided
+	}
+	return false, false
+}
+
 func mergeReachability(left, right typefacts.Reachability) typefacts.Reachability {
 	if left == right {
 		return left
@@ -1257,55 +1563,367 @@ func mergeReachability(left, right typefacts.Reachability) typefacts.Reachabilit
 	return typefacts.ReachUnknown
 }
 
-func (p *project) returnedClosureCapturesLocked(
-	implementation *ast.Node,
-	expression *ast.Node,
-) []int {
-	closure := expression
-	if ast.IsIdentifier(expression) {
-		target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(expression))
-		if target != nil {
-			closure = target.ValueDeclaration
-			if closure == nil && len(target.Declarations) == 1 {
-				closure = target.Declarations[0]
-			}
-		}
-	}
-	// A symbol whose value declaration is absent (or ambiguous across several
-	// declarations) leaves `closure` nil. That is a missing-evidence frontier,
-	// not a callable closure: return no proven captures so the demand stays a
-	// fail-closed open premise instead of dereferencing a nil AST node.
-	if closure == nil || !isCallableDeclaration(closure) {
+// returnedCallableLocationsLocked reports the exact source ranges of the
+// callables a returned value provably carries.
+//
+// The returned value is rarely the callable itself. Real packages hand back
+// `Object.assign(fn, { clear })`, `[fn, clear]`, or a `const` naming an arrow, and
+// every one of those constructions preserves the callable's identity: whatever the
+// caller invokes is the very function object whose body sits in one of these
+// ranges. Reporting the ranges rather than a set of captured parameter indices is
+// what makes the fact *bind*: a consumer asking whether a call inside some nested
+// callable can be reached through the returned value answers it by containment —
+// the call site lies within one of these ranges, or it does not. A union of
+// parameter indices could not answer that, because it says nothing about which
+// callable mentioned the parameter, and a call in a never-returned closure would
+// discharge on a returned closure that merely names the same parameter.
+//
+// Containment is transitive on purpose. A call nested two callables deep inside a
+// carried closure — `setTimeout(() => callback(…), wait)` inside a returned
+// debounced function — is still reached by invoking the returned value.
+//
+// Absence of a range is never proof that nothing is carried: the descent is a
+// whitelist and stops at the first construction it cannot vouch for.
+func (p *project) returnedCallableLocationsLocked(expression *ast.Node) []typefacts.Location {
+	closures := p.returnedCallablesLocked(expression)
+	if len(closures) == 0 {
 		return nil
 	}
-	roots := p.parameterCensusRootsLocked(implementation)
-	bySymbol := make(map[*ast.Symbol]int, len(roots))
-	for _, root := range roots {
-		bySymbol[p.canonicalSymbol(root.symbol)] = root.index
+	locations := make([]typefacts.Location, 0, len(closures))
+	for _, closure := range closures {
+		locations = append(locations, nodeLocation(closure))
 	}
-	seen := make(map[int]struct{})
-	closure.ForEachChild(func(node *ast.Node) bool {
-		var visit func(*ast.Node)
-		visit = func(current *ast.Node) {
-			if ast.IsIdentifier(current) && !ast.IsDeclarationNameOrImportPropertyName(current) {
-				if index, ok := bySymbol[p.canonicalSymbol(p.checker.GetSymbolAtLocation(current))]; ok {
-					seen[index] = struct{}{}
-				}
-			}
-			current.ForEachChild(func(child *ast.Node) bool {
-				visit(child)
-				return false
-			})
+	sort.Slice(locations, func(i, j int) bool {
+		if locations[i].Path != locations[j].Path {
+			return locations[i].Path < locations[j].Path
 		}
-		visit(node)
-		return false
+		if locations[i].StartByte != locations[j].StartByte {
+			return locations[i].StartByte < locations[j].StartByte
+		}
+		return locations[i].EndByte < locations[j].EndByte
 	})
-	indices := make([]int, 0, len(seen))
-	for index := range seen {
-		indices = append(indices, index)
+	write := 0
+	for read := range locations {
+		if write != 0 && locations[read] == locations[write-1] {
+			continue
+		}
+		locations[write] = locations[read]
+		write++
 	}
-	sort.Ints(indices)
-	return indices
+	return locations[:write]
+}
+
+// Bounds on the identity-preserving descent. Depth stops a chain of `const`
+// indirections and nested literals; the node budget stops a single pathological
+// literal — a thousand-element array of arrays — from making one return site cost
+// the whole census. Both are deliberately generous relative to real returned
+// shapes, which nest two or three levels.
+const (
+	maxReturnedCallableDepth  = 8
+	maxReturnedCallableBudget = 256
+)
+
+// returnedCallablesLocked collects the callable declarations a returned value
+// provably carries, descending only through constructions that keep the
+// callable's runtime identity intact:
+//
+//   - the expression itself, when it is a callable declaration;
+//   - parentheses and the three type-only wrappers (`as`, `satisfies`, `!`), which
+//     do not exist at runtime at all;
+//   - an identifier whose single declaration is a `const` variable, through that
+//     variable's initializer;
+//   - array-literal elements and object-literal property values, which the
+//     literal stores by reference;
+//   - `Object.assign`'s argument 0, which the ES specification returns by
+//     identity — but only when the callee resolves to the exact default-library
+//     `ObjectConstructor.assign` symbol.
+//
+// Every other construction — a call whose result identity is unknown, a
+// conditional, a spread, a shorthand property, an element access — contributes
+// nothing and leaves the demand a fail-closed open premise. Nothing here reports
+// absence, so refusing a construction is always the safe answer.
+func (p *project) returnedCallablesLocked(expression *ast.Node) []*ast.Node {
+	var closures []*ast.Node
+	budget := maxReturnedCallableBudget
+	p.collectReturnedCallablesLocked(
+		expression, 0, &budget, make(map[*ast.Node]struct{}), &closures,
+	)
+	return closures
+}
+
+func (p *project) collectReturnedCallablesLocked(
+	expression *ast.Node,
+	depth int,
+	budget *int,
+	visiting map[*ast.Node]struct{},
+	closures *[]*ast.Node,
+) {
+	if expression == nil || depth > maxReturnedCallableDepth || *budget <= 0 {
+		return
+	}
+	*budget--
+	node := identityPreservingUnwrap(expression)
+	if node == nil {
+		return
+	}
+	// A `const` cycle is not expressible in running code, but it is expressible in
+	// an AST the checker has already reported on, and this descent must terminate
+	// on any input rather than trust that it was well-formed.
+	if _, cycling := visiting[node]; cycling {
+		return
+	}
+	visiting[node] = struct{}{}
+	defer delete(visiting, node)
+
+	if isCallableDeclaration(node) {
+		*closures = append(*closures, node)
+		return
+	}
+	if ast.IsIdentifier(node) {
+		p.collectReturnedCallablesThroughBindingLocked(node, depth, budget, visiting, closures)
+		return
+	}
+	if ast.IsArrayLiteralExpression(node) {
+		for _, element := range node.AsArrayLiteralExpression().Elements.Nodes {
+			// A spread's contribution to the element positions is not fixed, so the
+			// slot it feeds carries no proven callable. Sibling elements are still
+			// stored by reference and remain provable on their own.
+			if element == nil || ast.IsSpreadElement(element) {
+				continue
+			}
+			p.collectReturnedCallablesLocked(element, depth+1, budget, visiting, closures)
+		}
+		return
+	}
+	if ast.IsObjectLiteralExpression(node) {
+		for _, property := range node.AsObjectLiteralExpression().Properties.Nodes {
+			if property == nil {
+				continue
+			}
+			if ast.IsMethodDeclaration(property) {
+				*closures = append(*closures, property)
+				continue
+			}
+			p.collectReturnedCallablesLocked(
+				objectLiteralPropertyValue(property), depth+1, budget, visiting, closures,
+			)
+		}
+		return
+	}
+	if ast.IsCallExpression(node) && p.isDefaultLibraryObjectAssignLocked(node) {
+		arguments := node.Arguments()
+		if len(arguments) != 0 && !ast.IsSpreadElement(arguments[0]) {
+			p.collectReturnedCallablesLocked(arguments[0], depth+1, budget, visiting, closures)
+		}
+	}
+}
+
+// collectReturnedCallablesThroughBindingLocked resolves one identifier to the
+// callable it names.
+//
+// The declaration-is-callable case keeps using the symbol's value declaration, so
+// an overloaded function still resolves to its implementation — but only when the
+// binding is never written to. `function fn() {}; fn = () => {}; return fn` is a
+// function declaration whose name no longer denotes it, and a hoisted declaration
+// says nothing about which function object the binding holds at the return. The
+// variable case is narrower on purpose: it demands exactly one declaration and
+// `const`. A reassignable binding does not prove the returned value is the
+// callable this initializer spells — the very next statement may rebind it — and
+// merged or repeated declarations leave no single initializer to read. Every
+// refusal emits nothing.
+func (p *project) collectReturnedCallablesThroughBindingLocked(
+	identifier *ast.Node,
+	depth int,
+	budget *int,
+	visiting map[*ast.Node]struct{},
+	closures *[]*ast.Node,
+) {
+	target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(identifier))
+	if target == nil {
+		return
+	}
+	declaration := target.ValueDeclaration
+	if declaration == nil && len(target.Declarations) == 1 {
+		declaration = target.Declarations[0]
+	}
+	if declaration == nil {
+		return
+	}
+	if isCallableDeclaration(declaration) {
+		if p.symbolIsAssignedLocked(target, declaration) {
+			return
+		}
+		*closures = append(*closures, declaration)
+		return
+	}
+	if len(target.Declarations) != 1 ||
+		!ast.IsVariableDeclaration(declaration) ||
+		!ast.IsVarConst(declaration) {
+		return
+	}
+	p.collectReturnedCallablesLocked(
+		declaration.Initializer(), depth+1, budget, visiting, closures,
+	)
+}
+
+// symbolIsAssignedLocked reports whether the file declaring `declaration` writes
+// to `target` anywhere — `fn = …`, a compound assignment, `fn++`, or a
+// destructuring pattern that names it.
+//
+// A hoisted `function fn() {}` binds a mutable variable, so its declaration is
+// not by itself proof that `fn` denotes that body at a later return. The question
+// is answered from the compiler's own ast.GetAssignmentTarget rather than from a
+// name scan, so a shadowing inner `fn` in the same file is not mistaken for a
+// write to this one.
+//
+// Scanning the declaring file alone is exact for the shapes that matter: an
+// imported binding is read-only, and TypeScript refuses an assignment to one.
+// The remaining hole is a `declare global` value augmented and written from
+// another file, which no descent here vouches for anyway.
+func (p *project) symbolIsAssignedLocked(target *ast.Symbol, declaration *ast.Node) bool {
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil {
+		return true
+	}
+	assigned, computed := p.assignedSymbols[sourceFile]
+	if !computed {
+		assigned = p.assignmentTargetSymbolsLocked(sourceFile)
+		if p.assignedSymbols == nil {
+			p.assignedSymbols = make(map[*ast.SourceFile]map[*ast.Symbol]struct{})
+		}
+		p.assignedSymbols[sourceFile] = assigned
+	}
+	_, written := assigned[target]
+	return written
+}
+
+func (p *project) assignmentTargetSymbolsLocked(
+	sourceFile *ast.SourceFile,
+) map[*ast.Symbol]struct{} {
+	assigned := make(map[*ast.Symbol]struct{})
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil {
+			return
+		}
+		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) &&
+			!ast.IsPartOfTypeNode(node) && ast.GetAssignmentTarget(node) != nil {
+			if symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node)); symbol != nil {
+				assigned[symbol] = struct{}{}
+			}
+		}
+		node.ForEachChild(func(child *ast.Node) bool {
+			visit(child)
+			return false
+		})
+	}
+	visit(sourceFile.AsNode())
+	return assigned
+}
+
+// identityPreservingUnwrap strips the wrappers that produce no runtime value of
+// their own: parentheses, and the `as` / `satisfies` / non-null assertions, all of
+// which the compiler erases. The value inside is bit-for-bit the value outside.
+func identityPreservingUnwrap(node *ast.Node) *ast.Node {
+	for range maxReturnedCallableDepth {
+		switch {
+		case node == nil:
+			return nil
+		case ast.IsParenthesizedExpression(node),
+			ast.IsAsExpression(node),
+			ast.IsSatisfiesExpression(node),
+			ast.IsNonNullExpression(node):
+			node = node.Expression()
+		default:
+			return node
+		}
+	}
+	return node
+}
+
+// objectLiteralPropertyValue is a property assignment's value expression, and nil
+// for every other object-literal element kind.
+//
+// The kind is matched by the compiler's own generated name because
+// ast.IsPropertyAssignment is outside this repository's pinned shim surface, and
+// the gate has to be exact rather than best-effort: Node.Initializer() panics for
+// the shorthand, spread and accessor kinds this rejects. Those three are refused
+// on their merits too — a shorthand's name resolves to the literal's own property
+// symbol rather than to the local binding it copies, a spread contributes an
+// unfixed set of properties, and an accessor is a call rather than a stored
+// reference.
+func objectLiteralPropertyValue(property *ast.Node) *ast.Node {
+	if property == nil || property.KindString() != "KindPropertyAssignment" {
+		return nil
+	}
+	return property.Initializer()
+}
+
+// isDefaultLibraryObjectAssignLocked proves a call's callee is exactly the
+// standard library's `Object.assign`. ES2015 §19.1.2.1 returns the target — its
+// step 5 returns `to`, the first argument, by identity — so argument 0 of such a
+// call is the value the call yields, and descending into it preserves identity.
+//
+// That guarantee belongs to one symbol, not to a spelling. A shadowed local
+// `Object`, a hand-written helper of the same name, or a `declare global`
+// augmentation of `ObjectConstructor` owns declarations outside the default
+// library and is refused. `Object["assign"](…)` is refused too: only a property
+// access is matched here, which is what the guarantee was verified against.
+func (p *project) isDefaultLibraryObjectAssignLocked(call *ast.Node) bool {
+	callee := call.Expression()
+	if callee == nil || !ast.IsPropertyAccessExpression(callee) {
+		return false
+	}
+	name := callee.Name()
+	if name == nil || !ast.IsIdentifier(name) || name.Text() != "assign" {
+		return false
+	}
+	receiver := callee.Expression()
+	if receiver == nil || !ast.IsIdentifier(receiver) || receiver.Text() != "Object" {
+		return false
+	}
+	return p.isDefaultLibrarySymbolLocked(p.checker.GetSymbolAtLocation(receiver), "Object", "") &&
+		p.isDefaultLibrarySymbolLocked(
+			p.checker.GetSymbolAtLocation(name), "assign", "ObjectConstructor",
+		)
+}
+
+// isDefaultLibrarySymbolLocked requires the symbol to carry exactly `name`, to own
+// at least one declaration, and for *every* declaration to sit in a file the
+// compiler itself considers a default library — so a single user-file
+// augmentation is enough to refuse the whole symbol. A non-empty `container` also
+// requires every declaration's parent to be the named interface.
+//
+// The quantifier has a reachable negative case and a test that pins it: a
+// `declare global { interface ObjectConstructor { assign… } }` augmentation.
+// The container arm does not. Given the receiver check that precedes the only
+// call passing a container, `Object.assign` cannot resolve to a default-library
+// `assign` declared anywhere but `ObjectConstructor`, so no TypeScript source
+// distinguishes this arm from its removal. It is kept as an explicit statement
+// of what was verified rather than as a filter something reaches today.
+func (p *project) isDefaultLibrarySymbolLocked(
+	symbol *ast.Symbol,
+	name string,
+	container string,
+) bool {
+	symbol = p.canonicalSymbol(symbol)
+	if symbol == nil || symbol.Name != name || len(symbol.Declarations) == 0 {
+		return false
+	}
+	for _, declaration := range symbol.Declarations {
+		sourceFile := ast.GetSourceFileOfNode(declaration)
+		if sourceFile == nil || !p.program.IsSourceFileDefaultLibrary(sourceFile.Path()) {
+			return false
+		}
+		if container == "" {
+			continue
+		}
+		parent := declaration.Parent
+		if parent == nil || parent.Name() == nil || parent.Name().Text() != container {
+			return false
+		}
+	}
+	return true
 }
 
 func nodeLocation(node *ast.Node) typefacts.Location {

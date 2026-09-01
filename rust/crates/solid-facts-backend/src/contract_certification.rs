@@ -3331,6 +3331,175 @@ mod tests {
         );
     }
 
+    // Regression: the private witness project listed only the export bindings'
+    // own runtime paths as program roots. Its harness imports declaration
+    // modules, and TypeScript resolves every declaration re-export specifier to
+    // the sibling `.d.ts`, so a runtime chunk named only by a re-export never
+    // became a program member: the producer found no source file for it and
+    // returned `sourceUnavailable` for an implementation the package ships
+    // (`@tanstack/devtools-ui`'s `dist/esm/styles/semantic-theme.js` reached
+    // through `dist/esm/internal.js`). The plan's independently replayed module
+    // closure already names those modules; the tsconfig must list them.
+    #[test]
+    fn private_project_lists_reexported_runtime_closure_modules_as_program_roots() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js","default":"./dist/index.js"}}}"#;
+        let runtime = b"export { make } from \"./create/make.js\";\n";
+        let implementation = b"import { helper } from \"./helper.js\";\nexport function make(callback) { helper(callback); return () => {}; }\n";
+        let helper = b"export function helper(callback) { callback(); }\n";
+        let declarations = b"export { make } from \"./create/make.js\";\n";
+        let implementation_declarations =
+            b"export declare function make(callback: () => void): () => void;";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/dist/index.js", runtime),
+            ("package/dist/create/make.js", implementation),
+            ("package/dist/create/helper.js", helper),
+            ("package/dist/index.d.ts", declarations),
+            ("package/dist/create/make.d.ts", implementation_declarations),
+        ]);
+        let root = "/project/node_modules/fixture-package";
+        let request = ImportRequest {
+            specifier: "fixture-package".into(),
+            importer: "/project/src/app.ts".into(),
+            export_conditions: vec!["import".into()],
+        };
+        let resolved = ResolvedImport {
+            specifier: request.specifier.clone(),
+            importer: request.importer.clone(),
+            requested_entrypoint: ".".into(),
+            package_name: "fixture-package".into(),
+            package_version: "1.2.3".into(),
+            package_integrity: ArtifactSnapshot::from_published(
+                &archive,
+                SnapshotLimits::policy_2(),
+            )
+            .unwrap()
+            .package_integrity()
+            .into(),
+            package_root: root.into(),
+            package_real_root: None,
+            package_manifest: resolved_file(root, "package.json", manifest),
+            runtime: resolved_file(root, "dist/index.js", runtime),
+            declarations: resolved_file(root, "dist/index.d.ts", declarations),
+            runtime_trace: ResolutionTrace {
+                branch: "/exports/./import".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "import".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./dist/index.js".into(),
+                    },
+                ],
+            },
+            declaration_trace: ResolutionTrace {
+                branch: "/exports/./types".into(),
+                steps: vec![
+                    ResolutionTraceStep {
+                        condition: "subpath".into(),
+                        target: ".".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "types".into(),
+                        target: "/exports/.".into(),
+                    },
+                    ResolutionTraceStep {
+                        condition: "target".into(),
+                        target: "./dist/index.d.ts".into(),
+                    },
+                ],
+            },
+            // The implementation module is not the entrypoint: only a re-export
+            // in `dist/index.js` names it.
+            closure: ClosureManifest::new(
+                vec![
+                    closure_entry(ClosureFileRole::Manifest, "package.json", manifest),
+                    closure_entry(ClosureFileRole::ResolutionInput, "package.json", manifest),
+                    closure_entry(ClosureFileRole::Runtime, "dist/index.js", runtime),
+                    closure_entry(
+                        ClosureFileRole::Runtime,
+                        "dist/create/make.js",
+                        implementation,
+                    ),
+                    closure_entry(ClosureFileRole::Runtime, "dist/create/helper.js", helper),
+                    closure_entry(
+                        ClosureFileRole::Declaration,
+                        "dist/index.d.ts",
+                        declarations,
+                    ),
+                    closure_entry(
+                        ClosureFileRole::Declaration,
+                        "dist/create/make.d.ts",
+                        implementation_declarations,
+                    ),
+                ],
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap(),
+            transform: None,
+            exports: BTreeMap::from([(
+                "make".into(),
+                ResolvedExportBinding {
+                    runtime: ResolvedExportTarget {
+                        module: resolved_file(root, "dist/create/make.js", implementation),
+                        export_name: "make".into(),
+                    },
+                    declarations: ResolvedExportTarget {
+                        module: resolved_file(
+                            root,
+                            "dist/create/make.d.ts",
+                            implementation_declarations,
+                        ),
+                        export_name: "make".into(),
+                    },
+                },
+            )]),
+            authority: ResolutionAuthority::Host,
+        };
+
+        let (package, artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        let plan = plan_certification(
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive),
+        )
+        .unwrap();
+
+        let files =
+            super::type_facts::private_project_program_files_for_test(&[&plan], &plan).unwrap();
+        assert!(
+            files.contains(&"dist/create/make.js".to_owned()),
+            "the re-exported implementation module must be a program root, got {files:?}"
+        );
+        assert!(
+            files.contains(&"dist/index.js".to_owned()),
+            "the entrypoint runtime module must remain a program root, got {files:?}"
+        );
+        // No export binding names this one at all: only the replayed runtime
+        // closure reaches it, and an implementation that calls into it needs it
+        // in the program.
+        assert!(
+            files.contains(&"dist/create/helper.js".to_owned()),
+            "a runtime module reached only through the closure must be a program root, got {files:?}"
+        );
+        // Declarations stay out: TypeScript resolves them itself, and the
+        // declaration source census already pins them.
+        assert!(
+            !files.iter().any(|path| path.ends_with(".d.ts")),
+            "declaration modules must not be added as program roots, got {files:?}"
+        );
+    }
+
     #[test]
     fn module_closure_is_recomputed_with_exact_roles_edges_and_hazards() {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;

@@ -277,8 +277,18 @@ pub struct ExportValueTranscript {
     pub value: InvocationValueFact,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub callable_paths: Vec<CallablePathFact>,
+    /// The exported value's one call signature, present only when its type has
+    /// exactly one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_signature: Option<SelectedSignature>,
+    /// Every call signature of an overloaded exported value, in declaration
+    /// order. Populated only when the type has more than one and every one of
+    /// them could be described, so it is never both non-empty and paired with
+    /// `call_signature`. A consumer must require its premise of *all* of them:
+    /// a claim that holds for every overload holds for the export, and no
+    /// single member of the set is "the" signature.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub call_signatures: Vec<SelectedSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implementation: Option<ExportImplementationTranscript>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -454,8 +464,12 @@ pub struct ReturnSite {
     pub reach: Reachability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<InvocationValueFact>,
+    /// Exact source ranges of the callables this returned value provably
+    /// carries. A call inside a nested callable is reachable through the
+    /// returned value exactly when its location lies within one of these
+    /// ranges; an empty list is never proof that nothing is carried.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub captures: Vec<usize>,
+    pub carried_callables: Vec<Location>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<ImplementationValueSource>,
 }

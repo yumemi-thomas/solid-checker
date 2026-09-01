@@ -77,6 +77,12 @@ type project struct {
 	// EvalSymlinks is semantic for linked packages but must not be repeated
 	// for every entity carrying the same declaration path.
 	runtimePaths map[string]string
+	// assignedSymbols memoizes, per source file of the accepted generation,
+	// the set of symbols that file writes to. Proving a hoisted function
+	// declaration still denotes its own body needs the answer once per file
+	// rather than once per returned-callable resolution. Checker-owned symbol
+	// pointers make it generation-scoped, like runtimePaths.
+	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
 	// resolved-call caches are generation-scoped and populated only by
 	// resolvedCall demands. Signatures and symbols are checker-owned pointers,
 	// so every accepted update drops the maps as it installs the new checker.
@@ -244,6 +250,7 @@ func (p *project) ReleaseAnalysisState() {
 	p.filesByName = nil
 	p.currentSourceFiles = nil
 	p.runtimePaths = nil
+	p.assignedSymbols = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
 	p.callDiagnostics = nil
@@ -514,6 +521,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.versions = candidateVersions
 	p.generation++
 	p.runtimePaths = nil
+	p.assignedSymbols = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {
 			p.exportedIdentities = make(map[*ast.Symbol]preservedExportIdentity)

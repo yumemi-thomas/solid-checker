@@ -514,8 +514,11 @@ inspect(() => {}, "return");
 	if flow == nil || len(flow.Returns) != 1 || len(flow.Throws) != 1 || len(flow.Branches) != 1 {
 		t.Fatalf("control-flow census = %#v", flow)
 	}
-	if len(flow.Returns[0].Captures) != 1 || flow.Returns[0].Captures[0] != 0 {
-		t.Fatalf("returned closure captures = %#v", flow.Returns[0].Captures)
+	if len(flow.Returns[0].CarriedCallables) != 1 {
+		t.Fatalf("returned carried callables = %#v", flow.Returns[0].CarriedCallables)
+	}
+	if got := returnedCaptures(t, transcript); !slices.Equal(got, []int{0}) {
+		t.Fatalf("returned closure captures = %v, want [0]", got)
 	}
 	var unreachableCall bool
 	for _, use := range transcript.ParameterUses {
@@ -553,6 +556,500 @@ repeat(() => {});
 		transcript.ControlFlow == nil || len(transcript.ControlFlow.Unsupported) == 0 {
 		t.Fatalf("unsupported flow completeness leaked: %#v", transcript)
 	}
+}
+
+// TestReturnedCaptureDescentAcceptsOnlyIdentityPreservingConstructions pins the
+// whitelist in returnedCallablesLocked arm by arm. Every accepted arm keeps the
+// callable's runtime identity, so naming its captures is true by construction;
+// every refused arm contributes nothing and leaves the demand open.
+func TestReturnedCaptureDescentAcceptsOnlyIdentityPreservingConstructions(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want []int
+	}{{
+		name: "directArrowIsUnchanged",
+		body: `return () => callback();`,
+		want: []int{0},
+	}, {
+		name: "objectAssignArgumentZero",
+		body: `const fn = () => callback();
+  const clear = () => {};
+  return Object.assign(fn, { clear });`,
+		want: []int{0},
+	}, {
+		// Only argument 0 is descended. `clear` really is carried by the returned
+		// value — Object.assign copies the property by reference — but the identity
+		// guarantee that was verified here is the one about the target, so `wait`
+		// stays unproven rather than being inferred from the source object.
+		name: "objectAssignThroughTypeOnlyWrappersDescendsOnlyTheTarget",
+		body: `const fn = () => callback();
+  const clear = () => { sink(wait); };
+  return (Object.assign(fn, { clear })! as (() => void) & { clear: () => void });`,
+		want: []int{0},
+	}, {
+		name: "shadowedLocalObjectAssignIsRefused",
+		body: `const fn = () => callback();
+  const Object = { assign: (target: () => void, source: object) => target };
+  return Object.assign(fn, {});`,
+		want: nil,
+	}, {
+		name: "arrayLiteralElements",
+		body: `const fn = () => callback();
+  const clear = () => { sink(wait); };
+  return [fn, clear];`,
+		want: []int{0, 1},
+	}, {
+		name: "arrayLiteralSpreadRefusesOnlyItsOwnSlot",
+		body: `const fn = () => callback();
+  return [...pool, fn];`,
+		want: []int{0},
+	}, {
+		name: "objectLiteralPropertyValue",
+		body: `const fn = () => callback();
+  return { run: fn, wait };`,
+		want: []int{0},
+	}, {
+		name: "objectLiteralMethod",
+		body: `return { run() { callback(); }, later: () => { sink(wait); } };`,
+		want: []int{0, 1},
+	}, {
+		name: "objectLiteralShorthandIsRefused",
+		body: `const fn = () => callback();
+  return { fn };`,
+		want: nil,
+	}, {
+		name: "objectLiteralSpreadIsRefused",
+		body: `return { ...pool };`,
+		want: nil,
+	}, {
+		name: "constVariableIndirection",
+		body: `const fn = () => callback();
+  return fn;`,
+		want: []int{0},
+	}, {
+		name: "functionDeclarationIndirectionIsUnchanged",
+		body: `function fn() { callback(); }
+  return fn;`,
+		want: []int{0},
+	}, {
+		name: "reassignableBindingIsRefused",
+		body: `let fn = () => callback();
+  return fn;`,
+		want: nil,
+	}, {
+		name: "destructuredBindingIsRefused",
+		body: `const [fn] = [() => callback()];
+  return fn;`,
+		want: nil,
+	}, {
+		name: "unresolvedCallResultIsRefused",
+		body: `const fn = () => callback();
+  return wrap(fn);`,
+		want: nil,
+	}, {
+		name: "conditionalExpressionIsRefused",
+		body: `const fn = () => callback();
+  const idle = () => {};
+  return wait > 0 ? fn : idle;`,
+		want: nil,
+	}, {
+		name: "elementAccessObjectAssignIsRefused",
+		body: `const fn = () => callback();
+  return Object["assign"](fn, {});`,
+		want: nil,
+	}, {
+		// A hoisted function declaration binds a mutable variable. The
+		// declaration proves what `fn` was, never what it holds at the return,
+		// so any write to the binding withdraws the whole descent.
+		name: "reassignedFunctionDeclarationIsRefused",
+		body: `function fn() { callback(); }
+  fn = () => { sink(wait); };
+  return fn;`,
+		want: nil,
+	}, {
+		name: "conditionallyReassignedFunctionDeclarationIsRefused",
+		body: `function fn() { callback(); }
+  if (wait > 0) { fn = () => { sink(wait); }; }
+  return fn;`,
+		want: nil,
+	}, {
+		// The write must be to *this* binding. A same-named local of an inner
+		// scope is a different symbol and leaves the declaration provable.
+		name: "shadowedInnerReassignmentLeavesTheDeclarationProvable",
+		body: `function fn() { callback(); }
+  function other() { let fn = () => {}; fn = () => { sink(wait); }; return fn; }
+  sink(other);
+  return fn;`,
+		want: []int{0},
+	}}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			source := `
+declare function sink(value: unknown): void;
+declare function wrap(value: () => void): () => void;
+declare const pool: Array<() => void>;
+function make(callback: () => void, wait: number) {
+  ` + testCase.body + `
+}
+make(() => {}, 1);
+`
+			transcript := invocationTranscriptForMake(t, source)
+			captures := returnedCaptures(t, transcript)
+			if !slices.Equal(captures, testCase.want) {
+				t.Fatalf(
+					"returned captures = %v, want %v (returns=%#v)",
+					captures, testCase.want, transcript.ControlFlow.Returns,
+				)
+			}
+		})
+	}
+}
+
+// TestObjectAssignIdentityRequiresTheUnaugmentedDefaultLibrarySymbol pins the two
+// exactness sub-guards of isDefaultLibrarySymbolLocked that no other case
+// reaches: the ObjectConstructor container check, and the requirement that
+// *every* declaration of the symbol sit in a default library. A single
+// `declare global` augmentation adds a user-file declaration to
+// `ObjectConstructor.assign`, at which point the ES identity guarantee is no
+// longer the one that was verified and the descent must contribute nothing.
+func TestObjectAssignIdentityRequiresTheUnaugmentedDefaultLibrarySymbol(t *testing.T) {
+	cases := []struct {
+		name   string
+		prefix string
+		want   []int
+	}{{
+		name:   "unaugmentedObjectAssignDescends",
+		prefix: `export {};`,
+		want:   []int{0},
+	}, {
+		name: "globalObjectConstructorAugmentationIsRefused",
+		prefix: `declare global { interface ObjectConstructor { assign<T>(target: T, extra: object): T; } }
+export {};`,
+		want: nil,
+	}}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			source := `
+declare function sink(value: unknown): void;
+` + testCase.prefix + `
+function make(callback: () => void, wait: number) {
+  const fn = () => callback();
+  return Object.assign(fn, {});
+}
+make(() => {}, 1);
+`
+			transcript := invocationTranscriptForMake(t, source)
+			captures := returnedCaptures(t, transcript)
+			if !slices.Equal(captures, testCase.want) {
+				t.Fatalf(
+					"returned captures = %v, want %v (returns=%#v)",
+					captures, testCase.want, transcript.ControlFlow.Returns,
+				)
+			}
+		})
+	}
+}
+
+// TestCarriedCallablesBindContainmentNotMention pins F5: the fact a consumer
+// joins against is the *range* of each carried callable, so a call made inside a
+// closure the implementation never returns is outside every one of them, even
+// when a returned closure names the same parameter.
+func TestCarriedCallablesBindContainmentNotMention(t *testing.T) {
+	source := `
+declare function sink(value: unknown): void;
+function make(callback: () => void, wait: number) {
+  const orphan = () => { callback(); };
+  const returned = () => { sink(callback); sink(wait); };
+  sink(orphan);
+  return returned;
+}
+make(() => {}, 1);
+`
+	transcript := invocationTranscriptForMake(t, source)
+	var carried []typefacts.Location
+	for _, site := range transcript.ControlFlow.Returns {
+		carried = append(carried, site.CarriedCallables...)
+	}
+	if len(carried) != 1 {
+		t.Fatalf("expected exactly the returned closure to be carried: %#v", carried)
+	}
+	// The orphan's `callback()` call is a direct-call parameter use; it must not
+	// fall inside the carried range, while the returned closure's mentions do.
+	orphanCall := strings.Index(source, "callback(); }")
+	if orphanCall < 0 {
+		t.Fatal("probe source lost its orphan call")
+	}
+	if carried[0].StartByte <= orphanCall && orphanCall < carried[0].EndByte {
+		t.Fatalf("orphan call at %d is inside the carried range %#v", orphanCall, carried[0])
+	}
+	if got := returnedCaptures(t, transcript); !slices.Equal(got, []int{0, 1}) {
+		t.Fatalf("returned closure mentions = %v, want [0 1]", got)
+	}
+}
+
+// TestFallThroughConstructsKeepFollowingStatementsReachable pins S3: a loop, try,
+// or switch that can only finish normally no longer reports every statement after
+// it as reach:unknown, while every shape whose completion is not proven — a jump
+// out, a swallowed throw, a loop with no exit edge and no break — keeps it.
+func TestFallThroughConstructsKeepFollowingStatementsReachable(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want typefacts.Reachability
+	}{{
+		name: "forOfWithoutJumpsFallsThrough",
+		body: `for (const key of keys) { sink(key); }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "forOfWithContinueFallsThrough",
+		body: `for (const key of keys) { if (key) continue; sink(key); }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "nestedLoopBreakFallsThrough",
+		body: `for (const key of keys) { for (const other of keys) { if (other) break; } }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "forOfWithReturnStaysUnknown",
+		body: `for (const key of keys) { if (key) return; }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "whileTrueWithoutBreakStaysUnknown",
+		body: `while (true) { if (keys.length) sink(1); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "whileTrueWithBreakFallsThrough",
+		body: `while (true) { if (keys.length) break; }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "forEverWithoutBreakStaysUnknown",
+		body: `for (;;) { sink(1); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "forEverWithBreakFallsThrough",
+		body: `for (;;) { if (keys.length) break; }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "doWhileTrueWithBreakFallsThrough",
+		body: `do { if (keys.length) break; } while (true);`,
+		want: typefacts.Reachable,
+	}, {
+		name: "whileWithOrdinaryConditionFallsThrough",
+		body: `while (keys.length > 0) { sink(1); break; }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "tryCatchWithoutJumpsFallsThrough",
+		body: `try { sink(1); } catch (error) { sink(error); }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "tryFinallyWithoutJumpsFallsThrough",
+		body: `try { sink(1); } finally { sink(2); }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "swallowedThrowStaysUnknownConservatively",
+		body: `try { throw new Error("x"); } catch (error) { sink(error); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "rethrowingCatchStaysUnknown",
+		body: `try { sink(1); } catch (error) { throw error; }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "switchWithBreaksFallsThrough",
+		body: `switch (keys.length) { case 0: sink(0); break; default: sink(1); }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "labeledBreakLeavingTheConstructStaysUnknown",
+		body: `outer: { for (const key of keys) { if (key) break outer; } sink(1); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "labeledBreakTargetingTheConstructFallsThrough",
+		body: `outer: for (const key of keys) { for (const other of keys) { if (other) break outer; } }`,
+		want: typefacts.Reachable,
+	}, {
+		name: "nestedCallableJumpsAreNotOurControlFlow",
+		body: `for (const key of keys) { sink(() => { if (key) return 1; throw new Error("x"); }); }`,
+		want: typefacts.Reachable,
+	}, {
+		// A loop that cannot end is a loop that cannot end wherever it sits.
+		// Reading only the outer construct's own header answered "falls
+		// through" for every one of these.
+		name: "tryFinallyWrappingInfiniteLoopStaysUnknown",
+		body: `try { while (true) { sink(1); } } finally { sink(2); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "nestedTryInfiniteInFinallyStaysUnknown",
+		body: `try { sink(1); } finally { while (true) { sink(2); } }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "tryWithNestedForEverStaysUnknown",
+		body: `try { for (;;) { sink(1); } } catch (error) { sink(error); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "switchDefaultInfiniteLoopStaysUnknown",
+		body: `switch (keys.length) { default: while (true) { sink(1); } }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "forOfWrappingInfiniteLoopStaysUnknown",
+		body: `for (const key of keys) { while (true) { sink(key); } }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		// A nested construct that leaves through a jump is not a trapped one.
+		// The enclosing scan classifies that jump itself, so the precision of
+		// the labeled-break case survives the nested descent.
+		name: "nestedLoopLeavingThroughALabeledBreakStillFallsThrough",
+		body: `outer: for (const key of keys) { while (true) { if (key) break outer; } }`,
+		want: typefacts.Reachable,
+	}, {
+		// Always-truthy literal conditions have no exit edge either. `true` was
+		// the only spelling the header test recognized.
+		name: "whileOneStaysUnknown",
+		body: `while (1) { sink(1); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "whileNotZeroStaysUnknown",
+		body: `while (!0) { sink(1); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "whileNonEmptyStringStaysUnknown",
+		body: `while ("go") { sink(1); }`,
+		want: typefacts.ReachUnknown,
+	}, {
+		name: "doWhileOneWithBreakFallsThrough",
+		body: `do { if (keys.length) break; } while (1);`,
+		want: typefacts.Reachable,
+	}, {
+		// A falsy literal is decidable too, and decidedly *has* an exit edge.
+		name: "whileZeroFallsThrough",
+		body: `while (0) { sink(1); }`,
+		want: typefacts.Reachable,
+	}, {
+		// Truthiness of a non-literal is not read here at all: the condition
+		// keeps its exit edge, which is the conservative direction for this
+		// construct even though the loop is in fact endless.
+		name: "nonLiteralTruthyConditionKeepsItsExitEdge",
+		body: `while (keys) { sink(1); }`,
+		want: typefacts.Reachable,
+	}}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			source := `
+declare function sink(value: unknown): void;
+declare const keys: string[];
+function make(callback: () => void) {
+  ` + testCase.body + `
+  return () => callback();
+}
+make(() => {});
+`
+			flow := controlFlowCensusForMake(t, source)
+			last := lastReturnSite(t, flow)
+			if last.Reach != testCase.want {
+				t.Fatalf("trailing return reach = %q, want %q (flow=%#v)", last.Reach, testCase.want, flow)
+			}
+			// Reachability after the construct is a strictly separate claim from
+			// reachability inside it. The marker must survive so the control-flow
+			// domain stays open and no consumer reads interior certainty here.
+			if len(flow.Unsupported) == 0 {
+				t.Fatalf("fall-through construct dropped its unsupported marker: %#v", flow)
+			}
+		})
+	}
+}
+
+// TestFallThroughReachabilityNeverPromotesAnUnreachableConstruct pins the one-way
+// direction of S3: a construct entered from an already-unreachable point never
+// makes the statement after it reachable.
+func TestFallThroughReachabilityNeverPromotesAnUnreachableConstruct(t *testing.T) {
+	source := `
+declare function sink(value: unknown): void;
+declare const keys: string[];
+function make(callback: () => void) {
+  throw new Error("stop");
+  for (const key of keys) { sink(key); }
+  return () => callback();
+}
+make(() => {});
+`
+	flow := controlFlowCensusForMake(t, source)
+	if last := lastReturnSite(t, flow); last.Reach == typefacts.Reachable {
+		t.Fatalf("return after an unreachable construct was promoted to reachable: %#v", flow)
+	}
+}
+
+func controlFlowCensusForMake(t *testing.T, source string) *typefacts.ControlFlowCensus {
+	t.Helper()
+	return invocationTranscriptForMake(t, source).ControlFlow
+}
+
+func invocationTranscriptForMake(t *testing.T, source string) typefacts.InvocationTranscript {
+	t.Helper()
+	dir := t.TempDir()
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	path := filepath.Join(dir, "facts.ts")
+	needle := source[strings.LastIndex(source, "make(") : len(source)-2]
+	answer, err := analyzer.InvocationTranscripts(
+		context.Background(),
+		invocationDemandsForNeedles(path, source, []string{needle}, true),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcript := answer.Transcripts[0]
+	if transcript.ControlFlow == nil {
+		t.Fatalf("no control-flow census for %q: %#v", needle, transcript)
+	}
+	return transcript
+}
+
+// returnedCaptures answers the historical "which parameters do the returned
+// callables close over" question as a *join* of two published facts: the
+// parameter-use census, whose locations are symbol-resolved, and the carried
+// callable ranges of every return site. The producer no longer reports the union
+// directly, because a union cannot say which callable did the mentioning; the
+// join reconstructs it here for tests that are about the descent whitelist
+// rather than about containment.
+func returnedCaptures(
+	t *testing.T,
+	transcript typefacts.InvocationTranscript,
+) []int {
+	t.Helper()
+	var indices []int
+	for _, use := range transcript.ParameterUses {
+		for _, site := range transcript.ControlFlow.Returns {
+			if locationWithinAny(use.Location, site.CarriedCallables) {
+				indices = append(indices, use.ParameterIndex)
+				break
+			}
+		}
+	}
+	slices.Sort(indices)
+	return slices.Compact(indices)
+}
+
+func locationWithinAny(inner typefacts.Location, outers []typefacts.Location) bool {
+	for _, outer := range outers {
+		if outer.Path == inner.Path &&
+			outer.StartByte <= inner.StartByte && inner.EndByte <= outer.EndByte {
+			return true
+		}
+	}
+	return false
+}
+
+func lastReturnSite(t *testing.T, flow *typefacts.ControlFlowCensus) typefacts.ReturnSite {
+	t.Helper()
+	if len(flow.Returns) == 0 {
+		t.Fatalf("control-flow census has no return sites: %#v", flow)
+	}
+	last := flow.Returns[0]
+	for _, site := range flow.Returns[1:] {
+		if site.Location.StartByte > last.Location.StartByte {
+			last = site
+		}
+	}
+	return last
 }
 
 func TestFunctionPrototypeCallApplyAndBindRefuseTheWrapperSignature(t *testing.T) {
