@@ -432,12 +432,13 @@ impl TypeFactsCertificationSession {
         plan: &CertificationPlan,
         schedule: &TypeFactsCertificationSchedule,
     ) -> Result<LiveInvocationAnswer, TypeFactsCertificationError> {
-        if schedule.demand_graph_root != plan.demand_graph().root().as_str() {
-            return Err(TypeFactsCertificationError::IdentityMismatch);
-        }
-        if !schedule.export_values.is_empty() {
-            return Err(TypeFactsCertificationError::IdentityMismatch);
-        }
+        verify_schedule_identity(
+            "invocation acquisition",
+            plan.demand_graph().root().as_str(),
+            &schedule.demand_graph_root,
+            "export_value_count",
+            schedule.export_values.len(),
+        )?;
         let context = CertificationInvocationContext::new(
             plan.snapshot_root(),
             plan.demand_graph().root().as_str(),
@@ -453,11 +454,13 @@ impl TypeFactsCertificationSession {
         plan: &CertificationPlan,
         schedule: &TypeFactsCertificationSchedule,
     ) -> Result<LiveExportValueAnswer, TypeFactsCertificationError> {
-        if schedule.demand_graph_root != plan.demand_graph().root().as_str()
-            || !schedule.invocations.is_empty()
-        {
-            return Err(TypeFactsCertificationError::IdentityMismatch);
-        }
+        verify_schedule_identity(
+            "export-value acquisition",
+            plan.demand_graph().root().as_str(),
+            &schedule.demand_graph_root,
+            "invocation_count",
+            schedule.invocations.len(),
+        )?;
         let context = CertificationInvocationContext::new(
             plan.snapshot_root(),
             plan.demand_graph().root().as_str(),
@@ -479,7 +482,14 @@ pub(super) fn acquire_and_verify_export_values(
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
     acquire_and_verify_export_values_batch(&[plan], pin)?
         .pop()
-        .ok_or(TypeFactsCertificationError::IdentityMismatch)
+        .ok_or_else(|| {
+            TypeFactsCertificationError::identity_mismatch(
+                "single export-value acquisition",
+                "answer_count",
+                "1",
+                "0",
+            )
+        })
 }
 
 /// Acquires independently bound answers for a complete alternative-case set
@@ -529,8 +539,13 @@ fn union_of_certification_sources(
             &source.installed_package_root,
             source.snapshot.package_name(),
         );
-        if !targets.insert(marker) {
-            return Err(TypeFactsCertificationError::IdentityMismatch);
+        if !targets.insert(marker.clone()) {
+            return Err(TypeFactsCertificationError::identity_mismatch(
+                "certification-source union",
+                "materialization_target",
+                format!("unique {}", diagnostic_identity_path(&marker)),
+                format!("duplicate {}", diagnostic_identity_path(&marker)),
+            ));
         }
     }
     Ok(sources.into_values().map(|(_, source)| source).collect())
@@ -596,15 +611,35 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
     sources: &[super::dependencies::VerifiedGraphSourcePackage],
     pin: &TypeFactsProducerPin,
 ) -> Result<Vec<VerifiedTypeFactsEvidence>, TypeFactsCertificationError> {
-    let first = plans
-        .first()
-        .copied()
-        .ok_or(TypeFactsCertificationError::IdentityMismatch)?;
-    if plans.iter().any(|plan| {
-        plan.snapshot_root() != first.snapshot_root()
-            || plan.snapshot.package_name() != first.snapshot.package_name()
-    }) {
-        return Err(TypeFactsCertificationError::IdentityMismatch);
+    let first = plans.first().copied().ok_or_else(|| {
+        TypeFactsCertificationError::identity_mismatch(
+            "export-value batch",
+            "plan_count",
+            "at least one",
+            "0",
+        )
+    })?;
+    if let Some(plan) = plans
+        .iter()
+        .find(|plan| plan.snapshot_root() != first.snapshot_root())
+    {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value batch",
+            "snapshot_root",
+            first.snapshot_root().to_owned(),
+            plan.snapshot_root().to_owned(),
+        ));
+    }
+    if let Some(plan) = plans
+        .iter()
+        .find(|plan| plan.snapshot.package_name() != first.snapshot.package_name())
+    {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value batch",
+            "package_name",
+            first.snapshot.package_name().to_owned(),
+            plan.snapshot.package_name().to_owned(),
+        ));
     }
     // This compatibility check consumes only the verifier-retained demand
     // graph and is repeated by schedule construction below. An incompatible
@@ -814,7 +849,14 @@ impl PrivateTypeFactsProject {
         {
             let candidate_root = package_roots
                 .get(&private_project_plan_key(candidate))
-                .ok_or(TypeFactsCertificationError::IdentityMismatch)?;
+                .ok_or_else(|| {
+                    TypeFactsCertificationError::identity_mismatch(
+                        "private project materialization",
+                        "package_root",
+                        diagnostic_plan_key(&private_project_plan_key(candidate)),
+                        format!("{} different known package root(s)", package_roots.len()),
+                    )
+                })?;
             files.extend(
                 candidate
                     .verified_exports
@@ -868,7 +910,17 @@ impl PrivateTypeFactsProject {
         self.package_roots
             .get(&private_project_plan_key(plan))
             .map(PathBuf::as_path)
-            .ok_or(TypeFactsCertificationError::IdentityMismatch)
+            .ok_or_else(|| {
+                TypeFactsCertificationError::identity_mismatch(
+                    "private project lookup",
+                    "package_root",
+                    diagnostic_plan_key(&private_project_plan_key(plan)),
+                    format!(
+                        "{} different known package root(s)",
+                        self.package_roots.len()
+                    ),
+                )
+            })
     }
 }
 
@@ -1424,10 +1476,19 @@ fn snapshot_module_harness_specifier(
     plan: &CertificationPlan,
     path: &str,
 ) -> Result<String, TypeFactsCertificationError> {
-    let relative = project
-        .package_root(plan)?
-        .strip_prefix(&project.root)
-        .map_err(|_| TypeFactsCertificationError::IdentityMismatch)?;
+    let package_root = project.package_root(plan)?;
+    let relative = package_root.strip_prefix(&project.root).map_err(|_| {
+        let (expected, actual) = diagnostic_identity_path_pair(
+            &project.root.to_string_lossy(),
+            &package_root.to_string_lossy(),
+        );
+        TypeFactsCertificationError::identity_mismatch(
+            "declaration harness",
+            "package_root_prefix",
+            expected,
+            actual,
+        )
+    })?;
     Ok(format!(
         "./{}/{}",
         relative.to_string_lossy().replace('\\', "/"),
@@ -1472,23 +1533,81 @@ pub(super) fn verify_live_answer(
     schedule: &TypeFactsCertificationSchedule,
     live: &LiveInvocationAnswer,
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
-    if schedule.demand_graph_root != plan.demand_graph().root().as_str()
-        || !schedule.export_values.is_empty()
-    {
-        return Err(TypeFactsCertificationError::IdentityMismatch);
-    }
+    verify_schedule_identity(
+        "invocation verification",
+        plan.demand_graph().root().as_str(),
+        &schedule.demand_graph_root,
+        "export_value_count",
+        schedule.export_values.len(),
+    )?;
     let identity = live.identity();
     let answer = live.answer();
-    if identity.context().snapshot_root() != plan.snapshot_root()
-        || identity.context().demand_graph_root() != plan.demand_graph().root().as_str()
-        || identity.generation() != answer.envelope.generation
-        || identity.project_id() != &*answer.envelope.project_id
-        || identity.demand_sha256() != &*answer.envelope.demand_sha256
-        || identity.handshake_protocol() != typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
-        || identity.handshake_schema_sha256() != typefacts::v3::TYPE_FACTS_SCHEMA_SHA256
-        || identity.handshake_build() != typefacts::v3::TYPE_FACTS_BUILD_ID
-    {
-        return Err(TypeFactsCertificationError::IdentityMismatch);
+    let context = identity.context();
+    if context.snapshot_root() != plan.snapshot_root() {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "snapshot_root",
+            plan.snapshot_root().to_owned(),
+            context.snapshot_root().to_owned(),
+        ));
+    }
+    if context.demand_graph_root() != plan.demand_graph().root().as_str() {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "context_demand_graph_root",
+            plan.demand_graph().root().as_str().to_owned(),
+            context.demand_graph_root().to_owned(),
+        ));
+    }
+    if identity.generation() != answer.envelope.generation {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "generation",
+            identity.generation().to_string(),
+            answer.envelope.generation.to_string(),
+        ));
+    }
+    if identity.project_id() != &*answer.envelope.project_id {
+        let (expected, actual) =
+            diagnostic_identity_path_pair(identity.project_id(), &answer.envelope.project_id);
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "project_id",
+            expected,
+            actual,
+        ));
+    }
+    if identity.demand_sha256() != &*answer.envelope.demand_sha256 {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "demand_sha256",
+            identity.demand_sha256().to_owned(),
+            answer.envelope.demand_sha256.to_string(),
+        ));
+    }
+    if identity.handshake_protocol() != typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "handshake_protocol",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL.to_string(),
+            identity.handshake_protocol().to_string(),
+        ));
+    }
+    if identity.handshake_schema_sha256() != typefacts::v3::TYPE_FACTS_SCHEMA_SHA256 {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "handshake_schema_sha256",
+            typefacts::v3::TYPE_FACTS_SCHEMA_SHA256.to_owned(),
+            identity.handshake_schema_sha256().to_owned(),
+        ));
+    }
+    if identity.handshake_build() != typefacts::v3::TYPE_FACTS_BUILD_ID {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "handshake_build",
+            typefacts::v3::TYPE_FACTS_BUILD_ID.to_owned(),
+            identity.handshake_build().to_owned(),
+        ));
     }
     let mut expected_ids = schedule.proof_demand_ids().collect::<Vec<_>>();
     expected_ids.sort();
@@ -1497,8 +1616,21 @@ pub(super) fn verify_live_answer(
         .proof_demand_ids()
         .map(str::to_owned)
         .collect::<Vec<_>>();
-    if expected_ids != actual_ids || answer.transcripts.len() != schedule.invocations.len() {
-        return Err(TypeFactsCertificationError::IdentityMismatch);
+    if expected_ids != actual_ids {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "proof_demand_ids",
+            format!("{expected_ids:?}"),
+            format!("{actual_ids:?}"),
+        ));
+    }
+    if answer.transcripts.len() != schedule.invocations.len() {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "invocation verification",
+            "transcript_count",
+            schedule.invocations.len().to_string(),
+            answer.transcripts.len().to_string(),
+        ));
     }
     if !answer.envelope.open_reasons.is_empty() {
         return Err(TypeFactsCertificationError::FamilyOpen {
@@ -1518,7 +1650,16 @@ pub(super) fn verify_live_answer(
     for (index, scheduled) in schedule.invocations.iter().enumerate() {
         let transcript = &answer.transcripts[index];
         if transcript.location != scheduled.demand.location {
-            return Err(TypeFactsCertificationError::IdentityMismatch);
+            let (expected, actual) = diagnostic_location_pair(
+                Some(&scheduled.demand.location),
+                Some(&transcript.location),
+            );
+            return Err(TypeFactsCertificationError::identity_mismatch(
+                "invocation verification",
+                "transcript_location",
+                expected,
+                actual,
+            ));
         }
         let transcript_bytes = typefacts::encode(transcript)?;
         let transcript_root = format!("sha256:{:x}", Sha256::digest(&transcript_bytes));
@@ -1609,23 +1750,81 @@ fn verify_live_export_value_answer_with_project_census(
     census_dependencies: &[&CertificationPlan],
     census_sources: &[super::dependencies::VerifiedGraphSourcePackage],
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
-    if schedule.demand_graph_root != plan.demand_graph().root().as_str()
-        || !schedule.invocations.is_empty()
-    {
-        return Err(TypeFactsCertificationError::IdentityMismatch);
-    }
+    verify_schedule_identity(
+        "export-value verification",
+        plan.demand_graph().root().as_str(),
+        &schedule.demand_graph_root,
+        "invocation_count",
+        schedule.invocations.len(),
+    )?;
     let identity = live.identity();
     let answer = live.answer();
-    if identity.context().snapshot_root() != plan.snapshot_root()
-        || identity.context().demand_graph_root() != plan.demand_graph().root().as_str()
-        || identity.generation() != answer.envelope.generation
-        || identity.project_id() != &*answer.envelope.project_id
-        || identity.demand_sha256() != &*answer.envelope.demand_sha256
-        || identity.handshake_protocol() != typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
-        || identity.handshake_schema_sha256() != typefacts::v3::TYPE_FACTS_SCHEMA_SHA256
-        || identity.handshake_build() != typefacts::v3::TYPE_FACTS_BUILD_ID
-    {
-        return Err(TypeFactsCertificationError::IdentityMismatch);
+    let context = identity.context();
+    if context.snapshot_root() != plan.snapshot_root() {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "snapshot_root",
+            plan.snapshot_root().to_owned(),
+            context.snapshot_root().to_owned(),
+        ));
+    }
+    if context.demand_graph_root() != plan.demand_graph().root().as_str() {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "context_demand_graph_root",
+            plan.demand_graph().root().as_str().to_owned(),
+            context.demand_graph_root().to_owned(),
+        ));
+    }
+    if identity.generation() != answer.envelope.generation {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "generation",
+            identity.generation().to_string(),
+            answer.envelope.generation.to_string(),
+        ));
+    }
+    if identity.project_id() != &*answer.envelope.project_id {
+        let (expected, actual) =
+            diagnostic_identity_path_pair(identity.project_id(), &answer.envelope.project_id);
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "project_id",
+            expected,
+            actual,
+        ));
+    }
+    if identity.demand_sha256() != &*answer.envelope.demand_sha256 {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "demand_sha256",
+            identity.demand_sha256().to_owned(),
+            answer.envelope.demand_sha256.to_string(),
+        ));
+    }
+    if identity.handshake_protocol() != typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "handshake_protocol",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL.to_string(),
+            identity.handshake_protocol().to_string(),
+        ));
+    }
+    if identity.handshake_schema_sha256() != typefacts::v3::TYPE_FACTS_SCHEMA_SHA256 {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "handshake_schema_sha256",
+            typefacts::v3::TYPE_FACTS_SCHEMA_SHA256.to_owned(),
+            identity.handshake_schema_sha256().to_owned(),
+        ));
+    }
+    if identity.handshake_build() != typefacts::v3::TYPE_FACTS_BUILD_ID {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "handshake_build",
+            typefacts::v3::TYPE_FACTS_BUILD_ID.to_owned(),
+            identity.handshake_build().to_owned(),
+        ));
     }
     let mut expected_ids = schedule.proof_demand_ids().collect::<Vec<_>>();
     expected_ids.sort();
@@ -1634,8 +1833,21 @@ fn verify_live_export_value_answer_with_project_census(
         .proof_demand_ids()
         .map(str::to_owned)
         .collect::<Vec<_>>();
-    if expected_ids != actual_ids || answer.transcripts.len() != schedule.export_values.len() {
-        return Err(TypeFactsCertificationError::IdentityMismatch);
+    if expected_ids != actual_ids {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "proof_demand_ids",
+            format!("{expected_ids:?}"),
+            format!("{actual_ids:?}"),
+        ));
+    }
+    if answer.transcripts.len() != schedule.export_values.len() {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            "export-value verification",
+            "transcript_count",
+            schedule.export_values.len().to_string(),
+            answer.transcripts.len().to_string(),
+        ));
     }
     validate_export_envelope_open_reasons(&answer.envelope.open_reasons)?;
     let source_sites = verify_snapshot_source_census(
@@ -1650,16 +1862,24 @@ fn verify_live_export_value_answer_with_project_census(
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
         let transcript = &answer.transcripts[index];
         if transcript.location != scheduled.demand.location {
-            return Err(TypeFactsCertificationError::IdentityMismatch);
+            let (expected, actual) = diagnostic_location_pair(
+                Some(&scheduled.demand.location),
+                Some(&transcript.location),
+            );
+            return Err(TypeFactsCertificationError::identity_mismatch(
+                "export-value verification",
+                "transcript_location",
+                expected,
+                actual,
+            ));
         }
-        match (
+        verify_implementation_location_identity(
             scheduled.demand.implementation_location.as_ref(),
-            transcript.implementation.as_ref(),
-        ) {
-            (Some(expected), Some(actual)) if expected == &actual.location => {}
-            (None, None) => {}
-            _ => return Err(TypeFactsCertificationError::IdentityMismatch),
-        }
+            transcript
+                .implementation
+                .as_ref()
+                .map(|implementation| &implementation.location),
+        )?;
         let transcript_bytes = typefacts::encode(transcript)?;
         let transcript_root = format!("sha256:{:x}", Sha256::digest(&transcript_bytes));
         for proof in &scheduled.proof_demands {
@@ -4603,8 +4823,15 @@ pub enum TypeFactsCertificationError {
     MissingDemand(String),
     #[error("Type Facts producer provenance is invalid: {0}")]
     ProducerProvenance(String),
-    #[error("Type Facts live-session identity does not match the certification plan")]
-    IdentityMismatch,
+    #[error(
+        "Type Facts live-session identity mismatch at {site}: field {field} expected {expected}, actual {actual}"
+    )]
+    IdentityMismatch {
+        site: &'static str,
+        field: &'static str,
+        expected: Box<str>,
+        actual: Box<str>,
+    },
     #[error("Type Facts snapshot source census is invalid: {0}")]
     SourceCensus(String),
     #[error("Type Facts demand {demand} is locally open: {reason}")]
@@ -4622,6 +4849,20 @@ pub enum TypeFactsCertificationError {
 }
 
 impl TypeFactsCertificationError {
+    fn identity_mismatch(
+        site: &'static str,
+        field: &'static str,
+        expected: impl Into<String>,
+        actual: impl Into<String>,
+    ) -> Self {
+        Self::IdentityMismatch {
+            site,
+            field,
+            expected: expected.into().into_boxed_str(),
+            actual: actual.into().into_boxed_str(),
+        }
+    }
+
     fn at_stage(self, stage: &'static str) -> Self {
         Self::TransactionStage {
             stage,
@@ -4643,6 +4884,110 @@ impl TypeFactsCertificationError {
     }
 }
 
+fn diagnostic_identity_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    if let Some(index) = normalized.find("/node_modules/") {
+        return normalized[index..].to_owned();
+    }
+    if let Some(index) = normalized.find("solid-checker-typefacts-project-") {
+        let suffix = normalized[index..]
+            .find('/')
+            .map(|offset| &normalized[index + offset..])
+            .unwrap_or("");
+        return format!("<private-project>{suffix}");
+    }
+    if Path::new(&normalized).is_absolute() {
+        return Path::new(&normalized)
+            .file_name()
+            .map(|name| format!("<absolute>/{}", name.to_string_lossy()))
+            .unwrap_or_else(|| "<absolute>".into());
+    }
+    normalized
+}
+
+fn diagnostic_identity_path_pair(expected: &str, actual: &str) -> (String, String) {
+    let mut expected_rendered = diagnostic_identity_path(expected);
+    let mut actual_rendered = diagnostic_identity_path(actual);
+    if expected != actual && expected_rendered == actual_rendered {
+        expected_rendered.push_str(" [expected identity]");
+        actual_rendered.push_str(" [different actual identity]");
+    }
+    (expected_rendered, actual_rendered)
+}
+
+fn diagnostic_location(location: Option<&typefacts::Location>) -> String {
+    location.map_or_else(
+        || "None".into(),
+        |location| {
+            format!(
+                "{}:{}-{}",
+                diagnostic_identity_path(&location.path),
+                location.start_byte,
+                location.end_byte
+            )
+        },
+    )
+}
+
+fn diagnostic_location_pair(
+    expected: Option<&typefacts::Location>,
+    actual: Option<&typefacts::Location>,
+) -> (String, String) {
+    let mut expected_rendered = diagnostic_location(expected);
+    let mut actual_rendered = diagnostic_location(actual);
+    if expected != actual && expected_rendered == actual_rendered {
+        expected_rendered.push_str(" [expected identity]");
+        actual_rendered.push_str(" [different actual identity]");
+    }
+    (expected_rendered, actual_rendered)
+}
+
+fn diagnostic_plan_key(key: &(String, String)) -> String {
+    format!("{}@{}", key.0, diagnostic_identity_path(&key.1))
+}
+
+fn verify_schedule_identity(
+    site: &'static str,
+    expected_root: &str,
+    actual_root: &str,
+    incompatible_count_field: &'static str,
+    incompatible_count: usize,
+) -> Result<(), TypeFactsCertificationError> {
+    if actual_root != expected_root {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            site,
+            "demand_graph_root",
+            expected_root.to_owned(),
+            actual_root.to_owned(),
+        ));
+    }
+    if incompatible_count != 0 {
+        return Err(TypeFactsCertificationError::identity_mismatch(
+            site,
+            incompatible_count_field,
+            "0",
+            incompatible_count.to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn verify_implementation_location_identity(
+    expected: Option<&typefacts::Location>,
+    actual: Option<&typefacts::Location>,
+) -> Result<(), TypeFactsCertificationError> {
+    if expected == actual {
+        return Ok(());
+    }
+    let (expected, actual) = diagnostic_location_pair(expected, actual);
+    Err(TypeFactsCertificationError::identity_mismatch(
+        "export-value verification",
+        "implementation_location",
+        expected,
+        actual,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4653,6 +4998,161 @@ mod tests {
 
     fn digest(bytes: &[u8]) -> String {
         format!("sha256:{:x}", Sha256::digest(bytes))
+    }
+
+    #[test]
+    fn identity_mismatch_names_the_exact_site_field_and_redacted_values() {
+        let expected = typefacts::Location {
+            path: "/private/tmp/solid-checker-typefacts-project-123-1/node_modules/pkg/a.js".into(),
+            start_byte: 10,
+            end_byte: 20,
+        };
+        let actual = typefacts::Location {
+            path: "/Users/example/secret/node_modules/pkg/b.js".into(),
+            start_byte: 30,
+            end_byte: 40,
+        };
+        let error = verify_implementation_location_identity(Some(&expected), Some(&actual))
+            .expect_err("different implementation locations must fail closed");
+        assert!(matches!(
+            &error,
+            TypeFactsCertificationError::IdentityMismatch {
+                site: "export-value verification",
+                field: "implementation_location",
+                expected,
+                actual,
+            } if expected.as_ref() == "/node_modules/pkg/a.js:10-20"
+                && actual.as_ref() == "/node_modules/pkg/b.js:30-40"
+        ));
+        let rendered = error.to_string();
+        assert!(!rendered.contains("/private/tmp"));
+        assert!(!rendered.contains("/Users/example"));
+
+        let absent = verify_implementation_location_identity(Some(&expected), None)
+            .expect_err("a missing producer implementation must fail closed");
+        assert!(matches!(
+            absent,
+            TypeFactsCertificationError::IdentityMismatch {
+                site: "export-value verification",
+                field: "implementation_location",
+                expected,
+                actual,
+            } if expected.as_ref() == "/node_modules/pkg/a.js:10-20"
+                && actual.as_ref() == "None"
+        ));
+        assert!(verify_implementation_location_identity(Some(&expected), Some(&expected)).is_ok());
+        assert!(verify_implementation_location_identity(None, None).is_ok());
+        let unexpected = verify_implementation_location_identity(None, Some(&actual))
+            .expect_err("an unexpected producer implementation must fail closed");
+        assert!(matches!(
+            unexpected,
+            TypeFactsCertificationError::IdentityMismatch {
+                site: "export-value verification",
+                field: "implementation_location",
+                expected,
+                actual,
+            } if expected.as_ref() == "None"
+                && actual.as_ref() == "/node_modules/pkg/b.js:30-40"
+        ));
+
+        let same_suffix_other_root = typefacts::Location {
+            path: "/private/tmp/solid-checker-typefacts-project-999-2/node_modules/pkg/a.js".into(),
+            start_byte: 10,
+            end_byte: 20,
+        };
+        let collision =
+            verify_implementation_location_identity(Some(&expected), Some(&same_suffix_other_root))
+                .expect_err("different private roots must remain visibly distinct");
+        assert!(matches!(
+            collision,
+            TypeFactsCertificationError::IdentityMismatch {
+                expected,
+                actual,
+                ..
+            } if expected.as_ref() == "/node_modules/pkg/a.js:10-20 [expected identity]"
+                && actual.as_ref()
+                    == "/node_modules/pkg/a.js:10-20 [different actual identity]"
+        ));
+    }
+
+    #[test]
+    fn schedule_identity_checks_root_before_the_incompatible_family_count() {
+        let root = verify_schedule_identity(
+            "export-value verification",
+            "sha256:expected",
+            "sha256:actual",
+            "invocation_count",
+            1,
+        )
+        .expect_err("a wrong graph root must fail closed");
+        assert!(matches!(
+            root,
+            TypeFactsCertificationError::IdentityMismatch {
+                site: "export-value verification",
+                field: "demand_graph_root",
+                expected,
+                actual,
+            } if expected.as_ref() == "sha256:expected"
+                && actual.as_ref() == "sha256:actual"
+        ));
+
+        let count = verify_schedule_identity(
+            "export-value verification",
+            "sha256:same",
+            "sha256:same",
+            "invocation_count",
+            1,
+        )
+        .expect_err("an invocation schedule cannot enter export-value verification");
+        assert!(matches!(
+            count,
+            TypeFactsCertificationError::IdentityMismatch {
+                site: "export-value verification",
+                field: "invocation_count",
+                expected,
+                actual,
+            } if expected.as_ref() == "0" && actual.as_ref() == "1"
+        ));
+        assert!(
+            verify_schedule_identity(
+                "export-value verification",
+                "sha256:same",
+                "sha256:same",
+                "invocation_count",
+                0,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn diagnostic_paths_remove_private_run_identity_without_losing_package_suffixes() {
+        assert_eq!(
+            diagnostic_identity_path(
+                "/private/tmp/solid-checker-typefacts-project-44-9/tsconfig.json"
+            ),
+            "<private-project>/tsconfig.json"
+        );
+        assert_eq!(
+            diagnostic_identity_path(
+                "/Users/alice/project/node_modules/outer/dist/node_modules/inner/index.d.ts"
+            ),
+            "/node_modules/outer/dist/node_modules/inner/index.d.ts"
+        );
+        assert_eq!(
+            diagnostic_identity_path("/Users/alice/secret"),
+            "<absolute>/secret"
+        );
+        assert_eq!(
+            diagnostic_identity_path_pair(
+                "/private/tmp/solid-checker-typefacts-project-1/tsconfig.json",
+                "/private/tmp/solid-checker-typefacts-project-2/tsconfig.json",
+            ),
+            (
+                "<private-project>/tsconfig.json [expected identity]".into(),
+                "<private-project>/tsconfig.json [different actual identity]".into(),
+            )
+        );
     }
 
     #[test]

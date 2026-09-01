@@ -607,8 +607,24 @@ pub fn certify_published_contract_graph_case_set(
             requests.entry(identity).or_insert(request);
         }
     }
-    let request_keys = requests.keys().cloned().collect::<Vec<_>>();
-    let request_values = requests.into_values().collect::<Vec<_>>();
+    let mut request_entries = requests.into_iter().collect::<Vec<_>>();
+    request_entries.sort_by(|(left_identity, left), (right_identity, right)| {
+        compare_type_facts_request_coordinates(
+            (
+                &left.plan.resolved_import.package_name,
+                &left.plan.resolved_import.package_version,
+                &left.plan.resolved_import.requested_entrypoint,
+                left_identity,
+            ),
+            (
+                &right.plan.resolved_import.package_name,
+                &right.plan.resolved_import.package_version,
+                &right.plan.resolved_import.requested_entrypoint,
+                right_identity,
+            ),
+        )
+    });
+    let (request_keys, request_values): (Vec<_>, Vec<_>) = request_entries.into_iter().unzip();
     let evidence =
         super::type_facts::acquire_and_verify_graph_export_values(root_plan, &request_values, pin)
             .map_err(
@@ -632,6 +648,13 @@ pub fn certify_published_contract_graph_case_set(
             )
         })
         .collect()
+}
+
+fn compare_type_facts_request_coordinates(
+    left: (&str, &str, &str, &str),
+    right: (&str, &str, &str, &str),
+) -> std::cmp::Ordering {
+    left.cmp(&right)
 }
 
 pub struct FinalizedGraphNode {
@@ -2068,6 +2091,38 @@ pub enum DependencyCompositionError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn type_facts_request_order_is_package_coordinate_first_and_digest_last() {
+        assert!(
+            compare_type_facts_request_coordinates(
+                ("@scope/a", "2.0.0", ".", "sha256:z"),
+                ("@scope/b", "1.0.0", ".", "sha256:a"),
+            )
+            .is_lt()
+        );
+        assert!(
+            compare_type_facts_request_coordinates(
+                ("pkg", "1.0.0", "./a", "sha256:z"),
+                ("pkg", "1.0.0", "./b", "sha256:a"),
+            )
+            .is_lt()
+        );
+        assert!(
+            compare_type_facts_request_coordinates(
+                ("pkg", "1.0.0", ".", "sha256:z"),
+                ("pkg", "2.0.0", ".", "sha256:a"),
+            )
+            .is_lt()
+        );
+        assert!(
+            compare_type_facts_request_coordinates(
+                ("pkg", "1.0.0", ".", "sha256:a"),
+                ("pkg", "1.0.0", ".", "sha256:b"),
+            )
+            .is_lt()
+        );
+    }
 
     fn id(package: &str) -> DependencyNodeIdentity {
         DependencyNodeIdentity {

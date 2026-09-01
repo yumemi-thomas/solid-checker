@@ -10402,3 +10402,24 @@ The published-typing must-not-clear controls (`@solid-devtools/ui`,
 `solid-devtools`, `@solidjs/web`, TanStack store/form, and the generic i18n
 inputs) remain refused. The five certified control probes remain certified.
 All 25 not-attempted rows are unchanged.
+
+## 2026-09-01 — Type Facts identity refusals name stable evidence, not an opaque build-dependent subject
+
+`TypeFactsCertificationError::IdentityMismatch` was a fieldless variant raised
+from nineteen sites, so every plan, envelope, count, location, and
+implementation disagreement produced the same sentence. The guards remain
+fail-closed, but now report a literal site/field and oriented expected/actual
+values. Path identities are package-relative or explicitly redacted; pair-aware
+rendering distinguishes unequal private roots whose safe suffixes collide.
+Tests pin all four expected/actual implementation-presence combinations, the
+schedule root/count split, guard precedence, and path-redaction collisions.
+
+Focused canonical reproducers show the underlying M9 failure: a scheduled
+authenticated implementation location is `Some`, while the producer returns
+`None`. The TanStack query and persist-client rows remain exact refusals; no
+semantic authority changed. Case-set requests now sort by stable package
+coordinates before digest, removing digest order as the source of the first
+failing graph-node name. The identity/evidence pairing remains digest-keyed
+after acquisition. Two repeated debug probes selected the same package
+coordinate; release-profile confirmation is deferred to the Round 2 full
+remeasurement. M9 is diagnosable, not yet semantically repaired.

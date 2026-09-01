@@ -631,6 +631,35 @@ Do **not** relax any of these checks. They are the seam that keeps a live produc
 bound to the plan it was scheduled for; a wrong relaxation here silently accepts evidence
 from a different transaction.
 
+#### M9 implementation result (2026-09-01)
+
+The fielded diagnostic identifies the suspected guard exactly. In both focused
+rows the schedule carries `implementation_location=Some(...)` for authenticated
+runtime bytes while the producer transcript carries `implementation=None`.
+Examples after stable redaction are
+`/node_modules/@tanstack/query-core/build/modern/retryer.js:3459-3473 -> None`
+and
+`/node_modules/@tanstack/query-persist-client-core/build/modern/createPersister.js:6160-6180 -> None`.
+No identity check was relaxed and neither row certified.
+
+All former unit-variant sites now name a literal site and field plus oriented
+expected/actual values. Path-bearing values are rendered relative to their
+`node_modules` coordinate or a redacted private-project marker; unequal raw
+identities that redact to the same suffix receive explicit expected/different-
+actual annotations. The diagnostic therefore exposes neither a host/user path
+nor a per-run temporary directory.
+
+The build-dependent graph-node label came from scheduling the case-set's Type
+Facts requests by canonical digest. Request/evidence pairs are now ordered by
+package name, version, entrypoint, then digest and re-keyed to the same digest
+after acquisition. This changes only which already-failing node is reported
+first; it cannot move evidence between nodes. The two focused debug runs
+retained their exact-refusal status and selected the same package coordinate.
+A release-profile confirmation is deferred to the Round 2 full remeasurement.
+Multiple independent open premises can still exist within that selected node;
+M9 is now diagnosable, not semantically fixed, and does not choose one failure
+as stronger proof.
+
 ---
 
 ### M10 — optional peer reached through a guarded dynamic import (class a, 1 row)
