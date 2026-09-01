@@ -69,9 +69,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     partial: 37
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 73,
+    "exact-refusal": 62,
     "not-attempted": 25,
-    verified: 320
+    verified: 331
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -79,7 +79,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 320);
+  assert.equal(ledger.summary.verifiedRows, 331);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -108,6 +108,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@corvu/popover@0.2.0|solid1|only",
       "@corvu/resizable@0.2.5|solid1|only",
       "@corvu/tooltip@0.2.2|solid1|only",
+      "@kobalte/utils@0.9.2|solid1|only",
       "@solid-devtools/extension-adapter@0.12.1|solid1|only",
       "@solid-devtools/frontend@0.15.4|solid1|only",
       "@solid-devtools/logger@0.9.11|solid1|only",
@@ -121,9 +122,12 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/analytics@0.2.1|solid1|only",
       "@solid-primitives/analytics@2.0.0-next.2|solid2|floor",
       "@solid-primitives/analytics@2.0.0-next.2|solid2|head",
+      "@solid-primitives/async@0.0.101-next.3|solid2|floor",
+      "@solid-primitives/async@0.0.101-next.3|solid2|head",
       "@solid-primitives/audio@1.4.5|solid1|only",
       "@solid-primitives/audio@3.0.0-next.2|solid2|floor",
       "@solid-primitives/audio@3.0.0-next.2|solid2|head",
+      "@solid-primitives/autofocus@0.1.5|solid1|only",
       "@solid-primitives/bounds@0.1.7|solid1|only",
       "@solid-primitives/bounds@1.0.0-next.2|solid2|floor",
       "@solid-primitives/bounds@1.0.0-next.2|solid2|head",
@@ -149,6 +153,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/date@2.1.8|solid1|only",
       "@solid-primitives/date@3.0.0-next.3|solid2|floor",
       "@solid-primitives/date@3.0.0-next.3|solid2|head",
+      "@solid-primitives/date-difference@1.0.2|solid1|only",
       "@solid-primitives/debounce@1.3.0|solid1|only",
       "@solid-primitives/deep@0.3.7|solid1|only",
       "@solid-primitives/deep@1.0.0-next.3|solid2|floor",
@@ -177,6 +182,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/filesystem@1.3.4|solid1|only",
       "@solid-primitives/filesystem@3.0.0-next.3|solid2|floor",
       "@solid-primitives/filesystem@3.0.0-next.3|solid2|head",
+      "@solid-primitives/flux-store@0.1.1|solid1|only",
+      "@solid-primitives/flux-store@1.0.0-next.2|solid2|floor",
+      "@solid-primitives/flux-store@1.0.0-next.2|solid2|head",
       "@solid-primitives/focus@1.0.0-next.4|solid2|floor",
       "@solid-primitives/focus@1.0.0-next.4|solid2|head",
       "@solid-primitives/form@1.0.0-next.2|solid2|floor",
@@ -198,12 +206,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/idle@1.0.0-next.3|solid2|head",
       "@solid-primitives/immutable@2.0.0-next.0|solid1|only",
       "@solid-primitives/input-mask@0.3.1|solid1|only",
-      "@solid-primitives/input-mask@1.0.0-next.2|solid2|floor",
-      "@solid-primitives/input-mask@1.0.0-next.2|solid2|head",
       "@solid-primitives/interaction@1.0.0-next.4|solid2|floor",
       "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
       "@solid-primitives/intersection-observer@2.2.5|solid1|only",
-      "@solid-primitives/jsx-parser@0.2.0|solid1|only",
       "@solid-primitives/jsx-tokenizer@1.1.4|solid1|only",
       "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor",
       "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|head",
@@ -294,6 +299,8 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/scheduled@2.0.0-next.2|solid2|floor",
       "@solid-primitives/scheduled@2.0.0-next.2|solid2|head",
       "@solid-primitives/script-loader@2.3.2|solid1|only",
+      "@solid-primitives/script-loader@3.0.0-next.2|solid2|floor",
+      "@solid-primitives/script-loader@3.0.0-next.2|solid2|head",
       "@solid-primitives/scroll@2.1.6|solid1|only",
       "@solid-primitives/scroll@3.0.0-next.4|solid2|floor",
       "@solid-primitives/scroll@3.0.0-next.4|solid2|head",
@@ -330,6 +337,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/styles@1.0.0-next.2|solid2|floor",
       "@solid-primitives/styles@1.0.0-next.2|solid2|head",
       "@solid-primitives/throttle@1.2.0|solid1|only",
+      "@solid-primitives/timer@1.4.4|solid1|only",
       "@solid-primitives/transition-group@1.1.2|solid1|only",
       "@solid-primitives/transition-group@2.0.0-next.2|solid2|floor",
       "@solid-primitives/transition-group@2.0.0-next.2|solid2|head",
@@ -354,8 +362,10 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/workers@2.0.1-next.1|solid2|floor",
       "@solid-primitives/workers@2.0.1-next.1|solid2|head",
       "@solidjs/html@2.0.0-rc.3|solid2|only",
+      "@solidjs/meta@0.29.4|solid1|only",
       "@solidjs/meta@1.0.0-next.2|solid2|floor",
       "@solidjs/meta@1.0.0-next.2|solid2|head",
+      "@solidjs/router@1.0.0|solid1|only",
       "@solidjs/start@2.0.3|solid1|only",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|floor",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|head",
@@ -401,6 +411,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "corvu@0.7.2|solid1|only",
       "motion-solidjs@0.7.0-beta.4|solid2|floor",
       "motion-solidjs@0.7.0-beta.4|solid2|head",
+      "solid-js@2.0.0-rc.3|solid2|only",
       "solid-recharts@2.0.0-beta.1|solid2|floor",
       "solid-recharts@2.0.0-beta.1|solid2|head"
     ]
