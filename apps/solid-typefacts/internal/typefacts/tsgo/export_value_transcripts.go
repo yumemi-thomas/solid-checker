@@ -240,6 +240,7 @@ func (p *project) exportImplementationTranscriptLocked(
 	transcript.Signature = &selected
 	transcript.ParameterUses = p.parameterUseCensusLocked(ctx, implementation)
 	transcript.ControlFlow = p.controlFlowCensusLocked(implementation)
+	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
 	if len(transcript.ControlFlow.Unsupported) != 0 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "controlFlowUnsupported")
@@ -249,9 +250,103 @@ func (p *project) exportImplementationTranscriptLocked(
 	return transcript
 }
 
+// callableReturnCensusesLocked records the return-carry edges owned by every
+// nested callable in an implementation. The implementation's own returns are
+// already ControlFlow; repeating them here would create two authorities for
+// the first link. Each nested callable is visited exactly once even though the
+// body walk descends through all of them.
+func (p *project) callableReturnCensusesLocked(
+	implementation *ast.Node,
+) []typefacts.CallableReturnCensus {
+	seen := make(map[*ast.Node]struct{})
+	var callables []*ast.Node
+	p.walkImplementationBodyLocked(
+		implementation,
+		func(node *ast.Node, _ *ast.Node, _ typefacts.Reachability) {
+			if node == implementation || !isCallableDeclaration(node) || node.Body() == nil {
+				return
+			}
+			if _, exists := seen[node]; exists {
+				return
+			}
+			seen[node] = struct{}{}
+			callables = append(callables, node)
+		},
+	)
+	censuses := make([]typefacts.CallableReturnCensus, 0, len(callables))
+	for _, callable := range callables {
+		flow := p.controlFlowCensusLocked(callable)
+		// A partial nested control-flow answer cannot authorize a return edge.
+		// Omitting the whole callable census is the fail-closed direction because
+		// absence is never read as proof that it returns nothing.
+		if len(flow.Unsupported) != 0 {
+			continue
+		}
+		returns := make([]typefacts.CallableReturnCarrySite, 0, len(flow.Returns))
+		for _, site := range flow.Returns {
+			var carried []typefacts.CallableCarryBinding
+			if expression := returnSiteExpression(callable, site.Location); expression != nil {
+				carried = p.callableReturnBindingsLocked(expression)
+			}
+			returns = append(returns, typefacts.CallableReturnCarrySite{
+				Location:         site.Location,
+				Reach:            site.Reach,
+				CarryReach:       site.CarryReach,
+				CarriedCallables: carried,
+			})
+		}
+		censuses = append(censuses, typefacts.CallableReturnCensus{
+			Callable: nodeLocation(callable),
+			Returns:  returns,
+		})
+	}
+	return censuses
+}
+
+// returnSiteExpression reconnects one control-flow return row to the exact
+// expression that produced it. The walk stops at nested callable boundaries:
+// their returns belong to their own census. A concise body is itself the
+// returned expression and carries its own location in ControlFlow.
+func returnSiteExpression(
+	callable *ast.Node,
+	location typefacts.Location,
+) *ast.Node {
+	body := callable.Body()
+	if body == nil {
+		return nil
+	}
+	if !ast.IsBlock(body) {
+		if nodeLocation(body) == location {
+			return body
+		}
+		return nil
+	}
+	var found *ast.Node
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil || found != nil {
+			return
+		}
+		if node != body && isCallableDeclaration(node) {
+			return
+		}
+		if ast.IsReturnStatement(node) && nodeLocation(node) == location {
+			found = node.Expression()
+			return
+		}
+		node.ForEachChild(func(child *ast.Node) bool {
+			visit(child)
+			return found != nil
+		})
+	}
+	visit(body)
+	return found
+}
+
 func (p *project) implementationCallCensusLocked(
 	implementation *ast.Node,
 ) []typefacts.ImplementationCall {
+	unsafeJumps := p.unsafeJumpRegionsLocked(implementation)
 	roots := p.parameterCensusRootsLocked(implementation)
 	bySymbol := make(map[*ast.Symbol]parameterCensusRoot, len(roots))
 	for _, root := range roots {
@@ -276,6 +371,14 @@ func (p *project) implementationCallCensusLocked(
 			// construction rather than silently accept one.
 			construct := ast.IsNewExpression(node)
 			if !ast.IsCallExpression(node) && !construct {
+				return
+			}
+			flowOwner := enclosing
+			if flowOwner == nil {
+				flowOwner = implementation
+			}
+			if reach != typefacts.Unreachable &&
+				locationWithheldByJump(unsafeJumps[flowOwner], nodeLocation(node)) {
 				return
 			}
 			kind := typefacts.CallKindCall

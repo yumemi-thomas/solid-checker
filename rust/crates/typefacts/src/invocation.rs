@@ -317,6 +317,14 @@ pub struct ExportImplementationTranscript {
     pub parameter_uses: Vec<ParameterUse>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control_flow: Option<ControlFlowCensus>,
+    /// Return-carry edges owned by nested callables in this implementation.
+    ///
+    /// The implementation's own returns live in [`Self::control_flow`]. These
+    /// rows make a second-order chain explicit: a callable already proven to
+    /// execute may return another callable. No consumer may read an absent row
+    /// as proof that a callable returns nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callable_returns: Vec<CallableReturnCensus>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calls: Vec<ImplementationCall>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -669,8 +677,40 @@ pub struct ReturnSite {
     /// ranges; an empty list is never proof that nothing is carried.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub carried_callables: Vec<Location>,
+    /// Lower-bound strength of this value-return edge. Absence carries no
+    /// authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carry_reach: Option<Reachability>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<ImplementationValueSource>,
+}
+
+/// Exact return-carry rows for one nested callable.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CallableReturnCensus {
+    pub callable: Location,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub returns: Vec<CallableReturnCarrySite>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CallableReturnCarrySite {
+    pub location: Location,
+    pub reach: Reachability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carry_reach: Option<Reachability>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub carried_callables: Vec<CallableCarryBinding>,
+}
+
+/// One exact callable carried by a nested callable's returned value.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CallableCarryBinding {
+    pub location: Location,
+    pub reach: Reachability,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -4,21 +4,19 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 9 because callable-path facts now distinguish
-// the demanded node's own local shape from whether its descendant census was
-// fully enumerated. A depth or cycle cut leaves Complete about the node intact
-// and reports SubtreeEnumerated=false, so exact-node consumers do not confuse
-// census budget with an unknown local answer while whole-census consumers still
-// fail closed.
+// TypeFactsHandshakeProtocol is 10 because an exported implementation now
+// carries exact per-callable return-carry edges. They let a consumer compose a
+// callable returned by a callable the export returns, while refusing lexical
+// nesting, stored closures, and return sites that are not reachable.
 //
-// A protocol-8 client rejects unknown transcript fields outright, and a
-// protocol-8 producer omits a field this protocol requires, so the addition
+// A protocol-9 client rejects unknown transcript fields outright, and a
+// protocol-9 producer omits a field this protocol requires, so the addition
 // is a break rather than a compatible extension and the number is what says
 // so. The digest and build id still move with it, and the handshake refuses on
 // any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 9
-	TypeFactsSchemaSHA256             = "sha256:1a9cda6d1e2423bf9c07d42b56718c2b63f63584ca9db357f51772e09d59cf7b"
+	TypeFactsHandshakeProtocol uint64 = 10
+	TypeFactsSchemaSHA256             = "sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84"
 )
 
 type ServiceHandshake struct {

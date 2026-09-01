@@ -1069,6 +1069,7 @@ func (p *project) parameterUseCensusLocked(
 	ctx context.Context,
 	implementation *ast.Node,
 ) []typefacts.ParameterUse {
+	unsafeJumps := p.unsafeJumpRegionsLocked(implementation)
 	roots := p.parameterCensusRootsLocked(implementation)
 	bySymbol := make(map[*ast.Symbol]parameterCensusRoot, len(roots))
 	aliases := make(map[*ast.Symbol]struct{})
@@ -1131,6 +1132,14 @@ func (p *project) parameterUseCensusLocked(
 			// operation reachability reads as an open escape; that is a separate
 			// measured decision, recorded in docs/precision-backlog.md.
 			captured := enclosing != nil && enclosing != body
+			flowOwner := enclosing
+			if flowOwner == nil {
+				flowOwner = implementation
+			}
+			if reach != typefacts.Unreachable &&
+				locationWithheldByJump(unsafeJumps[flowOwner], nodeLocation(node)) {
+				return
+			}
 			symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
 			root, ok := bySymbol[symbol]
 			if !ok {
@@ -1292,25 +1301,43 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 	body := implementation.Body()
 	if body != nil && !ast.IsBlock(body) {
 		value := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(body))
+		carried := p.carriedCallableLocationsLocked(body)
+		reachable := typefacts.Reachable
 		census.Returns = append(census.Returns, typefacts.ReturnSite{
 			Location:         nodeLocation(body),
 			Reach:            typefacts.Reachable,
 			Value:            &value,
-			CarriedCallables: p.carriedCallableLocationsLocked(body),
+			CarriedCallables: carried,
+			CarryReach:       &reachable,
 			Sources:          p.returnValueSourcesLocked(body),
 		})
 		return census
 	}
-	var scan func(*ast.Node, typefacts.Reachability) typefacts.Reachability
-	scan = func(node *ast.Node, reach typefacts.Reachability) typefacts.Reachability {
+	// ReturnSite.Reach deliberately retains the producer's historical,
+	// optimistic reachability. carryReach is a separate lower-bound premise for
+	// a value-carry edge: entering either arm of an undecidable branch makes the
+	// edge conditional, while both arms falling through restores the incoming
+	// lower bound for statements after the branch.
+	type flowState struct {
+		reach      typefacts.Reachability
+		carryReach typefacts.Reachability
+	}
+	unknownArm := func(state flowState) flowState {
+		if state.carryReach != typefacts.Unreachable {
+			state.carryReach = typefacts.ReachUnknown
+		}
+		return state
+	}
+	var scan func(*ast.Node, flowState) flowState
+	scan = func(node *ast.Node, state flowState) flowState {
 		if node == nil {
-			return reach
+			return state
 		}
 		if node != body && isCallableDeclaration(node) {
-			return reach
+			return state
 		}
 		if ast.IsBlock(node) {
-			current := reach
+			current := state
 			for _, statement := range node.AsBlock().Statements.Nodes {
 				current = scan(statement, current)
 			}
@@ -1324,15 +1351,23 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				value = &fact
 				carried = p.carriedCallableLocationsLocked(expression)
 			}
+			var carryReach *typefacts.Reachability
+			if node.Expression() != nil {
+				edgeReach := state.carryReach
+				carryReach = &edgeReach
+			}
 			census.Returns = append(census.Returns, typefacts.ReturnSite{
-				Location: nodeLocation(node), Reach: reach, Value: value, CarriedCallables: carried,
+				Location: nodeLocation(node), Reach: state.reach, Value: value,
+				CarriedCallables: carried, CarryReach: carryReach,
 				Sources: p.returnValueSourcesLocked(node.Expression()),
 			})
-			return typefacts.Unreachable
+			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
 		}
 		if ast.IsThrowStatement(node) {
-			census.Throws = append(census.Throws, typefacts.ThrowSite{Location: nodeLocation(node), Reach: reach})
-			return typefacts.Unreachable
+			census.Throws = append(census.Throws, typefacts.ThrowSite{
+				Location: nodeLocation(node), Reach: state.reach,
+			})
+			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
 		}
 		if ast.IsIfStatement(node) {
 			statement := node.AsIfStatement()
@@ -1342,24 +1377,56 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				partitions = p.invocationValueFactLocked(p.checker.GetTypeAtLocation(expression)).Partitions
 			}
 			census.Branches = append(census.Branches, typefacts.BranchSite{
-				Location: nodeLocation(node), Reach: reach, Partitions: partitions,
+				Location: nodeLocation(node), Reach: state.reach, Partitions: partitions,
 			})
-			thenReach := scan(
-				statement.ThenStatement, p.literalBranchReachLocked(reach, expression, true),
-			)
-			elseReach := p.literalBranchReachLocked(reach, expression, false)
-			if statement.ElseStatement != nil {
-				elseReach = scan(statement.ElseStatement, elseReach)
+			truthy, known := p.literalTruthinessLocked(expression, 0)
+			thenInput := state
+			elseInput := state
+			if known {
+				if truthy {
+					elseInput = flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
+				} else {
+					thenInput = flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
+				}
+			} else {
+				thenInput = unknownArm(thenInput)
+				elseInput = unknownArm(elseInput)
 			}
-			return mergeReachability(thenReach, elseReach)
+			thenState := scan(statement.ThenStatement, thenInput)
+			elseState := elseInput
+			if statement.ElseStatement != nil {
+				elseState = scan(statement.ElseStatement, elseInput)
+			}
+			if known {
+				if truthy {
+					return thenState
+				}
+				return elseState
+			}
+			merged := flowState{reach: mergeReachability(thenState.reach, elseState.reach)}
+			switch {
+			case merged.reach == typefacts.Unreachable || state.carryReach == typefacts.Unreachable:
+				merged.carryReach = typefacts.Unreachable
+			case p.constructCompletesNormallyLocked(statement.ThenStatement) &&
+				(statement.ElseStatement == nil || p.constructCompletesNormallyLocked(statement.ElseStatement)):
+				merged.carryReach = state.carryReach
+			default:
+				merged.carryReach = typefacts.ReachUnknown
+			}
+			return merged
 		}
 		if ast.IsConditionalExpression(node) {
 			expression := node.AsConditionalExpression()
 			partitions := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(expression.Condition)).Partitions
 			census.Branches = append(census.Branches, typefacts.BranchSite{
-				Location: nodeLocation(node), Reach: reach, Partitions: partitions,
+				Location: nodeLocation(node), Reach: state.reach, Partitions: partitions,
 			})
-			return mergeReachability(scan(expression.WhenTrue, reach), scan(expression.WhenFalse, reach))
+			thenState := scan(expression.WhenTrue, unknownArm(state))
+			elseState := scan(expression.WhenFalse, unknownArm(state))
+			return flowState{
+				reach:      mergeReachability(thenState.reach, elseState.reach),
+				carryReach: state.carryReach,
+			}
 		}
 		if ast.IsTryStatement(node) || ast.IsIterationStatement(node, true) || ast.IsSwitchStatement(node) {
 			marker := "switchReachability"
@@ -1373,11 +1440,13 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 				expression := node.Expression()
 				partitions := p.invocationValueFactLocked(p.checker.GetTypeAtLocation(expression)).Partitions
 				census.Branches = append(census.Branches, typefacts.BranchSite{
-					Location: nodeLocation(node), Reach: reach, Partitions: partitions,
+					Location: nodeLocation(node), Reach: state.reach, Partitions: partitions,
 				})
 			}
 			node.ForEachChild(func(child *ast.Node) bool {
-				scan(child, typefacts.ReachUnknown)
+				scan(child, flowState{
+					reach: typefacts.ReachUnknown, carryReach: typefacts.ReachUnknown,
+				})
 				return false
 			})
 			// Reachability *inside* the construct stays unknown — a loop body may
@@ -1392,25 +1461,139 @@ func (p *project) controlFlowCensusLocked(implementation *ast.Node) *typefacts.C
 			// An unreachable construct is never promoted: nothing that follows dead
 			// code becomes live by having a loop in between.
 			switch {
-			case reach == typefacts.Unreachable:
-				return typefacts.Unreachable
-			case reach == typefacts.Reachable && p.constructCompletesNormallyLocked(node):
-				return typefacts.Reachable
+			case state.reach == typefacts.Unreachable:
+				return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
+			case state.reach == typefacts.Reachable && p.constructCompletesNormallyLocked(node):
+				return state
 			default:
-				return typefacts.ReachUnknown
+				return flowState{reach: typefacts.ReachUnknown, carryReach: typefacts.ReachUnknown}
 			}
 		}
-		current := reach
+		if ast.IsBreakStatement(node) || isContinueStatement(node) {
+			// Exact jump-target flow is outside this census. In particular, a
+			// labelled break can bypass a later return without changing the legacy
+			// optimistic Reach row. Mark the whole census unsupported so no
+			// callable-return edge can acquire lower-bound authority from it.
+			if !jumpHandledByFallthroughConstruct(node, implementation) {
+				census.Unsupported = append(census.Unsupported, "jumpReachability")
+			}
+			return flowState{reach: typefacts.Unreachable, carryReach: typefacts.Unreachable}
+		}
+		current := state
 		node.ForEachChild(func(child *ast.Node) bool {
 			current = scan(child, current)
 			return false
 		})
 		return current
 	}
-	scan(body, typefacts.Reachable)
+	scan(body, flowState{reach: typefacts.Reachable, carryReach: typefacts.Reachable})
 	sort.Strings(census.Unsupported)
 	census.Unsupported = compactStrings(census.Unsupported)
+	if stringListContains(census.Unsupported, "jumpReachability") {
+		// The optimistic ReturnSite reach rows remain useful to their historical
+		// consumers, but partial control flow is never enough to authorize a
+		// callable carried by a return. Nested-census construction omits this
+		// callable entirely; the implementation-level equivalent is absence of
+		// carry authority on every return.
+		for index := range census.Returns {
+			census.Returns[index].CarryReach = nil
+		}
+	}
 	return census
+}
+
+// unsafeJumpRegionsLocked records the exact target-owned region whose positive
+// execution rows a jump makes non-universal. Source byte order is insufficient:
+// a `for` update is written before its body break, and sibling branch order says
+// nothing about execution. A break therefore withholds its whole target
+// subtree. A continue withholds only the loop body; the update/condition remain
+// valid may-execute evidence. The target boundary restores authority and no
+// region crosses a callable identity.
+func (p *project) unsafeJumpRegionsLocked(
+	implementation *ast.Node,
+) map[*ast.Node][]typefacts.Location {
+	regions := make(map[*ast.Node][]typefacts.Location)
+	p.walkImplementationBodyLocked(
+		implementation,
+		func(node *ast.Node, enclosing *ast.Node, _ typefacts.Reachability) {
+			if !ast.IsBreakStatement(node) && !isContinueStatement(node) {
+				return
+			}
+			owner := enclosing
+			if owner == nil {
+				owner = implementation
+			}
+			region := owner
+			if target := jumpTargetWithin(node, owner); target != nil {
+				region = target
+				if isContinueStatement(node) && !tryBetweenJumpAndTarget(node, target) {
+					for region != nil && region.KindString() == "KindLabeledStatement" {
+						region = region.Statement()
+					}
+					if region != nil && ast.IsIterationStatement(region, false) {
+						region = region.Statement()
+					}
+				}
+			}
+			if region != nil {
+				regions[owner] = append(regions[owner], nodeLocation(region))
+			}
+		},
+	)
+	return regions
+}
+
+func tryBetweenJumpAndTarget(jump, target *ast.Node) bool {
+	for ancestor := jump.Parent; ancestor != nil && ancestor != target; ancestor = ancestor.Parent {
+		if ast.IsTryStatement(ancestor) {
+			return true
+		}
+	}
+	return false
+}
+
+func locationWithheldByJump(regions []typefacts.Location, location typefacts.Location) bool {
+	for _, region := range regions {
+		if location.Path == region.Path && location.StartByte >= region.StartByte &&
+			location.EndByte <= region.EndByte {
+			return true
+		}
+	}
+	return false
+}
+
+func stringListContains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+// jumpHandledByFallthroughConstruct reports whether the shared walkers already
+// have an exact enclosing loop/switch owner for this break or continue. A jump
+// to a labelled block outside those constructs is deliberately excluded: its
+// target is the unsupported shape that triggered the per-frame refusal.
+func jumpHandledByFallthroughConstruct(jump, callable *ast.Node) bool {
+	for ancestor := jump.Parent; ancestor != nil; ancestor = ancestor.Parent {
+		if ancestor != callable && isCallableDeclaration(ancestor) {
+			return false
+		}
+		if ast.IsTryStatement(ancestor) {
+			return false
+		}
+		if ast.IsIterationStatement(ancestor, true) || ast.IsSwitchStatement(ancestor) {
+			// The nearest fallthrough construct must own the target. Looking
+			// through it for an outer label would let the nearer construct merge
+			// an abrupt path back into positive may-execute evidence.
+			return jumpTargetWithin(jump, ancestor) != nil
+		}
+		if ancestor == callable {
+			return false
+		}
+	}
+	return false
 }
 
 // walkImplementationBodyLocked visits every node of an implementation body once,
@@ -1507,10 +1690,29 @@ func (p *project) walkImplementationBodyLocked(
 			}
 			return completes
 		case ast.IsIterationStatement(node, true), ast.IsSwitchStatement(node):
-			node.ForEachChild(func(child *ast.Node) bool {
-				visit(child, nested, typefacts.ReachUnknown)
-				return false
-			})
+			if ast.IsSwitchStatement(node) {
+				statement := node.AsSwitchStatement()
+				visit(statement.Expression, nested, reach)
+				clauseEntry := typefacts.ReachUnknown
+				if reach == typefacts.Unreachable {
+					clauseEntry = typefacts.Unreachable
+				}
+				for _, clauseNode := range statement.CaseBlock.AsCaseBlock().Clauses.Nodes {
+					clause := clauseNode.AsCaseOrDefaultClause()
+					if clause.Expression != nil {
+						visit(clause.Expression, nested, clauseEntry)
+					}
+					current := clauseEntry
+					for _, child := range clause.Statements.Nodes {
+						current = visit(child, nested, current)
+					}
+				}
+			} else {
+				node.ForEachChild(func(child *ast.Node) bool {
+					visit(child, nested, typefacts.ReachUnknown)
+					return false
+				})
+			}
 			// The same question controlFlowCensusLocked answers, answered the same
 			// way: reachability *inside* the construct stays unknown, because a
 			// loop body may never run; reachability *after* a construct that can
@@ -1530,7 +1732,8 @@ func (p *project) walkImplementationBodyLocked(
 				return typefacts.ReachUnknown
 			}
 		}
-		terminates := ast.IsReturnStatement(node) || ast.IsThrowStatement(node)
+		terminates := ast.IsReturnStatement(node) || ast.IsThrowStatement(node) ||
+			ast.IsBreakStatement(node) || isContinueStatement(node)
 		node.ForEachChild(func(child *ast.Node) bool {
 			visit(child, nested, reach)
 			return false
@@ -2050,6 +2253,96 @@ func mergeReachability(left, right typefacts.Reachability) typefacts.Reachabilit
 // whitelist and stops at the first construction it cannot vouch for.
 func (p *project) carriedCallableLocationsLocked(expression *ast.Node) []typefacts.Location {
 	return p.callableLocationsLocked(expression, carriedCallableDescentWholeValue)
+}
+
+// callableReturnBindingsLocked is the return-carry answer for a nested
+// callable. It preserves the existing identity whitelist and adds one
+// distinction the implementation-level ReturnSite could not express: a
+// conditional value may carry different callable identities on its two arms.
+// Those alternatives are Unknown, never Reachable, unless the condition is a
+// compile-time literal and selects one arm exactly.
+func (p *project) callableReturnBindingsLocked(
+	expression *ast.Node,
+) []typefacts.CallableCarryBinding {
+	bindings := make(map[typefacts.Location]typefacts.Reachability)
+	budget := maxReturnedCallableBudget
+	var collect func(*ast.Node, typefacts.Reachability, int, map[*ast.Node]struct{})
+	collect = func(
+		candidate *ast.Node,
+		reach typefacts.Reachability,
+		depth int,
+		visiting map[*ast.Node]struct{},
+	) {
+		if candidate == nil || depth > maxReturnedCallableDepth || budget <= 0 {
+			return
+		}
+		budget--
+		node := identityPreservingUnwrap(candidate)
+		if node == nil {
+			return
+		}
+		if _, cycling := visiting[node]; cycling {
+			return
+		}
+		visiting[node] = struct{}{}
+		defer delete(visiting, node)
+
+		if locations := p.carriedCallableLocationsLocked(node); len(locations) != 0 {
+			for _, location := range locations {
+				previous, exists := bindings[location]
+				if !exists || previous == typefacts.Unreachable || reach == typefacts.Reachable {
+					bindings[location] = reach
+				}
+			}
+			return
+		}
+		if ast.IsIdentifier(node) {
+			target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+			if target == nil || len(target.Declarations) != 1 {
+				return
+			}
+			declaration := target.Declarations[0]
+			if !ast.IsVariableDeclaration(declaration) || !ast.IsVarConst(declaration) {
+				return
+			}
+			collect(declaration.Initializer(), reach, depth+1, visiting)
+			return
+		}
+		if !ast.IsConditionalExpression(node) {
+			return
+		}
+		conditional := node.AsConditionalExpression()
+		if truthy, known := p.literalTruthinessLocked(conditional.Condition, 0); known {
+			if truthy {
+				collect(conditional.WhenTrue, reach, depth+1, visiting)
+			} else {
+				collect(conditional.WhenFalse, reach, depth+1, visiting)
+			}
+			return
+		}
+		alternativeReach := typefacts.ReachUnknown
+		if reach == typefacts.Unreachable {
+			alternativeReach = typefacts.Unreachable
+		}
+		collect(conditional.WhenTrue, alternativeReach, depth+1, visiting)
+		collect(conditional.WhenFalse, alternativeReach, depth+1, visiting)
+	}
+	collect(expression, typefacts.Reachable, 0, make(map[*ast.Node]struct{}))
+
+	answer := make([]typefacts.CallableCarryBinding, 0, len(bindings))
+	for location, reach := range bindings {
+		answer = append(answer, typefacts.CallableCarryBinding{Location: location, Reach: reach})
+	}
+	sort.Slice(answer, func(i, j int) bool {
+		if answer[i].Location.Path != answer[j].Location.Path {
+			return answer[i].Location.Path < answer[j].Location.Path
+		}
+		if answer[i].Location.StartByte != answer[j].Location.StartByte {
+			return answer[i].Location.StartByte < answer[j].Location.StartByte
+		}
+		return answer[i].Location.EndByte < answer[j].Location.EndByte
+	})
+	return answer
 }
 
 // singleCallableLocationsLocked is the same descent restricted to the

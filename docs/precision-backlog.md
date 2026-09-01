@@ -10885,3 +10885,61 @@ consumer rows. Protocol 9 and its existing schema digest remain authoritative.
 No benchmark report, snapshot, generated ledger, or tracked binary changed.
 The full 418-probe Round 3 remeasurement remains deferred until the remaining
 Round 3 slices land; these two probes remain exact fail-closed cases.
+
+## 2026-09-02 — Second-order return carry is exact, bounded, and branch-strengthened
+
+Type Facts protocol 10 adds an exact per-callable return-carry census. A nested
+callable may authorize another callable only through matching path-and-span
+identities, a reachable return site, an explicit `carryReach` lower-bound
+premise, and recursive proof that the return owner itself executes. Conditional
+value alternatives are `Unknown` and satisfy only a may-execute floor; a
+nonliteral conditional return statement has the same may-only strength.
+Unsupported nested control flow omits the whole callable census, absence of
+either root or nested `carryReach` is never authority, and recursion is bounded
+to eight links and 256 visited nodes. The protocol-10 schema digest is
+`sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84`.
+
+Adversarial review found and killed eight independent over-proof routes before
+the slice was accepted: optimistic `if` return statements; missing site strength
+for an identifier initialized by a ternary; labeled-block jumps bypassing
+return, direct-call, and argument-callable evidence; `Unknown` being positive
+may-execute evidence; switch-clause statement ordering; cross-construct jump
+targets; source-order mistakes for sibling branches and `for` updates; and a
+`continue` overridden by an intervening `finally`. The final producer withholds
+positive call/use evidence by exact callable owner and jump-target region:
+`break` owns the whole target subtree, while `continue` owns only the loop body
+unless a `try` lies between it and the target. Tests distinguish break from
+continue, exact and multiply nested labels, target-external `try`, switch cases,
+dead rows, concise-arrow bodies, deep callable nesting, exact path/span identity,
+missing premises, and return-only depth/cycle bounds.
+
+The exact `@solid-primitives/jsx-parser@0.2.0|solid1|only` reproduction moved
+from operation-reachability refusal
+`sha256:3e9278c1f7fe2dd462f91312a3e02919829ea96486b48efc0913bae42a93b012`
+for artifact case
+`ce93bfaf22ad79c324056e933345f563f07b902bcc92d6f7e4f6a6e2576139b0:createToken`
+to an authenticated ordinary receipt. The canonical source chain is now proved
+as `createToken -> returned props closure -> possible token closure -> untrack
+slot 0 -> render(props)`, never from lexical containment alone.
+
+The clean 418-probe Round 3 report records exactly one certification movement:
+343 verified / 50 exact refusals / 25 not attempted becomes 344 / 49 / 25.
+An initial full run timed out while Bun was resolving
+`@solid-primitives/graphql@3.0.0-next.0`; an immediate canonical single-row
+reproducer certified it, and the replacement full run also certified it. The
+timeout report was therefore rejected as infrastructure noise rather than
+pinned as a semantic loss. Gesture v1 remains refused at callable-path demand
+`sha256:2c22a34db13743242edc3a737c021eb3d3de4bf747e118b06c30915ad2bf86db`,
+and `until` remains refused at operation-cardinality demand
+`sha256:15fde3fc57c55117d494a2ece2bd31fbd42fb424f58cf0e6b998eaa5e9878251`.
+
+The attempted runner shortcut for seven not-attempted rows was reverted. A
+generic no-runtime-ESM rule cleared the explicit side-effect-only
+`@solid-devtools/ext-adapter` control, while pre-authentication `.d.ts`
+classification bypassed archive member-kind and symlink/hardlink invariants.
+Those rows require an authenticated `ArtifactApplicability` premise; suffixes,
+empty surfaces, and pre-replay declaration guesses remain non-authoritative.
+The String replacement recovery also remains blocked as recorded above. No
+composition recovery was attempted after the claim-blind dependency witness
+repair: parent-to-dependency semantic mapping is still absent and stays
+fail-closed.

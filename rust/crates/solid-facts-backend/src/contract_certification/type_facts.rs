@@ -2939,14 +2939,60 @@ fn implementation_call_is_executed_within(
     let Some(enclosing) = call.enclosing_callable.as_ref() else {
         return false;
     };
-    let carried_by_return = implementation.control_flow.as_ref().is_some_and(|flow| {
-        flow.returns
-            .iter()
-            .filter(|site| site.reach == Reachability::Reachable)
-            .flat_map(|site| site.carried_callables.iter())
-            .any(|carried| carried == enclosing)
+    // The call and its immediately enclosing callable are one execution
+    // question, not two composition links. Argument/return edges below consume
+    // depth; charging this handoff too would halve the pre-existing bound.
+    callable_is_executed_within(implementation, enclosing, floor, depth, budget)
+}
+
+/// Whether the export invocation can execute one exact nested callable.
+///
+/// This is the shared node of the execution graph. A callable can enter the
+/// graph from the implementation's own return, from an invoking argument slot,
+/// or from a reachable return of another callable already in the graph. The
+/// last edge is deliberately keyed by exact callable locations on both sides:
+/// lexical containment and a merely declared/stored closure carry no weight.
+fn callable_is_executed_within(
+    implementation: &typefacts::ExportImplementationTranscript,
+    callable: &typefacts::Location,
+    floor: ReachabilityFloor,
+    depth: usize,
+    budget: &mut usize,
+) -> bool {
+    if depth > MAX_EXECUTION_PREMISE_DEPTH || *budget == 0 {
+        return false;
+    }
+    *budget -= 1;
+    let carried_by_implementation_return =
+        implementation.control_flow.as_ref().is_some_and(|flow| {
+            flow.returns
+                .iter()
+                .filter(|site| site.reach == Reachability::Reachable)
+                .filter(|site| site.carry_reach.is_some_and(|reach| floor.admits(reach)))
+                .flat_map(|site| site.carried_callables.iter())
+                .any(|carried| carried == callable)
+        });
+    if carried_by_implementation_return {
+        return true;
+    }
+    let carried_by_callable_return = implementation.callable_returns.iter().any(|census| {
+        census.returns.iter().any(|site| {
+            site.reach == Reachability::Reachable
+                && site.carry_reach.is_some_and(|reach| floor.admits(reach))
+                && site
+                    .carried_callables
+                    .iter()
+                    .any(|carried| floor.admits(carried.reach) && &carried.location == callable)
+                && callable_is_executed_within(
+                    implementation,
+                    &census.callable,
+                    floor,
+                    depth + 1,
+                    budget,
+                )
+        })
     });
-    if carried_by_return {
+    if carried_by_callable_return {
         return true;
     }
     implementation.calls.iter().any(|outer| {
@@ -2957,7 +3003,7 @@ fn implementation_call_is_executed_within(
                 carried
                     .locations
                     .iter()
-                    .any(|location| location == enclosing)
+                    .any(|location| location == callable)
             })
             .any(|carried| argument_slot_is_proven_invoking(outer, carried.argument))
             // Every link of the chain answers to the *same* floor, because the
@@ -6019,6 +6065,7 @@ mod tests {
                 "controlFlow": {"returns": [{
                     "location": {"path": "/project/index.js", "startByte": 42, "endByte": 52},
                     "reach": "reachable",
+                    "carryReach": "reachable",
                     "carriedCallables": [
                         {"path": "/project/index.js", "startByte": 5, "endByte": 40}
                     ]
@@ -6427,6 +6474,7 @@ mod tests {
                 "controlFlow": {"returns": [{
                     "location": {"path": "/project/index.js", "startByte": 42, "endByte": 52},
                     "reach": "reachable",
+                    "carryReach": "reachable",
                     "carriedCallables": [
                         {"path": "/project/index.js", "startByte": 5, "endByte": 40}
                     ]
@@ -6539,6 +6587,293 @@ mod tests {
         assert!(!implementation_call_is_executed(
             &implementation,
             &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+    }
+
+    #[test]
+    fn second_order_return_carry_composes_exact_callable_identities() {
+        let mut implementation: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": [{
+                    "location": {"path": "/project/index.js", "startByte": 92, "endByte": 100},
+                    "reach": "reachable",
+                    "carryReach": "reachable",
+                    "carriedCallables": [
+                        {"path": "/project/index.js", "startByte": 5, "endByte": 90}
+                    ]
+                }]},
+                "callableReturns": [{
+                    "callable": {"path": "/project/index.js", "startByte": 5, "endByte": 90},
+                    "returns": [{
+                        "location": {"path": "/project/index.js", "startByte": 70, "endByte": 82},
+                        "reach": "reachable",
+                        "carryReach": "reachable",
+                        "carriedCallables": [{
+                            "location": {
+                                "path": "/project/index.js", "startByte": 20, "endByte": 80
+                            },
+                            "reach": "reachable"
+                        }]
+                    }]
+                }],
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 30, "endByte": 40},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "calleeParameter": {"parameterIndex": 0},
+                    "captured": true,
+                    "enclosingCallable": {
+                        "path": "/project/index.js", "startByte": 20, "endByte": 80
+                    }
+                }]
+            }))
+            .unwrap();
+        assert!(implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+
+        // Missing lower-bound strength is absence of authority, never an
+        // implicit default. Pin both edges independently under both floors.
+        implementation.callable_returns[0].returns[0].carry_reach = None;
+        for floor in [ReachabilityFloor::Reachable, ReachabilityFloor::MayExecute] {
+            assert!(!implementation_call_is_executed(
+                &implementation,
+                &implementation.calls[0],
+                floor
+            ));
+        }
+        implementation.callable_returns[0].returns[0].carry_reach = Some(Reachability::Reachable);
+        implementation.control_flow.as_mut().unwrap().returns[0].carry_reach = None;
+        for floor in [ReachabilityFloor::Reachable, ReachabilityFloor::MayExecute] {
+            assert!(!implementation_call_is_executed(
+                &implementation,
+                &implementation.calls[0],
+                floor
+            ));
+        }
+        implementation.control_flow.as_mut().unwrap().returns[0].carry_reach =
+            Some(Reachability::Reachable);
+
+        // A return site that is not proven reachable cannot add the inner
+        // callable to the execution graph.
+        implementation.callable_returns[0].returns[0].reach = Reachability::Unknown;
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+        implementation.callable_returns[0].returns[0].reach = Reachability::Reachable;
+
+        // A branch-controlled return statement is a may-only edge. This is
+        // separate from the legacy optimistic site reach above.
+        implementation.callable_returns[0].returns[0].carry_reach = Some(Reachability::Unknown);
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        assert!(implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+        implementation.callable_returns[0].returns[0].carry_reach = Some(Reachability::Reachable);
+
+        // The implementation can likewise return the owner callable only on
+        // a possible branch. That first execution edge answers to the same
+        // floor as every nested edge.
+        implementation.control_flow.as_mut().unwrap().returns[0].carry_reach =
+            Some(Reachability::Unknown);
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        assert!(implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+        implementation.control_flow.as_mut().unwrap().returns[0].carry_reach =
+            Some(Reachability::Reachable);
+
+        // A conditional return-carry alternative can satisfy only a may-run
+        // operation. It cannot witness a lower bound of one.
+        implementation.callable_returns[0].returns[0].carried_callables[0].reach =
+            Reachability::Unknown;
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        assert!(implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::MayExecute
+        ));
+        implementation.callable_returns[0].returns[0].carried_callables[0].reach =
+            Reachability::Reachable;
+
+        // The owner of the return must itself execute. Merely naming an edge
+        // from a nested callable that the implementation never returns is not
+        // enough.
+        implementation.callable_returns[0].callable.start_byte = 101;
+        implementation.callable_returns[0].callable.end_byte = 120;
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        implementation.callable_returns[0].callable.start_byte = 5;
+        implementation.callable_returns[0].callable.end_byte = 90;
+
+        implementation.callable_returns[0].callable.path = "/project/other.js".into();
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        implementation.callable_returns[0].callable.path = "/project/index.js".into();
+
+        // Identity is exact across path and span. Byte containment does not
+        // let a neighbouring or same-spanned callable discharge the edge.
+        implementation.callable_returns[0].returns[0].carried_callables[0]
+            .location
+            .path = "/project/other.js".into();
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        implementation.callable_returns[0].returns[0].carried_callables[0]
+            .location
+            .path = "/project/index.js".into();
+        implementation.callable_returns[0].returns[0].carried_callables[0]
+            .location
+            .start_byte = 21;
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        implementation.callable_returns[0].returns[0].carried_callables[0]
+            .location
+            .start_byte = 20;
+        implementation.callable_returns[0].returns.clear();
+        assert!(!implementation_call_is_executed(
+            &implementation,
+            &implementation.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+    }
+
+    #[test]
+    fn callable_return_recursion_is_transitive_bounded_and_cycle_safe() {
+        let location = |index: usize| {
+            json!({
+                "path": "/project/index.js",
+                "startByte": index * 2 + 10,
+                "endByte": index * 2 + 11
+            })
+        };
+        let chain = |edges: usize| -> typefacts::ExportImplementationTranscript {
+            let callable_returns = (0..edges)
+                .map(|index| {
+                    json!({
+                        "callable": location(index),
+                        "returns": [{
+                            "location": {
+                                "path": "/project/index.js",
+                                "startByte": 1000 + index * 2,
+                                "endByte": 1001 + index * 2
+                            },
+                            "reach": "reachable",
+                            "carryReach": "reachable",
+                            "carriedCallables": [{
+                                "location": location(index + 1),
+                                "reach": "reachable"
+                            }]
+                        }]
+                    })
+                })
+                .collect::<Vec<_>>();
+            serde_json::from_value(json!({
+                "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+                "controlFlow": {"returns": [{
+                    "location": {"path": "/project/index.js", "startByte": 5, "endByte": 9},
+                    "reach": "reachable",
+                    "carryReach": "reachable",
+                    "carriedCallables": [location(0)]
+                }]},
+                "callableReturns": callable_returns,
+                "calls": [{
+                    "location": {"path": "/project/index.js", "startByte": 2000, "endByte": 2010},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "captured": true,
+                    "enclosingCallable": location(edges)
+                }]
+            }))
+            .unwrap()
+        };
+
+        let within = chain(MAX_EXECUTION_PREMISE_DEPTH);
+        assert!(implementation_call_is_executed(
+            &within,
+            &within.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+        let beyond = chain(MAX_EXECUTION_PREMISE_DEPTH + 1);
+        assert!(!implementation_call_is_executed(
+            &beyond,
+            &beyond.calls[0],
+            ReachabilityFloor::Reachable
+        ));
+
+        let cycle: typefacts::ExportImplementationTranscript = serde_json::from_value(json!({
+            "location": {"path": "/project/index.js", "startByte": 0, "endByte": 4},
+            "controlFlow": {"returns": []},
+            "callableReturns": [
+                {
+                    "callable": location(0),
+                    "returns": [{
+                        "location": {"path": "/project/index.js", "startByte": 100, "endByte": 101},
+                        "reach": "reachable",
+                        "carryReach": "reachable",
+                        "carriedCallables": [{"location": location(1), "reach": "reachable"}]
+                    }]
+                },
+                {
+                    "callable": location(1),
+                    "returns": [{
+                        "location": {"path": "/project/index.js", "startByte": 102, "endByte": 103},
+                        "reach": "reachable",
+                        "carryReach": "reachable",
+                        "carriedCallables": [{"location": location(0), "reach": "reachable"}]
+                    }]
+                }
+            ],
+            "calls": [{
+                "location": {"path": "/project/index.js", "startByte": 200, "endByte": 210},
+                "reach": "reachable",
+                "kind": "call",
+                "captured": true,
+                "enclosingCallable": location(1)
+            }]
+        }))
+        .unwrap();
+        assert!(!implementation_call_is_executed(
+            &cycle,
+            &cycle.calls[0],
             ReachabilityFloor::Reachable
         ));
     }
@@ -7061,6 +7396,7 @@ mod tests {
                 "controlFlow": {"returns": [{
                     "location": {"path": "/project/index.js", "startByte": 12, "endByte": 92},
                     "reach": "reachable",
+                    "carryReach": "reachable",
                     "carriedCallables": [
                         {"path": "/project/index.js", "startByte": 20, "endByte": 90}
                     ]

@@ -222,9 +222,15 @@ type ExportImplementationTranscript struct {
 	Signature     *SelectedSignature   `cbor:"signature,omitempty" json:"signature,omitempty"`
 	ParameterUses []ParameterUse       `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
 	ControlFlow   *ControlFlowCensus   `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
-	Calls         []ImplementationCall `cbor:"calls,omitempty" json:"calls,omitempty"`
-	Complete      bool                 `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons   []string             `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	// CallableReturns records the return-carry edges owned by each nested
+	// callable in this implementation. The top-level implementation's return
+	// sites remain in ControlFlow; these rows let a consumer compose a returned
+	// callable that itself returns another callable, without treating lexical
+	// nesting as execution.
+	CallableReturns []CallableReturnCensus `cbor:"callableReturns,omitempty" json:"callableReturns,omitempty"`
+	Calls           []ImplementationCall   `cbor:"calls,omitempty" json:"calls,omitempty"`
+	Complete        bool                   `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons     []string               `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 type ParameterValueSource struct {
@@ -464,8 +470,37 @@ type ReturnSite struct {
 	// a nested callable is reachable through the returned value answers it by
 	// containment: the call site lies within one of these ranges, or it does
 	// not. An empty list is never proof that nothing is carried.
-	CarriedCallables []Location                  `cbor:"carriedCallables,omitempty" json:"carriedCallables,omitempty"`
-	Sources          []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
+	CarriedCallables []Location `cbor:"carriedCallables,omitempty" json:"carriedCallables,omitempty"`
+	// CarryReach is the lower-bound strength of this particular value-return
+	// edge. It is absent only for a bare return. Reach remains the
+	// optimistic control-flow observation used by existing consumers; a
+	// conditional statement return therefore needs this separate premise before
+	// it may authorize execution of the value it returns.
+	CarryReach *Reachability               `cbor:"carryReach,omitempty" json:"carryReach,omitempty"`
+	Sources    []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
+}
+
+// CallableReturnCensus is the exact return-carry census for one nested
+// callable. Absence is never proof that the callable returns nothing.
+type CallableReturnCensus struct {
+	Callable Location                  `cbor:"callable" json:"callable"`
+	Returns  []CallableReturnCarrySite `cbor:"returns,omitempty" json:"returns,omitempty"`
+}
+
+type CallableReturnCarrySite struct {
+	Location         Location               `cbor:"location" json:"location"`
+	Reach            Reachability           `cbor:"reach" json:"reach"`
+	CarryReach       *Reachability          `cbor:"carryReach,omitempty" json:"carryReach,omitempty"`
+	CarriedCallables []CallableCarryBinding `cbor:"carriedCallables,omitempty" json:"carriedCallables,omitempty"`
+}
+
+// CallableCarryBinding names one exact callable and whether the returned value
+// carries it on every path through the return expression or only on a possible
+// alternative. Unknown is usable only by a consumer asking a may-execute
+// question; Unreachable carries no authority.
+type CallableCarryBinding struct {
+	Location Location     `cbor:"location" json:"location"`
+	Reach    Reachability `cbor:"reach" json:"reach"`
 }
 
 type ThrowSite struct {

@@ -75,19 +75,18 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // These counts are a live read of benchmarks/ecosystem/report.json and move
   // whenever that report is regenerated against changed proposal semantics.
   // Re-pin them only from a report whose movement is attributable; the current
-  // values follow the producer-root and artifact-mechanics rounds landed
-  // 2026-09-01 (see docs/precision-backlog.md). The latter adds exactly three
-  // authenticated receipts: byte-identical duplicate archive members,
-  // default-export identity, and materialized-root source attribution.
+  // values follow the producer-root, artifact-mechanics, and second-order
+  // return-carry rounds landed 2026-09-01/02 (see docs/precision-backlog.md).
+  // The return-carry slice adds exactly jsx-parser's authenticated receipt.
   assert.deepEqual(ledger.summary.proposalStates, {
     complete: 344,
     "fully-refused": 37,
     partial: 37
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 50,
+    "exact-refusal": 49,
     "not-attempted": 25,
-    verified: 343
+    verified: 344
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -95,7 +94,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 343);
+  assert.equal(ledger.summary.verifiedRows, 344);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -228,6 +227,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/interaction@1.0.0-next.4|solid2|floor",
       "@solid-primitives/interaction@1.0.0-next.4|solid2|head",
       "@solid-primitives/intersection-observer@2.2.5|solid1|only",
+      "@solid-primitives/jsx-parser@0.2.0|solid1|only",
       "@solid-primitives/jsx-tokenizer@1.1.4|solid1|only",
       "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|floor",
       "@solid-primitives/jsx-tokenizer@3.0.0-next.2|solid2|head",

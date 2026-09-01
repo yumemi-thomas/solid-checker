@@ -123,6 +123,19 @@ func callAt(
 	return typefacts.ImplementationCall{}
 }
 
+func hasCallAt(
+	implementation *typefacts.ExportImplementationTranscript,
+	source, needle string,
+) bool {
+	start := strings.Index(source, needle)
+	for _, call := range implementation.Calls {
+		if call.Location.StartByte == start {
+			return true
+		}
+	}
+	return false
+}
+
 func argumentCallables(call typefacts.ImplementationCall, argument int) []typefacts.Location {
 	for _, carried := range call.ArgumentCallables {
 		if carried.Argument == argument {
@@ -130,6 +143,486 @@ func argumentCallables(call typefacts.ImplementationCall, argument int) []typefa
 		}
 	}
 	return nil
+}
+
+func callableReturnsAt(
+	t *testing.T,
+	implementation *typefacts.ExportImplementationTranscript,
+	source, needle string,
+) typefacts.CallableReturnCensus {
+	t.Helper()
+	start := strings.Index(source, needle)
+	if start < 0 {
+		t.Fatalf("source lacks %q", needle)
+	}
+	for _, census := range implementation.CallableReturns {
+		if census.Callable.StartByte == start {
+			return census
+		}
+	}
+	t.Fatalf("no callable-return census starts at %q (byte %d): %#v", needle, start, implementation.CallableReturns)
+	return typefacts.CallableReturnCensus{}
+}
+
+func TestNestedCallableReturnsCarryOnlyExactReachableReturnedValues(t *testing.T) {
+	source := `declare const registry: Array<() => void>;
+declare function createEffect(callback: () => void): void;
+function secondOrder(callback: () => void) {
+  return (props: unknown) => {
+    void props;
+    const token = () => callback();
+    return token;
+  };
+}
+function deadReturn(callback: () => void) {
+  return () => {
+    const hidden = () => callback();
+    if (false) return hidden;
+    return () => {};
+  };
+}
+function storedOnly(callback: () => void) {
+  return () => {
+    const stored = () => callback();
+    registry.push(stored);
+    return () => {};
+  };
+}
+function unsupportedFlow(callback: () => void) {
+  return () => {
+    for (const value of []) void value;
+    return () => callback();
+  };
+}
+function conditionalChild(callback: () => void, flag: boolean) {
+  return () => {
+    if (flag) return () => callback();
+    return () => {};
+  };
+}
+function conditionalOwner(callback: () => void, flag: boolean) {
+  if (flag) return () => callback();
+  return () => {};
+}
+function labelledJump(callback: () => void, flag: boolean) {
+  return () => {
+    outer: {
+      if (flag) break outer;
+      return () => callback();
+    }
+    return () => {};
+  };
+}
+function topLevelJump(callback: () => void, flag: boolean) {
+  outer: {
+    if (flag) break outer;
+    return () => callback();
+  }
+  return () => {};
+}
+function directJump(directCallback: () => void, flag: boolean) {
+  outer: {
+    if (flag) break outer;
+    directCallback();
+  }
+}
+function nestedJump(nestedCallback: () => void, flag: boolean) {
+  createEffect(() => {
+    outer: {
+      if (flag) break outer;
+      nestedCallback();
+    }
+  });
+}
+function deadAfterContinue(deadCallback: () => void) {
+  for (;;) {
+    continue;
+    deadCallback();
+  }
+}
+function deadAfterBreak(breakCallback: () => void) {
+  while (true) {
+    break;
+    breakCallback();
+  }
+}
+function deadAfterSwitchBreak(switchCallback: () => void, value: number) {
+  switch (value) {
+    case 1:
+      break;
+      switchCallback();
+  }
+}
+function crossSwitchJump(crossSwitchCallback: () => void, value: number) {
+  outer: while (true) {
+    switch (value) { default: continue outer; }
+    crossSwitchCallback();
+  }
+}
+function crossTryJump(crossTryCallback: () => void) {
+  outer: while (true) {
+    try { break outer; } catch {}
+    crossTryCallback();
+  }
+}
+function reverseSiblingJump(reverseCallback: () => void, flag: boolean) {
+  outer: {
+    if (flag) { reverseCallback(); } else { break outer; }
+  }
+}
+function breakSkipsUpdate(breakUpdateCallback: () => void) {
+  for (let index = 0; index < 1; breakUpdateCallback()) { break; }
+}
+function continueRunsUpdate(continueUpdateCallback: () => void) {
+  for (let index = 0; index < 1; continueUpdateCallback()) { continue; }
+}
+function labelledContinueRunsUpdate(labelledUpdateCallback: () => void) {
+  outer: inner: for (let index = 0; index < 1; labelledUpdateCallback()) { continue outer; }
+}
+function finallyStopsContinueUpdate(finallyUpdateCallback: () => void) {
+  for (let index = 0; index < 1; finallyUpdateCallback()) {
+    try { continue; } finally { return; }
+  }
+}
+function outerTryContinueUpdate(outerTryCallback: () => void) {
+  try {
+    outer: for (let index = 0; index < 1; outerTryCallback()) { continue outer; }
+  } finally {}
+}
+function nestedLabelContinueUpdates(outerUpdateCallback: () => void, innerUpdateCallback: () => void) {
+  outer: for (let outerIndex = 0; outerIndex < 1; outerUpdateCallback()) {
+    inner: for (let innerIndex = 0; innerIndex < 1; innerUpdateCallback()) {
+      continue outer;
+    }
+  }
+}
+void secondOrder;
+void deadReturn;
+void storedOnly;
+void unsupportedFlow;
+void conditionalChild;
+void conditionalOwner;
+void labelledJump;
+void topLevelJump;
+void directJump;
+void nestedJump;
+void deadAfterContinue;
+void deadAfterBreak;
+void deadAfterSwitchBreak;
+void crossSwitchJump;
+void crossTryJump;
+void reverseSiblingJump;
+void breakSkipsUpdate;
+void continueRunsUpdate;
+void labelledContinueRunsUpdate;
+void finallyStopsContinueUpdate;
+void outerTryContinueUpdate;
+void nestedLabelContinueUpdates;
+`
+	censuses := implementationTranscriptsForFunctions(
+		t, source, []string{
+			"secondOrder", "deadReturn", "storedOnly", "unsupportedFlow",
+			"conditionalChild", "conditionalOwner", "labelledJump", "topLevelJump",
+			"directJump", "nestedJump", "deadAfterContinue", "deadAfterBreak",
+			"deadAfterSwitchBreak", "crossSwitchJump", "crossTryJump",
+			"reverseSiblingJump", "breakSkipsUpdate", "continueRunsUpdate",
+			"labelledContinueRunsUpdate", "finallyStopsContinueUpdate",
+			"outerTryContinueUpdate", "nestedLabelContinueUpdates",
+		},
+	)
+
+	outer := callableReturnsAt(t, censuses["secondOrder"], source, "(props: unknown) =>")
+	innerStart := strings.Index(source, "() => callback()")
+	if len(outer.Returns) != 1 || outer.Returns[0].Reach != typefacts.Reachable ||
+		len(outer.Returns[0].CarriedCallables) != 1 ||
+		outer.Returns[0].CarriedCallables[0].Location.StartByte != innerStart ||
+		outer.Returns[0].CarriedCallables[0].Reach != typefacts.Reachable {
+		t.Fatalf("second-order return census = %#v, want one reachable exact inner callable", outer)
+	}
+
+	dead := callableReturnsAt(t, censuses["deadReturn"], source, "() => {\n    const hidden")
+	hiddenStart := strings.Index(source, "() => callback();\n    if (false)")
+	var hiddenReturn *typefacts.CallableReturnCarrySite
+	for index := range dead.Returns {
+		if len(dead.Returns[index].CarriedCallables) == 1 &&
+			dead.Returns[index].CarriedCallables[0].Location.StartByte == hiddenStart {
+			hiddenReturn = &dead.Returns[index]
+		}
+	}
+	if hiddenReturn == nil || hiddenReturn.Reach != typefacts.Unreachable {
+		t.Fatalf("literal-dead callable return = %#v, want an unreachable carried edge", dead.Returns)
+	}
+
+	stored := callableReturnsAt(t, censuses["storedOnly"], source, "() => {\n    const stored")
+	storedStart := strings.LastIndex(source, "() => callback()")
+	for _, site := range stored.Returns {
+		for _, carried := range site.CarriedCallables {
+			if carried.Location.StartByte == storedStart {
+				t.Fatalf("stored-only callable leaked into return carry: %#v", stored)
+			}
+		}
+	}
+	unsupportedStart := strings.Index(source, "() => {\n    for (const value")
+	for _, census := range censuses["unsupportedFlow"].CallableReturns {
+		if census.Callable.StartByte == unsupportedStart {
+			t.Fatalf("unsupported nested control flow authorized a return census: %#v", census)
+		}
+	}
+
+	conditionalChild := callableReturnsAt(
+		t, censuses["conditionalChild"], source, "() => {\n    if (flag)",
+	)
+	conditionalChildStart := strings.Index(source, "() => callback();\n    return () => {};")
+	var conditionalChildReturn *typefacts.CallableReturnCarrySite
+	for index := range conditionalChild.Returns {
+		if len(conditionalChild.Returns[index].CarriedCallables) == 1 &&
+			conditionalChild.Returns[index].CarriedCallables[0].Location.StartByte == conditionalChildStart {
+			conditionalChildReturn = &conditionalChild.Returns[index]
+		}
+	}
+	if conditionalChildReturn == nil || conditionalChildReturn.Reach != typefacts.Reachable ||
+		conditionalChildReturn.CarryReach == nil ||
+		*conditionalChildReturn.CarryReach != typefacts.ReachUnknown {
+		t.Fatalf(
+			"branch-controlled child return = %#v, want optimistic site with may-only carry authority",
+			conditionalChild.Returns,
+		)
+	}
+
+	conditionalOwnerFunction := strings.Index(source, "function conditionalOwner")
+	conditionalOwnerStart := conditionalOwnerFunction +
+		strings.Index(source[conditionalOwnerFunction:], "() => callback();")
+	var conditionalOwnerReturn *typefacts.ReturnSite
+	for index := range censuses["conditionalOwner"].ControlFlow.Returns {
+		site := &censuses["conditionalOwner"].ControlFlow.Returns[index]
+		if len(site.CarriedCallables) == 1 && site.CarriedCallables[0].StartByte == conditionalOwnerStart {
+			conditionalOwnerReturn = site
+		}
+	}
+	if conditionalOwnerReturn == nil || conditionalOwnerReturn.Reach != typefacts.Reachable ||
+		conditionalOwnerReturn.CarryReach == nil ||
+		*conditionalOwnerReturn.CarryReach != typefacts.ReachUnknown {
+		t.Fatalf(
+			"branch-controlled owner return = %#v, want optimistic site with may-only carry authority",
+			censuses["conditionalOwner"].ControlFlow.Returns,
+		)
+	}
+
+	labelledStart := strings.Index(source, "() => {\n    outer:")
+	for _, census := range censuses["labelledJump"].CallableReturns {
+		if census.Callable.StartByte == labelledStart {
+			t.Fatalf("unmodelled labelled jump authorized a return census: %#v", census)
+		}
+	}
+
+	for _, site := range censuses["topLevelJump"].ControlFlow.Returns {
+		if site.CarryReach != nil {
+			t.Fatalf("unsupported top-level jump retained return authority: %#v", site)
+		}
+	}
+
+	for name, needle := range map[string]string{
+		"directJump": "directCallback();",
+		"nestedJump": "nestedCallback();",
+	} {
+		if hasCallAt(censuses[name], source, needle) {
+			t.Fatalf("%s retained a call from an unsupported frame: %#v", name, censuses[name].Calls)
+		}
+	}
+	for name, needle := range map[string]string{
+		"directJump": "directCallback();",
+		"nestedJump": "nestedCallback();",
+	} {
+		start := strings.Index(source, needle)
+		var found *typefacts.ParameterUse
+		for index := range censuses[name].ParameterUses {
+			if censuses[name].ParameterUses[index].Location.StartByte == start {
+				found = &censuses[name].ParameterUses[index]
+			}
+		}
+		if found != nil {
+			t.Fatalf("%s retained a parameter use from an unsupported frame: %#v", name, found)
+		}
+	}
+
+	deadCall := callAt(t, censuses["deadAfterContinue"], source, "deadCallback();")
+	if deadCall.Reach != typefacts.Unreachable {
+		t.Fatalf("call after continue = %#v, want unreachable", deadCall)
+	}
+	deadStart := strings.Index(source, "deadCallback();")
+	var deadUse *typefacts.ParameterUse
+	for index := range censuses["deadAfterContinue"].ParameterUses {
+		if censuses["deadAfterContinue"].ParameterUses[index].Location.StartByte == deadStart {
+			deadUse = &censuses["deadAfterContinue"].ParameterUses[index]
+		}
+	}
+	if deadUse == nil || deadUse.Reach != typefacts.Unreachable {
+		t.Fatalf("parameter use after continue = %#v, want unreachable", deadUse)
+	}
+	for name, needle := range map[string]string{
+		"deadAfterBreak":       "breakCallback();",
+		"deadAfterSwitchBreak": "switchCallback();",
+	} {
+		call := callAt(t, censuses[name], source, needle)
+		if call.Reach != typefacts.Unreachable {
+			t.Fatalf("%s call after handled break = %#v, want unreachable", name, call)
+		}
+		start := strings.Index(source, needle)
+		var use *typefacts.ParameterUse
+		for index := range censuses[name].ParameterUses {
+			if censuses[name].ParameterUses[index].Location.StartByte == start {
+				use = &censuses[name].ParameterUses[index]
+			}
+		}
+		if use == nil || use.Reach != typefacts.Unreachable {
+			t.Fatalf("%s use after handled break = %#v, want unreachable", name, use)
+		}
+	}
+	for name, needle := range map[string]string{
+		"crossSwitchJump":    "crossSwitchCallback();",
+		"crossTryJump":       "crossTryCallback();",
+		"reverseSiblingJump": "reverseCallback();",
+		"breakSkipsUpdate":   "breakUpdateCallback())",
+	} {
+		if hasCallAt(censuses[name], source, needle) {
+			t.Fatalf("%s retained a call across an unmodelled jump: %#v", name, censuses[name].Calls)
+		}
+		start := strings.Index(source, needle)
+		for _, use := range censuses[name].ParameterUses {
+			if use.Location.StartByte == start {
+				t.Fatalf("%s retained a use across an unmodelled jump: %#v", name, use)
+			}
+		}
+	}
+	continueCall := callAt(
+		t, censuses["continueRunsUpdate"], source, "continueUpdateCallback())",
+	)
+	if continueCall.Reach != typefacts.ReachUnknown {
+		t.Fatalf("for-update call after continue = %#v, want possible execution", continueCall)
+	}
+	continueStart := strings.Index(source, "continueUpdateCallback())")
+	var continueUse *typefacts.ParameterUse
+	for index := range censuses["continueRunsUpdate"].ParameterUses {
+		if censuses["continueRunsUpdate"].ParameterUses[index].Location.StartByte == continueStart {
+			continueUse = &censuses["continueRunsUpdate"].ParameterUses[index]
+		}
+	}
+	if continueUse == nil || continueUse.Reach != typefacts.ReachUnknown {
+		t.Fatalf("for-update use after continue = %#v, want possible execution", continueUse)
+	}
+	labelledCall := callAt(
+		t, censuses["labelledContinueRunsUpdate"], source, "labelledUpdateCallback())",
+	)
+	if labelledCall.Reach != typefacts.ReachUnknown {
+		t.Fatalf("labeled for-update call = %#v, want possible execution", labelledCall)
+	}
+	labelledUpdateStart := strings.Index(source, "labelledUpdateCallback())")
+	var labelledUse *typefacts.ParameterUse
+	for index := range censuses["labelledContinueRunsUpdate"].ParameterUses {
+		if censuses["labelledContinueRunsUpdate"].ParameterUses[index].Location.StartByte == labelledUpdateStart {
+			labelledUse = &censuses["labelledContinueRunsUpdate"].ParameterUses[index]
+		}
+	}
+	if labelledUse == nil || labelledUse.Reach != typefacts.ReachUnknown {
+		t.Fatalf("labeled for-update use = %#v, want possible execution", labelledUse)
+	}
+	for name, needle := range map[string]string{
+		"finallyStopsContinueUpdate": "finallyUpdateCallback())",
+	} {
+		if hasCallAt(censuses[name], source, needle) {
+			t.Fatalf("%s retained an update call overridden by finally: %#v", name, censuses[name].Calls)
+		}
+		start := strings.Index(source, needle)
+		for _, use := range censuses[name].ParameterUses {
+			if use.Location.StartByte == start {
+				t.Fatalf("%s retained an update use overridden by finally: %#v", name, use)
+			}
+		}
+	}
+	for name, needle := range map[string]string{
+		"outerTryContinueUpdate":     "outerTryCallback())",
+		"nestedLabelContinueUpdates": "outerUpdateCallback())",
+	} {
+		call := callAt(t, censuses[name], source, needle)
+		if call.Reach != typefacts.ReachUnknown {
+			t.Fatalf("%s target-external update call = %#v, want possible execution", name, call)
+		}
+		start := strings.Index(source, needle)
+		var use *typefacts.ParameterUse
+		for index := range censuses[name].ParameterUses {
+			if censuses[name].ParameterUses[index].Location.StartByte == start {
+				use = &censuses[name].ParameterUses[index]
+			}
+		}
+		if use == nil || use.Reach != typefacts.ReachUnknown {
+			t.Fatalf("%s target-external update use = %#v, want possible execution", name, use)
+		}
+	}
+	innerNeedle := "innerUpdateCallback())"
+	if hasCallAt(censuses["nestedLabelContinueUpdates"], source, innerNeedle) {
+		t.Fatalf(
+			"continue outer retained the inner-loop update call: %#v",
+			censuses["nestedLabelContinueUpdates"].Calls,
+		)
+	}
+	innerUpdateStart := strings.Index(source, innerNeedle)
+	for _, use := range censuses["nestedLabelContinueUpdates"].ParameterUses {
+		if use.Location.StartByte == innerUpdateStart {
+			t.Fatalf("continue outer retained the inner-loop update use: %#v", use)
+		}
+	}
+}
+
+func TestSecondOrderReturnCarryBindsTheJSXParserExecutionChain(t *testing.T) {
+	source := `import { untrack } from "solid-js";
+function createToken(render?: (props: unknown) => unknown) {
+  return (props: unknown) => {
+    const token = render ? () => untrack(() => render(props)) : () => "";
+    return token;
+  };
+}
+void createToken;
+`
+	implementation := implementationTranscriptsForProject(
+		t,
+		source,
+		[]string{"createToken"},
+		map[string]string{
+			"solid-js.d.ts": `declare module "solid-js" {
+  export function untrack<T>(callback: () => T): T;
+}`,
+		},
+	)["createToken"]
+
+	outer := callableReturnsAt(t, implementation, source, "(props: unknown) => {\n    const token")
+	tokenStart := strings.Index(source, "() => untrack")
+	if len(outer.Returns) != 1 {
+		t.Fatalf("outer token returns = %#v, want one return site", outer.Returns)
+	}
+	var tokenBinding *typefacts.CallableCarryBinding
+	for index := range outer.Returns[0].CarriedCallables {
+		if outer.Returns[0].CarriedCallables[index].Location.StartByte == tokenStart {
+			tokenBinding = &outer.Returns[0].CarriedCallables[index]
+		}
+	}
+	if outer.Returns[0].Reach != typefacts.Reachable || outer.Returns[0].CarryReach == nil ||
+		*outer.Returns[0].CarryReach != typefacts.Reachable || tokenBinding == nil ||
+		tokenBinding.Reach != typefacts.ReachUnknown {
+		t.Fatalf("outer token return = %#v, want the exact possible token closure", outer)
+	}
+
+	untrackCall := callAt(t, implementation, source, "untrack(() => render(props))")
+	renderArrowStart := strings.Index(source, "() => render(props)")
+	carried := argumentCallables(untrackCall, 0)
+	if untrackCall.TargetModule != "solid-js" || untrackCall.TargetName != "untrack" ||
+		len(carried) != 1 || carried[0].StartByte != renderArrowStart {
+		t.Fatalf("untrack execution link = %#v, carried %#v", untrackCall, carried)
+	}
+	renderCall := callAt(t, implementation, source, "render(props)")
+	if renderCall.EnclosingCallable == nil || renderCall.EnclosingCallable.StartByte != renderArrowStart ||
+		renderCall.CalleeParameter == nil || renderCall.CalleeParameter.ParameterIndex != 0 {
+		t.Fatalf("render call binding = %#v, want parameter 0 inside the exact render arrow", renderCall)
+	}
 }
 
 // TestArgumentCallablesCarryTheSameProofReturnSitesDo pins the argument-side
@@ -996,8 +1489,16 @@ func TestAConciseCallableBodyIsStillANestedCallable(t *testing.T) {
 	// finds `function <name>` cannot spell it.
 	source := `var wrap = (cb: () => void) => () => cb();
 var callsDirectly = (cb: () => void) => cb();
+var conciseJump = (conciseCb: () => void) => () => {
+  outer: { break outer; conciseCb(); }
+};
+var deepJump = (deepCb: () => void) => () => () => {
+  outer: { break outer; deepCb(); }
+};
 void wrap;
 void callsDirectly;
+void conciseJump;
+void deepJump;
 `
 	dir := t.TempDir()
 	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
@@ -1008,7 +1509,7 @@ void callsDirectly;
 	defer opened.Close()
 	analyzer := opened.(typefacts.ExportValueAnalyzer)
 	path := filepath.Join(dir, "facts.ts")
-	names := []string{"wrap", "callsDirectly"}
+	names := []string{"wrap", "callsDirectly", "conciseJump", "deepJump"}
 	demands := make([]typefacts.ExportValueDemand, 0, len(names))
 	for _, name := range names {
 		queryStart := strings.LastIndex(source, "void "+name+";") + len("void ")
@@ -1033,6 +1534,22 @@ void callsDirectly;
 			t.Fatalf("%s has no implementation census: %#v", name, answer.Transcripts[index])
 		}
 		censuses[name] = implementation
+	}
+	for name, needle := range map[string]string{
+		"conciseJump": "conciseCb();",
+		"deepJump":    "deepCb();",
+	} {
+		start := strings.Index(source, needle)
+		for _, call := range censuses[name].Calls {
+			if call.Location.StartByte == start && call.Reach != typefacts.Unreachable {
+				t.Fatalf("%s retained an authoritative call after its exact jump: %#v", name, call)
+			}
+		}
+		for _, use := range censuses[name].ParameterUses {
+			if use.Location.StartByte == start && use.Reach != typefacts.Unreachable {
+				t.Fatalf("%s retained an authoritative use after its exact jump: %#v", name, use)
+			}
+		}
 	}
 
 	// The honest stamp: `cb()` runs when the *returned* arrow runs, not when
@@ -1060,7 +1577,7 @@ void callsDirectly;
 
 	// A concise body that is *not* a callable is untouched: `cb => cb()` really
 	// does call its parameter, in its own frame.
-	direct := callAt(t, censuses["callsDirectly"], source, "cb();\nvoid wrap")
+	direct := callAt(t, censuses["callsDirectly"], source, "cb();\nvar conciseJump")
 	if direct.Captured || direct.EnclosingCallable != nil {
 		t.Fatalf("a concise *call* body is captured=%v, want uncaptured", direct.Captured)
 	}
