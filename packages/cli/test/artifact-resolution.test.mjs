@@ -678,6 +678,50 @@ describe("exact artifact records and closure", () => {
     ]);
   });
 
+  test("records the complete declaration census independently of shared bindings", () => {
+    const manifest = {
+      name: "declaration-census",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": "export const shared = 1; export const runtimeOnly = 2;\n",
+      "index.d.ts":
+        "export declare const shared: number; export declare const declarationOnly: number;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "declaration-census",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+
+    expect(Object.keys(record.exports)).toEqual(["shared"]);
+    expect(record.declarationExports).toEqual(["declarationOnly", "shared"]);
+  });
+
+  test("declaration census retains namespaces without granting an exact binding", () => {
+    const manifest = {
+      name: "namespace-census",
+      version: "1.0.0",
+      type: "module",
+      exports: "./index.ts"
+    };
+    const root = fixture(manifest, {
+      "index.ts":
+        "export namespace Config { export const inner = 1; } export const shared = 1;\n"
+    });
+    const record = resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "namespace-census",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+
+    expect(record.declarationExports).toEqual(["Config", "shared"]);
+    expect(Object.keys(record.exports)).toEqual(["shared"]);
+  });
+
   test("dependency planning retains closure independently of unresolved external exports", () => {
     const manifest = {
       name: "external-frontier",
@@ -732,6 +776,251 @@ describe("exact artifact records and closure", () => {
       "./index.js:external-runtime"
     ]);
     expect(graph.closure.frontiers).toEqual([]);
+  });
+
+  test("dependency planning marks only manifest-declared optional peer edges", () => {
+    const root = fixture(
+      {
+        name: "optional-peer-edges",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+        peerDependencies: {
+          "@solidjs/router": ">=0.9.0",
+          "required-peer": "^1.0.0",
+          "false-optional": "^1.0.0",
+          "truthy-optional": "^1.0.0"
+        },
+        peerDependenciesMeta: {
+          "@solidjs/router": { optional: true },
+          "false-optional": { optional: false },
+          "truthy-optional": { optional: "yes" },
+          "meta-only": { optional: true }
+        }
+      },
+      {
+        "index.js": [
+          'import "@solidjs/router";',
+          'void import("@solidjs/router");',
+          'void require("@solidjs/router");',
+          'void import("required-peer");',
+          'void import("false-optional");',
+          'void import("truthy-optional");',
+          'void import("meta-only");'
+        ].join("\n"),
+        "index.d.ts": "export declare const value: number;\n"
+      }
+    );
+
+    const planned = resolvePackageArtifactClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "optional-peer-edges",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(planned.externalDependencies).toEqual([
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "dynamic",
+        specifier: "@solidjs/router",
+        optionalPeer: true
+      },
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "dynamic",
+        specifier: "@solidjs/router",
+        optionalPeer: true,
+        dynamicImport: true
+      },
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "dynamic",
+        specifier: "false-optional",
+        dynamicImport: true
+      },
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "dynamic",
+        specifier: "meta-only",
+        dynamicImport: true
+      },
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "dynamic",
+        specifier: "required-peer",
+        dynamicImport: true
+      },
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "dynamic",
+        specifier: "truthy-optional",
+        dynamicImport: true
+      },
+      {
+        axis: "runtime",
+        importerPath: "./index.js",
+        kind: "import",
+        specifier: "@solidjs/router",
+        optionalPeer: true
+      }
+    ]);
+    const census = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "optional-peer-edges",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(census.closure.hazards.filter(hazard =>
+      hazard.source === "./index.js:@solidjs/router"
+    )).toEqual([
+      {
+        kind: "unaccepted-external-dependency",
+        source: "./index.js:@solidjs/router",
+        importerPath: "./index.js",
+        specifier: "@solidjs/router",
+        affectedExports: [],
+        affectedDomains: expect.any(Array),
+        optionalPeer: true
+      },
+      {
+        kind: "unaccepted-external-dependency",
+        source: "./index.js:@solidjs/router",
+        importerPath: "./index.js",
+        specifier: "@solidjs/router",
+        affectedExports: [],
+        affectedDomains: expect.any(Array),
+        optionalPeer: true,
+        dynamicImport: true
+      }
+    ]);
+  });
+
+  test("planning hazards keep colon-bearing importer paths structurally separate", () => {
+    const root = fixture(
+      {
+        name: "colon-importer",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+        peerDependencies: { "optional-peer": "^1.0.0" },
+        peerDependenciesMeta: { "optional-peer": { optional: true } }
+      },
+      {
+        "index.js": 'import "./dist/chunk:browser.js";\n',
+        "index.d.ts": "export declare const value: number;\n",
+        "dist/chunk:browser.js": 'void import("optional-peer");\n'
+      }
+    );
+
+    const census = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "colon-importer",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(census.closure.hazards).toEqual([
+      expect.objectContaining({
+        source: "./dist/chunk:browser.js:optional-peer",
+        importerPath: "./dist/chunk:browser.js",
+        specifier: "optional-peer",
+        optionalPeer: true,
+        dynamicImport: true
+      })
+    ]);
+  });
+
+  test("optional peer metadata never crosses a nested package scope", () => {
+    const root = fixture(
+      {
+        name: "outer-scope",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } },
+        peerDependencies: { "outer-optional": "^1.0.0" },
+        peerDependenciesMeta: { "outer-optional": { optional: true } }
+      },
+      {
+        "index.js": 'import "./nested-a/index.js"; import "./nested-b/index.js";\n',
+        "index.d.ts": "export declare const value: number;\n",
+        "nested-a/package.json": JSON.stringify({ name: "nested-a", version: "1.0.0" }),
+        "nested-a/index.js": 'void import("outer-optional");\n',
+        "nested-b/package.json": JSON.stringify({
+          name: "nested-b",
+          version: "1.0.0",
+          peerDependencies: { "nested-optional": "^1.0.0" },
+          peerDependenciesMeta: { "nested-optional": { optional: true } }
+        }),
+        "nested-b/index.js": 'void import("nested-optional");\n'
+      }
+    );
+
+    const planned = resolvePackageArtifactClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "outer-scope",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(planned.externalDependencies.filter(edge => edge.kind === "dynamic")).toEqual([
+      {
+        axis: "runtime",
+        importerPath: "./nested-a/index.js",
+        kind: "dynamic",
+        specifier: "outer-optional",
+        dynamicImport: true
+      },
+      {
+        axis: "runtime",
+        importerPath: "./nested-b/index.js",
+        kind: "dynamic",
+        specifier: "nested-optional",
+        dynamicImport: true
+      }
+    ]);
+    const census = resolvePackageDependencyPlanClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "outer-scope",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(census.closure.hazards).toEqual([
+      expect.objectContaining({
+        source: "./nested-a/index.js:outer-optional",
+        dynamicImport: true
+      }),
+      expect.objectContaining({
+        source: "./nested-b/index.js:nested-optional",
+        dynamicImport: true
+      })
+    ]);
+    expect(census.closure.hazards.some(hazard => hazard.optionalPeer)).toBe(false);
+  });
+
+  test("an exported external namespace import becomes a semantic re-export edge", () => {
+    const manifest = {
+      name: "external-namespace-forwarder",
+      version: "1.0.0",
+      exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+    };
+    const root = fixture(manifest, {
+      "index.js": 'import * as prettyFormat from "pretty-format"; export { prettyFormat };\n',
+      "index.d.ts": "export declare const prettyFormat: object;\n"
+    });
+
+    const planned = resolvePackageArtifactClosure({
+      importer: join(root, "consumer.mjs"),
+      specifier: "external-namespace-forwarder",
+      packageRoot: root,
+      integrity: "sha512:test"
+    });
+    expect(planned.externalDependencies).toEqual([{
+      axis: "runtime",
+      importerPath: "./index.js",
+      kind: "reexport",
+      specifier: "pretty-format"
+    }]);
   });
 
   test("dependency graph planning follows exact package imports aliases inside the authenticated root", () => {
@@ -1353,6 +1642,49 @@ describe("exact artifact records and closure", () => {
     expect(record.exports.alias).toEqual(exports.renamed);
     expect(record.exports.importedAlias).toEqual(exports.renamed);
     expect(record.exports.default).toBeUndefined();
+  });
+
+  test("never grants an external namespace binding from accepted dependency names", () => {
+    const dependencyRoot = fixture(
+      { name: "accepted", version: "1.0.0" },
+      {
+        "index.js": "export const child = 1;\n",
+        "index.d.ts": "export declare const child: number;\n"
+      }
+    );
+    const root = fixture(
+      {
+        name: "namespace-wrapper",
+        version: "1.0.0",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      },
+      {
+        "index.js": 'import * as acceptedNamespace from "accepted"; export { acceptedNamespace };\n',
+        "index.d.ts": 'import * as acceptedNamespace from "accepted"; export { acceptedNamespace };\n'
+      }
+    );
+    const target = axis => ({
+      module: {
+        path: join(dependencyRoot, axis === "runtime" ? "index.js" : "index.d.ts"),
+        digest: `sha256:${(axis === "runtime" ? "2" : "3").repeat(64)}`
+      },
+      exportName: "*"
+    });
+
+    expect(() => resolvePackageArtifacts({
+      importer: join(root, "consumer.mjs"),
+      specifier: "namespace-wrapper",
+      packageRoot: root,
+      integrity: "sha512:test",
+      acceptedDependencies: {
+        accepted: {
+          packageName: "accepted",
+          artifactCase: "artifact-case:accepted",
+          acceptedContractDigest: `sha256:${"1".repeat(64)}`,
+          exports: { "*": { runtime: target("runtime"), declarations: target("declarations") } }
+        }
+      }
+    })).toThrow(/accepted dependency .* has no exact runtime binding for export/);
   });
 
   test("names the missing accepted dependency for an import-then-export binding", () => {

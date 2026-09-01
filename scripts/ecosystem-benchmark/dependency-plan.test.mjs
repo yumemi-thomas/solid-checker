@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { test } from "vitest";
 
 import { planRecursiveDependencies } from "./lib/dependency-plan.mjs";
+import { ArtifactResolutionError } from "../../packages/cli/scripts/artifact-resolution.mjs";
 
 const digest = bytes =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -54,6 +55,8 @@ function fakeResolution({ graph }) {
         hazards: dependencies.map(dependency => ({
           kind: "unaccepted-external-dependency",
           source: `./index.js:${dependency}`,
+          importerPath: "./index.js",
+          specifier: dependency,
           affectedExports: [],
           affectedDomains: ["return-semantics"]
         }))
@@ -101,6 +104,177 @@ test("recursive dependency planning retains exact subpaths, versions, integritie
         .map(leaf => leaf.package),
       ["leaf"]
     );
+    assert.equal(plan.graphDigest, digest(JSON.stringify({
+      roots: plan.roots,
+      nodes: plan.nodes,
+      edges: plan.edges,
+      cycles: plan.cycles,
+      leaves: plan.leaves
+    })), "an empty additive conditional census does not perturb existing graph identities");
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an absent dynamic optional peer is conditional planning evidence, not a refusal leaf", () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-optional-peer-plan-"));
+  try {
+    const root = packageRoot(project, "root", "1.0.0");
+    const resolver = fakeResolution({ graph: { "root@1.0.0:root": [] } });
+    const plan = planRecursiveDependencies({
+      projectDir: project,
+      rootPackageRoot: root,
+      rootPackage: "root",
+      rootVersion: "1.0.0",
+      rootIntegrity: "sha512-root",
+      artifactCases: [{ entrypoint: ".", conditions: [] }],
+      resolveClosure: input => {
+        const resolved = resolver(input);
+        resolved.closure.hazards = [{
+          kind: "unaccepted-external-dependency",
+          source: "./index.js:optional-peer",
+          importerPath: "./index.js",
+          specifier: "optional-peer",
+          affectedExports: [],
+          affectedDomains: ["return-semantics"],
+          optionalPeer: true,
+          dynamicImport: true
+        }];
+        return resolved;
+      },
+      locatePackage: () => {
+        throw new ArtifactResolutionError("package-not-found", "absent");
+      },
+      pathExists: () => false,
+      integrityForVersion: () => null
+    });
+
+    assert.equal(plan.status, "conditional-only");
+    assert.deepEqual(plan.leaves, []);
+    assert.deepEqual(plan.conditionalDependencies.map(({ id: _id, ...entry }) => entry), [{
+      kind: "absent-optional-peer",
+      node: plan.roots[0].node,
+      specifier: "optional-peer"
+    }]);
+    assert.deepEqual(plan.edges, [{
+      from: plan.roots[0].node,
+      specifier: "optional-peer",
+      to: null,
+      conditional: "absent-optional-peer"
+    }]);
+    assert.equal(plan.graphDigest, digest(JSON.stringify({
+      roots: plan.roots,
+      nodes: plan.nodes,
+      edges: plan.edges,
+      cycles: plan.cycles,
+      leaves: plan.leaves,
+      conditionalDependencies: plan.conditionalDependencies
+    })), "a nonempty conditional census is identity-bearing");
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("optional-peer planning preserves present, inaccessible, and static failures", () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-optional-peer-failures-"));
+  try {
+    const root = packageRoot(project, "root", "1.0.0");
+    const resolver = fakeResolution({ graph: { "root@1.0.0:root": [] } });
+    const planFor = ({ hazards, pathExists }) => planRecursiveDependencies({
+      projectDir: project,
+      rootPackageRoot: root,
+      rootPackage: "root",
+      rootVersion: "1.0.0",
+      rootIntegrity: "sha512-root",
+      artifactCases: [{ entrypoint: ".", conditions: [] }],
+      resolveClosure: input => {
+        const resolved = resolver(input);
+        resolved.closure.hazards = hazards;
+        return resolved;
+      },
+      locatePackage: () => {
+        throw new ArtifactResolutionError("package-not-found", "unresolved");
+      },
+      pathExists,
+      integrityForVersion: () => null
+    });
+    const hazard = (dynamicImport, optionalPeer = true) => ({
+      kind: "unaccepted-external-dependency",
+      source: "./index.js:optional-peer",
+      importerPath: "./index.js",
+      specifier: "optional-peer",
+      affectedExports: [],
+      affectedDomains: ["return-semantics"],
+      optionalPeer,
+      dynamicImport
+    });
+
+    const present = planFor({ hazards: [hazard(true)], pathExists: () => true });
+    assert.equal(present.status, "exact-leaf-refusal");
+    assert.deepEqual(present.conditionalDependencies, []);
+    assert.equal(present.leaves[0].kind, "dependency-identity");
+
+    const inaccessibleError = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    const inaccessible = planFor({
+      hazards: [hazard(true)],
+      pathExists: () => { throw inaccessibleError; }
+    });
+    assert.equal(inaccessible.status, "exact-leaf-refusal");
+    assert.deepEqual(inaccessible.conditionalDependencies, []);
+    assert.equal(inaccessible.leaves[0].code, "planner-error");
+
+    const mixed = planFor({
+      hazards: [hazard(false, false), hazard(true)],
+      pathExists: () => false
+    });
+    assert.equal(mixed.status, "exact-leaf-refusal");
+    assert.equal(mixed.leaves.length, 1, "the static edge remains a refusal");
+    assert.equal(mixed.conditionalDependencies.length, 1, "only the dynamic optional edge is conditional");
+    assert.equal(mixed.edges.filter(edge => edge.conditional).length, 1);
+    assert.equal(mixed.edges.filter(edge => !edge.conditional).length, 1);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("colon-bearing importer paths cannot redirect optional-peer absence proof", () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-colon-importer-plan-"));
+  try {
+    const root = packageRoot(project, "root", "1.0.0");
+    const resolver = fakeResolution({ graph: { "root@1.0.0:root": [] } });
+    const plan = planRecursiveDependencies({
+      projectDir: project,
+      rootPackageRoot: root,
+      rootPackage: "root",
+      rootVersion: "1.0.0",
+      rootIntegrity: "sha512-root",
+      artifactCases: [{ entrypoint: ".", conditions: [] }],
+      resolveClosure: input => {
+        const resolved = resolver(input);
+        resolved.closure.hazards = [{
+          kind: "unaccepted-external-dependency",
+          source: "./dist/chunk:browser.js:optional-peer",
+          importerPath: "./dist/chunk:browser.js",
+          specifier: "optional-peer",
+          affectedExports: [],
+          affectedDomains: ["return-semantics"],
+          optionalPeer: true,
+          dynamicImport: true
+        }];
+        return resolved;
+      },
+      locatePackage: (_importer, name) => {
+        assert.equal(name, "optional-peer");
+        throw new ArtifactResolutionError("package-not-found", "present but broken");
+      },
+      pathExists: candidate => candidate.endsWith("/node_modules/optional-peer"),
+      integrityForVersion: () => null
+    });
+
+    assert.equal(plan.status, "exact-leaf-refusal");
+    assert.deepEqual(plan.conditionalDependencies, []);
+    assert.equal(plan.leaves[0].kind, "dependency-identity");
+    assert.equal(plan.leaves[0].specifier, "optional-peer");
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
@@ -174,6 +348,8 @@ test("recursive dependency planning records cycles and fails closed at resource 
     const cyclic = planRecursiveDependencies(common);
     assert.equal(cyclic.complete, true);
     assert.equal(cyclic.cycles.length, 1);
+    assert.equal(cyclic.status, "cycle-refusal");
+    assert.deepEqual(cyclic.conditionalDependencies, []);
 
     const bounded = planRecursiveDependencies({ ...common, maxNodes: 1 });
     assert.equal(bounded.complete, false);

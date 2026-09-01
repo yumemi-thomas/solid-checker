@@ -10687,3 +10687,68 @@ query/persist undeclared-peer defects retain their exact refusal reasons.
 published declaration closure is absent. No protocol, schema, snapshot, or
 generated artifact changed. The Round 2 full 418-probe remeasurement remains
 deferred until M10 lands.
+
+## 2026-09-01 — Optional dynamic peers become exact conditional edges
+
+M10 no longer treats every failed package lookup as proof that an optional
+peer is absent. The only conditional edge is an exact `package-not-found` for
+an unshadowed dynamic `import()` whose bare package name is owned by the root
+package's authenticated `peerDependencies` and has literal
+`peerDependenciesMeta.optional: true`. An ancestor-by-ancestor `lstat` census
+must also prove that no entry exists. Static imports, `require`, undeclared or
+non-boolean optional metadata, nested package scopes, installed-but-broken
+packages, and filesystem errors all remain refusal paths. The diagnostic graph
+records a nonempty, identity-bearing `conditionalDependencies` census;
+conditional-only, leaf-refusal, resource-refusal, and cycle-refusal statuses
+are mutually distinguished and the Phase 20 ledger checks that a
+`conditional-only` label has complete nonempty evidence.
+
+Adversarial review found that the planning hazard's old colon-delimited
+`source` string could not safely carry permission: a valid archive filename
+containing `:` could redirect the absence check to another spelling. Planning
+hazards now carry structured `importerPath` and `specifier` fields, and their
+map key, ordering, and digest bind those fields plus dynamic/optional identity.
+The display-only source string remains diagnostic. A colon-bearing importer
+with a present-but-broken actual peer is pinned as a refusal.
+
+The same slice closes three later mechanics exposed by the byte-reproducer.
+The registry request uses npm's abbreviated install metadata representation,
+so unrelated packument strings cannot trip the unchanged bounded-JSON limit;
+the returned bytes remain the exact authenticated input. Runtime and
+declaration export surfaces are now separate: an additive declaration census
+is replayed exactly from archive bytes and bound into the policy-2 resolved
+import root before runtime/declaration binding intersection. TypeScript
+namespace declarations—including explicit `export declare namespace`—receive
+an exact `AstFacts` declaration-surface-only fact (schema 40), never a value
+binding; quoted ambient modules and nested module blocks do not qualify.
+External namespace imports are retained as semantic re-export edges, but `*`
+cannot be supplied by an accepted dependency and therefore remains
+fail-closed. The `torture-dts-disagreement` fixture was first observed at its
+non-updating two-file refusal and then repinned: `runtimeFactory` is the sole
+shared exact export, while runtime-only and declaration-only names are both
+excluded.
+
+The canonical `@solidjs/testing-library@0.8.10|solid1|only` row has no demand
+digest before or after because it stops before Type Facts demand verification.
+Its outer verdict and first refusal remain the honest
+`@testing-library/dom` dependency-contract obligation. Internally, however,
+the exact dependency graph changes from graph root
+`sha256:849b60b34d61d5e33818a24c16da87842efe6ef30803f3355b5f8eb8539b0954`
+with 20 leaves (including an `@solidjs/router` package-not-found leaf) to
+`sha256:c876dbcf1c0dbd8e1b995d0c484e77d27019e60a44533a46854bb84ccbd25e43`
+with 19 leaves plus one `absent-optional-peer` conditional. The diagnosis's
+prediction that M10 alone would certify the row was falsified. Exact graph
+acquisition reaches later honest boundaries, including CommonJS/module-loading
+frontiers in `pretty-format@27.5.1`; those are not reclassified as ESM proof.
+
+The nine targeted controls retained their verdicts and first-refusal
+signatures: `solid-recharts@1.0.1` remains certified; all three Start Server
+rows still lack `#tanstack-router-entry`; all four Solid 2 TanStack
+query/persist rows still lack the undeclared `@solidjs/web` peer; and
+`@solid-primitives/context@0.3.2` still lacks its published declaration closure
+module. Their diagnostic graph roots move where applicable because the newly
+structured planning-hazard identity is intentionally digest-bearing, but no
+control gains a conditional edge. No Type Facts protocol or public contract
+schema changed; the internal AST facts schema moved from 39 to 40. The Round 2
+full 418-probe remeasurement remains deferred until this individually green
+slice lands.

@@ -122,6 +122,33 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
         ModuleAxis::Declarations,
         &mut BTreeSet::new(),
     )?;
+    let declaration_surface_names =
+        replay.declaration_surface_names(resolution.declarations_path(), &mut BTreeSet::new())?;
+    if !resolved.declaration_exports.is_empty()
+        && declaration_surface_names != resolved.declaration_exports
+    {
+        let replayed_only = declaration_surface_names
+            .difference(&resolved.declaration_exports)
+            .take(8)
+            .cloned()
+            .collect::<Vec<_>>();
+        let supplied_only = resolved
+            .declaration_exports
+            .difference(&declaration_surface_names)
+            .take(8)
+            .cloned()
+            .collect::<Vec<_>>();
+        return export_mismatch(format!(
+            "supplied declaration export census does not equal archive replay; replayedOnly(count={}, sample={replayed_only:?}); suppliedOnly(count={}, sample={supplied_only:?})",
+            declaration_surface_names
+                .difference(&resolved.declaration_exports)
+                .count(),
+            resolved
+                .declaration_exports
+                .difference(&declaration_surface_names)
+                .count(),
+        ));
+    }
     let names = runtime_names
         .intersection(&declaration_names)
         .cloned()
@@ -339,6 +366,7 @@ fn verify_target(
 #[derive(Clone, Debug, Default)]
 struct ModuleDescription {
     direct: BTreeMap<String, BindingTarget>,
+    declaration_surface_only: BTreeSet<String>,
     stars: Vec<String>,
     external_direct: BTreeMap<String, (String, String)>,
     external_stars: Vec<String>,
@@ -568,6 +596,17 @@ impl ExportReplay<'_> {
                     }
                 }
                 ExportKind::Named => {
+                    let declaration_surface_only = export
+                        .declaration_surface_only
+                        .iter()
+                        .map(|declaration| declaration.local.span)
+                        .collect::<BTreeSet<_>>();
+                    description.declaration_surface_only.extend(
+                        export
+                            .declaration_surface_only
+                            .iter()
+                            .map(|declaration| declaration.exported.to_string()),
+                    );
                     for specifier in export
                         .specifiers
                         .iter()
@@ -634,6 +673,14 @@ impl ExportReplay<'_> {
                         .iter()
                         .filter(|declaration| !declaration.type_only)
                     {
+                        if axis == ModuleAxis::Declarations
+                            && declaration_surface_only.contains(&declaration.local.span)
+                        {
+                            description
+                                .declaration_surface_only
+                                .insert(declaration.exported.to_string());
+                            continue;
+                        }
                         description.direct.insert(
                             declaration.exported.to_string(),
                             BindingTarget {
@@ -705,6 +752,43 @@ impl ExportReplay<'_> {
         for target in description.stars {
             names.extend(
                 self.exported_names(&target, axis, visiting)?
+                    .into_iter()
+                    .filter(|name| name != "default"),
+            );
+        }
+        for specifier in description.external_stars {
+            if let Some(dependency) = self.external_dependency(&specifier) {
+                names.extend(
+                    dependency
+                        .verified_exports
+                        .bindings
+                        .keys()
+                        .filter(|name| name.as_str() != "default")
+                        .cloned(),
+                );
+            }
+        }
+        visiting.remove(&identity);
+        Ok(names)
+    }
+
+    fn declaration_surface_names(
+        &mut self,
+        path: &str,
+        visiting: &mut BTreeSet<(ModuleAxis, String)>,
+    ) -> Result<BTreeSet<String>, ArtifactSnapshotError> {
+        let axis = ModuleAxis::Declarations;
+        let identity = (axis, path.into());
+        if !visiting.insert(identity.clone()) {
+            return Ok(BTreeSet::new());
+        }
+        let description = self.description(path, axis)?;
+        let mut names = description.direct.keys().cloned().collect::<BTreeSet<_>>();
+        names.extend(description.declaration_surface_only);
+        names.extend(description.external_direct.keys().cloned());
+        for target in description.stars {
+            names.extend(
+                self.declaration_surface_names(&target, visiting)?
                     .into_iter()
                     .filter(|name| name != "default"),
             );
@@ -912,6 +996,25 @@ mod tests {
                 span: Some(Span { start: 13, end: 18 }),
             })
         );
+    }
+
+    #[test]
+    fn nested_namespace_blocks_do_not_reclassify_an_exported_value_declaration() {
+        let snapshot = snapshot(&[(
+            "index.ts",
+            "export const value = function () { namespace Hidden {} return 1; };",
+        )]);
+        let mut replay = ExportReplay {
+            snapshot: &snapshot,
+            dependencies: &[],
+            descriptions: BTreeMap::new(),
+        };
+
+        let description = replay
+            .description("index.ts", ModuleAxis::Declarations)
+            .unwrap();
+        assert!(description.direct.contains_key("value"));
+        assert!(!description.declaration_surface_only.contains("value"));
     }
 
     #[test]

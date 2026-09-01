@@ -6,6 +6,7 @@ import {
   ArtifactResolutionError,
   closureEntriesAreCurrent,
   findPackageRoot,
+  locateExternalDependencyPackageRoot,
   resolvePackageDependencyPlanClosure
 } from "../../../packages/cli/scripts/artifact-resolution.mjs";
 import {
@@ -26,11 +27,14 @@ function rootSpecifier(packageName, entrypoint) {
 
 function externalHazard(hazard) {
   if (hazard?.kind !== "unaccepted-external-dependency") return null;
-  const separator = hazard.source.indexOf(":");
-  if (separator < 0) return null;
+  if (typeof hazard.importerPath !== "string" || typeof hazard.specifier !== "string") {
+    return null;
+  }
   return {
-    importerPath: hazard.source.slice(0, separator),
-    specifier: hazard.source.slice(separator + 1)
+    importerPath: hazard.importerPath,
+    specifier: hazard.specifier,
+    optionalPeer: hazard.optionalPeer === true,
+    dynamicImport: hazard.dynamicImport === true
   };
 }
 
@@ -66,11 +70,13 @@ export function planRecursiveDependencies({
   maxNodes = 512,
   resolveClosure = resolvePackageDependencyPlanClosure,
   locatePackage = findPackageRoot,
+  pathExists,
   integrityForVersion = packageIntegrityForVersion
 }) {
   const nodes = new Map();
   const edges = [];
   const leaves = new Map();
+  const conditionalDependencies = new Map();
   const cycles = [];
   const resolvedClosures = new Map();
   const integrities = new Map();
@@ -131,6 +137,10 @@ export function planRecursiveDependencies({
   const addLeaf = leaf => {
     const id = hash(leaf);
     leaves.set(id, { id, ...leaf });
+  };
+  const addConditionalDependency = dependency => {
+    const id = hash(dependency);
+    conditionalDependencies.set(id, { id, ...dependency });
   };
   const visit = ({ importer, specifier, packageRoot, integrity, conditions, depth, ancestry }) => {
     if (depth > maxDepth) {
@@ -239,7 +249,31 @@ export function planRecursiveDependencies({
         // cheap relative to closure parsing, so reread both for every edge
         // rather than letting a changed nearest install or identity inherit a
         // prior edge's planning evidence.
-        dependencyRoot = locatePackage(dependencyImporter, split.package);
+        dependencyRoot = locateExternalDependencyPackageRoot(
+          dependencyImporter,
+          {
+            kind: dependency.dynamicImport ? "dynamic" : "import",
+            ...dependency
+          },
+          {
+            locatePackage,
+            ...(pathExists ? { pathExists } : {})
+          }
+        );
+        if (!dependencyRoot) {
+          addConditionalDependency({
+            kind: "absent-optional-peer",
+            node: nodeId,
+            specifier: dependency.specifier
+          });
+          edges.push({
+            from: nodeId,
+            specifier: dependency.specifier,
+            to: null,
+            conditional: "absent-optional-peer"
+          });
+          continue;
+        }
         dependencyIdentity = readIdentity(dependencyRoot);
         dependencyIntegrity = exactIntegrity(
           dependencyRoot,
@@ -303,11 +337,21 @@ export function planRecursiveDependencies({
     String(left.to).localeCompare(String(right.to))
   );
   const sortedLeaves = [...leaves.values()].sort((left, right) => left.id.localeCompare(right.id));
+  const sortedConditionalDependencies = [...conditionalDependencies.values()]
+    .sort((left, right) => left.id.localeCompare(right.id));
   cycles.sort((left, right) => left.id.localeCompare(right.id));
   return {
     schemaVersion: 1,
     rootIdentity: { package: rootPackage, version: rootVersion, integrity: rootIntegrity },
-    status: budgetExceeded ? "resource-refusal" : "exact-leaf-refusal",
+    status: budgetExceeded
+      ? "resource-refusal"
+      : sortedLeaves.length > 0
+        ? "exact-leaf-refusal"
+        : cycles.length > 0
+          ? "cycle-refusal"
+          : sortedConditionalDependencies.length > 0
+            ? "conditional-only"
+            : "complete",
     complete: !budgetExceeded,
     limits: { maxDepth, maxNodes },
     roots,
@@ -315,6 +359,16 @@ export function planRecursiveDependencies({
     edges,
     cycles,
     leaves: sortedLeaves,
-    graphDigest: hash({ roots, nodes: sortedNodes, edges, cycles, leaves: sortedLeaves })
+    conditionalDependencies: sortedConditionalDependencies,
+    graphDigest: hash({
+      roots,
+      nodes: sortedNodes,
+      edges,
+      cycles,
+      leaves: sortedLeaves,
+      ...(sortedConditionalDependencies.length > 0
+        ? { conditionalDependencies: sortedConditionalDependencies }
+        : {})
+    })
   };
 }

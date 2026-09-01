@@ -3475,6 +3475,7 @@ mod tests {
             closure,
             transform: None,
             exports,
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -3671,6 +3672,7 @@ mod tests {
             closure,
             transform: None,
             exports,
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -3846,6 +3848,7 @@ mod tests {
                     },
                 },
             )]),
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -4243,6 +4246,7 @@ mod tests {
             export { runtimeName as publicName } from "./runtime.js";
             export * from "./star.js";
             export * as ns from "./namespace.js";
+            export const Config = {};
         "#;
         let runtime_target = b"export const runtimeName = 1;";
         let runtime_star = b"export const shared = 1;";
@@ -4251,6 +4255,7 @@ mod tests {
             export { declarationName as publicName } from "./surface.js";
             export * from "./star.js";
             export * as ns from "./namespace.js";
+            export declare namespace Config { const inner: number; }
         "#;
         let declaration_target = b"export declare const declarationName: number;";
         let declaration_star = b"export declare const shared: number;";
@@ -4346,6 +4351,12 @@ mod tests {
             closure,
             transform: None,
             exports,
+            declaration_exports: BTreeSet::from([
+                "Config".into(),
+                "ns".into(),
+                "publicName".into(),
+                "shared".into(),
+            ]),
             authority: ResolutionAuthority::Host,
         };
 
@@ -4358,6 +4369,17 @@ mod tests {
         omitted.exports.remove("shared");
         assert!(matches!(
             super::export_bindings::verify_snapshot_exports(&snapshot, &resolution, &omitted),
+            Err(ArtifactSnapshotError::ExportBindings(_))
+        ));
+
+        let mut omitted_declaration = resolved.clone();
+        omitted_declaration.declaration_exports.remove("shared");
+        assert!(matches!(
+            super::export_bindings::verify_snapshot_exports(
+                &snapshot,
+                &resolution,
+                &omitted_declaration
+            ),
             Err(ArtifactSnapshotError::ExportBindings(_))
         ));
 
@@ -4467,6 +4489,7 @@ mod tests {
             closure,
             transform: None,
             exports: BTreeMap::new(),
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
 
@@ -4600,6 +4623,7 @@ mod tests {
             closure,
             transform: None,
             exports,
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -4766,6 +4790,7 @@ mod tests {
             closure,
             transform: None,
             exports: BTreeMap::new(),
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =
@@ -5547,6 +5572,7 @@ mod tests {
                     },
                 },
             )]),
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         };
         let (package, mut artifact_case) =

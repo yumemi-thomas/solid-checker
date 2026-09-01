@@ -28,7 +28,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 39;
+pub const AST_FACTS_SCHEMA: u32 = 40;
 
 mod span_index;
 
@@ -531,6 +531,12 @@ pub struct ExportFact {
     pub namespace: Option<CompactString>,
     pub specifiers: Vec<ExportSpecifierFact>,
     pub declarations: Vec<ExportSpecifierFact>,
+    /// Public declaration names that do not authenticate an exact value
+    /// binding. Identifier-named TypeScript `namespace`/`module`
+    /// declarations live here, including explicit `declare` forms; quoted
+    /// ambient modules never do.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declaration_surface_only: Vec<ExportSpecifierFact>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -2259,6 +2265,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .declaration
                 .as_ref()
                 .map_or_else(Vec::new, export_declaration_names),
+            declaration_surface_only: declaration
+                .declaration
+                .as_ref()
+                .map_or_else(Vec::new, export_declaration_surface_names),
         });
         walk::walk_export_named_declaration(self, declaration);
     }
@@ -2317,6 +2327,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 exported: "default".into(),
                 type_only: false,
             }],
+            declaration_surface_only: vec![],
         });
         walk::walk_export_default_declaration(self, declaration);
     }
@@ -2330,6 +2341,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             namespace: declaration.exported.as_ref().map(module_export_name),
             specifiers: vec![],
             declarations: vec![],
+            declaration_surface_only: vec![],
         });
         walk::walk_export_all_declaration(self, declaration);
     }
@@ -2934,6 +2946,22 @@ fn export_declaration_names(declaration: &Declaration<'_>) -> Vec<ExportSpecifie
     }
 }
 
+fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<ExportSpecifierFact> {
+    let Declaration::TSModuleDeclaration(declaration) = declaration else {
+        return vec![];
+    };
+    let TSModuleDeclarationName::Identifier(name) = &declaration.id else {
+        return vec![];
+    };
+    vec![ExportSpecifierFact {
+        local: NamedSpan {
+            span: span(name.span),
+        },
+        exported: name.name.as_str().into(),
+        type_only: false,
+    }]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3223,6 +3251,30 @@ declare global { namespace HiddenGlobal {} }
             );
         }
         assert_eq!(facts.namespace_declarations.len(), 3);
+    }
+
+    #[test]
+    fn exported_namespace_surface_is_exact_and_includes_explicit_declare() {
+        let source = r#"
+export namespace RuntimeSurface {}
+export declare namespace DeclaredSurface {}
+export const value = function () { namespace NestedInsideValue {} return 1; };
+export declare module "quoted" {}
+"#;
+        let facts = extract("namespace-surface.ts", source).unwrap();
+        let surfaces = facts
+            .module_level_exports()
+            .flat_map(|export| &export.declaration_surface_only)
+            .map(|declaration| declaration.exported.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(surfaces, ["RuntimeSurface", "DeclaredSurface"]);
+        assert!(facts.module_level_exports().any(|export| {
+            export
+                .declarations
+                .iter()
+                .any(|declaration| declaration.exported == "value")
+        }));
     }
 
     /// A class **static block** is neither a function body nor a module

@@ -21,6 +21,7 @@ import {
   certifyContract,
   isExactDependencyCompositionRefusal,
   isReusableDependencyRefusalAudit,
+  locateExternalDependencyPackageRoot,
   parseCertifyArguments,
   publishedGraphPreparationConcurrency,
   runContractCertificationPipeline,
@@ -445,6 +446,78 @@ test("published graph preparation uses a bounded run-wide worker cap", () => {
   );
 });
 
+test("only a genuinely absent dynamic optional peer is inapplicable", () => {
+  const importer = "/project/packages/app/dist/index.js";
+  const missing = () => {
+    throw new ArtifactResolutionError("package-not-found", "missing");
+  };
+  const optionalDynamic = {
+    kind: "dynamic",
+    specifier: "@solidjs/router",
+    optionalPeer: true,
+    dynamicImport: true
+  };
+
+  assert.equal(
+    locateExternalDependencyPackageRoot(importer, optionalDynamic, {
+      locatePackage: missing,
+      pathExists: () => false
+    }),
+    null
+  );
+  for (const dependency of [
+    { ...optionalDynamic, kind: "import" },
+    { ...optionalDynamic, dynamicImport: false },
+    { ...optionalDynamic, optionalPeer: false }
+  ]) {
+    assert.throws(
+      () => locateExternalDependencyPackageRoot(importer, dependency, {
+        locatePackage: missing,
+        pathExists: () => false
+      }),
+      error => error instanceof ArtifactResolutionError && error.code === "package-not-found"
+    );
+  }
+  for (const resolutionError of [
+    new Error("generic resolution failure"),
+    new ArtifactResolutionError("invalid-target", "wrong refusal family")
+  ]) {
+    assert.throws(
+      () => locateExternalDependencyPackageRoot(importer, optionalDynamic, {
+        locatePackage: () => { throw resolutionError; },
+        pathExists: () => false
+      }),
+      error => error === resolutionError,
+      "only an exact package-not-found refusal can prove absence"
+    );
+  }
+  assert.throws(
+    () => locateExternalDependencyPackageRoot(importer, optionalDynamic, {
+      locatePackage: missing,
+      pathExists: candidate => candidate === "/project/node_modules/@solidjs/router"
+    }),
+    error => error instanceof ArtifactResolutionError && error.code === "package-not-found",
+    "a present but broken package directory remains a refusal"
+  );
+  const inaccessible = Object.assign(new Error("permission denied"), { code: "EACCES" });
+  assert.throws(
+    () => locateExternalDependencyPackageRoot(importer, optionalDynamic, {
+      locatePackage: missing,
+      pathExists: () => { throw inaccessible; }
+    }),
+    error => error === inaccessible,
+    "filesystem I/O failure is not proof of absence"
+  );
+  assert.equal(
+    locateExternalDependencyPackageRoot(importer, optionalDynamic, {
+      locatePackage: () => "/project/node_modules/@solidjs/router",
+      pathExists: () => false
+    }),
+    "/project/node_modules/@solidjs/router",
+    "an installed optional peer follows ordinary authentication"
+  );
+});
+
 test("published graph execution transports exact lock bytes and no caller receipt authority", () => {
   const state = (name, locator, sourceDependencies = []) => ({
     node: { bunLockPath: "/project/bun.lock", lockLocator: locator },
@@ -614,11 +687,15 @@ test("concrete acquisition failure writes only a non-replayable audit", async ()
       }
     })
   );
-  const fetch_ = async () => ({
-    ok: true,
-    status: 200,
-    arrayBuffer: async () => metadata.buffer
-  });
+  const metadataRequests = [];
+  const fetch_ = async (url, options) => {
+    metadataRequests.push({ url, options });
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => metadata.buffer
+    };
+  };
   try {
     await assert.rejects(
       certifyContract(
@@ -643,6 +720,10 @@ test("concrete acquisition failure writes only a non-replayable audit", async ()
     assert.equal(transcript.replayable, false);
     assert.equal(transcript.status, "refused");
     assert.ok(transcript.stageDurationsMs.artifactAcquisition >= 0);
+    assert.deepEqual(metadataRequests, [{
+      url: "https://registry.npmjs.org/example",
+      options: { headers: { accept: "application/vnd.npm.install-v1+json" } }
+    }]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

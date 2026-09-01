@@ -218,6 +218,7 @@ fn analysis() -> ProposalAnalysis {
         closure,
         transform: None,
         exports,
+        declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::StandalonePackageResolver,
     };
     ProposalAnalysis {

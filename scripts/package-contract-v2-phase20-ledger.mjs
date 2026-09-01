@@ -414,7 +414,25 @@ export function assertPhase20Ledger(ledger) {
           `${row.probeId} has either a complete plan or an explicit resource refusal`
         );
       }
-      assert.ok(row.dependencyPlan.leaves.length > 0 || row.dependencyPlan.cycles.length > 0);
+      const conditionals = row.dependencyPlan.conditionalDependencies ?? [];
+      assert.ok(
+        row.dependencyPlan.leaves.length > 0 ||
+          row.dependencyPlan.cycles.length > 0 ||
+          conditionals.length > 0
+      );
+      if (row.dependencyPlan.status === "conditional-only") {
+        assert.equal(row.dependencyPlan.complete, true);
+        assert.equal(row.dependencyPlan.leaves.length, 0);
+        assert.equal(row.dependencyPlan.cycles.length, 0);
+        assert.ok(conditionals.length > 0);
+      }
+      if (
+        row.dependencyPlan.leaves.length === 0 &&
+        row.dependencyPlan.cycles.length === 0 &&
+        conditionals.length > 0
+      ) {
+        assert.equal(row.dependencyPlan.status, "conditional-only");
+      }
     }
   }
 }

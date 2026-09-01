@@ -487,6 +487,10 @@ pub struct ResolvedImport {
     pub transform: Option<ResolvedFile>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub exports: BTreeMap<String, ResolvedExportBinding>,
+    /// Exact declaration-axis export census. Empty means the producer did not
+    /// supply this additive evidence and grants no filtering authority.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub declaration_exports: BTreeSet<String>,
     pub authority: ResolutionAuthority,
 }
 
@@ -534,6 +538,9 @@ impl ResolvedImport {
             )?;
             validate_resolved_file(&binding.runtime.module)?;
             validate_resolved_file(&binding.declarations.module)?;
+        }
+        for name in &self.declaration_exports {
+            validate_identifier(name, "declaration export name")?;
         }
         Ok(())
     }
@@ -1271,6 +1278,7 @@ mod tests {
             closure,
             transform: None,
             exports: BTreeMap::from([("value".into(), binding.clone()), ("other".into(), binding)]),
+            declaration_exports: BTreeSet::new(),
             authority: ResolutionAuthority::Host,
         }
     }

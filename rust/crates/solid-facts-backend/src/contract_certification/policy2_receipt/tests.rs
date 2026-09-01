@@ -123,6 +123,7 @@ fn resolved_import() -> ResolvedImport {
         closure: ClosureManifest::new(Vec::new(), Vec::new(), Vec::new()).unwrap(),
         transform: None,
         exports,
+        declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }
@@ -633,6 +634,20 @@ fn receipt_replay_against_another_accepted_main_is_rejected() {
             field: "semanticDigest" | "mainDigest"
         })
     ));
+}
+
+#[test]
+fn resolved_import_root_binds_the_declaration_export_census() {
+    let resolved = resolved_import();
+    let original_root = policy2_resolved_import_root(&resolved).unwrap();
+    let mut changed = resolved;
+    changed.declaration_exports.insert("Config".into());
+
+    assert_ne!(
+        original_root,
+        policy2_resolved_import_root(&changed).unwrap(),
+        "an additive declaration-surface census is receipt identity"
+    );
 }
 
 #[test]

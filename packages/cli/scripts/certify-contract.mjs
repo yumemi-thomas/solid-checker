@@ -23,10 +23,12 @@ import process from "node:process";
 
 import { runNativeAsync } from "../bin/launcher.mjs";
 import {
+  ArtifactResolutionError,
   ArtifactResolutionSession,
-  findPackageRoot,
+  locateExternalDependencyPackageRoot,
   resolvePackageArtifactClosure
 } from "./artifact-resolution.mjs";
+export { locateExternalDependencyPackageRoot } from "./artifact-resolution.mjs";
 import {
   artifactCaseDisposition,
   finiteArtifactCandidates,
@@ -227,7 +229,11 @@ async function checkedResponse(response, label) {
 async function acquirePublishedArtifact({ options, manifest, scratch, fetch_ = fetch }) {
   const metadataResponse = await fetch_(
     exactRegistryPackageUrl(options.registryOrigin, manifest.name),
-    { headers: { accept: "application/json" } }
+    // The install-v1 packument preserves the exact version/dist identity Rust
+    // authenticates while excluding unrelated readmes and publisher metadata
+    // that can exceed the pinned bounded-JSON string limit. The response bytes
+    // themselves still cross the native provenance boundary unchanged.
+    { headers: { accept: "application/vnd.npm.install-v1+json" } }
   );
   const metadataBytes = await checkedResponse(metadataResponse, "registry metadata acquisition");
   let metadata;
@@ -382,7 +388,11 @@ function createCompilerSourceCollector({
       ownerRoot,
       dependency.importerPath ?? dependency.source
     );
-    const dependencyRoot = findPackageRoot(dependencyImporter, dependencyName);
+    const dependencyRoot = locateExternalDependencyPackageRoot(
+      dependencyImporter,
+      dependency
+    );
+    if (!dependencyRoot) return null;
     const dependencyManifest = JSON.parse(
       readFileSync(join(dependencyRoot, "package.json"), "utf8")
     );

@@ -66,6 +66,7 @@ fn resolution(exports: impl IntoIterator<Item = String>) -> ResolvedImport {
                 )
             })
             .collect(),
+        declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }

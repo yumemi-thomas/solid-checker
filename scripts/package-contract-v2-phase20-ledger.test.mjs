@@ -4,10 +4,30 @@ import { readFileSync } from "node:fs";
 import { test } from "vitest";
 
 import {
+  assertPhase20Ledger,
   assertFrozenPhase20Ledger,
   buildPhase20Ledger,
   classifyArtifactApplicability
 } from "./package-contract-v2-phase20-ledger.mjs";
+
+test("a conditional-only dependency plan requires exact nonempty conditional evidence", () => {
+  const bytes = readFileSync(new URL("../benchmarks/ecosystem/report.json", import.meta.url));
+  const ledger = buildPhase20Ledger(JSON.parse(bytes.toString("utf8")), {
+    reportSha256: createHash("sha256").update(bytes).digest("hex")
+  });
+  const row = ledger.rows.find(candidate => candidate.externalEdges.length > 0);
+  row.dependencyPlan = {
+    complete: true,
+    status: "conditional-only",
+    leaves: [],
+    cycles: [],
+    conditionalDependencies: [{ kind: "absent-optional-peer", specifier: "optional-peer" }]
+  };
+  assert.doesNotThrow(() => assertPhase20Ledger(ledger));
+
+  row.dependencyPlan.conditionalDependencies = [];
+  assert.throws(() => assertPhase20Ledger(ledger));
+});
 
 test("Phase 20 check remains frozen after the Phase 21 report replaces the live corpus", () => {
   assert.doesNotThrow(() => assertFrozenPhase20Ledger({

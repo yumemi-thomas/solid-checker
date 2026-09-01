@@ -3635,11 +3635,11 @@ fn contract_generation_obligation_target_names(
 
 #[cfg(test)]
 mod contract_generation_callback_attribution_tests {
-    use std::collections::{BTreeMap, HashMap};
+    use std::collections::{BTreeMap, BTreeSet, HashMap};
 
     use super::{
-        contract_generation_obligation_target_names, mark_contract_generation_callback_unknown,
-        reconcile_entry_export_kind,
+        contract_exports_without_entry_file, contract_generation_obligation_target_names,
+        mark_contract_generation_callback_unknown, reconcile_entry_export_kind,
     };
     use solid_reactive_ir::{
         ContractClaim, ContractExport, ContractGenerationObligation, ExportKindProof,
@@ -3652,6 +3652,23 @@ mod contract_generation_callback_attribution_tests {
             function_identity: function_identity.into(),
             ..ContractGenerationObligation::default()
         }
+    }
+
+    #[test]
+    fn no_entry_file_contracts_still_follow_the_declaration_surface() {
+        let exports = BTreeMap::from([("declared".to_owned(), 1), ("runtimeOnly".to_owned(), 2)]);
+        assert_eq!(
+            contract_exports_without_entry_file(
+                &exports,
+                Some(&BTreeSet::from(["declared".to_owned()])),
+            ),
+            BTreeMap::from([("declared".to_owned(), 1)])
+        );
+        assert_eq!(
+            contract_exports_without_entry_file(&exports, None),
+            exports,
+            "a missing declaration census is never proof that an export is absent"
+        );
     }
 
     #[test]
@@ -4604,6 +4621,8 @@ fn emit_package_contract(
     if request.package_version.is_empty() {
         return Err("--package-version is required with --emit-contract".into());
     }
+    let resolution: solid_facts_backend::ResolvedImport =
+        serde_json::from_slice(&fs::read(&request.contract_resolution)?)?;
     // SC9 findings are proof obligations, not permission to discard every
     // independently known export. After resolving the requested entrypoint we
     // attribute each one to the narrowest claim domain it can invalidate and
@@ -4625,8 +4644,13 @@ fn emit_package_contract(
         .iter()
         .map(|entity| (entity.location.clone(), *entity))
         .collect::<HashMap<_, _>>();
+    let declaration_export_names =
+        (!resolution.declaration_exports.is_empty()).then_some(&resolution.declaration_exports);
     let mut exports = if request.contract_entry_file.is_empty() {
-        (*program.contract_exports).clone()
+        contract_exports_without_entry_file(
+            program.contract_exports.as_ref(),
+            declaration_export_names,
+        )
     } else {
         contract_exports_for_entry_file(
             facts,
@@ -4635,6 +4659,7 @@ fn emit_package_contract(
             &files_by_canonical_path,
             &entities_by_location,
             contracts,
+            declaration_export_names,
         )?
     };
     let entry_entities_by_name = if request.contract_entry_file.is_empty() {
@@ -4820,8 +4845,6 @@ fn emit_package_contract(
             )?;
         }
     }
-    let resolution: solid_facts_backend::ResolvedImport =
-        serde_json::from_slice(&fs::read(&request.contract_resolution)?)?;
     let mut external_targets = BTreeSet::new();
     if !request.contract_entry_file.is_empty() {
         let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
@@ -5144,16 +5167,28 @@ fn contract_exports_for_entry_file(
     files_by_canonical_path: &HashMap<PathBuf, &solid_facts::FileFacts>,
     entities_by_location: &HashMap<typefacts::Location, &typefacts::EntityFact>,
     contracts: &solid_reactive_ir::contract_semantics::AcceptedContractIndex,
+    declaration_export_names: Option<&BTreeSet<String>>,
 ) -> Result<BTreeMap<String, solid_reactive_ir::ContractExport>, Box<dyn std::error::Error>> {
     let entry_file = entry_file.canonicalize()?;
     let mut visiting = HashSet::new();
-    let names = exported_names_for_file(
+    let mut names = exported_names_for_file(
         facts,
         files_by_canonical_path,
         contracts,
         &entry_file,
         &mut visiting,
     )?;
+    // Contracts describe the executable names that are also present on the
+    // package's TypeScript surface. Filter before summary attribution: a
+    // runtime-only export-star member has no declaration identity, so trying
+    // to summarize it would manufacture an IdentityMismatch for a name that
+    // TypeScript consumers cannot import. This uses the declaration-axis
+    // census, not `resolution.exports`; certification independently replays
+    // the census from archive bytes, and an omitted shared binding therefore
+    // still reaches the existing exact-identity refusal.
+    if let Some(declaration_export_names) = declaration_export_names {
+        names.retain(|name| declaration_export_names.contains(name));
+    }
     let entry_entities_by_name = names
         .iter()
         .filter_map(|name| {
@@ -5226,6 +5261,20 @@ fn contract_exports_for_entry_file(
         .into());
     }
     Ok(exports)
+}
+
+fn contract_exports_without_entry_file<T: Clone>(
+    exports: &BTreeMap<String, T>,
+    declaration_export_names: Option<&BTreeSet<String>>,
+) -> BTreeMap<String, T> {
+    let Some(declaration_export_names) = declaration_export_names else {
+        return exports.clone();
+    };
+    exports
+        .iter()
+        .filter(|(name, _)| declaration_export_names.contains(name.as_str()))
+        .map(|(name, export)| (name.clone(), export.clone()))
+        .collect()
 }
 
 type AcceptedReexportIdentity = (

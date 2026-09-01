@@ -271,6 +271,15 @@ function requestedEntrypoint(specifier, packageName) {
   return suffix ? `.${suffix}` : ".";
 }
 
+function isExplicitOptionalPeer(manifest, specifier) {
+  if (!specifier || specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("#")) {
+    return false;
+  }
+  const packageName = packageNameFromSpecifier(specifier);
+  return Object.hasOwn(manifest.peerDependencies ?? {}, packageName) &&
+    manifest.peerDependenciesMeta?.[packageName]?.optional === true;
+}
+
 export function findPackageRoot(importer, packageName) {
   let directory = dirname(resolve(importer));
   while (true) {
@@ -281,6 +290,45 @@ export function findPackageRoot(importer, packageName) {
     directory = parent;
   }
   fail("package-not-found", `${packageName} is not installed above ${importer}`);
+}
+
+function pathEntryExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return false;
+    throw error;
+  }
+}
+
+export function locateExternalDependencyPackageRoot(
+  importer,
+  dependency,
+  { locatePackage = findPackageRoot, pathExists = pathEntryExists } = {}
+) {
+  const packageName = packageNameFromSpecifier(dependency.specifier);
+  try {
+    return locatePackage(importer, packageName);
+  } catch (error) {
+    if (
+      !(error instanceof ArtifactResolutionError) ||
+      error.code !== "package-not-found" ||
+      dependency.kind !== "dynamic" ||
+      dependency.dynamicImport !== true ||
+      dependency.optionalPeer !== true
+    ) {
+      throw error;
+    }
+    let directory = dirname(resolve(importer));
+    while (true) {
+      if (pathExists(join(directory, "node_modules", packageName))) throw error;
+      const parent = dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+    return null;
+  }
 }
 
 function targetKind(target) {
@@ -1068,6 +1116,12 @@ function moduleDescription(path, axis, packageRoot, cache) {
     stars: [],
     externalDirect: new Map(),
     externalStars: [],
+    // Value namespaces are part of a declaration module's public TypeScript
+    // surface, but the exact binding resolver does not yet authenticate their
+    // runtime identity. Keep the census separate so it can prevent a
+    // runtime-only export from being mistaken for shared without granting a
+    // namespace binding.
+    declarationSurfaceOnly: new Set(),
     imports: new Map(),
     externalImports: new Map(),
     specifiers: [],
@@ -1085,7 +1139,10 @@ function moduleDescription(path, axis, packageRoot, cache) {
         kind: "import",
         text: statement.moduleSpecifier.text,
         target,
-        asset: target ? undefined : localAssetTarget(path, statement.moduleSpecifier.text, packageRoot)
+        asset: target ? undefined : localAssetTarget(path, statement.moduleSpecifier.text, packageRoot),
+        optionalPeer:
+          scope.packageRoot === packageRoot &&
+          isExplicitOptionalPeer(scope.manifest, statement.moduleSpecifier.text)
       });
       if (!statement.importClause || statement.importClause.isTypeOnly) continue;
       if (statement.importClause.name) {
@@ -1115,6 +1172,15 @@ function moduleDescription(path, axis, packageRoot, cache) {
             });
           }
         }
+      } else if (bindings && ts.isNamespaceImport(bindings)) {
+        const binding = { file: target, name: "*" };
+        if (target) description.imports.set(bindings.name.text, binding);
+        else {
+          description.externalImports.set(bindings.name.text, {
+            specifier: statement.moduleSpecifier.text,
+            name: "*"
+          });
+        }
       }
     }
     if (ts.isExportDeclaration(statement)) {
@@ -1127,7 +1193,9 @@ function moduleDescription(path, axis, packageRoot, cache) {
           kind: "reexport",
           text: module.text,
           target,
-          asset: target ? undefined : localAssetTarget(path, module.text, packageRoot)
+          asset: target ? undefined : localAssetTarget(path, module.text, packageRoot),
+          optionalPeer:
+            scope.packageRoot === packageRoot && isExplicitOptionalPeer(scope.manifest, module.text)
         });
       }
       if (statement.isTypeOnly) continue;
@@ -1176,6 +1244,13 @@ function moduleDescription(path, axis, packageRoot, cache) {
       continue;
     }
     if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
+    if (
+      axis === "declarations" &&
+      ts.isModuleDeclaration(statement) &&
+      ts.isIdentifier(statement.name)
+    ) {
+      description.declarationSurfaceOnly.add(statement.name.text);
+    }
     if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
       description.direct.set("default", { file: path, name: "default" });
     }
@@ -1212,7 +1287,9 @@ function moduleDescription(path, axis, packageRoot, cache) {
         text,
         target: opaque ? undefined : moduleTarget(path, text, axis, packageRoot, cache),
         asset: opaque ? undefined : localAssetTarget(path, text, packageRoot),
-        dynamic: node.expression.kind === ts.SyntaxKind.ImportKeyword
+        dynamic: node.expression.kind === ts.SyntaxKind.ImportKeyword,
+        optionalPeer:
+          scope.packageRoot === packageRoot && isExplicitOptionalPeer(scope.manifest, text)
       });
     }
     ts.forEachChild(node, visitDynamic);
@@ -1344,6 +1421,7 @@ function exportedNames(
   visiting.add(identity);
   const description = moduleDescription(path, axis, packageRoot, cache);
   const names = new Set(description.direct.keys());
+  for (const name of description.declarationSurfaceOnly) names.add(name);
   for (const name of description.externalDirect.keys()) names.add(name);
   for (const target of description.stars) {
     for (const name of exportedNames(
@@ -1412,7 +1490,7 @@ function exactExportBindings(
     if (!runtimeTarget || !declarationTarget) continue;
     exports[name] = { runtime: runtimeTarget, declarations: declarationTarget };
   }
-  return { exports, cache };
+  return { exports, declarationExports: [...declarationNames].sort(), cache };
 }
 
 function syntaxHazards(path, sourceFile, checker) {
@@ -1602,7 +1680,9 @@ function closureForRoots(
         axis,
         importerPath: relativePath,
         kind: specifier.kind,
-        specifier: specifier.text
+        specifier: specifier.text,
+        ...(specifier.optionalPeer ? { optionalPeer: true } : {}),
+        ...(specifier.dynamic ? { dynamicImport: true } : {})
       });
       const accepted = acceptedDependencies[specifier.text];
       if (accepted) {
@@ -1826,7 +1906,7 @@ export function resolvePackageArtifacts({
   ]);
   let semantic = session?.[SESSION_LOOKUP](semanticKey, logicalRoot);
   if (!semantic) {
-    const { exports, cache } = exactExportBindings(
+    const { exports, declarationExports, cache } = exactExportBindings(
       runtime.file,
       declarations.file,
       logicalRoot,
@@ -1843,7 +1923,7 @@ export function resolvePackageArtifacts({
       cache,
       acceptedDependencies
     );
-    semantic = { exports, closure };
+    semantic = { exports, declarationExports, closure };
     session?.[SESSION_STORE](semanticKey, semantic);
   }
   const realRoot = realpath(logicalRoot);
@@ -1867,6 +1947,7 @@ export function resolvePackageArtifacts({
     declarationTrace: declarations.trace,
     closure: semantic.closure,
     exports: semantic.exports,
+    declarationExports: semantic.declarationExports,
     authority: "standalonePackageResolver"
   };
 }
@@ -1938,14 +2019,16 @@ export function resolvePackageArtifactClosure({
   );
   const canonicalExternalDependencies = [...new Map(
     externalDependencies.map(dependency => [
-      `${dependency.axis}\0${dependency.importerPath}\0${dependency.kind}\0${dependency.specifier}`,
+      `${dependency.axis}\0${dependency.importerPath}\0${dependency.kind}\0${dependency.specifier}\0${dependency.optionalPeer === true}\0${dependency.dynamicImport === true}`,
       dependency
     ])
   ).values()].sort((left, right) =>
     compareText(left.axis, right.axis) ||
     compareText(left.importerPath, right.importerPath) ||
     compareText(left.kind, right.kind) ||
-    compareText(left.specifier, right.specifier)
+    compareText(left.specifier, right.specifier) ||
+    Number(left.optionalPeer === true) - Number(right.optionalPeer === true) ||
+    Number(left.dynamicImport === true) - Number(right.dynamicImport === true)
   );
   return {
     specifier,
@@ -1974,6 +2057,17 @@ function dependencyPlanningClosure(
   const entries = new Map();
   const external = new Map();
   const frontiers = new Map();
+  const belongsToRootPackageScope = path => {
+    let directory = dirname(resolve(path));
+    const root = resolve(packageRoot);
+    while (true) {
+      if (isFile(join(directory, "package.json"))) return directory === root;
+      if (directory === root) return true;
+      const parent = dirname(directory);
+      if (parent === directory) return false;
+      directory = parent;
+    }
+  };
   const addEntry = (role, path) => {
     const relativePath = packagePath(packageRoot, path);
     const entry = { role, path: relativePath, digest: fileDigest(realpath(path)) };
@@ -1989,17 +2083,26 @@ function dependencyPlanningClosure(
     const source = readFileSync(realpath(path), "utf8");
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
     const byteOffset = offset => Buffer.byteLength(source.slice(0, offset), "utf8");
+    const externalHazard = (specifier, dynamic) => ({
+      kind: "unaccepted-external-dependency",
+      source: `${relativePath}:${specifier}`,
+      importerPath: relativePath,
+      specifier,
+      affectedExports: [],
+      affectedDomains: [...DOMAIN_NAMES],
+      ...(belongsToRootPackageScope(path) && isExplicitOptionalPeer(manifest, specifier)
+        ? { optionalPeer: true }
+        : {}),
+      ...(dynamic ? { dynamicImport: true } : {})
+    });
+    const externalKey = (specifier, dynamic) =>
+      JSON.stringify([relativePath, specifier, dynamic ? "dynamic-import" : "static"]);
     const follow = (specifier, dynamic = false) => {
       // Bundler-mediated asset import: opaque, never a closure edge. Record the
       // same unaccepted external frontier the fall-through below records for a
       // bare specifier. See `bundlerResourceSuffix`.
       if (bundlerResourceSuffix(specifier)) {
-        external.set(`${relativePath}:${specifier}`, {
-          kind: "unaccepted-external-dependency",
-          source: `${relativePath}:${specifier}`,
-          affectedExports: [],
-          affectedDomains: [...DOMAIN_NAMES]
-        });
+        external.set(externalKey(specifier, dynamic), externalHazard(specifier, dynamic));
         return;
       }
       if (specifier.startsWith("#")) {
@@ -2024,12 +2127,7 @@ function dependencyPlanningClosure(
         // Unknown in this census row: record the same unaccepted external
         // frontier the fall-through below records for a bare specifier, so
         // every domain of every reachable export stays open.
-        external.set(`${relativePath}:${specifier}`, {
-          kind: "unaccepted-external-dependency",
-          source: `${relativePath}:${specifier}`,
-          affectedExports: [],
-          affectedDomains: [...DOMAIN_NAMES]
-        });
+        external.set(externalKey(specifier, dynamic), externalHazard(specifier, dynamic));
         return;
       }
       const target = localModuleTarget(path, specifier, axis, packageRoot);
@@ -2051,12 +2149,7 @@ function dependencyPlanningClosure(
       if (specifier.startsWith(".") || specifier.startsWith("/")) {
         fail("module-not-found", `local closure module ${specifier} from ${path} was not found`);
       }
-      external.set(`${relativePath}:${specifier}`, {
-        kind: "unaccepted-external-dependency",
-        source: `${relativePath}:${specifier}`,
-        affectedExports: [],
-        affectedDomains: [...DOMAIN_NAMES]
-      });
+      external.set(externalKey(specifier, dynamic), externalHazard(specifier, dynamic));
     };
     for (const statement of file.statements) {
       if (
@@ -2112,7 +2205,12 @@ function dependencyPlanningClosure(
     left.path.localeCompare(right.path) ||
     left.digest.localeCompare(right.digest)
   );
-  const hazards = [...external.values()].sort((left, right) => left.source.localeCompare(right.source));
+  const hazards = [...external.values()].sort((left, right) =>
+    left.importerPath.localeCompare(right.importerPath) ||
+    left.specifier.localeCompare(right.specifier) ||
+    Number(left.dynamicImport === true) - Number(right.dynamicImport === true) ||
+    Number(left.optionalPeer === true) - Number(right.optionalPeer === true)
+  );
   const sortedFrontiers = [...frontiers.values()].sort((left, right) => left.source.localeCompare(right.source));
   const digest = `sha256:${createHash("sha256")
     .update("solid-checker:dependency-planning-closure:v1\0")
