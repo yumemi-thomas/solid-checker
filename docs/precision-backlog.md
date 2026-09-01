@@ -10636,3 +10636,54 @@ Start Server rows, the four Solid 2 TanStack query/persist rows, and
 `@solid-primitives/context@0.3.2`. No protocol, schema, snapshot, or generated
 artifact changed. The Round 2 full 418-probe remeasurement remains deferred
 until the remaining bounded artifact slices land.
+
+## 2026-09-01 — Source census attribution follows materialized package roots
+
+Type Facts source-census verification now attributes a producer source to the
+longest exact materialized package-root prefix. Private-project verification
+reads those roots back from the project object that performed materialization;
+the public replay path uses the exact authenticated resolved/installed package
+roots rather than reconstructing a sibling `node_modules` tree beside the
+tsconfig. When artifact resolution authenticated both logical and real package
+roots, the public path admits both exact spellings so TypeScript's symlink
+realpath does not create a false refusal. A package archive's own
+`dist/.../node_modules/<name>/...` member therefore remains owned by that
+package unless an independently authenticated nested package root is the exact
+longer prefix. The unauthenticated-external-source pass consumes the same root
+table, and the selected snapshot must contain the exact remainder with the
+producer's exact digest; there is no retry against a shorter or same-named
+root.
+
+The canonical `solid-recharts@1.0.1|solid1|only` refusal had no demand digest.
+Before this slice, witness acquisition misattributed
+`dist/browser/node_modules/csstype/index.d.ts` to the hoisted `csstype@3.2.3`
+snapshot and refused with `producer source digest differs from snapshot:
+index.d.ts`. After the change, the member is charged to the authenticated
+`solid-recharts` snapshot and the row certifies through catalog publication.
+
+Adversarial review found an order-dependent collision in the first
+implementation: distinct authenticated snapshots whose byte-compatible files
+materialized at one root could leave attribution to whichever root-table entry
+sorted first. Equal roots now deduplicate only when snapshot root, archive
+provenance root, and stable evidence prefix all agree; every other collision
+refuses. An exact duplicate that includes the owner remains owner-attributed.
+Tests pin vendored-owner, authenticated nested, and hoisted roots; root-boundary
+prefix collisions; equal-root identity conflicts; absent members; digest
+mismatches; stable evidence paths; and the prohibition on falling back after
+the longest root is selected. The first full verification pass caught a graph
+false refusal: reconstructing each graph node's target from that node's own
+installation path did not describe the already-materialized shared project.
+The project now records every plan and graph-source target as it writes it, and
+the bottom-up graph regression exercises those recorded roots. A separate
+monorepo regression pins the public path where the tsconfig is under
+`packages/app` but the authenticated package is hoisted at the repository
+root; a pnpm-style regression pins the authenticated realpath while refusing a
+different store version. Final re-review found no remaining bounded M6
+over-proof or order dependence.
+
+The three Start Server publisher defects and four Solid 2 TanStack
+query/persist undeclared-peer defects retain their exact refusal reasons.
+`@solid-primitives/context@0.3.2` still stops before certification because its
+published declaration closure is absent. No protocol, schema, snapshot, or
+generated artifact changed. The Round 2 full 418-probe remeasurement remains
+deferred until M10 lands.

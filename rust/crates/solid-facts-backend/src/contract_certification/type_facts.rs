@@ -671,6 +671,7 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
                 &live,
                 dependencies,
                 sources,
+                &project,
             )
             .map_err(|error| error.at_stage("live export-value verification"))
         })
@@ -767,6 +768,7 @@ pub(super) fn acquire_and_verify_graph_export_values(
                 &request.dependencies,
                 &census_dependencies,
                 &sources,
+                Some(&project),
             )
             .map_err(|error| {
                 error.at_graph_node(request.plan, "live graph export-value verification")
@@ -780,6 +782,7 @@ struct PrivateTypeFactsProject {
     project_id: PathBuf,
     harness: PathBuf,
     package_roots: std::collections::BTreeMap<(String, String), PathBuf>,
+    source_roots: std::collections::BTreeMap<String, PathBuf>,
 }
 
 impl PrivateTypeFactsProject {
@@ -830,6 +833,7 @@ impl PrivateTypeFactsProject {
             materialize_snapshot(&dependency.snapshot, &target)?;
             package_roots.insert(private_project_plan_key(dependency), target);
         }
+        let mut source_roots = std::collections::BTreeMap::new();
         for source in sources {
             let target = private_project_package_target(
                 &root,
@@ -839,6 +843,7 @@ impl PrivateTypeFactsProject {
                 source.snapshot.package_name(),
             );
             materialize_snapshot(&source.snapshot, &target)?;
+            source_roots.insert(source.identity.clone(), target);
         }
         let harness = root.join("solid-checker-export-values.ts");
         let project_id = root.join("tsconfig.json");
@@ -899,6 +904,7 @@ impl PrivateTypeFactsProject {
             project_id,
             harness,
             package_roots,
+            source_roots,
         })
     }
 
@@ -919,6 +925,23 @@ impl PrivateTypeFactsProject {
                         "{} different known package root(s)",
                         self.package_roots.len()
                     ),
+                )
+            })
+    }
+
+    fn source_root(
+        &self,
+        source: &super::dependencies::VerifiedGraphSourcePackage,
+    ) -> Result<&Path, TypeFactsCertificationError> {
+        self.source_roots
+            .get(&source.identity)
+            .map(PathBuf::as_path)
+            .ok_or_else(|| {
+                TypeFactsCertificationError::identity_mismatch(
+                    "private project lookup",
+                    "source_root",
+                    diagnostic_identity_path(&source.installed_package_root),
+                    format!("{} different known source root(s)", self.source_roots.len()),
                 )
             })
     }
@@ -1654,6 +1677,7 @@ pub(super) fn verify_live_answer(
         plan,
         &[],
         &[],
+        None,
         &answer.envelope.sources,
         &schedule.verifier_sources,
     )?;
@@ -1734,7 +1758,7 @@ pub(super) fn verify_live_export_value_answer(
     schedule: &TypeFactsCertificationSchedule,
     live: &LiveExportValueAnswer,
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
-    verify_live_export_value_answer_with_dependencies(plan, schedule, live, &[], &[])
+    verify_live_export_value_answer_with_project_census(plan, schedule, live, &[], &[], &[], None)
 }
 
 fn verify_live_export_value_answer_with_dependencies(
@@ -1743,6 +1767,7 @@ fn verify_live_export_value_answer_with_dependencies(
     live: &LiveExportValueAnswer,
     dependencies: &[&CertificationPlan],
     sources: &[super::dependencies::VerifiedGraphSourcePackage],
+    project: &PrivateTypeFactsProject,
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
     verify_live_export_value_answer_with_project_census(
         plan,
@@ -1751,6 +1776,7 @@ fn verify_live_export_value_answer_with_dependencies(
         dependencies,
         dependencies,
         sources,
+        Some(project),
     )
 }
 
@@ -1761,6 +1787,7 @@ fn verify_live_export_value_answer_with_project_census(
     dependencies: &[&CertificationPlan],
     census_dependencies: &[&CertificationPlan],
     census_sources: &[super::dependencies::VerifiedGraphSourcePackage],
+    project: Option<&PrivateTypeFactsProject>,
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
     verify_schedule_identity(
         "export-value verification",
@@ -1866,6 +1893,7 @@ fn verify_live_export_value_answer_with_project_census(
         plan,
         census_dependencies,
         census_sources,
+        project,
         &answer.envelope.sources,
         &schedule.verifier_sources,
     )?;
@@ -3842,6 +3870,7 @@ fn verify_snapshot_source_census(
     plan: &CertificationPlan,
     dependencies: &[&CertificationPlan],
     graph_sources: &[super::dependencies::VerifiedGraphSourcePackage],
+    project: Option<&PrivateTypeFactsProject>,
     sources: &[typefacts::TranscriptSourceDigest],
     verifier_sources: &[typefacts::TranscriptSourceDigest],
 ) -> Result<Vec<String>, TypeFactsCertificationError> {
@@ -3910,72 +3939,99 @@ fn verify_snapshot_source_census(
         sites.push(format!("typefacts-source:{suffix}:{}", matches[0].sha256));
     }
 
-    let mut dependency_markers = dependencies
-        .iter()
-        .map(|dependency| {
-            (
-                private_project_package_marker(
-                    plan,
-                    &dependency.resolved_import.package_root,
-                    dependency.snapshot.package_name(),
-                ),
-                &dependency.snapshot,
-            )
-        })
-        .chain(graph_sources.iter().map(|source| {
-            (
-                private_project_package_marker(
-                    plan,
-                    &source.installed_package_root,
-                    source.snapshot.package_name(),
-                ),
-                &source.snapshot,
-            )
-        }))
-        .collect::<Vec<_>>();
-    dependency_markers.sort_by(|(left, _), (right, _)| {
-        right.len().cmp(&left.len()).then_with(|| left.cmp(right))
+    let owner_roots = match project {
+        Some(project) => vec![project.package_root(plan)?.to_path_buf()],
+        None => authenticated_source_root_paths(
+            &plan.resolved_import.package_root,
+            plan.resolved_import.package_real_root.as_deref(),
+        ),
+    };
+    let mut source_roots = Vec::new();
+    for root in owner_roots {
+        source_roots.push(SnapshotSourceRoot {
+            path: normalized_source_root(&root),
+            evidence_prefix: materialized_source_evidence_prefix(project, &root, &package_marker)?,
+            snapshot: &plan.snapshot,
+            dependency: false,
+        });
+    }
+    for dependency in dependencies {
+        let roots = match project {
+            Some(project) => vec![project.package_root(dependency)?.to_path_buf()],
+            None => authenticated_source_root_paths(
+                &dependency.resolved_import.package_root,
+                dependency.resolved_import.package_real_root.as_deref(),
+            ),
+        };
+        let fallback_prefix = private_project_package_marker(
+            plan,
+            &dependency.resolved_import.package_root,
+            dependency.snapshot.package_name(),
+        );
+        for root in roots {
+            source_roots.push(SnapshotSourceRoot {
+                path: normalized_source_root(&root),
+                evidence_prefix: materialized_source_evidence_prefix(
+                    project,
+                    &root,
+                    &fallback_prefix,
+                )?,
+                snapshot: &dependency.snapshot,
+                dependency: true,
+            });
+        }
+    }
+    for source in graph_sources {
+        let root = project.map_or_else(
+            || Ok(PathBuf::from(&source.installed_package_root)),
+            |project| project.source_root(source).map(Path::to_path_buf),
+        )?;
+        let fallback_prefix = private_project_package_marker(
+            plan,
+            &source.installed_package_root,
+            source.snapshot.package_name(),
+        );
+        source_roots.push(SnapshotSourceRoot {
+            path: normalized_source_root(&root),
+            evidence_prefix: materialized_source_evidence_prefix(project, &root, &fallback_prefix)?,
+            snapshot: &source.snapshot,
+            dependency: true,
+        });
+    }
+    deduplicate_snapshot_source_roots(&mut source_roots)?;
+    source_roots.sort_by(|left, right| {
+        right
+            .path
+            .len()
+            .cmp(&left.path.len())
+            .then_with(|| left.path.cmp(&right.path))
     });
-    reject_unauthenticated_external_sources(&package_marker, &dependency_markers, sources)?;
+    let source_root_paths = source_roots
+        .iter()
+        .map(|root| root.path.clone())
+        .collect::<Vec<_>>();
+
+    reject_unauthenticated_external_sources(&source_root_paths, sources)?;
 
     // Every source attributed to this package must come from the immutable
     // snapshot. This catches a sibling/ancestor installation silently winning
     // resolution even when the demanded declaration happened to share bytes.
     for source in sources {
         let normalized = source.path.replace('\\', "/");
-        let matched = dependency_markers
-            .iter()
-            .map(|(marker, snapshot)| (marker, *snapshot))
-            .chain(std::iter::once((&package_marker, &plan.snapshot)))
-            .find_map(|(marker, snapshot)| {
-                normalized
-                    .rsplit_once(marker)
-                    .map(|(_, relative)| (snapshot, relative))
-            });
-        let Some((snapshot, relative)) = matched else {
+        let Some((root_index, relative)) =
+            strip_materialized_source_root(&normalized, &source_root_paths)
+        else {
             continue;
         };
-        let bytes = snapshot.read(relative).ok_or_else(|| {
-            TypeFactsCertificationError::SourceCensus(format!(
-                "producer consulted package source outside the snapshot: {relative}"
-            ))
-        })?;
-        let expected = format!("sha256:{:x}", Sha256::digest(bytes));
-        if expected != source.sha256.as_ref() {
-            return Err(TypeFactsCertificationError::SourceCensus(format!(
-                "producer source digest differs from snapshot: {relative}"
-            )));
-        }
-        if let Some((marker, snapshot)) = dependency_markers
-            .iter()
-            .find(|(marker, _)| normalized.contains(marker))
-        {
-            // `marker` is this package's project-relative root and `relative`
-            // its path inside the snapshot, so together they are the file's
-            // project-relative path.
+        let root = &source_roots[root_index];
+        let snapshot = root.snapshot;
+        verify_snapshot_source_digest(snapshot, relative, &source.sha256)?;
+        if root.dependency {
             sites.push(format!(
-                "typefacts-source-snapshot:{}:{marker}{relative}:{}",
+                "typefacts-source-snapshot:{}:{}{}:{}",
                 snapshot.provenance_root(),
+                root.evidence_prefix,
+                relative,
                 source.sha256
             ));
         }
@@ -3986,6 +4042,112 @@ fn verify_snapshot_source_census(
         ));
     }
     Ok(sites)
+}
+
+struct SnapshotSourceRoot<'a> {
+    path: String,
+    evidence_prefix: String,
+    snapshot: &'a super::ArtifactSnapshot,
+    dependency: bool,
+}
+
+fn deduplicate_snapshot_source_roots(
+    roots: &mut Vec<SnapshotSourceRoot<'_>>,
+) -> Result<(), TypeFactsCertificationError> {
+    roots.sort_by(|left, right| left.path.cmp(&right.path));
+    let mut unique = Vec::<SnapshotSourceRoot<'_>>::with_capacity(roots.len());
+    for root in roots.drain(..) {
+        let Some(existing) = unique
+            .last_mut()
+            .filter(|existing| existing.path == root.path)
+        else {
+            unique.push(root);
+            continue;
+        };
+        if existing.snapshot.root() != root.snapshot.root()
+            || existing.snapshot.provenance_root() != root.snapshot.provenance_root()
+            || existing.evidence_prefix != root.evidence_prefix
+        {
+            return Err(TypeFactsCertificationError::SourceCensus(format!(
+                "distinct authenticated snapshots claim one materialized package root: {}",
+                diagnostic_identity_path(&root.path)
+            )));
+        }
+        existing.dependency &= root.dependency;
+    }
+    *roots = unique;
+    Ok(())
+}
+
+fn normalized_source_root(path: &Path) -> String {
+    format!(
+        "{}/",
+        path.to_string_lossy()
+            .replace('\\', "/")
+            .trim_end_matches('/')
+    )
+}
+
+fn authenticated_source_root_paths(logical: &str, real: Option<&str>) -> Vec<PathBuf> {
+    let mut roots = vec![PathBuf::from(logical)];
+    if let Some(real) = real {
+        roots.push(PathBuf::from(real));
+    }
+    roots
+}
+
+fn materialized_source_evidence_prefix(
+    project: Option<&PrivateTypeFactsProject>,
+    root: &Path,
+    fallback: &str,
+) -> Result<String, TypeFactsCertificationError> {
+    let Some(project) = project else {
+        return Ok(fallback.to_owned());
+    };
+    let relative = root.strip_prefix(&project.root).map_err(|_| {
+        TypeFactsCertificationError::identity_mismatch(
+            "source census",
+            "materialized_root",
+            diagnostic_identity_path(&project.root.to_string_lossy()),
+            diagnostic_identity_path(&root.to_string_lossy()),
+        )
+    })?;
+    Ok(format!(
+        "/{}/",
+        relative
+            .to_string_lossy()
+            .replace('\\', "/")
+            .trim_matches('/')
+    ))
+}
+
+fn strip_materialized_source_root<'a>(
+    source: &'a str,
+    roots_longest_first: &[String],
+) -> Option<(usize, &'a str)> {
+    roots_longest_first
+        .iter()
+        .enumerate()
+        .find_map(|(index, root)| source.strip_prefix(root).map(|relative| (index, relative)))
+}
+
+fn verify_snapshot_source_digest(
+    snapshot: &super::ArtifactSnapshot,
+    relative: &str,
+    actual: &str,
+) -> Result<(), TypeFactsCertificationError> {
+    let bytes = snapshot.read(relative).ok_or_else(|| {
+        TypeFactsCertificationError::SourceCensus(format!(
+            "producer consulted package source outside the snapshot: {relative}"
+        ))
+    })?;
+    let expected = format!("sha256:{:x}", Sha256::digest(bytes));
+    if expected != actual {
+        return Err(TypeFactsCertificationError::SourceCensus(format!(
+            "producer source digest differs from snapshot: {relative}"
+        )));
+    }
+    Ok(())
 }
 
 fn private_project_package_marker(
@@ -4011,17 +4173,13 @@ fn private_project_package_marker(
 }
 
 fn reject_unauthenticated_external_sources(
-    package_marker: &str,
-    dependencies: &[(String, &super::ArtifactSnapshot)],
+    source_roots: &[String],
     sources: &[typefacts::TranscriptSourceDigest],
 ) -> Result<(), TypeFactsCertificationError> {
     for source in sources {
         let normalized = source.path.replace('\\', "/");
         if normalized.contains("/node_modules/")
-            && !normalized.contains(package_marker)
-            && !dependencies
-                .iter()
-                .any(|(marker, _)| normalized.contains(marker))
+            && strip_materialized_source_root(&normalized, source_roots).is_none()
         {
             return Err(TypeFactsCertificationError::SourceCensus(format!(
                 "producer consulted unauthenticated external package source: {normalized}"
@@ -5064,6 +5222,27 @@ mod tests {
 
     fn digest(bytes: &[u8]) -> String {
         format!("sha256:{:x}", Sha256::digest(bytes))
+    }
+
+    fn source_snapshot(
+        root: &str,
+        provenance_root: &str,
+        files: &[(&str, &[u8])],
+    ) -> super::super::ArtifactSnapshot {
+        super::super::ArtifactSnapshot {
+            package_name: "source-package".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512:test".into(),
+            files: std::sync::Arc::new(
+                files
+                    .iter()
+                    .map(|(path, bytes)| ((*path).to_owned(), std::sync::Arc::<[u8]>::from(*bytes)))
+                    .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: root.into(),
+            provenance_root: provenance_root.into(),
+        }
     }
 
     #[test]
@@ -8527,11 +8706,159 @@ mod tests {
         }];
         assert!(matches!(
             reject_unauthenticated_external_sources(
-                "/node_modules/fixture-package/",
-                &[],
+                &["/project/node_modules/fixture-package/".into()],
                 &sources,
             ),
             Err(TypeFactsCertificationError::SourceCensus(_))
+        ));
+    }
+
+    #[test]
+    fn source_census_uses_longest_materialized_root_prefix() {
+        let mut roots = vec![
+            "/project/node_modules/solid-recharts/".to_owned(),
+            "/project/node_modules/csstype/".to_owned(),
+            "/project/node_modules/solid-recharts/node_modules/csstype/".to_owned(),
+        ];
+        roots.sort_by(|left, right| right.len().cmp(&left.len()).then_with(|| left.cmp(right)));
+
+        let vendored =
+            "/project/node_modules/solid-recharts/dist/browser/node_modules/csstype/index.d.ts";
+        let (owner, relative) = strip_materialized_source_root(vendored, &roots).unwrap();
+        assert_eq!(roots[owner], "/project/node_modules/solid-recharts/");
+        assert_eq!(relative, "dist/browser/node_modules/csstype/index.d.ts");
+
+        let nested = "/project/node_modules/solid-recharts/node_modules/csstype/index.d.ts";
+        let (owner, relative) = strip_materialized_source_root(nested, &roots).unwrap();
+        assert_eq!(
+            roots[owner],
+            "/project/node_modules/solid-recharts/node_modules/csstype/"
+        );
+        assert_eq!(relative, "index.d.ts");
+
+        let hoisted = "/project/node_modules/csstype/index.d.ts";
+        let (owner, relative) = strip_materialized_source_root(hoisted, &roots).unwrap();
+        assert_eq!(roots[owner], "/project/node_modules/csstype/");
+        assert_eq!(relative, "index.d.ts");
+
+        assert!(
+            strip_materialized_source_root("/project/node_modules/unplanned/index.d.ts", &roots,)
+                .is_none()
+        );
+
+        let normalized = normalized_source_root(Path::new("/project/node_modules/pkg"));
+        assert_eq!(normalized, "/project/node_modules/pkg/");
+        for outside in [
+            "/project/node_modules/pkg-other/index.d.ts",
+            "/project/node_modules/pkg2/index.d.ts",
+        ] {
+            assert!(
+                strip_materialized_source_root(outside, std::slice::from_ref(&normalized))
+                    .is_none()
+            );
+        }
+
+        let authenticated_hoisted = normalized_source_root(Path::new("/repo/node_modules/pkg"));
+        assert_eq!(authenticated_hoisted, "/repo/node_modules/pkg/");
+        assert!(
+            strip_materialized_source_root(
+                "/repo/node_modules/pkg/index.d.ts",
+                std::slice::from_ref(&authenticated_hoisted),
+            )
+            .is_some()
+        );
+        assert!(
+            strip_materialized_source_root(
+                "/repo/packages/app/node_modules/pkg/index.d.ts",
+                std::slice::from_ref(&authenticated_hoisted),
+            )
+            .is_none()
+        );
+
+        let pnpm_roots = authenticated_source_root_paths(
+            "/repo/node_modules/pkg",
+            Some("/repo/.pnpm/pkg@1.0.0/node_modules/pkg"),
+        )
+        .into_iter()
+        .map(|root| normalized_source_root(&root))
+        .collect::<Vec<_>>();
+        assert!(
+            strip_materialized_source_root(
+                "/repo/.pnpm/pkg@1.0.0/node_modules/pkg/index.d.ts",
+                &pnpm_roots,
+            )
+            .is_some()
+        );
+        assert!(
+            strip_materialized_source_root(
+                "/repo/.pnpm/pkg@2.0.0/node_modules/pkg/index.d.ts",
+                &pnpm_roots,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn source_census_refuses_ambiguous_materialized_roots() {
+        let first = source_snapshot("sha256:first", "sha256:archive", &[]);
+        let same = source_snapshot("sha256:first", "sha256:archive", &[]);
+        let different_bytes = source_snapshot("sha256:second", "sha256:archive", &[]);
+        let different_archive = source_snapshot("sha256:first", "sha256:other-archive", &[]);
+
+        let root = |snapshot, dependency| SnapshotSourceRoot {
+            path: "/project/node_modules/pkg/".into(),
+            evidence_prefix: "/node_modules/pkg/".into(),
+            snapshot,
+            dependency,
+        };
+        let mut identical = vec![root(&first, false), root(&same, true)];
+        deduplicate_snapshot_source_roots(&mut identical).unwrap();
+        assert_eq!(identical.len(), 1);
+        assert!(!identical[0].dependency);
+
+        for conflicting in [&different_bytes, &different_archive] {
+            let mut roots = vec![root(&first, true), root(conflicting, true)];
+            assert!(matches!(
+                deduplicate_snapshot_source_roots(&mut roots),
+                Err(TypeFactsCertificationError::SourceCensus(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn source_census_never_falls_back_after_exact_root_selection() {
+        let bytes = b"export type Value = string;";
+        let nested = source_snapshot("sha256:nested", "sha256:nested-archive", &[]);
+        let owner = source_snapshot(
+            "sha256:owner",
+            "sha256:owner-archive",
+            &[("node_modules/dep/index.d.ts", bytes)],
+        );
+        let roots = vec![
+            "/project/node_modules/owner/node_modules/dep/".to_owned(),
+            "/project/node_modules/owner/".to_owned(),
+        ];
+        let source = "/project/node_modules/owner/node_modules/dep/index.d.ts";
+        let (selected, relative) = strip_materialized_source_root(source, &roots).unwrap();
+        assert_eq!(selected, 0);
+        assert!(matches!(
+            verify_snapshot_source_digest(&nested, relative, &digest(bytes)),
+            Err(TypeFactsCertificationError::SourceCensus(reason))
+                if reason.contains("outside the snapshot")
+        ));
+        assert!(
+            verify_snapshot_source_digest(&owner, "node_modules/dep/index.d.ts", &digest(bytes),)
+                .is_ok(),
+            "matching bytes under the shorter root cannot answer for the selected nested root"
+        );
+        assert!(matches!(
+            verify_snapshot_source_digest(
+                &owner,
+                "node_modules/dep/index.d.ts",
+                &digest(b"different"),
+            ),
+            Err(TypeFactsCertificationError::SourceCensus(reason))
+                if reason.contains("digest differs")
         ));
     }
 
