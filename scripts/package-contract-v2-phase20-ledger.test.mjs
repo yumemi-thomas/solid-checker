@@ -75,22 +75,19 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // These counts are a live read of benchmarks/ecosystem/report.json and move
   // whenever that report is regenerated against changed proposal semantics.
   // Re-pin them only from a report whose movement is attributable; the current
-  // values follow the producer-root round landed 2026-09-01 (see
-  // docs/precision-backlog.md): exact fixed tuples, intrinsic primitive-string
-  // indexing, and exact Array/ReadonlyArray roots no longer inherit the
-  // member-census `openIndex` signal; local node completeness is independent
-  // from subtree enumeration on protocol 9. The same round deliberately
-  // removes the two flux-store certifications after finding that instantiable
-  // generic path nodes had been emitted locally complete.
+  // values follow the producer-root and artifact-mechanics rounds landed
+  // 2026-09-01 (see docs/precision-backlog.md). The latter adds exactly three
+  // authenticated receipts: byte-identical duplicate archive members,
+  // default-export identity, and materialized-root source attribution.
   assert.deepEqual(ledger.summary.proposalStates, {
     complete: 344,
     "fully-refused": 37,
     partial: 37
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 53,
+    "exact-refusal": 50,
     "not-attempted": 25,
-    verified: 340
+    verified: 343
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -98,7 +95,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 340);
+  assert.equal(ledger.summary.verifiedRows, 343);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -348,6 +345,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/sse@0.0.103|solid1|only",
       "@solid-primitives/sse@1.0.0-next.2|solid2|floor",
       "@solid-primitives/sse@1.0.0-next.2|solid2|head",
+      "@solid-primitives/start@0.0.4|solid1|only",
       "@solid-primitives/state-machine@0.1.1|solid1|only",
       "@solid-primitives/state-machine@1.0.0-next.2|solid2|floor",
       "@solid-primitives/state-machine@1.0.0-next.2|solid2|head",
@@ -369,6 +367,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/trigger@1.2.4|solid1|only",
       "@solid-primitives/trigger@3.0.0-next.2|solid2|floor",
       "@solid-primitives/trigger@3.0.0-next.2|solid2|head",
+      "@solid-primitives/tween@1.4.1|solid1|only",
       "@solid-primitives/tween@2.0.0-next.2|solid2|floor",
       "@solid-primitives/tween@2.0.0-next.2|solid2|head",
       "@solid-primitives/upload@0.1.5|solid1|only",
@@ -440,6 +439,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "motion-solidjs@0.7.0-beta.4|solid2|floor",
       "motion-solidjs@0.7.0-beta.4|solid2|head",
       "solid-js@2.0.0-rc.3|solid2|only",
+      "solid-recharts@1.0.1|solid1|only",
       "solid-recharts@2.0.0-beta.1|solid2|floor",
       "solid-recharts@2.0.0-beta.1|solid2|head"
     ]

@@ -5547,21 +5547,36 @@ fn validate_module_export_precedence(
     // name: illegal duplicate const/class declarations also share a spelling
     // (and may share a recovery symbol on a TypeScript-error program).
     // Specifier/default/namespace-export entries remain separate entries.
+    let declaration_path = path.to_string_lossy();
+    let is_declaration_module = [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|suffix| declaration_path.ends_with(suffix));
     let mut declaration_entries = Vec::new();
     let mut explicit_count = 0;
     for export in ast.module_level_exports() {
         let count = explicit_runtime_export_binding_count(export, name);
-        let declarations =
-            if export.kind == solid_facts::ast::ExportKind::Named && export.module.is_none() {
-                export
-                    .declarations
-                    .iter()
-                    .filter(|declaration| !declaration.type_only && declaration.exported == name)
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-        explicit_count += count - declarations.len();
+        let declarations = if export.kind == solid_facts::ast::ExportKind::Named
+            && export.module.is_none()
+            && (!export.type_only || is_declaration_module)
+        {
+            export
+                .declarations
+                .iter()
+                .filter(|declaration| !declaration.type_only && declaration.exported == name)
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        // Oxc correctly marks a bodyless overload signature as type-only in a
+        // runtime source file. A declaration module has no body by design, so
+        // its direct declaration entries are counted below as the authenticated
+        // type surface standing in for the separately materialized runtime.
+        let declarations_already_counted = if export.type_only {
+            0
+        } else {
+            declarations.len()
+        };
+        explicit_count += count - declarations_already_counted;
         declaration_entries.extend(declarations);
     }
     let reviewed_class_namespace_merge = match declaration_entries.as_slice() {
@@ -5573,7 +5588,17 @@ fn validate_module_export_precedence(
         }
         _ => false,
     };
-    explicit_count += if reviewed_class_namespace_merge {
+    let function_declarations = declaration_entries
+        .iter()
+        .map(|entry| ast.function_declaration_at(entry.local.span))
+        .collect::<Option<Vec<_>>>();
+    let reviewed_function_overload_set = function_declarations.as_ref().is_some_and(|entries| {
+        let implementation_count = entries.iter().filter(|entry| entry.has_body).count();
+        !entries.is_empty()
+            && ((implementation_count == 1 && !is_declaration_module)
+                || (implementation_count == 0 && is_declaration_module))
+    });
+    explicit_count += if reviewed_class_namespace_merge || reviewed_function_overload_set {
         1
     } else {
         declaration_entries.len()
@@ -5603,7 +5628,16 @@ mod accepted_reexport_precedence_tests {
     }
 
     fn consult_stars(source: &str, name: &str) -> Result<bool, Box<dyn std::error::Error>> {
-        validate_module_export_precedence(&ast(source), Path::new("/project/index.mts"), name)
+        consult_stars_at("/project/index.mts", source, name)
+    }
+
+    fn consult_stars_at(
+        path: &str,
+        source: &str,
+        name: &str,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let facts = solid_facts::ast::extract(path, source).expect("valid module");
+        validate_module_export_precedence(&facts, Path::new(path), name)
     }
 
     #[test]
@@ -5710,6 +5744,113 @@ mod accepted_reexport_precedence_tests {
             assert!(
                 !consult_stars(source, "Merged")
                     .expect("a class+namespace merge binds one runtime name")
+            );
+        }
+    }
+
+    #[test]
+    fn typescript_function_overloads_are_one_explicit_runtime_binding() {
+        let runtime_source = r#"
+            export * from 'm';
+            export function getRelativeCoordinate(event: MouseEvent): Point;
+            export function getRelativeCoordinate(event: TouchEvent): Point[];
+            export function getRelativeCoordinate(event: MouseEvent | TouchEvent): Point | Point[] {
+                return {} as Point;
+            }
+        "#;
+        for path in ["/project/index.ts", "/project/index.mts"] {
+            assert!(
+                !consult_stars_at(path, runtime_source, "getRelativeCoordinate")
+                    .expect("one implementation closes the overload set"),
+                "runtime overload was not collapsed for {path}"
+            );
+        }
+
+        let declaration_source = r#"
+            export * from 'm';
+            export declare function parse(value: string): string;
+            export declare function parse(value: Uint8Array): string;
+        "#;
+        for path in [
+            "/project/index.d.ts",
+            "/project/index.d.mts",
+            "/project/index.d.cts",
+        ] {
+            assert!(
+                !consult_stars_at(path, declaration_source, "parse")
+                    .expect("a declaration module publishes one overloaded binding"),
+                "declaration overload was not collapsed for {path}"
+            );
+        }
+
+        assert!(
+            consult_stars_at("/project/index.d.ts", "export * from 'm';", "parse")
+                .expect("an empty declaration set is not an overload set"),
+            "a declaration-module star must remain eligible when no explicit declaration exists"
+        );
+
+        let mixed_error = consult_stars_at(
+            "/project/index.d.ts",
+            "export declare function parse(): void; export declare const parse: number;",
+            "parse",
+        )
+        .expect_err("mixed declaration kinds are not a function overload set");
+        assert!(
+            mixed_error
+                .to_string()
+                .contains("2 explicit runtime export entries"),
+            "unexpected mixed-declaration refusal: {mixed_error}"
+        );
+
+        for path in [
+            "/project/index.d.ts",
+            "/project/index.d.mts",
+            "/project/index.d.cts",
+        ] {
+            for source in [
+                "export * from 'm'; export function x(a: string): void; export function x(a: unknown) {}",
+                "export * from 'm'; export function x() {} export function x() {}",
+            ] {
+                let error = consult_stars_at(path, source, "x")
+                    .expect_err("a declaration module cannot authenticate function bodies");
+                assert!(
+                    error
+                        .to_string()
+                        .contains("2 explicit runtime export entries"),
+                    "unexpected declaration-body refusal for {path}: {error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn overload_shape_does_not_hide_duplicate_runtime_declarations() {
+        for (source, count) in [
+            ("export function x() {} export function x() {}", 2),
+            (
+                "export function x() {} export function x(): void; export function x() {}",
+                3,
+            ),
+        ] {
+            let error = consult_stars(source, "x")
+                .expect_err("an unproved runtime overload set must remain refused");
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("{count} explicit runtime export entries")),
+                "unexpected refusal for {source}: {error}"
+            );
+        }
+
+        for path in ["/project/index.ts", "/project/index.mts"] {
+            assert!(
+                consult_stars_at(
+                    path,
+                    "export * from 'm'; export declare function x(a: string): void; export declare function x(a: number): void;",
+                    "x"
+                )
+                .expect("bodyless signatures in a runtime source do not publish a runtime entry"),
+                "ambient overload signatures must not hide the real star export for {path}"
             );
         }
     }

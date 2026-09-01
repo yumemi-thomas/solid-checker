@@ -10752,3 +10752,67 @@ control gains a conditional edge. No Type Facts protocol or public contract
 schema changed; the internal AST facts schema moved from 39 to 40. The Round 2
 full 418-probe remeasurement remains deferred until this individually green
 slice lands.
+
+## 2026-09-01 — Artifact-mechanics round: three exact recoveries, no hidden gains
+
+The authoritative 418-probe remeasurement records 344 complete proposals, 37
+partial proposals, and 37 fully refused proposals. Certification is now 343
+verified, 50 exact refusals, and 25 not attempted. Relative to the checked-in
+producer-roots report, exactly three certification verdicts moved and all three
+were the bounded artifact-mechanics acceptances:
+
+| probe | before | after |
+| --- | --- | --- |
+| `@solid-primitives/start@0.0.4\|solid1\|only` | exact refusal before demand planning: byte-identical canonical archive member `dist/index.cjs` appeared twice | verified; M7 retains one authenticated member identity |
+| `@solid-primitives/tween@1.4.1\|solid1\|only` | exact refusal at `sha256:53bc385769aecf2468dce0903cc8795b2d832d96f3470697742bb283c1136d49`: declaration name disagreed with default-export replay | verified; M5 keeps resolver, selector, and producer query identities separate |
+| `solid-recharts@1.0.1\|solid1\|only` | exact refusal before a demand digest: vendored `dist/browser/node_modules/csstype/index.d.ts` was charged to the hoisted `csstype` snapshot | verified; M6 attributes the source to the longest exact materialized package root |
+
+The remaining bounded mechanisms advanced only to later honest refusals:
+
+- M2, `@tanstack/ai-solid@0.19.1`, moved from declaration-substitution demand
+  `sha256:2dd8afbd69ebe886683183c10f6e080712c0de1d0e21362540280f7fe8f4048f`
+  to operation-reachability demand
+  `sha256:1097d02a3424f9c13e8f456a8f606bb17382e3d0f698f8cacb6ea7ca87671389`.
+- M3, `@tanstack/solid-db@0.2.40`, moved from namespace-suffix demand
+  `sha256:b9a804368e8a7fd546f0ae1b10915131d9da2afa32b01915542628df38da366b`
+  to the locally open recursive-value demand
+  `sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983`.
+- M5, `@solid-primitives/local-store@1.1.4`, discharged identity demand
+  `sha256:174bb5aa2e0dcae2c5cfd3883b5358050541f3fd8a4e559de81951ea5efefaad`
+  and now refuses the distinct operation-reachability demand
+  `sha256:446606d9de553833a6e31e24febc2b56fcf04d92e1cef042d314bb2007d96c99`.
+- M8, `motion-solidjs@0.6.0`, no longer reports two accepted identities for
+  `delay`; it remains refused before demand planning because `addScaleCorrector`
+  resolves outside the authenticated package.
+- M10, `@solidjs/testing-library@0.8.10`, no longer treats absent optional
+  `@solidjs/router` as a fatal edge; it remains refused before a demand digest
+  because the later `@testing-library/dom/build/index.js` entry has no runtime
+  ESM exports.
+- M9 made both opaque identity stops deterministic. `@tanstack/solid-query`
+  reaches demand
+  `sha256:1e5287b5f6ac0365df170c68881e1c20a57c87d64fa0ea59ffc460be4336d496`
+  and refuses an unavailable implementation transcript;
+  `@tanstack/solid-query-persist-client` names the exact
+  `implementation_location` disagreement and has no demand digest.
+
+All seven publisher-defect controls remain refused: the three Solid Start
+Server rows still lack `#tanstack-router-entry`, and the four Solid 2 TanStack
+query/persist rows still lack the undeclared `@solidjs/web` peer that `tsc`
+reports as TS2307. The separate `@solid-primitives/context@0.3.2` declaration-
+closure must-not-clear control also remains refused. No proposal class moved,
+and there was no unexpected certification gain or loss.
+
+The first full measurement exposed a latent M8 regression in both
+`solid-recharts@2.0.0-beta.1` Solid 2 rows: two overload signatures plus their
+implementation were counted as three runtime exports. The invalid measurement
+was not pinned. AST facts schema 41 now records exact direct function-
+declaration names and whether each has a body. Runtime `.ts`/`.mts` overloads
+collapse only with exactly one body; declaration `.d.ts`/`.d.mts`/`.d.cts`
+overloads collapse only with zero bodies. Empty sets, mixed declaration kinds,
+ambient runtime-source signatures, declaration-file bodies, and duplicate
+implementations are mutation-pinned refusals. Adversarial review first caught
+the vacuous empty-set star suppression and then the declaration-file body
+over-permission; both were fixed before the final 418-probe run. The final
+Solid 2 floor and head rows are again verified, so neither is a verdict
+movement in the authoritative report. No Type Facts protocol or public contract
+schema changed in this repair.

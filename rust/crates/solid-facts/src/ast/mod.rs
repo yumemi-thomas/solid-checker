@@ -28,7 +28,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 40;
+pub const AST_FACTS_SCHEMA: u32 = 41;
 
 mod span_index;
 
@@ -42,6 +42,14 @@ pub struct AstFacts {
     pub calls: Vec<CallFact>,
     pub bindings: Vec<BindingFact>,
     pub functions: Vec<FunctionFact>,
+    /// Direct named function declarations, including overload signatures whose
+    /// body is absent. [`FunctionFact`] deliberately models executable
+    /// functions and therefore cannot distinguish a TypeScript overload
+    /// signature from some unrelated exported declaration with the same name.
+    /// Contract emission needs that exact distinction when counting runtime
+    /// export entries.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub function_declarations: Vec<FunctionDeclarationFact>,
     /// Class declarations and expressions. See [`ClassFact`]: a class is
     /// `typeof === "function"` at runtime but carries no call signature, so
     /// this is the only fact domain that can tell a contract generator the
@@ -421,6 +429,13 @@ pub struct FunctionFact {
     /// expression-bodied arrows, which have no statement prologue.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub directives: Vec<CompactString>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FunctionDeclarationFact {
+    pub name: NamedSpan,
+    pub has_body: bool,
 }
 
 impl FunctionFact {
@@ -895,6 +910,15 @@ impl AstFacts {
             .is_ok()
     }
 
+    /// The direct function declaration whose binding name is exactly `span`.
+    #[must_use]
+    pub fn function_declaration_at(&self, span: Span) -> Option<&FunctionDeclarationFact> {
+        self.function_declarations
+            .binary_search_by_key(&span, |declaration| declaration.name.span)
+            .ok()
+            .map(|index| &self.function_declarations[index])
+    }
+
     /// Whether `span` is *exactly* the target an assignment overwrites without
     /// reading the previous value — plain `=` and nothing else.
     ///
@@ -1022,6 +1046,7 @@ impl AstFacts {
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
+            function_declarations: Vec::new(),
             classes: Vec::new(),
             namespace_declarations: Vec::new(),
             imports: Vec::new(),
@@ -1149,6 +1174,7 @@ struct Collector<'s, 'semantic> {
     calls: Vec<CallFact>,
     bindings: Vec<BindingFact>,
     functions: Vec<FunctionFact>,
+    function_declarations: Vec<FunctionDeclarationFact>,
     classes: Vec<ClassFact>,
     namespace_declarations: Vec<NamedSpan>,
     imports: Vec<ImportFact>,
@@ -1264,6 +1290,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
+            function_declarations: Vec::new(),
             classes: Vec::new(),
             namespace_declarations: Vec::new(),
             imports: Vec::new(),
@@ -1304,6 +1331,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.calls.sort_by_key(|fact| fact.span);
         self.bindings.sort_by_key(|fact| fact.declaration);
         self.functions.sort_by_key(|fact| fact.span);
+        self.function_declarations
+            .sort_by_key(|declaration| declaration.name.span);
         self.classes.sort_by_key(|fact| fact.span);
         self.namespace_declarations.sort_by_key(|name| name.span);
         self.imports.sort_by_key(|fact| fact.span);
@@ -1339,6 +1368,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             calls: self.calls,
             bindings: self.bindings,
             functions: self.functions,
+            function_declarations: self.function_declarations,
             classes: self.classes,
             namespace_declarations: self.namespace_declarations,
             imports: self.imports,
@@ -2047,6 +2077,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_function(&mut self, function: &Function<'a>, flags: ScopeFlags) {
+        if matches!(
+            function.r#type,
+            FunctionType::FunctionDeclaration | FunctionType::TSDeclareFunction
+        ) && let Some(name) = &function.id
+        {
+            self.function_declarations.push(FunctionDeclarationFact {
+                name: NamedSpan {
+                    span: span(name.span),
+                },
+                has_body: function.body.is_some(),
+            });
+        }
         if let Some(body) = &function.body {
             self.functions.push(FunctionFact {
                 span: span(function.span),

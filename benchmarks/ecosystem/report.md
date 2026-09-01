@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-01T08:35:07.779Z
-- Finished: 2026-09-01T08:38:58.544Z
-- Duration: 230765 ms
+- Started: 2026-09-01T13:55:06.916Z
+- Finished: 2026-09-01T13:58:10.515Z
+- Duration: 183599 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Manifest generated at: 2026-08-26T14:21:49.573Z (rows: 307, probes: 418)
@@ -17,7 +17,7 @@
 - Declared entrypoints: 44
 - Generated entrypoints: 32
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 61
+- Refused artifact cases (partial contracts): 58
 - Inapplicable artifact cases (recorded, not refused): 3
 - Success (complete contracts): 2/6 (33.33%)
 - Partial contracts: 3
@@ -43,9 +43,9 @@ Failure details:
 - Compatible packages: 4
 - Probes run: 4
 - Declared entrypoints: 14
-- Generated entrypoints: 560
+- Generated entrypoints: 561
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 117
+- Refused artifact cases (partial contracts): 116
 - Inapplicable artifact cases (recorded, not refused): 94
 - Success (complete contracts): 0/4 (0%)
 - Partial contracts: 3
@@ -422,9 +422,9 @@ Failure details:
 - Compatible packages: 2
 - Probes run: 2
 - Declared entrypoints: 3
-- Generated entrypoints: 65
+- Generated entrypoints: 66
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 7
+- Refused artifact cases (partial contracts): 5
 - Inapplicable artifact cases (recorded, not refused): 0
 - Success (complete contracts): 0/2 (0%)
 - Partial contracts: 2
@@ -848,9 +848,9 @@ None.
 - Probes with at least one refused entrypoint: 37
 - Probes with at least one inapplicable artifact case: 311
 - Probes with at least one closure note: 0
-- Exports proven: 0/8682 (0%) (with unknown: 8682, without a summary: 0)
+- Exports proven: 0/8847 (0%) (with unknown: 8847, without a summary: 0)
 - Of those unknown exports: 31 unknown in every measured domain (the generator said nothing about them at all), 0 unknown only inside a conditional variant (the default resolution is fully claimed)
-- Entrypoints: 1126 emitted, 0 refused; 371 artifact cases refused, 465 artifact cases inapplicable
+- Entrypoints: 1128 emitted, 0 refused; 365 artifact cases refused, 465 artifact cases inapplicable
 - Closure notes (block byte-attested verification): 0
 - Attested closure notes (record complete, runtime unbounded): 0
 
@@ -858,11 +858,11 @@ None.
 
 | Artifact | Samples | p50 bytes | p95 bytes | max bytes |
 | --- | ---: | ---: | ---: | ---: |
-| Pretty main | 381 | 2186 | 12864 | 668364 |
-| Canonical minified main | 381 | 1632 | 9629 | 495773 |
-| Proposal plan (not evidence) | 381 | 49252 | 540062 | 19517777 |
+| Pretty main | 381 | 2186 | 12864 | 679409 |
+| Canonical minified main | 381 | 1632 | 9629 | 505226 |
+| Proposal plan (not evidence) | 381 | 49252 | 540062 | 20322252 |
 | Canonical bytes per export | 381 | 356 | 1085 | 1696 |
-| Canonical bytes per operation | 91 | 844.5 | 2521 | 16525.77 |
+| Canonical bytes per operation | 91 | 844.5 | 2521 | 16840.87 |
 
 Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate.
 
@@ -870,26 +870,26 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 
 | Domain | Exports carrying an unknown |
 | --- | --- |
-| callbacks | 8682 |
-| reads | 8682 |
-| writes | 8682 |
-| creates | 8682 |
-| invalidates | 8682 |
-| throws | 8682 |
-| returns | 8682 |
-| cleanups | 8682 |
-| disposals | 8682 |
+| callbacks | 8847 |
+| reads | 8847 |
+| writes | 8847 |
+| creates | 8847 |
+| invalidates | 8847 |
+| throws | 8847 |
+| returns | 8847 |
+| cleanups | 8847 |
+| disposals | 8847 |
 | recursiveValue | 31 |
-| **total** | **78169** |
+| **total** | **79654** |
 
-Read the domain columns together, not separately: 31 of the 8682 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
+Read the domain columns together, not separately: 31 of the 8847 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
 
 ### Positive behavioral rows (what a probe step would have to drive)
 
 | Row kind | Count |
 | --- | --- |
-| invoke | 407 |
-| return | 285 |
+| invoke | 413 |
+| return | 291 |
 | read | 389 |
 | write | 0 |
 | invalidate | 0 |
@@ -901,8 +901,8 @@ Read the domain columns together, not separately: 31 of the 8682 unknown exports
 
 | Family | Contracts | Fully proven | With unknowns | With refusals | Exports proven | Unknown claims |
 | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 19 | 0/19 (0%) | 19 | 10 | 0/1614 (0%) | 14545 |
-| Kobalte | 5 | 0/5 (0%) | 5 | 5 | 0/3417 (0%) | 30753 |
+| Official Solid | 19 | 0/19 (0%) | 19 | 10 | 0/1638 (0%) | 14761 |
+| Kobalte | 5 | 0/5 (0%) | 5 | 5 | 0/3558 (0%) | 32022 |
 | Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17423 |
 | Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2632 |
 | TanStack | 38 | 0/38 (0%) | 38 | 8 | 0/271 (0%) | 2439 |
@@ -914,9 +914,9 @@ Read the domain columns together, not separately: 31 of the 8682 unknown exports
 
 | Package | Solid | Unknown claims | Exports with unknown / total | All five domains | Variant-only | Dominant cause |
 | --- | --- | --- | --- | --- | --- | --- |
-| @kobalte/core@0.13.13 | solid1 | 20295 | 2255/2255 | 0 | 0 | callbacks |
-| @kobalte/core@2.0.0-alpha.0 | solid2 | 8352 | 928/928 | 0 | 0 | callbacks |
-| solid-js@1.9.14 | solid1 | 5526 | 612/612 | 18 | 0 | callbacks |
+| @kobalte/core@0.13.13 | solid1 | 21168 | 2352/2352 | 0 | 0 | callbacks |
+| @kobalte/core@2.0.0-alpha.0 | solid2 | 8748 | 972/972 | 0 | 0 | callbacks |
+| solid-js@1.9.14 | solid1 | 5742 | 636/636 | 18 | 0 | callbacks |
 | @solidjs/web@2.0.0-rc.3 | solid2 | 4347 | 483/483 | 0 | 0 | callbacks |
 | solid-recharts@1.0.1 | solid1 | 2943 | 327/327 | 0 | 0 | callbacks |
 | @solidjs/signals@2.0.0-rc.3 | solid2 | 1647 | 183/183 | 0 | 0 | callbacks |
@@ -936,8 +936,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 3119871 ms
-- Phases: install 83302 ms, generation 436206 ms, harness 2600363 ms
+- Worker time: 2474884 ms
+- Phases: install 61989 ms, generation 436418 ms, harness 1976477 ms
 
 ### Top failure signatures
 
@@ -970,8 +970,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Partial contracts
 
-- @kobalte/core@0.13.13 (kobalte): 507 entrypoint(s) generated, 0 entrypoint(s) and 53 artifact case(s) refused
-- @kobalte/core@2.0.0-alpha.0 (kobalte): 58 entrypoint(s) generated, 0 entrypoint(s) and 6 artifact case(s) refused
+- @kobalte/core@0.13.13 (kobalte): 508 entrypoint(s) generated, 0 entrypoint(s) and 52 artifact case(s) refused
+- @kobalte/core@2.0.0-alpha.0 (kobalte): 59 entrypoint(s) generated, 0 entrypoint(s) and 4 artifact case(s) refused
 - @kobalte/solidbase@0.6.13 (kobalte): 33 entrypoint(s) generated, 0 entrypoint(s) and 59 artifact case(s) refused
 - @kobalte/utils@0.9.2 (kobalte): 20 entrypoint(s) generated, 0 entrypoint(s) and 5 artifact case(s) refused
 - @kobalte/utils@2.0.0-alpha.0 (kobalte): 7 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
@@ -1005,7 +1005,7 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 - motion-solidjs@0.7.0-beta.4 (motion-solidjs): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
 - motion-solidjs@0.7.0-beta.4 (motion-solidjs): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
 - solid-devtools@0.34.5 (solid-devtools): 1 entrypoint(s) generated, 0 entrypoint(s) and 7 artifact case(s) refused
-- solid-js@1.9.14 (official-solid): 18 entrypoint(s) generated, 0 entrypoint(s) and 57 artifact case(s) refused
+- solid-js@1.9.14 (official-solid): 18 entrypoint(s) generated, 0 entrypoint(s) and 54 artifact case(s) refused
 - solid-js@2.0.0-rc.3 (official-solid): 1 entrypoint(s) generated, 0 entrypoint(s) and 21 artifact case(s) refused
 
 ### Shared dependency blockers
