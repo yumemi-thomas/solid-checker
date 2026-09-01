@@ -1,0 +1,249 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7be6f2b049d4c0baa47bb96eda63b425f4e26dd96854d330f6ef8fc6408ea33a",
+            "path": "./index.ts",
+            "sha256": "5cf279537432a846a54692614aff221367092767a8dd6adaaa31de8eec114e03"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "5cf279537432a846a54692614aff221367092767a8dd6adaaa31de8eec114e03"
+          },
+          "exports": {
+            "defaultReexportShorthand": "summary-e08caafb0a4fccc77c554184e4ca812a1ba4458d48351ce570e083b962eeb294",
+            "exportAllShorthand": "summary-aa7fdbf75329d28845041367112694c816f9152920da2ce52525f573bef0d8be",
+            "importedAccessorShorthand": "summary-37384c4f3fded9b27e4752e25b0b1c557e626ca827d6fde48fc4459e4327439e",
+            "importedShorthand": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "namedReexportShorthand": "summary-bc6e92c24d3681c461803ba3ecc080315d58501f5bc68aeebd6f97a69e2a084a",
+            "namespaceShorthand": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "scopedShorthand": "summary-070f9d3cbb153600d5c7db325a2ee502b9690f394a3156ae546be7be9f702895",
+            "shadowedShorthand": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "unprovenShorthand": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "writtenShorthand": "summary-070f9d3cbb153600d5c7db325a2ee502b9690f394a3156ae546be7be9f702895"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:836eaca5ac3b5acaefda3fd5b949d7177a40d4ac7e89ed77b72dbe0b3c239d89",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "836eaca5ac3b5acaefda3fd5b949d7177a40d4ac7e89ed77b72dbe0b3c239d89"
+    },
+    "name": "shorthand-block-scope-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-070f9d3cbb153600d5c7db325a2ee502b9690f394a3156ae546be7be9f702895": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "tracked",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-37384c4f3fded9b27e4752e25b0b1c557e626ca827d6fde48fc4459e4327439e": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "importedTracked",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-aa7fdbf75329d28845041367112694c816f9152920da2ce52525f573bef0d8be": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "starTracked",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-bc6e92c24d3681c461803ba3ecc080315d58501f5bc68aeebd6f97a69e2a084a": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "chainedTracked",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-e08caafb0a4fccc77c554184e4ca812a1ba4458d48351ce570e083b962eeb294": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "defaultFromBarrel",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

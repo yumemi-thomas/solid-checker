@@ -1,0 +1,45 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c1005ad3f2e0fb95c2f958ac22e738bf240be2634265bc423eaabf37f66aea57",
+            "path": "./index.js",
+            "sha256": "45f510a72f7a2d7878a834789c78accf296ca531187b744e0afaa1d7ce48612b"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "45f510a72f7a2d7878a834789c78accf296ca531187b744e0afaa1d7ce48612b"
+          },
+          "exports": {
+            "shadowedResizeObserver": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:724cc05cb5542f6dd08fa791c470899e38a2c691a36109bd633acf674d3fe2ca",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "724cc05cb5542f6dd08fa791c470899e38a2c691a36109bd633acf674d3fe2ca"
+    },
+    "name": "runtime-semantics-shadowed-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

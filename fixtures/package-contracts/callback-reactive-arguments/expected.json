@@ -1,0 +1,81 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "84086c28badc37be8938e8c88fdb1b3158db36628f1377281edc28054eabcd54",
+            "path": "./index.js",
+            "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "9cac85e64e6a7649af44ab1afe3d06867c22dd22a3f671b34f852deb75b401d6"
+          },
+          "exports": {
+            "mapValue": "summary-8435ce063fc32c1614f4d38f662eccfacacc622b12cff30a7d333a2000d44361"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:c65628378fba568262129af2ea6053a784ed9168673a87f61d8904a5b878cccd",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "c65628378fba568262129af2ea6053a784ed9168673a87f61d8904a5b878cccd"
+    },
+    "name": "callback-reactive-arguments",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-8435ce063fc32c1614f4d38f662eccfacacc622b12cff30a7d333a2000d44361": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "inputs": [
+              "unknown",
+              {
+                "kind": "reactive",
+                "role": "accessor"
+              }
+            ],
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+solid-checker: no certifiable artifact case; 1 case(s) refused; first refusal: .: solid-checker-rust: emit package contract: entry file <package-root>/index.js has no runtime ESM exports

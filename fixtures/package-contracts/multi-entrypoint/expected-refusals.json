@@ -1,0 +1,18 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "multi-entrypoint-package",
+    "version": "1.2.3"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./empty",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/empty.ts has no runtime ESM exports"
+    }
+  ],
+  "inapplicable": []
+}

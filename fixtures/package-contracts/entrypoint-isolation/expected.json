@@ -1,0 +1,89 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "2344f180d8bba86dfffcb4b5ffce8cd086a772560297762aaddeecd94a58c80d",
+            "path": "./index.ts",
+            "sha256": "6ce7c4f7e39d58d5c9131e783efbfe23df0e8e564c0f1a260a016babca11a8bc"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "6ce7c4f7e39d58d5c9131e783efbfe23df0e8e564c0f1a260a016babca11a8bc"
+          },
+          "exports": {
+            "readRoot": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    },
+    "./broken": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "4a723b2d1fc5cb555c48ac0479c48a4b32045147e446e0f2fdce2afc8c74ed86",
+            "path": "./broken.ts",
+            "sha256": "a4311cdc9d3f01d4215e87a720b60b2ae8e792b511ec4dbc7457e8f58bb3c573"
+          },
+          "declarations": {
+            "path": "./broken.ts",
+            "sha256": "a4311cdc9d3f01d4215e87a720b60b2ae8e792b511ec4dbc7457e8f58bb3c573"
+          },
+          "exports": {
+            "publicScheduler": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1broken",
+            "typesBranch": "/exports/.~1broken"
+          }
+        }
+      ]
+    },
+    "./feature": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "e74a0c34d2952f7044b7807e6db1ec73b69a2a282572014252fd9102ec84cbfd",
+            "path": "./feature.js",
+            "sha256": "ea095407e81898c6f52d68c3bc9d7932d3323245a821f4bcbf551594c358bbaa"
+          },
+          "declarations": {
+            "path": "./feature.js",
+            "sha256": "ea095407e81898c6f52d68c3bc9d7932d3323245a821f4bcbf551594c358bbaa"
+          },
+          "exports": {
+            "featureValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1feature",
+            "typesBranch": "/exports/.~1feature"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:2ea88b7c3c91f442275828b973c0cd3454f6c52fb1676e13a21973c75a51ee88",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "2ea88b7c3c91f442275828b973c0cd3454f6c52fb1676e13a21973c75a51ee88"
+    },
+    "name": "entrypoint-isolation-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

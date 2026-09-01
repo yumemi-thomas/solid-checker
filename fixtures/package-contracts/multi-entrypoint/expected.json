@@ -1,0 +1,134 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "49ff327450de221f0638d7b6bbf0b5e8ed0463f6c70068ad99039d9f33a456d1",
+            "path": "./node.ts",
+            "sha256": "c9757e99143615c12daab23af7b441ec1421fed871812889b22697d8b6d60281"
+          },
+          "declarations": {
+            "path": "./node.ts",
+            "sha256": "c9757e99143615c12daab23af7b441ec1421fed871812889b22697d8b6d60281"
+          },
+          "exports": {
+            "nodeOnlyValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./node/import",
+            "typesBranch": "/exports/./node/import"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "72a8f54c6b72d0063a50f766fbd3406c24538c12e4a280f043328619c409325c",
+            "path": "./index.ts",
+            "sha256": "699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828"
+          },
+          "exports": {
+            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "rootConstant": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "rootValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./browser/import",
+            "typesBranch": "/exports/./browser/import"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "72a8f54c6b72d0063a50f766fbd3406c24538c12e4a280f043328619c409325c",
+            "path": "./index.ts",
+            "sha256": "699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "699c98dfa55f68e9e69d5a1c079f0057eff36ba9984ac70cde2c23f852f14828"
+          },
+          "exports": {
+            "default": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "rootConstant": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "rootValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./default"
+          }
+        }
+      ]
+    },
+    "./features/alpha": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "b70315d493caf5efbae35221da23578f9596e225921dec0416f50d26df08cb11",
+            "path": "./features/alpha.ts",
+            "sha256": "11508283bcfcdf268d6531b89fef60346a63a308b3d329f5a88f64dd540bff9c"
+          },
+          "declarations": {
+            "path": "./features/alpha.ts",
+            "sha256": "11508283bcfcdf268d6531b89fef60346a63a308b3d329f5a88f64dd540bff9c"
+          },
+          "exports": {
+            "alphaValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1features~1*/import",
+            "typesBranch": "/exports/.~1features~1*/import"
+          }
+        }
+      ]
+    },
+    "./state": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "eda9b7acfb5835d1c91d17220ba66f62e65b6d0a63f5b3e6ac99a7cda44fa87e",
+            "path": "./state.ts",
+            "sha256": "738e9cc37e16778882bf01d9c1d95caf916f9a307e129acd2b9ae75a9f909dd8"
+          },
+          "declarations": {
+            "path": "./state.ts",
+            "sha256": "738e9cc37e16778882bf01d9c1d95caf916f9a307e129acd2b9ae75a9f909dd8"
+          },
+          "exports": {
+            "stateConstant": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "stateValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1state",
+            "typesBranch": "/exports/.~1state"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:ab1315c8e213eac6dcaba3dadfba9f0cd8855b807cf84be495ce96fac691b465",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "ab1315c8e213eac6dcaba3dadfba9f0cd8855b807cf84be495ce96fac691b465"
+    },
+    "name": "multi-entrypoint-package",
+    "version": "1.2.3"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

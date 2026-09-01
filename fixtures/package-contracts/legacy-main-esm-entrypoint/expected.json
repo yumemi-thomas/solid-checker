@@ -1,0 +1,74 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "aa6e9cfa77e12d098c02852684bc933dbe27652b666a738ffb774f3736ddbfbc",
+            "path": "./index.js",
+            "sha256": "ad2d95e5dfdc417b803cdb1c6d016601a00da97f80418152d3cbcd9871699cd0"
+          },
+          "declarations": {
+            "path": "./index.js",
+            "sha256": "ad2d95e5dfdc417b803cdb1c6d016601a00da97f80418152d3cbcd9871699cd0"
+          },
+          "exports": {
+            "scheduleLegacy": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5"
+          },
+          "resolution": {
+            "runtimeBranch": "legacy:main",
+            "typesBranch": "legacy:main"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:fe82f4797552c6e76d413ead40ecb830f1803cbec8b08d72817e6a23a4803d82",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "fe82f4797552c6e76d413ead40ecb830f1803cbec8b08d72817e6a23a4803d82"
+    },
+    "name": "legacy-main-esm-entrypoint-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

@@ -9129,3 +9129,37 @@ for `createDomCollection` ("operation value path has the wrong callability") —
 an unrelated open claim that remains outstanding. The program grew from 2 files
 to 47 for `@corvu/utils@0.4.2` and from 2 to 237 for `@kobalte/core`; witness
 acquisition moved within run-to-run noise on a debug binary.
+
+## 2026-09-01 — Twenty-four generator fixtures were asserted by nothing
+
+The normalized-v2 migration (`474c101f`) deleted the Rust generator process
+suite in `rust/crates/solid-facts-backend/tests/contracts_process.rs`, which
+shrank from roughly 1738 lines to 121, and moved fixture registration to
+`fixtures/package-contracts/corpus.json`. Thirty-three fixture directories were
+named by the deleted tests; only some were carried into the new manifest.
+Twenty-four `fixtures/package-contracts/` directories were left registered
+nowhere and referenced by name nowhere, so their claims were asserted by no
+gate at all for four weeks. They had no snapshots either, so nothing about them
+was even observable.
+
+Twenty-three are now registered in the corpus with reviewed snapshots. Nothing
+about the analyzer changed; what changed is that these claims are now falsifiable.
+Every one of the resolution branches `legacy:index` (runtime), `legacy:main`
+(declarations) and the `legacy:module`/`legacy:index` pair was unpinned, as was
+the CJS-only runtime refusal, the `accepted-dependency-binding` refusal on an
+external re-export — the most common refusal class on real registry packages —
+and the deferral of a callback that escapes through a returned callable whose
+identity `Object.assign` preserves.
+
+`carried-value-kind` is the exception and stays unregistered. Its claim is that
+an installed dependency's own semantic document cannot launder a false value
+kind, and it depends on `.solid-checker/accepted-contracts.json` reaching
+analysis. `contract generate` — the only driver `scripts/contract-corpus.mjs`
+runs — never loads that catalog; `acceptedDependencies` defaults to `{}` and is
+supplied only by `contract certify`, which no repository gate runs over a
+fixture. Registering it would pin an `accepted-dependency-binding` refusal that
+is an artifact of the wrong driver while the laundering claim stayed untested.
+It is not dead: it is one of the twenty-one tracked catalogs
+`auditPhase19Cut().obsoletePolicy1Catalogs` counts, and that count already
+describes those catalogs as policy-1. The claim needs a certification gate, or a
+policy-2 reissue of the fixture's catalog, before it asserts anything again.

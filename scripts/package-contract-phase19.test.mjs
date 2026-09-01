@@ -76,8 +76,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // untracked and invisible to the audit. 141 includes the generated
       // Type Facts implementation-transcript main document added by Phase 21.
       // 143 adds the destructured-parameter-callback generator fixture's main
-      // document.
-      stableMainDocuments: 143,
+      // document. 163 adds the twenty main documents pinned when the orphaned
+      // package-contract fixtures were registered in the generator corpus --
+      // twenty rather than twenty-three, because legacy-cjs-entrypoint,
+      // external-reexport and solid-reexport are fail-closed refusals and pin
+      // an expected-refusal.txt instead of a main document.
+      stableMainDocuments: 163,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
