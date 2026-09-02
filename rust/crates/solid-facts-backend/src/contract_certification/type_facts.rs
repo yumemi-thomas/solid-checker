@@ -5065,27 +5065,17 @@ fn create_private_directory() -> Result<PathBuf, TypeFactsCertificationError> {
     ))
 }
 
+/// Copies the pinned image into the private directory and returns the digest
+/// of the *destination* bytes. The copy is an APFS clone where the filesystem
+/// allows it (`crate::clone_or_copy_file`): a copy-on-write private file that
+/// costs no data write. The digest is always taken from the destination, so
+/// what is verified is the file that will launch, whichever way it was made.
 fn copy_and_hash(
     source: &Path,
     destination: &Path,
 ) -> Result<SourceHash, TypeFactsCertificationError> {
-    let mut source = File::open(source)?;
-    let mut destination = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(destination)?;
-    let mut hash = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let read = source.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hash.update(&buffer[..read]);
-        destination.write_all(&buffer[..read])?;
-    }
-    destination.sync_all()?;
-    Ok(SourceHash::parse(format!("sha256:{:x}", hash.finalize()))?)
+    crate::clone_or_copy_file(source, destination)?;
+    hash_file(destination)
 }
 
 fn hash_file(path: &Path) -> Result<SourceHash, TypeFactsCertificationError> {
@@ -5584,6 +5574,33 @@ mod tests {
         ] {
             assert!(!type_facts_program_can_load(unloadable), "{unloadable}");
         }
+    }
+
+    #[test]
+    fn execution_image_copies_are_private_and_byte_identical() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-typefacts-clone-test-{}-{}",
+            std::process::id(),
+            PRIVATE_PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("source.bin");
+        let destination = root.join("private.bin");
+        let bytes: Vec<u8> = (0..(3 * 1024 * 1024u32))
+            .map(|index| (index % 251) as u8)
+            .collect();
+        fs::write(&source, &bytes).unwrap();
+        let expected = hash_file(&source).unwrap();
+        assert_eq!(copy_and_hash(&source, &destination).unwrap(), expected);
+        assert_eq!(fs::read(&destination).unwrap(), bytes);
+        // The private copy shares no future with its source.
+        fs::write(&source, b"replaced after the copy").unwrap();
+        assert_eq!(hash_file(&destination).unwrap(), expected);
+        assert!(
+            copy_and_hash(&source, &destination).is_err(),
+            "an existing destination is refused, never overwritten"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

@@ -1222,6 +1222,9 @@ function usage() {
                          rust/target/registry-cache
   --no-registry-cache    fetch every registry byte fresh, as a certification
                          run outside this harness does
+  --durable-writes       flush every published catalog to stable storage as a
+                         certification outside this harness does; default off,
+                         since the run's catalogs are scratch
   --attempt-certification
                          attempt policy-2 certification for every structurally
                          complete proposal and retain its exact first refusal
@@ -1256,6 +1259,7 @@ function parseArgs(argv) {
     certificationConcurrency: DEFAULT_CERTIFICATION_CONCURRENCY,
     registryCache: null,
     noRegistryCache: false,
+    durableWrites: false,
     attemptCertification: false,
     keepTemp: false,
     includeSupplemental: false,
@@ -1317,6 +1321,9 @@ function parseArgs(argv) {
         break;
       case "--no-registry-cache":
         options.noRegistryCache = true;
+        break;
+      case "--durable-writes":
+        options.durableWrites = true;
         break;
       case "--attempt-certification":
         options.attemptCertification = true;
@@ -1460,7 +1467,8 @@ function buildRealHooks({
   typeFactsBin,
   certificationInnerConcurrency,
   registryCache = null,
-  maxWorkers = 1
+  maxWorkers = 1,
+  durableWrites = false
 }) {
   // Generation and certification run inside a pool of long-lived CLI workers
   // (lib/cli-worker.mjs) instead of one CLI process per probe and phase. The
@@ -1474,7 +1482,14 @@ function buildRealHooks({
     environment: {
       ...process.env,
       SOLID_CHECKER_NATIVE_BIN: nativeBin,
-      SOLID_TYPEFACTS_BIN: typeFactsBin
+      SOLID_TYPEFACTS_BIN: typeFactsBin,
+      // Every catalog a certification publishes here lives in a temporary
+      // directory the probe removes seconds later, so the full-disk flushes
+      // that make a real publication crash-durable buy nothing and cost the
+      // run about ten F_FULLFSYNCs per certification. Atomic visibility is
+      // unchanged; only crash durability is relaxed, and only when the run
+      // asked for it. The product default flushes.
+      SOLID_CHECKER_DURABLE_WRITES: durableWrites ? "full" : "none"
     },
     supervise: superviseChildMemory
   });
@@ -1737,7 +1752,8 @@ async function main(argv = process.argv.slice(2)) {
     registryCache,
     // The scheduler never runs more concurrent generation and certification
     // work than this, so the pool never queues.
-    maxWorkers: Math.max(1, options.concurrency || 1, options.certificationConcurrency || 1)
+    maxWorkers: Math.max(1, options.concurrency || 1, options.certificationConcurrency || 1),
+    durableWrites: options.durableWrites
   });
   const scheduleCosts = historicalScheduleCosts();
 
@@ -1785,7 +1801,8 @@ async function main(argv = process.argv.slice(2)) {
       checker: {
         nativeBin: binaries.nativeBin,
         typeFactsBin: binaries.typeFactsBin,
-        registryCache
+        registryCache,
+        durableWrites: options.durableWrites
       },
       scope
     });

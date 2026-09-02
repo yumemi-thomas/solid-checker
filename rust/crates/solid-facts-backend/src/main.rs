@@ -1045,7 +1045,7 @@ fn execute_contract_case_set_certification(
         fs::remove_dir_all(&stage_root)?;
     } else {
         fs::rename(&stage_root, &final_root)?;
-        fs::File::open(&case_sets_root)?.sync_all()?;
+        solid_facts_backend::durable_sync(&fs::File::open(&case_sets_root)?)?;
     }
 
     // A matching manifest is not enough when a prior content-addressed
@@ -1180,7 +1180,7 @@ fn execute_contract_graph_certification(
         fs::remove_dir_all(&stage_root)?;
     } else {
         fs::rename(&stage_root, &final_root)?;
-        fs::File::open(&graphs_root)?.sync_all()?;
+        solid_facts_backend::durable_sync(&fs::File::open(&graphs_root)?)?;
     }
 
     // Re-authenticate committed bytes. Only then expose the trust file and
@@ -1386,7 +1386,7 @@ fn execute_contract_graph_case_set_certification(
         fs::remove_dir_all(&stage_root)?;
     } else {
         fs::rename(&stage_root, &final_root)?;
-        fs::File::open(&case_sets_root)?.sync_all()?;
+        solid_facts_backend::durable_sync(&fs::File::open(&case_sets_root)?)?;
     }
     verify_policy2_case_set_in_fresh_process(
         request_path,
@@ -1828,10 +1828,10 @@ fn write_atomic_file(path: &Path, bytes: &[u8]) -> Result<(), Box<dyn std::error
         .create_new(true)
         .open(&temporary)?;
     file.write_all(bytes)?;
-    file.sync_all()?;
+    solid_facts_backend::durable_sync(&file)?;
     drop(file);
     fs::rename(&temporary, path)?;
-    fs::File::open(parent)?.sync_all()?;
+    solid_facts_backend::durable_sync(&fs::File::open(parent)?)?;
     Ok(())
 }
 

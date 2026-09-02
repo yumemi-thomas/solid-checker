@@ -12,9 +12,9 @@ const FULL_CORPUS_ROWS = 418;
 // compute-bound at roughly 176-190 s on the 14-core authority host (see
 // docs/ecosystem-benchmark.md, "Where the certified run's time goes"). The
 // budget is the ceiling the project holds itself to, not a description of the
-// current measurement; with loadable-only private Type Facts projects, the
-// generated proposal handed to certification, and hardware SHA-256 for the
-// producer hash the corpus measures 159 s there (1,157 CPU-seconds).
+// current measurement; with pooled CLI workers, the generated proposal handed
+// to certification, cloned execution images and no fsync for scratch catalogs
+// the corpus measures ~146 s there (see the table in docs/ecosystem-benchmark.md).
 const WALL_TIME_BUDGET_MS = 150_000;
 
 test("the authoritative full corpus remains below the 150-second wall-time budget", () => {

@@ -821,7 +821,10 @@ export function buildReport({
       // The registry cache certification children were allowed to read, or
       // null when every registry byte was fetched fresh. Recorded so a wall
       // time can be read knowing whether it includes registry latency.
-      registryCache: checker?.registryCache ?? null
+      registryCache: checker?.registryCache ?? null,
+      // Whether published catalogs were flushed to stable storage (the
+      // product default) or written without fsync because they were scratch.
+      durableWrites: checker?.durableWrites ?? true
     },
     manifest: {
       generatedAt: manifest?.generatedAt ?? null,
@@ -1271,6 +1274,9 @@ export function renderMarkdown(report) {
   lines.push(`- Type Facts binary: ${report.checker?.typeFactsBin ?? "unknown"}`);
   lines.push(
     `- Registry cache for certification: ${report.checker?.registryCache ?? "none (every registry byte fetched fresh)"}`
+  );
+  lines.push(
+    `- Durable catalog writes: ${report.checker?.durableWrites === false ? "off (scratch catalogs, no fsync)" : "on"}`
   );
   lines.push(
     `- Manifest generated at: ${report.manifest?.generatedAt ?? "unknown"} ` +

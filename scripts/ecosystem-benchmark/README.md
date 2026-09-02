@@ -66,6 +66,15 @@ shares state between requests (every call builds its own resolution session and
 scratch, as a fresh process would). The ~800 process starts a corpus run used to
 pay for cost more CPU than the work they carried.
 
+Certification children run with `SOLID_CHECKER_DURABLE_WRITES=none`: every
+catalog a probe publishes lives in a temporary directory removed seconds
+later, so the full-disk flushes (`F_FULLFSYNC` on Apple platforms, about ten
+per certification) that make a real publication crash-durable buy nothing here.
+Atomic visibility is unchanged — every publication still writes to a temporary
+path and renames it into place — and the product default flushes;
+`--durable-writes` restores it for a run. The report records the choice under
+`checker.durableWrites`.
+
 Generation runs under the certification importer of its probe and
 certification receives the emitted proposal through `contract certify
 --proposal`, so the proposal each probe's generation phase measured is verified

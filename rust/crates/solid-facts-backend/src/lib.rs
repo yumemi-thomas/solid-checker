@@ -8,6 +8,79 @@ mod artifact_resolution;
 mod bounded_json;
 mod cache;
 mod contract_certification;
+
+/// Whether published artifacts are flushed to stable storage before they are
+/// made visible. Atomic visibility never changes: every publication still
+/// writes to a temporary path and renames it into place, so a reader sees a
+/// whole file or nothing. What `SOLID_CHECKER_DURABLE_WRITES=none` relaxes is
+/// crash durability — the `fsync` (an `F_FULLFSYNC` full-disk flush on Apple
+/// platforms) of the file and its directory before the rename. That is the
+/// right trade only where the published artifact is scratch, as in the
+/// ecosystem benchmark, whose catalogs live in a temporary directory removed
+/// seconds later; the product default flushes. Read once per process.
+pub fn durable_writes_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        !matches!(
+            std::env::var("SOLID_CHECKER_DURABLE_WRITES")
+                .ok()
+                .as_deref()
+                .map(str::trim),
+            Some("none") | Some("0")
+        )
+    })
+}
+
+/// `File::sync_all` under the process durability policy; see
+/// [`durable_writes_enabled`].
+pub fn durable_sync(file: &std::fs::File) -> std::io::Result<()> {
+    if durable_writes_enabled() {
+        file.sync_all()
+    } else {
+        Ok(())
+    }
+}
+
+/// Creates `destination` as a private copy of `source`, refusing an existing
+/// destination. On APFS the copy is a `clonefile(2)` — a copy-on-write file
+/// with its own inode that shares no future with the source, so it is exactly
+/// as private as a byte copy and costs no data write; everywhere else, and
+/// whenever the clone is refused, the bytes are copied. Callers that need the
+/// copy's identity hash the destination afterwards, as they always did, so the
+/// guarantee ("this exact private file is what launches") is unchanged.
+/// Returns whether the destination was cloned rather than written.
+pub fn clone_or_copy_file(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> std::io::Result<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+        let source_c = std::ffi::CString::new(source.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+        let destination_c = std::ffi::CString::new(destination.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+        // SAFETY: both pointers are valid NUL-terminated paths for the call.
+        let status = unsafe { libc::clonefile(source_c.as_ptr(), destination_c.as_ptr(), 0) };
+        if status == 0 {
+            return Ok(true);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            return Err(error);
+        }
+        // Not APFS, a cross-volume path, or a filesystem that refuses clones:
+        // fall through to the byte copy.
+    }
+    let mut input = std::fs::File::open(source)?;
+    let mut output = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(destination)?;
+    std::io::copy(&mut input, &mut output)?;
+    durable_sync(&output)?;
+    Ok(false)
+}
 mod contract_document;
 mod contract_interface;
 mod contract_workflow;

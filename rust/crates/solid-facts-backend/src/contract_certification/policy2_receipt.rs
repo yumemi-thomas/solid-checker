@@ -1372,7 +1372,7 @@ pub fn publish_policy2_catalog(
     write_new_synced(&temporary, &pointer)?;
     fs::rename(&temporary, &catalog_path).map_err(publication_io)?;
     File::open(root)
-        .and_then(|directory| directory.sync_all())
+        .and_then(|directory| crate::durable_sync(&directory))
         .map_err(publication_io)?;
     Ok(PublishedPolicy2Catalog {
         main_path,
@@ -1407,7 +1407,7 @@ fn write_new_synced(path: &Path, bytes: &[u8]) -> Result<(), ReceiptPublicationE
         .open(path)
         .map_err(publication_io)?;
     file.write_all(bytes).map_err(publication_io)?;
-    file.sync_all().map_err(publication_io)
+    crate::durable_sync(&file).map_err(publication_io)
 }
 
 fn digest_hex(value: &str) -> &str {

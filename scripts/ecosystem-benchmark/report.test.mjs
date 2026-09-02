@@ -844,8 +844,10 @@ test("renderMarkdown covers both Solid versions and every family, and flags trun
     }
   });
   assert.equal(report.checker.registryCache, "/repo/rust/target/registry-cache");
+  assert.equal(report.checker.durableWrites, true, "absent means the product default");
 
   const markdown = renderMarkdown(report);
+  assert.ok(markdown.includes("- Durable catalog writes: on"));
   assert.ok(markdown.includes("- Registry cache for certification: /repo/rust/target/registry-cache"));
   const fresh = renderMarkdown(
     buildReport({

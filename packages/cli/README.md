@@ -68,6 +68,13 @@ an in-process generation. Generate under `--certification-importer` set to the
 path certification will use (its name derives from the package root and the
 catalog) for the hand-over to be admissible.
 
+Published catalogs, receipts and trust configurations are written to a
+temporary path, flushed to stable storage, and renamed into place.
+`SOLID_CHECKER_DURABLE_WRITES=none` skips the flush (atomic visibility is
+unchanged; only crash durability is relaxed) for callers whose catalogs are
+scratch, such as the ecosystem benchmark. Leave it unset for a real
+publication.
+
 Certification acquires every named package — the root and each compiler-source
 dependency the lockfile selects — from the registry, up to
 `SOLID_CHECKER_REGISTRY_CONCURRENCY` (default 8) at a time. Setting

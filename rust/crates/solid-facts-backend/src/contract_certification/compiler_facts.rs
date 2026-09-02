@@ -23,7 +23,6 @@ use solid_reactive_ir::contract_semantics::certification::{
     ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
 };
 #[cfg(unix)]
-use std::fs::OpenOptions;
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -519,7 +518,7 @@ impl PrivateExecutionImage {
 
         #[cfg(unix)]
         {
-            use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+            use std::os::unix::fs::PermissionsExt as _;
 
             let source = std::env::current_exe()
                 .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;
@@ -535,18 +534,10 @@ impl PrivateExecutionImage {
                 .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;
             let path = root.join("solid-checker-compiler-session");
             let result = (|| {
-                let mut input = File::open(&source)
-                    .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;
-                let mut output = OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .mode(0o500)
-                    .open(&path)
-                    .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;
-                std::io::copy(&mut input, &mut output)
-                    .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;
-                output
-                    .sync_all()
+                // A copy-on-write clone where the filesystem allows it, a byte
+                // copy otherwise; the digest check below verifies the private
+                // file that will launch either way.
+                crate::clone_or_copy_file(&source, &path)
                     .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;
                 fs::set_permissions(&path, fs::Permissions::from_mode(0o500))
                     .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;

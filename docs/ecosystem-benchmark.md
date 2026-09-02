@@ -230,7 +230,9 @@ host with a warm registry cache, 418 probes and 393 certification attempts
 | cache warm, 24 certification slots | 181 s | 1,610 s |
 | cache warm, 20 slots, loadable-only private projects | 173-185 s | 1,560-1,610 s |
 | + generated proposal handed to certification | 163 s | 1,312 s |
-| + hardware SHA-256 for the producer hash on aarch64 (current) | 159 s | 1,157 s |
+| + hardware SHA-256 for the producer hash on aarch64 | 159 s | 1,157 s |
+| + generate and certify in a pool of CLI workers | 154 s | 812 s |
+| + no fsync for scratch catalogs, cloned execution images (current) | 146.5 s | 894 s |
 
 Per-invocation accounting of the native binary for one 14-slot run:
 
@@ -299,6 +301,20 @@ outcomes and byte-identical stderr; wall time fell to 154 s, and the run is no
 longer CPU-bound — its slot time barely moved, so what remains is certification
 latency (a native certification still holds its slot for ~3.5 s while using
 ~0.4 s of CPU).
+
+Two latency sources inside certification were then removed. Every published
+catalog, receipt and trust configuration was flushed with `sync_all` — an
+`F_FULLFSYNC` full-disk flush on Apple platforms, about ten per certification;
+the runner now sets `SOLID_CHECKER_DURABLE_WRITES=none` for its workers because
+every catalog it publishes is scratch removed seconds later (atomic visibility
+through rename is unchanged; the product default still flushes; the report
+records `checker.durableWrites`). And each certification copied the 29 MB
+Type Facts producer and the 22 MB checker into private execution directories
+before hashing and launching them — roughly 20 GB of writes per run; both are
+now APFS clones (copy-on-write private files, still hashed and verified as
+before, byte-copied where cloning is unavailable). Average witness acquisition
+fell from 5.0 s to 4.5-4.8 s under twenty-way concurrency and the corpus
+measured 146.5 s, with identical outcomes.
 
 Before the pool, what remained was CPU that is per-process by construction: about 420
 CPU-seconds of `--project` analysis across ~1,800 processes (median 0.19 s
@@ -2567,6 +2583,15 @@ across 291 probes. Its remaining generation failures are classified as
 unresolved or conflicting export kinds and unsupported ESM runtime targets;
 its refusals remain machine-visible semantic blockers, not silently accepted
 contracts.
+
+### Run-to-run variance
+
+Wall time still varies with the host: the same configuration measured 146.5 s,
+152 s and, once, 305 s, the last because Bun re-fetched package manifests from
+the registry for every install (install slot time 478 s against 74-232 s
+normally). Total CPU is the stable figure to compare between changes; wall time
+alone says as much about the host's other load and the registry's latency as
+about the checker.
 
 ## Exit-code contract
 
