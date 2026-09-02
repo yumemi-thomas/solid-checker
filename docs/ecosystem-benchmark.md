@@ -2615,6 +2615,104 @@ expected package is still verified by version and lock integrity against the
 manifest. Total CPU is the stable figure to compare between changes; wall time
 alone says as much about the host's other load as about the checker.
 
+## The accepted-contract lane, and why the runner cannot consume a sibling row's receipt
+
+First, a correction to
+`docs/package-contract-v2/phase21/2026-09-01-dependency-composition-scoping.md`
+§3.1, which lists `--accepted-contracts` as `contract certify`'s accepted-lane
+flag: **`contract certify` has no such flag.** Its whole argument surface is
+`--package-root --integrity --catalog --entrypoint --conditions
+--certification-importer --issuer-configuration --trust-configuration-output
+--audit-output --proposal --proposal-refusal-audit --registry-origin
+--output --plan-contract-certification --certification-plan-output
+--execute-contract-certification`. `--accepted-contracts` is an argument of the
+*native analyzer*, forwarded by `generate-package-contract.mjs:876-877,975-976`
+when a caller passes the `acceptedContractCatalog` /
+`receiptTrustConfiguration` options — and no certify code path passes them.
+
+So the dependency evidence `contract certify` can actually produce today comes
+from one place: the **published-graph lane**, which certifies the dependency
+graph *inside the same install, under one issuer, in one native transaction*,
+dependency-first (`preparePublishedGraph`, `certify-contract.mjs:1666-1745`).
+Authenticated dependency composition exists only there —
+`authenticate_dependency_receipts` is a method on `PublishedContractGraphPlan`
+(`contract_certification/dependencies.rs:404-427`), so every receipt it
+authenticates was issued for a node of that same graph.
+
+That lane is engaged only as a **fallback**, when root proposal generation
+throws outright (`certify-contract.mjs:2302-2333`). A root generation that
+succeeds while refusing individual artifact cases — the common shape — keeps the
+private graph out of the run entirely, and `--proposal` reuse short-circuits
+ahead of the fallback. The runner's `attemptCertification`
+(`scripts/ecosystem-benchmark/run.mjs:1585-1629`) passes `--catalog` (the
+catalog each probe *publishes*, not one it reads) plus the issuer, trust and
+audit paths, and always `--proposal`, so in practice no benchmark row consults
+any dependency's proof unless its root generation failed.
+
+**Adding a host-supplied accepted lane that routes one row's published receipt
+into a later row cannot authenticate, and would only turn a silent absence into
+a refusal.** A receipt binds five install-specific identities, and each probe
+gets a fresh temporary install *and* a fresh issuer:
+
+1. **Issuer scope and seed.** `run.mjs:1599-1606` writes
+   `scope: ecosystem-benchmark:<sha256 of this probe's catalog path>` with a
+   fresh `randomBytes(32)` seed. `authenticate_dependency_receipt`
+   (`rust/crates/solid-facts-backend/src/contract_certification/dependencies.rs:2080-2085`)
+   requires `receipt.issuer_kind()`, `issuer_scope()` and `revocation_epoch()` to
+   equal the *parent's* configured issuer, so a sibling probe's receipt is
+   `TrustMismatch`.
+2. **`bindings.importer`.** An absolute path to the certification importer
+   written beside the producing probe's package root
+   (`.solid-checker-certification-<hash>.mjs`, where the hash is over that
+   package root and that catalog path). The consumer's dependency edge names an
+   importer inside the consumer's own install, so the check at `:2040-2044`
+   fails with `ReceiptMismatch { field: "importer" }`.
+3. **`bindings.resolvedImportRoot`.** `policy2_resolved_import_root`
+   (`contract_certification/policy2_receipt.rs:659-676`) hashes the whole
+   `ResolvedImport`, which carries `importer`, `package_root` and
+   `package_real_root` (`artifact_resolution.rs:468-495`). Correcting (2) by hand
+   therefore breaks (3), which is the point.
+4. **`import.exports[*].runtime.module.path`** — the resolver-side binding the
+   JS half consumes as `acceptedDependencies[specifier].exports[name].runtime`
+   (`artifact-resolution.mjs:1937-1954`) — is an absolute path inside the
+   producing install, which does not exist in the consumer's.
+5. **`lockfileDigest` / `lockLocator`** participate in
+   `CanonicalDependencyNodeIdentity` (`dependencies.rs:300-324`), so even a
+   byte-identical package copied between installs is a different graph node.
+
+None of these is incidental: they are what stops a receipt for one resolution
+from laundering a different one. The reachable form of "consume a dependency's
+proof" in this harness is therefore **not** a shared catalog across rows. It is
+to engage the existing published-graph lane for the artifact cases that need it —
+today it is skipped whenever root generation succeeds, so a case refused with an
+exact dependency-composition refusal
+(`accepted dependency <specifier> has no exact runtime binding for export <name>`)
+never gets a graph node for that specifier.
+
+**Fail-closed rules the composition path already enforces**, and that a future
+change must not weaken (see `docs/package-contract-v2/phase21/2026-09-01-dependency-composition-scoping.md`
+§4): a refused or absent dependency contributes nothing and its absence is loud
+(`SemanticQueryError::MissingImport`, never silence); a version, integrity or
+closure mismatch refuses fatally rather than falling back; a project may not
+nominate its own issuer; claims are never inherited transitively — each edge
+needs its own receipt, one verifier build across the graph; witness coverage is
+total-or-refuse, with no `inapplicable` variant, so a composition that cannot
+prove a claim must leave the demand open.
+
+**What an unaccepted dependency costs, exactly.** Every
+`unaccepted-external-dependency` hazard is recorded with
+`affectedDomains = all nine` and `affectedExports = []`
+(`artifact-resolution.mjs`, `module_closure.rs:300-306`), and
+`ClosureManifest::open_domains` (`artifact_resolution.rs:416-427`) feeds them to
+`ExportSemantics::open_call_domains` (`contract_semantics.rs:685-689`). One
+unaccepted external therefore opens all nine claim domains of *every* export in
+that artifact case. Opening a domain does not erase the operations already
+derived — `@solid-primitives/until@0.1.1` publishes its `callbacks[{from:{arg:0}}]`
+invoke operation with all nine domains open — but it does make `closed` for that
+domain unreachable. Since every `@solid-primitives/*` package imports `solid-js`,
+and `solid-js@1.9.14` cannot itself be an accepted dependency, **no row in this
+corpus can publish a closed `callbacks` claim.**
+
 ## Exit-code contract
 
 Benchmark mode (`run.mjs` without `--thresholds`) exits 0 whenever the

@@ -1,5 +1,203 @@
 # Precision backlog
 
+## `@solid-primitives/utils@6.4.1`'s root refusal is not a bundled-contract, condition-selection, or dialect-binding defect (2026-09-03)
+
+`@solid-primitives/utils@6.4.1|solid1|only` is `partial-success` and certifies
+through its complete one-root dependency plan; its root artifact case refuses
+`accepted dependency solid-js/web has no exact runtime binding for export
+isServer` (`acceptedExternalBinding` →
+`packages/cli/scripts/artifact-resolution.mjs:1990-2001`), so the published
+catalog holds only `./immutable`. Reproduced at HEAD `0f9c5916` with a
+`make build-checker-debug` binary; the refusal is byte-identical to the
+checked-in `benchmarks/ecosystem/report.json` row.
+
+**All three hypotheses on the table were falsified by measurement.**
+
+1. *Not a missing bundled contract.* `pkg/contracts/bundled/solid-v1/solid-web-{browser-development,browser-production,node}.json`
+   all carry `isServer`, and so does
+   `benchmarks/package-contract-v2/phase14/solid-v1-authority/solid-web-browser-production.json`.
+   They are also not reachable: `bundled_first_party_contract_index`
+   (`first_party_bundles.rs:375`) reads `EMBEDDED_SOLID1_BUNDLES`, which is
+   `&[]` (`:124`), as is `EMBEDDED_BUNDLES` (`:77`); both
+   `pkg/contracts/bundled/*/bundle-index.json` files have `contracts: []`. No
+   bundled contract reaches any consumer today.
+2. *Not a condition-selection defect.* The probe's root case has
+   `conditions: []`, the resolver selects `./dist/index.js`, and the
+   corresponding published solid-js target is the one the authority documents
+   cover.
+3. *Not "dialect packages are bound differently".* There is no dialect-specific
+   binding path. `acceptedExternalBinding` reads exactly
+   `acceptedDependencies[specifier].exports[name][axis]`, and that map is empty
+   because nothing populates it in the runner's default path (see the accepted-lane
+   entry below).
+
+**The actual chain, measured.** Forcing the private published-graph lane
+(`contract certify --entrypoint .` on the kept install, which makes root
+generation throw and therefore engages `preparePublishedGraphFallback`) does
+reach a graph node for `solid-js/web` — the lane the map would have come from —
+and then refuses inside that node's own proposal generation, before it can
+supply any binding:
+
+```
+emit package contract: entry file <package-root>/web/dist/web.js exports
+"Aliases", whose runtime kind no closed type answers (Unknown, Unknown);
+publishing kind "value" would certify it invokes no caller-supplied callback
+```
+
+`main.rs:6349` / `reconcile_entry_export_kind`'s `Unresolvable` arm. The
+installed bytes are `const Aliases = Object.assign(Object.create(null), {…})`
+(`solid-js@1.9.14`, `web/dist/web.js:26`); `Object.create(null)` is declared
+`any`, so `Object.assign`'s result is `any` and callability/constructability are
+both `Unknown`. `tsc` reports nothing here — this is a contract-emission gate,
+not a type diagnostic — so the boundary rule does not apply, but the repair is
+its own slice: the export's *declaration* axis answers this exactly
+(`web/types/client.d.ts:2`, `export const Aliases: Record<string, string>`, a
+closed non-callable type whose file digest is already part of the artifact case),
+and `reconcile_entry_export_kind` consults only the runtime entity. Admitting a
+declaration-axis answer where the runtime axis is `any` would move every export
+of every row and needs its own adversarial review and a full-corpus
+remeasurement; it was not attempted.
+
+Independently, the same class bites `solid-js` one level up: eleven of the 38
+refused artifact cases of `solid-js@1.9.14|solid1|only` — all seven `./web`
+condition cases plus `./web/dist/{dev,server,web}.js` and
+`./web/types/index.d.ts` — refuse `accepted dependency solid-js has no exact
+runtime binding for export ErrorBoundary`, because `solid-js/web`
+re-exports from `solid-js`, and a package's own other entrypoint is treated as
+an external dependency with no accepted contract. That is the **self-package
+accepted binding** premise the 2026-09-02 composition diagnosis §E.8 names as
+unimplemented, and it is the floor of this chain.
+
+**Exact remaining fail-closed case.** `@solid-primitives/utils@6.4.1|solid1|only`
+root stays refused on `isServer`; `solid-js@1.9.14`'s `./web` cases stay refused
+on `ErrorBoundary`; a forced graph node for `solid-js/web` stays refused on
+`Aliases`. No code, fixture, snapshot, contract or generated artifact changed.
+
+## The ecosystem runner's accepted lane cannot be wired by routing a sibling row's receipt (2026-09-03)
+
+The plan was: when a row's dependency plan names a package whose receipt an
+earlier row published, pass it through `contract certify --accepted-contracts`.
+**There is no such flag, and the underlying composition cannot authenticate
+across probes.** Both facts were read off the code and the published receipts,
+not inferred.
+
+- `contract certify`'s whole argument surface is `--package-root --integrity
+  --catalog --entrypoint --conditions --certification-importer
+  --issuer-configuration --trust-configuration-output --audit-output --proposal
+  --proposal-refusal-audit --registry-origin --output
+  --plan-contract-certification --certification-plan-output
+  --execute-contract-certification`. `--accepted-contracts` is a *native
+  analyzer* argument, forwarded by `generate-package-contract.mjs:876-877,975-976`
+  when a caller supplies `acceptedContractCatalog` +
+  `receiptTrustConfiguration`; no certify path supplies them. The 2026-09-01
+  scoping study §3.1 table is wrong on this point.
+- Authenticated dependency composition exists only on the published-graph lane:
+  `authenticate_dependency_receipts` is a method on `PublishedContractGraphPlan`
+  (`contract_certification/dependencies.rs:404-427`), so every receipt it
+  authenticates was issued for a node of the *same* graph, in the same install,
+  under the same issuer, in one native transaction.
+- A published receipt binds five install-specific identities, and the runner
+  gives every probe a fresh temp install and a fresh issuer: issuer scope
+  (`ecosystem-benchmark:<sha256 of that probe's catalog path>`) and a random
+  seed (`run.mjs:1599-1606`) versus `dependencies.rs:2080-2085`'s
+  `TrustMismatch`; `bindings.importer`, an absolute path to the producing
+  probe's certification importer, versus `:2040-2044`'s
+  `ReceiptMismatch { field: "importer" }`; `bindings.resolvedImportRoot`, which
+  hashes the whole `ResolvedImport` including `importer`, `package_root` and
+  `package_real_root`, so hand-correcting the importer breaks the root;
+  `import.exports[*].runtime.module.path`, an absolute path in the producing
+  install that the consumer's resolver would have to read; and
+  `lockfileDigest`/`lockLocator` inside `CanonicalDependencyNodeIdentity`.
+  Verified against the rootless probe's own
+  `…accepted-catalog/accepted-contracts.json`, whose `bindings.importer` and
+  `import.exports.createBranch.runtime.module.path` both name
+  `/private/var/folders/…/solid-checker-ecosystem-rdSbV2/…`.
+
+None of those bindings is incidental — together they are what stops a receipt
+for one resolution from laundering a different one — so the flag was not added.
+Adding it would convert a silent absence into a refusal and unlock nothing.
+
+**The reachable form instead**, recorded for whoever picks it up: engage the
+existing published-graph lane per *artifact case*. Today it runs only as a
+fallback when root proposal generation throws outright
+(`certify-contract.mjs:2302-2333`), and `--proposal` reuse short-circuits ahead
+of it, so a root generation that succeeds while refusing individual cases — the
+common shape, and exactly `@solid-primitives/utils@6.4.1`'s — never gets a graph
+node for the specifier it refused on. That change does **not** unlock utils: the
+graph node it would need (`solid-js` at `./web`) refuses at proposal generation
+(see the entry above). Its blast radius across the 418 rows is unmeasured and it
+must not be landed on the strength of one row.
+
+Recorded and unchanged: `AcceptedDependencyComposition` demands are still
+emitted zero times for these rows, `ClosureManifest.dependencies` is still empty
+(verified `[]` in rootless's certification inputs), and cross-package semantic
+composition still fails closed with `MissingClosedClaim` per the 2026-09-01
+claim-blind-witness repair.
+
+## `until`'s composed-invoke premise has no producer: rootless publishes no callbacks claim at all (2026-09-03)
+
+`@solid-primitives/until@0.1.1|solid1|only` still refuses
+`operation-cardinality` demand
+`sha256:15fde3fc57c55117d494a2ece2bd31fbd42fb424f58cf0e6b998eaa5e9878251`
+(`artifact-case:d24421345876c98f1f7e7b7062e5b995a9a01ac776887b3af1b28a555f532388:until`)
+with `callback parameter has no exact direct-call or resolved-argument flow`,
+reproduced at HEAD `0f9c5916`. The proposed fourth tier of
+`argument_slot_is_proven_invoking`
+(`contract_certification/type_facts.rs:3834` at this HEAD; the 2026-09-02
+diagnosis's `:3563` was read at `79e71286`) — an authenticated
+dependency's *closed* `callbacks` claim with `from.arg == N` and an `invoke`
+operation — was **not** implemented, because its premise has no producer and two
+independent reasons say it cannot get one here.
+
+1. **rootless publishes nothing to read.** `@solid-primitives/rootless@1.5.4|solid1|only`
+   certifies (`class: success`) and its receipt's signed main gives all eight
+   exports the single summary `{"call":{},"shape":"callable"}`
+   (`summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b`),
+   with `positiveOperations: []` and 80 unresolved claims. There is no
+   `callbacks` entry for `createBranch` for any tier to consult — not an open
+   one, not a wrong-slot one, none. The same runtime bytes
+   (`sha256:0b7d93cf…`) *do* carry the full closed claim in
+   `benchmarks/package-contract-v2/phase14/solid-v1-authority/rootless-root-default.json`,
+   so the claim is derivable in principle — but that document was produced under
+   the phase-13/14 whole-closure model (closure
+   `9fda42d2…`, four closure *packages*, zero hazards) rather than today's
+   per-package model (closure `d1c21e51…`, zero packages, five
+   `unaccepted-external-dependency` hazards), and it therefore cannot
+   authenticate against this install either.
+2. **`closed` is unreachable for any row in this corpus.** An
+   `unaccepted-external-dependency` hazard carries
+   `affected_domains = all nine`, `affected_exports = []`
+   (`module_closure.rs:300-306`), and `ClosureManifest::open_domains`
+   (`artifact_resolution.rs:416-427`) → `open_call_domains`
+   (`contract_semantics.rs:685-689`) opens all nine domains of every export of
+   the case. rootless's closure carries that hazard for
+   `@solid-primitives/utils`, `solid-js` **and** `solid-js/web`; every
+   `@solid-primitives/*` package imports `solid-js`; and `solid-js` cannot be an
+   accepted dependency (entry above). So no artifact case here can close
+   `callbacks`.
+
+Two corrections to the 2026-09-02 composition diagnosis §C.3, which attributed
+rootless's vacuity to the hazard alone: opening a domain does **not** erase
+derived operations — `until` publishes its own
+`callbacks[{from:{arg:0}}]` + `invoke` operation
+(`count {scope: call, min: 0, max: many}`, `tracking: tracked`) with all nine
+domains open — so rootless's emptiness has a **second, unattributed cause** in
+the IR's own claim derivation, and rootless's exports reach the wire through
+`raised_function_export` (identical empty summary for all eight, which is what
+that raise produces). Naming that cause is open work.
+
+Also confirmed while measuring, and unchanged: until's demand is a
+zero-or-more-per-call demand (`ProofFamily::OperationCardinality`,
+`contract_certification/type_facts.rs:2939`, refuses unless cardinality is
+exactly `{Call, 0, Many}`, then discharges at floor `MayExecute`), so
+`count.min: 0` would not have been the obstacle; the four demands that share the
+premise are `sha256:15fde3fc…`, `sha256:8e91609d…`, `sha256:88e245af…` and the
+`CallbackBinding` one of `sha256:011ed77d…`/`sha256:89b41ba0…`; the Tier A
+literal at `type_facts.rs:3836` is untouched and stays the only dialect source.
+
+**Exact remaining fail-closed case.** until stays refused on `sha256:15fde3fc…`.
+No producer, certifier, schema, snapshot, fixture or generated artifact changed.
+
 ## A `read` operation's locally created accessor now has a census witness (2026-09-03)
 
 `@solid-primitives/timer@1.4.5-next.1|solid2|floor` and `|head` refused
