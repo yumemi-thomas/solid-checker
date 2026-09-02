@@ -12,6 +12,7 @@ import {
 import {
   buildInstallArguments,
   createProject,
+  installLockfileCacheEntry,
   installPackages,
   readInstalledVersions,
   readLockIntegrity,
@@ -445,4 +446,97 @@ test("installPackages surfaces a fake timeout without touching the network", asy
     spawnImpl: fakeSpawn
   });
   assert.equal(result.timedOut, true);
+});
+
+// ---------------------------------------------------------------------------
+// Install lockfile cache: a previous run's exact resolution is installed frozen
+// (no registry manifest), a miss resolves as before and is stored, and a frozen
+// failure falls back to the ordinary install.
+// ---------------------------------------------------------------------------
+
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+function resolvingFakeSpawn(calls, { frozenFails = false } = {}) {
+  return async ({ cwd, args, timeoutMs }) => {
+    calls.push({ cwd, args, timeoutMs });
+    if (args.includes("--frozen-lockfile")) {
+      if (frozenFails) return { status: 1, stdout: "", stderr: "lockfile had changes", timedOut: false };
+      return { status: 0, stdout: "frozen", stderr: "", timedOut: false };
+    }
+    // An ordinary install records the resolution Bun would have written.
+    const specs = args.filter(argument => !argument.startsWith("--") && argument !== "install");
+    writeFileSync(
+      join(cwd, "package.json"),
+      JSON.stringify({ name: "probe", private: true, dependencies: Object.fromEntries(specs.map(spec => spec.split("@").slice(0, -1).join("@")).map((name, index) => [name, specs[index].split("@").pop()])) })
+    );
+    writeFileSync(join(cwd, "bun.lock"), `{"lockfileVersion":2,"packages":{"resolved":"${specs.join(",")}"}}`);
+    return { status: 0, stdout: "resolved", stderr: "", timedOut: false };
+  };
+}
+
+test("a cache miss resolves as before and stores the exact resolution; a hit installs frozen", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-install-locks-"));
+  const cache = join(root, "locks");
+  try {
+    const first = join(root, "first");
+    mkdirSync(first);
+    await createProject({ root: first, specs: ["solid-js@1.9.14"] });
+    const calls = [];
+    const miss = await installPackages({ projectDir: first, specs: ["solid-js@1.9.14"], spawnImpl: resolvingFakeSpawn(calls), lockfileCache: cache });
+    assert.equal(miss.status, 0);
+    assert.equal(miss.lockfileReuse, "miss");
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].args.includes("solid-js@1.9.14"), "a miss resolves against the registry as before");
+    const entry = installLockfileCacheEntry(cache, ["solid-js@1.9.14"]);
+    assert.ok(existsSync(join(entry, "bun.lock")) && existsSync(join(entry, "package.json")), "the resolution is stored");
+
+    const second = join(root, "second");
+    mkdirSync(second);
+    await createProject({ root: second, specs: ["solid-js@1.9.14"] });
+    const hitCalls = [];
+    const hit = await installPackages({ projectDir: second, specs: ["solid-js@1.9.14"], spawnImpl: resolvingFakeSpawn(hitCalls), lockfileCache: cache });
+    assert.equal(hit.status, 0);
+    assert.equal(hit.lockfileReuse, "hit");
+    assert.equal(hitCalls.length, 1);
+    assert.deepEqual(hitCalls[0].args, ["install", "--ignore-scripts", "--no-progress", "--frozen-lockfile"]);
+    assert.equal(readFileSync(join(second, "bun.lock"), "utf8"), readFileSync(join(entry, "bun.lock"), "utf8"));
+    assert.match(readFileSync(join(second, "package.json"), "utf8"), /"solid-js"/, "the cached package.json carries the dependency set");
+
+    assert.notEqual(installLockfileCacheEntry(cache, ["solid-js@1.9.15"]), entry, "another version is another entry");
+    assert.equal(installLockfileCacheEntry(cache, ["b@1", "a@1"]), installLockfileCacheEntry(cache, ["a@1", "b@1"]), "spec order does not matter");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a frozen install that fails falls back to the ordinary install and refreshes the entry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-install-locks-"));
+  const cache = join(root, "locks");
+  try {
+    const entry = installLockfileCacheEntry(cache, ["solid-js@1.9.14"]);
+    mkdirSync(entry, { recursive: true });
+    writeFileSync(join(entry, "package.json"), '{"name":"probe","dependencies":{"solid-js":"1.9.14"}}');
+    writeFileSync(join(entry, "bun.lock"), '{"stale":true}');
+    const project = join(root, "project");
+    mkdirSync(project);
+    await createProject({ root: project, specs: ["solid-js@1.9.14"] });
+    const calls = [];
+    const result = await installPackages({ projectDir: project, specs: ["solid-js@1.9.14"], spawnImpl: resolvingFakeSpawn(calls, { frozenFails: true }), lockfileCache: cache });
+    assert.equal(result.status, 0);
+    assert.equal(result.lockfileReuse, "miss");
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].args.includes("--frozen-lockfile"));
+    assert.ok(calls[1].args.includes("solid-js@1.9.14"), "the ordinary install ran after the frozen failure");
+    assert.notEqual(readFileSync(join(entry, "bun.lock"), "utf8"), '{"stale":true}', "the entry was refreshed");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("without a lockfile cache installs resolve exactly as before", async () => {
+  const calls = [];
+  const result = await installPackages({ projectDir: "/tmp/does-not-need-to-exist-for-this-fake", specs: ["solid-js@1.9.14"], spawnImpl: async request => { calls.push(request); return { status: 0, stdout: "", stderr: "", timedOut: false }; } });
+  assert.equal(result.lockfileReuse, null);
+  assert.deepEqual(calls[0].args, ["install", "--ignore-scripts", "--no-progress", "solid-js@1.9.14"]);
 });

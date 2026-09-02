@@ -848,6 +848,8 @@ test("renderMarkdown covers both Solid versions and every family, and flags trun
 
   const markdown = renderMarkdown(report);
   assert.ok(markdown.includes("- Durable catalog writes: on"));
+  assert.equal(report.checker.installLockfileCache, null);
+  assert.ok(markdown.includes("- Install lockfile cache: none (every install resolved against the registry)"));
   assert.ok(markdown.includes("- Registry cache for certification: /repo/rust/target/registry-cache"));
   const fresh = renderMarkdown(
     buildReport({

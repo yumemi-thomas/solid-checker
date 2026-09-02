@@ -2589,9 +2589,13 @@ contracts.
 Wall time still varies with the host: the same configuration measured 146.5 s,
 152 s and, once, 305 s, the last because Bun re-fetched package manifests from
 the registry for every install (install slot time 478 s against 74-232 s
-normally). Total CPU is the stable figure to compare between changes; wall time
-alone says as much about the host's other load and the registry's latency as
-about the checker.
+normally). Installs now reuse a previous run's exact resolution
+(`rust/target/install-locks`, keyed by the exact spec set, installed with
+`--frozen-lockfile`; see scripts/ecosystem-benchmark/README.md), which removes
+the registry from the install phase entirely on a warm cache while every
+expected package is still verified by version and lock integrity against the
+manifest. Total CPU is the stable figure to compare between changes; wall time
+alone says as much about the host's other load as about the checker.
 
 ## Exit-code contract
 

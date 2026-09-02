@@ -73,6 +73,10 @@ const DEFAULT_SCHEDULE_REPORT = join(ROOT, "benchmarks/ecosystem/report.json");
 // packages/cli/scripts/certify-contract.mjs for what an entry is and the
 // checks it is held to before it is used.
 const DEFAULT_REGISTRY_CACHE = join(ROOT, "rust/target/registry-cache");
+// Each probe's resolved package.json and bun.lock, keyed by its exact spec set,
+// so a later run installs frozen (no registry manifest round trips) and with
+// the same transitive resolution. See lib/install.mjs.
+const DEFAULT_INSTALL_LOCKFILE_CACHE = join(ROOT, "rust/target/install-locks");
 const DEFAULT_TIMEOUT_SECONDS = 300;
 const PROGRESS_HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -1225,6 +1229,10 @@ function usage() {
   --durable-writes       flush every published catalog to stable storage as a
                          certification outside this harness does; default off,
                          since the run's catalogs are scratch
+  --no-install-lockfile-cache
+                         resolve every install against the registry instead of
+                         installing a previous run's exact resolution frozen
+                         (default rust/target/install-locks)
   --attempt-certification
                          attempt policy-2 certification for every structurally
                          complete proposal and retain its exact first refusal
@@ -1260,6 +1268,7 @@ function parseArgs(argv) {
     registryCache: null,
     noRegistryCache: false,
     durableWrites: false,
+    installLockfileCache: true,
     attemptCertification: false,
     keepTemp: false,
     includeSupplemental: false,
@@ -1324,6 +1333,9 @@ function parseArgs(argv) {
         break;
       case "--durable-writes":
         options.durableWrites = true;
+        break;
+      case "--no-install-lockfile-cache":
+        options.installLockfileCache = false;
         break;
       case "--attempt-certification":
         options.attemptCertification = true;
@@ -1468,7 +1480,8 @@ function buildRealHooks({
   certificationInnerConcurrency,
   registryCache = null,
   maxWorkers = 1,
-  durableWrites = false
+  durableWrites = false,
+  installLockfileCache = null
 }) {
   // Generation and certification run inside a pool of long-lived CLI workers
   // (lib/cli-worker.mjs) instead of one CLI process per probe and phase. The
@@ -1514,7 +1527,7 @@ function buildRealHooks({
 
     installPackages: async ({ projectDir, specs, expected, timeoutMs }) => {
       await createProject({ root: projectDir, specs });
-      const result = await bunInstall({ projectDir, specs, timeoutMs });
+      const result = await bunInstall({ projectDir, specs, timeoutMs, lockfileCache: installLockfileCache });
       const names = Object.keys(expected);
       const installedVersions = readInstalledVersions(projectDir, names);
       const integrity = readLockIntegrity(projectDir, names);
@@ -1753,7 +1766,8 @@ async function main(argv = process.argv.slice(2)) {
     // The scheduler never runs more concurrent generation and certification
     // work than this, so the pool never queues.
     maxWorkers: Math.max(1, options.concurrency || 1, options.certificationConcurrency || 1),
-    durableWrites: options.durableWrites
+    durableWrites: options.durableWrites,
+    installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null
   });
   const scheduleCosts = historicalScheduleCosts();
 
@@ -1802,7 +1816,8 @@ async function main(argv = process.argv.slice(2)) {
         nativeBin: binaries.nativeBin,
         typeFactsBin: binaries.typeFactsBin,
         registryCache,
-        durableWrites: options.durableWrites
+        durableWrites: options.durableWrites,
+        installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null
       },
       scope
     });

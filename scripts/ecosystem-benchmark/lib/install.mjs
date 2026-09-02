@@ -14,15 +14,51 @@
 //   warm between probes; the exact specs and lockfile still pin the artifact.
 
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { copyFile, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { packageIntegrity } from "../../lib/package-integrity.mjs";
 
 export function buildInstallArguments({ specs }) {
   return ["install", "--ignore-scripts", "--no-progress", ...specs];
+}
+
+// A frozen install reads the dependency set from package.json and every
+// resolution from bun.lock, so it consults no registry manifest; the specs
+// are already in the cached package.json.
+export function buildFrozenInstallArguments() {
+  return ["install", "--ignore-scripts", "--no-progress", "--frozen-lockfile"];
+}
+
+/// Where a probe's resolved install is remembered. The key is the exact spec
+/// set, so a manifest re-pin (a new version) is a different entry, never a
+/// stale hit.
+export function installLockfileCacheEntry(cacheRoot, specs) {
+  const key = createHash("sha256").update(JSON.stringify([...specs].sort())).digest("hex");
+  return join(cacheRoot, "v1", key.slice(0, 2), key);
+}
+
+async function storeInstallLockfile(entry, projectDir) {
+  const staging = `${entry}.staging-${process.pid}-${Date.now()}`;
+  try {
+    await mkdir(staging, { recursive: true });
+    await copyFile(join(projectDir, "package.json"), join(staging, "package.json"));
+    await copyFile(join(projectDir, "bun.lock"), join(staging, "bun.lock"));
+    await mkdir(dirname(entry), { recursive: true });
+    // A refresh replaces a stale entry: rename cannot land on a non-empty
+    // directory, so the previous entry goes first. A reader racing this sees
+    // a miss, never a torn entry.
+    await rm(entry, { recursive: true, force: true });
+    await rename(staging, entry);
+  } catch {
+    // Best-effort: a cache that cannot be written only costs the next run a
+    // registry round trip per install. A concurrent writer's identical entry
+    // winning the rename is the common reason to land here.
+    await rm(staging, { recursive: true, force: true });
+  }
 }
 
 export async function createProject({ root, specs }) {
@@ -135,10 +171,36 @@ function defaultSpawn({ cwd, args, timeoutMs }) {
   });
 }
 
-export async function installPackages({ projectDir, specs, spawnImpl, timeoutMs }) {
+/// Installs `specs` into `projectDir`. With `lockfileCache`, a previous run's
+/// resolved package.json and bun.lock for the same exact spec set are placed in
+/// the project first and Bun installs frozen: the transitive resolution is the
+/// one recorded, no registry manifest is consulted, and the tarballs come from
+/// Bun's own cache. What the harness verifies afterwards — the installed
+/// version and lock integrity of every expected package against the manifest —
+/// is unchanged, and a frozen install that fails for any reason falls back to
+/// the ordinary install, whose result refreshes the entry. Without the cache
+/// (or on a miss) the install resolves against the registry exactly as before,
+/// and a successful resolution is stored.
+export async function installPackages({ projectDir, specs, spawnImpl, timeoutMs, lockfileCache = null }) {
   const run = spawnImpl ?? defaultSpawn;
-  const args = buildInstallArguments({ specs });
-  return run({ cwd: projectDir, args, timeoutMs });
+  const entry = lockfileCache ? installLockfileCacheEntry(lockfileCache, specs) : null;
+  if (entry && existsSync(join(entry, "bun.lock")) && existsSync(join(entry, "package.json"))) {
+    try {
+      await copyFile(join(entry, "package.json"), join(projectDir, "package.json"));
+      await copyFile(join(entry, "bun.lock"), join(projectDir, "bun.lock"));
+      const frozen = await run({ cwd: projectDir, args: buildFrozenInstallArguments(), timeoutMs });
+      if (frozen.status === 0 || frozen.timedOut) return { ...frozen, lockfileReuse: "hit" };
+    } catch {
+      // fall through to the ordinary install
+    }
+    await rm(join(projectDir, "bun.lock"), { force: true });
+    await createProject({ root: projectDir, specs });
+  }
+  const result = await run({ cwd: projectDir, args: buildInstallArguments({ specs }), timeoutMs });
+  if (entry && result.status === 0 && existsSync(join(projectDir, "bun.lock"))) {
+    await storeInstallLockfile(entry, projectDir);
+  }
+  return { ...result, lockfileReuse: entry ? "miss" : null };
 }
 
 export async function withTemporaryProject(fn) {

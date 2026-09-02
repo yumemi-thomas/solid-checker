@@ -824,7 +824,10 @@ export function buildReport({
       registryCache: checker?.registryCache ?? null,
       // Whether published catalogs were flushed to stable storage (the
       // product default) or written without fsync because they were scratch.
-      durableWrites: checker?.durableWrites ?? true
+      durableWrites: checker?.durableWrites ?? true,
+      // Where a previous run's exact install resolutions were reused from, or
+      // null when every install resolved against the registry.
+      installLockfileCache: checker?.installLockfileCache ?? null
     },
     manifest: {
       generatedAt: manifest?.generatedAt ?? null,
@@ -1277,6 +1280,9 @@ export function renderMarkdown(report) {
   );
   lines.push(
     `- Durable catalog writes: ${report.checker?.durableWrites === false ? "off (scratch catalogs, no fsync)" : "on"}`
+  );
+  lines.push(
+    `- Install lockfile cache: ${report.checker?.installLockfileCache ?? "none (every install resolved against the registry)"}`
   );
   lines.push(
     `- Manifest generated at: ${report.manifest?.generatedAt ?? "unknown"} ` +

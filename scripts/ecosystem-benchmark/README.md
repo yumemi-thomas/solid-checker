@@ -66,6 +66,18 @@ shares state between requests (every call builds its own resolution session and
 scratch, as a fresh process would). The ~800 process starts a corpus run used to
 pay for cost more CPU than the work they carried.
 
+Installs reuse a previous run's exact resolution: each probe's resolved
+`package.json` and `bun.lock` are kept under `rust/target/install-locks`,
+keyed by the exact spec set, and a later run places them in the project and
+installs with `--frozen-lockfile` — no registry manifest is consulted and the
+transitive resolution is the one recorded. Every expected package is still
+verified by version and lock integrity against the manifest exactly as before,
+a frozen install that fails falls back to the ordinary install, and a manifest
+re-pin is a different key. `--no-install-lockfile-cache` resolves every install
+against the registry; the report records the choice under
+`checker.installLockfileCache`. Before this, install slot time swung between
+74 s and 478 s across otherwise identical runs as Bun re-fetched manifests.
+
 Certification children run with `SOLID_CHECKER_DURABLE_WRITES=none`: every
 catalog a probe publishes lives in a temporary directory removed seconds
 later, so the full-disk flushes (`F_FULLFSYNC` on Apple platforms, about ten
