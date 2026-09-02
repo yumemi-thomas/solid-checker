@@ -56,6 +56,16 @@ policy input before issuing a receipt. `--concurrency N` and
 `--certification-concurrency N` remain available for controlled comparisons or
 memory-constrained hosts.
 
+Generation and certification run inside a pool of long-lived CLI workers
+(`lib/cli-worker.mjs`, `lib/cli-worker-pool.mjs`) rather than one CLI process
+per probe and phase. A worker imports the two CLI functions once and serves one
+request at a time, reproducing the CLI's stdout, stderr and exit status exactly;
+the pool keeps the per-request timeout and memory supervision by killing the
+worker that serves the request, recycles workers after 64 requests, and never
+shares state between requests (every call builds its own resolution session and
+scratch, as a fresh process would). The ~800 process starts a corpus run used to
+pay for cost more CPU than the work they carried.
+
 Generation runs under the certification importer of its probe and
 certification receives the emitted proposal through `contract certify
 --proposal`, so the proposal each probe's generation phase measured is verified

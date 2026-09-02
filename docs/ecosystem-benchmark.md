@@ -290,7 +290,17 @@ backend and the MSVC build is untouched) takes the per-spawn sidecar setup from
 about 81 ms to 33 ms and the corpus from 1,312 to 1,157 CPU-seconds, with
 digests and outcomes unchanged.
 
-What remains is CPU that is per-process by construction: about 420
+The runner then stopped paying for a process per probe and phase: generation
+and certification run in a pool of long-lived CLI workers
+(scripts/ecosystem-benchmark/lib/cli-worker.mjs) that reproduce the CLI's
+stdout, stderr and exit status exactly and keep the per-request timeout and
+memory supervision. Total CPU fell from 1,157 to 812 seconds with identical
+outcomes and byte-identical stderr; wall time fell to 154 s, and the run is no
+longer CPU-bound — its slot time barely moved, so what remains is certification
+latency (a native certification still holds its slot for ~3.5 s while using
+~0.4 s of CPU).
+
+Before the pool, what remained was CPU that is per-process by construction: about 420
 CPU-seconds of `--project` analysis across ~1,800 processes (median 0.19 s
 each, one Type Facts program per exact source closure by design), ~390
 CPU-seconds in the 393 `contract certify` JavaScript processes (≈1 s each, of

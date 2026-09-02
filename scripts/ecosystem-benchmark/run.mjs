@@ -61,11 +61,11 @@ import {
 import { sortRows, validateManifest } from "./lib/manifest.mjs";
 import { buildReport, evaluateThresholds, renderMarkdown } from "./lib/report.mjs";
 import { certificationImporterPathFor } from "../../packages/cli/scripts/certify-contract.mjs";
+import { createCliWorkerPool } from "./lib/cli-worker-pool.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_MANIFEST = join(ROOT, "scripts/ecosystem-benchmark/manifest.json");
 const DEFAULT_SENTINEL = join(ROOT, "scripts/ecosystem-benchmark/sentinel.json");
-const DEFAULT_CLI = join(ROOT, "packages/cli/bin/solid-checker.mjs");
 const DEFAULT_SCHEDULE_REPORT = join(ROOT, "benchmarks/ecosystem/report.json");
 // Content-addressed registry bytes shared by every certification child of a
 // run (and across runs). Lives under rust/target with the other ignored,
@@ -1458,19 +1458,32 @@ function superviseChildMemory(child, capMb = PROBE_MEMORY_CAP_MB) {
 function buildRealHooks({
   nativeBin,
   typeFactsBin,
-  cliPath,
   certificationInnerConcurrency,
-  registryCache = null
+  registryCache = null,
+  maxWorkers = 1
 }) {
+  // Generation and certification run inside a pool of long-lived CLI workers
+  // (lib/cli-worker.mjs) instead of one CLI process per probe and phase. The
+  // worker reproduces the CLI's stdout, stderr and exit status exactly; the
+  // pool keeps the per-request timeout and memory supervision, killing the
+  // worker that serves a request exactly where the CLI child was killed
+  // before. The variables below are the ones the CLI reads at call time; the
+  // native binaries are fixed for the run and inherited by every worker.
+  const pool = createCliWorkerPool({
+    maxWorkers,
+    environment: {
+      ...process.env,
+      SOLID_CHECKER_NATIVE_BIN: nativeBin,
+      SOLID_TYPEFACTS_BIN: typeFactsBin
+    },
+    supervise: superviseChildMemory
+  });
   const generationEnvironment = {
-    ...process.env,
-    SOLID_CHECKER_NATIVE_BIN: nativeBin,
-    SOLID_TYPEFACTS_BIN: typeFactsBin
+    SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY: null,
+    SOLID_CHECKER_REGISTRY_CACHE: null
   };
   const certificationEnvironment = {
-    ...generationEnvironment,
-    SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY:
-      String(certificationInnerConcurrency),
+    SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY: String(certificationInnerConcurrency),
     // Empty, not absent, when disabled: the child must not pick a cache up
     // from the inherited environment that this run decided against.
     SOLID_CHECKER_REGISTRY_CACHE: registryCache ?? ""
@@ -1493,70 +1506,36 @@ function buildRealHooks({
       return { ...result, installedVersions, integrity };
     },
 
-    generateContract: ({ packageRoot, outputPath, timeoutMs, integrity, entrypoints = [] }) =>
-      new Promise(resolvePromise => {
-        // Generate under the importer certification will use for this probe
-        // (named by the package root and the catalog certification publishes
-        // to), so the emitted proposal can be handed to `contract certify
-        // --proposal` instead of being regenerated. The importer does not
-        // change the emitted document, plan or refusal audit.
-        // Certification resolves its package root through realpath and Rust
-        // binds the receipt to that exact string, so generate under the same
-        // spelling; otherwise the handed-over resolution would not bind.
-        const generationRoot = realpathSync(packageRoot);
-        const certificationImporter = certificationImporterPathFor({
-          packageRoot: generationRoot,
-          catalog: `${outputPath}.accepted-catalog`
-        });
-        const child = spawn(
-          process.execPath,
-          [
-            cliPath,
-            "contract",
-            "generate",
-            "--package-root",
-            generationRoot,
-            "--integrity",
-            integrity,
-            "--output",
-            outputPath,
-            "--certification-importer",
-            certificationImporter,
-            ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
-          ],
-          {
-            env: generationEnvironment,
-            stdio: ["ignore", "pipe", "pipe"]
-          }
-        );
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        const memory = superviseChildMemory(child);
-        const timer = timeoutMs
-          ? setTimeout(() => {
-              timedOut = true;
-              child.kill("SIGKILL");
-            }, timeoutMs)
-          : null;
-        child.stdout.on("data", chunk => {
-          stdout += chunk;
-        });
-        child.stderr.on("data", chunk => {
-          stderr += chunk;
-        });
-        child.on("close", status => {
-          if (timer) clearTimeout(timer);
-          memory.stop();
-          resolvePromise({
-            status,
-            stdout,
-            stderr: stderr + memory.marker(),
-            timedOut,
-            memoryExceeded: memory.exceeded()
-          });
-        });
-      }),
+    generateContract: ({ packageRoot, outputPath, timeoutMs, integrity, entrypoints = [] }) => {
+      // Generate under the importer certification will use for this probe
+      // (named by the package root and the catalog certification publishes
+      // to), so the emitted proposal can be handed to `contract certify
+      // --proposal` instead of being regenerated. The importer does not
+      // change the emitted document, plan or refusal audit. Certification
+      // resolves its package root through realpath and Rust binds the receipt
+      // to that exact string, so generate under the same spelling.
+      const generationRoot = realpathSync(packageRoot);
+      const certificationImporter = certificationImporterPathFor({
+        packageRoot: generationRoot,
+        catalog: `${outputPath}.accepted-catalog`
+      });
+      return pool.run({
+        kind: "generate",
+        args: [
+          "--package-root",
+          generationRoot,
+          "--integrity",
+          integrity,
+          "--output",
+          outputPath,
+          "--certification-importer",
+          certificationImporter,
+          ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
+        ],
+        env: generationEnvironment,
+        timeoutMs
+      });
+    },
 
     attemptCertification: ({
       packageRoot,
@@ -1567,82 +1546,51 @@ function buildRealHooks({
       entrypoints = [],
       proposalRefusalAudit = "",
       proposal = ""
-    }) =>
-      new Promise(resolvePromise => {
-        const authorityDir = `${catalogPath}.authority`;
-        mkdirSync(authorityDir, { recursive: true });
-        const issuerConfiguration = join(authorityDir, "issuer.json");
-        const trustConfiguration = join(authorityDir, "trust.json");
-        writeFileSync(issuerConfiguration, `${JSON.stringify({
-          format: "solid-checker-policy2-issuer-configuration",
-          issuerConfigurationVersion: 1,
-          kind: "persistent-local",
-          scope: `ecosystem-benchmark:${createHash("sha256").update(catalogPath).digest("hex")}`,
-          seed: randomBytes(32).toString("base64"),
-          revocationEpoch: 1
-        })}\n`, { mode: 0o600 });
-        const child = spawn(
-          process.execPath,
-          [
-            cliPath,
-            "contract",
-            "certify",
-            "--package-root",
-            packageRoot,
-            "--integrity",
-            integrity,
-            "--catalog",
-            catalogPath,
-            "--issuer-configuration",
-            issuerConfiguration,
-            "--trust-configuration-output",
-            trustConfiguration,
-            "--audit-output",
-            auditPath,
-            ...(proposalRefusalAudit
-              ? ["--proposal-refusal-audit", proposalRefusalAudit]
-              : []),
-            ...(proposal ? ["--proposal", proposal] : []),
-            ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
-          ],
-          {
-            env: certificationEnvironment,
-            stdio: ["ignore", "pipe", "pipe"]
-          }
-        );
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        const memory = superviseChildMemory(child);
-        const timer = timeoutMs
-          ? setTimeout(() => {
-              timedOut = true;
-              child.kill("SIGKILL");
-            }, timeoutMs)
-          : null;
-        child.stdout.on("data", chunk => {
-          stdout += chunk;
-        });
-        child.stderr.on("data", chunk => {
-          stderr += chunk;
-        });
-        child.on("close", status => {
-          if (timer) clearTimeout(timer);
-          memory.stop();
-          resolvePromise({
-            status,
-            stdout,
-            stderr: stderr + memory.marker(),
-            timedOut,
-            memoryExceeded: memory.exceeded()
-          });
-        });
-      }),
+    }) => {
+      const authorityDir = `${catalogPath}.authority`;
+      mkdirSync(authorityDir, { recursive: true });
+      const issuerConfiguration = join(authorityDir, "issuer.json");
+      const trustConfiguration = join(authorityDir, "trust.json");
+      writeFileSync(issuerConfiguration, `${JSON.stringify({
+        format: "solid-checker-policy2-issuer-configuration",
+        issuerConfigurationVersion: 1,
+        kind: "persistent-local",
+        scope: `ecosystem-benchmark:${createHash("sha256").update(catalogPath).digest("hex")}`,
+        seed: randomBytes(32).toString("base64"),
+        revocationEpoch: 1
+      })}\n`, { mode: 0o600 });
+      return pool.run({
+        kind: "certify",
+        args: [
+          "--package-root",
+          packageRoot,
+          "--integrity",
+          integrity,
+          "--catalog",
+          catalogPath,
+          "--issuer-configuration",
+          issuerConfiguration,
+          "--trust-configuration-output",
+          trustConfiguration,
+          "--audit-output",
+          auditPath,
+          ...(proposalRefusalAudit
+            ? ["--proposal-refusal-audit", proposalRefusalAudit]
+            : []),
+          ...(proposal ? ["--proposal", proposal] : []),
+          ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
+        ],
+        env: certificationEnvironment,
+        timeoutMs
+      });
+    },
 
     cleanup: async ({ projectDir, outputDir }) => {
       await rm(projectDir, { recursive: true, force: true });
       await rm(outputDir, { recursive: true, force: true });
-    }
+    },
+
+    close: () => pool.close()
   };
 }
 
@@ -1783,11 +1731,13 @@ async function main(argv = process.argv.slice(2)) {
   const hooks = buildRealHooks({
     nativeBin: binaries.nativeBin,
     typeFactsBin: binaries.typeFactsBin,
-    cliPath: DEFAULT_CLI,
     certificationInnerConcurrency: recommendedCertificationInnerConcurrency(
       options.certificationConcurrency
     ),
-    registryCache
+    registryCache,
+    // The scheduler never runs more concurrent generation and certification
+    // work than this, so the pool never queues.
+    maxWorkers: Math.max(1, options.concurrency || 1, options.certificationConcurrency || 1)
   });
   const scheduleCosts = historicalScheduleCosts();
 
@@ -1816,6 +1766,7 @@ async function main(argv = process.argv.slice(2)) {
     return;
   } finally {
     stopProgressHeartbeat();
+    await hooks.close?.();
   }
   const finishedAt = new Date().toISOString();
 
