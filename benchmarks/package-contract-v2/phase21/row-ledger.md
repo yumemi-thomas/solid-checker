@@ -1,11 +1,11 @@
 # Phase 21 ecosystem refusal-reduction ledger
 
 - Baseline fully refused rows: 30
-- Current report SHA-256: f4194c85aad55e7eff1151e4d0f3b98ca5145e07217b1111fe15c23598e87cc6
+- Current report SHA-256: da6ce8a07c010875e7db793c11300fe2995e241a7e7a1348e4b7d082910aa022
 - Upstream missing-byte controls: 5
 - CJS/no-ESM controls: 7
 - Checker-addressable rows: 18
-- Newly verified rows: 8
+- Newly verified rows: 9
 - Confirmed upstream declaration defects: 1
 
 ## Current terminal classes
@@ -26,9 +26,9 @@
 | retained-unsupported-runtime-model | 7 |
 | exact-refusal-authenticated-layout | 5 |
 | retained-upstream-missing-bytes | 5 |
-| exact-refusal-semantic-model | 4 |
+| pending-phase21-checker-work | 4 |
 | exact-refusal-package-import-resolution | 3 |
-| pending-phase21-checker-work | 3 |
+| exact-refusal-semantic-model | 3 |
 | confirmed-upstream-declaration-defect | 1 |
 | exact-refusal-type-facts-capability | 1 |
 | verified-through-ordinary-receipt-load | 1 |
@@ -70,7 +70,7 @@
 | @tanstack/solid-query@5.102.5\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
 | @tanstack/solid-query@6.0.0-rc.0\|solid2\|floor | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-query@6.0.0-rc.0\|solid2\|head | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
-| @tanstack/solid-query-persist-client@5.102.5\|solid1\|only | exact-refusal-semantic-model | checker-semantic-model | dependency-contract-obligation |
+| @tanstack/solid-query-persist-client@5.102.5\|solid1\|only | pending-phase21-checker-work | checker-semantic-model | dependency-contract-obligation |
 | @tanstack/solid-query-persist-client@6.0.0-rc.0\|solid2\|floor | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-query-persist-client@6.0.0-rc.0\|solid2\|head | exact-refusal-authenticated-layout | authenticated-dependency-layout | dependency-contract-obligation |
 | @tanstack/solid-start-server@1.167.36\|solid1\|only | exact-refusal-package-import-resolution | checker-resolver | dependency-contract-obligation |

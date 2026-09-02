@@ -83,16 +83,18 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // the non-emitting-module applicability slice (2026-09-02) adds exactly
   // @kobalte/utils 2.0, @solidjs/h, @solidjs/image and @solidjs/universal; the
   // dependency-target-not-exported disposition (2026-09-03) removes exactly the two
-  // @solid-primitives/drag-drop Solid 2 rows, whose bundle imports solid-js/web.
+  // @solid-primitives/drag-drop Solid 2 rows, whose bundle imports solid-js/web; the
+  // declaration-owner harness and array element-index split (2026-09-03) add exactly
+  // @tanstack/solid-query-persist-client 5.102.5 and @solid-primitives/db-store 1.1.4.
   assert.deepEqual(ledger.summary.proposalStates, {
     complete: 348,
     "fully-refused": 37,
     partial: 33
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 47,
+    "exact-refusal": 45,
     "not-attempted": 21,
-    verified: 350
+    verified: 352
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -100,7 +102,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 350);
+  assert.equal(ledger.summary.verifiedRows, 352);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -181,6 +183,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/date@3.0.0-next.3|solid2|floor",
       "@solid-primitives/date@3.0.0-next.3|solid2|head",
       "@solid-primitives/date-difference@1.0.2|solid1|only",
+      "@solid-primitives/db-store@1.1.4|solid1|only",
       "@solid-primitives/debounce@1.3.0|solid1|only",
       "@solid-primitives/deep@0.3.7|solid1|only",
       "@solid-primitives/deep@1.0.0-next.3|solid2|floor",
@@ -427,6 +430,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@tanstack/solid-query-devtools@5.102.5|solid1|only",
       "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor",
       "@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head",
+      "@tanstack/solid-query-persist-client@5.102.5|solid1|only",
       "@tanstack/solid-router@1.170.30|solid1|only",
       "@tanstack/solid-router@2.0.0-rc.2|solid2|floor",
       "@tanstack/solid-router@2.0.0-rc.2|solid2|head",

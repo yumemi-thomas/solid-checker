@@ -147,7 +147,18 @@ Producer side only. **The gate `require_verifiable_root_premise` is not touched
 observation *closed* only where the type system genuinely answers.
 
 Keep `openIndex` exactly as it is inside `walkCallablePathsLocked` (path facts).
-In `invocationValueFactLocked`, ask a narrower question before stamping. Three
+In `invocationValueFactLocked`, ask a narrower question before stamping.
+
+> **Superseded 2026-09-03 for the array arm only** — see the precision-backlog
+> entry "An exact Array's numeric index is subtree enumeration, not an open
+> shape". A path fact for an *exact* Array element index now records
+> `SubtreeEnumerated = false` alone and keeps its own `Complete`. That is the
+> same split M4 (§4) introduced, and it is what the whole-census gates already
+> read, so `require_all_callable_paths_closed` /
+> `require_export_callable_paths_closed` still refuse. Every other index —
+> string- or symbol-keyed, an array-*like* object's declared numeric index, a
+> generic array-like interface, any tuple with an optional or rest element —
+> keeps `openIndex` on path facts exactly as this section says. Three
 independently gateable arms, in increasing order of blast radius — ship them one
 at a time and measure each:
 

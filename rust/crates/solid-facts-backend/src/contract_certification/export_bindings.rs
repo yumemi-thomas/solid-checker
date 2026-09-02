@@ -57,6 +57,21 @@ impl SnapshotVerifiedExports {
         })
     }
 
+    /// Authenticated snapshot root of the package that *owns* `name`'s
+    /// declaration binding.
+    ///
+    /// `declaration_binding` returns a path relative to that owner, which for
+    /// an export re-exported from a dependency is the dependency's package and
+    /// not this snapshot's. Any consumer that turns the path into a module
+    /// specifier must join it onto the owner's root; this is how the owner is
+    /// identified, using the same root `verify_target` matches a planned
+    /// dependency by.
+    pub(super) fn declaration_binding_snapshot_root(&self, name: &str) -> Option<&str> {
+        self.bindings
+            .get(name)
+            .map(|binding| binding.declarations_snapshot_root.as_str())
+    }
+
     pub(super) fn runtime_binding(&self, name: &str) -> Option<(&str, &str, Span, &str)> {
         self.bindings.get(name).and_then(|binding| {
             binding.runtime_span.map(|span| {

@@ -1500,11 +1500,28 @@ type ExportResolutionVariants = std::collections::BTreeMap<
     std::collections::BTreeSet<ExportResolutionVariant>,
 >;
 
-fn derive_export_value_schedules(
+/// How many distinct declaration resolutions each public `(specifier, export)`
+/// subject has across `plans`.
+///
+/// A variant is `(declaration path, selector, declaration export, owning
+/// snapshot root)`. The owner is the fourth coordinate — not the *plan's*
+/// snapshot root, which is what it used to be — because a declaration path is
+/// only an identity together with the package it is relative to. Two cases whose
+/// paths, selectors and export names agree inside two different dependency
+/// copies are two resolutions of one public subpath, and collapsing them let a
+/// case be bound to whichever copy the host's active condition set resolves.
+///
+/// Both directions of the change are deliberate. Within a single-package batch
+/// every plan shares `plan.snapshot_root()`, so the old coordinate distinguished
+/// nothing there. Across a graph, where plans of one package name at different
+/// versions do differ in it, the old coordinate *split* subjects that agreed on
+/// the binding in every respect that decides what the harness imports; the new
+/// one merges them, and merging is safe because the public specifier is only
+/// ever taken when `publicly_addressable` holds, which means it resolves inside
+/// that plan's own materialized copy.
+fn export_resolution_variants(
     plans: &[&CertificationPlan],
-    project: &PrivateTypeFactsProject,
-    force_exact_subjects: bool,
-) -> Result<Vec<TypeFactsCertificationSchedule>, TypeFactsCertificationError> {
+) -> Result<ExportResolutionVariants, TypeFactsCertificationError> {
     let mut resolution_variants = ExportResolutionVariants::new();
     for plan in plans {
         for demand in plan
@@ -1530,10 +1547,60 @@ fn derive_export_value_schedules(
                     declaration_path.to_owned(),
                     declaration_selector.to_owned(),
                     declaration_export.to_owned(),
-                    plan.snapshot_root().to_owned(),
+                    declaration_binding_owner(plan, export, demand.id().as_str())?.to_owned(),
                 ));
         }
     }
+    Ok(resolution_variants)
+}
+
+/// Test-only entry point: the declaration-resolution variants `plans` produce,
+/// as `(public specifier, export, variants)` with each variant rendered as
+/// `(declaration path, selector, declaration export, owning snapshot root)`.
+/// Used by the sibling module's regression tests that the owning snapshot root
+/// is the coordinate, not the plan's.
+#[cfg(test)]
+pub(super) fn export_resolution_variants_for_test(
+    plans: &[&CertificationPlan],
+) -> Result<Vec<(String, String, Vec<ExportResolutionVariant>)>, TypeFactsCertificationError> {
+    Ok(export_resolution_variants(plans)?
+        .into_iter()
+        .map(|((specifier, export), variants)| (specifier, export, variants.into_iter().collect()))
+        .collect())
+}
+
+/// Test-only entry point: the harness subject `derive_export_value_schedules`
+/// would give `subject_plan`'s `export`, with the variant map computed over
+/// `plans` and the private project materialized from `owner` plus
+/// `dependencies`. `force_exact_subjects` mirrors the graph lane's argument.
+#[cfg(test)]
+pub(super) fn export_value_harness_subject_for_test(
+    owner: &CertificationPlan,
+    dependencies: &[&CertificationPlan],
+    plans: &[&CertificationPlan],
+    subject_plan: &CertificationPlan,
+    export: &str,
+    force_exact_subjects: bool,
+) -> Result<(String, String), TypeFactsCertificationError> {
+    let project = PrivateTypeFactsProject::materialize(owner, dependencies, plans, &[])?;
+    let variants = export_resolution_variants(plans)?;
+    export_value_harness_subject(
+        &project,
+        subject_plan,
+        subject_plan.selected_artifact_case_id(),
+        export,
+        "test-demand",
+        &variants,
+        force_exact_subjects,
+    )
+}
+
+fn derive_export_value_schedules(
+    plans: &[&CertificationPlan],
+    project: &PrivateTypeFactsProject,
+    force_exact_subjects: bool,
+) -> Result<Vec<TypeFactsCertificationSchedule>, TypeFactsCertificationError> {
+    let resolution_variants = export_resolution_variants(plans)?;
     let mut subjects = std::collections::BTreeMap::<(String, String), String>::new();
     for plan in plans {
         for demand in plan
@@ -1567,7 +1634,7 @@ fn derive_export_value_schedules(
         .map(|plan| {
             snapshot_module_harness_specifier(
                 project,
-                plan,
+                project.package_root(plan)?,
                 plan.verified_resolution.declarations_path(),
             )
         })
@@ -1849,6 +1916,47 @@ pub(super) fn export_implementation_location_for_test(
     export_implementation_location(plans, &project, owner, export, "test-demand")
 }
 
+/// Test-only entry point: materialize `owner` together with `dependencies` the
+/// way one graph project does, then build the exact declaration harness subject
+/// for each of `exports` and report `(specifier, selector, specifier resolves to
+/// a materialized module)`.
+///
+/// A specifier resolves when the literal path exists or when the declaration
+/// file TypeScript maps it back to does — `declaration_import_path` writes the
+/// runtime extension, and a declaration-only module is addressed through it.
+/// Used by the sibling module's regression test that a declaration binding
+/// re-exported from a dependency is imported from *that dependency's*
+/// materialized package root.
+#[cfg(test)]
+pub(super) fn exact_declaration_harness_subjects_for_test(
+    owner: &CertificationPlan,
+    dependencies: &[&CertificationPlan],
+    exports: &[&str],
+) -> Result<Vec<(String, String, bool)>, TypeFactsCertificationError> {
+    let mut plans = vec![owner];
+    plans.extend(dependencies.iter().copied());
+    let project = PrivateTypeFactsProject::materialize(owner, dependencies, &plans, &[])?;
+    exports
+        .iter()
+        .map(|export| {
+            let (specifier, selector) =
+                exact_declaration_harness_subject(&project, owner, export, "test-demand")?;
+            let path = project.root.join(specifier.trim_start_matches("./"));
+            let resolves = path.is_file()
+                || ["d.ts", "d.mts", "d.cts"].iter().any(|extension| {
+                    let literal = path.to_string_lossy();
+                    let stem = literal
+                        .strip_suffix(".js")
+                        .or_else(|| literal.strip_suffix(".mjs"))
+                        .or_else(|| literal.strip_suffix(".cjs"))
+                        .unwrap_or(&literal);
+                    Path::new(&format!("{stem}.{extension}")).is_file()
+                });
+            Ok((specifier, selector, resolves))
+        })
+        .collect()
+}
+
 fn export_value_harness_subject(
     project: &PrivateTypeFactsProject,
     plan: &CertificationPlan,
@@ -1918,16 +2026,92 @@ fn exact_declaration_harness_subject(
     // subpath once would silently bind every case to the host's one active
     // condition set. This relative verifier-owned path selects the immutable
     // snapshot file each opaque plan already authenticated.
-    let specifier = snapshot_module_harness_specifier(project, plan, declaration_path)?;
+    //
+    // `declaration_path` is relative to the package that *owns* the binding,
+    // which for an export re-exported from a dependency is that dependency and
+    // not this plan. See `declaration_owner_package_root`.
+    let owner = declaration_binding_owner(plan, export, demand)?;
+    let package_root = declaration_owner_package_root(project, plan, owner)?;
+    let specifier = snapshot_module_harness_specifier(project, package_root, declaration_path)?;
     Ok((specifier, declaration_selector.to_owned()))
+}
+
+fn declaration_binding_owner<'plan>(
+    plan: &'plan CertificationPlan,
+    export: &str,
+    demand: &str,
+) -> Result<&'plan str, TypeFactsCertificationError> {
+    plan.verified_exports
+        .declaration_binding_snapshot_root(export)
+        .ok_or_else(|| TypeFactsCertificationError::SubjectMismatch {
+            demand: demand.to_owned(),
+            reason: "demanded export has no snapshot-verified declaration binding".into(),
+        })
+}
+
+/// Materialized package root of the copy whose authenticated snapshot root is
+/// `owner`.
+///
+/// A re-exported export's declaration binding names a file relative to the
+/// package that owns it. Joining a dependency-owned path onto this plan's own
+/// package root names a file the plan does not ship: the harness import never
+/// resolves, the alias target comes back as the checker's `unknown` symbol, and
+/// the producer answers a declaration openness about a file the demand never
+/// named — a witness-program defect reported as a producer limit.
+///
+/// The owner is selected by the same authenticated snapshot root the export
+/// replay recorded and `verify_target` matches a planned dependency by, never
+/// by package name or by path arithmetic.
+///
+/// Several materialized copies of one snapshot root are not an ambiguity, for
+/// the reason `export_implementation_location` already records at its own call
+/// site: `snapshot_root` is a content hash over the package name, version, and
+/// every file's bytes, so every copy carrying it holds byte-identical sources at
+/// the same package-relative path. Importing the declaration through any of them
+/// selects the same bytes and the same producer transcript. This binds the
+/// *first* such copy in `package_roots` order — the map is a `BTreeMap` keyed by
+/// `(snapshot root, installed package root)`, so among the copies of one
+/// snapshot root that order is the installed package root's, and the selection
+/// is stable across runs and independent of plan discovery order. Refusing
+/// instead would escape `derive_export_value_schedules`, which the graph lane
+/// calls once for the whole graph: one duplicated install of one owning
+/// dependency would refuse every node of that published graph.
+///
+/// An owner this project did not materialize is a different matter and still
+/// fails closed — there is no copy to address, and guessing one would be
+/// substitution. That arm is unreachable from the batch lane, which cannot carry
+/// a foreign declaration owner at all (see the `(None, _)` note below).
+fn declaration_owner_package_root<'project>(
+    project: &'project PrivateTypeFactsProject,
+    plan: &CertificationPlan,
+    owner: &str,
+) -> Result<&'project Path, TypeFactsCertificationError> {
+    if owner == plan.snapshot_root() {
+        return project.package_root(plan);
+    }
+    project
+        .package_roots
+        .iter()
+        .find(|((snapshot_root, _), _)| snapshot_root == owner)
+        .map(|(_, root)| root.as_path())
+        .ok_or_else(|| {
+            TypeFactsCertificationError::identity_mismatch(
+                "declaration harness",
+                "declaration_owner_package_root",
+                format!("a materialized package of snapshot root {owner}"),
+                format!(
+                    "{} materialized package root(s), none of that snapshot root",
+                    project.package_roots.len()
+                ),
+            )
+        })
 }
 
 fn snapshot_module_harness_specifier(
     project: &PrivateTypeFactsProject,
-    plan: &CertificationPlan,
+    package_root: &Path,
     path: &str,
 ) -> Result<String, TypeFactsCertificationError> {
-    let package_root = project.package_root(plan)?;
     let relative = package_root.strip_prefix(&project.root).map_err(|_| {
         let (expected, actual) = diagnostic_identity_path_pair(
             &project.root.to_string_lossy(),

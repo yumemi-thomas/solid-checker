@@ -4261,6 +4261,680 @@ mod tests {
         );
     }
 
+    // Regression: the exact witness harness imported every declaration binding
+    // from the *root* plan's materialized package root. A binding for an export
+    // re-exported from a dependency is a path relative to that dependency, so
+    // the import named a file the root does not ship
+    // (`@tanstack/solid-query-persist-client`'s `PERSISTER_KEY_PREFIX`, whose
+    // declaration is `@tanstack/query-persist-client-core`'s
+    // `build/modern/createPersister.d.ts`): the module never resolved, the
+    // alias target came back as the checker's `unknown` symbol, and the
+    // producer answered `declarationUnavailable` about a file the demand never
+    // named.
+    #[test]
+    fn an_exact_harness_imports_a_reexported_declaration_from_its_owning_package() {
+        let dependency_manifest = br#"{"name":"dependency-package","version":"1.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}"#;
+        let dependency_runtime = b"export { PREFIX } from \"./build/modern/prefix.js\";\n";
+        let dependency_declarations = b"export { PREFIX } from \"./build/modern/prefix.js\";\n";
+        let prefix_runtime = b"export const PREFIX = \"dependency-prefix\";\n";
+        let prefix_declarations = b"export declare const PREFIX: \"dependency-prefix\";\n";
+        let dependency_archive = published_archive_for(
+            "dependency-package",
+            "1.0.0",
+            &[
+                ("package/package.json", dependency_manifest),
+                ("package/index.js", dependency_runtime),
+                ("package/index.d.ts", dependency_declarations),
+                ("package/build/modern/prefix.js", prefix_runtime),
+                ("package/build/modern/prefix.d.ts", prefix_declarations),
+            ],
+        );
+        let dependency_root = "/project/node_modules/dependency-package";
+        let dependency_plan = plan_for_test_package(
+            &dependency_archive,
+            "dependency-package",
+            "1.0.0",
+            dependency_root,
+            dependency_manifest,
+            &["import"],
+            &[(
+                "PREFIX",
+                ("build/modern/prefix.js", prefix_runtime),
+                ("build/modern/prefix.d.ts", prefix_declarations),
+                dependency_root,
+            )],
+            &[],
+        );
+
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js","default":"./dist/index.js"}}}"#;
+        let runtime = b"export { PREFIX } from \"dependency-package\";\nexport { LOCAL } from \"./local.js\";\n";
+        let declarations = b"export { PREFIX } from \"dependency-package\";\nexport { LOCAL } from \"./local.js\";\n";
+        let local_runtime = b"export const LOCAL = \"local\";\n";
+        let local_declarations = b"export declare const LOCAL: \"local\";\n";
+        let archive = published_archive_for(
+            "fixture-package",
+            "1.2.3",
+            &[
+                ("package/package.json", manifest),
+                ("package/dist/index.js", runtime),
+                ("package/dist/index.d.ts", declarations),
+                ("package/dist/local.js", local_runtime),
+                ("package/dist/local.d.ts", local_declarations),
+            ],
+        );
+        let root = "/project/node_modules/fixture-package";
+        let plan = plan_for_test_package(
+            &archive,
+            "fixture-package",
+            "1.2.3",
+            root,
+            manifest,
+            &["import"],
+            &[
+                (
+                    "LOCAL",
+                    ("dist/local.js", local_runtime),
+                    ("dist/local.d.ts", local_declarations),
+                    root,
+                ),
+                (
+                    "PREFIX",
+                    ("build/modern/prefix.js", prefix_runtime),
+                    ("build/modern/prefix.d.ts", prefix_declarations),
+                    dependency_root,
+                ),
+            ],
+            &[&dependency_plan],
+        );
+
+        // Both bindings are re-exports; only `PREFIX` crosses a package.
+        assert_eq!(
+            plan.verified_exports.declaration_binding("PREFIX"),
+            Some(("build/modern/prefix.d.ts", "PREFIX", "PREFIX"))
+        );
+        assert_eq!(
+            plan.verified_exports
+                .declaration_binding_snapshot_root("PREFIX"),
+            Some(dependency_plan.snapshot_root())
+        );
+        assert_eq!(
+            plan.verified_exports.declaration_binding("LOCAL"),
+            Some(("dist/local.d.ts", "LOCAL", "LOCAL"))
+        );
+        assert_eq!(
+            plan.verified_exports
+                .declaration_binding_snapshot_root("LOCAL"),
+            Some(plan.snapshot_root())
+        );
+
+        let subjects = super::type_facts::exact_declaration_harness_subjects_for_test(
+            &plan,
+            &[&dependency_plan],
+            &["PREFIX", "LOCAL"],
+        )
+        .expect("the exact harness subject must build for a cross-package re-export");
+        // The dependency-owned binding is imported from the dependency's own
+        // materialized package root. Joining `build/modern/prefix.js` onto
+        // `node_modules/fixture-package` — what the defect did — names no file.
+        assert_eq!(
+            subjects[0],
+            (
+                "./node_modules/dependency-package/build/modern/prefix.js".to_owned(),
+                "PREFIX".to_owned(),
+                true
+            )
+        );
+        // A root-owned re-export still resolves against the root's own package.
+        assert_eq!(
+            subjects[1],
+            (
+                "./node_modules/fixture-package/dist/local.js".to_owned(),
+                "LOCAL".to_owned(),
+                true
+            )
+        );
+    }
+
+    /// A dependency package whose entrypoint re-exports `VALUE` from
+    /// `lib/value.d.ts`, with `marker` distinguishing otherwise identical
+    /// copies so each gets its own snapshot root.
+    fn value_dependency_archive(name: &str, version: &str, marker: &str) -> PublishedArchive {
+        let manifest = format!(
+            r#"{{"name":"{name}","version":"{version}","exports":{{".":{{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}}}}"#
+        );
+        published_archive_for(
+            name,
+            version,
+            &[
+                ("package/package.json", manifest.as_bytes()),
+                (
+                    "package/index.js",
+                    b"export { VALUE } from \"./lib/value.js\";\n",
+                ),
+                (
+                    "package/index.d.ts",
+                    b"export { VALUE } from \"./lib/value.js\";\n",
+                ),
+                (
+                    "package/lib/value.js",
+                    format!("export const VALUE = \"{marker}\";\n").as_bytes(),
+                ),
+                (
+                    "package/lib/value.d.ts",
+                    format!("export declare const VALUE: \"{marker}\";\n").as_bytes(),
+                ),
+            ],
+        )
+    }
+
+    fn value_dependency_plan(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        marker: &str,
+    ) -> CertificationPlan {
+        let manifest = format!(
+            r#"{{"name":"{name}","version":"{version}","exports":{{".":{{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}}}}"#
+        );
+        let runtime = format!("export const VALUE = \"{marker}\";\n");
+        let declarations = format!("export declare const VALUE: \"{marker}\";\n");
+        plan_for_test_package(
+            archive,
+            name,
+            version,
+            root,
+            manifest.as_bytes(),
+            &["import"],
+            &[(
+                "VALUE",
+                ("lib/value.js", runtime.as_bytes()),
+                ("lib/value.d.ts", declarations.as_bytes()),
+                root,
+            )],
+            &[],
+        )
+    }
+
+    // Regression, declaration axis: `declaration_owner_package_root` used to
+    // refuse the moment two materialized copies carried the owning
+    // `snapshot_root`, which contradicts the argument
+    // `export_implementation_location` records for the very same multiplicity —
+    // `snapshot_root` is a content hash over the package name, version, and
+    // every file's bytes, so every copy holds identical bytes at the same
+    // package-relative path. Worse, the refusal escapes
+    // `derive_export_value_schedules`, which the graph lane calls once for the
+    // whole graph: one duplicated install of one owning dependency would have
+    // refused every node of that published graph. It must bind the first
+    // materialized copy instead.
+    #[test]
+    fn declaration_harness_binds_first_owner_for_shared_snapshot_root() {
+        let dependency_archive = value_dependency_archive("dependency-package", "1.0.0", "shared");
+        // Two installed roots, one snapshot root: a hoisted copy and a nested
+        // one, which is what a real install tree produces for one resolution.
+        let hoisted = value_dependency_plan(
+            &dependency_archive,
+            "dependency-package",
+            "1.0.0",
+            "/project/node_modules/dependency-package",
+            "shared",
+        );
+        let nested = value_dependency_plan(
+            &dependency_archive,
+            "dependency-package",
+            "1.0.0",
+            "/project/node_modules/fixture-package/node_modules/dependency-package",
+            "shared",
+        );
+        assert_eq!(
+            hoisted.snapshot_root(),
+            nested.snapshot_root(),
+            "identical bytes must share one snapshot root for this test to mean anything"
+        );
+
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js","default":"./dist/index.js"}}}"#;
+        let reexport = b"export { VALUE } from \"dependency-package\";\n";
+        let archive = published_archive_for(
+            "fixture-package",
+            "1.2.3",
+            &[
+                ("package/package.json", manifest),
+                ("package/dist/index.js", reexport),
+                ("package/dist/index.d.ts", reexport),
+            ],
+        );
+        let plan = plan_for_test_package(
+            &archive,
+            "fixture-package",
+            "1.2.3",
+            "/project/node_modules/fixture-package",
+            manifest,
+            &["import"],
+            &[(
+                "VALUE",
+                ("lib/value.js", b"export const VALUE = \"shared\";\n"),
+                (
+                    "lib/value.d.ts",
+                    b"export declare const VALUE: \"shared\";\n",
+                ),
+                "/project/node_modules/dependency-package",
+            )],
+            &[&hoisted],
+        );
+
+        let subjects = super::type_facts::exact_declaration_harness_subjects_for_test(
+            &plan,
+            &[&hoisted, &nested],
+            &["VALUE"],
+        )
+        .expect("two copies of one owning snapshot root must bind, not refuse");
+        let (specifier, selector, resolves) = &subjects[0];
+        assert!(
+            resolves,
+            "the bound owner must name a materialized module, got {specifier:?}"
+        );
+        assert_eq!(selector, "VALUE");
+        // First in `package_roots` order — a BTreeMap keyed by (snapshot root,
+        // installed package root), so among copies of one snapshot root the
+        // order is the installed root's and the choice is run-independent.
+        assert_eq!(
+            specifier, "./node_modules/dependency-package/lib/value.js",
+            "the first materialized copy of the owning snapshot root must be bound"
+        );
+    }
+
+    // Regression: the resolution-variant key's fourth coordinate was the
+    // *plan's* snapshot root, which is constant across one package's artifact
+    // cases and therefore distinguished nothing. Two conditional cases that
+    // re-export one name from two different dependency copies are two
+    // resolutions of one public subpath; collapsing them let the harness ask
+    // TypeScript to resolve `fixture-package` once and bind both cases to
+    // whichever branch the host's active condition set selects.
+    #[test]
+    fn a_declaration_owner_splits_two_cases_that_agree_on_the_binding_path() {
+        let alpha_archive = value_dependency_archive("dep-alpha", "1.0.0", "alpha");
+        let beta_archive = value_dependency_archive("dep-beta", "1.0.0", "beta");
+        let alpha = value_dependency_plan(
+            &alpha_archive,
+            "dep-alpha",
+            "1.0.0",
+            "/project/node_modules/dep-alpha",
+            "alpha",
+        );
+        let beta = value_dependency_plan(
+            &beta_archive,
+            "dep-beta",
+            "1.0.0",
+            "/project/node_modules/dep-beta",
+            "beta",
+        );
+
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3","exports":{".":{"alpha":{"types":"./a.d.ts","default":"./a.js"},"default":{"types":"./b.d.ts","default":"./b.js"}}}}"#;
+        let from_alpha = b"export { VALUE } from \"dep-alpha\";\n";
+        let from_beta = b"export { VALUE } from \"dep-beta\";\n";
+        let archive = published_archive_for(
+            "fixture-package",
+            "1.2.3",
+            &[
+                ("package/package.json", manifest),
+                ("package/a.js", from_alpha),
+                ("package/a.d.ts", from_alpha),
+                ("package/b.js", from_beta),
+                ("package/b.d.ts", from_beta),
+            ],
+        );
+        let root = "/project/node_modules/fixture-package";
+        let alpha_case = plan_for_test_package(
+            &archive,
+            "fixture-package",
+            "1.2.3",
+            root,
+            manifest,
+            &["alpha"],
+            &[(
+                "VALUE",
+                ("lib/value.js", b"export const VALUE = \"alpha\";\n"),
+                (
+                    "lib/value.d.ts",
+                    b"export declare const VALUE: \"alpha\";\n",
+                ),
+                "/project/node_modules/dep-alpha",
+            )],
+            &[&alpha],
+        );
+        let beta_case = plan_for_test_package(
+            &archive,
+            "fixture-package",
+            "1.2.3",
+            root,
+            manifest,
+            &[],
+            &[(
+                "VALUE",
+                ("lib/value.js", b"export const VALUE = \"beta\";\n"),
+                ("lib/value.d.ts", b"export declare const VALUE: \"beta\";\n"),
+                "/project/node_modules/dep-beta",
+            )],
+            &[&beta],
+        );
+
+        // Everything the old key looked at is equal between the two cases: one
+        // package, one snapshot root, one public specifier, one declaration
+        // path, one selector, one declaration export name.
+        assert_eq!(alpha_case.snapshot_root(), beta_case.snapshot_root());
+        assert_eq!(
+            alpha_case.verified_exports.declaration_binding("VALUE"),
+            beta_case.verified_exports.declaration_binding("VALUE"),
+        );
+        assert_ne!(
+            alpha_case
+                .verified_exports
+                .declaration_binding_snapshot_root("VALUE"),
+            beta_case
+                .verified_exports
+                .declaration_binding_snapshot_root("VALUE"),
+        );
+
+        let plans = [&alpha_case, &beta_case, &alpha, &beta];
+        let variants = super::type_facts::export_resolution_variants_for_test(&plans).unwrap();
+        let fixture = variants
+            .iter()
+            .find(|(specifier, export, _)| specifier == "fixture-package" && export == "VALUE")
+            .expect("the root package's public subject must be inventoried");
+        assert_eq!(
+            fixture.2.len(),
+            2,
+            "two owning dependency copies are two resolutions, got {:?}",
+            fixture.2
+        );
+
+        // End to end: each case's harness subject is the exact declaration in
+        // its own dependency, not the shared public specifier.
+        for (case, expected) in [
+            (&alpha_case, "./node_modules/dep-alpha/lib/value.js"),
+            (&beta_case, "./node_modules/dep-beta/lib/value.js"),
+        ] {
+            let (specifier, selector) = super::type_facts::export_value_harness_subject_for_test(
+                &alpha_case,
+                &[&alpha, &beta],
+                &plans,
+                case,
+                "VALUE",
+                true,
+            )
+            .unwrap();
+            assert_eq!((specifier.as_str(), selector.as_str()), (expected, "VALUE"));
+        }
+    }
+
+    // The other direction of the same coordinate change. Two plans of one
+    // package name at different versions differ in `plan.snapshot_root()`, so
+    // the old key split them even when they agreed on every coordinate that
+    // decides what the harness imports. The new key merges them, and merging is
+    // safe because the public specifier is only ever taken for a plan whose
+    // materialized copy *is* `node_modules/<name>` (`publicly_addressable`), so
+    // it resolves inside that plan's own copy.
+    #[test]
+    fn one_declaration_owner_merges_two_versions_the_plan_root_coordinate_split() {
+        let shared_archive = value_dependency_archive("dep-shared", "1.0.0", "shared");
+        let shared = value_dependency_plan(
+            &shared_archive,
+            "dep-shared",
+            "1.0.0",
+            "/project/node_modules/dep-shared",
+            "shared",
+        );
+        let reexport = b"export { VALUE } from \"dep-shared\";\n";
+        let owner_binding: &[TestExportBinding<'_>] = &[(
+            "VALUE",
+            ("lib/value.js", b"export const VALUE = \"shared\";\n"),
+            (
+                "lib/value.d.ts",
+                b"export declare const VALUE: \"shared\";\n",
+            ),
+            "/project/node_modules/dep-shared",
+        )];
+
+        let mut plans = Vec::new();
+        let mut archives = Vec::new();
+        for (version, note) in [("1.2.3", b"// one\n"), ("1.2.4", b"// two\n")] {
+            let manifest = format!(
+                r#"{{"name":"consumer","version":"{version}","exports":{{".":{{"types":"./index.d.ts","import":"./index.js","default":"./index.js"}}}}}}"#
+            );
+            let mut runtime = reexport.to_vec();
+            runtime.extend_from_slice(note);
+            archives.push((manifest, runtime));
+        }
+        let built = archives
+            .iter()
+            .enumerate()
+            .map(|(index, (manifest, runtime))| {
+                let version = if index == 0 { "1.2.3" } else { "1.2.4" };
+                let archive = published_archive_for(
+                    "consumer",
+                    version,
+                    &[
+                        ("package/package.json", manifest.as_bytes()),
+                        ("package/index.js", runtime.as_slice()),
+                        ("package/index.d.ts", reexport),
+                    ],
+                );
+                (version, manifest, archive)
+            })
+            .collect::<Vec<_>>();
+        for (index, (version, manifest, archive)) in built.iter().enumerate() {
+            let root = if index == 0 {
+                "/project/node_modules/consumer"
+            } else {
+                "/project/node_modules/other/node_modules/consumer"
+            };
+            plans.push(plan_for_test_package(
+                archive,
+                "consumer",
+                version,
+                root,
+                manifest.as_bytes(),
+                &["import"],
+                owner_binding,
+                &[&shared],
+            ));
+        }
+        let (first, second) = (&plans[0], &plans[1]);
+        assert_ne!(
+            first.snapshot_root(),
+            second.snapshot_root(),
+            "the two versions must differ in the coordinate the old key used"
+        );
+        assert_eq!(
+            first
+                .verified_exports
+                .declaration_binding_snapshot_root("VALUE"),
+            second
+                .verified_exports
+                .declaration_binding_snapshot_root("VALUE"),
+            "and must agree on the owning dependency copy"
+        );
+        assert_eq!(
+            first.verified_exports.declaration_binding("VALUE"),
+            second.verified_exports.declaration_binding("VALUE"),
+        );
+
+        let all = [first, second, &shared];
+        let variants = super::type_facts::export_resolution_variants_for_test(&all).unwrap();
+        let consumer = variants
+            .iter()
+            .find(|(specifier, export, _)| specifier == "consumer" && export == "VALUE")
+            .expect("the consumer's public subject must be inventoried");
+        assert_eq!(
+            consumer.2.len(),
+            1,
+            "one owning copy and one binding is one resolution, got {:?}",
+            consumer.2
+        );
+    }
+
+    /// One export's name, its runtime and declaration module (package-relative
+    /// path plus bytes), and the installed root of the package that owns them —
+    /// a dependency's root when the export is re-exported across packages.
+    type TestExportBinding<'a> = (&'a str, (&'a str, &'a [u8]), (&'a str, &'a [u8]), &'a str);
+
+    /// Plans one published package under `conditions`, whose entrypoint
+    /// re-exports each named export from the given runtime/declaration module
+    /// pair — which may live in a dependency.
+    ///
+    /// Runtime and declaration paths and their traces are replayed from the
+    /// snapshot rather than written down, because `verify_resolved_import`
+    /// requires the supplied traces to equal its own replay exactly.
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn plan_for_test_package(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        dependencies: &[&CertificationPlan],
+    ) -> CertificationPlan {
+        let snapshot =
+            ArtifactSnapshot::from_published(archive, SnapshotLimits::policy_2()).unwrap();
+        let parsed: SnapshotPackageManifest = serde_json::from_slice(manifest).unwrap();
+        let active = conditions.iter().copied().collect::<BTreeSet<_>>();
+        let runtime_target =
+            resolve_snapshot_export(&snapshot, &parsed, ".", &active, ResolutionAxis::Runtime)
+                .unwrap();
+        let declaration_target = resolve_snapshot_export(
+            &snapshot,
+            &parsed,
+            ".",
+            &active,
+            ResolutionAxis::Declarations,
+        )
+        .unwrap();
+        let runtime = (
+            runtime_target.path.as_str(),
+            snapshot.read(&runtime_target.path).unwrap(),
+        );
+        let declarations = (
+            declaration_target.path.as_str(),
+            snapshot.read(&declaration_target.path).unwrap(),
+        );
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: runtime.0.into(),
+            declarations_path: declarations.0.into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+        let accepted = dependencies
+            .iter()
+            .map(|dependency| AcceptedDependencyEdge {
+                specifier: dependency.snapshot.package_name().into(),
+                package_name: dependency.snapshot.package_name().into(),
+                artifact_case: dependency.selected_artifact_case_id().into(),
+                accepted_contract_digest: format!("sha256:{:064x}", 1),
+            })
+            .collect::<Vec<_>>();
+        let closure =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &accepted)
+                .unwrap();
+        let request = ImportRequest {
+            specifier: name.into(),
+            importer: "/project/src/app.ts".into(),
+            export_conditions: conditions.iter().map(|&value| value.to_owned()).collect(),
+        };
+        let resolved = ResolvedImport {
+            specifier: request.specifier.clone(),
+            importer: request.importer.clone(),
+            requested_entrypoint: ".".into(),
+            package_name: name.into(),
+            package_version: version.into(),
+            package_integrity: snapshot.package_integrity().into(),
+            package_root: root.into(),
+            package_real_root: None,
+            package_manifest: resolved_file(root, "package.json", manifest),
+            runtime: resolved_file(root, runtime.0, runtime.1),
+            declarations: resolved_file(root, declarations.0, declarations.1),
+            runtime_trace: runtime_target.trace.clone(),
+            declaration_trace: declaration_target.trace.clone(),
+            closure,
+            transform: None,
+            exports: exports
+                .iter()
+                .map(|(export, runtime_target, declaration_target, owner_root)| {
+                    (
+                        (*export).to_owned(),
+                        ResolvedExportBinding {
+                            runtime: ResolvedExportTarget {
+                                module: resolved_file(
+                                    owner_root,
+                                    runtime_target.0,
+                                    runtime_target.1,
+                                ),
+                                export_name: (*export).to_owned(),
+                            },
+                            declarations: ResolvedExportTarget {
+                                module: resolved_file(
+                                    owner_root,
+                                    declaration_target.0,
+                                    declaration_target.1,
+                                ),
+                                export_name: (*export).to_owned(),
+                            },
+                        },
+                    )
+                })
+                .collect(),
+            declaration_exports: BTreeSet::new(),
+            authority: ResolutionAuthority::Host,
+        };
+        let (package, mut artifact_case) =
+            crate::artifact_resolution::proposal_identity(&resolved).unwrap();
+        // Every export claims a plain value shape, which is what inventories
+        // the `recursive-value-shape` demand the witness harness answers.
+        artifact_case.exports = exports
+            .iter()
+            .map(|(export, _, _, _)| {
+                (
+                    (*export).to_owned(),
+                    ExportSemantics {
+                        identity: ExportIdentity {
+                            entrypoint: artifact_case.entrypoint.clone(),
+                            public_name: (*export).to_owned(),
+                            runtime: ExportTargetIdentity {
+                                module: artifact_case.runtime.clone(),
+                                export_name: (*export).to_owned(),
+                            },
+                            declarations: ExportTargetIdentity {
+                                module: artifact_case.declarations.clone(),
+                                export_name: (*export).to_owned(),
+                            },
+                        },
+                        shape: ValueShape::Plain,
+                        stability: StabilityKnowledge::Unknown,
+                        call: CallSemantics::new(
+                            CallClaims::default(),
+                            Vec::new(),
+                            Vec::new(),
+                            Vec::new(),
+                            GuardPartition::default(),
+                        ),
+                    },
+                )
+            })
+            .collect();
+        let candidate = ContractProposal::new(package, vec![artifact_case])
+            .normalize()
+            .unwrap();
+        super::plan_certification_with_dependencies(
+            &mut CertificationPlanningTransaction::new(),
+            CertificationRequest::new(candidate, request, resolved),
+            UntrustedArtifactEnvelope::Published(archive.clone()),
+            dependencies,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn module_closure_is_recomputed_with_exact_roles_edges_and_hazards() {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;

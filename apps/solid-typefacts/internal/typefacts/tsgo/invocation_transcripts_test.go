@@ -199,6 +199,9 @@ declare function array(): number[];
 declare function indexed(): { fixed: { nested: () => void }; [key: string]: unknown };
 declare function singleOptional(): [number?];
 declare function singleRest(): [...number[]];
+declare function roNumbers(): readonly number[];
+declare function stringKeyed(): { length: number; [key: string]: number };
+declare function numberKeyedObject(): { [key: number]: string };
 fixed();
 optional();
 rest();
@@ -207,6 +210,9 @@ array();
 indexed();
 singleOptional();
 singleRest();
+roNumbers();
+stringKeyed();
+numberKeyedObject();
 `
 	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
 	analyzer, closeProject := openInvocationAnalyzer(t, dir)
@@ -214,7 +220,8 @@ singleRest();
 	sourcePath := filepath.Join(dir, "facts.ts")
 	needles := []string{
 		"fixed()", "optional()", "rest()", "tupleUnion()", "array()", "indexed()",
-		"singleOptional()", "singleRest()",
+		"singleOptional()", "singleRest()", "roNumbers()", "stringKeyed()",
+		"numberKeyedObject()",
 	}
 	demands := make([]typefacts.InvocationDemand, len(needles))
 	for index, needle := range needles {
@@ -238,12 +245,12 @@ singleRest();
 	if slices.Contains(results[0].Result.OpenReasons, "openIndex") {
 		t.Fatalf("fixed tuple result stayed open: %#v", results[0].Result)
 	}
-	for _, index := range []int{1, 2, 3, 5, 6} {
+	for _, index := range []int{1, 2, 3, 5, 6, 9, 10} {
 		if !slices.Contains(results[index].Result.OpenReasons, "openIndex") {
 			t.Fatalf("result %d lost its open index: %#v", index, results[index].Result)
 		}
 	}
-	for _, index := range []int{4, 7} {
+	for _, index := range []int{4, 7, 8} {
 		if slices.Contains(results[index].Result.OpenReasons, "openIndex") {
 			t.Fatalf("array-normalized result %d stayed root-open: %#v", index, results[index].Result)
 		}
@@ -262,7 +269,26 @@ singleRest();
 			t.Fatalf("tuple result %d root = %#v, want openIndex=%v", index, root, wantOpen)
 		}
 	}
-	for _, resultIndex := range []int{4, 7} {
+	// Path-fact negatives: a tuple with a sole optional element, a string-keyed
+	// index signature, and a number-keyed index signature on a non-array object
+	// all keep `openIndex` on the path fact. (A union's openness is a property
+	// of the root value fact, pinned above; the path walk emits one path set per
+	// constituent, each of which is an exact tuple here.)
+	for _, resultIndex := range []int{6, 9, 10} {
+		var openRoot *typefacts.CallablePathFact
+		for index := range results[resultIndex].ResultCallablePaths {
+			path := &results[resultIndex].ResultCallablePaths[index]
+			if len(path.Path) == 0 {
+				openRoot = path
+				break
+			}
+		}
+		if openRoot == nil || openRoot.Complete || openRoot.SubtreeEnumerated ||
+			!slices.Contains(openRoot.OpenReasons, "openIndex") {
+			t.Fatalf("result %d path root = %#v, want openIndex", resultIndex, openRoot)
+		}
+	}
+	for _, resultIndex := range []int{4, 7, 8} {
 		var arrayRoot *typefacts.CallablePathFact
 		for index := range results[resultIndex].ResultCallablePaths {
 			path := &results[resultIndex].ResultCallablePaths[index]
@@ -271,9 +297,17 @@ singleRest();
 				break
 			}
 		}
-		if arrayRoot == nil || arrayRoot.Complete || arrayRoot.SubtreeEnumerated ||
-			!slices.Contains(arrayRoot.OpenReasons, "openIndex") {
-			t.Fatalf("array-normalized result %d path root = %#v, want openIndex", resultIndex, arrayRoot)
+		// An exact Array's sole numeric index says the walk did not enumerate
+		// the elements, which is `SubtreeEnumerated`, and nothing about this
+		// node's own shape. The whole-census gate still refuses it; a demand
+		// naming this exact path no longer does.
+		if arrayRoot == nil || !arrayRoot.Complete || arrayRoot.SubtreeEnumerated ||
+			slices.Contains(arrayRoot.OpenReasons, "openIndex") {
+			t.Fatalf(
+				"array-normalized result %d path root = %#v, want closed shape with an unenumerated subtree",
+				resultIndex,
+				arrayRoot,
+			)
 		}
 	}
 
@@ -624,8 +658,42 @@ mixed();
 				break
 			}
 		}
-		if root == nil || root.Complete || !slices.Contains(root.OpenReasons, "openIndex") {
+		if root == nil {
+			t.Fatalf("array-shaped result %d has no path root", index)
+		}
+		// The path fact records the unenumerated elements as
+		// `SubtreeEnumerated` for an *exact* Array — its own shape is answered —
+		// and keeps `openIndex` for an array-like object's author-declared
+		// numeric index and for a generic array-like interface. `mixed`'s union
+		// is open on the root *value* fact, asserted above; its path facts are
+		// emitted per constituent, and constituent 0 is an exact array.
+		exactArray := index < 2 || index == 4
+		if exactArray {
+			if !root.Complete || root.SubtreeEnumerated ||
+				slices.Contains(root.OpenReasons, "openIndex") {
+				t.Fatalf(
+					"exact array result %d path root = %#v, want closed shape with an unenumerated subtree",
+					index,
+					root,
+				)
+			}
+			continue
+		}
+		if root.Complete || root.SubtreeEnumerated ||
+			!slices.Contains(root.OpenReasons, "openIndex") {
 			t.Fatalf("array-shaped result %d path root = %#v, want member-enumeration openIndex", index, root)
+		}
+	}
+	// The union's second constituent is the array-like object, whose declared
+	// numeric index is not an element accessor this walk skipped.
+	mixed := answer.Transcripts[4].SelectedSignature
+	for pathIndex := range mixed.ResultCallablePaths {
+		candidate := &mixed.ResultCallablePaths[pathIndex]
+		if len(candidate.Path) != 0 || candidate.Alternative != 1 {
+			continue
+		}
+		if candidate.Complete || !slices.Contains(candidate.OpenReasons, "openIndex") {
+			t.Fatalf("union constituent 1 path root = %#v, want member-enumeration openIndex", candidate)
 		}
 	}
 

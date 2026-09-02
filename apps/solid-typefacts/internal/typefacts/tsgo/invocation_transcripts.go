@@ -572,10 +572,20 @@ func invocationValueHasClosedPrimitiveApparentIndex(
 
 // invocationValueHasClosedArrayIndex recognizes only the global Array and
 // ReadonlyArray references whose sole numeric index has exactly their element
-// type. This closes the value's own shape, not its unbounded member census;
-// callable-path facts deliberately retain openIndex. Tuples are handled by the
-// stricter fixed-length arm above, and author-defined array-like interfaces do
-// not satisfy the checker's array-or-tuple predicate.
+// type. This closes the value's own shape and says nothing about its unbounded
+// member census, on both fact kinds: the root value fact drops openIndex, and a
+// callable-path fact records the unenumerated elements as SubtreeEnumerated=false
+// while keeping its own Complete and no openIndex. The whole-census consumer
+// gates read SubtreeEnumerated and still refuse; a demand naming that exact path
+// asserts nothing about the elements and no longer reads the census's premise as
+// its own. Tuples are handled by the stricter fixed-length arm above, and
+// author-defined array-like interfaces do not satisfy the checker's
+// array-or-tuple predicate.
+//
+// Ask this of the value's own type, never of its apparent type: a type parameter
+// constrained to an array has array index infos but is not an array, and closing
+// it on the strength of a constraint is unsound (an instantiation may intersect
+// in a call signature).
 func invocationValueHasClosedArrayIndex(typeChecker *checker.Checker, value *checker.Type) bool {
 	if value == nil || value.Flags()&checker.TypeFlagsUnion != 0 ||
 		!checker.Checker_isArrayOrTupleType(typeChecker, value) ||
@@ -986,9 +996,26 @@ func (p *project) walkCallablePathsLocked(
 	if value != nil && len(p.checker.GetIndexInfosOfType(value)) != 0 &&
 		!invocationValueHasClosedExactTupleIndex(p.checker, value) {
 		fact := &(*paths)[factIndex]
-		fact.Complete = false
+		// An exact Array's sole numeric index is the compiler's own synthesized
+		// element accessor, and this walk emits the array's declared members but
+		// never its elements. That is a statement about member *enumeration*,
+		// not about this node's shape: callability, constructability and the
+		// type flags are all answered for `T[]` exactly as they are for a fixed
+		// tuple. So record it the way the depth and cycle cuts are recorded —
+		// SubtreeEnumerated only. The whole-census gates
+		// (`callable_path_census_is_closed`) still refuse it; a demand naming
+		// this exact path, which asserts nothing about the elements, no longer
+		// reads the census's premise as its own.
+		//
+		// Everything else keeps `openIndex` and its incompleteness: a string- or
+		// symbol-keyed index signature, a union, and any tuple with an optional
+		// or rest element are all author-declared open key spaces whose value
+		// type is not the element type this walk skipped.
 		fact.SubtreeEnumerated = false
-		fact.OpenReasons = append(fact.OpenReasons, "openIndex")
+		if !invocationValueHasClosedArrayIndex(p.checker, value) {
+			fact.Complete = false
+			fact.OpenReasons = append(fact.OpenReasons, "openIndex")
+		}
 	}
 	if value == nil || remaining == 0 {
 		if value != nil && (len(p.checker.GetPropertiesOfType(value)) != 0 || checker.IsTupleType(value)) {

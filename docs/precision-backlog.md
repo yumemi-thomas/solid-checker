@@ -12284,3 +12284,273 @@ specifier defect recorded above.
 Ledgers re-pinned: Phase 21 to the digest above; Phase 20 moved 352 → 350
 verified and 45 → 47 exact refusals, removing the two drag-drop rows. Wall time
 72.2 s, on par with the 71.3 s baseline.
+
+## 2026-09-03 — A re-exported declaration is imported from the package that owns it
+
+The witness harness built every declaration import against the *root plan's*
+materialized package root. A declaration binding is a path relative to the
+package that **owns** it, and for an export re-exported from a dependency that
+is the dependency's package, not the root's — so the harness imported a file the
+root does not ship.
+
+The row this was diagnosed on:
+`@tanstack/solid-query-persist-client@5.102.5|solid1|only`, export
+`PERSISTER_KEY_PREFIX`, whose declaration is
+`@tanstack/query-persist-client-core`'s `build/modern/createPersister.d.ts`. The
+harness asked for
+
+    ./node_modules/@tanstack/solid-query-persist-client/build/modern/createPersister.js
+
+which does not exist. The module never resolved, the alias target came back as
+the checker's `unknown` symbol (`targetDecls=0`), and the producer answered
+`declarationUnavailable` about a file the demand never named — a
+witness-program defect reported as a producer limit, the same shape as the
+favicon defect recorded on 2026-09-02.
+
+### Fix
+
+`SnapshotVerifiedExports::declaration_binding_snapshot_root`
+(`rust/crates/solid-facts-backend/src/contract_certification/export_bindings.rs`)
+exposes the authenticated snapshot root the export replay already recorded for
+each binding — the same root `verify_target` matches a planned dependency by.
+`declaration_owner_package_root`
+(`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`)
+resolves that root to the materialized copy that owns it and
+`snapshot_module_harness_specifier` now takes a package root instead of a plan.
+
+Selection is never by name and never by path arithmetic. Two materialized
+copies carrying the owning snapshot root are **not** an ambiguity, for the reason
+`export_implementation_location` already records for the same multiplicity:
+`snapshot_root` is a content hash over the package name, version, and every
+file's bytes, so every copy holds byte-identical sources at the same
+package-relative path, and importing the declaration through any of them selects
+the same bytes and the same producer transcript. The first such copy in
+`package_roots` order is bound — the map is a `BTreeMap` keyed by
+`(snapshot root, installed package root)`, so among the copies of one snapshot
+root that order is the installed package root's, and the choice is stable across
+runs and independent of plan discovery order.
+
+Refusing there would also have been much worse than a lost row:
+`derive_export_value_schedules` is called **once for the whole graph** by the
+graph lane, so one duplicated install of one owning dependency would have
+refused every node of that published graph. That blast radius was never
+measured.
+
+The one arm that does fail closed is an owner this project did not materialize:
+there is no copy to address and guessing one would be substitution. It raises an
+identity mismatch on `declaration_owner_package_root`. A binding whose owner *is*
+the plan takes exactly the previous path.
+
+The resolution-variant key in `export_resolution_variants` (extracted from
+`derive_export_value_schedules`) carried `plan.snapshot_root()` as its fourth
+coordinate. It now carries the *declaration owner's* root: a declaration path is
+only an identity together with the package it is relative to. Both directions of
+that swap are deliberate.
+
+- **It splits.** Within one package's artifact cases the old coordinate was
+  constant, so two conditional cases that re-export one name from two *different*
+  dependency copies collapsed into one variant — and the harness then asked
+  TypeScript to resolve the public specifier once, binding both cases to whichever
+  branch the host's active condition set selected. They are two resolutions of one
+  public subpath and are now two variants.
+- **It merges.** Across a graph, plans of one package name at different versions
+  *do* differ in `plan.snapshot_root()`, so the old coordinate split subjects that
+  agreed on every coordinate deciding what the harness imports. Merging them is
+  safe because the public specifier is only ever taken when `publicly_addressable`
+  holds — the plan's materialized copy *is* `node_modules/<name>` — so it resolves
+  inside that plan's own copy, which is the copy the surviving variant describes.
+
+### Pinned
+
+Four tests in `rust/crates/solid-facts-backend/src/contract_certification.rs`,
+each verified to fail against the code it replaces.
+
+`an_exact_harness_imports_a_reexported_declaration_from_its_owning_package`
+plans a root package whose entrypoint re-exports one export from a dependency
+(`build/modern/prefix.d.ts`, a path the root does not ship) and one from its own
+`dist/local.d.ts`, materializes them the way the graph lane does, and asserts
+each exact subject's specifier, selector, and that the specifier names a
+materialized module. Against the previous code it reports
+`("./node_modules/fixture-package/build/modern/prefix.js", "PREFIX", false)` —
+the defect, with `false` for "resolves to no file".
+
+`declaration_harness_binds_first_owner_for_shared_snapshot_root` is the
+declaration-axis mirror of
+`implementation_location_binds_first_owner_for_shared_snapshot_root`: one
+dependency archive installed at a hoisted and a nested root, one snapshot root
+between them (asserted), and the subject must bind the first materialized copy
+rather than refuse.
+
+`a_declaration_owner_splits_two_cases_that_agree_on_the_binding_path` builds two
+conditional cases of one package whose bindings agree on *every* coordinate the
+old key looked at — same snapshot root, same public specifier, same
+`(path, selector, declaration export)` — and differ only in the owning
+dependency. Two variants are required, and each case's end-to-end harness
+subject must be the exact declaration in its own dependency. Under the old
+coordinate the variant map holds one entry.
+
+`one_declaration_owner_merges_two_versions_the_plan_root_coordinate_split` is the
+other direction: two versions of one package name, differing in
+`plan.snapshot_root()` but agreeing on the owning copy and the binding, must be
+one variant. Under the old coordinate it is two.
+
+### Measured
+
+| row | before | after |
+| --- | --- | --- |
+| `@tanstack/solid-query-persist-client@5.102.5\|solid1\|only` | refused, `sha256:2f2e1c9dd969b319323811acbe922d1410d5944ce2083041d680188008b7f75b`, `PERSISTER_KEY_PREFIX` `(transcriptIncomplete,producer:declarationUnavailable)` | **certified** |
+| `@tanstack/solid-query@5.102.5\|solid1\|only` | refused, `sha256:f06329123be31f858423f45cf214f7255aac5faa0591373487ac92d1a842e4f9` | refused, same digest — `@tanstack/query-core`'s `keepPreviousData` root, a different defect |
+| `@tanstack/solid-db@0.2.40\|solid1\|only` | refused, `sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983` | refused, same digest — `@tanstack/db`'s `compareLiveQueryWindowDependencies` operation *path* is open |
+| `@tanstack/solid-form@2.0.0-alpha.2\|solid1\|only` | refused, `sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed` | refused, same digest — `@tanstack/store`'s `shallow<T>`, bare generic, must stay refused |
+| `@tanstack/solid-store@0.11.1\|solid1\|only` | refused, `sha256:34aa664d…` (same demand) | refused, same digest — same bare generic |
+| `@tanstack/ai-solid@0.19.1\|solid1\|only` | refused, `sha256:1097d02a3424f9c13e8f456a8f606bb17382e3d0f698f8cacb6ea7ca87671389` | refused, same digest — `@tanstack/ai`'s `parseWithStandardSchema` parameter-rooted read |
+| `@solidjs/element@2.0.0-rc.3\|solid2\|only` | refused, `sha256:c18ef2b8e92d873c24730b5644a38474fe3837d98b46c5654f175a42da4945be` | refused, same digest — `component-register`'s `hot`, the `types: []` decision (M6) |
+| `corvu@0.7.2\|solid1\|only` | certified | certified |
+
+Ten certified controls re-measured after the producer rebuild and all stayed
+certified: scheduled@1.5.3, map@0.7.4, refs@1.1.4, event-listener@2.4.6,
+storage@4.4.0, reducer@0.0.101, cookies@1.0.0-next.2|head,
+websocket@2.0.0-next.3|head, marker@0.2.2, i18n@2.2.1.
+
+### What stays open
+
+`verify_subject_signature` still builds its declaration marker as
+`/node_modules/<plan package name>/<declaration_path>` with no dependency arm,
+so a *selected-signature* demand on a cross-package re-export cannot match its
+own declaration. Nothing in the corpus reaches it — the marker simply fails to
+match and the row refuses — and `verify_export_value_subject` already has the
+`authenticated_dependency_declaration_target` arm for the export-value family.
+Not fixed here; it needs its own slice and its own row.
+
+This whole class is graph-lane-only, and the batch lane cannot reach any of it.
+`acquire_and_verify_export_values_batch` plans with `dependencies = &[]`, so
+`verify_snapshot_exports_with_dependencies` finds no plan for an external
+re-export specifier and planning itself fails with "declaration export … has no
+exact binding" — long before a schedule, a harness specifier, or an owner lookup
+exists. In particular `declaration_owner_package_root`'s unmaterialized-owner arm
+is unreachable from that lane: a plan whose bindings are all self-owned takes the
+`owner == plan.snapshot_root()` path. (`export_implementation_location` looks its
+runtime binding's owner up in the schedule's `plans` and would refuse a foreign
+one with "runtime export binding belongs to an unplanned snapshot", but the batch
+lane never gets that far.)
+
+## 2026-09-03 — An exact Array's numeric index is subtree enumeration, not an open shape
+
+Three of the four remaining `recursive-value-shape` open-root rows were
+classified against the producer's own root observation, dumped with a bounded
+print and removed immediately. One was a producer defect; two are honest.
+
+### Class **a**, fixed: `@solid-primitives/db-store@1.1.4|solid1|only`
+
+`createDbStore: <Row extends DbRow>(opts) => [Store<Row[]>, SetStoreFunction<Row[]>, { refetch: () => void }]`.
+The tuple *root* already closed under the M1a arm; the refusal had moved to the
+**path** fact for element `[0]`:
+
+    CallablePathFact { path: [Tuple 0], presence: Required, callability: NonCallable,
+      constructability: NonConstructable, complete: false, subtree_enumerated: false,
+      open_reasons: ["openIndex"] }
+
+`Store<T>` is `T` in solid-js 1.9, so `[0]` is an ordinary array. The stamp in
+`walkCallablePathsLocked`
+(`apps/solid-typefacts/internal/typefacts/tsgo/invocation_transcripts.go`) was
+setting **both** `Complete = false` and `SubtreeEnumerated = false` for it. Those
+are two different claims, and the M4 split already separated them on the wire:
+`callable_path_census_is_closed` requires both, while a demand naming an exact
+path requires only the local observation.
+
+An exact Array's sole numeric index is the compiler's own synthesized element
+accessor, and this walk emits the array's declared members (`length`, `map`, …)
+but never its elements. That is a statement about member *enumeration*. The
+node's own shape — callability, constructability, type flags — is answered for
+`T[]` exactly as it is for a fixed tuple. So the array arm now records
+`SubtreeEnumerated = false` only, reusing the existing
+`invocationValueHasClosedArrayIndex` predicate: non-union, array-and-not-tuple,
+exactly one numeric index info whose value type is *identical* to the sole
+element type argument.
+
+**No wire field changed.** `SubtreeEnumerated` already exists and the consumer
+gates already read it; no protocol digest, schema, or shim moved.
+
+What still keeps `openIndex` and its incompleteness on a path fact: a string- or
+symbol-keyed index signature, an array-*like* object's author-declared numeric
+index, a generic array-like interface, and any tuple with an optional or rest
+element. Pinned as negatives in
+`TestInvocationValueClosesOnlyFixedTupleIndexAndKeepsPathIndexOnItsOwner`
+(`roNumbers(): readonly number[]` closes; `stringKeyed()`,
+`numberKeyedObject()`, `singleOptional()` stay open) and in
+`TestInvocationValueClosesOnlyExactArrayIndexAtRoot`, whose `arrayLike`,
+`genericArrayLike`, and augmented-index cases stay open while `mutable`,
+`readonly` and `mixed`'s array constituent close. A union's openness remains a
+property of the root *value* fact: path facts are emitted per constituent, and
+`mixed`'s second constituent — the array-like object — keeps `openIndex`.
+
+Both Go tests previously asserted the old behavior for the array cases; those
+assertions were the deliberate pin from the roots round and were updated
+here with the argument above, not deleted. §3 of
+`docs/package-contract-v2/phase21/2026-09-01-producer-roots-diagnosis.md` now
+carries a "superseded for the array arm only" note pointing here, and
+`invocationValueHasClosedArrayIndex`'s own doc states the split instead of the
+retired rule.
+
+`sha256:9dab66f5913baa2952a803c2664a1d9050701f1bcae5d104e8ec055a6f9c1b07` →
+**certified**.
+
+### Class **b**, stays refused: two constrained-generic roots
+
+| row | demand | export | root type | producer observation |
+| --- | --- | --- | --- | --- |
+| `@solidjs/router@2.0.0-next.18\|solid2\|only` | `sha256:14d5fea34c151563efdf95fe1ed05e1c1c1fbc7148529008f45cbf644ef7b55d` | `defineRoutes` | `R` from `defineRoutes<const R extends readonly RouteDefinition[]>(routes: R): R` | `open_reasons=["unresolvedGeneric","openIndex"]`, callability `NonCallable`, primitive known |
+| `@solid-primitives/utils@7.0.0-next.4\|solid2\|floor` and `\|head` | `sha256:a681b563e342dcab290146ab84177e556843298e59036ef42e17a3b779972236` | `get` (`./immutable`) | `O[K]` from `get<O extends object, K extends keyof O>(obj: O, key: K): O[K]` | `open_reasons=["unresolvedGeneric"]`, `primitive.unknown=true` |
+
+Neither is recoverable, and the reason is stronger than the "a type the caller
+instantiates" argument already recorded for i18n's `T extends string`. Deriving
+a shape claim from a type parameter's *constraint* is unsound in the
+over-proof-safe direction: `readonly RouteDefinition[] & (() => void)` is
+assignable to `R`'s constraint and **is** callable, so "not callable" is not a
+property every instantiation has. `O[K]` is an indexed access over two type
+parameters and has no apparent shape at all. `unresolvedGeneric` is the honest
+answer; both stay refused on byte-identical demand digests.
+
+Consequence for the M1 arms: they must keep asking about the *value's own type*.
+`R`'s `openIndex` comes from `GetIndexInfosOfType` answering on the apparent
+type (the constraint's array), while `invocationValueHasClosedArrayIndex` asks
+`Checker_isArrayOrTupleType` of `R` itself and correctly answers false. Widening
+either predicate to the apparent type would close a generic's index on the
+strength of a constraint — the same unsound step. Recorded so the next round does
+not attempt it.
+
+### Must-not-clear controls, re-measured
+
+All refused on byte-identical demand digests after both fixes and the producer
+rebuild: `@solid-devtools/ui@0.10.3` (`sha256:1ecbeb4e…`),
+`solid-devtools@0.34.5` (`sha256:79f6b48f…`), `@solidjs/web@2.0.0-rc.3`
+(`sha256:0fde5acc…`, `asyncArg` bare `T`), `@tanstack/solid-store@0.11.1`
+(`sha256:34aa664d…`), `@solid-primitives/flux-store@1.0.0-next.2` floor and head
+(`sha256:04bfc404…`, `unresolvedGeneric` on a path), and
+`@solid-primitives/i18n@3.0.0-next.4` floor and head (`sha256:f22debed…`).
+
+### What stays open
+
+The primitive arm (`invocationValueHasClosedPrimitiveApparentIndex`) is still
+root-only; the intrinsic `String` wrapper's numeric index keeps a `string`-valued
+*path* fact incomplete. No corpus row needs it and the narrower change was
+preferred.
+
+Neither open-root row above was measured against the full corpus here; only the
+targeted probes, the must-not-clear set, and the ten certified controls were
+re-run. The complete 418-probe re-measure is the round owner's.
+
+### Re-measured: 352 verified / 45 exact refusals / 21 not attempted
+
+The complete 418-probe corpus was re-run after both parts of this batch and
+their fixer round (`make ecosystem-benchmark`; report SHA-256 recorded in the
+Phase 21 ledger's `authority.currentReport`). Against the committed report,
+exactly two verdicts moved, both refused → verified:
+`@tanstack/solid-query-persist-client@5.102.5|solid1|only` (was `2f2e1c9dd969…`,
+the harness specifier joined onto the wrong package root) and
+`@solid-primitives/db-store@1.1.4|solid1|only` (was `9dab66f5913b…`, the
+`openIndex` stamp on an exact array element's path fact). No other row changed
+status or first refusal; `@solidjs/router@2.0.0-next.18` and
+`@solid-primitives/utils@7.0.0-next.4` floor+head stay refused on their
+`unresolvedGeneric` roots as recorded. Ledgers re-pinned: Phase 20 moved
+350 → 352 verified and 47 → 45 exact refusals. Wall time 72.5 s.
