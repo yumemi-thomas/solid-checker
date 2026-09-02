@@ -11,6 +11,10 @@ is `superseded by ADR-0003`. It means: the problem and the sound *form* of the
 premise are recorded, no code ships, and the required shape of a future version
 is stated below so a later round starts from the objections rather than
 rediscovering them.
+
+Read the 2026-09-03 section before reviving this. Four of the five preconditions
+turned out to be reachable; the fifth resolved *against* the premise, so the
+deferral is no longer a queue of work items.
 -->
 
 ## The structural wall this would answer
@@ -204,3 +208,145 @@ Every item is a precondition, not a suggestion.
 
 Until all five hold, `@solidjs/signals@2.0.0-rc.3|solid2|only` stays refused on
 `sha256:78a16558…` and the wall above is the recorded explanation.
+
+## 2026-09-03: preconditions measured; 5 is settled *against* the premise
+
+The five were worked in order. Three are reachable and one is now provable; the
+fifth is not open any more — it resolved against the axiom, so this ADR stays
+`deferred` and is no longer waiting on work items 1-4.
+
+**1 — reachable.** `SnapshotedPackage::package_integrity`
+(`rust/crates/solid-facts-backend/src/contract_certification.rs:1487-1490`) is a
+public accessor beside `package_name` (`:1478`) and `package_version` (`:1483`),
+and the lock replay already compares all three field-by-field with a
+naming-the-field disagreement
+(`contract_certification/dependencies.rs:1222-1240`). An integrity-bound tuple
+gate is a straight mirror of that loop. The audited SRI to key it against is
+`pkg/contracts/bundled/solid-v2/solidjs-signals.json`'s
+`package.integrity` `sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==`.
+
+**2 — provable, and the objection was narrower than it looked.** rc.3's
+`onSettled` really does sit at `dist/dev.js:6064` rather than `4855-4893`, but
+the *bytes of the function* are identical between the two prereleases. Read from
+the installed rc.0 tarball (`@solidjs/signals@2.0.0-rc.0`, bun cache) and the
+rc.3 tree the probe installed:
+
+| function | rc.0 `dist/dev.js` | rc.3 `dist/dev.js` | body |
+| --- | --- | --- | --- |
+| `onSettled` | 4873-4895 | 6064-6086 | byte-identical |
+| `createTrackedEffect` | 4642-4644 | 5820-5822 | byte-identical |
+| `untrack` | 2928-2942 | 3847-3861 | byte-identical |
+| `getOwner` | 1506-1508 | 2230-2232 | byte-identical |
+
+So `solid_2.rs:247` and `:315` describe rc.3's runtime exactly as they describe
+rc.0's, `solid_2.rs:234`'s `untrack` citation (`dev.js:2928-2942`) lands on the
+same 15 lines in both, and re-citing to rc.3 would be a *line-number* correction
+carrying no new behavioral claim. Only the line ranges move. (`onSettled`'s
+guarded shape is worth stating once, since 5 turns on it: under a live
+children-capable owner it is
+`createTrackedEffect(() => untrack(callback), { name: "onSettled" })`; otherwise
+it is `globalQueue.enqueue(EFFECT_USER, …)`, which calls the callback plainly and
+in dev throws `SETTLED_CLEANUP_UNOWNED` if that call returns a cleanup.)
+
+The bundled SRI is the right tarball's. The probe's `bun.lock` records
+`@solidjs/signals@2.0.0-rc.3` with registry integrity
+`sha512-/yPhTf3x…` — byte-equal to `solidjs-signals.json`'s `package.integrity` —
+and, independently of the SRI, the generated artifact case's own digests for the
+installed files (`dist/dev.js` `sha256:cc68ed0f…`, `package.json`
+`sha256:22d27a9e…`) equal the bundled contract's. Content match, not coordinate
+match.
+
+**3 — reachable.** `floor` is a parameter of `require_owner_operation_call`
+(`contract_certification/type_facts.rs:4141`), so it is in scope for the whole
+body, including the `if !found` site. Objection 3 was about *where the reverted
+attempt put the axiom*, not about an absent fact; a `floor == MayExecute` guard
+is one condition.
+
+**4 — reachable, and moot.** `scripts/contract-corpus.mjs:60` fabricates
+`fixture:sha256:<manifest digest>`, so a corpus fixture named
+`@solidjs/signals@2.0.0-rc.3` would indeed be refused by an integrity-bound gate
+and admitted by a name+version one. Nothing was authored, because of 5.
+
+**5 — settled against the premise.** Two independent findings, either
+disqualifying.
+
+*The demand's evidence is the dialect's own vocabulary, reached through a
+filesystem path.* The generated proposal's `owner-requirement-0` on `onSettled`
+(`owner: {requires: required, requiresChildren: required, source:
+ambient-at-call}`) is attached from `program.missing_owners` by
+`attach_generated_owner_requirements`
+(`rust/crates/solid-facts-backend/src/main.rs:6317`), indexed by
+`generated_owner_requirements_by_symbol` (`:6222`). The requirement itself is
+pushed by `find_missing_owners` at the `Primitive::CreateTrackedEffect` arm
+(`rust/crates/solid-reactive-ir/src/owners.rs:844-861`) for the
+`createTrackedEffect(…)` call inside `onSettled`'s own body. That call is a
+`Primitive` at all only because `solid_primitive_declaration`
+(`rust/crates/solid-reactive-ir/src/symbols.rs:589-595`) grants primitive
+identity to any declaration whose **filesystem path** carries a `solid-js` or
+`@solidjs` component (`declaration_path_is_solid_package`, `:597-601` —
+deliberately, for "bootstrap analysis of Solid's own implementation, where there
+is no package import to establish provenance") and whose **name** the dialect
+declares. `Effect` then becomes `child_owners = Required` in
+`apply_owner_requirement`
+(`rust/crates/solid-facts-backend/src/inferred_contract.rs:446-455`).
+
+So the chain is: dialect name vocabulary + a path heuristic → owner requirement
+→ demand. The axiom would answer it from `solid_2.rs`'s rows about the same
+names. There is no artifact evidence anywhere in that loop that the axiom would
+not itself be supplying, which is objection 4 confirmed mechanically rather than
+suspected.
+
+*And the demand contradicts the audited authority for byte-identical bytes.* The
+probe's generated artifact case and the bundled contract name the same artifact —
+`dist/dev.js` `sha256:cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79`,
+manifest `sha256:22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76`,
+integrity `sha512-/yPhTf3x…`. For those bytes
+`pkg/contracts/bundled/solid-v2/solidjs-signals.json`'s `onSettled` summary has
+`"creates": []` with `creates` listed in `closed`, its `callback` operation's
+owner is `source: ambient-at-execution` with `productions: []` closed, and the
+leaf owner is a `resources` entry `onSettled-leaf-owner`. The audited authority
+asserts, closed, that the operation the axiom would discharge **does not exist**.
+An axiom that discharged it would prove a claim the audit denies, whatever its
+identity gate.
+
+The audit is also the side that matches the runtime. `onSettled` does not
+require an ambient owner; it *branches* on one, and the non-owner arm is a
+defined enqueue path. The generated `requires: required` is
+`find_missing_owners`' owner-context lattice not being guard-sensitive: it saw a
+`createTrackedEffect` call in an exported function whose callers are not
+enumerable and turned it into a consumer obligation. That inference is right for
+a wrapper importing `createEffect` from `solid-js` and wrong for a call in the
+`getOwner()`-guarded arm of the primitive's own definition.
+
+Neither reconciliation offered by item 5 is available without the broader
+redesign:
+
+- *Suppress the create for the dialect's own primitive-defining exports.*
+  Defensible in principle — the requirement's only evidence is a provenance-free
+  path heuristic — but the `OwnerRequirement` record carries no field
+  distinguishing a path-bootstrap recognition from an import-edge one, so the
+  suppression cannot be expressed without threading that provenance through
+  `solid-reactive-ir`. And the misclassification is not local to this row: the
+  heuristic names *every* dialect-spelled local in *any* `solid-js`/`@solidjs`-pathed
+  file, which is the behavior the checker relies on when analyzing Solid's own
+  repository. Changing it changes that, and that is an owner-model change with
+  its own fixtures.
+- *Emit it as the bundled contract does.* The generator cannot. `creates: []`
+  *closed* is a negative closed claim; generation leaves `creates` open for all
+  183 of this package's exports (`unknownByDomain.creates == 183` in the probe's
+  own summary). Closing it because no requirement was derived manufactures a
+  negative claim from missing knowledge. Only a hand audit can assert that
+  closure, and the one that does already exists.
+
+Finally, the trade from objection 5 has not improved: the row's next wall,
+`argument-binding`
+`sha256:40cc236b1354cce01e555595129f2873232a80c1f62beafa3f925fef1b82ae34`, is
+gated by `argument_slot_is_proven_invoking`'s `target_module == "solid-js"` Tier A
+(`type_facts.rs:3834-3852`), so even a sound owner axiom would move no row.
+
+**Consequence.** The axiom is not blocked on engineering; the premise is wrong
+for the one row it was designed for, because the demand it would discharge is
+one the audited contract for those exact bytes closes as absent. The refusal on
+`sha256:78a16558…` is the honest answer, and the generated-versus-audited
+disagreement about `onSettled`'s `creates` is the defect worth carrying forward —
+against the generator, not against the verifier.

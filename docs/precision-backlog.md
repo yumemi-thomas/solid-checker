@@ -1,5 +1,141 @@
 # Precision backlog
 
+## The dialect axiom was not blocked on engineering; the demand it would have discharged is one the audit closes as absent (2026-09-03)
+
+This slice **shipped no code**. It was the follow-up round on
+`@solidjs/signals@2.0.0-rc.3|solid2|only`, working the five preconditions in
+`docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md` in order.
+Four are reachable. The fifth resolved *against* the premise, so the ADR stays
+`deferred` — now as a decision, not a queue — and the row stays refused on
+`operation-reachability`
+`sha256:78a165588bd85e84dd94c2598e9271279c741475da2089d5d6e93f3164cbbbca`
+with the committed message unchanged (re-measured this slice against a fresh
+`rust/target/debug/solid-checker-rust`).
+
+### rc.0 and rc.3 are the same bytes where the dialect cites them
+
+Objection 2 was real but smaller than it read. `onSettled` does sit at
+`dist/dev.js:6064` in rc.3 rather than `4855-4893`; the *function bodies* are
+byte-identical across the two prereleases — `onSettled` (rc.0 4873-4895 / rc.3
+6064-6086), `createTrackedEffect` (4642-4644 / 5820-5822), `untrack`
+(2928-2942 / 3847-3861) and `getOwner` (1506-1508 / 2230-2232). So
+`rust/crates/solid-dialect/src/solid_2.rs:247` and `:315` describe rc.3's
+runtime exactly as they describe rc.0's and only their line numbers are stale.
+**No citation was edited**, because nothing depends on the correction now; a
+future audit round can make it as a line-number fix carrying no new behavioral
+claim. Recorded here so the next reader does not re-derive it.
+
+### The generated owner requirement and the audited contract disagree about the same bytes
+
+The defect worth carrying forward is not on the verifier's side.
+
+The generated proposal's `onSettled` summary carries
+`creates: ["owner-requirement-0"]` with
+`owner: {requires: required, requiresChildren: required, source: ambient-at-call}`.
+The bundled audited contract for the **same artifact digest**
+(`dist/dev.js` `sha256:cc68ed0f0c5de86411555af407ac7acf4d1c10206f24bab4e1793c22553f1a79`,
+manifest `sha256:22d27a9e…`, integrity `sha512-/yPhTf3x…`) carries
+`"creates": []` with `creates` in `closed`, a `callback` operation owned
+`ambient-at-execution` with `productions: []` closed, and the leaf owner as a
+`resources` entry `onSettled-leaf-owner`
+(`pkg/contracts/bundled/solid-v2/solidjs-signals.json`). One of the two is
+wrong about closed, byte-identified facts.
+
+The audited one matches the runtime. rc.3's `onSettled` is
+`owner && !(owner._config & CONFIG_CHILDREN_FORBIDDEN) ? createTrackedEffect(() => untrack(callback), { name: "onSettled" }) : globalQueue.enqueue(EFFECT_USER, …)`
+— it does not *require* an ambient owner, it **branches** on one, and the
+non-owner arm is a defined enqueue path (which in dev throws
+`SETTLED_CLEANUP_UNOWNED` only if the callback returns a cleanup).
+
+The generated claim's derivation, end to end:
+
+1. `solid_primitive_declaration`
+   (`rust/crates/solid-reactive-ir/src/symbols.rs:589-595`) grants primitive
+   identity to a declaration whose **filesystem path** carries a `solid-js` or
+   `@solidjs` component (`declaration_path_is_solid_package`, `:597-601`) and
+   whose **name** the dialect declares. Inside `@solidjs/signals`' own bundle
+   that makes the local `createTrackedEffect` a `Primitive`.
+2. `find_missing_owners`' `Primitive::CreateTrackedEffect` arm
+   (`rust/crates/solid-reactive-ir/src/owners.rs:844-861`) records an `effect`
+   owner requirement for that call, since it is not inside an owner-providing
+   region. The owner-context lattice is not guard-sensitive, so the
+   `getOwner()` ternary above the call is invisible to it.
+3. `generated_owner_requirements_by_symbol` /
+   `attach_generated_owner_requirements`
+   (`rust/crates/solid-facts-backend/src/main.rs:6222`, `:6317`) attach it to
+   the export summary, on the stated ground that an export whose callers are
+   not enumerable must carry the obligation.
+4. `apply_owner_requirement`
+   (`rust/crates/solid-facts-backend/src/inferred_contract.rs:446-455`) maps
+   `Effect` to `child_owners = Required`, which is the demand.
+
+Step 3 is right for a wrapper package that imports `createEffect` from
+`solid-js`; the import edge is the provenance. It is wrong here, where the
+callee is a local of the same bundle and the only provenance is step 1's path
+component.
+
+**Why the axiom cannot fix it.** The axiom would answer that demand from
+`solid_2.rs`'s rows about the same primitive names that step 1 used — no
+artifact evidence enters the loop that the axiom does not itself supply — and
+it would prove `child_owners = Required` for an operation the audited authority
+for those exact bytes closes as absent. Either half disqualifies it
+independently of the identity gate, the floor rule, or the fixture.
+
+**Why neither reconciliation shipped.**
+
+- *Suppress the create for the dialect's own primitive-defining exports.*
+  The `OwnerRequirement` record carries no field distinguishing a
+  path-bootstrap recognition from an import-edge one, so the suppression cannot
+  be stated without threading that provenance through `solid-reactive-ir`. And
+  the misclassification is general: the heuristic names every dialect-spelled
+  local in any `solid-js`/`@solidjs`-pathed file, which is exactly what the
+  checker relies on when it analyzes Solid's own repository. Narrowing it is an
+  owner-model change with its own fixtures, not a slice of this one.
+- *Emit it as the bundled contract does.* `creates: []` **closed** is a
+  negative closed claim. Generation leaves `creates` open for all 183 of this
+  package's exports (`unknownByDomain.creates == 183` in the probe's own
+  summary); closing it because no requirement was derived manufactures a
+  negative claim from missing knowledge. Only a hand audit can assert that
+  closure, and the one that does already exists.
+
+**Open, and named:** the generator emits a consumer owner obligation for a
+primitive-defining package's export whose owner requirement is
+runtime-guarded, contradicting the audited contract for the same bytes. Two
+independent follow-ups: guard-sensitivity in the owner-context lattice
+(a `getOwner()`-guarded call with a defined non-owner arm is not an
+unconditional requirement), and provenance on `OwnerRequirement` so a
+path-bootstrap recognition can be told from an import edge. Neither is
+attempted here.
+
+### Preconditions 1, 3 and 4: reachable, unused
+
+Recorded so a revival does not re-measure them.
+`SnapshotedPackage::package_integrity`
+(`rust/crates/solid-facts-backend/src/contract_certification.rs:1487-1490`) is
+public beside name and version, and `dependencies.rs:1222-1240` already
+compares the triple field-by-field — an integrity-bound gate is a mirror of
+that loop. `floor` is a parameter of `require_owner_operation_call`
+(`contract_certification/type_facts.rs:4141`), in scope for the whole body
+including the `if !found` site, so a `MayExecute`-only guard is one condition.
+`scripts/contract-corpus.mjs:60` fabricates `fixture:sha256:<manifest digest>`,
+so a corpus fixture claiming the audited coordinate would be refused by an
+integrity-bound gate and admitted by a name+version one. No fixture was
+authored; the phase19 corpus pin stays at 173.
+
+### Unchanged, and why no controls were run
+
+`argument-binding`
+`sha256:40cc236b1354cce01e555595129f2873232a80c1f62beafa3f925fef1b82ae34` also
+stays refused: `argument_slot_is_proven_invoking`'s Tier A gates on
+`target_module == "solid-js"` (`type_facts.rs:3834-3852`), which no call inside
+the defining package can satisfy. Because no code, contract, fixture or
+snapshot changed in this slice, the control rows
+(`@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor` and
+`|head`, `@solidjs/element@2.0.0-rc.3|solid2|only`, the marker / i18n /
+scheduled / timer floors, `solid-js@2.0.0-rc.3|solid2|only`, and
+`motion-solidjs@0.7.0-beta.4|solid2|floor` and `|head`) cannot have moved and
+were not re-run. No ledger re-pin is due.
+
 ## A planned dependency was invisible to the module that re-exported it (2026-09-03)
 
 `motion-solidjs@0.6.0|solid1|only` refused *before any demand*:
