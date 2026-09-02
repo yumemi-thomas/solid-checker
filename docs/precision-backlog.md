@@ -12794,3 +12794,120 @@ its pre-planning refusal with the message now naming `motion-dom` as the
 re-export's owner instead of "outside the resolved package". No other row moved
 its status or first refusal. Ledgers re-pinned: Phase 20 moved 352 → 353
 verified and 45 → 44 exact refusals. Wall time 71.3 s.
+
+## 2026-09-03 — Three owner and ambient refusals diagnosed; no code shipped
+
+This batch investigated three rows and **shipped no code**. All three stay
+refused on their committed demand digests, and no refusal message changed. What
+was produced is the diagnosis and, for the first, a deferred ADR.
+
+### `@solidjs/signals@2.0.0-rc.3|solid2|only` — structural wall, recorded, unfixed
+
+Refused at `operation-reachability`
+`sha256:78a165588bd85e84dd94c2598e9271279c741475da2089d5d6e93f3164cbbbca`, on
+`onSettled`: *owner requirement has no exact dialect primitive call; observed
+["getOwner", "createTrackedEffect", "untrack", "enqueue", "e"]*.
+
+`require_owner_operation_call`
+(`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs:4015`)
+wants a reachable, uncaptured call whose `target_module` is exactly `solid-js`
+(`:4036`). Inside the package that *defines* the primitives no such call exists
+or can: `@solidjs/signals`' `onSettled` **is** the function `solid-js`
+re-exports under that name (`solid-js@2.0.0-rc.3/types/index.d.ts` is one
+`export { … } from "@solidjs/signals"`), and every callee in its body is a
+local of its own bundle. The wall is structural, not a missing producer fact.
+
+`onSettled` is the only export of the package that hits it: the generated
+contract carries exactly one owner-requirement create operation in each of the
+three artifact cases, and in all three it is `onSettled`'s
+`owner-requirement-0`; every other export's `creates` claim is empty.
+
+A dialect-axiom premise for this case was implemented and **reverted whole**.
+The sound form of the premise, the five confirmed objections that stopped it —
+a name+version identity gate where every neighbour binds integrity too, a
+version gate pointed at rc.3 while the two dialect rows it rests on cite rc.0,
+floor-blindness, unsettled circularity between the demand's owner claim and the
+rows that would discharge it, and zero rows moved — and the required shape of
+any future version are in
+`docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md`
+(status `deferred`). Two of the five are soundness defects; either alone
+disqualifies the attempt.
+
+Worth recording for the next round: with the axiom in place the row still did
+not certify. Its first refusal advanced one demand, to `argument-binding`
+`sha256:40cc236b1354cce01e555595129f2873232a80c1f62beafa3f925fef1b82ae34`, still
+on `onSettled` — *callback parameter has no exact direct-call or
+resolved-argument flow* — because `onSettled` hands its callback to `untrack`,
+another local of its own bundle. Discharging the owner demand alone certifies
+nothing here.
+
+### `@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor` and `|head` — honest
+
+Both refuse at `operation-cardinality` on the same `onSettled` shape, inside a
+*published-graph node* rather than the root: `@solidjs/signals@2.0.0-rc.0` for
+floor (`sha256:c9843e7b65f7dd57a0846baeb59299cc5427768b5bad74a1715ec799cc8465b0`)
+and `@solidjs/signals@2.0.0-rc.5` for head
+(`sha256:1d71c2da005afe4637a8ce42f5100941dcf61da9c5cd5bf264e436da1ad0496e`).
+
+These are **honest refusals against a non-audited prerelease**: neither rc.0 nor
+rc.5 is the version this repository's bundled 2.0 contracts and runtime lock
+pin, and AGENTS.md forbids substituting a newer or older prerelease silently.
+The refusal message was **not** changed to name an audited version — naming one
+presumes the audited-tuple table that objection 2 of the ADR shows was pointed
+at the wrong bytes, so the message would have asserted an audit that does not
+exist for the ownership rows. The messages stay as committed.
+
+### `@solidjs/element@2.0.0-rc.3|solid2|only` — honest, and not cheaply improvable
+
+Refused at `recursive-value-shape`
+`sha256:c18ef2b8e92d873c24730b5644a38474fe3837d98b46c5654f175a42da4945be`, on
+graph node `component-register@0.8.8`'s `hot`: *operation value root shape has no
+verifiable premise: the demand asserts no callability and the producer's root
+observation is open*.
+
+`component-register@0.8.8` declares
+`hot(module: NodeModule & { hot?: any }, tagName: string): void`. `NodeModule`
+is an ambient from `@types/node`; the producer's private witness project sets
+`types: []`, so the reference does not resolve and the root observation stays
+open.
+
+The rule considered was: admit exactly those `@types/*` packages that are
+**authenticated members of the certification closure**. **`@types/node` is not
+in this closure, so the rule would change nothing and was not implemented.**
+From the probe's own installed tree:
+
+- `component-register@0.8.8`'s manifest has **no `dependencies` field at all**;
+  its `devDependencies` are `@babel/*`, `@rollup/*`, `coveralls`, `jest`,
+  `jest-environment-jsdom-sixteen`, `rollup`, `typescript` — `@types/node` is
+  not even among those, and a devDependency is not a closure member regardless.
+- `@solidjs/element@2.0.0-rc.3` depends on `component-register@^0.8.7` and peers
+  `solid-js` / `@solidjs/web`; nothing else.
+- The probe's `bun.lock` contains zero `@types` entries and the installed
+  `node_modules` has no `@types` directory.
+
+So the package's own authenticated closure does not carry the typings its
+declaration depends on, and the refusal is correct against the published bytes.
+
+The message was **not** changed to name the unresolved ambient. It is not
+cheaply possible from the verifier: the transcript carries the producer's
+open-reason tokens (`openType` / `typeUnavailable`), not the unresolved type
+reference's identifier, and TypeScript prints an unresolved type reference as
+`any`, so the type descriptor does not name it either. Making the refusal say
+`NodeModule` means teaching the Type Facts producer to transmit the unresolved
+reference — a producer change and rebuild, which moves the
+`bin/solid-typefacts` source manifest and every gate keyed on it. Left as a
+producer-side follow-up rather than approximated here.
+
+### Controls
+
+Re-measured against the reverted tree and unchanged:
+`@solid-primitives/marker@0.2.2|solid1|only` and
+`@solid-primitives/scheduled@1.5.3|solid1|only` certified;
+`@solid-primitives/until@0.1.1|solid1|only` refused on `sha256:15fde3fc…`;
+`@solidjs/element@2.0.0-rc.3|solid2|only` refused on `sha256:c18ef2b8…`. The
+three `@solidjs/signals`-dependent certified rows stay certified:
+`solid-js@2.0.0-rc.3|solid2|only` (whose published graph carries the
+`@solidjs/signals@2.0.0-rc.3` node), and `motion-solidjs@0.7.0-beta.4|solid2|head`
+and `|floor`.
+
+No corpus verdict moved in either direction, so no ledger re-pin is due.
