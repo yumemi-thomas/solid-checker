@@ -32,11 +32,20 @@ the feature matrix without changing ordinary development and test profiles.
 
 ## Performance regressions
 
-`make verify-performance` certifies repository-owned ceilings for scaling,
-Type Facts payload, fresh Reactive IR, cached reuse, and a one-file incremental
-analysis. The incremental ceiling is intentionally measured on a deterministic
-1,000-source corpus and can be overridden with
-`SOLID_CHECKER_MAX_INCREMENTAL_NS` when testing that the gate turns red.
+`make verify-performance` certifies repository-owned invariants over a
+deterministic corpus: structural ones (export aggregation scaling, Type Facts
+payload per source, cached-result reuse) and wall-time ceilings (fresh Reactive
+IR per source, a one-file incremental edit on 1,000 sources). Run locally, both
+kinds are enforced. The `Performance` workflow enforces only the structural
+ones and reports the wall-time ceilings (`--wall-time-gate report`): GitHub's
+shared runners measure the same commit up to 1.6x apart between runs, so a
+fixed ceiling there is either too loose to catch anything or fails on a slow
+day, as it did in three of ten runs in September 2026. The workflow's
+regression gate is `benchmarks/compare-performance.mjs`, which races the
+merge base against the head on the same runner in interleaved rounds and fails
+past a 1.25x ratio; its ratios stayed within 0.98-1.04 over the same runs. The
+ceilings can be overridden with `SOLID_CHECKER_MAX_INCREMENTAL_NS` and
+`SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE` when testing that the gate turns red.
 
 The `Performance` GitHub workflow also sends fresh, cached-throughput, and
 one-file incremental wall-time benchmarks to CodSpeed on `main` and every pull

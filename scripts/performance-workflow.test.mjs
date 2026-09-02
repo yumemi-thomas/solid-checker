@@ -10,11 +10,10 @@ test("performance regressions are compared on pull requests and the default bran
   assert.match(workflow, /\bpull_request:/);
   assert.match(workflow, /CodSpeedHQ\/action@v4/);
   assert.match(workflow, /\bmode: walltime\b/);
-  assert.match(workflow, /bun benchmarks\/verify-performance\.mjs/);
-  assert.match(
-    workflow,
-    /SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE: 225000/,
-  );
+  // Shared runners report the wall-time ceilings instead of enforcing them;
+  // the interleaved base/head comparison is the regression gate there.
+  assert.match(workflow, /bun benchmarks\/verify-performance\.mjs --wall-time-gate report/);
+  assert.doesNotMatch(workflow, /SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE/);
   assert.match(workflow, /git merge-base HEAD/);
   assert.match(workflow, /git rev-parse HEAD\^/);
   assert.match(workflow, /bun benchmarks\/compare-performance\.mjs/);
