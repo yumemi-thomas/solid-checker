@@ -24,6 +24,7 @@ import {
   certifyContract,
   isExactDependencyCompositionRefusal,
   isReusableDependencyRefusalAudit,
+  nativeRefusalAttribution,
   locateExternalDependencyPackageRoot,
   certificationImporterPathFor,
   parseCertifyArguments,
@@ -672,6 +673,55 @@ test("an intermediate certification refusal cannot reach catalog publication", a
     /witness-acquisition refused for demand sha256:missing/
   );
   assert.equal(published, false);
+});
+
+test("a native semantic refusal attributes the demand and family the audit records", () => {
+  // The exact stderr the native certifier writes for an unsupported operation
+  // input, wrapped by the two stages it passes through. Before the refusal
+  // named its demand, every row of this class produced the same sentence and
+  // the sidecar recorded `demandId: null, family: null` for all of them.
+  const unsupported =
+    "solid-checker-rust: policy-2 proof finalization failed: " +
+    "Type Facts certification failed during live export-value verification: " +
+    `Type Facts demand sha256:${"3".repeat(64)} is unsupported: operation input ` +
+    "artifact-case:097ee468:createMarker:operation:callback-0[0] is reactive/accessor, and the " +
+    "implementation census binds only parameter-rooted operation inputs " +
+    "(family=recursive-value-shape)";
+  assert.deepEqual(nativeRefusalAttribution(unsupported), {
+    demandId: `sha256:${"3".repeat(64)}`,
+    family: "recursive-value-shape"
+  });
+
+  // The locally-open family carries its name in its own position.
+  assert.deepEqual(
+    nativeRefusalAttribution(
+      `Type Facts demand sha256:${"a".repeat(64)} is locally open: argument-binding ` +
+        "(artifact-case:331dfa49:createReaction): callback parameter has no exact " +
+        "direct-call or resolved-argument flow"
+    ),
+    { demandId: `sha256:${"a".repeat(64)}`, family: "argument-binding" }
+  );
+
+  // Nothing is guessed. A reason this cannot parse stays unattributed rather
+  // than being attributed wrongly.
+  assert.deepEqual(nativeRefusalAttribution("native checker exited 1"), {
+    demandId: null,
+    family: null
+  });
+  assert.deepEqual(nativeRefusalAttribution(undefined), { demandId: null, family: null });
+
+  // These are exactly the two fields the refusal audit copies into
+  // `refusal.demandId` and `refusal.family`, so populating them here is what
+  // makes the sidecar attributable.
+  const refusal = new CertificationRefusal({
+    stage: "witness-acquisition",
+    owner: "certifier",
+    reason: unsupported,
+    ...nativeRefusalAttribution(unsupported)
+  });
+  assert.equal(refusal.demandId, `sha256:${"3".repeat(64)}`);
+  assert.equal(refusal.family, "recursive-value-shape");
+  assert.match(refusal.message, /witness-acquisition refused for demand sha256:3{64}/);
 });
 
 test("concrete acquisition failure writes only a non-replayable audit", async () => {

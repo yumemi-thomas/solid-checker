@@ -1397,8 +1397,26 @@ func (p *project) parameterUseCensusLocked(
 			if ctx.Err() != nil {
 				return
 			}
-			if !ast.IsIdentifier(node) || ast.IsDeclarationNameOrImportPropertyName(node) ||
-				ast.IsPartOfTypeNode(node) {
+			// A shorthand property assignment's name is *both* a declaration
+			// name and a value read: `{ cb }` stores `cb` exactly as
+			// `{ cb: cb }` does. The declaration-name guard skipped it, so
+			// `const holder = { cb }` recorded no use of `cb` at all while
+			// every other escape of the same value — `{ cb: cb }`, `[cb]`,
+			// `(0, cb)`, `new Map([["k", cb]])` — recorded `unknownEscape`.
+			// A consumer that reads this census as exhaustive was therefore
+			// blind to the shorthand, and the value could leave the body
+			// unrecorded.
+			//
+			// The use is recorded as `unknownEscape`, which is what this
+			// census says about a value it cannot classify further: the
+			// producer knows the value was stored into an object literal and
+			// states no more than that. This also covers `{ ...{ cb } }`,
+			// whose inner literal is the same node kind.
+			shorthand := node.Parent != nil &&
+				ast.IsShorthandPropertyAssignment(node.Parent) &&
+				node.Parent.Name() == node
+			if !ast.IsIdentifier(node) || ast.IsPartOfTypeNode(node) ||
+				(ast.IsDeclarationNameOrImportPropertyName(node) && !shorthand) {
 				return
 			}
 			// The use census exempts an implementation whose own body *is* a
@@ -1418,13 +1436,26 @@ func (p *project) parameterUseCensusLocked(
 				locationWithheldByJump(unsafeJumps[flowOwner], nodeLocation(node)) {
 				return
 			}
-			symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+			// The symbol at a shorthand name is the *property*, not the value
+			// it reads; the value symbol has its own resolution.
+			resolved := p.checker.GetSymbolAtLocation(node)
+			if shorthand {
+				resolved = p.checker.GetShorthandAssignmentValueSymbol(node.Parent)
+			}
+			symbol := p.canonicalSymbol(resolved)
 			root, ok := bySymbol[symbol]
 			if !ok {
 				return
 			}
 			_, alias := aliases[symbol]
 			kind := p.parameterUseKindLocked(node)
+			// parameterUseKindLocked already answers unknownEscape for a shorthand
+			// property name; this is belt-and-braces, not the guard, so a change
+			// to the classifier cannot silently turn an object-literal escape
+			// into a weaker kind.
+			if shorthand {
+				kind = typefacts.ParameterUseUnknownEscape
+			}
 			if alias && kind == typefacts.ParameterUseDirectCall {
 				kind = typefacts.ParameterUseAliasCall
 			}

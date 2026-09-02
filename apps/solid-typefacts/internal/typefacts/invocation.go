@@ -271,7 +271,22 @@ type ImplementationCall struct {
 	Declaration        *ResolvedDeclaration    `cbor:"declaration,omitempty" json:"declaration,omitempty"`
 	CalleeParameter    *ParameterValueSource   `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
 	ArgumentParameters []*ParameterValueSource `cbor:"argumentParameters,omitempty" json:"argumentParameters,omitempty"`
-	Captured           bool                    `cbor:"captured,omitempty" json:"captured,omitempty"`
+	// ArgumentSources is, per written argument slot, the value provenance of
+	// the expression written in that slot: the same trace ReturnSite.Sources
+	// carries for a returned expression, applied to an argument. One entry per
+	// written argument slot, parallel to ArgumentParameters and subject to the
+	// same exactArgumentSlots gate, so a slot a spread has displaced gets an
+	// empty list rather than a trace of the expression written there.
+	//
+	// An empty list means the producer traced nothing. It never means "this
+	// argument is not an accessor", never means "this argument is plain", and
+	// never means the slot carries no provenance — the tracer follows array
+	// literals, callable expressions, call results and one hop through a
+	// single-assignment array binding element that is neither a rest element
+	// nor defaulted, and everything else it declines to model leaves the list
+	// empty. Every consumer must fail closed on an empty list.
+	ArgumentSources [][]ImplementationValueSource `cbor:"argumentSources,omitempty" json:"argumentSources,omitempty"`
+	Captured        bool                          `cbor:"captured,omitempty" json:"captured,omitempty"`
 	// EnclosingCallable is the exact source range of the *innermost* callable
 	// that contains this call, or nil when the call sits directly in the
 	// implementation's own body. It is the link a consumer needs to compose a
@@ -397,6 +412,17 @@ const (
 	ImplementationValueCallResult     ImplementationValueSourceKind = "callResult"
 )
 
+// ImplementationValueSource is one traced provenance of a value: what the
+// expression at Path within the traced value is, and — for a call result —
+// which callee and which slot of its result it came from.
+//
+// A *presence* is a positive fact. An *absence* is not: a value the tracer
+// declined to model (a conditional, a property read, a reassignable binding, a
+// computed callee) contributes no source, and a consumer that read an empty
+// list as "not a call result" or "plain" would be reading the producer's
+// silence as a claim. TargetModule is the written import specifier text and is
+// empty for a locally declared callee, which is a fact about the source text
+// rather than a resolved package identity.
 type ImplementationValueSource struct {
 	Path         []PathSegment                 `cbor:"path,omitempty" json:"path,omitempty"`
 	Kind         ImplementationValueSourceKind `cbor:"kind" json:"kind"`

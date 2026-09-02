@@ -12,8 +12,8 @@
 //! export with nothing to say about reactivity, and it is not here.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, TrackedCallbackTiming,
-    Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, ReactiveRole, ResultSlot,
+    TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 /// Solid 1.x.
@@ -386,6 +386,31 @@ impl Dialect for Solid1x {
     /// only by accident, and it named nothing 1.x-specific.
     fn returns_store(&self, primitive: Primitive) -> bool {
         matches!(primitive, Primitive::CreateStore | Primitive::CreateMutable)
+    }
+
+    /// Source: `solid-js@1.9.14/types/reactive/signal.d.ts`, read from the
+    /// installed package. It declares
+    /// `createSignal<T>(value: T, options?): Signal<T>` with
+    /// `type Signal<T> = [get: Accessor<T>, set: Setter<T>]`, and
+    /// `createMemo<Next extends Prev, Prev = Next>(fn): Accessor<Next>`.
+    /// `Accessor` and `Setter` are the same
+    /// public type exports [`Dialect::type_role`] already classifies, so the
+    /// two rows restate an audited declaration rather than inferring one from a
+    /// name.
+    ///
+    /// Deliberately only these two. `createResource`'s `[Resource<T>, {...}]`,
+    /// `useTransition`'s `[Accessor<boolean>, ...]`, `createDeferred` and
+    /// `createSelector` are all real 1.x accessor results, and every one of
+    /// them stays absent until a proof needs it and its 2.0 counterpart has
+    /// been reviewed: an unused row is an unaudited row that a later consumer
+    /// would read as audited.
+    fn reactive_result_slot(&self, primitive: Primitive, slot: ResultSlot) -> Option<ReactiveRole> {
+        match (primitive, slot) {
+            (Primitive::CreateSignal, ResultSlot::TupleItem(0)) => Some(ReactiveRole::Accessor),
+            (Primitive::CreateSignal, ResultSlot::TupleItem(1)) => Some(ReactiveRole::Setter),
+            (Primitive::CreateMemo, ResultSlot::Whole) => Some(ReactiveRole::Accessor),
+            _ => None,
+        }
     }
 
     /// Source: the declarations in `solid-js@1.9.14`, read from the installed

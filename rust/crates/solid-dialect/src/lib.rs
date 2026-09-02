@@ -297,6 +297,87 @@ pub fn unambiguous_callable_result_tuple_item(name: &str, index: usize) -> bool 
     !answers.is_empty() && answers.into_iter().all(|answer| answer)
 }
 
+/// Which part of what a primitive call returns a question is about.
+///
+/// `Whole` is the returned value itself; `TupleItem(n)` is slot `n` of a
+/// returned tuple. The two are not interchangeable and neither is a default:
+/// `createMemo()` is an accessor whole, `createSignal()[0]` is an accessor at a
+/// slot, and `createSignal()` itself is neither.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ResultSlot {
+    Whole,
+    TupleItem(usize),
+}
+
+/// The reactive role of a value: the two roles the normalized contract's shape
+/// model represents, and no others.
+///
+/// Deliberately narrower than [`TypeRole`], which answers what a public *type*
+/// export means. This answers what a *call result slot* is, which is the
+/// question a provenance proof asks.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ReactiveRole {
+    Accessor,
+    Setter,
+}
+
+/// The reactive role of one slot of what `name` returns, when every dialect
+/// that canonically exports `name` agrees.
+///
+/// `None` means "no dialect answer" and is never "not reactive": a name no
+/// dialect exports, a slot no dialect has audited, and a slot the two dialects
+/// disagree about all answer `None`, and a caller may read none of them as a
+/// negative claim.
+///
+/// Disagreement includes silence. If one dialect that canonically exports the
+/// name answers a role and another answers nothing, the pair has not agreed,
+/// so the answer is `None` — the opposite reading would let 1.x's audited
+/// vocabulary speak for a 2.0 name whose owner has not reviewed it.
+///
+/// Kept separate from [`unambiguous_callable_result_tuple_item`] on purpose:
+/// that one answers *callability* for the return path, and widening it into a
+/// reactivity table would make one answer carry two claims.
+#[must_use]
+pub fn unambiguous_reactive_result_slot(name: &str, slot: ResultSlot) -> Option<ReactiveRole> {
+    let answers = [Version::V1, Version::V2]
+        .into_iter()
+        .filter_map(|version| {
+            let dialect = version.dialect();
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.reactive_result_slot(primitive, slot))
+        })
+        .collect::<Vec<_>>();
+    let first = *answers.first()?;
+    answers
+        .into_iter()
+        .all(|answer| answer == first)
+        .then_some(first)
+        .flatten()
+}
+
+/// Whether some dialect exports `name` from `origin_module` in value position.
+///
+/// This is a dialect answer about *where a name can come from*, not a resolved
+/// package identity: the module string a producer states is the written import
+/// specifier, so this premise says "the specifier is one a Solid dialect
+/// exports this name from" and nothing more. An empty module — which is what a
+/// locally declared value reports — is `false`, which is the whole point: a
+/// package's own `function createSignal()` must never answer a question about
+/// the dialect's.
+#[must_use]
+pub fn exports_value_from(origin_module: &str, name: &str) -> bool {
+    if origin_module.is_empty() || name.is_empty() {
+        return false;
+    }
+    [Version::V1, Version::V2].into_iter().any(|version| {
+        version
+            .dialect()
+            .export_modules(name, ExportPosition::Value)
+            .contains(&origin_module)
+    })
+}
+
 /// The role a JSX tag plays as a boundary.
 ///
 /// Callers ask for the role, never the name: 1.x spells the async boundary
@@ -905,6 +986,25 @@ pub trait Dialect: Sync {
     /// store — 1.x's `createMutable`, 2.0's `createProjection` — and cannot
     /// describe a tuple, which is what `createStore` returns in both versions.
     fn returns_store(&self, primitive: Primitive) -> bool;
+
+    /// The reactive role this dialect assigns to one slot of what `primitive`
+    /// returns, or `None` where this dialect's audited vocabulary does not
+    /// state it.
+    ///
+    /// The finer-grained companion to [`Dialect::creates_reactive_source`] and
+    /// [`Dialect::returns_store`], which together say *whether* a call produces
+    /// a source and *which kind* but carry no slot — so they cannot tell
+    /// `createSignal()[0]` from `createSignal()[1]`, and a proof that read them
+    /// for a slot would certify a setter as an accessor.
+    ///
+    /// `None` is not a negative claim. Every row is a per-version audited fact
+    /// and stays absent until this dialect's owner has one, which is why the
+    /// aggregate [`unambiguous_reactive_result_slot`] treats one dialect's
+    /// silence as disagreement rather than deferring to the other's row.
+    fn reactive_result_slot(&self, primitive: Primitive, slot: ResultSlot) -> Option<ReactiveRole> {
+        let _ = (primitive, slot);
+        None
+    }
 
     /// Which argument holds `primitive`'s options object.
     ///
@@ -2513,5 +2613,106 @@ mod tests {
         assert!(unambiguous_callable_type("solid-js", "Setter"));
         assert!(!unambiguous_callable_type("user-module", "Accessor"));
         assert!(!unambiguous_callable_type("solid-js", "Signal"));
+    }
+
+    // The reactive result table answers a *slot*, which is the whole reason it
+    // exists: `unambiguous_callable_result_tuple_item` says both `createSignal`
+    // slots are callable, and a proof that read it for reactivity would certify
+    // the setter as an accessor.
+    #[test]
+    fn reactive_result_slots_are_per_slot_and_need_cross_dialect_agreement() {
+        assert_eq!(
+            unambiguous_reactive_result_slot("createSignal", ResultSlot::TupleItem(0)),
+            Some(ReactiveRole::Accessor)
+        );
+        assert_eq!(
+            unambiguous_reactive_result_slot("createSignal", ResultSlot::TupleItem(1)),
+            Some(ReactiveRole::Setter)
+        );
+        assert_eq!(
+            unambiguous_reactive_result_slot("createMemo", ResultSlot::Whole),
+            Some(ReactiveRole::Accessor)
+        );
+
+        // Silence is not a role. A slot past the audited tuple, the whole of a
+        // value whose slots are audited, a slot of a value whose whole is, a
+        // primitive with no row at all, and a name no dialect exports all
+        // answer `None` — and none of those answers may be read as "not
+        // reactive".
+        assert_eq!(
+            unambiguous_reactive_result_slot("createSignal", ResultSlot::TupleItem(2)),
+            None
+        );
+        assert_eq!(
+            unambiguous_reactive_result_slot("createSignal", ResultSlot::Whole),
+            None
+        );
+        assert_eq!(
+            unambiguous_reactive_result_slot("createMemo", ResultSlot::TupleItem(0)),
+            None
+        );
+        assert_eq!(
+            unambiguous_reactive_result_slot("createEffect", ResultSlot::Whole),
+            None
+        );
+        assert_eq!(
+            unambiguous_reactive_result_slot("createUnknown", ResultSlot::TupleItem(0)),
+            None
+        );
+
+        // A name only one dialect canonically exports is answered by that
+        // dialect alone; a store result is not an accessor result in either.
+        assert_eq!(
+            unambiguous_reactive_result_slot("createMutable", ResultSlot::Whole),
+            None
+        );
+        assert_eq!(
+            unambiguous_reactive_result_slot("createProjection", ResultSlot::Whole),
+            None
+        );
+    }
+
+    // One dialect's row may not speak for the other's silence. Asserted on the
+    // dialects directly, because the aggregate cannot distinguish "neither has
+    // a row" from "one does": both answer `None`, and only one of them would
+    // be a soundness bug if the aggregate deferred to the row it found.
+    #[test]
+    fn one_dialect_row_does_not_answer_for_the_other_dialects_silence() {
+        let one = Version::V1.dialect();
+        let two = Version::V2.dialect();
+        // `createDeferred` is 1.x-only vocabulary and has no row in either.
+        assert_eq!(
+            one.reactive_result_slot(Primitive::CreateDeferred, ResultSlot::Whole),
+            None
+        );
+        // A row present in both, agreeing, is what the aggregate answers.
+        for dialect in [one, two] {
+            assert_eq!(
+                dialect.reactive_result_slot(Primitive::CreateSignal, ResultSlot::TupleItem(0)),
+                Some(ReactiveRole::Accessor)
+            );
+            assert_eq!(
+                dialect.reactive_result_slot(Primitive::CreateStore, ResultSlot::TupleItem(0)),
+                None,
+                "a store slot has no accessor row"
+            );
+        }
+    }
+
+    // The module premise replaces a `== "solid-js"` literal in the certifier.
+    // Its whole point is the empty module: a package's own locally declared
+    // `createSignal` reports no module, and must never answer a question about
+    // the dialect's.
+    #[test]
+    fn value_export_modules_answer_only_for_audited_dialect_modules() {
+        assert!(exports_value_from("solid-js", "createSignal"));
+        assert!(exports_value_from("solid-js", "createMemo"));
+        assert!(exports_value_from("solid-js/store", "createStore"));
+        assert!(!exports_value_from("", "createSignal"));
+        assert!(!exports_value_from("solid-js", ""));
+        assert!(!exports_value_from("my-signals", "createSignal"));
+        assert!(!exports_value_from("solid-js", "createUnknown"));
+        // A type-position-only export is not a value export.
+        assert!(!exports_value_from("solid-js", "Accessor"));
     }
 }

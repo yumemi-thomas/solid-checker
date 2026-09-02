@@ -11,8 +11,8 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, TrackedCallbackTiming,
-    Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, ReactiveRole, ResultSlot,
+    TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 /// Solid 2.0.
@@ -446,6 +446,40 @@ impl Dialect for Solid2 {
             primitive,
             Primitive::CreateStore | Primitive::CreateOptimisticStore | Primitive::CreateProjection
         )
+    }
+
+    /// Source: the published declarations, read from the exact package
+    /// artifacts of the audited prerelease. In
+    /// `solid-js@2.0.0-rc.3/types/server/signals.d.ts`:
+    /// `createSignal<T>(value: Exclude<T, Function>, options?): Signal<T>`,
+    /// `createMemo<T>(compute, options?): SourceAccessor<T>`, and
+    /// `type SourceAccessor<T> = Refreshable<SignalAccessor<T>>`. `Signal` is
+    /// re-exported from `@solidjs/signals@2.0.0-rc.3`, whose
+    /// `dist/types/signals.d.ts` declares
+    /// `type Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`. rc.3 is
+    /// the prerelease this repository's fixtures and ecosystem corpus pin; the
+    /// same three declarations were checked in rc.0 and rc.5 and are
+    /// unchanged. `SourceAccessor` is one of the names
+    /// [`Dialect::type_role`] already classifies as an accessor, so these rows
+    /// restate an audited 2.0 declaration.
+    ///
+    /// The bundled 2.0 contract is *not* the authority for this question and
+    /// disagrees in a way a row must not follow: `solidjs-signals.json`'s
+    /// `createMemo` summary carries `output: "plain"` and its `createSignal`
+    /// has no summary at all, because the generated single-value `returns`
+    /// column cannot express either shape. That is the generator's silence,
+    /// not the 2.0 vocabulary's negative claim.
+    ///
+    /// `createOptimistic` also returns a `Signal<T>` and `createProjection` a
+    /// store; both stay absent until a proof needs them and their own review
+    /// lands.
+    fn reactive_result_slot(&self, primitive: Primitive, slot: ResultSlot) -> Option<ReactiveRole> {
+        match (primitive, slot) {
+            (Primitive::CreateSignal, ResultSlot::TupleItem(0)) => Some(ReactiveRole::Accessor),
+            (Primitive::CreateSignal, ResultSlot::TupleItem(1)) => Some(ReactiveRole::Setter),
+            (Primitive::CreateMemo, ResultSlot::Whole) => Some(ReactiveRole::Accessor),
+            _ => None,
+        }
     }
 
     /// Source: the match this replaced in `solid-reactive-ir/src/static_api.rs`,

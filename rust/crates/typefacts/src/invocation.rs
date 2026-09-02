@@ -391,6 +391,23 @@ pub struct ImplementationCall {
     pub callee_parameter: Option<ParameterValueSource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub argument_parameters: Vec<Option<ParameterValueSource>>,
+    /// Per written argument slot, the traced value provenance of the expression
+    /// written there — the same trace [`ReturnSite::sources`] carries for a
+    /// returned expression. Parallel to `argument_parameters` and gated the
+    /// same way, so a slot a spread has displaced carries an empty list rather
+    /// than a trace of the expression written at that position.
+    ///
+    /// **An empty list means the producer traced nothing.** It is never "this
+    /// argument is not an accessor", never "this argument is plain", and never
+    /// a claim about the slot at all: the tracer follows array literals,
+    /// callable expressions, call results and one hop through a
+    /// single-assignment array binding element, and every other expression — a
+    /// conditional, a property read, a reassigned or redeclared binding, a rest
+    /// or defaulted element, a computed callee — leaves the slot empty. A short
+    /// list is the same absence: a consumer reads the slot it wants and fails
+    /// closed when it is missing or empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub argument_sources: Vec<Vec<ImplementationValueSource>>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub captured: bool,
     /// The exact source range of the *innermost* callable containing this call,
@@ -575,6 +592,17 @@ pub enum ImplementationValueSourceKind {
     CallResult,
 }
 
+/// One traced provenance of a value: what sits at `path` within the traced
+/// value, and — for a [`ImplementationValueSourceKind::CallResult`] — which
+/// callee and which slot of its result it came from.
+///
+/// A source's *presence* is a positive fact; its absence is not. A value the
+/// producer declines to model contributes no source, so an empty list of these
+/// is the producer's silence and never a claim about what the value is not.
+/// `target_module` is the written import specifier text and is empty for a
+/// locally declared callee: it is a fact about the source text, not a resolved
+/// package identity, and a consumer that needs dialect identity must ask the
+/// dialect whether that specifier exports that name.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImplementationValueSource {

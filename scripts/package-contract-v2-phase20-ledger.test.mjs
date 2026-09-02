@@ -78,16 +78,17 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // values follow the producer-root, artifact-mechanics, and second-order
   // return-carry rounds landed 2026-09-01/02 (see docs/precision-backlog.md).
   // The return-carry slice adds exactly jsx-parser's authenticated receipt; the
-  // apparent-member census slice (2026-09-02) adds exactly i18n@2.2.1.
+  // apparent-member census slice (2026-09-02) adds exactly i18n@2.2.1, and the
+  // argument-provenance slice (2026-09-02) adds exactly the three marker rows.
   assert.deepEqual(ledger.summary.proposalStates, {
     complete: 344,
     "fully-refused": 37,
     partial: 37
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 48,
+    "exact-refusal": 45,
     "not-attempted": 25,
-    verified: 345
+    verified: 348
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -95,7 +96,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 345);
+  assert.equal(ledger.summary.verifiedRows, 348);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -247,6 +248,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/map@0.7.4|solid1|only",
       "@solid-primitives/map@1.0.0-next.2|solid2|floor",
       "@solid-primitives/map@1.0.0-next.2|solid2|head",
+      "@solid-primitives/marker@0.2.2|solid1|only",
+      "@solid-primitives/marker@2.0.0-next.2|solid2|floor",
+      "@solid-primitives/marker@2.0.0-next.2|solid2|head",
       "@solid-primitives/masonry@0.1.4|solid1|only",
       "@solid-primitives/masonry@2.0.0-next.2|solid2|floor",
       "@solid-primitives/masonry@2.0.0-next.2|solid2|head",

@@ -104,6 +104,27 @@ export function isExactDependencyCompositionRefusal(refusal) {
   );
 }
 
+/// The demand and family a native certifier refusal names, so the audit
+/// sidecar attributes it instead of recording `demandId: null, family: null`
+/// for every semantic refusal alike.
+///
+/// This reads only the two shapes the native certifier's own error types
+/// produce -- `Type Facts demand <id> is unsupported: ... (family=<f>)` and
+/// `Type Facts demand <id> is locally open: <f> (<artifact-case>:<export>):
+/// ...`. Anything else stays unattributed: a reason this cannot parse is
+/// reported exactly as it was, never guessed at, and the sidecar's nulls are
+/// the honest answer for it.
+export function nativeRefusalAttribution(reason) {
+  const text = typeof reason === "string" ? reason : "";
+  const demand = /Type Facts demand (sha256:[0-9a-f]{64})\b/.exec(text);
+  const declared = /\(family=([a-z][a-z0-9-]*)\)/.exec(text);
+  const open = / is locally open: ([a-z][a-z0-9-]*) \(/.exec(text);
+  return {
+    demandId: demand?.[1] ?? null,
+    family: declared?.[1] ?? open?.[1] ?? null
+  };
+}
+
 export class CertificationRefusal extends Error {
   constructor({ stage, owner, reason, demandId = null, family = null, refusals = [] }) {
     const location = demandId ? ` for demand ${demandId}` : "";
@@ -1171,10 +1192,13 @@ async function executePreparedPublishedGraphs({
   );
   if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
   if (child.status !== 0) {
+    const reason =
+      child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`;
     throw new CertificationRefusal({
       stage: "witness-acquisition",
       owner: "certifier",
-      reason: child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`
+      reason,
+      ...nativeRefusalAttribution(reason)
     });
   }
   return { authority: "native-certification-complete", catalogRoot };
@@ -1809,10 +1833,13 @@ async function executeNativeCertification({
   );
   if (child.error) throw new Error(`could not start the native checker: ${child.error.message}`);
   if (child.status !== 0) {
+    const reason =
+      child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`;
     throw new CertificationRefusal({
       stage: "witness-acquisition",
       owner: "certifier",
-      reason: child.stderr.trim() || child.stdout.trim() || `native checker exited ${child.status}`
+      reason,
+      ...nativeRefusalAttribution(reason)
     });
   }
   return { authority: "native-certification-complete", catalogRoot };

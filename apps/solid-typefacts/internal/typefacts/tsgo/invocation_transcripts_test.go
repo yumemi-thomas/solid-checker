@@ -2711,3 +2711,46 @@ func TestAugmentedNameSuppressionFailsClosedWithoutTheObjectInterface(t *testing
 		})
 	}
 }
+
+// An object-literal shorthand is a value read as much as `{ cb: cb }` is, and
+// the declaration-name guard hid it: `const holder = { cb }` recorded no use of
+// `cb` at all, so a consumer reading this census as exhaustive was blind to the
+// one escape spelling that names the value once. Every escape of the same value
+// now records a row.
+func TestParameterUseCensusRecordsObjectLiteralShorthandEscapes(t *testing.T) {
+	source := `export function make(cb: (value: unknown) => void) {
+  const shorthand = { cb };
+  const explicit = { cb: cb };
+  const spread = { ...{ cb } };
+  const element = [cb];
+  const sequence = (0, cb);
+  void [shorthand, explicit, spread, element, sequence];
+}
+void make;
+`
+	implementation := exportImplementationForMake(t, source)
+	escapes := map[int]typefacts.ParameterUseKind{}
+	for _, use := range implementation.ParameterUses {
+		if use.ParameterIndex != 0 {
+			continue
+		}
+		escapes[use.Location.StartByte] = use.Kind
+	}
+	for _, needle := range []string{"{ cb }", "cb: cb }", "...{ cb }", "[cb]", "(0, cb)"} {
+		at := strings.Index(source, needle) + strings.LastIndex(needle, "cb")
+		kind, recorded := escapes[at]
+		if !recorded {
+			t.Fatalf("escape %q at byte %d recorded no use: %#v", needle, at, implementation.ParameterUses)
+		}
+		if kind != typefacts.ParameterUseUnknownEscape {
+			t.Fatalf("escape %q recorded kind %q, want unknownEscape", needle, kind)
+		}
+	}
+
+	// The shorthand's symbol at that location is the *property*; the use has
+	// to be attributed to the value it reads.
+	shorthand := strings.Index(source, "{ cb }") + 2
+	if _, recorded := escapes[shorthand]; !recorded {
+		t.Fatalf("the shorthand at %d is attributed to no parameter", shorthand)
+	}
+}

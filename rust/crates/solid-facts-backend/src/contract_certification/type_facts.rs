@@ -10,8 +10,8 @@
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use solid_reactive_ir::contract_semantics::{
-    CardinalityScope, ClaimDomain, ClaimPath, OperationKind, Requirement, SemanticClaimPath,
-    UpperBound, ValuePathSegment, ValueRoot, ValueShape, ValueSource,
+    CardinalityScope, ClaimDomain, ClaimPath, OperationKind, ReactiveRole, Requirement,
+    SemanticClaimPath, UpperBound, ValuePathSegment, ValueRoot, ValueShape, ValueSource,
     certification::{
         DemandedCallability, PositiveFactSubject, ProofDemand, ProofDemandGraph,
         ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
@@ -1742,12 +1742,8 @@ fn export_value_callable_depth(
                 ValueRoot::OperationInput { operation, index } => export
                     .operation(&operation.0)
                     .and_then(|operation| operation.inputs.get(usize::from(*index)))
-                    .and_then(|input| parameter_source(input).ok())
-                    .and_then(|source| match source {
-                        ValueSource::Parameter { path, .. } => Some(path.len()),
-                        _ => None,
-                    })
-                    .unwrap_or(0),
+                    .and_then(parameter_root)
+                    .map_or(0, |(_, path)| path.len()),
             };
             prefix.saturating_add(path.0.len())
         }
@@ -2941,17 +2937,96 @@ fn proof_operation<'a>(
         })
 }
 
-fn parameter_source(value: &ValueShape) -> Result<ValueSource, TypeFactsCertificationError> {
+/// The exact parameter root of an operation input, or `None` for every other
+/// shape. Never an error: the callers that own an answer build the attributable
+/// refusal themselves through [`operation_input_parameter_root`], and the one
+/// caller that is only measuring a path depth wants the absence.
+fn parameter_root(value: &ValueShape) -> Option<(u16, &[String])> {
     match value {
-        ValueShape::Parameter { index, path } => Ok(ValueSource::Parameter {
-            index: *index,
-            path: path.clone(),
-        }),
-        _ => Err(TypeFactsCertificationError::UnsupportedDemand {
-            demand: "operation-input".into(),
-            reason: "implementation census only binds exact parameter-rooted operation inputs"
-                .into(),
-        }),
+        ValueShape::Parameter { index, path } => Some((*index, path.as_slice())),
+        _ => None,
+    }
+}
+
+/// The parameter root of an operation input, with the refusal that names the
+/// exact input and the shape the implementation census cannot bind.
+///
+/// The refusal carries the demand's own id, the operation input's identity, and
+/// the demand family, because without them every unsupported input in a package
+/// renders as the same sentence: the audit sidecar reports `demandId: null,
+/// family: null` and six different packages become one indistinguishable class.
+/// The operation identity is the one the emitted document carries, which in a
+/// normalized contract is already qualified by artifact case and export
+/// (`artifact-case:<digest>:<export>:operation:<id>`), so the input is named
+/// once rather than prefixed with the same two fields again.
+/// `value_shape_constructor` is a stable spelling rather than `{:?}` for the
+/// same reason `parameter_use_kind_site` is — a refusal reason is read by
+/// tooling and pinned by tests, so it may not move when a shape gains a field.
+fn operation_input_parameter_root(
+    value: &ValueShape,
+    proof: &ScheduledProofDemand,
+    operation: &str,
+    index: usize,
+) -> Result<(u16, Vec<String>), TypeFactsCertificationError> {
+    if let Some((parameter, path)) = parameter_root(value) {
+        return Ok((parameter, path.to_vec()));
+    }
+    Err(TypeFactsCertificationError::UnsupportedDemand {
+        demand: proof.id.clone(),
+        reason: format!(
+            "operation input {operation}[{index}] is {}, and the implementation census binds only parameter-rooted operation inputs (family={})",
+            value_shape_constructor(value),
+            proof_family_name(proof.family)
+        ),
+    })
+}
+
+fn operation_input_parameter_source(
+    value: &ValueShape,
+    proof: &ScheduledProofDemand,
+    operation: &str,
+    index: usize,
+) -> Result<ValueSource, TypeFactsCertificationError> {
+    let (parameter, path) = operation_input_parameter_root(value, proof, operation, index)?;
+    Ok(ValueSource::Parameter {
+        index: parameter,
+        path,
+    })
+}
+
+/// The stable spelling of a value shape's constructor, for refusal text.
+///
+/// A shape's *constructor* only: a refusal names which shape the census cannot
+/// bind, and reproducing a shape's contents there would put a package's
+/// semantics into an error string that tests pin. `Reactive` is the one
+/// exception, and only for its role, because "reactive" without the role does
+/// not distinguish the two inputs this refusal class is actually made of.
+fn value_shape_constructor(value: &ValueShape) -> &'static str {
+    match value {
+        ValueShape::Unknown => "unknown",
+        ValueShape::Plain => "plain",
+        ValueShape::Parameter { .. } => "parameter",
+        ValueShape::Tuple(_) => "tuple",
+        ValueShape::Array { .. } => "array",
+        ValueShape::Object(_) => "object",
+        ValueShape::Choice(_) => "choice",
+        ValueShape::Callable => "callable",
+        ValueShape::Promise(_) => "promise",
+        ValueShape::AsyncIterable(_) => "async-iterable",
+        ValueShape::Reactive {
+            role: ReactiveRole::Accessor,
+            ..
+        } => "reactive/accessor",
+        ValueShape::Reactive {
+            role: ReactiveRole::Setter,
+            ..
+        } => "reactive/setter",
+        ValueShape::Store { .. } => "store",
+        ValueShape::Action { .. } => "action",
+        ValueShape::Component => "component",
+        ValueShape::Cleanup { .. } => "cleanup",
+        ValueShape::RefApplication => "ref-application",
+        ValueShape::ServerFunctionReference { .. } => "server-function-reference",
     }
 }
 
@@ -3590,11 +3665,12 @@ fn require_operation_evidence(
             require_parameter_flow(implementation, &callback.from, floor, open, sites)
         }
         OperationKind::Read => {
-            let source = operation
+            let input = operation
                 .inputs
                 .first()
-                .ok_or_else(|| open("read operation has no input"))
-                .and_then(parameter_source)?;
+                .ok_or_else(|| open("read operation has no input"))?;
+            let source =
+                operation_input_parameter_source(input, proof, operation.id.0.as_str(), 0)?;
             require_parameter_read_evidence(implementation, &source, floor, open, sites)
         }
         OperationKind::Return => {
@@ -3922,6 +3998,352 @@ fn operation_input_value_shape_evidence(
     }
 }
 
+/// The reactive role a recursive value-shape demand asserts of an `invoke`
+/// operation's input, or `None` when the demand is not that one.
+///
+/// Every premise is required, not defaulted. The kind gate is `Invoke` because
+/// this witness is the callback's own call sites and a `read` operation has
+/// none (its shape carries no span at all — see the backlog entry). The path
+/// must be the root, because the census traces the argument *expression* and
+/// says nothing about a property inside the value it traces. And the demand
+/// must assert no callability: a demand that also claims the value is callable
+/// is asking for something a value trace does not answer.
+fn reactive_operation_input_role(
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+    input: &ValueShape,
+    path: &solid_reactive_ir::contract_semantics::ValuePath,
+    callable: DemandedCallability,
+) -> Option<ReactiveRole> {
+    if operation.kind != OperationKind::Invoke
+        || !path.0.is_empty()
+        || callable != DemandedCallability::Unknown
+    {
+        return None;
+    }
+    match input {
+        ValueShape::Reactive { role, .. } => Some(*role),
+        _ => None,
+    }
+}
+
+/// The stable spelling of a reactive role, for refusal text.
+const fn reactive_role_name(role: ReactiveRole) -> &'static str {
+    match role {
+        ReactiveRole::Accessor => "reactive/accessor",
+        ReactiveRole::Setter => "reactive/setter",
+    }
+}
+
+/// The role the dialect vocabulary would have to agree on for this shape.
+const fn dialect_reactive_role(role: ReactiveRole) -> solid_dialect::ReactiveRole {
+    match role {
+        ReactiveRole::Accessor => solid_dialect::ReactiveRole::Accessor,
+        ReactiveRole::Setter => solid_dialect::ReactiveRole::Setter,
+    }
+}
+
+/// The result slot a traced call-result source names, when it names one
+/// exactly.
+///
+/// An empty target path is the whole result; one tuple segment carrying an
+/// index is that slot. Every other path — a property, a deeper path, a tuple
+/// segment with no index — names something this table does not answer, and
+/// answering it anyway is how a slot claim becomes a guess.
+fn traced_result_slot(
+    source: &typefacts::ImplementationValueSource,
+) -> Option<solid_dialect::ResultSlot> {
+    match source.target_path.as_slice() {
+        [] => Some(solid_dialect::ResultSlot::Whole),
+        [segment] if segment.kind == PathSegmentKind::Tuple => {
+            segment.index.map(solid_dialect::ResultSlot::TupleItem)
+        }
+        _ => None,
+    }
+}
+
+/// Whether one traced argument source proves the demanded reactive role.
+///
+/// Three premises, each owned here rather than by the producer, and each
+/// enforced once: the caller selects the sources whose `path` is empty, so this
+/// does not restate that.
+///
+/// The trace has to be of a call *result* with a resolved callee. The kind gate
+/// stays even though today's producer emits a `DirectCallable` with no target
+/// — a function literal is not a dialect call, and
+/// `reactive_operation_input_refuses_every_unproven_provenance` pins what
+/// deleting the gate would cost by handing this a `DirectCallable` carrying a
+/// complete, plausible `createSignal` target. The `(name, slot)` pair has to be
+/// one every dialect that exports the name agrees is exactly this role, which
+/// is where a setter handed to an accessor position is refused. And the module
+/// the producer states has to be one a dialect exports that name from in value
+/// position, which is what keeps a package's own `function createSignal()` —
+/// traced with an empty module — from answering for the dialect's.
+fn traced_source_proves_role(
+    source: &typefacts::ImplementationValueSource,
+    role: ReactiveRole,
+) -> bool {
+    source.kind == typefacts::ImplementationValueSourceKind::CallResult
+        && !source.target.is_empty()
+        && solid_dialect::exports_value_from(&source.target_module, &source.target_name)
+        && traced_result_slot(source).is_some_and(|slot| {
+            solid_dialect::unambiguous_reactive_result_slot(&source.target_name, slot)
+                == Some(dialect_reactive_role(role))
+        })
+}
+
+/// Implementation evidence that an `invoke` operation's input carries the
+/// demanded reactive role.
+///
+/// The claim is universally quantified over the callback's call sites, and it
+/// has to be: `cb(accessor); cb(plainValue);` makes "there is a call that hands
+/// an accessor" true and the operation's input shape false. So every admitted
+/// call must prove it, and a call whose slot traces to nothing refuses the
+/// whole demand rather than being skipped — an empty trace is the producer's
+/// silence, never a plain value.
+///
+/// **The floor is `MayExecute`, deliberately, and this is the one branch here
+/// where that is not a relaxation.** The other operation-input branches assert
+/// what a position *is* and keep the strict floor, because a call in a loop
+/// body proves a parameter callable no more than it proves the loop runs. This
+/// demand's claim is conditional in the same shape a conditional call is:
+/// *whenever* this invoke happens, input `index` has this shape. Whether the
+/// invoke happens at all is the `operation-reachability` demand's question, and
+/// that one is answered separately through `callback.from`. `Unreachable` still
+/// clears nothing: a call after a `return` never happens, so it neither
+/// witnesses the shape nor contradicts it, and a census whose only matching
+/// call is unreachable leaves the set empty and refuses.
+///
+/// `captured` is not a veto for the same reason — marker's `mapMatch(text)`
+/// sits inside a `createRoot(dispose => …)` callback, and a claim about what
+/// that call passes does not depend on proving the closure runs. But the
+/// enclosing callable is recorded in the witness, so the audit shows which body
+/// each site sits in; a producer that says `captured` without naming one is
+/// refused rather than recorded as if it sat in the export's own body.
+///
+/// **Quantifying over the call census alone is not universal quantification,
+/// and that gap was a false-certification route.** The census states
+/// `calleeParameter` only for a call whose callee resolves to the parameter
+/// *exactly*, so five shapes that run the callback are invisible to it, each
+/// measured against the real producer: `const f = cb; f(plain)` (the call's
+/// callee is nil), `cb.call(null, plain)` and `cb.apply(…)` (the callee is the
+/// parameter at path length 1, which
+/// [`parameter_value_source_exact`] refuses), `Reflect.apply(cb, …)` and
+/// `holder.cb(plain)` (nil again), and `new cb(plain)` — a construction, for
+/// which the producer states no `calleeParameter` *by design*. A census of
+/// `[cb(accessor), <any of those>]` satisfied "every matching call proves the
+/// role" while the export handed the callback a plain value.
+///
+/// So the premise is **the use census accounts for the callback exactly as the
+/// calls this proof proved**: every use rooted at the callback parameter that
+/// the floor admits must *be the callee of* one of those calls. Not "lie
+/// inside" one — byte containment is the wrong relation, and reading it as
+/// coverage was a second false-certification route: `cb(text, cb)` and
+/// `cb(text, (held = cb))` put an `argumentKnown` and an `unknownEscape` use
+/// *inside* the proved call's own span, so a containment premise cleared them
+/// while the callback was handed to something else in the same call.
+///
+/// Identity is positional, and exactly so: a simple identifier callee is the
+/// call expression's first token, so the callee use and the call start at the
+/// same byte and the use ends inside the call. `cb?.(x)` also starts at `cb`.
+/// A parenthesized `(cb)(x)` starts the call one byte earlier than the use and
+/// is refused; that is an accepted over-refusal, pinned as one.
+///
+/// This subsumes a use-kind gate rather than restating it: `storage`,
+/// `aliasCall`, `propertyAccess`, `argumentKnown`, `return` and
+/// `unknownEscape` uses are the callee of no proved call, and neither is the
+/// `directCall` use inside `new cb(plain)`, because a construction is not one
+/// of the calls examined. It keeps the shape the proof must accept: marker's
+/// captured `cb(text)` is a `capture` use that *is* the callee of its proved
+/// call.
+///
+/// Two premises the census has to meet before any of that means anything. The
+/// transcript must be **complete with no open reason at all** — not even
+/// `controlFlowUnsupported`, which `require_export_implementation` otherwise
+/// admits: the use census withholds rows inside an unsafe-jump region, and a
+/// withheld escape is exactly what this premise cannot afford. And the
+/// callback must be bound to a *whole* parameter: the census is rooted at
+/// parameters, so for a callback at `Parameter{0, ["cb"]}` a use of `props` is
+/// indistinguishable from a use of `props.cb`, and a premise that skipped
+/// those rows would be vacuous precisely where the value can escape.
+fn require_reactive_operation_input(
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+    index: usize,
+    role: ReactiveRole,
+    implementation: &typefacts::ExportImplementationTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let callback = export
+        .callbacks()
+        .items()
+        .iter()
+        .find(|callback| callback.operation == operation.id)
+        .ok_or_else(|| open("reactive operation input has no exact callback source"))?;
+    let source = &callback.from;
+    if !matches!(source, ValueSource::Parameter { path, .. } if path.is_empty()) {
+        return Err(open(
+            "reactive operation input's callback is not bound to a whole parameter",
+        ));
+    }
+    if !implementation.complete || !implementation.open_reasons.is_empty() {
+        return Err(open(&format!(
+            "implementation use census is not exhaustive (complete={}, reasons={:?})",
+            implementation.complete, implementation.open_reasons
+        )));
+    }
+    let floor = ReachabilityFloor::MayExecute;
+    let mut witnesses = Vec::new();
+    let mut proved = Vec::new();
+    for call in &implementation.calls {
+        let names_callback = call.callee_parameter.as_ref().is_some_and(|actual| {
+            parameter_binding_matches(actual.parameter_index, &actual.path, source)
+        });
+        // The kind gate is load-bearing rather than decorative, for the reason
+        // spelled out on `require_parameter_read_call`: this side does not
+        // certify against the producer's habits. Today a construction states no
+        // `calleeParameter` at all — which is why the coverage premise below is
+        // what catches `new cb(plain)` — but a producer that did state one must
+        // not have it read as a call, at any path length.
+        if names_callback && !is_call_expression(call) {
+            return Err(open(&format!(
+                "callback parameter is constructed rather than called at {}:{}:{}",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            )));
+        }
+        if !is_call_expression(call)
+            || !call
+                .callee_parameter
+                .as_ref()
+                .is_some_and(|actual| parameter_value_source_exact(actual, source))
+        {
+            continue;
+        }
+        if !floor.admits(call.reach) {
+            continue;
+        }
+        if call.captured && call.enclosing_callable.is_none() {
+            return Err(open(
+                "reactive operation input has a captured call site with no enclosing callable",
+            ));
+        }
+        let traced = call
+            .argument_sources
+            .get(index)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let rooted = traced
+            .iter()
+            .filter(|source| source.path.is_empty())
+            .collect::<Vec<_>>();
+        if rooted.is_empty() {
+            return Err(open(&format!(
+                "reactive operation input {index} has no traced value at {}:{}:{}",
+                call.location.path, call.location.start_byte, call.location.end_byte
+            )));
+        }
+        if !rooted
+            .iter()
+            .all(|source| traced_source_proves_role(source, role))
+        {
+            return Err(open(&format!(
+                "reactive operation input {index} at {}:{}:{} does not trace to an unambiguous dialect {} result; observed {:?}",
+                call.location.path,
+                call.location.start_byte,
+                call.location.end_byte,
+                reactive_role_name(role),
+                rooted
+                    .iter()
+                    .map(|source| (
+                        source.target_module.as_ref(),
+                        source.target_name.as_ref(),
+                        traced_result_slot(source)
+                    ))
+                    .collect::<Vec<_>>()
+            )));
+        }
+        for source in rooted {
+            witnesses.push(format!(
+                "reactive-operation-input:{}:{}:{}:{}:{}:{}:{}:{}",
+                call.location.path,
+                call.location.start_byte,
+                call.location.end_byte,
+                index,
+                source.target_module,
+                source.target_name,
+                traced_result_slot_site(source),
+                enclosing_callable_site(call)
+            ));
+        }
+        proved.push(&call.location);
+    }
+    if witnesses.is_empty() {
+        return Err(open(&format!(
+            "reactive operation input {index} has no call of the exact callback parameter the implementation may reach"
+        )));
+    }
+    for usage in &implementation.parameter_uses {
+        if !parameter_binding_matches(usage.parameter_index, &usage.binding_path, source)
+            || !floor.admits(usage.reach)
+        {
+            continue;
+        }
+        if !proved
+            .iter()
+            .any(|proved| location_is_callee_of(&usage.location, proved))
+        {
+            return Err(open(&format!(
+                "callback parameter use {} at {}:{}:{} is not the callee of a proved call of it",
+                parameter_use_kind_site(usage.kind),
+                usage.location.path,
+                usage.location.start_byte,
+                usage.location.end_byte
+            )));
+        }
+    }
+    sites.extend(witnesses);
+    Ok(())
+}
+
+/// Whether `use_site` is the *callee* of the call at `call`, positionally.
+///
+/// A call expression begins at its callee, so an identifier callee starts at
+/// exactly the call's own start byte and ends inside it — `cb(x)` and
+/// `cb?.(x)` both. Deliberately not containment: an argument of the same call
+/// is contained by it and is not its callee, which is the whole distinction
+/// this premise turns on. A callee written with parentheses, `(cb)(x)`, starts
+/// one byte later than its call and is refused here; over-refusing that is the
+/// safe side of a positional rule.
+///
+/// It is never a claim about *execution*. That a use is a call's callee says
+/// nothing about whether the call runs; the floor answers that separately.
+fn location_is_callee_of(use_site: &typefacts::Location, call: &typefacts::Location) -> bool {
+    use_site.path == call.path
+        && use_site.start_byte == call.start_byte
+        && use_site.end_byte <= call.end_byte
+}
+
+/// The stable spelling of a traced result slot for a witness site.
+fn traced_result_slot_site(source: &typefacts::ImplementationValueSource) -> String {
+    match traced_result_slot(source) {
+        Some(solid_dialect::ResultSlot::Whole) => "whole".to_owned(),
+        Some(solid_dialect::ResultSlot::TupleItem(index)) => format!("tuple:{index}"),
+        None => "unaddressed".to_owned(),
+    }
+}
+
+/// The body a call sits in, named exactly: the innermost callable containing
+/// it, or the implementation's own body.
+fn enclosing_callable_site(call: &typefacts::ImplementationCall) -> String {
+    match &call.enclosing_callable {
+        Some(location) => format!(
+            "enclosing:{}:{}:{}",
+            location.path, location.start_byte, location.end_byte
+        ),
+        None => "enclosing:implementation-body".to_owned(),
+    }
+}
+
 fn require_operation_recursive_subject(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
@@ -3952,25 +4374,42 @@ fn require_operation_recursive_subject(
         let operation = exported
             .operation(&operation.0)
             .ok_or_else(|| open("recursive input operation is absent"))?;
-        let mut source = operation
+        let index = usize::from(*index);
+        let input = operation
             .inputs
-            .get(usize::from(*index))
-            .ok_or_else(|| open("recursive input index is absent"))
-            .and_then(parameter_source)?;
-        let path_is_exact_properties = if let ValueSource::Parameter {
-            path: source_path, ..
-        } = &mut source
-        {
-            path.0.iter().all(|segment| match segment {
-                ValuePathSegment::ObjectProperty(property) => {
-                    source_path.push(property.clone());
-                    true
-                }
-                ValuePathSegment::ChoiceAlternative(_) => true,
-                _ => false,
-            })
-        } else {
-            false
+            .get(index)
+            .ok_or_else(|| open("recursive input index is absent"))?;
+        // The reactive-input arm is answered *before* the parameter root is
+        // required, because this input is deliberately not parameter-rooted:
+        // the IR knows the value is a dialect accessor the export created
+        // itself, and the shape is what it has left to say so with.
+        if let Some(role) = reactive_operation_input_role(operation, input, path, *callable) {
+            let (export_semantics, implementation) =
+                require_export_implementation(plan, proof, transcript, open)?;
+            require_reactive_operation_input(
+                export_semantics,
+                operation,
+                index,
+                role,
+                implementation,
+                open,
+                sites,
+            )?;
+            return Ok(());
+        }
+        let (parameter, mut source_path) =
+            operation_input_parameter_root(input, proof, operation.id.0.as_str(), index)?;
+        let path_is_exact_properties = path.0.iter().all(|segment| match segment {
+            ValuePathSegment::ObjectProperty(property) => {
+                source_path.push(property.clone());
+                true
+            }
+            ValuePathSegment::ChoiceAlternative(_) => true,
+            _ => false,
+        });
+        let source = ValueSource::Parameter {
+            index: parameter,
+            path: source_path,
         };
         // A root path appends nothing above, so `source` is the same value the
         // unasserted arm has always read.
@@ -4017,17 +4456,16 @@ fn require_operation_recursive_signature(
             let operation = exported
                 .operation(&operation.0)
                 .ok_or_else(|| open("recursive input operation is absent"))?;
-            let source = operation
+            let index = usize::from(*index);
+            let input = operation
                 .inputs
-                .get(usize::from(*index))
-                .ok_or_else(|| open("recursive input index is absent"))
-                .and_then(parameter_source)?;
-            let ValueSource::Parameter { index, path } = source else {
-                return Err(open("recursive input is not parameter-rooted"));
-            };
+                .get(index)
+                .ok_or_else(|| open("recursive input index is absent"))?;
+            let (parameter_index, path) =
+                operation_input_parameter_root(input, proof, operation.id.0.as_str(), index)?;
             let parameter = signature
                 .parameters
-                .get(usize::from(index))
+                .get(usize::from(parameter_index))
                 .ok_or_else(|| open("recursive input parameter is absent"))?;
             (parameter.value.clone(), &parameter.callable_paths, path)
         }
@@ -10009,5 +10447,1052 @@ mod tests {
             verify_family(&guard, &conditional),
             Err(TypeFactsCertificationError::FamilyOpen { .. })
         ));
+    }
+
+    fn reactive_input_operation(
+        kind: OperationKind,
+        role: ReactiveRole,
+    ) -> solid_reactive_ir::contract_semantics::Operation {
+        let mut operation = operation("callback-0", kind, per_call_cardinality(Some(0)));
+        operation.inputs = vec![ValueShape::Reactive {
+            role,
+            resource: None,
+            capabilities: solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown,
+        }];
+        operation
+    }
+
+    fn reactive_input_export(
+        operation: &solid_reactive_ir::contract_semantics::Operation,
+    ) -> solid_reactive_ir::contract_semantics::ExportSemantics {
+        export_semantics(
+            vec![CallbackInvocation {
+                from: parameter_source_at(0, &[]),
+                operation: operation.id.clone(),
+            }],
+            vec![operation.clone()],
+        )
+    }
+
+    /// One `cb(argument)` census row: the callback parameter is the callee, and
+    /// slot 0 carries whatever provenance the row states.
+    fn callback_call(
+        start: usize,
+        reach: &str,
+        captured: bool,
+        sources: serde_json::Value,
+    ) -> serde_json::Value {
+        let mut call = json!({
+            "location": {"path": "/pkg/dist/index.js", "startByte": start, "endByte": start + 10},
+            "reach": reach,
+            "kind": "call",
+            "target": "symbol:callback",
+            "calleeParameter": {"parameterIndex": 0},
+            "argumentParameters": [null],
+            "argumentSources": [sources],
+        });
+        if captured {
+            call["captured"] = json!(true);
+            call["enclosingCallable"] =
+                json!({"path": "/pkg/dist/index.js", "startByte": 1, "endByte": 900});
+        }
+        call
+    }
+
+    fn implementation_with(
+        calls: Vec<serde_json::Value>,
+    ) -> typefacts::ExportImplementationTranscript {
+        implementation_with_uses(calls, Vec::new())
+    }
+
+    fn implementation_with_uses(
+        calls: Vec<serde_json::Value>,
+        parameter_uses: Vec<serde_json::Value>,
+    ) -> typefacts::ExportImplementationTranscript {
+        serde_json::from_value(json!({
+            "location": {"path": "/pkg/dist/index.js", "startByte": 0, "endByte": 4},
+            "calls": calls,
+            "parameterUses": parameter_uses,
+            "complete": true,
+        }))
+        .expect("a valid implementation transcript")
+    }
+
+    /// One use-census row for the callback parameter, at `start`.
+    fn callback_use(start: usize, kind: &str, captured: bool) -> serde_json::Value {
+        json!({
+            "parameterIndex": 0,
+            "location": {"path": "/pkg/dist/index.js", "startByte": start, "endByte": start + 2},
+            "reach": "reachable",
+            "kind": kind,
+            "captured": captured,
+        })
+    }
+
+    /// A call the census records with no callee parameter at all: an alias
+    /// call, a reflective apply, or a member call of a value the callback was
+    /// stored into.
+    fn callback_call_of_other_value(start: usize, sources: serde_json::Value) -> serde_json::Value {
+        json!({
+            "location": {"path": "/pkg/dist/index.js", "startByte": start, "endByte": start + 10},
+            "reach": "reachable",
+            "kind": "call",
+            "target": "symbol:other",
+            "argumentSources": [sources],
+        })
+    }
+
+    fn dialect_signal_source(slot: usize) -> serde_json::Value {
+        json!([{
+            "kind": "callResult",
+            "target": "symbol:createSignal",
+            "targetName": "createSignal",
+            "targetModule": "solid-js",
+            "targetPath": [{"kind": "tuple", "index": slot}],
+        }])
+    }
+
+    fn reactive_input_result(
+        role: ReactiveRole,
+        calls: Vec<serde_json::Value>,
+    ) -> Result<Vec<String>, TypeFactsCertificationError> {
+        reactive_input_result_with_uses(role, calls, Vec::new())
+    }
+
+    fn reactive_input_result_with_uses(
+        role: ReactiveRole,
+        calls: Vec<serde_json::Value>,
+        uses: Vec<serde_json::Value>,
+    ) -> Result<Vec<String>, TypeFactsCertificationError> {
+        let operation = reactive_input_operation(OperationKind::Invoke, role);
+        let export = reactive_input_export(&operation);
+        let implementation = implementation_with_uses(calls, uses);
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "recursive".into(),
+            reason: reason.into(),
+        };
+        let mut sites = Vec::new();
+        require_reactive_operation_input(
+            &export,
+            &operation,
+            0,
+            role,
+            &implementation,
+            &open,
+            &mut sites,
+        )?;
+        Ok(sites)
+    }
+
+    // Mechanism A: the export created the accessor itself and handed it to the
+    // callback, so the input's shape is proved by the callback's own call sites
+    // rather than by binding the input to a parameter it does not come from.
+    // This is `@solid-primitives/marker`'s `mapMatch(text)` exactly — reach
+    // `Unknown`, captured inside a `createRoot(dispose => …)` callback.
+    #[test]
+    fn reactive_operation_input_is_proved_by_traced_dialect_provenance() {
+        let sites = reactive_input_result(
+            ReactiveRole::Accessor,
+            vec![callback_call(
+                100,
+                "unknown",
+                true,
+                dialect_signal_source(0),
+            )],
+        )
+        .expect("a traced dialect accessor proves the input shape");
+        assert_eq!(sites.len(), 1);
+        assert!(
+            sites[0].starts_with("reactive-operation-input:/pkg/dist/index.js:100:110:0:solid-js:createSignal:tuple:0:"),
+            "the witness names the call, the slot and the traced result: {}",
+            sites[0]
+        );
+        assert!(
+            sites[0].ends_with("enclosing:/pkg/dist/index.js:1:900"),
+            "a captured call site records the body it sits in: {}",
+            sites[0]
+        );
+
+        // The uncaptured case records the export's own body rather than
+        // nothing, so a witness never omits where it was observed.
+        let own_body = reactive_input_result(
+            ReactiveRole::Accessor,
+            vec![callback_call(
+                100,
+                "reachable",
+                false,
+                dialect_signal_source(0),
+            )],
+        )
+        .expect("an uncaptured reachable call is evidence too");
+        assert!(
+            own_body[0].ends_with("enclosing:implementation-body"),
+            "{}",
+            own_body[0]
+        );
+
+        // The setter slot proves the setter role, on the same table.
+        reactive_input_result(
+            ReactiveRole::Setter,
+            vec![callback_call(
+                100,
+                "reachable",
+                false,
+                dialect_signal_source(1),
+            )],
+        )
+        .expect("slot 1 is the setter in every dialect that exports createSignal");
+    }
+
+    // Every trap in the design that must not clear, each as its own row. A
+    // mutation that drops any one premise turns exactly one of these green.
+    #[test]
+    fn reactive_operation_input_refuses_every_unproven_provenance() {
+        let local_factory = json!([{
+            "kind": "callResult",
+            "target": "symbol:myOwnAccessorFactory",
+            "targetName": "myOwnAccessorFactory",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+        let local_same_name = json!([{
+            "kind": "callResult",
+            "target": "symbol:local-createSignal",
+            "targetName": "createSignal",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+        let unresolved_callee = json!([{
+            "kind": "callResult",
+            "targetName": "createSignal",
+            "targetModule": "solid-js",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+        let direct_callable = json!([{"kind": "directCallable"}]);
+        let property_path = json!([{
+            "kind": "callResult",
+            "target": "symbol:createSignal",
+            "targetName": "createSignal",
+            "targetModule": "solid-js",
+            "targetPath": [{"kind": "property", "property": "read"}],
+        }]);
+        let foreign_module = json!([{
+            "kind": "callResult",
+            "target": "symbol:createSignal",
+            "targetName": "createSignal",
+            "targetModule": "my-signals",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+
+        for (label, calls) in [
+            // A non-dialect helper: traced, resolved, and answered by no
+            // dialect table.
+            (
+                "a locally declared factory",
+                vec![callback_call(100, "reachable", false, local_factory)],
+            ),
+            // The same, named `createSignal`. The name is not the premise; the
+            // module the producer states is, and a local declaration states
+            // none.
+            (
+                "a local function named createSignal",
+                vec![callback_call(100, "reachable", false, local_same_name)],
+            ),
+            // A dialect name from a module no dialect exports it from.
+            (
+                "a foreign module",
+                vec![callback_call(100, "reachable", false, foreign_module)],
+            ),
+            // `(options.storage || createSignal)(…)` resolves to no callee, so
+            // the producer traces nothing at all.
+            (
+                "an untraced argument",
+                vec![callback_call(100, "reachable", false, json!([]))],
+            ),
+            // The slot is missing from the census entirely.
+            (
+                "an absent slot",
+                vec![json!({
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "target": "symbol:callback",
+                    "calleeParameter": {"parameterIndex": 0},
+                })],
+            ),
+            // A resolved trace with no callee symbol is not a resolved callee.
+            (
+                "an unresolved callee symbol",
+                vec![callback_call(100, "reachable", false, unresolved_callee)],
+            ),
+            // A function literal is not a dialect call result.
+            (
+                "a direct callable",
+                vec![callback_call(100, "reachable", false, direct_callable)],
+            ),
+            // A property of a result is a slot this table does not answer.
+            (
+                "an unaddressed result path",
+                vec![callback_call(100, "reachable", false, property_path)],
+            ),
+            // The setter, where the accessor was demanded. This is the trap a
+            // rule proving "traced to createSignal slot n" without comparing
+            // roles would clear.
+            (
+                "the wrong role",
+                vec![callback_call(
+                    100,
+                    "reachable",
+                    false,
+                    dialect_signal_source(1),
+                )],
+            ),
+            // A second call hands a value the producer traced nothing for. The
+            // claim is about the input of every invoke, so one counterexample
+            // refuses -- this is what makes "some witnessing call" unsound.
+            (
+                "a second call with an untraced value",
+                vec![
+                    callback_call(100, "reachable", false, dialect_signal_source(0)),
+                    callback_call(200, "reachable", false, json!([])),
+                ],
+            ),
+            // Code after a `return` never runs, so it witnesses nothing, and a
+            // census whose only matching call is unreachable proves nothing.
+            (
+                "only an unreachable call",
+                vec![callback_call(
+                    100,
+                    "unreachable",
+                    false,
+                    dialect_signal_source(0),
+                )],
+            ),
+            // A call of something else is not a call of the callback.
+            (
+                "a call of another value",
+                vec![json!({
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "target": "symbol:other",
+                    "argumentSources": [dialect_signal_source(0)],
+                })],
+            ),
+            // A construction is not a call.
+            (
+                "a construction",
+                vec![json!({
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
+                    "reach": "reachable",
+                    "kind": "construct",
+                    "target": "symbol:callback",
+                    "calleeParameter": {"parameterIndex": 0},
+                    "argumentSources": [dialect_signal_source(0)],
+                })],
+            ),
+            // A producer that says `captured` without naming the callable it
+            // is captured in leaves the witness unable to say where the call
+            // sits, which is a fact this proof records rather than assumes.
+            (
+                "a captured call with no enclosing callable",
+                vec![json!({
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 110},
+                    "reach": "reachable",
+                    "kind": "call",
+                    "target": "symbol:callback",
+                    "calleeParameter": {"parameterIndex": 0},
+                    "captured": true,
+                    "argumentSources": [dialect_signal_source(0)],
+                })],
+            ),
+        ] {
+            assert!(
+                matches!(
+                    reactive_input_result(ReactiveRole::Accessor, calls),
+                    Err(TypeFactsCertificationError::FamilyOpen { .. })
+                ),
+                "{label} must not clear a reactive operation input"
+            );
+        }
+
+        // A callback bound to a different operation is no callback for this
+        // one.
+        let operation = reactive_input_operation(OperationKind::Invoke, ReactiveRole::Accessor);
+        let export = export_semantics(
+            vec![CallbackInvocation {
+                from: parameter_source_at(0, &[]),
+                operation: solid_reactive_ir::contract_semantics::OperationId("callback-9".into()),
+            }],
+            vec![operation.clone()],
+        );
+        let implementation = implementation_with(vec![callback_call(
+            100,
+            "reachable",
+            false,
+            dialect_signal_source(0),
+        )]);
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "recursive".into(),
+            reason: reason.into(),
+        };
+        assert!(
+            require_reactive_operation_input(
+                &export,
+                &operation,
+                0,
+                ReactiveRole::Accessor,
+                &implementation,
+                &open,
+                &mut Vec::new(),
+            )
+            .is_err(),
+            "the callback bound to this exact operation is the only one that answers"
+        );
+    }
+
+    // The use census is the universal quantifier the call census cannot be.
+    // Every shape here runs the callback with a value the call census does not
+    // show, measured against the real producer, and every one of them returned
+    // `Ok` before this premise existed.
+    #[test]
+    fn reactive_operation_input_requires_the_use_census_to_hold_no_other_route() {
+        // The accepted baseline: the proved call at 100..110, its own
+        // `directCall` use inside it, and nothing else.
+        let proved = callback_call(100, "reachable", false, dialect_signal_source(0));
+        reactive_input_result_with_uses(
+            ReactiveRole::Accessor,
+            vec![proved.clone()],
+            vec![callback_use(100, "directCall", false)],
+        )
+        .expect("a call whose only use is the call itself is fully accounted for");
+
+        // marker's real shape: the call sits inside a `createRoot(dispose =>
+        // …)` callback, so the producer classifies the use as `capture` with
+        // `captured: true`. It is still covered by the proved call, and a
+        // premise that demanded `directCall` would refuse all three marker
+        // rows.
+        reactive_input_result_with_uses(
+            ReactiveRole::Accessor,
+            vec![callback_call(
+                100,
+                "unknown",
+                true,
+                dialect_signal_source(0),
+            )],
+            vec![callback_use(100, "capture", true)],
+        )
+        .expect("a captured call of the callback is covered by that call");
+
+        // `cb?.(x)` is an ordinary call whose callee still starts at `cb`, so
+        // the identity relation holds for it unchanged.
+        reactive_input_result_with_uses(
+            ReactiveRole::Accessor,
+            vec![proved.clone()],
+            vec![callback_use(100, "directCall", false)],
+        )
+        .expect("an optional call is a call");
+
+        for (label, calls, uses) in [
+            // `cb(text, cb)`: the callback is its own second argument. The
+            // `argumentKnown` use sits *inside* the proved call's span, which
+            // is why containment was the wrong relation and identity is the
+            // right one.
+            (
+                "the callback as an argument of its own call",
+                vec![proved.clone()],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(105, "argumentKnown", false),
+                ],
+            ),
+            // `cb(text, (held = cb))`: the same, through an assignment the
+            // producer cannot classify.
+            (
+                "an assignment escape inside the proved call",
+                vec![proved.clone()],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(106, "unknownEscape", false),
+                ],
+            ),
+            // `cb(text)(cb)`: the outer call's callee is the *result*, so the
+            // census states no callee parameter for it, and the callback is
+            // its argument -- inside the outer span, outside the proved one.
+            (
+                "the callback as an argument of a call of its result",
+                vec![proved.clone(), callback_call_of_other_value(100, json!([]))],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(108, "argumentKnown", false),
+                ],
+            ),
+            // `cb(text, () => cb(plain))`: the nested arrow's own call is a
+            // matching call whose slot traces nothing, so the per-call rule
+            // refuses first -- but the `capture` use is also not the callee of
+            // the outer proved call, so either premise alone catches it.
+            (
+                "a nested closure that calls the callback",
+                vec![proved.clone()],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(104, "capture", true),
+                ],
+            ),
+            // `(cb)(x)`: the call starts at the parenthesis and the callee one
+            // byte later. Refusing this is an accepted over-refusal of the
+            // positional rule, pinned so it stays a decision.
+            (
+                "a parenthesized callee",
+                vec![callback_call(
+                    100,
+                    "reachable",
+                    false,
+                    dialect_signal_source(0),
+                )],
+                vec![callback_use(101, "directCall", false)],
+            ),
+            // `const f = cb; f(plain)`: the alias call's callee is nil, so the
+            // call census never sees it. The `storage` use is the evidence.
+            (
+                "an alias binding",
+                vec![proved.clone(), callback_call_of_other_value(200, json!([]))],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(150, "storage", false),
+                    callback_use(200, "aliasCall", false),
+                ],
+            ),
+            // `cb.call(null, plain)` / `cb.apply(…)`: the callee is the
+            // parameter at path length 1, which the exact match refuses, so
+            // the call is skipped. The `propertyAccess` use is the evidence.
+            (
+                "a call through Function.prototype.call",
+                vec![
+                    proved.clone(),
+                    json!({
+                        "location": {"path": "/pkg/dist/index.js", "startByte": 200, "endByte": 220},
+                        "reach": "reachable",
+                        "kind": "call",
+                        "target": "symbol:call",
+                        "calleeParameter": {"parameterIndex": 0, "path": [{"kind": "property", "property": "call"}]},
+                        "argumentSources": [json!([]), json!([])],
+                    }),
+                ],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(201, "propertyAccess", false),
+                ],
+            ),
+            // `Reflect.apply(cb, null, [plain])`: the callback is an argument.
+            (
+                "a reflective apply",
+                vec![proved.clone(), callback_call_of_other_value(200, json!([]))],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(205, "argumentKnown", false),
+                ],
+            ),
+            // `holder.cb = cb; holder.cb(plain)`: the producer cannot classify
+            // the escape at all.
+            (
+                "an escape into a property",
+                vec![proved.clone(), callback_call_of_other_value(300, json!([]))],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(200, "unknownEscape", false),
+                ],
+            ),
+            // `const holder = { cb }; holder.cb(plain)`: the object-literal
+            // shorthand. Its use row exists only because the producer stopped
+            // treating a shorthand name as a declaration name -- before that
+            // the census recorded nothing at all here and this premise was
+            // vacuous for the one spelling that names the value once.
+            (
+                "an object-literal shorthand escape",
+                vec![proved.clone(), callback_call_of_other_value(300, json!([]))],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(210, "unknownEscape", false),
+                ],
+            ),
+            // `return cb`: the value leaves, and what the caller passes it is
+            // not in this census.
+            (
+                "a returned callback",
+                vec![proved.clone()],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(200, "return", false),
+                ],
+            ),
+            // `new cb(plain)`: a construction states no `calleeParameter` at
+            // all, so neither the kind gate nor an exact-callee match sees it,
+            // and the producer classifies its callee as a `directCall` use.
+            // Only coverage catches it.
+            (
+                "a construction of the callback",
+                vec![
+                    proved.clone(),
+                    json!({
+                        "location": {"path": "/pkg/dist/index.js", "startByte": 200, "endByte": 215},
+                        "reach": "reachable",
+                        "kind": "construct",
+                        "argumentSources": [json!([])],
+                    }),
+                ],
+                vec![
+                    callback_use(100, "directCall", false),
+                    callback_use(205, "directCall", false),
+                ],
+            ),
+            // The same construction from a producer that *did* state the
+            // callee. The kind gate owns this one, at any path length.
+            (
+                "a construction naming the callback as its callee",
+                vec![
+                    proved.clone(),
+                    json!({
+                        "location": {"path": "/pkg/dist/index.js", "startByte": 200, "endByte": 215},
+                        "reach": "reachable",
+                        "kind": "construct",
+                        "target": "symbol:callback",
+                        "calleeParameter": {"parameterIndex": 0},
+                        "argumentSources": [json!([])],
+                    }),
+                ],
+                vec![callback_use(100, "directCall", false)],
+            ),
+            // A use in another file is not covered by a call in this one.
+            (
+                "a use in another file",
+                vec![proved.clone()],
+                vec![json!({
+                    "parameterIndex": 0,
+                    "location": {"path": "/pkg/dist/other.js", "startByte": 100, "endByte": 102},
+                    "reach": "reachable",
+                    "kind": "directCall",
+                })],
+            ),
+        ] {
+            assert!(
+                matches!(
+                    reactive_input_result_with_uses(ReactiveRole::Accessor, calls, uses),
+                    Err(TypeFactsCertificationError::FamilyOpen { .. })
+                ),
+                "{label} must not clear a reactive operation input"
+            );
+        }
+
+        // An unreachable use runs no more than an unreachable call, so it is
+        // no route either -- and it does not refuse a proof the reachable
+        // calls carry.
+        reactive_input_result_with_uses(
+            ReactiveRole::Accessor,
+            vec![proved],
+            vec![
+                callback_use(100, "directCall", false),
+                json!({
+                    "parameterIndex": 0,
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 300, "endByte": 302},
+                    "reach": "unreachable",
+                    "kind": "storage",
+                }),
+            ],
+        )
+        .expect("a use the implementation cannot reach is not a route to the callback");
+    }
+
+    // The premises the coverage rule itself rests on. Each is a way for the
+    // use census to be *unable* to answer, and each fails closed.
+    #[test]
+    fn reactive_operation_input_requires_an_answerable_use_census() {
+        let operation = reactive_input_operation(OperationKind::Invoke, ReactiveRole::Accessor);
+        let export = reactive_input_export(&operation);
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "recursive".into(),
+            reason: reason.into(),
+        };
+        let calls = vec![callback_call(
+            100,
+            "reachable",
+            false,
+            dialect_signal_source(0),
+        )];
+        let uses = vec![callback_use(100, "directCall", false)];
+        let attempt = |implementation: typefacts::ExportImplementationTranscript| {
+            require_reactive_operation_input(
+                &export,
+                &operation,
+                0,
+                ReactiveRole::Accessor,
+                &implementation,
+                &open,
+                &mut Vec::new(),
+            )
+        };
+
+        // An incomplete transcript, and a transcript open only for
+        // `controlFlowUnsupported` -- which `require_export_implementation`
+        // otherwise admits. The use census withholds rows inside an
+        // unsafe-jump region, so an open transcript is one whose escapes this
+        // premise cannot enumerate.
+        for open_reasons in [json!([]), json!(["controlFlowUnsupported"])] {
+            let incomplete: typefacts::ExportImplementationTranscript =
+                serde_json::from_value(json!({
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 0, "endByte": 4},
+                    "calls": calls.clone(),
+                    "parameterUses": uses.clone(),
+                    "complete": open_reasons.as_array().is_some_and(|reasons| !reasons.is_empty()),
+                    "openReasons": open_reasons,
+                }))
+                .expect("a valid implementation transcript");
+            assert!(
+                attempt(incomplete).is_err(),
+                "a census that is incomplete or open cannot be read as exhaustive"
+            );
+        }
+
+        // A callback bound to a property of a parameter, with a census that
+        // would otherwise prove it: the call states that exact callee path and
+        // hands it the accessor. What the census cannot state is whether
+        // `props.cb` *escaped* -- its use rows are rooted at `props`, and a
+        // `storage` use of `props` neither is nor is not a use of the
+        // callback. Skipping those rows would leave the premise vacuous
+        // exactly where the value can leave, so the demand is refused instead.
+        let nested = export_semantics(
+            vec![CallbackInvocation {
+                from: parameter_source_at(0, &["cb"]),
+                operation: operation.id.clone(),
+            }],
+            vec![operation.clone()],
+        );
+        let mut nested_call = callback_call(100, "reachable", false, dialect_signal_source(0));
+        nested_call["calleeParameter"] = json!({
+            "parameterIndex": 0,
+            "path": [{"kind": "property", "property": "cb"}],
+        });
+        let mut nested_callee_use = callback_use(100, "propertyAccess", false);
+        nested_callee_use["bindingPath"] = json!([{"kind": "property", "property": "cb"}]);
+        let error = require_reactive_operation_input(
+            &nested,
+            &operation,
+            0,
+            ReactiveRole::Accessor,
+            &implementation_with_uses(
+                vec![nested_call],
+                vec![
+                    nested_callee_use,
+                    // `const held = props;` -- rooted at the parameter, with
+                    // no path, so it says nothing about the property.
+                    callback_use(300, "storage", false),
+                ],
+            ),
+            &open,
+            &mut Vec::new(),
+        )
+        .expect_err("a callback at a property path has no use-census row of its own");
+        let TypeFactsCertificationError::FamilyOpen { reason, .. } = &error else {
+            panic!("unexpected error {error:?}");
+        };
+        assert!(
+            reason.contains("not bound to a whole parameter"),
+            "the refusal names the premise it fails, not a downstream symptom: {reason}"
+        );
+
+        // The rooted match is over the demanded parameter, not over "index 0
+        // with an empty binding path". A use of a *different* parameter is
+        // irrelevant and must not refuse; a use of this one through a
+        // destructured binding path is relevant and must.
+        let mut other_parameter = callback_use(300, "storage", false);
+        other_parameter["parameterIndex"] = json!(1);
+        reactive_input_result_with_uses(
+            ReactiveRole::Accessor,
+            calls.clone(),
+            vec![callback_use(100, "directCall", false), other_parameter],
+        )
+        .expect("a use of another parameter is not a use of the callback");
+
+        let mut bound_path = callback_use(300, "storage", false);
+        bound_path["bindingPath"] = json!([{"kind": "property", "property": "handler"}]);
+        assert!(
+            matches!(
+                reactive_input_result_with_uses(
+                    ReactiveRole::Accessor,
+                    calls,
+                    vec![callback_use(100, "directCall", false), bound_path],
+                ),
+                Err(TypeFactsCertificationError::FamilyOpen { .. })
+            ),
+            "a use rooted at the callback through a binding path is still a use of it"
+        );
+    }
+
+    // The two premises a reviewer's mutation survived. Each is pinned by a
+    // transcript that only that premise refuses.
+    #[test]
+    fn reactive_operation_input_premises_are_each_load_bearing() {
+        // `all` versus `any`: one slot, two rooted sources, one of which is a
+        // setter. A rule that accepted "some source proves the role" would
+        // certify this.
+        let mut disagreeing = dialect_signal_source(0);
+        disagreeing
+            .as_array_mut()
+            .expect("an array of sources")
+            .push(json!({
+                "kind": "callResult",
+                "target": "symbol:createSignal",
+                "targetName": "createSignal",
+                "targetModule": "solid-js",
+                "targetPath": [{"kind": "tuple", "index": 1}],
+            }));
+        assert!(
+            matches!(
+                reactive_input_result(
+                    ReactiveRole::Accessor,
+                    vec![callback_call(100, "reachable", false, disagreeing)]
+                ),
+                Err(TypeFactsCertificationError::FamilyOpen { .. })
+            ),
+            "two rooted sources that disagree about the role refuse the demand"
+        );
+
+        // The rooted-path selection. `cb([text])` traces slot 0 of the
+        // *argument* to `createSignal` slot 0, and the argument is an array
+        // holding the accessor rather than the accessor. The demand names the
+        // input's root, so only a source at the root answers it -- this is the
+        // premise the caller's `path.is_empty()` filter carries, and the one
+        // that must not be widened into "any source anywhere in the argument".
+        assert!(
+            matches!(
+                reactive_input_result(
+                    ReactiveRole::Accessor,
+                    vec![callback_call(
+                        100,
+                        "reachable",
+                        false,
+                        json!([{
+                            "path": [{"kind": "tuple", "index": 0}],
+                            "kind": "callResult",
+                            "target": "symbol:createSignal",
+                            "targetName": "createSignal",
+                            "targetModule": "solid-js",
+                            "targetPath": [{"kind": "tuple", "index": 0}],
+                        }])
+                    )]
+                ),
+                Err(TypeFactsCertificationError::FamilyOpen { .. })
+            ),
+            "an accessor inside the argument is not the argument"
+        );
+
+        // The `CallResult` kind gate. Today's producer emits a
+        // `DirectCallable` with no target at all, so the gate looks
+        // redundant with the target premises -- this is what deleting it
+        // would cost: a function literal with a complete, plausible
+        // `createSignal` provenance beside it.
+        assert!(
+            matches!(
+                reactive_input_result(
+                    ReactiveRole::Accessor,
+                    vec![callback_call(
+                        100,
+                        "reachable",
+                        false,
+                        json!([{
+                            "kind": "directCallable",
+                            "target": "symbol:createSignal",
+                            "targetName": "createSignal",
+                            "targetModule": "solid-js",
+                            "targetPath": [{"kind": "tuple", "index": 0}],
+                        }])
+                    )]
+                ),
+                Err(TypeFactsCertificationError::FamilyOpen { .. })
+            ),
+            "a function literal is not a dialect call result, whatever else the row carries"
+        );
+    }
+
+    // The whole of a returned value is a slot too, and it is reachable:
+    // `cb(createMemo(fn))` traces through the call-expression arm, which emits
+    // an empty target path. Measured against the real producer, which reports
+    // `callResult:createMemo@"solid-js"` with no target-path segments.
+    #[test]
+    fn reactive_operation_input_accepts_a_whole_result_accessor() {
+        let sites = reactive_input_result(
+            ReactiveRole::Accessor,
+            vec![callback_call(
+                100,
+                "reachable",
+                false,
+                json!([{
+                    "kind": "callResult",
+                    "target": "symbol:createMemo",
+                    "targetName": "createMemo",
+                    "targetModule": "solid-js",
+                }]),
+            )],
+        )
+        .expect("createMemo returns an accessor whole in both dialects");
+        assert!(
+            sites[0].contains(":solid-js:createMemo:whole:"),
+            "the witness names the whole result rather than a slot: {}",
+            sites[0]
+        );
+    }
+
+    // Which demands the arm claims at all. Every premise is required, and a
+    // demand missing one falls through to the parameter-rooted path rather
+    // than being answered by a value trace.
+    #[test]
+    fn reactive_operation_input_arm_claims_only_root_invoke_inputs() {
+        let empty = solid_reactive_ir::contract_semantics::ValuePath::default();
+        let invoke = reactive_input_operation(OperationKind::Invoke, ReactiveRole::Accessor);
+        assert_eq!(
+            reactive_operation_input_role(
+                &invoke,
+                &invoke.inputs[0],
+                &empty,
+                DemandedCallability::Unknown
+            ),
+            Some(ReactiveRole::Accessor)
+        );
+
+        // A `read` operation's input carries no span at all, so the callback
+        // call sites this arm reads do not exist for it.
+        let read = reactive_input_operation(OperationKind::Read, ReactiveRole::Accessor);
+        assert_eq!(
+            reactive_operation_input_role(
+                &read,
+                &read.inputs[0],
+                &empty,
+                DemandedCallability::Unknown
+            ),
+            None
+        );
+
+        // A callability claim is not something a value trace answers.
+        for callable in [
+            DemandedCallability::Callable,
+            DemandedCallability::NonCallable,
+        ] {
+            assert_eq!(
+                reactive_operation_input_role(&invoke, &invoke.inputs[0], &empty, callable),
+                None,
+                "{callable:?} asserts something this witness does not prove"
+            );
+        }
+
+        // A property inside the traced value is not what the census traced.
+        let property = solid_reactive_ir::contract_semantics::ValuePath(vec![
+            ValuePathSegment::ObjectProperty("read".into()),
+        ]);
+        assert_eq!(
+            reactive_operation_input_role(
+                &invoke,
+                &invoke.inputs[0],
+                &property,
+                DemandedCallability::Unknown
+            ),
+            None
+        );
+
+        // Every other shape stays unsupported. `Plain` carries a negative
+        // callability claim the census cannot make about an argument value,
+        // and `Object` needs a property path the tracer does not produce.
+        for shape in [
+            ValueShape::Plain,
+            ValueShape::Callable,
+            ValueShape::Object(solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown),
+            ValueShape::Store {
+                resource: None,
+                capabilities: solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown,
+            },
+        ] {
+            assert_eq!(
+                reactive_operation_input_role(
+                    &invoke,
+                    &shape,
+                    &empty,
+                    DemandedCallability::Unknown
+                ),
+                None,
+                "{shape:?} is not a reactive input this arm proves"
+            );
+        }
+    }
+
+    // The refusal every unsupported operation input takes, and the whole
+    // reason it was rewritten: the message names the demand, the exact input,
+    // the shape and the family, so the audit sidecar can attribute it instead
+    // of reporting `demandId: null, family: null` for six different packages.
+    #[test]
+    fn unsupported_operation_input_refusal_names_the_demand_and_the_shape() {
+        // The operation identity an emitted document carries: already
+        // qualified by artifact case and export, which is why the refusal
+        // names the input once instead of repeating those two fields.
+        const OPERATION: &str = "artifact-case:097ee468:createMarker:operation:callback-0";
+        let proof = proof(
+            ProofFamily::RecursiveValueShape,
+            ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue {
+                artifact_case: "artifact-case:097ee468".into(),
+                export: "createMarker".into(),
+                root: ValueRoot::OperationInput {
+                    operation: solid_reactive_ir::contract_semantics::OperationId(OPERATION.into()),
+                    index: 0,
+                },
+                path: solid_reactive_ir::contract_semantics::ValuePath::default(),
+                callable: DemandedCallability::Unknown,
+            }),
+        );
+        let error = operation_input_parameter_root(
+            &ValueShape::Reactive {
+                role: ReactiveRole::Accessor,
+                resource: None,
+                capabilities: solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown,
+            },
+            &proof,
+            OPERATION,
+            0,
+        )
+        .expect_err("a reactive input has no parameter root");
+        let TypeFactsCertificationError::UnsupportedDemand { demand, reason } = &error else {
+            panic!("unexpected error {error:?}");
+        };
+        assert_eq!(demand, &proof.id);
+        assert_eq!(
+            reason,
+            "operation input artifact-case:097ee468:createMarker:operation:callback-0[0] is reactive/accessor, and the implementation census binds only parameter-rooted operation inputs (family=recursive-value-shape)"
+        );
+
+        // The shape spelling is stable and per-constructor, so a test may pin
+        // it and a shape gaining a field cannot move it.
+        assert_eq!(value_shape_constructor(&ValueShape::Plain), "plain");
+        assert_eq!(
+            value_shape_constructor(&ValueShape::Object(
+                solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown
+            )),
+            "object"
+        );
+        assert_eq!(
+            value_shape_constructor(&ValueShape::Reactive {
+                role: ReactiveRole::Setter,
+                resource: None,
+                capabilities: solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown,
+            }),
+            "reactive/setter"
+        );
+
+        // A parameter-rooted input still answers, with its exact path.
+        let (index, path) = operation_input_parameter_root(
+            &ValueShape::Parameter {
+                index: 1,
+                path: vec!["of".into()],
+            },
+            &proof,
+            OPERATION,
+            0,
+        )
+        .expect("a parameter-rooted input has a root");
+        assert_eq!((index, path), (1, vec!["of".to_owned()]));
     }
 }

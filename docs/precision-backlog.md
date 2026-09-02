@@ -11183,3 +11183,263 @@ three runs of this session took 136–149 s with 97–123 s of install time — 
 phase the callable-path census cannot touch — on a host reporting a load
 average of 19 on 14 cores from unrelated processes. A quiet-host measurement
 remains owed before the performance-budget test is re-pinned.
+
+## 2026-09-02 — Argument value provenance proves a created accessor's shape
+
+Six ecosystem rows refused certification with
+
+```
+Type Facts demand operation-input is unsupported: implementation census only
+binds exact parameter-rooted operation inputs
+```
+
+for an operation input the emitted contract states as `reactive/accessor`. The
+message named neither the demand nor the subject — `demand` was the literal
+string `"operation-input"` — so the audit sidecar recorded `demandId: null,
+family: null` and all six rows were one indistinguishable class. Two mechanisms
+hid behind it, and this change closes one of them. Type Facts protocol 11 → 12;
+the protocol-12 schema digest is
+`sha256:3d97fa9a3cb8d0b0ac1ca7f8b116a07cfa5774efdefcb7ddc1d8ab51d72f60e0`
+(protocol 11 was
+`sha256:b9f4c20081ad2a9ac81502514d296ac229c3301ef960ea3b745d5eaad5b31d51`).
+The rules are in `docs/typefacts/adr/0024-v1-argument-value-provenance.md`.
+
+**Mechanism A, closed.** `createMarker` creates a signal and hands the accessor
+to the caller's callback (`const [text, set] = createSignal(matchText); …
+mapMatch(text)`). The producer now states `argumentSources` per written argument
+slot — the provenance walk that already answered return expressions — and the
+certifier's new reactive-input arm discharges the demand when every call of the
+exact callback parameter it may reach traces that slot to a call result whose
+`(name, slot)` the dialect table answers as exactly the demanded role.
+
+**Mechanism B, still open.** A `read` operation's `Reactive` input carries no
+span: `contracts.rs`'s `contract_export_function` drops each `SummaryRead`'s
+origin location, declaration and symbol and keeps a display string, which
+`inferred_contract.rs` then drops too. The operation therefore cannot be matched
+to a census call at all, and the strongest claim available from a universal rule
+over callee provenance is existential-plus-no-counterexample — weaker than
+mechanism A on purpose, and not implemented. No `calleeSources` producer field
+was added.
+
+Per-row, measured with a debug checker carrying the producer pin
+(`make build-checker-debug` supplies it; a bare `cargo build` produces a binary
+that refuses with "verifier build has no configured Type Facts executable
+digest" and measures nothing):
+
+| row | before | after |
+| --- | --- | --- |
+| `@solid-primitives/marker@0.2.2\|solid1\|only` | refused, `operation-input` | **certified** |
+| `@solid-primitives/marker@2.0.0-next.2\|solid2\|floor` | refused, `operation-input` | **certified** |
+| `@solid-primitives/marker@2.0.0-next.2\|solid2\|head` | refused, `operation-input` | **certified** |
+| `@solid-primitives/timer@1.4.5-next.1\|solid2\|floor` | refused, unattributed | refused, `operation-reachability`, demand `sha256:1aee58a94efcff998c64340690189232b89ab9cdfbaf4bc6d816b428b80adf62` |
+| `@solid-primitives/timer@1.4.5-next.1\|solid2\|head` | refused, unattributed | same demand digest as floor |
+| `solid-js@1.9.14\|solid1\|only` | refused, unattributed | refused, `recursive-value-shape`, demand `sha256:5463f0ed0af9a202b45f80b731fdba6d9048d2898f3ab5847973ec4156370f7c` |
+
+The two refusals are pinned as controls, with their exact text:
+
+```
+Type Facts demand sha256:1aee58a9… is unsupported: operation input
+artifact-case:5b9787fbde29759dd77afc0974f51ce4558822de811cb1f1a1496c7a4b386390:createIntervalCounter:operation:read-0[0]
+is reactive/accessor, and the implementation census binds only parameter-rooted
+operation inputs (family=operation-reachability)
+```
+
+```
+Type Facts demand sha256:5463f0ed… is unsupported: operation input
+artifact-case:331dfa4929983278c23d6479ad3858531982d1317cd6b3745f89c7ac26272ade:ErrorBoundary:operation:read-0[0]
+is reactive/accessor, and the implementation census binds only parameter-rooted
+operation inputs (family=recursive-value-shape)
+```
+
+`createIntervalCounter`'s row is the honest limit of a rule confined to an
+export's own census: its `implementation.calls` is the single call
+`createPolled(timeout, options)`, so nothing in its own transcript witnesses the
+read it claims. `createPolled`'s own read demands are refused by mechanism B
+regardless. solid-js additionally needs the self-artifact premise —
+`createSignal` is declared locally in `dist/solid.js`, so `targetModule` is
+empty and no module-based rule can reach it — and, behind that, the
+`argument-binding` blocker at `createReaction`.
+
+**The tracer tightening, and what it can only do.** `returnValueSourcesLocked`'s
+identifier arm walked `symbol.Declarations` and took the first array-binding
+element, so three shapes stated a provenance that was not the value:
+`let [a] = f(); if (c) { [a] = g(); }` traced to `f()`; `const [...rest] =
+createSignal(1)` traced the *tail array* to slot 0; and `const [a = fallback] =
+createSignal(2)` traced slot 0 for a value the default may have replaced. The
+arm now requires exactly one declaration, no assignment to the symbol anywhere
+else (the checker's own assignment-target symbols), no rest element, no default,
+and the reference positioned at or after the end of its binding's whole variable
+declaration; it counts the slot by position so an omitted element (`const [, set]
+= …`) still holds its place. The position premise closes the hole that dropping
+`const` opened: `cb(hoisted); var [hoisted] = createSignal(1);` traced slot 0
+for a reference that reads `undefined`, and `tsc` reports nothing for a `var`.
+It also refuses a self-reference inside the initializer, and over-refuses a
+reference written earlier inside a closure that runs later. An `ast.IsVarConst` gate was implemented first
+and reverted: bundler output across the corpus — `solid-js@1.9.14`'s own
+`dist/solid.js`, `@tanstack/query-devtools`, `@corvu-next/dismissible` —
+destructures `createSignal` with `let`/`var` and never reassigns, so `const`
+refused real rows for no soundness the assignment census does not already give.
+This surface is shared with `ReturnSite.sources`,
+which has carried the hole since it existed, so the tightening applies there
+too — and it can only *withdraw* a source, never add one, so every consumer can
+only refuse more than before. `require_return_callable_source` is the one
+consumer; `@solid-primitives/jsx-parser@0.2.0|solid1|only`, which exercises it,
+stayed certified, as did the other six certified control rows
+(`scheduled@1.5.3`, `map@0.7.4`, `storage@4.4.0`, `event-listener@2.4.6`,
+`i18n@2.2.1`, `timer@1.4.4`, all `|solid1|only`). The three refused controls
+stayed refused on their own reasons (`@solid-devtools/ui@0.10.3` callable-path,
+`until@0.1.1` operation-cardinality, `gestures@1.2.1` callable-path).
+
+**The call census is not a universal quantifier, and reading it as one was a
+false-certification route.** An adversarial review found it and it is now
+closed. The census states `calleeParameter` only for a callee that resolves to
+the parameter *exactly*, so five shapes that run the callback are invisible to
+it — measured against the real producer: `const f = cb; f(plain)` (no callee
+stated), `cb.call(null, plain)` and `cb.apply(…)` (the parameter at path length
+1, which `parameter_value_source_exact` refuses), `Reflect.apply(cb, …)` and
+`holder.cb(plain)` (none), and `new cb(plain)`, a construction for which the
+producer states no `calleeParameter` by design. Each of those beside one honest
+`cb(accessor)` satisfied "every matching call proves the role" while the export
+handed the callback a plain value; three of them were confirmed to return `Ok`.
+The arm now additionally requires that every use rooted at the callback
+parameter that the floor admits **is the callee of** one of the calls the proof
+just proved. Byte containment was tried first and a second review round showed
+it is the wrong relation: `cb(text, cb)` and `cb(text, (held = cb))` put an
+`argumentKnown` and an `unknownEscape` use *inside* the proved call's own span,
+so containment cleared them. Identity is positional — a call begins at its
+callee, so an identifier callee starts at the call's start byte and ends inside
+it, `cb?.(x)` included; a parenthesized `(cb)(x)` starts one byte later and is
+refused, an over-refusal pinned as a decision. The rule subsumes a use-kind gate
+(`storage`, `aliasCall`, `propertyAccess`, `argumentKnown`, `return`,
+`unknownEscape` are the callee of no proved call — and neither is the
+`directCall` use inside `new cb(plain)`, which is why a kind gate alone would not
+have closed it), while keeping the shape that must stay accepted: marker's
+`cb(text)` inside `createRoot(dispose => …)` is a `capture` use that *is* its
+proved call's callee. Every position was measured against the real producer
+before the premise was written.
+
+**Two premises the coverage rule rests on, both asserted rather than assumed.**
+The transcript must be `complete` with no open reason at all — not even
+`controlFlowUnsupported`, which `require_export_implementation` otherwise
+admits, because the use census withholds rows inside an unsafe-jump region and a
+withheld escape is what this premise cannot afford. That premise refuses more
+than jump regions: a body containing a plain `while`, `for`, `try`, or `switch`
+with no jump is also reported `controlFlowUnsupported`, so the arm never proves
+an export whose body has one — `mapArray` and `indexArray` included — whatever
+mechanism B later provides. And the callback must be
+bound to a *whole* parameter: for `Parameter{0, ["cb"]}` the census, being
+rooted at parameters, cannot separate a use of `props` from a use of `props.cb`,
+so such a demand is refused rather than approximated.
+
+**The use census itself had a hole, and it was hiding one of these routes.**
+`parameterUseCensusLocked` skipped every identifier for which
+`ast.IsDeclarationNameOrImportPropertyName` holds, and an object-literal
+shorthand's name is one — so `const holder = { cb }` recorded **no use at all**
+while `{ cb: cb }`, `[cb]`, `(0, cb)` and `new Map([["k", cb]])` each recorded
+`unknownEscape`. Paired with `holder.cb(plain)`, whose call states no callee
+parameter, the coverage premise was vacuous. A shorthand whose name resolves —
+through `GetShorthandAssignmentValueSymbol`, since the symbol at that location is
+the *property* — to a censused parameter is now recorded as `unknownEscape`;
+`{ ...{ cb } }` is the same node kind. This strengthens every consumer of the use
+census, so it was re-measured: no fixture finding moved (94 projects, 546
+findings) and no control row moved.
+
+**Traps that must not clear, and where each is pinned.** No fixture corpus in
+this repository certifies: `scripts/contract-corpus.mjs` runs `contract
+generate` only, and the ecosystem benchmark is the sole certification driver. So
+each trap is pinned where it is decided — the producer traps in
+`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts_test.go`
+and the certifier traps in `type_facts.rs`'s
+`reactive_operation_input_refuses_every_unproven_provenance`,
+`reactive_operation_input_requires_the_use_census_to_hold_no_other_route` and
+`reactive_operation_input_premises_are_each_load_bearing`. One row per trap:
+
+1. a locally declared factory (traced, resolved, answered by no dialect table);
+2. a *local* function named `createSignal` — the name is not the premise, the
+   stated module is, and a local declaration states none;
+3. a dialect name from a module no dialect exports it from;
+4. `(options.storage || createSignal)(…)`, whose callee resolves to no symbol,
+   so nothing is traced (`dist/solid.js:280` is exactly this shape);
+5. an absent slot, an unresolved callee symbol, a `directCallable`, and a
+   result path this table does not address;
+6. the setter slot where the accessor was demanded — the trap a rule proving
+   "traced to `createSignal` slot *n*" without comparing roles would clear;
+7. a second call handing an untraced value, which is what makes "some
+   witnessing call" unsound;
+8. an only-unreachable call;
+9. a call of another value, and a construction rather than a call;
+10. a `captured` call site the producer named no enclosing callable for.
+
+**Every premise is pinned by a mutant.** Seventeen mutations were applied one at
+a time and each killed exactly the test that owns it: consumer `all(…)` →
+`any(…)`, deleting the `CallResult` kind gate, widening the rooted-path
+selection (`cb([accessor])` is not `cb(accessor)`), deleting the use-coverage
+premise, reverting identity to containment, deleting the census-exhaustiveness
+premise, deleting the construct kind gate, tightening the floor to `Reachable`,
+accepting `Unreachable` calls; producer single-declaration, assignment-census,
+rest, default and position gates, deleting the shorthand recording, the
+nil-versus-empty slot encoding, and restoring the reverted `const` gate. Two
+mutants survived their first round and gained the test that owns them: the
+rooted-path one (an accessor *inside* the argument) and the containment one (the
+callback as an argument of its own call).
+
+**Fail-closed cases this change leaves open**, beyond mechanism B and
+composition above: `Plain`, `Object`, `Callable`, `Tuple`, `Choice` and `Store`
+operation inputs stay unsupported and now say so by constructor name; the
+self-artifact premise is not implemented; `createMemo`'s dialect row
+(`Whole = Accessor`) is reachable inline — `cb(createMemo(fn))` traces to an
+empty target path, which is `ResultSlot::Whole` — but not through a binding,
+because the identifier arm hops only through an array binding element and
+`const c = createMemo(fn)` is a plain `VariableDeclaration`; `createResource`,
+`useTransition`, `createDeferred`, `createSelector`, `createOptimistic` and the
+store family carry no row at all; `targetModule` is the written import
+specifier rather than a resolved package identity, the same approximation
+`require_return_callable_source` already makes, and the existing `== "solid-js"`
+literal sites were deliberately left alone; "silence is disagreement" is
+enforced in the aggregate but has no corpus row that exercises it, so the
+per-dialect answers are asserted directly instead; the callback binding is
+resolved with `.find()`, which is exact only because operation ids are
+per-callback in every emitted document seen so far; a callback bound to a
+parameter *property* path is refused rather than proved, because the use census
+cannot separate uses of the object from uses of the property; a parenthesized
+callee `(cb)(x)` is refused by the positional identity rule; and a reference
+written before its declaration but executed after it traces nothing.
+
+The 2.0 rows were read from `solid-js@2.0.0-rc.3/types/server/signals.d.ts`
+(`createSignal(...): Signal<T>`, `createMemo(...): SourceAccessor<T>`,
+`SourceAccessor<T> = Refreshable<SignalAccessor<T>>`) and
+`@solidjs/signals@2.0.0-rc.3/dist/types/signals.d.ts`
+(`Signal<T> = [get: SourceAccessor<T>, set: Setter<T>]`) — rc.3 being the
+prerelease the fixtures and corpus pin; rc.0 and rc.5 carry the same three
+declarations. They were **not** taken from the bundled contract, which disagrees
+in a direction a row must not follow:
+`pkg/contracts/bundled/solid-v2/solidjs-signals.json`'s `createMemo` summary
+carries `output: "plain"` and its `createSignal` has no summary at all, because
+the generated single-value `returns` column cannot express either shape. That
+is the generator's silence, not the 2.0 vocabulary's negative claim — the same
+trap the v1 bundle's empty-and-closed `createSignal` `returns` sets.
+
+### Re-measured: 348 verified / 45 exact refusals / 25 not attempted
+
+The complete 418-probe corpus was re-run with the fresh release checker and the
+protocol-12 producer after both fixer rounds (`make ecosystem-benchmark`; report
+SHA-256 `4a9c55f0ef601caafcae466c63995060aa16783ac8dec5d9cbda887003b3b72b`).
+Against the committed protocol-11 report, exactly three verdicts moved, all
+refused → verified: `@solid-primitives/marker@0.2.2|solid1|only`,
+`@solid-primitives/marker@2.0.0-next.2|solid2|floor` and `|head`. Proposal
+states are unchanged (344 complete / 37 partial / 37 fully refused). Every other
+row keeps its status and its normalized reason, with two attributed changes of
+wording only: the timer floor+head rows and `solid-js@1.9.14` now refuse on the
+attributed demands recorded above (`1aee58a9…` operation-reachability on
+`createIntervalCounter:read-0[0]`; `5463f0ed…` recursive-value-shape on
+`ErrorBoundary:read-0[0]`) where the committed report carried the unattributed
+`operation-input` text. No published-graph row moved its inner demand in this
+run, and no return-site certification was lost to the tracer tightening.
+
+The Phase 21 ledger was regenerated (`--write`) and re-pinned to the digest
+above; the Phase 20 test pins moved 345 → 348 verified and 48 → 45 exact
+refusals, inserting the three marker rows in ledger order.
+
+Wall time again is **not** attributable to this change: 140.2 s with 115.9 s
+of install time, against the committed baseline's 71.3 s / 55.9 s, on the same
+loaded host as the previous slice; the quiet-host measurement remains owed.

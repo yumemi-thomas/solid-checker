@@ -1,6 +1,7 @@
 package tsgo
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/apps/solid-typefacts/internal/wirecbor"
 )
 
 func TestExportValueTranscriptResolvesImportedAliasWithoutInventingCall(t *testing.T) {
@@ -841,4 +843,419 @@ void make;
 		}
 	}
 	t.Fatalf("finally-block call at %d is absent: %#v", cleanup, implementation.Calls)
+}
+
+// The argument half of the same tracer that answers a return site. One entry
+// per written argument slot, and every entry a positive fact or nothing: the
+// three shapes that trace to nothing here — a slot a spread displaced, a
+// non-identifier callee, and a reassignable binding — are refusals to state a
+// provenance, never a claim that the slot holds a plain value.
+func TestImplementationCallCensusTracesArgumentValueProvenance(t *testing.T) {
+	source := `import { createSignal } from "solid-js";
+function localSignal(value: unknown): [() => unknown, (next: unknown) => void] {
+  return [() => value, () => {}];
+}
+export function make(
+  cb: (...values: unknown[]) => void,
+  extra: unknown[],
+  options: { storage?: typeof createSignal },
+) {
+  const [text, setText] = createSignal(1);
+  cb(text, ...extra, setText);
+  cb(setText);
+  const [own] = localSignal(1);
+  cb(own);
+  const [picked] = (options.storage || createSignal)(1);
+  cb(picked);
+  let [mutable] = createSignal(1);
+  if (extra.length) { [mutable] = createSignal(2); }
+  cb(mutable);
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	byStart := map[int]typefacts.ImplementationCall{}
+	for _, call := range implementation.Calls {
+		byStart[call.Location.StartByte] = call
+	}
+	call := func(needle string) typefacts.ImplementationCall {
+		t.Helper()
+		start := strings.Index(source, needle)
+		if start < 0 {
+			t.Fatalf("needle %q is absent from the fixture", needle)
+		}
+		found, ok := byStart[start]
+		if !ok {
+			t.Fatalf("call at %q (byte %d) is absent from the census: %#v", needle, start, implementation.Calls)
+		}
+		return found
+	}
+	slot := func(needle string, index int) []typefacts.ImplementationValueSource {
+		t.Helper()
+		found := call(needle)
+		if len(found.ArgumentSources) != len(found.ArgumentParameters) {
+			t.Fatalf(
+				"call %q has %d traced slots and %d parameter slots, want one entry per written argument",
+				needle, len(found.ArgumentSources), len(found.ArgumentParameters),
+			)
+		}
+		if index >= len(found.ArgumentSources) {
+			t.Fatalf("call %q has no slot %d: %#v", needle, index, found.ArgumentSources)
+		}
+		return found.ArgumentSources[index]
+	}
+	tupleResult := func(sources []typefacts.ImplementationValueSource) typefacts.ImplementationValueSource {
+		t.Helper()
+		if len(sources) != 1 {
+			t.Fatalf("traced sources = %#v, want exactly one", sources)
+		}
+		source := sources[0]
+		if source.Kind != typefacts.ImplementationValueCallResult || len(source.Path) != 0 ||
+			len(source.TargetPath) != 1 || source.TargetPath[0].Kind != typefacts.PathSegmentTuple ||
+			source.TargetPath[0].Index == nil {
+			t.Fatalf("traced source = %#v, want a root-path call result at one tuple slot", source)
+		}
+		return source
+	}
+
+	// An accessor bound by `const [text] = createSignal(...)` and handed to a
+	// callback: the exact provenance mechanism A proves a reactive operation
+	// input with.
+	accessor := tupleResult(slot("cb(text, ...extra, setText)", 0))
+	if accessor.TargetName != "createSignal" || accessor.TargetModule != "solid-js" ||
+		*accessor.TargetPath[0].Index != 0 || accessor.Target == "" {
+		t.Fatalf("accessor argument source = %#v", accessor)
+	}
+
+	// Slot identity is the whole point: the setter is slot 1 of the same call,
+	// and a consumer comparing roles must be able to tell them apart.
+	setter := tupleResult(slot("cb(setText)", 0))
+	if setter.TargetName != "createSignal" || *setter.TargetPath[0].Index != 1 {
+		t.Fatalf("setter argument source = %#v", setter)
+	}
+
+	// The spread displaces slots 1 and 2, so neither is traced even though
+	// slot 2 is written as an accessor: the runtime value there is not the one
+	// written there. Slot 0 above keeps its exact meaning.
+	for _, index := range []int{1, 2} {
+		if traced := slot("cb(text, ...extra, setText)", index); len(traced) != 0 {
+			t.Fatalf("spread-displaced slot %d = %#v, want nothing traced", index, traced)
+		}
+	}
+
+	// A locally declared factory is traced, with the empty module that says so.
+	// The producer states the syntax; whether `localSignal` is a dialect
+	// primitive is not its question, and the empty module is what a consumer
+	// refuses on.
+	own := tupleResult(slot("cb(own)", 0))
+	if own.TargetName != "localSignal" || own.TargetModule != "" || *own.TargetPath[0].Index != 0 {
+		t.Fatalf("locally declared factory source = %#v", own)
+	}
+
+	// `(options.storage || createSignal)(1)` resolves to no callee symbol, so
+	// the binding traces to nothing at all.
+	if traced := slot("cb(picked)", 0); len(traced) != 0 {
+		t.Fatalf("non-identifier creator callee = %#v, want nothing traced", traced)
+	}
+
+	// The tightening: one declaration and never assigned. A `let` binding
+	// reassigned in a branch has one declaration and would otherwise trace to
+	// the initializer that is not the value.
+	if traced := slot("cb(mutable)", 0); len(traced) != 0 {
+		t.Fatalf("reassigned binding = %#v, want nothing traced", traced)
+	}
+}
+
+// Every premise of the identifier arm's binding gate, one row each, so a
+// mutation that drops one turns exactly one row green.
+//
+// The gate is single-assignment, not `const`. A `const` requirement was tried
+// and reverted: bundler output across the measured corpus — solid-js 1.9.14's
+// own `dist/solid.js` among it — destructures `createSignal` with `let` or
+// `var` and never reassigns, and refusing those rows buys no soundness the
+// assignment census does not already provide.
+func TestArgumentSourcesBindingGateIsSingleAssignmentAndSlotExact(t *testing.T) {
+	source := `import { createSignal } from "solid-js";
+export function make(cb: (value: unknown) => void, flag: boolean) {
+  const [fixed] = createSignal(1);
+  cb(fixed);
+  const [, setter] = createSignal(2);
+  cb(setter);
+  let [mutable] = createSignal(3);
+  cb(mutable);
+  let [reassigned] = createSignal(4);
+  if (flag) { [reassigned] = createSignal(5); }
+  cb(reassigned);
+  var [redeclared] = createSignal(6);
+  var [redeclared] = createSignal(7);
+  cb(redeclared);
+  const [...rest] = createSignal(8);
+  cb(rest);
+  const [defaulted = 9] = createSignal(10);
+  cb(defaulted);
+  const [chosen] = flag ? createSignal(11) : createSignal(12);
+  cb(chosen);
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	tracedSlot := func(needle string) []typefacts.ImplementationValueSource {
+		t.Helper()
+		start := strings.Index(source, needle)
+		if start < 0 {
+			t.Fatalf("needle %q is absent from the fixture", needle)
+		}
+		for _, call := range implementation.Calls {
+			if call.Location.StartByte != start {
+				continue
+			}
+			if len(call.ArgumentSources) != 1 {
+				t.Fatalf("call %q has %d traced slots, want one", needle, len(call.ArgumentSources))
+			}
+			return call.ArgumentSources[0]
+		}
+		t.Fatalf("call at %q is absent from the census", needle)
+		return nil
+	}
+	tupleSlot := func(needle string) int {
+		t.Helper()
+		sources := tracedSlot(needle)
+		if len(sources) != 1 || len(sources[0].TargetPath) != 1 ||
+			sources[0].TargetPath[0].Kind != typefacts.PathSegmentTuple ||
+			sources[0].TargetPath[0].Index == nil || sources[0].TargetName != "createSignal" {
+			t.Fatalf("call %q traced %#v, want one createSignal tuple slot", needle, sources)
+		}
+		return *sources[0].TargetPath[0].Index
+	}
+
+	// `const`, and `let` that is never assigned, both trace. An omitted
+	// element still holds its position, so the setter is slot 1 and not slot 0.
+	if got := tupleSlot("cb(fixed)"); got != 0 {
+		t.Fatalf("const binding = slot %d, want 0", got)
+	}
+	if got := tupleSlot("cb(mutable)"); got != 0 {
+		t.Fatalf("never-assigned let binding = slot %d, want 0", got)
+	}
+	if got := tupleSlot("cb(setter)"); got != 1 {
+		t.Fatalf("binding after an omitted element = slot %d, want 1", got)
+	}
+
+	for _, row := range []struct{ needle, why string }{
+		// Assigned somewhere other than its declaration: the initializer is
+		// not the value.
+		{"cb(reassigned)", "a binding reassigned in a branch"},
+		// Two declarations leave no single initializer.
+		{"cb(redeclared)", "a redeclared var binding"},
+		// `[...rest]` binds the tail array, not slot 0. The arm traced it to
+		// slot 0 before this premise existed.
+		{"cb(rest)", "a rest element"},
+		// `[a = fallback]` is the fallback exactly when slot 0 is undefined,
+		// and nothing here observes which value won.
+		{"cb(defaulted)", "a defaulted element"},
+		// The initializer has to be the call itself.
+		{"cb(chosen)", "a conditional initializer"},
+	} {
+		if traced := tracedSlot(row.needle); len(traced) != 0 {
+			t.Fatalf("%s traced %#v, want nothing", row.why, traced)
+		}
+	}
+}
+
+// A traced reference has to be positioned after the declaration it reads.
+// `var` hoists, so `cb(hoisted); var [hoisted] = createSignal(1);` reads
+// `undefined` at the call -- and `tsc` says nothing about it, which is what
+// made the single-assignment gate alone insufficient. The bound is the whole
+// `VariableDeclaration`, so a self-reference inside the initializer is refused
+// too.
+func TestArgumentSourcesRefuseAReferenceBeforeItsDeclaration(t *testing.T) {
+	source := `import { createSignal } from "solid-js";
+export function make(cb: (value: unknown) => void) {
+  cb(hoisted);
+  var [hoisted] = createSignal(1);
+  const [ordered] = createSignal(2);
+  cb(ordered);
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	traced := func(needle string) []typefacts.ImplementationValueSource {
+		t.Helper()
+		start := strings.Index(source, needle)
+		for _, call := range implementation.Calls {
+			if call.Location.StartByte == start && len(call.ArgumentSources) == 1 {
+				return call.ArgumentSources[0]
+			}
+		}
+		t.Fatalf("call at %q is absent from the census", needle)
+		return nil
+	}
+	if sources := traced("cb(hoisted)"); len(sources) != 0 {
+		t.Fatalf("a hoisted reference traced %#v, want nothing", sources)
+	}
+	if sources := traced("cb(ordered)"); len(sources) != 1 || sources[0].TargetName != "createSignal" {
+		t.Fatalf("an ordered reference traced %#v, want the createSignal slot", sources)
+	}
+}
+
+// The same two shapes on the surface the tracer already served. `[...rest]`
+// stated slot 0 for the tail array here too, and a defaulted element stated a
+// value the default may have replaced.
+func TestReturnValueSourcesRefuseRestAndDefaultedElements(t *testing.T) {
+	source := `import { createSignal } from "solid-js";
+export function make() {
+  const [...rest] = createSignal(1);
+  const [defaulted = 2] = createSignal(3);
+  const [fixed] = createSignal(4);
+  return [rest, defaulted, fixed];
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	flow := implementation.ControlFlow
+	if flow == nil || len(flow.Returns) != 1 {
+		t.Fatalf("control flow = %#v, want one return site", flow)
+	}
+	sources := flow.Returns[0].Sources
+	if len(sources) != 1 {
+		t.Fatalf("return sources = %#v, want only the plain const-bound slot", sources)
+	}
+	if len(sources[0].Path) != 1 || sources[0].Path[0].Index == nil || *sources[0].Path[0].Index != 2 {
+		t.Fatalf("surviving return source = %#v, want the third returned slot", sources[0])
+	}
+}
+
+// A slot the producer traced nothing for is an empty CBOR array (major type 4,
+// length 0 -- `0x80`), never `null` (`0xf6`). The Rust client's field is
+// `Vec<Vec<ImplementationValueSource>>`, so a null slot fails the whole
+// transcript with "invalid type: null, expected array" -- which is exactly what
+// a nil Go slice encoded to before this was pinned, and it refused every
+// certification that reached a census.
+func TestArgumentSourcesEncodeEmptySlotsAsArrays(t *testing.T) {
+	source := `export function make(cb: (value: unknown) => void) {
+  cb(1);
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	var call *typefacts.ImplementationCall
+	for index := range implementation.Calls {
+		if len(implementation.Calls[index].ArgumentSources) == 1 {
+			call = &implementation.Calls[index]
+			break
+		}
+	}
+	if call == nil {
+		t.Fatalf("census = %#v, want one call with one written argument", implementation.Calls)
+	}
+	if len(call.ArgumentSources[0]) != 0 {
+		t.Fatalf("slot 0 traced %#v, want nothing", call.ArgumentSources[0])
+	}
+	encoded, err := wirecbor.Marshal(call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := wirecbor.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	slots, ok := decoded["argumentSources"].([]any)
+	if !ok || len(slots) != 1 {
+		t.Fatalf("argumentSources decoded as %#v, want one slot", decoded["argumentSources"])
+	}
+	if slots[0] == nil {
+		t.Fatalf("slot 0 decoded as null; the Rust client refuses the transcript for it")
+	}
+	if empty, ok := slots[0].([]any); !ok || len(empty) != 0 {
+		t.Fatalf("slot 0 decoded as %#v, want an empty array", slots[0])
+	}
+	if bytes.Contains(encoded, []byte("argumentSources")) {
+		index := bytes.Index(encoded, []byte("argumentSources")) + len("argumentSources")
+		if encoded[index] != 0x81 || encoded[index+1] != 0x80 {
+			t.Fatalf(
+				"argumentSources encodes as %#x %#x, want one-element array (0x81) of empty array (0x80)",
+				encoded[index], encoded[index+1],
+			)
+		}
+	}
+
+	// A round trip through the wire form keeps the slot list, so a consumer
+	// that indexes by written argument sees the same shape the producer built.
+	var roundTripped typefacts.ImplementationCall
+	if err := wirecbor.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatal(err)
+	}
+	if len(roundTripped.ArgumentSources) != 1 || len(roundTripped.ArgumentSources[0]) != 0 {
+		t.Fatalf("round-tripped slots = %#v, want one empty slot", roundTripped.ArgumentSources)
+	}
+}
+
+// The same tightening, on the surface it already served. `ReturnSite.Sources`
+// has followed a symbol's first declaration since it existed, so a reassigned
+// binding stated a provenance there too; narrowing the arm can only withdraw a
+// source, never add one.
+func TestReturnValueSourcesRefuseAReassignedBinding(t *testing.T) {
+	source := `import { createSignal } from "solid-js";
+export function make(flag: boolean) {
+  let [mutable] = createSignal(1);
+  const [fixed] = createSignal(2);
+  if (flag) { [mutable] = createSignal(3); }
+  return [mutable, fixed];
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	flow := implementation.ControlFlow
+	if flow == nil || len(flow.Returns) != 1 {
+		t.Fatalf("control flow = %#v, want one return site", flow)
+	}
+	sources := flow.Returns[0].Sources
+	if len(sources) != 1 {
+		t.Fatalf("return sources = %#v, want only the const-bound slot", sources)
+	}
+	if len(sources[0].Path) != 1 || sources[0].Path[0].Index == nil || *sources[0].Path[0].Index != 1 ||
+		sources[0].TargetName != "createSignal" {
+		t.Fatalf("surviving return source = %#v, want the slot-1 const binding", sources[0])
+	}
+}
+
+func exportImplementationForSolidMake(
+	t *testing.T,
+	source string,
+) *typefacts.ExportImplementationTranscript {
+	t.Helper()
+	dir := t.TempDir()
+	writeInvocationProject(t, dir, map[string]string{
+		"facts.ts": source,
+		"solid-js.d.ts": `declare module "solid-js" {
+  export function createSignal(value: unknown): [() => unknown, (next: unknown) => void];
+}`,
+	})
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	analyzer := opened.(typefacts.ExportValueAnalyzer)
+	path := filepath.Join(dir, "facts.ts")
+	queryStart := strings.LastIndex(source, "void make") + len("void ")
+	implementationStart := strings.Index(source, "function make") + len("function ")
+	location := typefacts.Location{Path: path, StartByte: queryStart, EndByte: queryStart + len("make")}
+	implementation := typefacts.Location{
+		Path: path, StartByte: implementationStart, EndByte: implementationStart + len("make"),
+	}
+	answer, err := analyzer.ExportValueTranscripts(
+		context.Background(),
+		[]typefacts.ExportValueDemand{{
+			Location:               location,
+			ImplementationLocation: &implementation,
+			CallableDepth:          1,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(answer.Transcripts) != 1 || answer.Transcripts[0].Implementation == nil {
+		t.Fatalf("transcripts = %#v, want one implementation transcript", answer.Transcripts)
+	}
+	return answer.Transcripts[0].Implementation
 }

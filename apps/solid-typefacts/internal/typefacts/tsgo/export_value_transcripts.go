@@ -403,10 +403,26 @@ func (p *project) implementationCallCensusLocked(
 			exact := exactArgumentSlots(node)
 			for index, argument := range node.Arguments() {
 				var source *typefacts.ParameterValueSource
+				// The value provenance of the same slot, from the same
+				// tracer the return sites use. It answers a different
+				// question than the parameter root above — "what created
+				// this value" rather than "which parameter is it" — and a
+				// displaced slot gets neither, because the runtime value at
+				// that position is not the one written there.
+				//
+				// The empty list is written as an empty list, never as
+				// nothing: the wire form of a slot is an array, and one
+				// entry per written argument is the invariant a consumer
+				// indexes by.
+				traced := []typefacts.ImplementationValueSource{}
 				if index < exact {
 					source = p.parameterValueSourceLocked(argument, bySymbol)
+					if found := p.returnValueSourcesLocked(argument); len(found) != 0 {
+						traced = found
+					}
 				}
 				call.ArgumentParameters = append(call.ArgumentParameters, source)
+				call.ArgumentSources = append(call.ArgumentSources, traced)
 			}
 			call.Target, call.TargetName, call.TargetModule, call.Declaration =
 				p.implementationCallTargetLocked(node.Expression())
@@ -546,35 +562,83 @@ func (p *project) returnValueSourcesLocked(expression *ast.Node) []typefacts.Imp
 		if !ast.IsIdentifier(node) {
 			return
 		}
-		symbol := p.checker.GetSymbolAtLocation(node)
-		if symbol == nil {
+		// Exactly one hop, through a binding whose value cannot have been
+		// anything else, and whose slot is the slot it looks like.
+		//
+		// The arm used to walk every declaration of the symbol and take the
+		// first array-binding one, which made `let [a] = f(); [a] = g();` and a
+		// redeclared binding trace to `f()` and state it as the value's
+		// provenance. Four premises replace that:
+		//
+		//   - exactly one declaration, so a redeclared `var` proves nothing;
+		//   - the symbol is never an assignment target anywhere, answered by
+		//     the checker's own assignment-target symbols rather than by
+		//     reading source text. This is the whole single-assignment premise:
+		//     a `const` gate was tried and reverted, because bundler output
+		//     across the measured corpus (solid-js 1.9.14's own dist among
+		//     them) destructures with `let`/`var` and never reassigns, and
+		//     refusing those buys no soundness that this census does not
+		//     already give;
+		//   - no rest element. `const [...rest] = createSignal(1)` binds the
+		//     *tail array*, not slot 0, and the arm traced it to slot 0;
+		//   - no default. `const [a = fallback] = createSignal(2)` is `a`
+		//     only when slot 0 is not `undefined`, and nothing here observes
+		//     which value won;
+		//   - the reference is positioned at or after the end of the binding's
+		//     declaration, in the same file. `cb(hoisted); var [hoisted] =
+		//     createSignal(1);` reads `undefined`, and `tsc` says nothing about
+		//     it for a `var`. The bound is the whole `VariableDeclaration`, so
+		//     a self-reference inside the initializer is refused too. This
+		//     over-refuses a reference written earlier inside a closure that
+		//     runs later, which is recorded rather than special-cased.
+		//
+		// The slot index counts positions among the pattern's elements, and an
+		// omitted element (`const [, set] = …`) still holds its position, so
+		// the count is over all elements up to this one. A rest element is
+		// refused above rather than counted past.
+		//
+		// This can only remove sources, never add one, so it tightens
+		// ReturnSite.Sources at the same time as the argument slots.
+		symbol := p.canonicalSymbol(p.checker.GetSymbolAtLocation(node))
+		if symbol == nil || len(symbol.Declarations) != 1 {
 			return
 		}
-		for _, declaration := range symbol.Declarations {
-			if ast.IsBindingElement(declaration) && declaration.Parent != nil && ast.IsArrayBindingPattern(declaration.Parent) {
-				pattern := declaration.Parent
-				variable := pattern.Parent
-				if variable == nil || !ast.IsVariableDeclaration(variable) || variable.AsVariableDeclaration().Initializer == nil ||
-					!ast.IsCallExpression(variable.AsVariableDeclaration().Initializer) {
-					continue
-				}
-				for index, element := range pattern.AsBindingPattern().Elements.Nodes {
-					if element != declaration {
-						continue
-					}
-					target, name, module, _ := p.implementationCallTargetLocked(variable.AsVariableDeclaration().Initializer.Expression())
-					if target == "" {
-						return
-					}
-					item := index
-					sources = append(sources, typefacts.ImplementationValueSource{
-						Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
-						Target: target, TargetName: name, TargetModule: module,
-						TargetPath: []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
-					})
-					return
-				}
+		declaration := symbol.Declarations[0]
+		if !ast.IsBindingElement(declaration) || declaration.Parent == nil ||
+			!ast.IsArrayBindingPattern(declaration.Parent) ||
+			p.symbolIsAssignedLocked(symbol, declaration) {
+			return
+		}
+		element := declaration.AsBindingElement()
+		if element.DotDotDotToken != nil || element.Initializer != nil {
+			return
+		}
+		pattern := declaration.Parent
+		variable := pattern.Parent
+		if variable == nil || !ast.IsVariableDeclaration(variable) || variable.AsVariableDeclaration().Initializer == nil ||
+			!ast.IsCallExpression(variable.AsVariableDeclaration().Initializer) {
+			return
+		}
+		reference := nodeLocation(node)
+		if declared := nodeLocation(variable); reference.Path != declared.Path ||
+			reference.StartByte < declared.EndByte {
+			return
+		}
+		for index, candidate := range pattern.AsBindingPattern().Elements.Nodes {
+			if candidate != declaration {
+				continue
 			}
+			target, name, module, _ := p.implementationCallTargetLocked(variable.AsVariableDeclaration().Initializer.Expression())
+			if target == "" {
+				return
+			}
+			item := index
+			sources = append(sources, typefacts.ImplementationValueSource{
+				Path: append([]typefacts.PathSegment(nil), path...), Kind: typefacts.ImplementationValueCallResult,
+				Target: target, TargetName: name, TargetModule: module,
+				TargetPath: []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &item}},
+			})
+			return
 		}
 	}
 	walk(expression, nil)

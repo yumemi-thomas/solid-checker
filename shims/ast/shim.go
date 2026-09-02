@@ -191,6 +191,9 @@ func IsQualifiedName(node *ast.Node) bool
 //go:linkname IsReturnStatement github.com/microsoft/typescript-go/internal/ast.IsReturnStatement
 func IsReturnStatement(node *ast.Node) bool
 
+//go:linkname IsShorthandPropertyAssignment github.com/microsoft/typescript-go/internal/ast.IsShorthandPropertyAssignment
+func IsShorthandPropertyAssignment(node *ast.Node) bool
+
 //go:linkname IsSpreadElement github.com/microsoft/typescript-go/internal/ast.IsSpreadElement
 func IsSpreadElement(node *ast.Node) bool
 

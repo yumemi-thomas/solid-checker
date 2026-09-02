@@ -4,22 +4,28 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 11 because the callable-path census now
-// separates the members a value declares from the members it carries only
-// through the compiler's apparent-type augmentation. Every path fact reports
-// `apparent`, a nested union answers per-member presence instead of returning
-// only what every constituent declares, and a tuple carries its Array base's
-// members beside its element slots.
+// TypeFactsHandshakeProtocol is 12 because the implementation call census now
+// carries argumentSources: per written argument slot, the traced value
+// provenance of the expression written there, from the same tracer that already
+// answers it for a return site. The same change *narrows* that tracer's
+// identifier arm, which followed a symbol's first declaration and therefore
+// traced a reassignable or redeclared binding to an initializer that need not
+// be the value — a ReturnSite.Sources a protocol-11 producer states and a
+// protocol-12 producer withholds.
 //
-// The meaning of the census changed, not just its size: a protocol-10 consumer
-// would count an apparent leaf as a declared census member and could read a
-// library-owned `bind` or `prototype` as part of the package's own surface. A
-// protocol-10 producer also omits the field this protocol requires. Both
-// directions are a break, and the number is what says so. The digest and build
-// id still move with it, and the handshake refuses on any mismatch.
+// Both halves change meaning, not only size: a protocol-11 consumer reading a
+// protocol-12 census would find argument provenance it does not know how to
+// bound, and a protocol-11 producer's return sources carry authority a
+// protocol-12 consumer must not grant them. ImplementationCall also denies
+// unknown fields in both directions, so the added field alone is a break. The
+// digest and build id still move with it, and the handshake refuses on any
+// mismatch.
+//
+// Protocol 11 separated the members a value declares from the members it
+// carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 11
-	TypeFactsSchemaSHA256             = "sha256:b9f4c20081ad2a9ac81502514d296ac229c3301ef960ea3b745d5eaad5b31d51"
+	TypeFactsHandshakeProtocol uint64 = 12
+	TypeFactsSchemaSHA256             = "sha256:3d97fa9a3cb8d0b0ac1ca7f8b116a07cfa5774efdefcb7ddc1d8ab51d72f60e0"
 )
 
 type ServiceHandshake struct {

@@ -36,22 +36,26 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b9f4c20081ad2a9ac81502514d296ac229c3301ef960ea3b745d5eaad5b31d51";
-/// 11 splits the callable-path census into the members a value declares and
-/// the members it carries only through the compiler's apparent-type
-/// augmentation. Every path fact reports `apparent`; a nested union answers
-/// per-member presence rather than only the members every constituent
-/// declares; and a tuple carries its Array base's members beside its element
-/// slots.
+    "sha256:3d97fa9a3cb8d0b0ac1ca7f8b116a07cfa5774efdefcb7ddc1d8ab51d72f60e0";
+/// 12 adds `argumentSources` to the implementation call census: per written
+/// argument slot, the traced value provenance of the expression written there,
+/// from the same tracer that already answers it for a return site. It also
+/// *narrows* that tracer's identifier arm, which followed a symbol's first
+/// declaration and so traced a reassignable binding to an initializer that may
+/// not be the value — a `ReturnSite.sources` a protocol-11 producer states and
+/// a protocol-12 producer withholds.
 ///
-/// This is a change of meaning, not only of size. A protocol-10 consumer would
-/// count an apparent leaf as a declared census member and could read a
-/// library-owned `bind` or `prototype` as part of the package's own surface,
-/// and a protocol-10 producer omits the field this protocol requires. Both
-/// directions are a break and the number is what says so. The digest and build
-/// id still move with it, and the handshake refuses a producer that differs on
-/// any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 11;
+/// Both halves are a change of meaning, not only of size. A protocol-11
+/// consumer reading a protocol-12 census would find argument provenance it does
+/// not know how to bound, and a protocol-11 producer's return sources carry
+/// authority a protocol-12 consumer must not grant them. `ImplementationCall`
+/// also denies unknown fields in both directions, so the added field alone is a
+/// break. The digest and build id still move with it, and the handshake refuses
+/// a producer that differs on any one of the three.
+///
+/// 11 split the callable-path census into the members a value declares and the
+/// members it carries only through the compiler's apparent-type augmentation.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 12;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
