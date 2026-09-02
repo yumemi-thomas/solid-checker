@@ -1086,6 +1086,26 @@ function selectTarget(target, context) {
   }
 }
 
+// The file a legacy (no-`exports`) runtime subpath names. An exact request is
+// answered exactly; an extensionless one gets the CommonJS candidates a
+// `require` of it would find, in Node's order, because that is the only shape
+// in which an extensionless subpath is importable at all.
+function legacyRuntimeSubpath(path) {
+  if (isFile(path)) return path;
+  if (extname(path)) return undefined;
+  for (const candidate of [
+    `${path}.js`,
+    `${path}.json`,
+    `${path}.node`,
+    join(path, "index.js"),
+    join(path, "index.json"),
+    join(path, "index.node")
+  ]) {
+    if (isFile(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 function declarationCandidate(path) {
   if (DECLARATION_EXTENSIONS.some(extension => path.endsWith(extension))) return isFile(path) ? path : undefined;
   const extension = extname(path);
@@ -1187,7 +1207,45 @@ export function selectPackageExportTarget({
     };
   }
 
-  if (entrypoint !== ".") fail("not-exported", `${entrypoint} has no legacy package entrypoint`);
+  // A package with no `exports` field does not restrict its subpaths. Node's
+  // ESM_RESOLVE only applies PACKAGE_EXPORTS_RESOLVE when `exports` is
+  // present; without it, `pkg/sub` is LEGACY path resolution — the subpath is
+  // joined onto the package root, with CommonJS extension and index candidates
+  // for an extensionless request. Failing it as `not-exported` claimed the
+  // package excluded a module it publishes and can be imported: `dayjs`
+  // (1.11.23) ships `plugin/relativeTime.js` and no `exports`, `picomatch`
+  // (2.3.2) ships `lib/utils.js`, `fetch-blob` (3.2.0) ships `from.js`, and
+  // all three resolve at runtime. `not-exported` is now reserved for what it
+  // says: an `exports` map that excludes the subpath.
+  //
+  // A subpath that still does not exist is `target-not-found` at the caller's
+  // `resolvedFile`, or `exists: false` here — an absence, not an exclusion.
+  if (entrypoint !== ".") {
+    const requested = entrypoint.replace(/^\.\//, "");
+    const initial = resolve(packageRoot, requested);
+    const path =
+      axis === "declarations"
+        ? declarationCandidate(initial)
+        : legacyRuntimeSubpath(initial);
+    if (!path) {
+      fail(
+        axis === "declarations" ? "declarations-not-found" : "target-not-found",
+        `no ${axis === "declarations" ? "declaration" : "runtime"} target exists for ${initial}`
+      );
+    }
+    return {
+      path,
+      exists: isFile(path),
+      trace: {
+        branch: "legacy:subpath",
+        steps: [{ condition: "subpath", target: entrypoint }]
+      },
+      // No condition was consulted: there was no `exports` map to consult one
+      // in, and a legacy field names an entrypoint, never a subpath.
+      conditions: [],
+      legacyField: null
+    };
+  }
   const fallback = "index.js";
   const field =
     axis === "declarations"

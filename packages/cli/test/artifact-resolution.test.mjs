@@ -2311,3 +2311,98 @@ test("export target selection reports the conditions traversed and target presen
     "target"
   ]);
 });
+
+describe("a package with no exports field", () => {
+  // Node's ESM_RESOLVE applies PACKAGE_EXPORTS_RESOLVE only when `exports` is
+  // present. Without it, `pkg/sub` is LEGACY path resolution, so the package
+  // restricts nothing and `not-exported` is a false statement about it. Three
+  // real dependencies made this observable: `picomatch@2.3.2` (no `exports`,
+  // `lib/utils.js`, requested extensionless), `fetch-blob@3.2.0` (no
+  // `exports`, `from.js`) and `dayjs@1.11.23` (no `exports`,
+  // `plugin/relativeTime.js`).
+  const manifest = { name: "legacy-package", version: "1.0.0", main: "index.js", types: "./index.d.ts" };
+  const files = {
+    "index.js": "module.exports = {};\n",
+    "index.d.ts": "export declare const value: number;\n",
+    "from.js": "module.exports = {};\n",
+    "from.d.ts": "export declare const from: () => void;\n",
+    "lib/utils.js": "module.exports = {};\n",
+    "plugin/relativeTime.js": "module.exports = {};\n",
+    "nested/index.js": "module.exports = {};\n"
+  };
+
+  const select = (root, entrypoint, axis = "runtime") =>
+    selectPackageExportTarget({ packageRoot: root, manifest, entrypoint, conditions: [], axis });
+
+  test("resolves an exact subpath rather than answering not-exported", () => {
+    const root = fixture(manifest, files);
+    const selected = select(root, "./from.js");
+    expect(selected.path).toBe(join(root, "from.js"));
+    expect(selected.exists).toBe(true);
+    expect(selected.trace.branch).toBe("legacy:subpath");
+    // No condition was consulted, because there was no map to consult one in.
+    expect(selected.conditions).toEqual([]);
+    expect(select(root, "./plugin/relativeTime.js").path).toBe(
+      join(root, "plugin/relativeTime.js")
+    );
+  });
+
+  test("resolves an extensionless subpath through the CommonJS candidates", () => {
+    const root = fixture(manifest, files);
+    expect(select(root, "./lib/utils").path).toBe(join(root, "lib/utils.js"));
+    expect(select(root, "./nested").path).toBe(join(root, "nested/index.js"));
+  });
+
+  test("reports a subpath the package does not ship as absent, not as excluded", () => {
+    const root = fixture(manifest, files);
+    let error;
+    try {
+      select(root, "./absent.js");
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ArtifactResolutionError);
+    // An absence, which the closure walk already dispositions, and never the
+    // exclusion claim that refuses an artifact case.
+    expect(error.code).toBe("target-not-found");
+  });
+
+  test("answers the declaration axis for a subpath too", () => {
+    const root = fixture(manifest, files);
+    expect(select(root, "./from.js", "declarations").path).toBe(join(root, "from.d.ts"));
+  });
+
+  test("still answers not-exported when an exports map excludes the subpath", () => {
+    // The `solid-js` 2.0 shape: `./web` is absent and `./types/*` does not
+    // match it. This is the claim that refuses an artifact case, and it is
+    // reachable only with a map present.
+    const mapped = {
+      name: "mapped-package",
+      version: "1.0.0",
+      exports: {
+        ".": { types: "./index.d.ts", import: "./index.js" },
+        "./refresh": "./from.js",
+        "./types/*": "./types/*",
+        "./package.json": "./package.json"
+      }
+    };
+    const root = fixture(mapped, files);
+    let error;
+    try {
+      selectPackageExportTarget({ packageRoot: root, manifest: mapped, entrypoint: "./web", conditions: [] });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ArtifactResolutionError);
+    expect(error.code).toBe("not-exported");
+    // ...and a pattern that does match is a match.
+    expect(
+      selectPackageExportTarget({
+        packageRoot: root,
+        manifest: { ...mapped, exports: { ...mapped.exports, "./*": "./*" } },
+        entrypoint: "./lib/utils.js",
+        conditions: []
+      }).path
+    ).toBe(join(root, "lib/utils.js"));
+  });
+});

@@ -11835,3 +11835,452 @@ baseline's 71.3 s / 55.9 s, on a host that had returned to its normal load. That
 settles the question the two previous entries left open: neither the census
 round nor the argument-provenance round carries a measurable wall-time cost; the
 136–149 s runs recorded on 2026-09-02 were host contention.
+
+## 2026-09-02 — An unresolvable subpath no longer unnames its package's declarations
+
+`@solid-primitives/favicon@1.0.0-next.1` refused on both its solid2 rows
+(`|floor` and `|head`, one demand digest
+`sha256:686dc3324f8e4e10cca9c4e57125017baa36ab30f2de512b91c96a7fd7c925c5`) with
+`recursive-value-shape (…:FaviconLink): export root is not compiler-proved
+callable or constructable`. The declaration is
+`declare const FaviconLink: Component<FaviconLinkProps>` and
+`Component<P> = (props: P) => SolidElement` is exported by the installed
+solid-js 2.0.0-rc.0 (`types/index.d.ts` re-exports `./client/component.js`), so
+every static measurement said `Callable`. The roots diagnosis
+(`docs/package-contract-v2/phase21/2026-09-01-producer-roots-diagnosis.md` §10
+and its §11 addendum) had narrowed the cause to the producer's type observation
+for that one export, and left it open.
+
+### Root cause
+
+A one-run temporary print in `exportValueTranscriptLocked`, removed
+immediately, showed a *completed* observation whose type was
+`Component<FaviconLinkProps>` with type flags `0x1` — `TypeFlagsAny`, hence
+`openType` and unknown callability — and, on every one of the package's seven
+declaration files, one TS2307 at the module specifier of `from "solid-js"`.
+**The witness program had no `solid-js` at all.**
+
+`packages/cli/scripts/certify-contract.mjs` collects the declaration-only
+source closure by walking each artifact case's external dependency edges. Two
+callers answer a throw from that walk by withholding the *package name* the
+failing specifier carries — a deliberate all-or-nothing rule, because
+materializing one copy of a name whose other copy would not authenticate is
+substitution, not removal. But `@solid-primitives/favicon`'s compiled
+`dist/components.js` imports `solid-js/web`, and Solid 2 exports only `.`,
+`./refresh`, `./types/*` and `./package.json` — so the closure walk raised
+`ArtifactResolutionError { code: "not-exported" }` for the *subpath*, and the
+catch withheld the name `solid-js`, whose own copy had authenticated perfectly
+and was already in the acquired set. With Solid's declarations gone, every
+alias the package's typings import collapsed to `any`; `FaviconLink`, whose
+whole declared type *is* one of those aliases, collapsed with it, and the root
+premise refused an openness the published typings do not have. Under solid1
+targets `solid-js/web` resolves, which is why only the solid2 rows carried it.
+
+### The fix
+
+`collectCompilerSources` already returned the located package and dropped its
+transitive closure for `target-not-found` and `declarations-not-found`. That
+arm now covers every `ArtifactResolutionError`: a specifier the located
+package does not resolve is a fact about the *specifier*, and the package's own
+published declarations are still exactly what it published. Substitution is
+unaffected — Rust authenticates each source against its own lock selection and
+`retain_authenticated_source_packages` still withholds a name whose copy
+disagrees — and the two remaining withholding paths (a copy that cannot be
+turned into an authenticatable request; an archive that cannot be acquired) are
+untouched.
+
+Pinned by `a subpath a dependency does not export never unnames the dependency`
+in `packages/cli/test/contract-workflow.test.mjs`, which fails on the previous
+two-code list.
+
+### Measured
+
+`@solid-primitives/favicon@1.0.0-next.1|solid2|floor` and `|head` stopped
+refusing `sha256:686dc332…`. They then *certified*, which was wrong for a
+different reason and is fixed in the sibling entry below
+("An import of a subpath the dependency does not export refuses the case"):
+both rows now refuse `dependency-target-not-exported`. The false `openType` is
+gone either way — that is what this entry fixes — and the row's honest state is
+the new refusal.
+
+The five §9 controls stayed certified (`scheduled@1.5.3`, `map@0.7.4`,
+`refs@1.1.4`, `event-listener@2.4.6`, `storage@4.4.0`), as did the two extra
+controls this round measured alongside them (`marker@0.2.2`, `i18n@2.2.1`), and
+all five must-not-clear rows stayed refused on byte-identical demand digests:
+`@solid-devtools/ui@0.10.3` `sha256:1ecbeb4e…`, `solid-devtools@0.34.5`
+`sha256:79f6b48f…`, `@solidjs/web@2.0.0-rc.3` `sha256:0fde5acc…`,
+`@tanstack/solid-store@0.11.1` and `@tanstack/solid-form@2.0.0-alpha.2` both
+`sha256:34aa664d…`. Coverage compared 94 fixture projects / 546 findings with
+no movement.
+
+### What stays open
+
+Every row's declaration-only closure is still *silently* partial — both the
+Node collector and `retain_authenticated_source_packages` drop what they
+cannot authenticate, and only `certification_sources_root` in the receipt
+records which closure proved the result. That is unchanged by this slice.
+
+`solid-js/web` still does not resolve inside the witness program, correctly:
+the package really imports a subpath its declared peer does not export. What
+that should *mean* is the third entry's subject, not this one's.
+
+## 2026-09-02 — A case set's verification order is package coordinates, not path salt (M9)
+
+`@tanstack/solid-query-persist-client@5.102.5|solid1|only` refused with
+`Type Facts live-session identity mismatch at export-value verification: field
+implementation_location expected …/query-persist-client-core/src/createPersister.ts:2313-2333,
+actual None` on one run and `…/build/modern/createPersister.js:6160-6180,
+actual None` on another from identical inputs and identical binaries, and
+`@tanstack/solid-query@5.102.5|solid1|only` flipped its reported demand between
+`sha256:f06329123be31f858423f45cf214f7255aac5faa0591373487ac92d1a842e4f9`
+(`keepPreviousData`) and
+`sha256:1e5287b5f6ac0365df170c68881e1c20a57c87d64fa0ea59ffc460be4336d496`
+(`defaultScheduler`, `implementationUnavailable`). Two independent defects.
+
+### (a) The order that decides which refusal surfaces was salted by absolute paths
+
+`certify_published_contract_graph_case_set` acquires one Type Facts request per
+canonical graph node, and verification stops at the first open demand — so the
+request order decides which node's refusal the case set reports. That order was
+`(package_name, package_version, requested_entrypoint, identity_digest)`, and
+`node_identity_digest` hashes `identity.importer` and `resolved_import_root`,
+both absolute paths under the run's fresh temporary install directory.
+
+Alternative artifact cases of one package tie on name, version and entrypoint,
+so the path-salted digest alone decided their relative order.
+`@tanstack/query-persist-client-core@5.102.5` publishes three cases —
+`{}` → `build/modern/index.js`, `{"@tanstack/custom-condition"}` →
+`src/index.ts` (its `src/` tree is in `files`), `{"development"}` →
+`build/dev.js` — and the row's own dependency plan lists all three as graph
+roots. The two reported implementation locations are exactly the first two of
+them, which is the whole mechanism: not a schedule choosing a different
+location for one node, but a different node's schedule being reported first.
+
+The order is now
+`(package_name, package_version, requested_entrypoint, conditions.len(),
+conditions, runtime_target, declarations_target, digest)` — every coordinate a
+property of the packages, the digest only a last resort and never reached in
+practice.
+
+**The condition *count* is load-bearing, and ordering by the condition list
+alone is an inversion.** `certify-contract.mjs` adds `import` to every case's
+condition set, so the unconditional case is `["import"]` and every opt-in case
+is a superset of it — and lexicographically a superset whose extra word sorts
+below `import` comes *first*:
+`["@tanstack/custom-condition", "import"]` and `["development", "import"]` both
+precede `["import"]`, because `@` and `d` precede `i`. A first attempt at this
+fix ordered by the list alone and measured
+`["src/index.ts", "build/dev.js", "build/modern/index.js"]` — the
+publisher-private TypeScript source case first and the ordinary consumer's case
+last, the exact opposite of the intent. Fewest conditions first restores it:
+`["import"]` is the shortest set any case can carry.
+
+`type_facts_request_order_of_alternative_cases_is_independent_of_path_salt`
+derives the order over all six permutations of the three cases under two
+different path salts and asserts one answer with `build/modern/index.js`
+first. Its fixture identities are digested with the production
+`node_identity_digest`, so the salt really is mixed through SHA-256 rather than
+appearing as a shared prefix; the test fails on both of the orders it
+replaces — on the digest tie-break the answer changes with the salt, and on the
+bare condition-list tie-break `src/index.ts` comes first.
+
+The sibling lane orders differently and deliberately: `certify_value_only`
+consumes `type_facts_requests()` in `self.nodes` order, the retained
+dependency-first planning order. That is deterministic and path-independent
+too, but it is not this order, so a single-graph run and a case-set run can
+report different first refusals for the same node set.
+
+### (b) An identity mismatch was reported in place of the producer's open reason
+
+The producer sets `transcript.Implementation` only after the five early-refusal
+returns in `exportValueTranscriptLocked` (`sourceUnavailable`,
+`identifierNotExact`, `symbolUnresolved`, `aliasUnresolved`,
+`declarationUnavailable`), which return before it reads
+`ImplementationLocation` at all. An export observation that refused early
+therefore always answered `implementation = None`, and the unconditional
+identity check turned that into a *location identity failure naming a location
+the schedule chose correctly* — with the real defect, already stated in the
+transcript's own open reasons, never reported.
+
+`verify_scheduled_implementation_location` now defers on an incomplete
+transcript. This accepts nothing: every scheduled export value carries at least
+one proof demand (`new_export_values` groups demands and never creates an empty
+group), and `verify_export_value_subject` refuses an incomplete transcript for
+each of them, naming `transcriptIncomplete` and every producer reason. Pinned
+by `an_incomplete_transcript_is_not_held_to_the_scheduled_implementation_location`,
+which also asserts that a *complete* transcript with no implementation is still
+a hard mismatch.
+
+### Measured, twice each
+
+| row | before | after (two consecutive runs, repeated after the resolver round) |
+| --- | --- | --- |
+| `@tanstack/solid-query-persist-client@5.102.5\|solid1\|only` | refused, no demand digest, `implementation_location expected …/src/createPersister.ts:2313-2333` / `…/build/modern/createPersister.js:6160-6180`, `actual None` | refused, `sha256:2f2e1c9dd969b319323811acbe922d1410d5944ce2083041d680188008b7f75b`, artifact case `c56f33e7…`, export `PERSISTER_KEY_PREFIX` `(transcriptIncomplete,producer:declarationUnavailable)` |
+| `@tanstack/solid-query@5.102.5\|solid1\|only` | refused, `sha256:f06329123be3…` / `sha256:1e5287b5f6ac…` | refused, `sha256:f06329123be31f858423f45cf214f7255aac5faa0591373487ac92d1a842e4f9`, `@tanstack/query-core@5.102.5 (.)` artifact case `f71c70c3…` export `keepPreviousData`, `recursive-value-shape`: "the demand asserts no callability and the producer did not exhaustively observe the root" |
+
+Both rows remain refused; nothing certified that did not before. `solid-query`
+settling on `sha256:f0632912…` — the digest the *committed* report carries —
+is the corroboration the ordering argument wanted: the committed side of the
+flip is the `["import"]` case, which is what fewest-conditions-first selects.
+An intermediate build of this work, ordering by the bare condition list,
+reported `sha256:1e5287b5…` (`defaultScheduler`, `implementationUnavailable`)
+instead — the `@tanstack/custom-condition` side, stably. Both are honest
+frontiers of their own case; only one of them is the case a consumer resolves.
+
+### What stays open
+
+The flip itself was never reproduced in this work — every run on this host
+landed on the `build/modern` side. The causal chain is proved statically (the
+digest hashes `importer`; the cases tie on every earlier coordinate; the two
+reported locations are two of the row's own listed graph roots) and the new
+order is path-independent by construction and by test, but "the flip is gone"
+rests on that chain plus determinism across repeated runs, not on having
+watched it flip and stop.
+
+Two honest frontiers are newly *visible* rather than newly created, and both
+are open. `@tanstack/query-core`'s `keepPreviousData` root is not
+exhaustively observed; that was not diagnosed.
+
+`PERSISTER_KEY_PREFIX` was, and it is the **same class of defect as favicon's**
+— an incomplete witness program reported as a producer openness. A bounded
+producer print, removed immediately, shows the alias target resolving to the
+checker's `unknown` symbol (`targetDecls=0`), and the harness importing it from
+
+    ./node_modules/@tanstack/solid-query-persist-client/build/modern/createPersister.js
+
+which does not exist: `build/modern/createPersister.*` is a member of
+`@tanstack/query-persist-client-core`, not of `@tanstack/solid-query-persist-client`.
+`exact_declaration_harness_subject` takes the declaration binding for a
+re-exported export — a path relative to the *dependency's* package — and
+`snapshot_module_harness_specifier` joins it onto the *root plan's* package
+root. The module never resolves, so the name never resolves, and the producer
+answers `declarationUnavailable` about a file the demand does not name.
+`declare const PERSISTER_KEY_PREFIX = "tanstack-query"` is right there in the
+published `build/modern/createPersister.d.ts`. Filed, not fixed: it is a
+harness-specifier defect in `type_facts.rs`, it affects every re-exported
+export whose declaration binding names a dependency's file, and it needs its
+own slice.
+
+`export_implementation_location` still selects the first plan in `plans` order
+whose `snapshot_root` matches, and two byte-identical copies of one package
+installed at *different* roots would still tie down to the digest. The existing
+argument at that call site stands (a shared `snapshot_root` is a content hash,
+so the transcript over the span is identical either way), and the private
+project deduplicates package roots by installed identity, so no case in the
+corpus distinguishes them.
+
+## 2026-09-02 — An import of a subpath the dependency does not export refuses the case
+
+Repairing the withheld-`solid-js` defect two entries above left
+`@solid-primitives/favicon@1.0.0-next.1|solid2|floor` and `|head` **certified**,
+and that was a disposition gap rather than a result. An ordinary consumer
+resolving the package's `.` entrypoint reaches `dist/components.js`, which
+imports `solid-js/web`; the authenticated `solid-js` 2.0 exports map answers
+`.`, `./refresh`, `./types/*` and `./package.json` and nothing else. The
+certificate said nothing about a module the export needs and cannot load.
+
+Two lanes already fail closed on this shape and one did not. A *relative*
+import of a missing module is a hard `module-not-found` refusal
+(`packages/cli/scripts/artifact-resolution.mjs`), and the published-graph lane
+propagates an unresolvable dependency edge into a node refusal
+(`published-contract-graph.mjs`). The root certification lane instead answered
+it by withholding the dependency's *name* from the witness program — which is
+the defect the entry two above fixes, and which was never a statement about the
+importing case at all.
+
+### The premise
+
+An artifact case is **refused** at stage `artifact-case` with class
+`dependency-target-not-exported` when all three of these hold for one edge:
+
+1. **The edge is the case's own runtime import** — `axis === "runtime"` on an
+   edge of the case's own module closure.
+2. **The dependency declares an `exports` map**, is located in the installed
+   tree, and an exact Bun lock selection names that copy (name, version,
+   locator).
+3. **That map, replayed under the conditions this run selects, answers
+   `not-exported`** for the requested subpath.
+
+A first version of this check had only the third premise, applied wherever the
+source walk resolved anything. The full 418-probe re-measure refused eight
+previously certified rows for it (352 → 344 verified), and every one was a
+false claim; the premises above are what each of them taught.
+
+**Premise 1** — the declaration-axis walk is a *type* graph that no runtime
+resolves, and a specifier belonging to a transitive source package is that
+package's import, not this case's. `listhen/dist/index.d.ts:8` does
+`import * as jiti_lib_types from 'jiti/lib/types'`; jiti@2.7.0's map really
+does exclude `./lib/types`, and it does not matter, because a declaration file
+is erased before anything resolves it — and `listhen` is a transitive
+dependency of `@tanstack/solid-start-config`, not its case.
+`@tanstack/solid-query-devtools@6.0.0-rc.0` is the other shape: under
+`[@tanstack/custom-condition, import]` its dependency
+`@tanstack/query-devtools@5.102.8` resolves to `./src/index.ts`, whose own
+sources import `solid-js/web`. Whether *that* package loads under Solid 2 is a
+claim about its artifact case, and this lane holds no accepted contract for it.
+`@tanstack/solid-query-devtools` itself mentions `solid-js/web` only in two
+source comments.
+
+**Premise 2** — a package with no `exports` field does not restrict its
+subpaths at all, and three real dependencies proved the point:
+`picomatch@2.3.2` (`micromatch/index.js:6` does
+`require('picomatch/lib/utils')`, resolved by extension to `lib/utils.js`),
+`fetch-blob@3.2.0` (`node-fetch/src/index.js:34`, a real ESM import of
+`fetch-blob/from.js`, a published file), and `dayjs@1.11.23`
+(`@tanstack/pacer-devtools`' own `dist/components-*.js` imports
+`dayjs/plugin/relativeTime.js`, also published).
+
+**Premise 3** — `target-not-found` (the file is missing) and
+`conditions-unmatched` (no condition matched) are different claims with their
+own dispositions. A `"./*"` or other pattern key that matches the request is a
+match, so no map containing one can answer this. The legacy `browser` field
+cannot rescue a case either: Node ignores `browser` whenever `exports` is
+present, and it substitutes one file for another rather than adding a subpath.
+`imports` (`#specifier`) is a separate resolution that no package specifier
+reaches.
+
+The refusal names the dependency and the subpath:
+
+```
+artifact case . [import] imports dependency-target-not-exported:
+solid-js/web is not exported by solid-js@2.0.0-rc.0 under conditions [import]
+```
+
+### The resolver also lied about a package with no exports map
+
+`selectPackageExportTarget` failed every non-`.` subpath of a package with no
+`exports` field as "has no legacy package entrypoint" under the `not-exported`
+code. That is a false statement about the package: Node applies
+PACKAGE_EXPORTS_RESOLVE only when the field is present, and otherwise resolves
+`pkg/sub` as a legacy path — joined onto the package root, with the CommonJS
+extension and index candidates for an extensionless request, which is the only
+shape in which `picomatch/lib/utils` is importable at all. It now does exactly
+that, and a subpath the package does not ship is `target-not-found`, an
+absence. This is the primary repair for `@tanstack/pacer-devtools`, whose dayjs
+edge *is* its own runtime import and so passes premise 1; premise 2 is a second
+gate on the same mistake.
+
+### What it deliberately does not touch
+
+- **`conditions-unmatched` stays the unresolved-dependency frontier.** There
+  the subpath *is* declared and the run's condition set simply does not select
+  it. That is a different claim and keeps its existing disposition (policy-2
+  fix 0).
+- **A dependency that is not installed** keeps the unaccepted-external-dependency
+  hazard; nothing here is reached without a located, lock-selected copy.
+- **The package is not unnamed.** This is a refusal about the *case*; the
+  located dependency's declarations are still supplied to every case that does
+  resolve, which is exactly the repair two entries above.
+
+### Measured
+
+Ten rows are touched by this class. Each verdict is the installed dependency's
+own manifest read against Node's ESM_RESOLVE / PACKAGE_EXPORTS_RESOLVE.
+
+| row | specifier | dependency's `exports` | importer | verdict |
+| --- | --- | --- | --- | --- |
+| `@solid-primitives/favicon@1.0.0-next.1\|solid2\|floor`, `\|head` | `solid-js/web` | `.`, `./refresh`, `./types/*`, `./package.json` (rc.0 and rc.3 alike) | its own `dist/components.js`, runtime ESM | **refused, true** |
+| `@solid-primitives/drag-drop@0.1.0-next.0\|solid2\|floor`, `\|head` | `solid-js/web` | same four keys | its own `dist/context.js:3`, `import { createComponent } from "solid-js/web"` | **refused, true** |
+| `@tanstack/solid-query-devtools@6.0.0-rc.0\|solid2\|floor`, `\|head` | `solid-js/web` | same four keys | `@tanstack/query-devtools@5.102.8`'s `src/*.tsx`, a transitive package | **certified** — premise 1 (wrong case) |
+| `@solid-primitives/fetch@2.5.2\|solid1\|only` | `fetch-blob/from.js` | **absent** (`main: index.js`); ships `from.js` | `node-fetch/src/index.js:34` | **certified** — premises 1 and 2 |
+| `@solidjs/start@2.0.3\|solid1\|only` (`./config`) | `picomatch/lib/utils` | **absent**; ships `lib/utils.js` | `micromatch/index.js:6`, `require(…)` | **certified** — premises 1 and 2 |
+| `@tanstack/pacer-devtools@1.4.0\|solid1\|only` | `dayjs/plugin/relativeTime.js` | **absent**; ships `plugin/relativeTime.js` | its own `dist/components-*.js`, runtime ESM | **certified** — the resolver repair, and premise 2 |
+| `@tanstack/solid-start-config@1.120.20\|solid1\|only` | `jiti/lib/types` | `.`, `./native`, `./static`, `./register`, `./package.json` — really excludes it | `listhen/dist/index.d.ts:8`, a declaration file | **certified** — premise 1 (type-only, and wrong case) |
+
+`solid-js` 2.0.0-rc.0 and 2.0.0-rc.3 both publish exactly
+`[".", "./refresh", "./types/*", "./package.json"]`. `./types/*` is a pattern
+and cannot match `./web`, so the four refused rows really do ship a bundle
+importing the 1.x path, and really cannot load under the Solid 2 they are
+published against.
+
+The five §9 controls plus `marker@0.2.2` and `i18n@2.2.1` stayed certified and
+the five must-not-clear rows stayed refused on byte-identical demand digests;
+the two M9 rows kept their digests over two more runs each. Corpus: 79
+fixtures, snapshots unchanged. Coverage: 94 fixture projects / 546 findings, no
+movement.
+
+### Pins, and where they are
+
+Five resolver cases in `packages/cli/test/artifact-resolution.test.mjs`
+(`a package with no exports field`), which fail on the previous resolver: an
+exact subpath, an extensionless subpath through the CommonJS candidates, a
+subpath the package does not ship (now `target-not-found`), the declaration
+axis, and the control that an `exports` map excluding the subpath *still*
+answers `not-exported` while a matching `./*` pattern does not.
+
+Nine disposition cases in `packages/cli/test/contract-workflow.test.mjs` over
+one minimal installed tree, differing only in what the dependency exports and
+what the root imports: the `solid-js` 2.0 shape refuses with the class, stage,
+owner and conditions; an exported subpath, a condition-gated subpath the run
+selects, a matching `./*` pattern, both no-`exports` shapes (extensionless and
+exact `.js`), and a type-only import of a genuinely excluded subpath all do
+not. The type-only case was verified load-bearing by deleting premise 1 and
+watching it refuse; the `conditions-unmatched` case by widening premise 3 to
+that code and watching it refuse.
+
+Premise 2 has no test that can fail: with the resolver correct, a package
+without an `exports` map can no longer produce `not-exported` at all. It is
+kept as a second gate on the same mistake precisely so the claim cannot be
+inferred from an absent map, and that is recorded here rather than pinned.
+
+**Not** pinned under `fixtures/package-contracts/`, deliberately and against
+the round's instruction. That corpus is driven by `contract generate`
+(`scripts/contract-corpus.mjs`), which has no lockfile, no registry
+acquisition and no witness program — none of the premises above exists there,
+so a fixture in it would run no part of this mechanism while appearing to
+cover it. There is no certification-driven fixture gate over that directory.
+If one is built, these cases are what it should carry.
+
+### What stays open
+
+The class fires only on the case's own runtime closure. An unresolvable subpath
+inside a *dependency's* runtime closure — `@tanstack/query-devtools`'s
+`solid-js/web` under `[@tanstack/custom-condition, import]` is a live example —
+is that dependency's defect, and this lane says nothing about it because it
+holds no accepted contract for it. Closing that means composing a dependency's
+own artifact-case disposition into the root's, which is the accepted-dependency
+lane's subject rather than this one's.
+
+The class is also decided from the edges the source-collection walk enumerates.
+A case whose runtime graph reaches a broken subpath only through a *local*
+module the closure replay does not visit would not be seen; nothing in the
+corpus exercises that.
+
+The `exists: false` return from legacy subpath resolution is reachable but
+unexercised in the corpus: every measured no-`exports` subpath was a published
+file. A missing one lands on `target-not-found`, which the collector already
+dispositions by supplying the located package and dropping the closure behind
+the failed specifier.
+
+`benchmarks/ecosystem/report.{json,md}` in the worktree is the 418-probe
+re-measure made with the *first* version of this class (344 verified) and is
+stale against these fixes. It was not regenerated here.
+
+### Re-measured: 350 verified / 47 exact refusals / 21 not attempted
+
+The complete 418-probe corpus was re-run after the three rounds of this batch
+(`make ecosystem-benchmark`; report SHA-256
+`f4194c85aad55e7eff1151e4d0f3b98ca5145e07217b1111fe15c23598e87cc6`). Against
+the committed report, exactly two verdicts moved, both verified → refused and
+both honest: `@solid-primitives/drag-drop@0.1.0-next.0|solid2|floor` and
+`|head`, whose own `dist/context.js` imports `solid-js/web`, a subpath the
+authenticated `solid-js` 2.0 exports map (`.`, `./refresh`, `./types/*`,
+`./package.json`) does not export, so an ordinary Solid 2 consumer cannot load
+the module. The two favicon rows stay refused, now on that same true reason
+instead of the `openType` root the dropped `solid-js` sources produced. The
+first re-measure of this batch, with the disposition's original firing
+condition, had refused six further rows; every one was a resolver defect (a
+package with no `exports` field, a transitive package's or a declaration file's
+specifier attributed to the case) and every one certifies again after the third
+round — that intermediate report was not pinned.
+
+The M9 rows are now stable across runs and moved to their true frontiers:
+`@tanstack/solid-query@5.102.5` back on `f06329123be3…` (`keepPreviousData`,
+the `["import"]` case, matching the committed digest and corroborating the
+ordering fix), and `@tanstack/solid-query-persist-client@5.102.5` on
+`2f2e1c9dd969…` (`PERSISTER_KEY_PREFIX`, alias target open), the harness
+specifier defect recorded above.
+
+Ledgers re-pinned: Phase 21 to the digest above; Phase 20 moved 352 → 350
+verified and 45 → 47 exact refusals, removing the two drag-drop rows. Wall time
+72.2 s, on par with the 71.3 s baseline.

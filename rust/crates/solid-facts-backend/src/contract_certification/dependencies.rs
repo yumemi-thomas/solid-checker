@@ -604,27 +604,27 @@ pub fn certify_published_contract_graph_case_set(
             {
                 return Err(PublishedGraphCertificationError::CanonicalIdentityCollision(identity));
             }
-            requests.entry(identity).or_insert(request);
+            // The canonical identity travels with its request rather than
+            // being looked up again when the order is derived. A lookup would
+            // need an answer for a key it cannot find, and every such answer
+            // is wrong: `None` coordinates sort the node first, and a panic
+            // turns an ordering decision into a crash.
+            requests
+                .entry(identity)
+                .or_insert((node.identity.clone(), request));
         }
     }
     let mut request_entries = requests.into_iter().collect::<Vec<_>>();
-    request_entries.sort_by(|(left_identity, left), (right_identity, right)| {
+    request_entries.sort_by(|(_, (left, _)), (_, (right, _))| {
         compare_type_facts_request_coordinates(
-            (
-                &left.plan.resolved_import.package_name,
-                &left.plan.resolved_import.package_version,
-                &left.plan.resolved_import.requested_entrypoint,
-                left_identity,
-            ),
-            (
-                &right.plan.resolved_import.package_name,
-                &right.plan.resolved_import.package_version,
-                &right.plan.resolved_import.requested_entrypoint,
-                right_identity,
-            ),
+            type_facts_request_order_key(left),
+            type_facts_request_order_key(right),
         )
     });
-    let (request_keys, request_values): (Vec<_>, Vec<_>) = request_entries.into_iter().unzip();
+    let (request_keys, request_values): (Vec<_>, Vec<_>) = request_entries
+        .into_iter()
+        .map(|(digest, (_, request))| (digest, request))
+        .unzip();
     let evidence =
         super::type_facts::acquire_and_verify_graph_export_values(root_plan, &request_values, pin)
             .map_err(
@@ -650,9 +650,85 @@ pub fn certify_published_contract_graph_case_set(
         .collect()
 }
 
+/// The coordinates one case-set Type Facts request is ordered by, most
+/// significant first. See `type_facts_request_order_key`.
+type TypeFactsRequestOrderKey<'a> = (
+    &'a str,
+    &'a str,
+    &'a str,
+    usize,
+    &'a [String],
+    &'a str,
+    &'a str,
+    &'a str,
+);
+
+/// The order one case set's Type Facts requests are acquired and verified in —
+/// and therefore, since verification stops at the first open demand, which
+/// node's refusal a failing case set reports.
+///
+/// Package name, version and requested entrypoint first, so a case set stays
+/// grouped by package; then **fewest conditions first**, the conditions
+/// themselves, and the package-relative runtime and declaration targets those
+/// conditions resolve to. Every coordinate is a property of the packages; the
+/// canonical identity digest is only the last resort, and it is never reached
+/// in practice (see the residual below).
+///
+/// Condition *count* precedes the conditions because the list alone orders
+/// them backwards. `certify-contract.mjs` adds `import` to
+/// every case's condition set, so the unconditional case is `["import"]` and
+/// the opt-in cases are supersets of it — and *lexicographically* a superset
+/// starting with a lower-sorting word comes first:
+/// `["@tanstack/custom-condition", "import"]` and `["development", "import"]`
+/// both sort before `["import"]`, because `@` and `d` precede `i`. Ordering by
+/// the condition list alone therefore put the publisher-private TypeScript
+/// source case first and the ordinary consumer's case last, the exact
+/// inversion of the intent. The count restores it: `["import"]` is the
+/// shortest set any case can have.
+///
+/// The digest used to be the *third* tie-break, and it is salted by absolute
+/// paths — the canonical identity binds `importer` and the resolved import
+/// root, which under any harness that installs into a fresh temporary
+/// directory differ on every run. Alternative artifact cases of one package
+/// share name, version and entrypoint, so the digest alone decided their
+/// relative order, and the case whose refusal a failing set reported changed
+/// run to run from identical inputs and identical binaries:
+/// `@tanstack/query-persist-client-core`'s plain `import` case
+/// (`build/modern/createPersister.js`) one run and its
+/// `@tanstack/custom-condition` case (`src/createPersister.ts`) the next, with
+/// the demand digest in the report flipping with it.
+///
+/// Residual, unobservable within one run: two nodes agreeing on every
+/// coordinate above and differing only in `importer` would still tie down to
+/// the path-salted digest. One `name@version` resolves to one integrity in a
+/// lockfile, so two such nodes are byte-identical installations of the same
+/// package reached from different importers, and every premise proved over
+/// them is the same. Nothing in the corpus produces the pair.
+///
+/// The sibling lane orders differently and deliberately:
+/// `certify_value_only` consumes `type_facts_requests()` in `self.nodes`
+/// order, which is the retained dependency-first planning order. That is
+/// deterministic and path-independent too, but it is not this order, and a
+/// single-graph run and a case-set run can report different first refusals for
+/// the same node set.
+fn type_facts_request_order_key(
+    identity: &CanonicalDependencyNodeIdentity,
+) -> TypeFactsRequestOrderKey<'_> {
+    (
+        identity.package_name.as_str(),
+        identity.package_version.as_str(),
+        identity.entrypoint.as_str(),
+        identity.conditions.len(),
+        identity.conditions.as_slice(),
+        identity.runtime_target.as_str(),
+        identity.declarations_target.as_str(),
+        identity.digest(),
+    )
+}
+
 fn compare_type_facts_request_coordinates(
-    left: (&str, &str, &str, &str),
-    right: (&str, &str, &str, &str),
+    left: TypeFactsRequestOrderKey<'_>,
+    right: TypeFactsRequestOrderKey<'_>,
 ) -> std::cmp::Ordering {
     left.cmp(&right)
 }
@@ -2130,36 +2206,175 @@ pub enum DependencyCompositionError {
 mod tests {
     use super::*;
 
+    /// A node identity whose digest is computed the way production computes
+    /// it, over every field including the absolute `importer`. The digest is
+    /// what the old order tie-broke on, so a plaintext stand-in whose salt is
+    /// a shared prefix would make the digest order degenerate to the field
+    /// order and the salt-independence test vacuous.
+    fn order_identity(
+        package: &str,
+        version: &str,
+        entrypoint: &str,
+        conditions: &[&str],
+        runtime_target: &str,
+        importer: &str,
+    ) -> CanonicalDependencyNodeIdentity {
+        let mut identity = CanonicalDependencyNodeIdentity {
+            registry_origin: "https://registry.npmjs.org".into(),
+            package_manager: "bun".into(),
+            package_name: package.into(),
+            package_version: version.into(),
+            integrity: "sha512-test".into(),
+            lockfile_digest: "sha256:lock".into(),
+            lock_locator: format!("{package}@{version}"),
+            entrypoint: entrypoint.into(),
+            conditions: conditions.iter().map(|value| (*value).to_owned()).collect(),
+            // The one path-salted field the old order tie-broke on.
+            importer: importer.into(),
+            resolution_kind: "Exports".into(),
+            runtime_target: runtime_target.into(),
+            runtime_digest: "sha256:runtime".into(),
+            declarations_target: "build/index.d.ts".into(),
+            declarations_digest: "sha256:declarations".into(),
+            closure_root: "sha256:closure".into(),
+            resolved_import_root: format!("sha256:{importer}"),
+            snapshot_root: "sha256:snapshot".into(),
+            provenance_root: "sha256:provenance".into(),
+            artifact_case: "artifact-case:test".into(),
+            semantic_digest: "sha256:semantic".into(),
+            source_dependencies_root: "sha256:sources".into(),
+            digest: String::new(),
+        };
+        identity.digest = node_identity_digest(&identity);
+        identity
+    }
+
     #[test]
     fn type_facts_request_order_is_package_coordinate_first_and_digest_last() {
+        let left = order_identity("@scope/a", "2.0.0", ".", &["import"], "build/index.js", "z");
+        let right = order_identity("@scope/b", "1.0.0", ".", &["import"], "build/index.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("@scope/a", "2.0.0", ".", "sha256:z"),
-                ("@scope/b", "1.0.0", ".", "sha256:a"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+        let left = order_identity("pkg", "1.0.0", "./a", &["import"], "build/a.js", "z");
+        let right = order_identity("pkg", "1.0.0", "./b", &["import"], "build/b.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("pkg", "1.0.0", "./a", "sha256:z"),
-                ("pkg", "1.0.0", "./b", "sha256:a"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+        let left = order_identity("pkg", "1.0.0", ".", &["import"], "build/index.js", "z");
+        let right = order_identity("pkg", "2.0.0", ".", &["import"], "build/index.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("pkg", "1.0.0", ".", "sha256:z"),
-                ("pkg", "2.0.0", ".", "sha256:a"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+        // Fewest conditions first, and only then the condition list itself.
+        // `["import"]` is what an ordinary consumer selects; every opt-in case
+        // is a superset of it, and several of those sort *before* it
+        // lexicographically.
+        let plain = order_identity("pkg", "1.0.0", ".", &["import"], "build/index.js", "z");
+        for extra in ["@scope/private-condition", "development", "solid", "zzz"] {
+            let opt_in = order_identity(
+                "pkg",
+                "1.0.0",
+                ".",
+                &sorted_conditions(&["import", extra]),
+                "src/index.ts",
+                "a",
+            );
+            assert!(
+                compare_type_facts_request_coordinates(order_key(&plain), order_key(&opt_in))
+                    .is_lt(),
+                "the unconditional case must precede an opt-in case adding {extra:?}"
+            );
+        }
+        let left = order_identity("pkg", "1.0.0", ".", &["a", "import"], "build/index.js", "z");
+        let right = order_identity("pkg", "1.0.0", ".", &["b", "import"], "build/index.js", "a");
         assert!(
-            compare_type_facts_request_coordinates(
-                ("pkg", "1.0.0", ".", "sha256:a"),
-                ("pkg", "1.0.0", ".", "sha256:b"),
-            )
-            .is_lt()
+            compare_type_facts_request_coordinates(order_key(&left), order_key(&right)).is_lt()
         );
+    }
+
+    fn sorted_conditions<'a>(conditions: &[&'a str]) -> Vec<&'a str> {
+        let mut sorted = conditions.to_vec();
+        sorted.sort_unstable();
+        sorted
+    }
+
+    fn order_key(identity: &CanonicalDependencyNodeIdentity) -> TypeFactsRequestOrderKey<'_> {
+        type_facts_request_order_key(identity)
+    }
+
+    /// The regression: alternative artifact cases of one package share name,
+    /// version and entrypoint, and their canonical identity digests are salted
+    /// by the absolute installed paths of the run. Deriving the order over
+    /// every input permutation, under two different salts, must give one
+    /// answer — with the unconditional case, the runtime an ordinary consumer
+    /// resolves, first and the publisher-private TypeScript source last.
+    ///
+    /// This fails on both of the orders it replaces: on the digest tie-break
+    /// (the answer changes with the salt) and on the bare condition-list
+    /// tie-break (`src/index.ts` first, `build/modern/index.js` last).
+    #[test]
+    fn type_facts_request_order_of_alternative_cases_is_independent_of_path_salt() {
+        let case = |conditions: &[&str], runtime_target: &str, salt: &str| {
+            order_identity(
+                "@tanstack/query-persist-client-core",
+                "5.102.5",
+                ".",
+                &sorted_conditions(conditions),
+                runtime_target,
+                salt,
+            )
+        };
+        let derive = |salt: &str, permutation: [usize; 3]| {
+            let published = [
+                (
+                    ["@tanstack/custom-condition", "import"].as_slice(),
+                    "src/index.ts",
+                ),
+                (["development", "import"].as_slice(), "build/dev.js"),
+                (["import"].as_slice(), "build/modern/index.js"),
+            ];
+            let mut cases = permutation
+                .iter()
+                .map(|index| {
+                    let (conditions, runtime_target) = published[*index];
+                    case(conditions, runtime_target, salt)
+                })
+                .collect::<Vec<_>>();
+            cases.sort_by(|left, right| {
+                compare_type_facts_request_coordinates(order_key(left), order_key(right))
+            });
+            cases
+                .into_iter()
+                .map(|identity| identity.runtime_target)
+                .collect::<Vec<_>>()
+        };
+        let expected = vec![
+            "build/modern/index.js".to_owned(),
+            "src/index.ts".to_owned(),
+            "build/dev.js".to_owned(),
+        ];
+        // Every permutation of the three cases, under two salts that differ
+        // the way two runs' temporary install roots differ.
+        for permutation in [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
+        ] {
+            for salt in [
+                "/private/tmp/solid-checker-ecosystem-aaaaaa/node_modules",
+                "/private/tmp/solid-checker-ecosystem-zzzzzz/node_modules",
+            ] {
+                assert_eq!(
+                    derive(salt, permutation),
+                    expected,
+                    "{permutation:?} {salt}"
+                );
+            }
+        }
     }
 
     fn id(package: &str) -> DependencyNodeIdentity {

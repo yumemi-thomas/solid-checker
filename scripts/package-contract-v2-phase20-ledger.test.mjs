@@ -81,16 +81,18 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // apparent-member census slice (2026-09-02) adds exactly i18n@2.2.1, and the
   // argument-provenance slice (2026-09-02) adds exactly the three marker rows, and
   // the non-emitting-module applicability slice (2026-09-02) adds exactly
-  // @kobalte/utils 2.0, @solidjs/h, @solidjs/image and @solidjs/universal.
+  // @kobalte/utils 2.0, @solidjs/h, @solidjs/image and @solidjs/universal; the
+  // dependency-target-not-exported disposition (2026-09-03) removes exactly the two
+  // @solid-primitives/drag-drop Solid 2 rows, whose bundle imports solid-js/web.
   assert.deepEqual(ledger.summary.proposalStates, {
     complete: 348,
     "fully-refused": 37,
     partial: 33
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 45,
+    "exact-refusal": 47,
     "not-attempted": 21,
-    verified: 352
+    verified: 350
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -98,7 +100,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 352);
+  assert.equal(ledger.summary.verifiedRows, 350);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -189,8 +191,6 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/devices@1.3.1|solid1|only",
       "@solid-primitives/devices@3.0.0-next.2|solid2|floor",
       "@solid-primitives/devices@3.0.0-next.2|solid2|head",
-      "@solid-primitives/drag-drop@0.1.0-next.0|solid2|floor",
-      "@solid-primitives/drag-drop@0.1.0-next.0|solid2|head",
       "@solid-primitives/event-bus@1.1.4|solid1|only",
       "@solid-primitives/event-bus@3.0.0-next.3|solid2|floor",
       "@solid-primitives/event-bus@3.0.0-next.3|solid2|head",

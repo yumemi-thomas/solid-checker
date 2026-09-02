@@ -1299,6 +1299,317 @@ test("root certification withholds a name whose published bytes it could not acq
   }
 });
 
+// The three cases of the `dependency-target-not-exported` policy. Each writes
+// the same minimal install and differs only in what `alpha` exports and what
+// the root's runtime module imports from it.
+function writeSubpathInstall(project, {
+  alphaSubpath = null,
+  alphaExports = null,
+  alphaDropExports = false,
+  alphaFiles = {},
+  rootImport = null,
+  rootTypeImport = null
+}) {
+  writeRootSourceInstall(project, { lockedNames: ["alpha", "beta"] });
+  const manifestPath = join(project, "node_modules/alpha/package.json");
+  const alpha = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (alphaSubpath) {
+    alpha.exports["./web"] = alphaSubpath;
+    writeFileSync(join(project, "node_modules/alpha/types/web.d.ts"), "export type W = () => void;\n");
+    writeFileSync(join(project, "node_modules/alpha/dist/web.js"), "export {};\n");
+  }
+  if (alphaExports) alpha.exports = alphaExports;
+  if (alphaDropExports) {
+    delete alpha.exports;
+    alpha.main = "index.js";
+    alpha.types = "./types/index.d.ts";
+    writeFileSync(join(project, "node_modules/alpha/index.js"), "export {};\n");
+  }
+  writeFileSync(manifestPath, `${JSON.stringify(alpha)}\n`);
+  for (const [relativePath, body] of Object.entries(alphaFiles)) {
+    const target = join(project, "node_modules/alpha", relativePath);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, body);
+  }
+  if (rootImport) {
+    writeFileSync(
+      join(project, "node_modules/root-package/dist/index.js"),
+      `import ${JSON.stringify(rootImport)};\nexport const value = () => {};\n`
+    );
+  }
+  if (rootTypeImport) {
+    writeFileSync(
+      join(project, "node_modules/root-package/types/index.d.ts"),
+      `import type { T as A } from ${JSON.stringify(rootTypeImport)};\nexport declare const value: A;\n`
+    );
+  }
+}
+
+// Runs the root source walk and returns either the emitted source names or the
+// refusal, so a case's disposition is one assertion either way.
+async function rootSources(project, generated = null) {
+  const scratch = join(project, "scratch");
+  mkdirSync(scratch, { recursive: true });
+  const archive = new TextEncoder().encode("not a real tarball").buffer;
+  return acquireRootCompilerSources({
+    options: {
+      packageRoot: join(project, "node_modules/root-package"),
+      registryOrigin: "https://registry.npmjs.org",
+      integrity: "sha512-root-package"
+    },
+    generated: generated ?? rootSourceGenerated(project),
+    scratch,
+    fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+  }).then(
+    ([emitted]) => ({ names: emitted.map(source => source.packageName).sort() }),
+    error => ({ refusal: error })
+  );
+}
+
+test("a dependency shipping no exports field never answers not-exported for a subpath", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // The `picomatch@2.3.2` shape: no `exports` field at all, and an
+    // extensionless subpath whose real file is `lib/utils.js`. Node applies
+    // PACKAGE_EXPORTS_RESOLVE only when `exports` is present; without it the
+    // subpath is legacy path resolution, so the package excludes nothing and
+    // there is nothing to refuse.
+    writeSubpathInstall(project, {
+      alphaDropExports: true,
+      alphaFiles: { "lib/utils.js": "export {};\n" },
+      rootImport: "alpha/lib/utils"
+    });
+    const result = await rootSources(project);
+    assert.equal(result.refusal, undefined, `unexpected refusal: ${result.refusal?.reason}`);
+    assert.deepEqual(result.names, ["alpha", "beta"]);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a dependency shipping no exports field resolves an exact .js subpath", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // The `fetch-blob@3.2.0` shape: no `exports`, and the request already
+    // carries its extension. `fetch-blob/from.js` is a published file.
+    writeSubpathInstall(project, {
+      alphaDropExports: true,
+      alphaFiles: { "from.js": "export {};\n" },
+      rootImport: "alpha/from.js"
+    });
+    const result = await rootSources(project);
+    assert.equal(result.refusal, undefined, `unexpected refusal: ${result.refusal?.reason}`);
+    assert.deepEqual(result.names, ["alpha", "beta"]);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a type-only import of a non-exported subpath never refuses the case", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // The `jiti/lib/types` shape: an `exports` map that really does exclude
+    // the subpath, reached only from a declaration file. A type import is
+    // erased before anything resolves it, so the case's runtime never asks.
+    writeSubpathInstall(project, { rootTypeImport: "alpha/lib/types" });
+    const result = await rootSources(project);
+    assert.equal(result.refusal, undefined, `unexpected refusal: ${result.refusal?.reason}`);
+    assert.ok(result.names.includes("alpha"), "the dependency is still named");
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a runtime import of a subpath a real exports map excludes refuses the case", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // The `solid-js` 2.0 shape, exactly: an `exports` map whose keys are `.`,
+    // `./refresh`, `./types/*` and `./package.json`, and a runtime import of
+    // `./web` — the path Solid 1.x published and 2.0 retired. `./types/*` is a
+    // pattern, and it does not match `./web`.
+    writeSubpathInstall(project, {
+      alphaExports: {
+        ".": { types: "./types/index.d.ts", import: "./dist/index.js" },
+        "./refresh": "./dist/refresh.js",
+        "./types/*": "./types/*",
+        "./package.json": "./package.json"
+      },
+      alphaFiles: { "dist/refresh.js": "export {};\n" },
+      rootImport: "alpha/web"
+    });
+    const result = await rootSources(project);
+    assert.ok(result.refusal, "an excluded runtime subpath must refuse the case");
+    assert.equal(result.refusal.stage, "artifact-case");
+    assert.match(
+      result.refusal.reason,
+      /dependency-target-not-exported: alpha\/web is not exported by alpha@1\.0\.0 under conditions \[import\]/
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an exports pattern that matches the subpath is a match, not an exclusion", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // The wildcard control for the premise above: a `./*` key matches every
+    // subpath, so no map containing one can answer `not-exported`.
+    writeSubpathInstall(project, {
+      alphaExports: {
+        ".": { types: "./types/index.d.ts", import: "./dist/index.js" },
+        "./*": "./dist/*"
+      },
+      alphaFiles: { "dist/web.js": "export {};\n" },
+      rootImport: "alpha/web.js"
+    });
+    const result = await rootSources(project);
+    assert.equal(result.refusal, undefined, `unexpected refusal: ${result.refusal?.reason}`);
+    assert.ok(result.names.includes("alpha"));
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an artifact case importing a subpath its dependency does not export is refused", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // `alpha` exports `.` and nothing else, and the root's runtime module
+    // imports `alpha/web` — the shape `@solid-primitives/favicon`'s compiled
+    // output has against Solid 2, which dropped the `./web` subpath. The
+    // dependency is installed, its manifest is the published one and the
+    // lockfile selects it, so no witness program can make this import
+    // resolve: the case is refused, and refused as a case rather than by
+    // unnaming `alpha`.
+    writeSubpathInstall(project, { rootImport: "alpha/web" });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const refusal = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+    }).then(
+      () => null,
+      error => error
+    );
+    assert.ok(refusal, "the case must be refused, not certified with the module missing");
+    assert.equal(refusal.name, "CertificationRefusal");
+    assert.equal(refusal.stage, "artifact-case");
+    assert.equal(refusal.owner, "certifier");
+    assert.match(refusal.reason, /^artifact case \. \[import\] imports dependency-target-not-exported: /);
+    assert.match(refusal.reason, /alpha\/web is not exported by alpha@1\.0\.0 under conditions \[import\]/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a sibling case importing a subpath its dependency does export is not refused", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    writeSubpathInstall(project, {
+      alphaSubpath: { types: "./types/web.d.ts", import: "./dist/web.js" },
+      rootImport: "alpha/web"
+    });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const [emitted] = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+    });
+    assert.deepEqual(
+      emitted.map(source => source.packageName).sort(),
+      ["alpha", "beta"],
+      "an exported subpath refuses nothing and still names every source"
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a subpath exported only under a condition this run selects is not refused", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // The subpath exists only behind `solid`. The run selects it, so the
+    // import resolves and there is nothing to refuse — the negative control
+    // for the policy above, which must key on the exports map's answer under
+    // the run's own conditions and not on the subpath's spelling.
+    writeSubpathInstall(project, {
+      alphaSubpath: { solid: { types: "./types/web.d.ts", import: "./dist/web.js" } },
+      rootImport: "alpha/web"
+    });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const generated = rootSourceGenerated(project);
+    generated.certificationInputs[0].conditions = ["import", "solid"];
+    const [emitted] = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated,
+      scratch,
+      fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+    });
+    assert.deepEqual(
+      emitted.map(source => source.packageName).sort(),
+      ["alpha", "beta"],
+      "a condition-gated subpath the run selects resolves like any other"
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a resolution failure that is not a missing export still names the located package", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
+  try {
+    // The batch-1 defect, in the shape that survives the policy above: the
+    // subpath IS exported, but only behind a condition this run does not
+    // select. That is `conditions-unmatched`, deliberately still the
+    // unresolved-dependency frontier — the located package's declarations are
+    // supplied and its name is not withheld, which is what collapsed
+    // `Component<Props>` to `any` before.
+    writeSubpathInstall(project, {
+      alphaSubpath: { "alpha/private-condition": "./dist/web.js" },
+      rootImport: "alpha/web"
+    });
+    const scratch = join(project, "scratch");
+    mkdirSync(scratch, { recursive: true });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    const [emitted] = await acquireRootCompilerSources({
+      options: {
+        packageRoot: join(project, "node_modules/root-package"),
+        registryOrigin: "https://registry.npmjs.org",
+        integrity: "sha512-root-package"
+      },
+      generated: rootSourceGenerated(project),
+      scratch,
+      fetch_: registryStub({ alpha: { archive }, beta: { archive } })
+    });
+    assert.deepEqual(
+      emitted.map(source => source.packageName).sort(),
+      ["alpha", "beta"],
+      "the package behind an unresolvable-but-declared subpath is still named"
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test("a project with no Bun lockfile names no declaration-only source at all", async () => {
   const project = mkdtempSync(join(tmpdir(), "solid-checker-root-sources-"));
   try {

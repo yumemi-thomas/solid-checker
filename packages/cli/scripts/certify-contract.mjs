@@ -140,6 +140,78 @@ export class CertificationRefusal extends Error {
   }
 }
 
+/// Refuses an artifact case whose **own runtime module graph** imports a
+/// subpath that the installed dependency's `exports` map provably excludes.
+///
+/// Returns nothing and throws a `CertificationRefusal` when it fires. Three
+/// premises, all of which must hold, and each of which one measured row taught:
+///
+///  1. **The edge is the case's own runtime import.** `axis === "runtime"` on
+///     an edge of the case's own closure. The declaration-axis walk is a
+///     *type* graph that no runtime resolves — a `.d.ts` naming
+///     `jiti/lib/types` is erased — and a specifier belonging to a transitive
+///     source package is that package's import, not this case's. Firing on
+///     those attributed a grandchild's specifier to the root's artifact case.
+///  2. **The dependency declares an `exports` map.** A package with no
+///     `exports` does not restrict its subpaths at all: Node applies
+///     PACKAGE_EXPORTS_RESOLVE only when the field is present, and otherwise
+///     resolves `pkg/sub` as a legacy path. `dayjs@1.11.23`,
+///     `picomatch@2.3.2` and `fetch-blob@3.2.0` ship no `exports` and all
+///     three publish the requested file. (`artifact-resolution.mjs` no longer
+///     answers `not-exported` for them either; this is the second gate on the
+///     same mistake, because the claim is about the map and must not be
+///     inferable from its absence.)
+///  3. **The map, replayed under this run's conditions, answers
+///     `not-exported`.** Not "the file is missing" (`target-not-found`) and
+///     not "no condition matched" (`conditions-unmatched`, which stays the
+///     unresolved-dependency frontier). A `"./*"` or other pattern key that
+///     matches the request is a match, so a wildcard map never answers this.
+///     The legacy `browser` field cannot rescue it: Node ignores `browser`
+///     whenever `exports` is present, and it only substitutes one file for
+///     another rather than adding a subpath. `imports` (`#specifier`) is a
+///     different resolution that no package specifier reaches.
+///
+/// What is left when all three hold is a broken import: the package is
+/// present, its manifest is the published one, an exact Bun lock selection
+/// names that copy, and its own export map publishes nothing for the module
+/// the case imports at runtime. `@solid-primitives/favicon`,
+/// `@solid-primitives/drag-drop` and `@tanstack/solid-query-devtools` all
+/// import `solid-js/web`, which Solid 2 retired.
+function refuseCaseImportingUnexportedTarget({
+  entrypoint,
+  conditions,
+  dependency,
+  located,
+  resolutionSession
+}) {
+  if (dependency.axis !== "runtime") return;
+  if (located.dependencyManifest.exports === undefined) return;
+  try {
+    resolvePackageArtifactClosure(
+      {
+        importer: located.dependencyImporter,
+        specifier: located.specifier,
+        packageRoot: located.dependencyRoot,
+        conditions,
+        resolutionKind: "import",
+        integrity: located.dependencyLock.integrity
+      },
+      resolutionSession
+    );
+  } catch (error) {
+    if (!(error instanceof ArtifactResolutionError) || error.code !== "not-exported") return;
+    throw new CertificationRefusal({
+      stage: "artifact-case",
+      owner: "certifier",
+      reason:
+        `artifact case ${entrypoint} [${conditions.join(", ")}] imports ` +
+        `dependency-target-not-exported: ${located.specifier} is not exported by ` +
+        `${located.dependencyManifest.name}@${located.dependencyManifest.version} ` +
+        `under conditions [${conditions.join(", ")}]`
+    });
+  }
+}
+
 function requireFunction(owner, name) {
   const operation = owner?.[name];
   if (typeof operation !== "function") {
@@ -663,7 +735,26 @@ function createCompilerSourceCollector({
         integrity: located.dependencyLock.integrity
       }, resolutionSession);
     } catch (error) {
-      if (["target-not-found", "declarations-not-found"].includes(error?.code)) {
+      // A specifier the located package does not resolve is a fact about that
+      // *specifier*, not about the package's bytes. The package's own
+      // published declarations are exactly what they were, so they are still
+      // supplied and only the closure *behind* the failed specifier is
+      // dropped: the private project then reports that one module missing,
+      // which is what it is.
+      //
+      // Letting the failure escape instead unnames the whole package, because
+      // both callers answer a throw by withholding
+      // `packageNameOfSpecifier(specifier)` — and the name a subpath
+      // specifier carries is the name of a package that authenticated
+      // perfectly. `@solid-primitives/favicon`'s compiled output imports
+      // `solid-js/web`, which Solid 2 no longer exports; withholding
+      // `solid-js` for it deleted every Solid declaration from the witness
+      // program, collapsed `Component<Props>` and every other imported alias
+      // to `any`, and manufactured an `openType` root the published typings
+      // do not have. Substitution — the risk withholding exists to prevent —
+      // is unaffected: each source is authenticated against its own lock
+      // selection in Rust, which still withholds a name whose copy disagrees.
+      if (error instanceof ArtifactResolutionError) {
         return [source];
       }
       throw error;
@@ -709,6 +800,10 @@ function createCompilerSourceCollector({
   return {
     locateExternalFrom,
     collectCompilerSources,
+    // Exposed so the artifact-case policy replays a dependency edge through
+    // the same memoized resolver the collector uses, instead of a second one
+    // that could disagree with it.
+    resolutionSession,
     sourceArtifacts,
     compilerSourceClosureCount: () => compilerSourceClosures.size
   };
@@ -1751,8 +1846,19 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
       try {
         const located = collector.locateExternalFrom(resolved.packageRoot, dependency);
         if (!located) continue;
+        refuseCaseImportingUnexportedTarget({
+          entrypoint: input.entrypoint ?? ".",
+          conditions,
+          dependency,
+          located,
+          resolutionSession: collector.resolutionSession
+        });
         found.push(...await collector.collectCompilerSources(located, conditions, new Set()));
-      } catch {
+      } catch (error) {
+        // A refused case is not an unnameable package: the dependency is
+        // authenticated and its declarations must still reach every case that
+        // does resolve, which is the repair this loop's own catch exists for.
+        if (error instanceof CertificationRefusal) throw error;
         withheldNames.add(packageNameOfSpecifier(dependency.specifier));
       }
     }

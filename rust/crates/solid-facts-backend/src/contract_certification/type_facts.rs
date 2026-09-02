@@ -2329,12 +2329,9 @@ fn verify_live_export_value_answer_with_project_census(
                 actual,
             ));
         }
-        verify_implementation_location_identity(
+        verify_scheduled_implementation_location(
+            transcript,
             scheduled.demand.implementation_location.as_ref(),
-            transcript
-                .implementation
-                .as_ref()
-                .map(|implementation| &implementation.location),
         )?;
         let transcript_bytes = typefacts::encode(transcript)?;
         let transcript_root = format!("sha256:{:x}", Sha256::digest(&transcript_bytes));
@@ -6224,6 +6221,42 @@ fn verify_schedule_identity(
     Ok(())
 }
 
+/// Holds one export-value transcript to the implementation location its
+/// schedule asked about — but only when the producer got far enough to answer.
+///
+/// An export observation that refused early (the demanded span was not the
+/// exact identifier, the alias did not resolve, the target had no declaration)
+/// returns before it ever reads `implementation_location`, so its absent
+/// implementation *is* that refusal, not a producer answering about a
+/// different span. Comparing anyway turned every such transcript into
+/// "field implementation_location expected <path>, actual None": a location
+/// identity failure naming a location the schedule chose correctly, for a
+/// demand whose real defect is one of the transcript's own open reasons.
+/// `@tanstack/solid-query-persist-client@5.102.5` reported exactly that, and
+/// the reason it hid is `PERSISTER_KEY_PREFIX` coming back
+/// `declarationUnavailable`.
+///
+/// Deferring accepts nothing. Every scheduled export value carries at least
+/// one proof demand by construction (`new_export_values` groups demands and
+/// never creates an empty group), and `verify_export_value_subject` refuses an
+/// incomplete transcript for each of them, naming `transcriptIncomplete` and
+/// every producer reason.
+fn verify_scheduled_implementation_location(
+    transcript: &ExportValueTranscript,
+    expected: Option<&typefacts::Location>,
+) -> Result<(), TypeFactsCertificationError> {
+    if !transcript.complete {
+        return Ok(());
+    }
+    verify_implementation_location_identity(
+        expected,
+        transcript
+            .implementation
+            .as_ref()
+            .map(|implementation| &implementation.location),
+    )
+}
+
 fn verify_implementation_location_identity(
     expected: Option<&typefacts::Location>,
     actual: Option<&typefacts::Location>,
@@ -6346,6 +6379,39 @@ mod tests {
                 && actual.as_ref()
                     == "/node_modules/pkg/a.js:10-20 [different actual identity]"
         ));
+    }
+
+    /// An incomplete transcript never answers about a span, so holding it to
+    /// the scheduled implementation location reported a location identity
+    /// failure in place of the producer's actual open reason. A complete one
+    /// is still held to it exactly as before.
+    #[test]
+    fn an_incomplete_transcript_is_not_held_to_the_scheduled_implementation_location() {
+        let scheduled = typefacts::Location {
+            path: "/private/tmp/solid-checker-typefacts-project-1-1/node_modules/pkg/impl.js"
+                .into(),
+            start_byte: 6160,
+            end_byte: 6180,
+        };
+        let mut open = maximally_open_export_value_transcript();
+        assert!(!open.complete);
+        assert!(open.implementation.is_none());
+        assert!(verify_scheduled_implementation_location(&open, Some(&scheduled)).is_ok());
+
+        // Completeness is the whole difference: the same absent implementation
+        // on a transcript the producer finished is still a hard mismatch.
+        open.complete = true;
+        let error = verify_scheduled_implementation_location(&open, Some(&scheduled))
+            .expect_err("a finished transcript owes an answer about the scheduled span");
+        assert!(matches!(
+            error,
+            TypeFactsCertificationError::IdentityMismatch {
+                field: "implementation_location",
+                actual,
+                ..
+            } if actual.as_ref() == "None"
+        ));
+        assert!(verify_scheduled_implementation_location(&open, None).is_ok());
     }
 
     #[test]

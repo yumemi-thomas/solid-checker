@@ -85,7 +85,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // callback-slot-derived-store-server, callback-slot-props-forwarding,
       // and parameter-member-read-path. 168 adds the exact shared runtime and
       // declaration surface pinned by torture-dts-disagreement.
-      stableMainDocuments: 168,
+      stableMainDocuments: 170,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
