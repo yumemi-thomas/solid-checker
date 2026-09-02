@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-02T22:16:50.427Z
-- Finished: 2026-09-02T22:18:00.509Z
-- Duration: 70082 ms
+- Started: 2026-09-02T23:18:50.009Z
+- Finished: 2026-09-02T23:20:00.604Z
+- Duration: 70595 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -862,11 +862,11 @@ None.
 
 | Artifact | Samples | p50 bytes | p95 bytes | max bytes |
 | --- | ---: | ---: | ---: | ---: |
-| Pretty main | 381 | 2186 | 12864 | 679409 |
-| Canonical minified main | 381 | 1632 | 9629 | 505226 |
-| Proposal plan (not evidence) | 381 | 49252 | 540062 | 20322252 |
+| Pretty main | 381 | 2186 | 12864 | 682417 |
+| Canonical minified main | 381 | 1632 | 9629 | 506494 |
+| Proposal plan (not evidence) | 381 | 49252 | 540062 | 20370858 |
 | Canonical bytes per export | 381 | 356 | 1085 | 1696 |
-| Canonical bytes per operation | 91 | 844.5 | 2521 | 16840.87 |
+| Canonical bytes per operation | 91 | 844.5 | 2521 | 13328.79 |
 
 Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate.
 
@@ -894,7 +894,7 @@ Read the domain columns together, not separately: 37 of the 8847 unknown exports
 | --- | --- |
 | invoke | 413 |
 | return | 290 |
-| read | 389 |
+| read | 397 |
 | write | 0 |
 | invalidate | 0 |
 | create | 85 |
@@ -940,8 +940,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 996346 ms
-- Phases: install 71440 ms, generation 376661 ms, harness 548245 ms
+- Worker time: 1008184 ms
+- Phases: install 78386 ms, generation 375713 ms, harness 554085 ms
 
 ### Top failure signatures
 

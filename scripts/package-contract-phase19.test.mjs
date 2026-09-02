@@ -93,7 +93,7 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // composed-operation-shadowed-target, which pins that the target is
       // named by the discovering node's identity rather than by the name two
       // declarations share.
-      stableMainDocuments: 173,
+      stableMainDocuments: 174,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

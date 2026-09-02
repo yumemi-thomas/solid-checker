@@ -205,6 +205,12 @@ export function artifactApplicabilityForRefusal(error) {
       ? ARTIFACT_APPLICABILITY.UnsupportedArtifactShape
       : ARTIFACT_APPLICABILITY.MissingPublishedTarget;
   }
+  // The specifier names a runtime module the package does not ship; only its
+  // declaration sibling exists. Same standing as an absent published target:
+  // a consumer reaches the entrypoint and the module it imports is not there.
+  if (error.code === "local-runtime-target-is-declaration-only") {
+    return ARTIFACT_APPLICABILITY.MissingPublishedTarget;
+  }
   if (
     [
       "declarations-not-found",

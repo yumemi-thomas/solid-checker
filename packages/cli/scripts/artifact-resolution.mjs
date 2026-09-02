@@ -12,7 +12,7 @@ import {
   realpathSync,
   statSync
 } from "node:fs";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import tsNamespace from "typescript";
 
 export function selectTypeScriptApi(namespace) {
@@ -204,6 +204,63 @@ export function declarationFileFlavor(path) {
   return DECLARATION_FILE_EXTENSIONS.some(extension => lowered.endsWith(extension))
     ? MODULE_EMISSION_FLAVOR.DeclarationFile
     : MODULE_EMISSION_FLAVOR.Module;
+}
+
+/**
+ * Whether TypeScript reads this path as a declaration file, by name alone.
+ *
+ * Mirrors `tspath.GetDeclarationFileExtension` and Rust's
+ * `is_typescript_declaration_file_name` — including its third case, a `.ts`
+ * whose *base name* also carries `.d.` (`x.d.web.ts`), and its base-name-only
+ * scope, so a directory called `x.d.ts` on the path is not one. Wider than
+ * `declarationFileFlavor`'s suffix list deliberately: that one selects a parse
+ * grammar, this one answers "does a runtime module exist under this name".
+ */
+function isDeclarationFileName(path) {
+  // Case-sensitive, like `strings.HasSuffix` in tsgo. A differently-cased
+  // spelling is unreachable anyway: `localModuleTarget` builds its candidates
+  // from lowercase literals, so a `.D.TS` member is only ever selected as an
+  // explicit specifier, where its extension is not a runtime one and it is an
+  // asset. Keeping all three mirrors of this predicate byte-identical matters
+  // more than covering a shape none of them can produce.
+  const base = basename(path);
+  if (DECLARATION_FILE_EXTENSIONS.some(extension => base.endsWith(extension))) return true;
+  return base.endsWith(".ts") && base.includes(".d.");
+}
+
+/**
+ * Whether an import or export declaration is erased whole, so the module it
+ * names is read for types and never loaded at runtime.
+ *
+ * Fail-closed in both directions that matter. `import "./x"` and
+ * `import {} from "./x"` are **not** type-only: the first is a side-effect
+ * import and the second is a shape TypeScript's own elision rules treat
+ * inconsistently, so both keep the runtime role and stay subject to the
+ * declaration-only refusal. A namespace or default binding is a value binding
+ * unless the whole clause is marked `type`.
+ */
+function specifierIsTypeOnly(statement) {
+  if (ts.isImportDeclaration(statement)) {
+    const clause = statement.importClause;
+    if (!clause) return false;
+    if (clause.isTypeOnly) return true;
+    if (clause.name) return false;
+    const bindings = clause.namedBindings;
+    return Boolean(
+      bindings &&
+        ts.isNamedImports(bindings) &&
+        bindings.elements.length > 0 &&
+        bindings.elements.every(element => element.isTypeOnly)
+    );
+  }
+  if (statement.isTypeOnly) return true;
+  const clause = statement.exportClause;
+  return Boolean(
+    clause &&
+      ts.isNamedExports(clause) &&
+      clause.elements.length > 0 &&
+      clause.elements.every(element => element.isTypeOnly)
+  );
 }
 
 function hasDeclareModifier(node) {
@@ -1753,6 +1810,10 @@ function moduleDescription(path, axis, packageRoot, cache) {
         text: statement.moduleSpecifier.text,
         target,
         asset: target ? undefined : localAssetTarget(path, statement.moduleSpecifier.text, packageRoot),
+        // The `type` modifier is recorded here, before the clause is read for
+        // bindings below, because the closure walk needs it: an erased edge
+        // reaches its target on the declarations axis, never the runtime one.
+        typeOnly: specifierIsTypeOnly(statement),
         optionalPeer:
           scope.packageRoot === packageRoot &&
           isExplicitOptionalPeer(scope.manifest, statement.moduleSpecifier.text)
@@ -1807,6 +1868,7 @@ function moduleDescription(path, axis, packageRoot, cache) {
           text: module.text,
           target,
           asset: target ? undefined : localAssetTarget(path, module.text, packageRoot),
+          typeOnly: specifierIsTypeOnly(statement),
           optionalPeer:
             scope.packageRoot === packageRoot && isExplicitOptionalPeer(scope.manifest, module.text)
         });
@@ -2238,6 +2300,32 @@ function closureForRoots(
             "package-imports-unsupported",
             `package imports-map target ${packagePath(packageRoot, specifier.target)} ` +
               `resolves into the closure; certifier replay does not support imports maps yet`
+          );
+        }
+        // An erased edge is a declarations-axis edge. TypeScript deletes the
+        // import statement whole, so nothing about the target is a runtime
+        // fact: giving it the runtime role claimed the emitted JavaScript
+        // loads a module it never mentions, and — because
+        // `localModuleTarget` substitutes `.d.ts` for a `.js` specifier on the
+        // runtime axis — put declaration files into the runtime census, which
+        // is what fed a target's `sourceFiles` list.
+        if (specifier.typeOnly && axis === "runtime") {
+          visit(specifier.target, "declarations");
+          continue;
+        }
+        // A *value* edge whose only resolution is a declaration file names a
+        // runtime module the package does not ship. `localModuleTarget` tries
+        // every runtime sibling first (`./x.js` → `x.js`, `x.ts`, `x.tsx`),
+        // so reaching a declaration file here proves none exists, and the
+        // emitted `import "./x.js"` would fail in any consumer. That is the
+        // 08-31 doctrine's criterion for a refusal, not a disposition: a
+        // consumer really reaches it and really breaks.
+        if (axis === "runtime" && isDeclarationFileName(specifier.target)) {
+          fail(
+            "local-runtime-target-is-declaration-only",
+            `local runtime module ${specifier.text} from ${relativePath} resolves only to ` +
+              `declaration file ${packagePath(packageRoot, specifier.target)}; the package ` +
+              `ships no runtime module under that specifier`
           );
         }
         visit(

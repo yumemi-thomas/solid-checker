@@ -8,7 +8,9 @@
 use std::collections::BTreeSet;
 
 use sha2::{Digest as _, Sha256};
-use solid_facts::ast::{ModuleHazardKind, ModuleLoadKind, extract};
+use solid_facts::ast::{
+    ExportFact, ExportKind, ImportFact, ImportKind, ModuleHazardKind, ModuleLoadKind, extract,
+};
 
 use crate::artifact_resolution::{
     AcceptedDependencyEdge, AffectedClaimDomain, ClosureEntry, ClosureFileRole, ClosureHazard,
@@ -23,6 +25,56 @@ const DECLARATION_EXTENSIONS: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
 const DECLARATION_MODULE_EXTENSIONS: [&str; 11] = [
     ".ts", ".tsx", ".d.ts", ".mts", ".d.mts", ".cts", ".d.cts", ".js", ".jsx", ".mjs", ".cjs",
 ];
+
+/// Whether TypeScript reads this path as a declaration file, by name alone.
+///
+/// Mirrors `tspath.GetDeclarationFileExtension`, the generator's
+/// `isDeclarationFileName`, and the binary's
+/// `is_typescript_declaration_file_name` — including the `x.d.web.ts` case and
+/// the base-name-only scope. Wider than [`DECLARATION_EXTENSIONS`]
+/// deliberately: that list drives suffix *substitution*, this predicate answers
+/// "does a runtime module exist under this name".
+fn is_declaration_file_name(path: &str) -> bool {
+    // Case-sensitive, like `strings.HasSuffix` in tsgo and like the other two
+    // mirrors of this predicate.
+    let base = path.rsplit('/').next().unwrap_or(path);
+    if DECLARATION_EXTENSIONS
+        .iter()
+        .any(|extension| base.ends_with(extension))
+    {
+        return true;
+    }
+    base.ends_with(".ts") && base.contains(".d.")
+}
+
+/// Whether an import declaration is erased whole, so the module it names is
+/// read for types and never loaded at runtime.
+///
+/// Mirrors the generator's `specifierIsTypeOnly` exactly, both directions
+/// included: a bare `import "./x"` and an `import {} from "./x"` carry no
+/// bindings and are **not** type-only, and a default or namespace binding is a
+/// value binding unless the whole clause is marked `type`.
+fn import_is_type_only(fact: &ImportFact) -> bool {
+    fact.type_only
+        || (!fact.bindings.is_empty()
+            && fact
+                .bindings
+                .iter()
+                .all(|binding| binding.kind == ImportKind::Named && binding.type_only))
+}
+
+/// The export half of [`import_is_type_only`]. `export * from` and
+/// `export * as ns from` are value edges; a named re-export list is erased only
+/// when it is non-empty and every specifier is type-only.
+fn export_module_is_type_only(fact: &ExportFact) -> bool {
+    if fact.type_only {
+        return true;
+    }
+    if fact.kind == ExportKind::All || fact.namespace.is_some() {
+        return false;
+    }
+    !fact.specifiers.is_empty() && fact.specifiers.iter().all(|specifier| specifier.type_only)
+}
 
 #[derive(Clone, Debug)]
 pub struct SnapshotVerifiedClosure {
@@ -198,30 +250,36 @@ impl ClosureReplay<'_> {
             });
         }
 
+        // The `type` modifier travels with the specifier: an erased edge is a
+        // declarations-axis edge, and dropping the flag here made the replay
+        // disagree with the generator's census about every such edge's role.
         let static_specifiers = facts
             .imports
             .into_iter()
-            .map(|fact| fact.module.into_string())
-            .chain(
-                facts
-                    .exports
-                    .into_iter()
-                    .filter_map(|fact| fact.module.map(|module| module.into_string())),
-            )
+            .map(|fact| {
+                let type_only = import_is_type_only(&fact);
+                (fact.module.into_string(), type_only)
+            })
+            .chain(facts.exports.into_iter().filter_map(|fact| {
+                let type_only = export_module_is_type_only(&fact);
+                fact.module.map(|module| (module.into_string(), type_only))
+            }))
             .collect::<Vec<_>>();
-        for specifier in static_specifiers {
-            self.visit_specifier(path, axis, role, &specifier, false)?;
+        for (specifier, type_only) in static_specifiers {
+            self.visit_specifier(path, axis, role, &specifier, false, type_only)?;
         }
         for load in facts.module_loads {
             let Some(specifier) = load.specifier else {
                 continue;
             };
+            // A dynamic import or `require` is always a value edge.
             self.visit_specifier(
                 path,
                 axis,
                 role,
                 &specifier,
                 load.kind == ModuleLoadKind::DynamicImport,
+                false,
             )?;
         }
         Ok(())
@@ -234,7 +292,16 @@ impl ClosureReplay<'_> {
         current_role: ClosureFileRole,
         specifier: &str,
         dynamic_import: bool,
+        type_only: bool,
     ) -> Result<(), ArtifactSnapshotError> {
+        // An erased edge reaches its target on the declarations axis. This is
+        // the generator's rule in `closureForRoots`, and the two must agree or
+        // the recomputed closure never matches the supplied one.
+        let (axis, current_role) = if type_only && axis == ModuleAxis::Runtime {
+            (ModuleAxis::Declarations, ClosureFileRole::Declaration)
+        } else {
+            (axis, current_role)
+        };
         if dynamic_import && (specifier.ends_with(".node") || specifier.ends_with(".wasm")) {
             self.hazards.push(ClosureHazard {
                 kind: if specifier.ends_with(".node") {
@@ -251,6 +318,19 @@ impl ClosureReplay<'_> {
 
         match resolve_local(self.snapshot, importer, specifier, axis)? {
             LocalResolution::Module(target) => {
+                // A *value* edge whose only resolution is a declaration file
+                // names a runtime module the package does not ship. The
+                // generator refuses the artifact case for this
+                // (`local-runtime-target-is-declaration-only`), so a proposal
+                // carrying one should not exist; refuse it here too rather than
+                // recompute a closure the generator would never have emitted.
+                if axis == ModuleAxis::Runtime && is_declaration_file_name(&target) {
+                    return closure_mismatch(format!(
+                        "local runtime module {specifier:?} from {importer:?} resolves only to \
+                         declaration file {target:?}; the package ships no runtime module under \
+                         that specifier"
+                    ));
+                }
                 let role = if dynamic_import && axis == ModuleAxis::Runtime {
                     ClosureFileRole::LiteralDynamicChunk
                 } else {

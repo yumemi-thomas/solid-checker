@@ -32,14 +32,14 @@
       "conditions": [],
       "stage": "artifact-case",
       "applicability": "runtime-module",
-      "reason": "solid-checker-rust: contract emission batch target 7 names source outside its configured project: <package-root>/evaluated-default.d.ts"
+      "reason": "solid-checker-rust: contract emission batch target 7 names entry file <package-root>/evaluated-default.d.ts as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts"
     },
     {
       "entrypoint": "./implemented",
       "conditions": [],
       "stage": "artifact-case",
       "applicability": "runtime-module",
-      "reason": "solid-checker-rust: contract emission batch target 8 names source outside its configured project: <package-root>/implemented.d.ts"
+      "reason": "solid-checker-rust: contract emission batch target 8 names entry file <package-root>/implemented.d.ts as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts"
     },
     {
       "entrypoint": "./vitest",

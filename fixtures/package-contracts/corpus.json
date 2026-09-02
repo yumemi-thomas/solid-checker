@@ -25,6 +25,7 @@
     "conditional-returns-divergence",
     "conditional-returns-divergence-both",
     "conditional-targets",
+    "declaration-closure-member",
     "declaration-sibling-reach",
     "deferred-returned-callback",
     "destructured-parameter-callback",

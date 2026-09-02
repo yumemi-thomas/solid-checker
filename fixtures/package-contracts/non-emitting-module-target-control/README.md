@@ -57,11 +57,16 @@ the suffix from doing the work on its own:
 
 The last two are recorded as refusals, which is what the trap requires, but
 note *why* they refuse today: a `.d.ts` runtime target that reaches the emission
-batch hits the pre-existing "names source outside its configured project"
-refusal (the false M1 message recorded in `docs/precision-backlog.md`), not a
-message about the premise. The pin still works — widening the premise to clear
-either of them moves the row from `refusals` to `inapplicable` and the snapshot
-fails — but the reason string is not the premise's own.
+batch has no fact source to summarize, because TypeScript emits no JavaScript
+for a declaration file and the Type Facts producer therefore never reports one.
+That is not a message about the premise. The pin still works — widening the
+premise to clear either of them moves the row from `refusals` to `inapplicable`
+and the snapshot fails — but the reason string is not the premise's own.
+
+Until 2026-09-03 that refusal read "names source outside its configured
+project", which was false: the generator had written the file into the batch
+tsconfig's `files` list, so it *was* in the configured project. See
+`declaration-closure-member`, whose whole subject is that message.
 
 ## Inapplicable, and why these two are not a suffix guess
 

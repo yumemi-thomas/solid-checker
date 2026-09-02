@@ -404,29 +404,144 @@ struct ContractEmissionFactProgramKey {
     sources: Vec<CanonicalContractEmissionSource>,
 }
 
+/// Whether TypeScript reads this path as a declaration file.
+///
+/// This is not a semantic classification of the file's contents and never
+/// decides an applicability question — `non-emitting-module-target` owns that,
+/// against authenticated bytes. It answers exactly one mechanical question:
+/// *will the Type Facts producer report this path in its `Sources` operation?*
+/// The producer drops every source whose `IsDeclarationFile` is set
+/// (`apps/solid-typefacts/internal/typefacts/tsgo/project.go`), and tsgo sets
+/// that flag from the file name alone, so the same name test answers it here.
+///
+/// Mirrors `tspath.GetDeclarationFileExtension` byte for byte, including its
+/// third case: a `.ts` file whose *base name* also contains `.d.` (`x.d.web.ts`)
+/// is a declaration file, while a directory called `x.d.ts` on the path is not.
+/// Case-sensitive, like the `strings.HasSuffix` it mirrors. The generator's
+/// `isDeclarationFileName` and the replay's `is_declaration_file_name` are the
+/// other two spellings of this predicate; keep all three identical.
+fn is_typescript_declaration_file_name(path: &Path) -> bool {
+    let Some(base) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if base.ends_with(".d.ts") || base.ends_with(".d.cts") || base.ends_with(".d.mts") {
+        return true;
+    }
+    base.ends_with(".ts") && base.contains(".d.")
+}
+
+/// The refusal for a module the emitter has to read facts for and the fact
+/// program does not contain.
+///
+/// For a declaration file, "not part of the TypeScript project" is false twice
+/// over: the generator wrote it into the project's `files` list, and the reason
+/// it is absent from the facts is that the producer omits every declaration
+/// file from `Sources`. Say exactly that much — the producer reports no source
+/// facts under this suffix — and nothing about what the file publishes, which
+/// is `non-emitting-module-target`'s question and is answered from bytes.
+///
+/// **This arm is defensive, and no path reaches it today.**
+/// `contract_emission_target_sources` refuses a declaration *entry file* before
+/// emission on the batch path, which is the primary path for every artifact
+/// case; the singleton fallback runs only for a non-primary member of an
+/// identity group, and `prepareArtifact`'s identity binds the entrypoint, so a
+/// group never has one. The recursive-walk call sites are additionally closed
+/// from the generator side: a local *value* edge whose only resolution is a
+/// declaration file now refuses at the closure census
+/// (`local-runtime-target-is-declaration-only`), so no chain walks into one.
+/// Both arms are therefore pinned by unit test, not by a fixture: no package
+/// can construct the reaching case.
+fn missing_fact_program_module(path: &Path) -> String {
+    if is_typescript_declaration_file_name(path) {
+        return format!(
+            "emit package contract: the fact program has no source for {}; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts",
+            path.display()
+        );
+    }
+    format!(
+        "emit package contract: entry file {} is not part of the TypeScript project",
+        path.display()
+    )
+}
+
 fn contract_emission_target_sources(
     target: &ContractEmissionBatchTarget,
     sources_by_path: &HashMap<PathBuf, SourceFile>,
 ) -> Result<Vec<CanonicalContractEmissionSource>, Box<dyn std::error::Error>> {
+    // The entry file is the one project file this target cannot do without: it
+    // is the module whose surface the contract describes. Every other name in
+    // `source_files` is a closure member the fact program reads *around* it.
+    // Resolving it up front is what lets the declaration rule below apply to
+    // the closure without ever applying to the entrypoint itself.
+    let entry_file = Path::new(&target.entry_file).canonicalize().map_err(|error| {
+        format!(
+            "contract emission batch target {} names entry file {}, which does not resolve on disk: {error}",
+            target.index, target.entry_file
+        )
+    })?;
     let mut selected = BTreeSet::new();
     let mut sources = Vec::with_capacity(target.source_files.len());
     for source_file in &target.source_files {
-        let canonical_path = Path::new(source_file).canonicalize()?;
+        // A source the batch names but that does not exist is a missing
+        // published target, never a source to skip below. Name the target by
+        // its entry file as well as its index: the index alone identifies
+        // nothing a reader can act on, and the offending path is frequently a
+        // closure member rather than the entrypoint's own file.
+        let canonical_path = Path::new(source_file).canonicalize().map_err(|error| {
+            format!(
+                "contract emission batch target {} for entry file {} names source {source_file}, which does not resolve on disk: {error}",
+                target.index, target.entry_file
+            )
+        })?;
         if !selected.insert(canonical_path.clone()) {
             continue;
         }
-        let source = sources_by_path
-            .get(&canonical_path)
-            .ok_or_else(|| {
-                format!(
-                    "contract emission batch target {} names source outside its configured project: {}",
-                    target.index, source_file
+        let Some(source) = sources_by_path.get(&canonical_path) else {
+            // A declaration *closure member* is expected to be absent here,
+            // and its absence is not a scoping fault: a target's project files
+            // are the compiler's root set, while `Sources` is the producer's
+            // fact-source report, and the producer omits every declaration file
+            // from the latter because it carries no runtime bytes to build
+            // facts for. The two roles are distinct — a declaration file is a
+            // *program* input, never a *fact source* — and the singleton
+            // emission path has always agreed, because it derives its sources
+            // from `configured_sources()` alone and never looks a target's
+            // project files up. Skipping it here restores that agreement; the
+            // file still reaches the producer's program through the tsconfig.
+            //
+            // Defense in depth, not the primary guard. The generator no longer
+            // puts a declaration file in a target's `sourceFiles` at all: an
+            // erased (`import type`) edge now reaches its target on the
+            // declarations axis, whose role `projectFiles` filters out, and a
+            // *value* edge whose only resolution is a declaration file refuses
+            // the artifact case outright
+            // (`local-runtime-target-is-declaration-only`). This branch must
+            // not assume that invariant holds, so it stays — pinned by unit
+            // test rather than by a fixture.
+            //
+            // The target's own entry file is never skipped. A declaration file
+            // there means this target has no runtime module at all, which is a
+            // refusal — stated here, where the reason is known, instead of
+            // reaching the emitter's vaguer project-membership guard.
+            if canonical_path.is_file() && is_typescript_declaration_file_name(&canonical_path) {
+                if canonical_path != entry_file {
+                    continue;
+                }
+                return Err(format!(
+                    "contract emission batch target {} names entry file {} as its own fact source; its suffix makes it a TypeScript declaration file, for which the Type Facts producer reports no source facts",
+                    target.index, target.entry_file
                 )
-            })?
-            .clone();
+                .into());
+            }
+            return Err(format!(
+                "contract emission batch target {} for entry file {} names source {source_file}, which the configured project does not report as a fact source",
+                target.index, target.entry_file
+            )
+            .into());
+        };
         sources.push(CanonicalContractEmissionSource {
             canonical_path,
-            source,
+            source: source.clone(),
         });
     }
     sources.sort_by(|left, right| left.canonical_path.cmp(&right.canonical_path));
@@ -2430,13 +2545,26 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     if let Some(batch) = contract_emission_batch.take() {
         // The union project opens one pinned Type Facts program. Before any
         // fact reuse, native code independently canonicalizes every target's
-        // complete source program and binds its source bytes and compiler
-        // options into the key below. Request-level dialect, runtime, rule,
-        // generation, Type Facts, and project inputs are bound as well. Only
-        // exact equal keys share the fact build; attestations, catalogs, IR,
-        // and entrypoint emission remain per target. The key is local to this
-        // process invocation and cannot cross a certification or fresh replay
-        // boundary.
+        // *fact sources* — the subset of its project files the producer reports
+        // in `Sources` — and binds their source bytes and compiler options into
+        // the key below. Request-level dialect, runtime, rule, generation, Type
+        // Facts, and project inputs are bound as well. Only exact equal keys
+        // share the fact build; attestations, catalogs, IR, and entrypoint
+        // emission remain per target. The key is local to this process
+        // invocation and cannot cross a certification or fresh replay boundary.
+        //
+        // The subset is the whole key, deliberately. A declaration member of a
+        // target's project files is not an input to the fact program: the
+        // producer never reports one (it emits no JavaScript, so there are no
+        // runtime bytes to build facts for), and it reaches the producer's
+        // TypeScript program through this batch's single tsconfig, which is the
+        // same document for every target in the batch. So two targets differing
+        // only in declaration members really do share one fact program, and
+        // grouping them together is correct rather than a widened key.
+        // Authentication of those bytes is not this key's job either: the
+        // generator binds every closure member, declaration files included,
+        // into each case's `closureSha256`, and certification replays it from
+        // the archive.
         let configured_sources = request.sources.clone();
         let mut sources_by_path = HashMap::new();
         for source in &configured_sources {
@@ -5310,12 +5438,7 @@ fn contract_exports_for_entry_file(
     let entry_facts = files_by_canonical_path
         .get(&entry_file)
         .copied()
-        .ok_or_else(|| {
-            format!(
-                "emit package contract: entry file {} is not part of the TypeScript project",
-                entry_file.display()
-            )
-        })?;
+        .ok_or_else(|| missing_fact_program_module(&entry_file))?;
     let mut exports = BTreeMap::new();
     for name in names {
         validate_module_export_precedence(&entry_facts.ast, &entry_file, &name)?;
@@ -5431,12 +5554,10 @@ fn collect_accepted_reexport_candidates(
     if !visiting.insert((path.clone(), name.to_owned())) {
         return Ok(());
     }
-    let file = files_by_canonical_path.get(&path).copied().ok_or_else(|| {
-        format!(
-            "emit package contract: entry file {} is not part of the TypeScript project",
-            path.display()
-        )
-    })?;
+    let file = files_by_canonical_path
+        .get(&path)
+        .copied()
+        .ok_or_else(|| missing_fact_program_module(&path))?;
     let consult_export_stars = validate_module_export_precedence(&file.ast, &path, name)?;
 
     for export in reexport_entries_for_name(&file.ast, name, consult_export_stars) {
@@ -7158,6 +7279,257 @@ mod contract_emission_fact_program_tests {
         changed.context.typefacts_arguments.push("--strict".into());
         assert_ne!(key, changed);
     }
+
+    /// `tspath.GetDeclarationFileExtension`, which is what decides whether the
+    /// producer reports a path in `Sources` at all.
+    #[test]
+    fn declaration_file_names_mirror_the_producer_predicate() {
+        for name in [
+            "/pkg/types/index.d.ts",
+            "/pkg/dist/index.d.mts",
+            "/pkg/dist/index.d.cts",
+            // TypeScript's third case: any `.ts` whose base name carries `.d.`.
+            "/pkg/dist/index.d.web.ts",
+        ] {
+            assert!(
+                is_typescript_declaration_file_name(Path::new(name)),
+                "{name}"
+            );
+        }
+        for name in [
+            "/pkg/src/index.ts",
+            "/pkg/src/index.tsx",
+            "/pkg/dist/index.js",
+            "/pkg/dist/index.mjs",
+            "/pkg/dist/index.d.js",
+            // A *directory* spelled like a declaration file is not one: the
+            // producer tests the base name only.
+            "/pkg/index.d.ts/impl.ts",
+        ] {
+            assert!(
+                !is_typescript_declaration_file_name(Path::new(name)),
+                "{name}"
+            );
+        }
+    }
+
+    struct SourceTree(PathBuf);
+
+    impl SourceTree {
+        fn new(label: &str) -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "solid-checker-emission-sources-{label}-{}-{nonce}",
+                std::process::id()
+            ));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+
+        fn write(&self, name: &str, text: &str) -> PathBuf {
+            let path = self.0.join(name);
+            fs::write(&path, text).unwrap();
+            path.canonicalize().unwrap()
+        }
+
+        fn absent(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for SourceTree {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn target(
+        index: usize,
+        entry_file: &Path,
+        source_files: &[&Path],
+    ) -> ContractEmissionBatchTarget {
+        ContractEmissionBatchTarget {
+            index,
+            output: "/scratch/proposal.json".into(),
+            plan: "/scratch/plan.json".into(),
+            resolution: "/scratch/resolution.json".into(),
+            entry_file: entry_file.to_string_lossy().into_owned(),
+            source_files: source_files
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+        }
+    }
+
+    fn reported(paths: &[&Path]) -> HashMap<PathBuf, SourceFile> {
+        paths
+            .iter()
+            .map(|path| {
+                (
+                    path.to_path_buf(),
+                    SourceFile {
+                        path: path.to_string_lossy().into_owned(),
+                        source: std::sync::Arc::from(fs::read_to_string(path).unwrap().as_str()),
+                        compiler_options: solid_facts::compiler::CompilerOptions::default(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// The phase 21 M1 defect. A declaration file in an emitting target's
+    /// runtime closure is a program input the producer never reports as a fact
+    /// source, so requiring it manufactured a refusal whose message was false.
+    #[test]
+    fn a_declaration_closure_member_is_not_required_to_be_a_fact_source() {
+        let tree = SourceTree::new("closure-member");
+        let entry = tree.write(
+            "index.ts",
+            "import type { Options } from \"./options.js\";\n",
+        );
+        let options = tree.write(
+            "options.d.ts",
+            "export interface Options { name: string }\n",
+        );
+        let sources = reported(&[&entry]);
+
+        let selected =
+            contract_emission_target_sources(&target(0, &entry, &[&options, &entry]), &sources)
+                .expect("a declaration closure member must not refuse the target");
+        assert_eq!(
+            selected
+                .iter()
+                .map(|source| source.canonical_path.clone())
+                .collect::<Vec<_>>(),
+            vec![entry],
+            "the declaration member must be skipped, not substituted"
+        );
+    }
+
+    /// The entry file is the one project file the target cannot do without.
+    /// A declaration file there is a real refusal, and it says why rather than
+    /// claiming the file is outside a project the generator put it in.
+    #[test]
+    fn a_declaration_entry_file_refuses_with_its_actual_reason() {
+        let tree = SourceTree::new("declaration-entry");
+        let entry = tree.write("evaluated-default.d.ts", "export default 1;\n");
+        let sources = HashMap::new();
+
+        let error = contract_emission_target_sources(&target(7, &entry, &[&entry]), &sources)
+            .expect_err("a declaration entry file has no runtime module");
+        let error = error.to_string();
+        assert!(error.contains("target 7 names entry file"), "{error}");
+        assert!(error.contains(&entry.display().to_string()), "{error}");
+        assert!(
+            error.contains("its suffix makes it a TypeScript declaration file"),
+            "{error}"
+        );
+        assert!(error.contains("reports no source facts"), "{error}");
+        assert!(
+            !error.contains("outside its configured project"),
+            "the false claim must be gone: {error}"
+        );
+        assert!(!error.contains("runtime module"), "{error}");
+    }
+
+    /// A non-declaration source the project does not report stays fail-closed,
+    /// and the message now names the target's own entry file beside the batch
+    /// index — the attribution defect, where a sorted `sourceFiles` list made
+    /// the refusal appear to be about a closure member's entrypoint.
+    #[test]
+    fn an_unreported_runtime_source_refuses_and_names_its_target() {
+        let tree = SourceTree::new("unreported-runtime");
+        let entry = tree.write("index.ts", "export { helper } from \"./helper.js\";\n");
+        let helper = tree.write("helper.ts", "export function helper() {}\n");
+        let sources = reported(&[&entry]);
+
+        let error =
+            contract_emission_target_sources(&target(4, &entry, &[&helper, &entry]), &sources)
+                .expect_err("an unreported runtime source must stay fail-closed");
+        let error = error.to_string();
+        assert!(error.contains("target 4 for entry file"), "{error}");
+        assert!(error.contains(&entry.display().to_string()), "{error}");
+        assert!(error.contains(&helper.display().to_string()), "{error}");
+        assert!(
+            error.contains("does not report as a fact source"),
+            "{error}"
+        );
+    }
+
+    /// A directory spelled like a declaration file is not one, and is not
+    /// skipped. `is_file` is what stops a member kind the producer would never
+    /// have reported as a source from being waved through as one.
+    #[test]
+    fn a_declaration_named_directory_is_not_skipped() {
+        let tree = SourceTree::new("declaration-directory");
+        let entry = tree.write("index.ts", "export const a = 1;\n");
+        let directory = tree.0.join("options.d.ts");
+        fs::create_dir(&directory).unwrap();
+        let directory = directory.canonicalize().unwrap();
+        let sources = reported(&[&entry]);
+
+        let error =
+            contract_emission_target_sources(&target(3, &entry, &[&directory, &entry]), &sources)
+                .expect_err("a directory is not a declaration source");
+        let error = error.to_string();
+        assert!(error.contains("target 3 for entry file"), "{error}");
+        assert!(
+            error.contains("does not report as a fact source"),
+            "{error}"
+        );
+    }
+
+    /// A source that does not exist is a missing published target, never a
+    /// source to skip — including when it is spelled as a declaration file.
+    #[test]
+    fn an_absent_declaration_source_is_not_skipped() {
+        let tree = SourceTree::new("absent-declaration");
+        let entry = tree.write(
+            "index.ts",
+            "import type { Options } from \"./options.js\";\n",
+        );
+        let options = tree.absent("options.d.ts");
+        let sources = reported(&[&entry]);
+
+        let error =
+            contract_emission_target_sources(&target(2, &entry, &[&options, &entry]), &sources)
+                .expect_err("an absent source must refuse");
+        let error = error.to_string();
+        assert!(error.contains("target 2 for entry file"), "{error}");
+        assert!(error.contains("does not resolve on disk"), "{error}");
+    }
+
+    /// The emitter's own project-membership guard. Its declaration arm is
+    /// defensive — see `missing_fact_program_module` for why no path reaches
+    /// it — so both arms are pinned here rather than by a fixture.
+    #[test]
+    fn the_fact_program_membership_refusal_names_a_declaration_file_for_what_it_is() {
+        let declaration = missing_fact_program_module(Path::new("/pkg/types/hyperscript.d.ts"));
+        assert!(
+            declaration.contains("its suffix makes it a TypeScript declaration file"),
+            "{declaration}"
+        );
+        assert!(
+            declaration.contains("reports no source facts"),
+            "{declaration}"
+        );
+        // The message vouches for nothing beyond the producer's omission: what
+        // the file publishes is `non-emitting-module-target`'s question.
+        assert!(!declaration.contains("runtime module"), "{declaration}");
+        assert!(
+            !declaration.contains("is not part of the TypeScript project"),
+            "{declaration}"
+        );
+
+        let runtime = missing_fact_program_module(Path::new("/pkg/dist/index.js"));
+        assert_eq!(
+            runtime,
+            "emit package contract: entry file /pkg/dist/index.js is not part of the TypeScript project"
+        );
+    }
 }
 
 fn exported_names_for_file(
@@ -7171,12 +7543,10 @@ fn exported_names_for_file(
     if !visiting.insert(path.clone()) {
         return Ok(BTreeSet::new());
     }
-    let file = files_by_canonical_path.get(&path).copied().ok_or_else(|| {
-        format!(
-            "emit package contract: entry file {} is not part of the TypeScript project",
-            path.display()
-        )
-    })?;
+    let file = files_by_canonical_path
+        .get(&path)
+        .copied()
+        .ok_or_else(|| missing_fact_program_module(&path))?;
     let mut names = BTreeSet::new();
     // `module_level_exports`, not `exports`: an `export` nested in a
     // `namespace`, `declare module`, or `declare global` body binds a member of

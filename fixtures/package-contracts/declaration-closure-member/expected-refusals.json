@@ -1,0 +1,18 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "declaration-closure-member-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./phantom-consumer",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "unavailable-published-target",
+      "reason": "local runtime module ./phantom.js from ./src/phantom-consumer.ts resolves only to declaration file ./src/phantom.d.ts; the package ships no runtime module under that specifier"
+    }
+  ],
+  "inapplicable": []
+}

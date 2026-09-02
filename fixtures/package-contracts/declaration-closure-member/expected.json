@@ -1,0 +1,67 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "1d1f683abc8dc5b9452a686955501f9378f99fd2b8c6ae024f6b99327d95df6e",
+            "path": "./src/index.ts",
+            "sha256": "c2eaacd972ae63a9a49b71c24aa994d36dc78f362115a42820e82a13c4735ad9"
+          },
+          "declarations": {
+            "path": "./src/index.ts",
+            "sha256": "c2eaacd972ae63a9a49b71c24aa994d36dc78f362115a42820e82a13c4735ad9"
+          },
+          "exports": {
+            "createWidget": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./label": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "944ed2a5293e0c57ba2b3e49ee6438af4ccef43936a10487bea6a97491daefa5",
+            "path": "./src/label.ts",
+            "sha256": "1e3f71b741ad799c1cdda860186e672d9e26d7cfdd6cd9580eae9adbc30e0c87"
+          },
+          "declarations": {
+            "path": "./src/label.ts",
+            "sha256": "1e3f71b741ad799c1cdda860186e672d9e26d7cfdd6cd9580eae9adbc30e0c87"
+          },
+          "exports": {
+            "label": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1label/default",
+            "typesBranch": "/exports/.~1label/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:eddadf11d1fb27929c128032939148a428c1c42f3e034ca81a3ca2f9c9b271ac",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "eddadf11d1fb27929c128032939148a428c1c42f3e034ca81a3ca2f9c9b271ac"
+    },
+    "name": "declaration-closure-member-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

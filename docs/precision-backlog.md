@@ -13531,3 +13531,256 @@ attempt advanced from `artifact-or-demand-planning` with no demand to
 `motion-dom@12.43.0` `attachFollow`, locally open), while its reported outcome
 stays the plain-lane generation refusal. Ledgers re-pinned to the new report
 digest; the Phase 20 counts are unchanged. Wall time 70.1 s.
+
+## 2026-09-03 — An erased import edge is a declarations-axis edge; a value edge into a declaration-only target refuses
+
+Phase 21's M1 defect
+(`docs/package-contract-v2/phase21/2026-09-02-artifact-applicability-diagnosis.md`
+§1.9, §2c, §6.4). The refusal
+
+```
+contract emission batch target N names source outside its configured project: <package-root>/…d.ts
+```
+
+was **false in both halves**, and both halves are now fixed.
+
+### The mechanism, confirmed end to end
+
+`projectFiles` (`packages/cli/scripts/generate-package-contract.mjs`) computes
+one set — the runtime target plus every `runtime`/`literal-dynamic-chunk`
+closure entry — and hands it to *two* consumers with different requirements:
+the batch tsconfig's `files` list, and each batch target's `sourceFiles` list.
+A declaration file belongs in the first and cannot be in the second. The Type
+Facts producer drops every source whose `IsDeclarationFile` is set
+(`apps/solid-typefacts/internal/typefacts/tsgo/project.go`), correctly — a
+`.d.ts` emits no JavaScript, so there are no runtime bytes to build facts for —
+so `sources_by_path` (`rust/crates/solid-facts-backend/src/main.rs`) never held
+one, and the strict per-target lookup in
+`contract_emission_target_sources` refused.
+
+The message asserted a scoping condition that did not hold: the generator had
+written the file into `files:` itself. And it misattributed: `sourceFiles` is
+sorted, so the named path was routinely a closure member rather than the
+refused entrypoint's own module (`@solidjs/h`'s `./types/index.d.ts` was
+refused naming `types/hyperscript.d.ts`).
+
+Only the batch path was affected. `analyzeArtifact`, the singleton fallback,
+writes the same tsconfig but passes no per-target source list — it takes
+`configured_sources()` whole — so a declaration file was never looked up there.
+The two paths were supposed to implement identical behavior; the fix restores
+that rather than adding a third rule.
+
+### Option (a), with the entry file carved out
+
+The diagnosis' preferred option (a) — do not require a declaration closure
+member in `sources_by_path` — is what shipped, in the narrow form the §2c traps
+demand:
+
+- **The absence is a mechanical fact about the producer, not a semantic claim
+  about the file.** `is_typescript_declaration_file_name` mirrors
+  `tspath.GetDeclarationFileExtension` byte for byte (including its third case,
+  a `.ts` whose *base name* carries `.d.`, and its base-name-only scope, so a
+  directory called `x.d.ts` on the path is not one). It answers exactly "will
+  the producer report this path in `Sources`" and decides no applicability
+  question — `non-emitting-module-target` owns that, against authenticated
+  archive bytes.
+- **A source that does not exist is not skipped.** The path is canonicalized
+  before the lookup, so a missing published target fails there — and now names
+  the target that asked for it instead of surfacing a bare `os error 2`. This is
+  the §2c trap that made the diagnosis' F1 sketch unshippable.
+- **A target's own entry file is never skipped.** A declaration file *there*
+  means the target has no runtime module at all, and it now refuses with that
+  reason at the batch lookup, where the reason is known — instead of falling
+  through to the emitter's vaguer project-membership guard.
+- **A non-declaration source absent from the report still refuses**, with a
+  message that states the actual condition and names both the batch index and
+  the target's entry file.
+
+Option (b) — teaching the producer to report declaration files with a kind
+marker, a protocol 13→14 wire change plus an ADR — was not built and is not
+needed: nothing downstream wants facts for a declaration file, and the file
+still reaches the producer's program through the tsconfig, so no type resolution
+changes.
+
+Option (a) turned out **not to be the fix**, only the fail-closed floor under
+it. See the next section: the reason a declaration file was in a target's
+`sourceFiles` at all was a census role defect, and repairing the lookup without
+repairing the role certified a broken entrypoint.
+
+The emitter's second layer (`missing_fact_program_module`, three call sites)
+keeps refusing but no longer says "entry file X is not part of the TypeScript
+project" for a declaration file, which was false the same way.
+
+**No path reaches that arm today**, and the earlier draft of this entry
+overclaimed otherwise. The batch lookup refuses a declaration entry file before
+emission, and the batch path is primary for every artifact case; the singleton
+fallback runs only for a non-primary member of an identity group, and
+`prepareArtifact`'s identity string binds the entrypoint, so a group never has
+one. The recursive-walk call sites are additionally closed from the generator
+side now that a local value edge into a declaration-only target refuses at the
+census. Both arms are therefore pinned by unit test, not by a fixture: no
+package can construct the reaching case.
+
+Two messages were also trimmed of a clause they could not vouch for. They now
+state only the mechanical fact — the producer reports no source facts for a
+declaration file — and name the suffix as the ground, instead of asserting that
+the target "has no runtime module to summarize", which is
+`non-emitting-module-target`'s question and is answered from bytes.
+
+### The defect the first attempt unmasked, and the real root cause
+
+Repairing the Rust lookup alone **certified a broken entrypoint**, and this is
+the substantive half of the slice. `localModuleTarget`
+(`packages/cli/scripts/artifact-resolution.mjs`) substitutes `.d.ts` for a
+`.js` specifier *on the runtime axis*, and `moduleDescription` recorded every
+static specifier **before** reading its `type` modifier. Two unlike edges were
+therefore both `runtime`-role closure entries:
+
+* `import type { Options } from "./options.js"` — TypeScript deletes the
+  statement whole. The emitted JavaScript never mentions `./options.js`, so
+  nothing about `src/options.d.ts` is a runtime fact, and the runtime role was a
+  false claim. It was also what put a declaration file into a target's
+  `sourceFiles` list, i.e. the *entire* closure-member half of M1.
+* `import { phantom } from "./phantom.js"` — the edge survives compilation. The
+  emitted JavaScript really contains that import and `src/phantom.js` is not
+  published (`localModuleTarget` tries every runtime sibling first, so reaching
+  a declaration file proves none exists). Every consumer fails at load. M1's
+  false refusal had been *masking* this; with the Rust lookup alone the case
+  certified `createWidget` against an import that cannot resolve.
+
+Both are now answered at the source:
+
+1. **The census records the `type` modifier** (`specifierIsTypeOnly`) and an
+   erased edge reaches its target on the **declarations** axis, never the
+   runtime one. `import type …`, `export type … from …`, and a fully type-only
+   specifier list all qualify; a bare `import "./x"`, an `import {} from "./x"`,
+   and any default or namespace binding stay value edges, deliberately, because
+   TypeScript's elision of those is not something to guess at.
+2. **A runtime-axis local value edge whose only resolution is a declaration
+   file refuses the artifact case**, with the new stage-`artifact-case` code
+   `local-runtime-target-is-declaration-only` and
+   `applicability: "unavailable-published-target"` — the same standing as an
+   absent published target, because the module the entrypoint imports is
+   absent. That is the 08-31 doctrine's criterion for a refusal rather than a
+   disposition: a consumer really reaches it and really breaks.
+
+**The verifier half moved with it, and had to.**
+`replay_snapshot_closure`
+(`rust/crates/solid-facts-backend/src/contract_certification/module_closure.rs`)
+recomputes every closure role from archive bytes and compares digests, and it
+was discarding the `type` modifier that `solid_facts::ast` already carries
+(`ImportFact::type_only`, `ImportBindingFact::type_only`, `ExportFact`'s and
+`ExportSpecifierFact`'s). Left alone it would have refused *every* package with
+a type-only import in a runtime module on a closure mismatch. It now mirrors
+`specifierIsTypeOnly` exactly (`import_is_type_only` /
+`export_module_is_type_only`) and refuses the value-edge shape too, so the
+generator and the verifier admit the same closures.
+
+**Consequence for the Rust batch lookup: it is now defense in depth.** With the
+role rule in place the generator never puts a declaration file in a target's
+`sourceFiles` — an erased edge's role is filtered out by `projectFiles`, and a
+value edge refuses — so the tolerance in
+`contract_emission_target_sources` is no longer on any reachable path except
+through a future regression. It stays because the emitter must not assume the
+generator's invariant, and it is pinned by unit test rather than by a fixture.
+
+### Fixture: `fixtures/package-contracts/declaration-closure-member`
+
+Three entrypoints over the same mechanism, differing in one token:
+
+* `.` → `src/index.ts`, the `import type` shape. **Certifies**, with
+  `src/options.d.ts` carrying the `declaration` role — verified in the emitted
+  `closureSha256` and in the certification inputs, where no `runtime:` entry for
+  that path exists. Before the slice it refused with M1's false message.
+* `./phantom-consumer` → `src/phantom-consumer.ts`, the value-import shape.
+  **Refuses** with `local-runtime-target-is-declaration-only`. Before the slice
+  it refused with M1's false message; after the Rust fix alone it wrongly
+  certified.
+* `./label` → `src/label.ts`, no declaration file in its closure. Certified
+  before and after, so a snapshot where only the other two moved is the evidence
+  that these rules and nothing else changed the answer.
+
+The README carries the trap (**neither `.d.ts` may gain an implementation
+sibling**, or its case silently stops testing anything) and all four boundaries.
+
+Three of those boundaries cannot be a fixture at all — a non-declaration source
+absent from the producer's report is unconstructible (`projectFiles` is a subset
+of the batch tsconfig's `files` and the producer reports every non-declaration
+program file), and so are the absent-source and declaration-named-directory
+shapes. They are pinned by unit tests in
+`rust/crates/solid-facts-backend/src/main.rs`
+(`contract_emission_fact_program_tests`, 8 tests) together with the producer
+predicate, the attribution, and both message arms; the verifier half is pinned
+by two new tests in `contract_certification.rs`.
+
+### What moved, and what did not
+
+`non-emitting-module-target-control`'s `./evaluated-default` and `./implemented`
+— two `.d.ts` entrypoints whose non-emitting premise fails, so they reach
+emission — carried this same false message and **stay refused**, now with the
+true reason. That reason-string move is the only expected-snapshot change in the
+corpus besides the new fixture.
+
+No ecosystem row moved, as predicted. `@kobalte/solidbase@0.6.13|solid1|only`
+was probed for exactly this class: **30 of its 33 refusals carried the M1
+message**, all of them the *entry-file* case (15 `.d.ts` members × the `solid`
+and `import` condition arms), none the closure-member case. All 30 now carry the
+declaration-file reason and stay refused, because the
+`non-emitting-module-target` premise refuses those bytes on a **value import**
+(`pace.d.ts`'s `import "@bprogress/core/css"`, `Layout.d.ts`, `sidebar.d.ts`,
+`index.d.ts`, …) or a **value export specifier** (`context.d.ts`) — they import
+or re-export runtime bindings, so the bytes do not prove emptiness. The other 13
+`.d.ts` members are already `inapplicable`. The row stays `partial-success`
+regardless: `./client` refuses on `virtual:solidbase/components` having no
+runtime binding for `mdxComponents`, and `./config/route` on
+`src/config/route-config.js` not being a file.
+
+Re-measured after the fixer round, the same 8 probes moved **nothing but that
+message text** on those same 30 cases: no case changed class, no closure
+mismatch appeared anywhere, and every control certified identically — which is
+the evidence that the census role change and its verifier mirror agree.
+
+Controls re-measured on the patched build and unchanged, all certified:
+`@solidjs/h@2.0.0-rc.3|solid2|only`, `@solidjs/image@0.1.0|solid1|only`,
+`@solidjs/universal@2.0.0-rc.3|solid2|only`,
+`@kobalte/utils@2.0.0-alpha.0|solid2|only`,
+`@solid-primitives/marker@0.2.2|solid1|only`,
+`@solid-primitives/i18n@2.2.1|solid1|only`, and
+`@solid-primitives/timer@1.4.5-next.1|solid2|floor`. The phase18/phase19 cut pin
+stays at 173 stable-v1 mains: a generator-corpus `expected.json` is not a main
+document, so a new fixture does not move it.
+
+### What stays open
+
+- The external dependency census still records a type-only import of a *bare*
+  specifier on the importer's axis and still raises the generic
+  `unaccepted-external-dependency` hazard for it. That is fail-closed and was
+  left alone: only local edges, which are the ones that carry a closure role and
+  feed `projectFiles`, moved to the declarations axis.
+- The dependency-planning closure (`dependencyPlanningClosure`) walks statements
+  without reading the `type` modifier. It is unreached for these shapes because
+  the artifact closure runs first and refuses, but it is not the same
+  implementation and remains a divergence to close.
+- A `.d.ts` entrypoint whose `non-emitting-module-target` premise fails still
+  refuses — 30 solidbase cases, and the two control cases. The refusal is now
+  true, but the underlying question ("should a declaration file ever be selected
+  on the runtime axis at all", the diagnosis' F2) is deliberately untouched:
+  answering it means widening the premise past what the bytes prove, which is
+  the 2026-09-02 revert's lesson.
+- The producer still reports no declaration file in `Sources`, so no analysis
+  fact is ever built for one. Nothing here changes that, and nothing downstream
+  wants it changed; option (b) stays unbuilt.
+- Everything §6.4 of the diagnosis lists that is not M1 stays exactly as it was:
+  `@kobalte/core@0.13.13`'s 41 M3 refusals and its `callable-path` demand,
+  `@solidjs/diagnostics`' `./vitest`, `@solid-devtools/{ext-adapter,babel-plugin,shared}`,
+  and `@solid-primitives/utils@6.4.1`'s root case.
+
+### Re-measured: 355 verified / 42 exact refusals / 21 not attempted (unchanged)
+
+The complete 418-probe corpus was re-run after the role repair and its fixer
+round (`make ecosystem-benchmark`; report SHA-256 recorded in the Phase 21
+ledger's `authority.currentReport`). Every row keeps its outcome, its
+certification status, its first demand digest and its refused and inapplicable
+case counts; the closure replay's new reading of the `type` modifier produced no
+closure mismatch anywhere in the corpus. The Phase 21 ledger is re-pinned to the
+new report digest; Phase 20 counts are unchanged. Wall time 70.6 s.

@@ -5558,6 +5558,92 @@ mod tests {
         )));
     }
 
+    /// An `import type` edge is a declarations-axis edge on both sides. The
+    /// generator's census says so (`closureForRoots`), so the replay must, or
+    /// every package with a type-only import in a runtime module refuses on a
+    /// closure mismatch.
+    #[test]
+    fn module_closure_reaches_a_type_only_edge_on_the_declarations_axis() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let runtime = b"import type { Options } from './options.js';
+export const value = 1;
+";
+        let options = b"export interface Options { name: string }
+";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/src/index.ts", runtime),
+            ("package/src/options.d.ts", options),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "src/index.ts".into(),
+            declarations_path: "src/index.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+
+        let replayed =
+            super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[]).unwrap();
+        assert!(
+            replayed.entries.contains(&closure_entry(
+                ClosureFileRole::Declaration,
+                "src/options.d.ts",
+                options,
+            )),
+            "{:?}",
+            replayed.entries
+        );
+        assert!(
+            !replayed
+                .entries
+                .iter()
+                .any(|entry| entry.path == "src/options.d.ts"
+                    && entry.role == ClosureFileRole::Runtime),
+            "an erased edge never carries the runtime role: {:?}",
+            replayed.entries
+        );
+    }
+
+    /// The value-edge half. A `.js` specifier resolving only to a declaration
+    /// file names a runtime module the package does not ship; the generator
+    /// refuses the artifact case, and the replay refuses the closure rather
+    /// than recomputing one the generator would never have emitted.
+    #[test]
+    fn module_closure_refuses_a_value_edge_into_a_declaration_only_target() {
+        let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
+        let runtime = b"import { phantom } from './phantom.js';
+export const value = phantom;
+";
+        let phantom = b"export declare function phantom(): void;
+";
+        let archive = published_archive(&[
+            ("package/package.json", manifest),
+            ("package/src/index.ts", runtime),
+            ("package/src/phantom.d.ts", phantom),
+        ]);
+        let snapshot =
+            ArtifactSnapshot::from_published(&archive, SnapshotLimits::policy_2()).unwrap();
+        let resolution = SnapshotVerifiedResolution {
+            snapshot_root: snapshot.root().into(),
+            provenance_root: snapshot.provenance_root().into(),
+            runtime_path: "src/index.ts".into(),
+            declarations_path: "src/index.ts".into(),
+            evidence_root: format!("sha256:{:064x}", 0),
+        };
+
+        let error = super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &[])
+            .expect_err("a value edge into a declaration-only target must refuse");
+        let error = error.to_string();
+        assert!(
+            error.contains("resolves only to declaration file"),
+            "{error}"
+        );
+        assert!(error.contains("src/phantom.d.ts"), "{error}");
+    }
+
     #[test]
     fn module_closure_resolves_only_unshadowed_literal_require_edges() {
         let manifest = br#"{"name":"fixture-package","version":"1.2.3"}"#;
