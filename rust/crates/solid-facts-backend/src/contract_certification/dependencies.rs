@@ -1051,7 +1051,7 @@ fn importer_within_package_root(importer: &str, package_root: &str) -> bool {
 /// admits a re-export issued from a non-entry module of the parent package
 /// while still rejecting any importer that is not a member of the parent's
 /// proven closure (for instance one transplanted outside the package root).
-fn importer_is_closure_entry_module(
+pub(super) fn importer_is_closure_entry_module(
     importer: &str,
     package_root: &str,
     entries: &[crate::artifact_resolution::ClosureEntry],

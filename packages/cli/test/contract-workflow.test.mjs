@@ -16,7 +16,10 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import { createRuntimeProbeHarness } from "../scripts/contract-probe-harness.mjs";
-import { ArtifactResolutionError } from "../scripts/artifact-resolution.mjs";
+import {
+  ArtifactResolutionError,
+  resolvePackageArtifactClosure
+} from "../scripts/artifact-resolution.mjs";
 import {
   buildPublishedGraphExecutionRequest,
   CertificationRefusal,
@@ -26,6 +29,8 @@ import {
   isReusableDependencyRefusalAudit,
   nativeRefusalAttribution,
   locateExternalDependencyPackageRoot,
+  mergeProposalDependencies,
+  reexportImporterCensus,
   certificationImporterPathFor,
   parseCertifyArguments,
   publishedGraphPreparationConcurrency,
@@ -525,6 +530,201 @@ test("only a genuinely absent dynamic optional peer is inapplicable", () => {
     "/project/node_modules/@solidjs/router",
     "an installed optional peer follows ordinary authentication"
   );
+});
+
+test("the re-export importer census sees every module, not the first one sorted", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-reexport-census-"));
+  try {
+    const packageRoot = join(root, "node_modules", "consumer");
+    mkdirSync(join(packageRoot, "dist", "core"), { recursive: true });
+    writeFileSync(
+      join(packageRoot, "package.json"),
+      `${JSON.stringify({
+        name: "consumer",
+        version: "1.0.0",
+        type: "module",
+        dependencies: { "shared-dependency": "1.0.0" },
+        exports: {
+          ".": { types: "./dist/index.d.ts", import: "./dist/index.js" }
+        }
+      })}\n`
+    );
+    // Both modules re-export the same specifier. `./dist/core/nested.js`
+    // sorts before `./dist/index.js`, so a first-occurrence census names the
+    // nested module and drops the entry module -- exactly the shape that made
+    // `motion-solidjs@0.6.0`'s entry-module bridge resolve against nothing.
+    writeFileSync(
+      join(packageRoot, "dist", "index.js"),
+      'export { SHARED } from "shared-dependency";\n' +
+        'export { NESTED } from "./core/nested.js";\n'
+    );
+    writeFileSync(
+      join(packageRoot, "dist", "index.d.ts"),
+      'export { SHARED } from "shared-dependency";\n' +
+        'export { NESTED } from "./core/nested.js";\n'
+    );
+    writeFileSync(
+      join(packageRoot, "dist", "core", "nested.js"),
+      'export { OTHER as NESTED } from "shared-dependency";\n'
+    );
+    writeFileSync(
+      join(packageRoot, "dist", "core", "nested.d.ts"),
+      'export { OTHER as NESTED } from "shared-dependency";\n'
+    );
+    const dependencyRoot = join(root, "node_modules", "shared-dependency");
+    mkdirSync(dependencyRoot, { recursive: true });
+    writeFileSync(
+      join(dependencyRoot, "package.json"),
+      `${JSON.stringify({
+        name: "shared-dependency",
+        version: "1.0.0",
+        type: "module",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      })}\n`
+    );
+    writeFileSync(
+      join(dependencyRoot, "index.js"),
+      'export const SHARED = "shared";\nexport const OTHER = "other";\n'
+    );
+    writeFileSync(
+      join(dependencyRoot, "index.d.ts"),
+      'export declare const SHARED: "shared";\nexport declare const OTHER: "other";\n'
+    );
+
+    const resolved = resolvePackageArtifactClosure({
+      importer: join(root, "app.mjs"),
+      specifier: "consumer",
+      packageRoot,
+      conditions: ["import"],
+      resolutionKind: "import",
+      integrity: "sha512-consumer"
+    });
+    const edges = resolved.externalDependencies.filter(
+      edge => edge.axis === "runtime" && edge.kind === "reexport"
+    );
+    assert.deepEqual(
+      edges.map(edge => edge.importerPath),
+      ["./dist/core/nested.js", "./dist/index.js"],
+      "the nested module really is the first occurrence in canonical order"
+    );
+
+    const entryImporter = join(packageRoot, "dist", "index.js");
+    const nestedImporter = join(packageRoot, "dist", "core", "nested.js");
+    const census = reexportImporterCensus(packageRoot, edges);
+    assert.deepEqual(
+      [...(census.get("shared-dependency") ?? [])].sort(),
+      [nestedImporter, entryImporter].sort(),
+      "the census carries every re-exporting module of the package"
+    );
+
+    // The emitted catalog carries both, with the node's own importer being the
+    // first occurrence exactly as `prepareState` records it.
+    const proposal = join(root, "dependency-proposal.json");
+    writeFileSync(proposal, '{"format":"solid-reactivity-contract"}\n');
+    const merged = mergeProposalDependencies(
+      [{
+        viaSpecifier: "shared-dependency",
+        node: { importer: nestedImporter, packageName: "shared-dependency" },
+        planning: {
+          proposal,
+          resolution: {
+            importer: nestedImporter,
+            specifier: "shared-dependency",
+            exports: {}
+          }
+        },
+        demandPlan: {
+          selectedArtifactCase: "artifact-case:shared",
+          candidateSemanticDigest: `sha256:${"0".repeat(64)}`
+        },
+        reexportImporters: [...census.get("shared-dependency")].sort()
+      }],
+      join(root, "catalog")
+    );
+    assert.deepEqual(
+      JSON.parse(readFileSync(merged.catalog, "utf8")).contracts.map(
+        contract => contract.import.importer
+      ),
+      [nestedImporter, entryImporter].sort(),
+      "the entry module must be able to ask the catalog about this dependency"
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the private graph catalog names every module that re-exports a dependency", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-graph-catalog-"));
+  try {
+    const packageRoot = join(root, "node_modules", "consumer");
+    const proposal = join(root, "dependency-proposal.json");
+    writeFileSync(proposal, '{"format":"solid-reactivity-contract"}\n');
+    const entryImporter = join(packageRoot, "dist", "index.js");
+    const helperImporter = join(packageRoot, "dist", "core", "helper.js");
+    const dependency = {
+      viaSpecifier: "shared-dependency",
+      node: { importer: helperImporter, packageName: "shared-dependency" },
+      planning: {
+        proposal,
+        resolution: {
+          importer: helperImporter,
+          specifier: "shared-dependency",
+          exports: { SHARED: { runtime: {}, declarations: {} } }
+        }
+      },
+      demandPlan: {
+        selectedArtifactCase: "artifact-case:shared",
+        candidateSemanticDigest: `sha256:${"0".repeat(64)}`
+      },
+      // The alphabetically first re-exporting module is the helper, but the
+      // artifact case's entry module re-exports the same specifier and is what
+      // emission asks the catalog about.
+      reexportImporters: [entryImporter, helperImporter].sort()
+    };
+
+    const merged = mergeProposalDependencies([dependency], join(root, "catalog"));
+    const catalog = JSON.parse(readFileSync(merged.catalog, "utf8"));
+    assert.deepEqual(
+      catalog.contracts.map(contract => contract.import.importer),
+      [helperImporter, entryImporter].sort(),
+      "every re-exporting module of the consumer names the same accepted contract"
+    );
+    assert.equal(
+      new Set(catalog.contracts.map(contract => contract.document)).size,
+      1,
+      "the entries share one document object rather than duplicating bytes"
+    );
+    for (const contract of catalog.contracts) {
+      assert.equal(contract.import.specifier, "shared-dependency");
+      assert.deepEqual(contract.import.exports, {
+        SHARED: { runtime: {}, declarations: {} }
+      });
+    }
+    assert.deepEqual(Object.keys(merged.proposalDependencies), ["shared-dependency"]);
+
+    assert.throws(
+      () => mergeProposalDependencies(
+        [{ ...dependency, reexportImporters: [entryImporter] }],
+        join(root, "catalog-mismatch")
+      ),
+      /names an importer that re-exports nothing/,
+      "the node's own resolution must be one of the occurrences"
+    );
+
+    const single = mergeProposalDependencies(
+      [{ ...dependency, reexportImporters: [] }],
+      join(root, "catalog-single")
+    );
+    assert.deepEqual(
+      JSON.parse(readFileSync(single.catalog, "utf8")).contracts.map(
+        contract => contract.import.importer
+      ),
+      [helperImporter],
+      "with no occurrence census the node's own importer is the only entry"
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("published graph execution transports exact lock bytes and no caller receipt authority", () => {

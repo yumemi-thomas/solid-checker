@@ -125,6 +125,8 @@ pub(super) fn verify_snapshot_exports_with_dependencies(
     let mut replay = ExportReplay {
         snapshot,
         dependencies,
+        package_root: resolved.package_root.as_str(),
+        closure_entries: &resolved.closure.entries,
         descriptions: BTreeMap::new(),
     };
     let runtime_names = replay.exported_names(
@@ -403,6 +405,14 @@ struct BindingTarget {
 struct ExportReplay<'a> {
     snapshot: &'a ArtifactSnapshot,
     dependencies: &'a [&'a super::CertificationPlan],
+    /// This node's own installed package root and replayed closure entries,
+    /// which `external_dependency` uses to tell *this* package's dependency
+    /// edge from a homonymous edge reached through a descendant package (which
+    /// may name a different installed copy). Empty entries break no tie, so a
+    /// repeated specifier then stays refused, exactly as before this scope
+    /// existed.
+    package_root: &'a str,
+    closure_entries: &'a [crate::artifact_resolution::ClosureEntry],
     descriptions: BTreeMap<(ModuleAxis, String), ModuleDescription>,
 }
 
@@ -892,14 +902,44 @@ impl ExportReplay<'_> {
         }
     }
 
+    /// The one planned dependency that *this* package's own import of
+    /// `specifier` resolved to.
+    ///
+    /// `dependencies` is the whole authenticated descendant set, because an
+    /// export target can terminate more than one accepted re-export edge
+    /// away. The set therefore repeats a specifier whenever two packages in
+    /// the graph depend on the same one -- a diamond, which is the ordinary
+    /// shape, not an exceptional one (`motion-solidjs` and `framer-motion`
+    /// both depend on `motion-utils`). Selecting by specifier alone made every
+    /// such repeat ambiguous and bound nothing at all.
+    ///
+    /// A repeat is disambiguated by the importer, using the same authoritative
+    /// edge matcher `plan_published_contract_graph` checks node identity with:
+    /// the plan whose importer is a proven runtime or declaration module of
+    /// *this* package's replayed closure is this package's own edge, and a
+    /// homonymous specifier reached from a descendant package is a different
+    /// edge that may name a different installed copy. The narrowing is applied
+    /// only to break a tie, so a single unambiguous match keeps binding
+    /// exactly as before, and a tie no narrowing resolves stays refused.
     fn external_dependency(&self, specifier: &str) -> Option<&super::CertificationPlan> {
-        let mut matches = self
+        let matches = self
             .dependencies
             .iter()
             .copied()
-            .filter(|dependency| dependency.import_request.specifier == specifier);
-        let dependency = matches.next()?;
-        matches.next().is_none().then_some(dependency)
+            .filter(|dependency| dependency.import_request.specifier == specifier)
+            .collect::<Vec<_>>();
+        if let [dependency] = matches.as_slice() {
+            return Some(dependency);
+        }
+        let mut owned = matches.into_iter().filter(|dependency| {
+            super::dependencies::importer_is_closure_entry_module(
+                &dependency.import_request.importer,
+                self.package_root,
+                self.closure_entries,
+            )
+        });
+        let dependency = owned.next()?;
+        owned.next().is_none().then_some(dependency)
     }
 
     fn external_binding(
@@ -986,6 +1026,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1022,6 +1064,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1047,6 +1091,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1131,6 +1177,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1221,6 +1269,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 
@@ -1349,6 +1399,8 @@ mod tests {
         let mut replay = ExportReplay {
             snapshot: &snapshot,
             dependencies: &[],
+            package_root: "/project/node_modules/source-types",
+            closure_entries: &[],
             descriptions: BTreeMap::new(),
         };
 

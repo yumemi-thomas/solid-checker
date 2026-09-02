@@ -4773,6 +4773,269 @@ mod tests {
         );
     }
 
+    // Regression: `external_dependency` selected a planned dependency by its
+    // bare specifier across the *whole* authenticated descendant set. That set
+    // repeats a specifier as soon as two packages of one graph depend on the
+    // same one -- `motion-solidjs` and `framer-motion` both depend on
+    // `motion-utils` -- and the repeat was read as ambiguity, so the export
+    // bound to nothing and the case refused with `runtime export
+    // "MotionGlobalConfig" has no exact binding`. The parent's own closure-entry
+    // importer names the edge exactly.
+    #[test]
+    fn a_shared_dependency_of_two_graph_packages_binds_through_this_package_s_own_edge() {
+        let leaf_manifest = br#"{"name":"leaf-package","version":"1.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let leaf_runtime = b"export const SHARED = \"leaf\";\n";
+        let leaf_declarations = b"export declare const SHARED: \"leaf\";\n";
+        let leaf_archive = published_archive_for(
+            "leaf-package",
+            "1.0.0",
+            &[
+                ("package/package.json", leaf_manifest),
+                ("package/index.js", leaf_runtime),
+                ("package/index.d.ts", leaf_declarations),
+            ],
+        );
+        let leaf_root = "/project/node_modules/leaf-package";
+        let leaf_binding = [(
+            "SHARED",
+            ("index.js", leaf_runtime.as_slice()),
+            ("index.d.ts", leaf_declarations.as_slice()),
+            leaf_root,
+        )];
+
+        let middle_manifest = br#"{"name":"middle-package","version":"1.0.0","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}}}"#;
+        let middle_runtime =
+            b"export { SHARED } from \"leaf-package\";\nexport const MIDDLE = \"middle\";\n";
+        let middle_declarations =
+            b"export { SHARED } from \"leaf-package\";\nexport declare const MIDDLE: \"middle\";\n";
+        let middle_archive = published_archive_for(
+            "middle-package",
+            "1.0.0",
+            &[
+                ("package/package.json", middle_manifest),
+                ("package/dist/index.js", middle_runtime),
+                ("package/dist/index.d.ts", middle_declarations),
+            ],
+        );
+        let middle_root = "/project/node_modules/middle-package";
+        let middle_importer = "/project/node_modules/middle-package/dist/index.js";
+
+        let root_manifest = br#"{"name":"root-package","version":"1.2.3","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}}}"#;
+        let root_runtime =
+            b"export { SHARED } from \"leaf-package\";\nexport { MIDDLE } from \"middle-package\";\n";
+        let root_declarations =
+            b"export { SHARED } from \"leaf-package\";\nexport { MIDDLE } from \"middle-package\";\n";
+        let root_archive = published_archive_for(
+            "root-package",
+            "1.2.3",
+            &[
+                ("package/package.json", root_manifest),
+                ("package/dist/index.js", root_runtime),
+                ("package/dist/index.d.ts", root_declarations),
+            ],
+        );
+        let root_root = "/project/node_modules/root-package";
+        let root_importer = "/project/node_modules/root-package/dist/index.js";
+
+        // The same leaf package, imported once by the root package and once by
+        // the middle package. Identical bytes, identical specifier, different
+        // edge.
+        let leaf_via_root = plan_for_test_package_from_importer(
+            &leaf_archive,
+            "leaf-package",
+            "1.0.0",
+            leaf_root,
+            leaf_manifest,
+            &["import"],
+            &leaf_binding,
+            &[],
+            root_importer,
+        );
+        let leaf_via_middle = plan_for_test_package_from_importer(
+            &leaf_archive,
+            "leaf-package",
+            "1.0.0",
+            leaf_root,
+            leaf_manifest,
+            &["import"],
+            &leaf_binding,
+            &[],
+            middle_importer,
+        );
+        let middle_plan = plan_for_test_package_from_importer(
+            &middle_archive,
+            "middle-package",
+            "1.0.0",
+            middle_root,
+            middle_manifest,
+            &["import"],
+            &[
+                (
+                    "MIDDLE",
+                    ("dist/index.js", middle_runtime.as_slice()),
+                    ("dist/index.d.ts", middle_declarations.as_slice()),
+                    middle_root,
+                ),
+                (
+                    "SHARED",
+                    ("index.js", leaf_runtime.as_slice()),
+                    ("index.d.ts", leaf_declarations.as_slice()),
+                    leaf_root,
+                ),
+            ],
+            &[&leaf_via_middle],
+            root_importer,
+        );
+
+        let root_bindings = [
+            (
+                "MIDDLE",
+                ("dist/index.js", middle_runtime.as_slice()),
+                ("dist/index.d.ts", middle_declarations.as_slice()),
+                middle_root,
+            ),
+            (
+                "SHARED",
+                ("index.js", leaf_runtime.as_slice()),
+                ("index.d.ts", leaf_declarations.as_slice()),
+                leaf_root,
+            ),
+        ];
+        let plan = plan_for_test_package_from_importer(
+            &root_archive,
+            "root-package",
+            "1.2.3",
+            root_root,
+            root_manifest,
+            &["import"],
+            &root_bindings,
+            &[&leaf_via_root, &middle_plan, &leaf_via_middle],
+            "/project/src/app.ts",
+        );
+        assert_eq!(
+            plan.verified_exports.binding_count(),
+            2,
+            "both exports bind once the shared specifier is disambiguated by importer"
+        );
+
+        // Nothing is guessed when no candidate is this package's own edge: two
+        // leaf plans, both imported from inside the middle package, leave the
+        // root's own `leaf-package` import unbound.
+        let leaf_via_other_middle = plan_for_test_package_from_importer(
+            &leaf_archive,
+            "leaf-package",
+            "1.0.0",
+            leaf_root,
+            leaf_manifest,
+            &["import"],
+            &leaf_binding,
+            &[],
+            "/project/node_modules/middle-package/dist/other.js",
+        );
+        let refusal = try_plan_for_test_package_from_importer(
+            &root_archive,
+            "root-package",
+            "1.2.3",
+            root_root,
+            root_manifest,
+            &["import"],
+            &root_bindings,
+            &[&leaf_via_middle, &middle_plan, &leaf_via_other_middle],
+            "/project/src/app.ts",
+        );
+        let refusal = match refusal {
+            Ok(_) => panic!("an edge no importer claims must stay refused"),
+            Err(error) => error.to_string(),
+        };
+        assert!(
+            refusal.contains("runtime export \"SHARED\" has no exact binding"),
+            "unexpected refusal: {refusal}"
+        );
+
+        // Version skew is the case the tie-break has to get *right*, not merely
+        // unambiguously: the same specifier names a hoisted 1.0.0 beside the
+        // root and a nested 2.0.0 under the middle package, with different
+        // bytes. The wrong copy is listed first.
+        let nested_manifest = br#"{"name":"leaf-package","version":"2.0.0","exports":{".":{"types":"./index.d.ts","import":"./index.js"}}}"#;
+        let nested_runtime = b"export const SHARED = \"nested\";\n";
+        let nested_declarations = b"export declare const SHARED: \"nested\";\n";
+        let nested_archive = published_archive_for(
+            "leaf-package",
+            "2.0.0",
+            &[
+                ("package/package.json", nested_manifest),
+                ("package/index.js", nested_runtime),
+                ("package/index.d.ts", nested_declarations),
+            ],
+        );
+        let nested_root = "/project/node_modules/middle-package/node_modules/leaf-package";
+        let nested_leaf_via_middle = plan_for_test_package_from_importer(
+            &nested_archive,
+            "leaf-package",
+            "2.0.0",
+            nested_root,
+            nested_manifest,
+            &["import"],
+            &[(
+                "SHARED",
+                ("index.js", nested_runtime.as_slice()),
+                ("index.d.ts", nested_declarations.as_slice()),
+                nested_root,
+            )],
+            &[],
+            middle_importer,
+        );
+        let skewed = plan_for_test_package_from_importer(
+            &root_archive,
+            "root-package",
+            "1.2.3",
+            root_root,
+            root_manifest,
+            &["import"],
+            &root_bindings,
+            &[&nested_leaf_via_middle, &middle_plan, &leaf_via_root],
+            "/project/src/app.ts",
+        );
+        let (_, _, _, skewed_snapshot_root) = skewed
+            .verified_exports
+            .runtime_binding("SHARED")
+            .expect("the root's own hoisted copy binds");
+        assert_eq!(
+            skewed_snapshot_root,
+            leaf_via_root.snapshot.root(),
+            "the tie-break must select this package's own copy, not the nested one"
+        );
+        assert_ne!(
+            skewed_snapshot_root,
+            nested_leaf_via_middle.snapshot.root(),
+            "the nested 2.0.0 copy has different bytes and must not be bound"
+        );
+
+        // And the wrong copy is never admitted quietly. With only the nested
+        // copy planned there is no tie to break, so the single-match path
+        // hands it over -- and the downstream artifact verification refuses it
+        // for what it is: a file outside that plan's package root.
+        let wrong_copy = try_plan_for_test_package_from_importer(
+            &root_archive,
+            "root-package",
+            "1.2.3",
+            root_root,
+            root_manifest,
+            &["import"],
+            &root_bindings,
+            &[&nested_leaf_via_middle, &middle_plan],
+            "/project/src/app.ts",
+        );
+        let wrong_copy = match wrong_copy {
+            Ok(_) => panic!("a wrong-copy binding must not certify"),
+            Err(error) => error.to_string(),
+        };
+        assert!(
+            wrong_copy.contains("outside the logical package root"),
+            "unexpected refusal: {wrong_copy}"
+        );
+    }
+
     /// One export's name, its runtime and declaration module (package-relative
     /// path plus bytes), and the installed root of the package that owns them —
     /// a dependency's root when the export is re-exported across packages.
@@ -4796,6 +5059,62 @@ mod tests {
         exports: &[TestExportBinding<'_>],
         dependencies: &[&CertificationPlan],
     ) -> CertificationPlan {
+        plan_for_test_package_from_importer(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            conditions,
+            exports,
+            dependencies,
+            "/project/src/app.ts",
+        )
+    }
+
+    /// As `plan_for_test_package`, but names the module that issued the
+    /// import. A dependency node of a published graph is imported by a module
+    /// of its *parent package*, never by the project's own entry module, and
+    /// that importer is what identifies the edge when two packages in one
+    /// graph depend on the same specifier.
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn plan_for_test_package_from_importer(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        dependencies: &[&CertificationPlan],
+        importer: &str,
+    ) -> CertificationPlan {
+        try_plan_for_test_package_from_importer(
+            archive,
+            name,
+            version,
+            root,
+            manifest,
+            conditions,
+            exports,
+            dependencies,
+            importer,
+        )
+        .unwrap()
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "exact resolution inputs")]
+    fn try_plan_for_test_package_from_importer(
+        archive: &PublishedArchive,
+        name: &str,
+        version: &str,
+        root: &str,
+        manifest: &[u8],
+        conditions: &[&str],
+        exports: &[TestExportBinding<'_>],
+        dependencies: &[&CertificationPlan],
+        importer: &str,
+    ) -> Result<CertificationPlan, super::CertificationPlanningError> {
         let snapshot =
             ArtifactSnapshot::from_published(archive, SnapshotLimits::policy_2()).unwrap();
         let parsed: SnapshotPackageManifest = serde_json::from_slice(manifest).unwrap();
@@ -4826,21 +5145,31 @@ mod tests {
             declarations_path: declarations.0.into(),
             evidence_root: format!("sha256:{:064x}", 0),
         };
-        let accepted = dependencies
-            .iter()
-            .map(|dependency| AcceptedDependencyEdge {
-                specifier: dependency.snapshot.package_name().into(),
-                package_name: dependency.snapshot.package_name().into(),
+        // One closure edge per specifier: a graph whose descendant set repeats
+        // a package (two consumers of one shared dependency) still declares
+        // that dependency once in each consumer's own closure.
+        let mut accepted = Vec::new();
+        for dependency in dependencies {
+            let specifier: String = dependency.snapshot.package_name().into();
+            if accepted
+                .iter()
+                .any(|edge: &AcceptedDependencyEdge| edge.specifier == specifier)
+            {
+                continue;
+            }
+            accepted.push(AcceptedDependencyEdge {
+                specifier: specifier.clone(),
+                package_name: specifier,
                 artifact_case: dependency.selected_artifact_case_id().into(),
                 accepted_contract_digest: format!("sha256:{:064x}", 1),
-            })
-            .collect::<Vec<_>>();
+            });
+        }
         let closure =
             super::module_closure::replay_snapshot_closure(&snapshot, &resolution, &accepted)
                 .unwrap();
         let request = ImportRequest {
             specifier: name.into(),
-            importer: "/project/src/app.ts".into(),
+            importer: importer.into(),
             export_conditions: conditions.iter().map(|&value| value.to_owned()).collect(),
         };
         let resolved = ResolvedImport {
@@ -4932,7 +5261,6 @@ mod tests {
             UntrustedArtifactEnvelope::Published(archive.clone()),
             dependencies,
         )
-        .unwrap()
     }
 
     #[test]

@@ -1,5 +1,169 @@
 # Precision backlog
 
+## A planned dependency was invisible to the module that re-exported it (2026-09-03)
+
+`motion-solidjs@0.6.0|solid1|only` refused *before any demand*:
+
+```
+contract identity does not match the resolved import: Runtime target for export
+"addScaleCorrector" is re-exported from dependency "motion-dom" (module
+"dist/es/projection/styles/scale-correction.mjs"), which no planned dependency
+binds; the planned dependencies contribute no target in that package
+```
+
+The batch-3 diagnosis had established that `motion-dom@12.43.0` `.` **is** a
+node of the generation-side dependency plan, generates cleanly, and really does
+own that module — and that the planned dependencies nonetheless contributed
+targets only in `{"framer-motion", "motion-utils"}`. **The missing step was the
+importer**, and it turned out to be two defects, one on each side of the
+private published-graph lane. Both were measured off the kept certification
+scratch (`--proposal-refusal-audit` forces that lane, and every node's own
+`solid-reactivity.json.refusals.json` was read), not inferred.
+
+### The generation catalog named one arbitrary module per dependency
+
+`prepareState` (`packages/cli/scripts/certify-contract.mjs`) plans one graph
+node per *specifier* and lets the **first** runtime re-export edge in canonical
+order name that node's importer. For `motion-solidjs` the four re-export edges
+to `motion-dom` are `dist/v1/core/render-style.mjs`, `dist/v1/events.mjs`,
+`dist/v1/index.mjs` and `dist/v1/primitives/index.mjs`; the alphabetically
+first won, and the emitted catalog read
+
+| specifier | recorded importer |
+| --- | --- |
+| `motion-dom` | `dist/v1/core/render-style.mjs` |
+| `motion` | `dist/v1/index.mjs` |
+| `motion-utils` | `dist/v1/index.mjs` |
+| `motion/mini` | `dist/v1/index.mjs` |
+
+`AcceptedContractIndex::contract` keys on the exact `(importer, specifier)`
+pair (`contract_semantics/consumer.rs:300-312`), and emission asks it about the
+**entry module**: `collect_accepted_reexport_candidates` starts at the artifact
+case's entry file and passes `file.path` as the importer (`main.rs:5461`,
+`:5494`, `:5535`). So `motion-utils`' `MotionGlobalConfig` bridge resolved and
+`motion-dom`'s `addScaleCorrector` bridge — identical syntax, one line apart in
+`dist/v1/index.mjs` — did not. The three packages the refusal message named
+were exactly the three whose one recorded importer happened to be the entry
+module. Nothing was ambiguous and nothing was unresolved: the contract existed
+and was filed under a key nobody would ask for.
+
+`reexportImporterCensus` now derives, from the same filtered runtime
+re-export edge list the nodes are planned from, every module that re-exports
+each specifier; `mergeProposalDependencies` emits one catalog entry per
+occurrence, all sharing one document object. This is not a new claim:
+`prepareState` already located *every* occurrence and refused the node outright
+unless they all resolved to the same installed copy
+(`ambiguous dependency identity for …`), so the only field that differs between
+the entries is the one the index is keyed by. `proposalDependencies` stays
+keyed by specifier, because the JS resolver's `acceptedDependencies` lookup is
+importer-agnostic — which is why the JS side had produced the `motion-dom`
+target all along and only Rust refused it.
+
+`read_proposal_dependency_catalog_for_generation` memoizes decode and
+normalization per `documentDigest`, so N entries sharing one document pay for
+it once. Every entry still reads its own file and is digest-checked against it
+first: nothing is admitted on a neighbour's evidence, and only a pure function
+of the bytes the digest pins is shared.
+
+**The shadowing surface widens with it, deliberately.** The proposal index
+precedes the bundled first-party contracts (`with_fallback`, whose rule is
+"project acquisition wins per importer and specifier; a built-in may fill only
+a genuinely absent key"), so a specifier now takes its generation-time
+semantics from the graph node at *every* re-exporting module of the package
+rather than at one. That index is private to emission — the final native
+case-set transaction independently replays every archive, resolution, closure
+edge, semantic digest and receipt — and today no bundled contract is reachable
+at all (`EMBEDDED_SOLID1_BUNDLES`/`EMBEDDED_BUNDLES` are both empty), so the
+widening changes which key a *proposal* answers and never which contract is
+authoritative.
+
+### A shared dependency of two graph packages disambiguated to nothing
+
+With the catalog repaired the root generated, and the native certifier refused
+one level in: `artifact export binding mismatch: runtime export
+"MotionGlobalConfig" has no exact binding`.
+
+`external_dependency` (`contract_certification/export_bindings.rs`) selected a
+planned dependency by its bare specifier across the **whole** authenticated
+descendant set — which `plan_graph_request_dependency_first` passes
+deliberately, because "export identity can traverse more than one accepted
+re-export edge". That set repeats a specifier as soon as two packages of one
+graph depend on the same one, and `motion-solidjs` and `framer-motion` both
+depend on `motion-utils` (and on `motion-dom`). A diamond is the ordinary
+shape, not an exceptional one, and the repeat was read as ambiguity: two
+matches, so `Option::None`, so no binding at all.
+
+The importer names the edge exactly, and the authoritative matcher already
+existed — `importer_is_closure_entry_module`, which
+`plan_published_contract_graph` checks node identity with: the plan whose
+importer is a proven runtime or declaration module of *this* package's replayed
+closure is this package's own edge, and a homonymous specifier reached from a
+descendant package is a different edge that may name a different installed
+copy. The narrowing is applied **only to break a tie**, so a single unambiguous
+match binds exactly as before (no row that certifies today changes) and a tie
+that no importer claims stays refused rather than being guessed at.
+
+### What moved, and what the boundary now is
+
+`motion-solidjs@0.6.0|solid1|only`'s certification audit moved from
+`stage: artifact-or-demand-planning`, `owner: artifact-provenance`,
+`demandId: null` to `stage: witness-acquisition`, `owner: certifier`,
+`demandId: sha256:924093f26c0724479c45c0e620c28c2c43b484168445468db3c6d89bcc926ea1`,
+`family: recursive-value-shape`, with ten demand plans across ten graph nodes.
+The row's *reported* outcome is unchanged (`dependency-contract-obligation`,
+`first refusal: .: accepted dependency motion-utils has no exact runtime
+binding for export MotionGlobalConfig`) because the runner reports the
+plain-lane generation refusal, which this repair does not touch — the private
+graph lane is what advanced.
+
+**Exact remaining refusal**, and it is honest: `motion-dom@12.43.0` `.`'s own
+export `attachFollow` is *locally open* —
+`recursive-value-shape (…:attachFollow): operation value path is locally open
+(complete=false, presence=Unknown, callability=Unknown, reasons=["openAlternative"])`.
+That is a claim about `motion-dom`'s own bytes, not about provenance, and it is
+where this row now stops.
+
+**Pinned by tests, not fixtures.** Both defects live in the private
+published-graph lane, which needs real published archives and a dependency
+catalog; `fixtures/package-contracts` drives the plain no-accepted-contract
+generation lane and cannot express either one. Three tests, each verified to
+fail when its own change is reverted:
+
+- *the re-export importer census sees every module, not the first one sorted*
+  (`packages/cli/test/contract-workflow.test.mjs`) drives the **census
+  itself**: a synthetic two-module consumer package on disk, resolved by the
+  real `resolvePackageArtifactClosure`, whose nested module provably sorts
+  ahead of its entry module, asserting that both importers reach the emitted
+  catalog. A first-occurrence census fails it.
+- *the private graph catalog names every module that re-exports a dependency*
+  (same file) pins the emission rule on its own: every occurrence present, one
+  shared document object, the node's own resolution required to be among them,
+  and the no-census fallback.
+- `a_shared_dependency_of_two_graph_packages_binds_through_this_package_s_own_edge`
+  (`contract_certification.rs`) is a real two-consumer diamond built from
+  published archives. It fails with `runtime export "SHARED" has no exact
+  binding` without the tie-break; it additionally pins that a tie no importer
+  claims stays refused, that a **version-skewed** diamond (hoisted `leaf@1.0.0`
+  against nested `leaf@2.0.0`, different bytes, wrong copy listed first) binds
+  this package's own copy, and that an inverted tie-break produces
+  `resolved file is outside the logical package root` rather than a binding —
+  the downstream refusal that makes a wrong-copy selection unsound-but-safe
+  instead of silently wrong.
+
+`one_document_digest_normalizes_once_for_every_catalog_entry`
+(`contract_interface.rs`) pins the memo: a repeated digest decodes once and
+both entries bind the same normalized document. Phase 18/19 stay at **173**
+stable-v1 mains — this slice adds no artifact.
+
+Controls re-measured at this build, all unchanged:
+`motion-solidjs@0.7.0-beta.4|solid2|floor` and `|head` certified,
+`corvu@0.7.2|solid1|only` certified,
+`@tanstack/solid-query-persist-client@5.102.5|solid1|only` certified,
+`@solid-primitives/timer@1.4.5-next.1|solid2|floor` certified, and
+`@tanstack/solid-db@0.2.40|solid1|only` still refused on demand
+`sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983`.
+The full 418-probe corpus was **not** re-run in this slice.
+
 ## `@solid-primitives/utils@6.4.1`'s root refusal is not a bundled-contract, condition-selection, or dialect-binding defect (2026-09-03)
 
 `@solid-primitives/utils@6.4.1|solid1|only` is `partial-success` and certifies
@@ -13355,3 +13519,15 @@ to mechanism B's missing witness, and `motion-solidjs@0.6.0` only alternated
 its first-refused entrypoint (`.` ↔ `./v1`), the reporting-order flip recorded
 earlier. Ledgers re-pinned: Phase 20 moved 353 → 355 verified and 44 → 42
 exact refusals. Wall time 72.3 s.
+
+### Re-measured: 355 verified / 42 exact refusals / 21 not attempted (unchanged)
+
+The complete 418-probe corpus was re-run after the two graph-lane repairs and
+their fixer round (`make ecosystem-benchmark`; report SHA-256 recorded in the
+Phase 21 ledger's `authority.currentReport`). No verdict moved. Exactly one row
+changed what it records: `motion-solidjs@0.6.0|solid1|only`'s certification
+attempt advanced from `artifact-or-demand-planning` with no demand to
+`witness-acquisition` on demand `sha256:924093f26c07…` (recursive-value-shape,
+`motion-dom@12.43.0` `attachFollow`, locally open), while its reported outcome
+stays the plain-lane generation refusal. Ledgers re-pinned to the new report
+digest; the Phase 20 counts are unchanged. Wall time 70.1 s.

@@ -313,6 +313,30 @@ enum AcceptedCatalogStatus {
     Policy2Portable,
 }
 
+/// Decodes and normalizes one catalog document, once per distinct
+/// `documentDigest`.
+///
+/// A digest-duplicated entry is the ordinary shape now that the catalog names
+/// every module of a package that re-exports a dependency: N entries share one
+/// document object and differ only in the importer the generation-time index
+/// is keyed by. Every entry still reads its own file and is digest-checked
+/// against it before it gets here, so nothing is admitted on a neighbour's
+/// evidence; only the decode and normalization is shared, and that is a pure
+/// function of exactly the bytes the digest pins.
+fn normalized_catalog_document<'memo>(
+    memo: &'memo mut BTreeMap<String, solid_reactive_ir::contract_semantics::NormalizedContract>,
+    document_digest: &str,
+    document: &[u8],
+) -> Result<&'memo solid_reactive_ir::contract_semantics::NormalizedContract, ContractFailure> {
+    if !memo.contains_key(document_digest) {
+        let normalized = contract_document::decode(document)?.normalize()?;
+        memo.insert(document_digest.to_owned(), normalized);
+    }
+    Ok(memo
+        .get(document_digest)
+        .expect("the entry was just inserted when absent"))
+}
+
 /// Loads open child proposals for one private graph-generation process. The
 /// resulting semantics are explicitly unauthenticated projection material;
 /// this reader is never used by ordinary discovery, diagnostics, or catalog
@@ -362,6 +386,7 @@ pub fn read_proposal_dependency_catalog_for_generation(
     }
     let base = path.parent().unwrap_or_else(|| Path::new("."));
     let mut projected = Vec::with_capacity(catalog.contracts.len());
+    let mut normalized_documents = BTreeMap::new();
     for mut entry in catalog.contracts {
         let document = read_boundary_file(
             &catalog_member_path(base, &entry.document)?,
@@ -375,11 +400,15 @@ pub fn read_proposal_dependency_catalog_for_generation(
             });
         }
         rebase_catalog_import(base, &mut entry.import)?;
-        let normalized = contract_document::decode(&document)?.normalize()?;
+        let normalized = normalized_catalog_document(
+            &mut normalized_documents,
+            &entry.document_digest,
+            &document,
+        )?;
         let external_targets =
             crate::artifact_resolution::resolved_external_export_targets(&entry.import)?;
         let selected = crate::artifact_resolution::select_and_bind_with_external_targets(
-            &normalized,
+            normalized,
             &entry.import,
             &external_targets,
         )?;
@@ -912,5 +941,30 @@ mod tests {
     #[test]
     fn policy2_receipts_require_authenticated_provenance() {
         assert!(require_policy2_receipt(br#"{"receiptVersion":2}"#).is_ok());
+    }
+
+    #[test]
+    fn one_document_digest_normalizes_once_for_every_catalog_entry() {
+        const DOCUMENT: &[u8] = br#"{"format":"solid-reactivity-contract","schemaVersion":1,"semanticModelVersion":1,"package":{"name":"solid-js","version":"2.0.0-rc.3","integrity":"sha512:test","manifest":{"path":"package.json","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"summaries":{"plain":{"shape":"plain"}},"entrypoints":{".":{"artifact":{"path":"dist/solid.js","sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","closureSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},"declarations":{"path":"types/index.d.ts","sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},"exports":{"version":"plain"}}},"sidecars":{}}"#;
+        let digest = sha256_digest(DOCUMENT);
+        let mut memo = BTreeMap::new();
+        let first = normalized_catalog_document(&mut memo, &digest, DOCUMENT)
+            .unwrap()
+            .clone();
+        assert_eq!(memo.len(), 1);
+        // Two catalog entries naming one document object -- the shape every
+        // multi-module re-export now produces.
+        let second = normalized_catalog_document(&mut memo, &digest, DOCUMENT)
+            .unwrap()
+            .clone();
+        assert_eq!(
+            memo.len(),
+            1,
+            "a repeated documentDigest must not decode and normalize again"
+        );
+        assert_eq!(
+            first, second,
+            "both entries bind the same normalized document"
+        );
     }
 }

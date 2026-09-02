@@ -1163,7 +1163,34 @@ function storeMergedObject(source, target) {
   copyFileSync(source, target);
 }
 
-function mergeProposalDependencies(dependencies, outputRoot) {
+/// Every module of a package that re-exports a given specifier, keyed by that
+/// specifier -- not only the first one in canonical order.
+///
+/// One graph node still stands for one specifier: `prepareState` proves every
+/// occurrence locates the same installed copy before it plans anything. But
+/// the private generation catalog is keyed by `(importer, specifier)`, and
+/// emission asks it about the artifact case's *entry module* and about every
+/// relative module the export chain walks through. Naming one arbitrary
+/// occurrence answers whichever query happens to match it and silently
+/// withholds the accepted contract from the rest, which is then
+/// indistinguishable from having no dependency at all: `motion-solidjs@0.6.0`
+/// re-exports `motion-dom` from four modules, `dist/v1/core/render-style.mjs`
+/// sorted first, and its entry module's `addScaleCorrector` bridge therefore
+/// resolved against nothing.
+///
+/// `edges` are the caller's already-filtered runtime re-export edges, so the
+/// census cannot disagree with the set of nodes that gets planned.
+export function reexportImporterCensus(packageRoot, edges) {
+  const census = new Map();
+  for (const edge of edges) {
+    const importers = census.get(edge.specifier) ?? new Set();
+    importers.add(resolve(packageRoot, edge.importerPath ?? edge.source));
+    census.set(edge.specifier, importers);
+  }
+  return census;
+}
+
+export function mergeProposalDependencies(dependencies, outputRoot) {
   if (dependencies.length === 0) {
     return { catalog: "", proposalDependencies: {} };
   }
@@ -1190,11 +1217,28 @@ function mergeProposalDependencies(dependencies, outputRoot) {
       dependency.planning.proposal,
       join(outputRoot, "objects", documentName)
     );
-    contracts.push({
-      document: `objects/${documentName}`,
-      documentDigest,
-      import: resolution
-    });
+    // One entry per module of the consuming package that re-exports this
+    // specifier. `prepareState` located every one of them and refused the node
+    // outright unless they all resolved to the same installed copy, so the
+    // only field that differs between these entries is the importer -- exactly
+    // the field the generation-time index is keyed by. The entries share one
+    // document object; emission reads whichever occurrence its export chain
+    // arrives at.
+    const importers = dependency.reexportImporters?.length
+      ? dependency.reexportImporters
+      : [resolution.importer];
+    if (!importers.includes(resolution.importer)) {
+      throw new Error(
+        `dependency ${dependency.viaSpecifier} names an importer that re-exports nothing`
+      );
+    }
+    for (const importer of importers) {
+      contracts.push({
+        document: `objects/${documentName}`,
+        documentDigest,
+        import: importer === resolution.importer ? resolution : { ...resolution, importer }
+      });
+    }
     proposalDependencies[dependency.viaSpecifier] = {
       packageName: dependency.node.packageName,
       artifactCase: dependency.demandPlan.selectedArtifactCase,
@@ -1536,9 +1580,11 @@ async function preparePublishedGraphFallback({
         directDependencies.push({ state: child, viaSpecifier: dependency.specifier });
         return true;
       };
-      for (const dependency of resolved.externalDependencies.filter(
+      const semanticEdges = resolved.externalDependencies.filter(
         dependency => dependency.axis === "runtime" && dependency.kind === "reexport"
-      )) {
+      );
+      const reexportImporters = reexportImporterCensus(node.packageRoot, semanticEdges);
+      for (const dependency of semanticEdges) {
         await addSemanticDependency(dependency);
       }
       const sortDependencies = () => {
@@ -1576,6 +1622,7 @@ async function preparePublishedGraphFallback({
         artifactSnapshot,
         generatedOutput,
         directDependencies,
+        reexportImporters,
         planning: null,
         demandPlan: null,
         sourceDependencies,
@@ -1691,7 +1738,10 @@ async function preparePublishedGraphFallback({
       async state => {
         const dependencies = state.directDependencies.map(dependency => ({
           ...dependency.state,
-          viaSpecifier: dependency.viaSpecifier
+          viaSpecifier: dependency.viaSpecifier,
+          reexportImporters: [
+            ...(state.reexportImporters.get(dependency.viaSpecifier) ?? [])
+          ].sort()
         }));
         const merged = mergeProposalDependencies(
           dependencies,
