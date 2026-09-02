@@ -228,7 +228,8 @@ host with a warm registry cache, 418 probes and 393 certification attempts
 | cache warm, 14 certification slots | 185-190 s | 1,530-1,590 s |
 | cache warm, 20 certification slots (new default) | 176-182 s | 1,580-1,650 s |
 | cache warm, 24 certification slots | 181 s | 1,610 s |
-| cache warm, 20 slots, loadable-only private projects (current) | 173-185 s | 1,560-1,610 s |
+| cache warm, 20 slots, loadable-only private projects | 173-185 s | 1,560-1,610 s |
+| + generated proposal handed to certification (current) | 163 s | 1,312 s |
 
 Per-invocation accounting of the native binary for one 14-slot run:
 
@@ -263,12 +264,25 @@ remaining wait on the scheduler rather than on filesystem metadata.
 Two other engine-side experiments were measured and not kept: writing the
 private project from eight threads raised system time from 3 s to 11 s per
 certification on APFS with no wall gain, and deferring its removal to a thread
-joined at process exit moved nothing off the slot. What remains is CPU:
-`--project` analysis (717 CPU-seconds, including each batch's own Type Facts
-program build), each certification's declaration-closure resolution in
-JavaScript, and the proposal that `contract certify` regenerates although the
-runner's generation phase just produced one. Each of those is a design
-decision, not a mechanical change, and is recorded here rather than taken.
+joined at process exit moved nothing off the slot.
+
+`contract certify` no longer regenerates the proposal inside the benchmark:
+generation runs under the probe's certification importer and its emission
+(document, plan, refusal audit and the new `.certification-inputs.json`
+sidecar) is handed to `contract certify --proposal`, which admits it only when
+package identity, integrity, package root, importer, entrypoints, conditions
+and the document and plan digests all match, and regenerates otherwise. Rust's
+treatment of the proposal is unchanged — an untrusted candidate whose
+resolution, closure and exports are verified against the archive and whose
+claims must be proven — so the hand-over moves no authority. The importer path
+does not change the emitted document, plan or refusal audit, so the generation
+phase's own measurement is unchanged too. 334 of the 393 certification
+attempts reused their proposal (the rest had no emitted document to hand over);
+outcomes were identical and the run measured 163 s and 1,312 CPU-seconds.
+
+What remains is CPU: `--project` analysis (717 CPU-seconds, including each
+batch's own Type Facts program build) and each certification's
+declaration-closure resolution in JavaScript.
 
 ## Per-probe timeout
 

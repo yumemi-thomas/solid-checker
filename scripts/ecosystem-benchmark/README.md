@@ -56,6 +56,13 @@ policy input before issuing a receipt. `--concurrency N` and
 `--certification-concurrency N` remain available for controlled comparisons or
 memory-constrained hosts.
 
+Generation runs under the certification importer of its probe and
+certification receives the emitted proposal through `contract certify
+--proposal`, so the proposal each probe's generation phase measured is verified
+rather than regenerated; certify admits the hand-over only when identity,
+integrity, importer, census and document digests match, and regenerates
+otherwise (the certification audit records `reusedProposal`).
+
 Certification children share a content-addressed registry cache,
 `rust/target/registry-cache` by default (`--registry-cache DIR`,
 `SOLID_CHECKER_REGISTRY_CACHE`, or `--no-registry-cache` to fetch every byte

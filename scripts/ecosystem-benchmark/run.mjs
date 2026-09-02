@@ -32,7 +32,13 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync
+} from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -54,6 +60,7 @@ import {
 } from "./lib/install.mjs";
 import { sortRows, validateManifest } from "./lib/manifest.mjs";
 import { buildReport, evaluateThresholds, renderMarkdown } from "./lib/report.mjs";
+import { certificationImporterPathFor } from "../../packages/cli/scripts/certify-contract.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_MANIFEST = join(ROOT, "scripts/ecosystem-benchmark/manifest.json");
@@ -797,7 +804,12 @@ async function runProbe(
           entrypoints: probe.entrypoints ?? [],
           proposalRefusalAudit: existsSync(proposalRefusalAudit)
             ? proposalRefusalAudit
-            : ""
+            : "",
+          // The generation phase emitted this probe's proposal under the
+          // certification importer; hand it over with its sidecars so
+          // certification verifies it instead of regenerating it. Certify
+          // itself decides whether the hand-over is admissible.
+          proposal: existsSync(`${outputPath}.certification-inputs.json`) ? outputPath : ""
         });
       } catch (error) {
         certificationResult = {
@@ -942,7 +954,12 @@ async function certifyCompleteProbe(item, { timeoutMs, keepTemp }, hooks) {
           entrypoints: item.task.probe.entrypoints ?? [],
           proposalRefusalAudit: existsSync(proposalRefusalAudit)
             ? proposalRefusalAudit
-            : ""
+            : "",
+          // The generation phase emitted this probe's proposal under the
+          // certification importer; hand it over with its sidecars so
+          // certification verifies it instead of regenerating it. Certify
+          // itself decides whether the hand-over is admissible.
+          proposal: existsSync(`${outputPath}.certification-inputs.json`) ? outputPath : ""
         });
       } catch (error) {
         certificationResult = {
@@ -1478,6 +1495,19 @@ function buildRealHooks({
 
     generateContract: ({ packageRoot, outputPath, timeoutMs, integrity, entrypoints = [] }) =>
       new Promise(resolvePromise => {
+        // Generate under the importer certification will use for this probe
+        // (named by the package root and the catalog certification publishes
+        // to), so the emitted proposal can be handed to `contract certify
+        // --proposal` instead of being regenerated. The importer does not
+        // change the emitted document, plan or refusal audit.
+        // Certification resolves its package root through realpath and Rust
+        // binds the receipt to that exact string, so generate under the same
+        // spelling; otherwise the handed-over resolution would not bind.
+        const generationRoot = realpathSync(packageRoot);
+        const certificationImporter = certificationImporterPathFor({
+          packageRoot: generationRoot,
+          catalog: `${outputPath}.accepted-catalog`
+        });
         const child = spawn(
           process.execPath,
           [
@@ -1485,11 +1515,13 @@ function buildRealHooks({
             "contract",
             "generate",
             "--package-root",
-            packageRoot,
+            generationRoot,
             "--integrity",
             integrity,
             "--output",
             outputPath,
+            "--certification-importer",
+            certificationImporter,
             ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
           ],
           {
@@ -1533,7 +1565,8 @@ function buildRealHooks({
       timeoutMs,
       integrity,
       entrypoints = [],
-      proposalRefusalAudit = ""
+      proposalRefusalAudit = "",
+      proposal = ""
     }) =>
       new Promise(resolvePromise => {
         const authorityDir = `${catalogPath}.authority`;
@@ -1569,6 +1602,7 @@ function buildRealHooks({
             ...(proposalRefusalAudit
               ? ["--proposal-refusal-audit", proposalRefusalAudit]
               : []),
+            ...(proposal ? ["--proposal", proposal] : []),
             ...entrypoints.flatMap(entrypoint => ["--entrypoint", entrypoint])
           ],
           {

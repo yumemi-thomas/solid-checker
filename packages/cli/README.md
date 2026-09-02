@@ -55,6 +55,19 @@ name-only, stale, unreceipted, or artifact-mismatched input.
 ordinary generation and analysis never execute dependency code, and a passing
 probe never closes a claim.
 
+`contract generate` writes a `.certification-inputs.json` sidecar beside the
+proposal (with the existing `.proposal.json` and `.refusals.json`) recording
+the emitted artifact cases, their resolutions, and the identity they were
+generated under. `contract certify --proposal <FILE>` reuses that emission
+instead of regenerating it when the package identity, integrity, package root,
+certification importer, entrypoints and conditions all match and the document
+and plan still carry the recorded digests; anything else regenerates. Reuse
+moves no authority: Rust verifies every resolution against the authenticated
+archive and proves every claim before a receipt exists, exactly as it does for
+an in-process generation. Generate under `--certification-importer` set to the
+path certification will use (its name derives from the package root and the
+catalog) for the hand-over to be admissible.
+
 Certification acquires every named package — the root and each compiler-source
 dependency the lockfile selects — from the registry, up to
 `SOLID_CHECKER_REGISTRY_CONCURRENCY` (default 8) at a time. Setting

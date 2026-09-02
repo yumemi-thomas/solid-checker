@@ -31,6 +31,7 @@ import {
 } from "./artifact-resolution.mjs";
 export { locateExternalDependencyPackageRoot } from "./artifact-resolution.mjs";
 import {
+  CERTIFICATION_INPUTS_FORMAT,
   artifactCaseDisposition,
   finiteArtifactCandidates,
   finiteConditionPartitions,
@@ -67,6 +68,12 @@ Options:
   --proposal-refusal-audit <FILE>
                           Reuse a complete current dependency-refusal census
                           after authenticated artifact acquisition
+  --proposal <FILE>       Reuse a proposal that contract generate emitted for this
+                          exact package root, integrity, importer, entrypoints
+                          and conditions (with its .proposal.json and
+                          .certification-inputs.json sidecars) instead of
+                          regenerating it; anything that does not match
+                          regenerates
   --audit-output <FILE>   Write a non-replayable diagnostic transcript
   -h, --help              Show this help
 
@@ -190,6 +197,7 @@ export function parseCertifyArguments(arguments_) {
     entrypoints: [],
     conditions: [],
     proposalRefusalAudit: "",
+    proposal: "",
     auditOutput: "",
     issuerConfiguration: process.env.SOLID_CHECKER_POLICY2_ISSUER_CONFIG ?? "",
     trustConfigurationOutput: process.env.SOLID_CHECKER_POLICY2_TRUST_CONFIG ?? "",
@@ -213,6 +221,7 @@ export function parseCertifyArguments(arguments_) {
       options.conditions.push(...value.split(",").map(item => item.trim()).filter(Boolean));
     } else if (key === "--audit-output") options.auditOutput = value;
     else if (key === "--proposal-refusal-audit") options.proposalRefusalAudit = value;
+    else if (key === "--proposal") options.proposal = value;
     else if (key === "--issuer-configuration") options.issuerConfiguration = value;
     else if (key === "--trust-configuration-output") options.trustConfigurationOutput = value;
     else throw new Error(`unknown contract certification argument ${key}`);
@@ -851,6 +860,130 @@ export function isReusableDependencyRefusalAudit({
     }
   }
   return true;
+}
+
+/// The importer file `contract certify` writes beside a package root, named by
+/// the package root and catalog it certifies. Exported so a harness that
+/// generates a proposal ahead of certification can generate it under the same
+/// importer and hand it over with `--proposal`.
+export function certificationImporterPathFor({ packageRoot, catalog }) {
+  const resolvedRoot = realpathSync(resolve(packageRoot));
+  const resolvedCatalog = resolve(
+    catalog || join(resolvedRoot, ".solid-checker", "accepted-contracts.json")
+  );
+  const importerIdentity = createHash("sha256")
+    .update("solid-checker:certification-importer:v1\0")
+    .update(resolvedRoot)
+    .update("\0")
+    .update(resolvedCatalog)
+    .digest("hex");
+  return join(dirname(resolvedRoot), `.solid-checker-certification-${importerIdentity}.mjs`);
+}
+
+function samePathIdentity(left, right) {
+  const canonical = path => {
+    try {
+      return join(realpathSync(dirname(path)), path.split(/[\\/]/).pop());
+    } catch {
+      return null;
+    }
+  };
+  const a = canonical(left);
+  const b = canonical(right);
+  return a !== null && b !== null && a === b;
+}
+
+/// Decides whether a proposal emitted earlier by `contract generate` may stand
+/// in for the one this certification would generate now. Everything the
+/// generation was parameterized by must match — package identity, integrity,
+/// package root, certification importer, entrypoints, conditions — and the
+/// document and plan bytes must still carry the digests the sidecar recorded,
+/// so an edited or swapped file is not paired with inputs derived from another.
+/// Each named artifact case must also be one the current census would emit.
+/// Returns the parsed inputs, or null when the caller must regenerate. Nothing
+/// this admits becomes authority: Rust still verifies every resolution against
+/// the authenticated archive and proves every claim before a receipt exists.
+export function reusableProposalInputs({
+  inputs,
+  documentBytes,
+  planBytes,
+  manifest,
+  packageRoot,
+  integrity,
+  certificationImporter,
+  entrypoints = [],
+  conditions = []
+}) {
+  const digest = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+  const sameList = (left, right) =>
+    Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index]);
+  if (
+    inputs?.format !== CERTIFICATION_INPUTS_FORMAT ||
+    inputs?.inputsVersion !== 1 ||
+    inputs?.package?.name !== manifest?.name ||
+    inputs?.package?.version !== manifest?.version ||
+    typeof integrity !== "string" ||
+    !integrity ||
+    inputs?.integrity !== integrity ||
+    typeof inputs?.packageRoot !== "string" ||
+    !samePathIdentity(inputs.packageRoot, packageRoot) ||
+    typeof certificationImporter !== "string" ||
+    !certificationImporter ||
+    typeof inputs?.certificationImporter !== "string" ||
+    !samePathIdentity(inputs.certificationImporter, certificationImporter) ||
+    !sameList(inputs?.entrypoints, entrypoints) ||
+    !sameList(inputs?.conditions, conditions) ||
+    inputs?.document?.sha256 !== digest(documentBytes) ||
+    inputs?.plan?.sha256 !== digest(planBytes) ||
+    !Array.isArray(inputs?.certificationInputs) ||
+    inputs.certificationInputs.length === 0
+  ) {
+    return null;
+  }
+  let expected;
+  try {
+    const current = finiteEntrypoints(manifest, entrypoints, packageRoot);
+    expected = new Set(
+      finiteArtifactCandidates(
+        manifest,
+        current.entrypoints,
+        finiteConditionPartitions(manifest, conditions),
+        packageRoot
+      )
+        .filter(candidate =>
+          artifactCaseDisposition({
+            manifest,
+            packageRoot,
+            entrypoint: candidate.entrypoint,
+            conditions: candidate.conditions
+          }) === null
+        )
+        .map(candidate => artifactCaseCoordinate(candidate.entrypoint, candidate.conditions))
+    );
+  } catch {
+    return null;
+  }
+  for (const input of inputs.certificationInputs) {
+    const coordinate = artifactCaseCoordinate(input?.entrypoint, input?.conditions);
+    if (
+      coordinate === null ||
+      !expected.has(coordinate) ||
+      typeof input?.resolution?.specifier !== "string" ||
+      typeof input?.resolution?.importer !== "string" ||
+      !samePathIdentity(input.resolution.importer, certificationImporter) ||
+      // Rust binds the receipt to the resolved import root by exact string, so
+      // the resolution must have been computed under the very root string this
+      // certification uses — a symlinked spelling of the same directory would
+      // certify and then fail to bind, a spurious refusal.
+      input.resolution.packageRoot !== packageRoot
+    ) {
+      return null;
+    }
+  }
+  return inputs;
 }
 
 export function validatedReusableDependencyRefusalAuditBytes({
@@ -1824,6 +1957,55 @@ function writeSuccessAudit(
   }, null, 2)}\n`);
 }
 
+/// Reads the sidecars beside `options.proposal` and, when
+/// `reusableProposalInputs` admits them, copies document, plan and refusal
+/// audit into the certification scratch under the names an in-process
+/// generation would have produced. The copies are made from the exact bytes
+/// that were validated, never re-read from the reusable path.
+function reuseEmittedProposal({ options, manifest, certificationImporter, proposalOutput }) {
+  let inputs;
+  let documentBytes;
+  let planBytes;
+  try {
+    documentBytes = readFileSync(options.proposal);
+    planBytes = readFileSync(`${options.proposal}.proposal.json`);
+    inputs = JSON.parse(readFileSync(`${options.proposal}.certification-inputs.json`, "utf8"));
+  } catch {
+    return null;
+  }
+  const admitted = reusableProposalInputs({
+    inputs,
+    documentBytes,
+    planBytes,
+    manifest,
+    packageRoot: options.packageRoot,
+    integrity: options.integrity,
+    certificationImporter,
+    entrypoints: options.entrypoints,
+    conditions: options.conditions
+  });
+  if (!admitted) return null;
+  writeFileSync(proposalOutput, documentBytes);
+  writeFileSync(`${proposalOutput}.proposal.json`, planBytes);
+  try {
+    writeFileSync(
+      `${proposalOutput}.refusals.json`,
+      readFileSync(`${options.proposal}.refusals.json`)
+    );
+  } catch {
+    // The refusal census is a separate, separately validated reuse.
+  }
+  return {
+    package: manifest.name,
+    version: manifest.version,
+    output: proposalOutput,
+    plan: `${proposalOutput}.proposal.json`,
+    schemaVersion: 1,
+    certificationInputs: admitted.certificationInputs,
+    accepted: false
+  };
+}
+
 export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   const options = parseCertifyArguments(arguments_);
   if (options.help) {
@@ -1841,6 +2023,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   if (options.proposalRefusalAudit) {
     options.proposalRefusalAudit = resolve(options.proposalRefusalAudit);
   }
+  if (options.proposal) options.proposal = resolve(options.proposal);
   const manifest = JSON.parse(readFileSync(join(options.packageRoot, "package.json"), "utf8"));
   if (!manifest.name || !manifest.version) {
     throw new Error("package.json must declare an exact package name and version");
@@ -1871,6 +2054,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   const certificationImporter = realpathSync(certificationImporterPath);
   const demandPlans = [];
   let graphPreparation = null;
+  let reusedProposal = false;
   const stageDurationsMs = {};
   let certified = false;
   const measure = async (stage, operation) => {
@@ -1943,6 +2127,13 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
               };
               return { authority: "rust", generated: null, graph };
             }
+          }
+          const reused = options.proposal
+            ? reuseEmittedProposal({ options, manifest, certificationImporter, proposalOutput })
+            : null;
+          if (reused) {
+            reusedProposal = true;
+            return { authority: "rust", generated: reused, graph: null };
           }
           try {
             const generated = await generatePackageContract(generationArguments, { quiet: true });
@@ -2017,7 +2208,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       manifest,
       demandPlans,
       stageDurationsMs,
-      graphPreparation
+      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation
     );
     certified = true;
   } catch (error) {

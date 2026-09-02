@@ -4,7 +4,7 @@
 // semantic inference, normalization, proposal closure weakening, compact
 // encoding, and multi-artifact merging. This file never reads a summary.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   copyFileSync,
   mkdirSync,
@@ -597,6 +597,47 @@ function stableRefusalReason(error, { packageRoot, scratch }) {
 // `Array.isArray(refusals)`, and every one of them counts `refusals.length` as
 // the refusal total — so a separate array is what makes "never counted as a
 // refusal" true by construction rather than by editing each counter.
+export const CERTIFICATION_INPUTS_FORMAT = "solid-checker-contract-certification-inputs";
+
+/// Records, next to an emitted proposal, exactly what `contract certify` would
+/// otherwise regenerate in-process: the emitted artifact cases with their
+/// resolutions, and the identity they were generated under. The document and
+/// plan are bound by digest so a later `--proposal` reuse cannot pair these
+/// inputs with different bytes. Nothing here is authority: Rust verifies every
+/// resolution against the authenticated archive and treats the document as an
+/// untrusted candidate, exactly as it does for an in-process generation.
+function writeCertificationInputs(output, plan, {
+  manifest,
+  integrity,
+  packageRoot,
+  certificationImporter,
+  entrypoints,
+  conditions,
+  certificationInputs
+}) {
+  const digest = path => `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+  writeFileSync(
+    `${output}.certification-inputs.json`,
+    `${JSON.stringify(
+      {
+        format: CERTIFICATION_INPUTS_FORMAT,
+        inputsVersion: 1,
+        package: { name: manifest.name, version: manifest.version },
+        integrity,
+        packageRoot,
+        certificationImporter: certificationImporter || null,
+        entrypoints,
+        conditions,
+        document: { path: output, sha256: digest(output) },
+        plan: { path: plan, sha256: digest(plan) },
+        certificationInputs
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
 function writeProposalRefusalAudit(output, manifest, refusals, inapplicable = []) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(
@@ -1304,6 +1345,15 @@ export async function generatePackageContract(
     })),
     accepted: false
   };
+  writeCertificationInputs(output, result.plan, {
+    manifest,
+    integrity: options.integrity,
+    packageRoot,
+    certificationImporter: options.certificationImporter,
+    entrypoints: options.entrypoints,
+    conditions: options.conditions,
+    certificationInputs: result.certificationInputs
+  });
   if (!quiet) {
     process.stdout.write(
       `generated unaccepted stable contract proposal for ${manifest.name}@${manifest.version} at ${output}` +

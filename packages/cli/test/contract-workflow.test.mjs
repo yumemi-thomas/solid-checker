@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -24,10 +25,12 @@ import {
   isExactDependencyCompositionRefusal,
   isReusableDependencyRefusalAudit,
   locateExternalDependencyPackageRoot,
+  certificationImporterPathFor,
   parseCertifyArguments,
   publishedGraphPreparationConcurrency,
   registryAcquisitionConcurrency,
   registryCacheRoot,
+  reusableProposalInputs,
   runContractCertificationPipeline,
   validatedReusableDependencyRefusalAuditBytes
 } from "../scripts/certify-contract.mjs";
@@ -1568,6 +1571,156 @@ test("without SOLID_CHECKER_REGISTRY_CACHE every acquisition is fetched fresh", 
       assert.equal(first.length, 2);
       assert.equal(second.length, 2);
     });
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Proposal hand-over. A proposal `contract generate` emitted may stand in for
+// the one certification would regenerate only when everything the generation
+// was parameterized by matches and the bytes still carry the recorded digests.
+// ---------------------------------------------------------------------------
+
+function sha256Of(bytes) {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function writeReusableProposalProject() {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-proposal-reuse-"));
+  const write = (path, body) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+  };
+  const packageRoot = join(project, "node_modules/root-package");
+  write(
+    join(packageRoot, "package.json"),
+    `{"name":"root-package","version":"1.0.0","exports":{".":{"types":"./types/index.d.ts","import":"./dist/index.js"}}}\n`
+  );
+  write(join(packageRoot, "types/index.d.ts"), "export declare const value: () => void;\n");
+  write(join(packageRoot, "dist/index.js"), "export const value = () => {};\n");
+  const importer = certificationImporterPathFor({
+    packageRoot,
+    catalog: join(project, "out/root.json.accepted-catalog")
+  });
+  const documentBytes = Buffer.from('{"format":"stable","package":{"name":"root-package"}}\n');
+  const planBytes = Buffer.from('{"format":"plan"}\n');
+  const inputs = {
+    format: "solid-checker-contract-certification-inputs",
+    inputsVersion: 1,
+    package: { name: "root-package", version: "1.0.0" },
+    integrity: "sha512-root",
+    packageRoot,
+    certificationImporter: importer,
+    entrypoints: [],
+    conditions: [],
+    document: { path: join(project, "out/root.json"), sha256: sha256Of(documentBytes) },
+    plan: { path: join(project, "out/root.json.proposal.json"), sha256: sha256Of(planBytes) },
+    certificationInputs: [
+      {
+        entrypoint: ".",
+        conditions: [],
+        resolution: { specifier: "root-package", importer, packageRoot }
+      }
+    ]
+  };
+  const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+  const current = {
+    manifest,
+    packageRoot,
+    integrity: "sha512-root",
+    certificationImporter: importer,
+    entrypoints: [],
+    conditions: []
+  };
+  return { project, packageRoot, importer, documentBytes, planBytes, inputs, current };
+}
+
+test("certificationImporterPathFor is deterministic in the package root and catalog", () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-importer-path-"));
+  try {
+    const packageRoot = join(project, "node_modules/pkg");
+    mkdirSync(packageRoot, { recursive: true });
+    const first = certificationImporterPathFor({ packageRoot, catalog: join(project, "a.catalog") });
+    const again = certificationImporterPathFor({ packageRoot, catalog: join(project, "a.catalog") });
+    const other = certificationImporterPathFor({ packageRoot, catalog: join(project, "b.catalog") });
+    assert.equal(first, again);
+    assert.notEqual(first, other, "the catalog is part of the importer identity");
+    assert.equal(dirname(first), realpathSync(dirname(packageRoot)), "the importer sits beside the package root");
+    assert.match(first.split("/").pop(), /^\.solid-checker-certification-[0-9a-f]{64}\.mjs$/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a matching emitted proposal is admitted for reuse", () => {
+  const { project, documentBytes, planBytes, inputs, current } = writeReusableProposalProject();
+  try {
+    const admitted = reusableProposalInputs({ inputs, documentBytes, planBytes, ...current });
+    assert.ok(admitted, "identity, digests and census all match");
+    assert.equal(admitted.certificationInputs.length, 1);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an emitted proposal is refused for reuse on any parameter or byte mismatch", () => {
+  const { project, packageRoot, importer, documentBytes, planBytes, inputs, current } =
+    writeReusableProposalProject();
+  try {
+    const attempt = (override, name) => {
+      const result = reusableProposalInputs({
+        inputs: { ...inputs, ...override.inputs },
+        documentBytes: override.documentBytes ?? documentBytes,
+        planBytes: override.planBytes ?? planBytes,
+        ...current,
+        ...override.current
+      });
+      assert.equal(result, null, name);
+    };
+    attempt({ documentBytes: Buffer.from("edited\n") }, "document bytes drifted");
+    attempt({ planBytes: Buffer.from("edited\n") }, "plan bytes drifted");
+    attempt({ current: { integrity: "sha512-other" } }, "integrity differs");
+    attempt({ inputs: { package: { name: "root-package", version: "1.0.1" } } }, "version differs");
+    attempt({ current: { entrypoints: ["./extra"] } }, "entrypoint census differs");
+    attempt({ current: { conditions: ["solid"] } }, "conditions differ");
+    attempt(
+      { current: { certificationImporter: join(dirname(importer), ".solid-checker-certification-ffff.mjs") } },
+      "importer differs"
+    );
+    attempt({ inputs: { packageRoot: join(dirname(packageRoot), "other-package") } }, "package root differs");
+    attempt({ inputs: { inputsVersion: 2 } }, "unknown sidecar version");
+    attempt({ inputs: { certificationInputs: [] } }, "no emitted case");
+    attempt(
+      {
+        inputs: {
+          certificationInputs: [
+            { entrypoint: "./absent", conditions: [], resolution: { specifier: "root-package/absent", importer, packageRoot } }
+          ]
+        }
+      },
+      "a case the current census does not emit"
+    );
+    attempt(
+      {
+        inputs: {
+          certificationInputs: [
+            { entrypoint: ".", conditions: [], resolution: { specifier: "root-package", importer: join(project, "elsewhere.mjs"), packageRoot } }
+          ]
+        }
+      },
+      "a resolution from another importer"
+    );
+    attempt(
+      {
+        inputs: {
+          certificationInputs: [
+            { entrypoint: ".", conditions: [], resolution: { specifier: "root-package", importer, packageRoot: packageRoot.replace("/node_modules/", "/node_modules/./") } }
+          ]
+        }
+      },
+      "a resolution computed under another spelling of the package root"
+    );
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
