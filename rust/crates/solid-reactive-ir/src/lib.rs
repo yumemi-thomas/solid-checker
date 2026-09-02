@@ -56,7 +56,8 @@ use contracts::{
     contract_export_summaries_incremental,
 };
 pub use contracts::{
-    ExportKindProof, export_kind_proof, export_kind_proof_from_entity, raised_function_export,
+    ExportKindProof, export_kind_proof, export_kind_proof_from_entity, project_accepted_export,
+    raised_function_export,
 };
 use execution_role::{
     NamedCallbackRoles, allowed_callback_spans, assigned_member_function_contains, execution_role,
@@ -1017,22 +1018,92 @@ pub struct ContractExport {
     pub open_claims: BTreeSet<contract_semantics::ClaimDomain>,
 }
 
+impl ContractExport {
+    /// Whether this summary contains any domain that only a runtime function
+    /// may carry. A `value` export with one of these domains is internally
+    /// inconsistent even when the domain is open: absence of proof is not a
+    /// value-side effect summary.
+    #[must_use]
+    pub fn has_function_effects(&self) -> bool {
+        self.reactive_reads.is_open()
+            || self
+                .reactive_reads
+                .known()
+                .is_some_and(|reads| !reads.is_empty())
+            || self.returns.is_open()
+            || self.returns.known().is_some_and(Option::is_some)
+            || self.callbacks.is_open()
+            || self
+                .callbacks
+                .known()
+                .is_some_and(|callbacks| !callbacks.is_empty())
+            || self.owner_requirements.is_open()
+            || self
+                .owner_requirements
+                .known()
+                .is_some_and(|requirements| !requirements.is_empty())
+            || self.async_behavior.is_open()
+            || self
+                .async_behavior
+                .known()
+                .is_some_and(|behavior| !behavior.is_empty())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractReactiveRead {
     pub kind: String,
     pub label: String,
     pub parameter: Option<usize>,
-    /// Exact invoked property for a `parameter-member` read when every path
-    /// contributing to the row names the same static member. Older contracts
-    /// omit it and remain valid, but only a named member can be runtime-probed
-    /// without guessing which property to instrument.
-    pub member: Option<String>,
+    /// Exact access path from the parameter for a `parameter-member` read,
+    /// when every access contributing to the row walks the same static
+    /// properties. `parsed.modifiers.includes(m)` is `["modifiers",
+    /// "includes"]`, not `["includes"]`: a consumer matches this as a *prefix*
+    /// of the observed access, so naming only the last segment describes a
+    /// property the parameter does not have and can never be witnessed.
+    ///
+    /// `None` where contributing accesses disagree, or where no segment could
+    /// be named exactly. Older contracts omit it and remain valid, but only a
+    /// named path can be runtime-probed without guessing which property to
+    /// instrument.
+    pub path: Option<Vec<String>>,
+}
+
+/// When a `tracked` callback row runs, relative to the export returning.
+///
+/// `execution: "tracked"` is an *attribution* word: it says the runtime
+/// subscribes the callback's reads, and says nothing about whether the export
+/// has already run it. `inline` and `deferred` carry their schedule in the word
+/// itself; `tracked` cannot, because 1.x `createMemo` runs its compute during
+/// the creating call while 1.x `createEffect` queues it, and 2.0 disagrees with
+/// 1.x on `createEffect`. The schedule is
+/// [`solid_dialect::Dialect::tracked_callback_timing`]'s to answer, and it is
+/// carried here rather than re-derived from the word — a consumer that reads
+/// "queued" out of "tracked" publishes a promise the runtime breaks, which is
+/// what `mergeProps` and `createMemo` rows did before this field existed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CallbackSchedule {
+    /// The callback has run by the time the export returns.
+    SameStack,
+    /// The export queued it; it has not run when the export returns.
+    Queued,
+    /// The runtime hands it to an external scheduler.
+    External,
+    /// The dialect states no timing for this slot, so no schedule word is
+    /// honest. The emitted operation carries no execution point at all rather
+    /// than a guessed one.
+    Unestablished,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractCallback {
     pub parameter: usize,
     pub execution: String,
+    /// The schedule of a `tracked` row, where the producer established one.
+    /// `None` is a producer that did not compute a schedule for this row and
+    /// leaves the consumer's historical default in place; it is meaningless
+    /// for `inline` and `deferred`, whose word already carries the schedule.
+    pub schedule: Option<CallbackSchedule>,
     /// Runtime arguments supplied when this callback is invoked. `null`
     /// preserves an unmodeled ordinary value at that position; a structured
     /// descriptor uses the same bounded accessor/store/tuple/object vocabulary
@@ -1098,30 +1169,7 @@ impl PackageContract {
                 summary.kind
             ));
         }
-        if summary.kind == "value"
-            && (summary.reactive_reads.is_open()
-                || summary
-                    .reactive_reads
-                    .known()
-                    .is_some_and(|reads| !reads.is_empty())
-                || summary.returns.is_open()
-                || summary.returns.known().is_some_and(Option::is_some)
-                || summary.callbacks.is_open()
-                || summary
-                    .callbacks
-                    .known()
-                    .is_some_and(|callbacks| !callbacks.is_empty())
-                || summary.owner_requirements.is_open()
-                || summary
-                    .owner_requirements
-                    .known()
-                    .is_some_and(|requirements| !requirements.is_empty())
-                || summary.async_behavior.is_open()
-                || summary
-                    .async_behavior
-                    .known()
-                    .is_some_and(|behavior| !behavior.is_empty()))
-        {
+        if summary.kind == "value" && summary.has_function_effects() {
             return Err(format!(
                 "package contract value export {entrypoint}:{name} cannot have function effects"
             ));
@@ -1129,12 +1177,18 @@ impl PackageContract {
         for read in summary.reactive_reads.known().into_iter().flatten() {
             let valid = match read.kind.as_str() {
                 "accessor" | "store-path" => {
-                    !read.label.is_empty() && read.parameter.is_none() && read.member.is_none()
+                    !read.label.is_empty() && read.parameter.is_none() && read.path.is_none()
                 }
+                // A stated path must name every one of its segments: an empty
+                // segment names no property, and the spelling for "no segment
+                // could be named" is an absent path, not a blank one.
                 "parameter-member" => {
                     read.label.is_empty()
                         && read.parameter.is_some()
-                        && read.member.as_ref().is_none_or(|member| !member.is_empty())
+                        && read
+                            .path
+                            .as_ref()
+                            .is_none_or(|path| path.iter().all(|segment| !segment.is_empty()))
                 }
                 _ => false,
             };
@@ -1306,6 +1360,8 @@ pub struct ContractBindingCounts {
 #[serde(rename_all = "camelCase")]
 pub struct ContractGenerationObligation {
     pub function: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub function_symbol: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub function_identity: String,
     pub parameter: usize,
@@ -2465,6 +2521,7 @@ mod tests {
             resolved_call: None,
             callability: None,
             constructability: None,
+            runtime_binding_kind: None,
             runtime_value_domain: None,
             primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
             primitive_literal_candidates: None,

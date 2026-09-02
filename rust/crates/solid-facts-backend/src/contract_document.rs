@@ -59,10 +59,6 @@ pub struct SidecarDigests {
 }
 
 impl DecodedContractDocument {
-    pub(crate) const fn semantic_model_version(&self) -> u16 {
-        self.document.semantic_model_version
-    }
-
     pub(crate) fn normalize(self) -> Result<NormalizedContract, ContractFailure> {
         expand(self.document)
     }
@@ -3377,6 +3373,64 @@ mod tests {
         assert_eq!(
             effect.call.resources[0].states.state(),
             KnowledgeState::PartialPositive
+        );
+    }
+
+    #[test]
+    fn composing_a_value_export_with_open_call_path_never_manufactures_function_effects() {
+        // Regression for the ecosystem-wrapper refusal
+        // `package contract value export .:IR cannot have function effects`
+        // (@tanstack/solid-db -> IR, and its siblings @tanstack/solid-hotkeys
+        // ALL_KEYS, @tanstack/solid-query dataTagErrorSymbol, @tanstack/solid-form
+        // initialServerFormState, @tanstack/solid-query-persist-client
+        // PERSISTER_KEY_PREFIX). Each republishes a plain value constant from a
+        // dependency whose *proposal* still carries that export's call-path
+        // domains as open (unresolved). Composing that proposal for the importing
+        // package's generation projects the value export; opening its vacuous
+        // call-path there manufactured function effects on a value export and
+        // refused the parent. A non-callable value is never invoked, so its
+        // call-path is vacuously empty; standalone generation already certifies
+        // it effect-free and composition must agree.
+        //
+        // `MINIMAL`'s `version` export is this exact shape -- a plain (value)
+        // export whose call-path knowledge is Unknown (open). Before the fix in
+        // `project_accepted_export`, projecting it opened Reads/Callbacks/Returns
+        // /Creates and `has_function_effects()` was true.
+        use solid_reactive_ir::contract_semantics::proof::project_untrusted_proposal_for_generation;
+        use solid_reactive_ir::contract_semantics::{AcceptedContractIndex, AcceptedContractInput};
+        use solid_reactive_ir::project_accepted_export;
+
+        let contract = normalized(MINIMAL);
+        assert_eq!(
+            contract.artifact_cases()[0]
+                .exports
+                .get("version")
+                .unwrap()
+                .claim_state(solid_reactive_ir::contract_semantics::ClaimDomain::Reads),
+            solid_reactive_ir::contract_semantics::KnowledgeState::Unknown,
+            "the fixture must keep `version`'s call-path open for the regression to bite",
+        );
+        let case_id = contract.artifact_cases()[0].id.clone();
+        let accepted = project_untrusted_proposal_for_generation(contract, &case_id).unwrap();
+        let index = AcceptedContractIndex::new([AcceptedContractInput {
+            importer: "/pkg/index.js".into(),
+            specifier: "dependency".into(),
+            contract: accepted,
+        }])
+        .unwrap();
+        let used = index
+            .resolve_name("/pkg/index.js", "dependency", "version")
+            .unwrap();
+        let projected = project_accepted_export(&used);
+        assert_eq!(projected.kind, "value");
+        assert!(
+            !projected.has_function_effects(),
+            "a non-callable value export's vacuous open call-path must not project as function effects: {projected:?}",
+        );
+        assert!(
+            projected.open_claims.is_empty(),
+            "no call-path domain may stay open on a non-callable value export: {:?}",
+            projected.open_claims,
         );
     }
 

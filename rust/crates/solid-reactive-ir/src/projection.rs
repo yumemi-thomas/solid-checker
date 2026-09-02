@@ -74,7 +74,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             export,
             reexported,
         } => {
-            if let Some(claims) = defect
+            if defect.analysis_context.starts_with("obsolete-policy1-receipt:") {
+                (
+                    format!(
+                        "the discovered reactivity contract for {module} was authorized only by obsolete proof policy 1; its claims cannot be used for {} export {export}",
+                        if *reexported { "re-exported" } else { "imported" }
+                    ),
+                    "Policy-1 receipts cannot be grandfathered. Reacquire the exact package artifact and run policy-2 certification; until every demanded witness and the mandatory probe gate verify, this import remains uncertifiable.".into(),
+                )
+            } else if let Some(claims) = defect
                 .analysis_context
                 .strip_prefix("unbound-contract-claims:")
             {

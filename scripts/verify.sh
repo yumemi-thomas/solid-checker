@@ -51,8 +51,9 @@ fi
 #
 # The clock is a single `bun -e` per boundary (bun is already required by
 # steps below), so one read serves as the previous step's end and the next
-# step's start: 27 reads for 26 steps. `date` is not used because POSIX `date`
-# has no sub-second field and several steps finish in tens of milliseconds.
+# step's start. The run anchor and final summary each take one additional read.
+# `date` is not used because POSIX `date` has no sub-second field and several
+# steps finish in tens of milliseconds.
 #
 # `SOLID_CHECKER_GATE_CACHE=0` in the environment forces the content-addressed
 # gate caches (coverage, contract corpus, registry pins) to recompute
@@ -199,6 +200,25 @@ bun scripts/package-contract-v2-phase16.mjs --check
 # schema version 1 without rewriting independent version namespaces.
 step phase18-stable-cut
 bun scripts/package-contract-phase18.mjs
+
+# Phase 19A keeps policy 1 active while pinning the exact authority/refusal
+# baseline and a Rust-owned, internal policy-2 manifest and digest. This gate
+# fails if the audit rendering, producer identities, or issuance-shortcut
+# inventory drifts before the atomic policy cut.
+step phase19-policy
+bun scripts/package-contract-phase19.mjs
+
+# Phase 20 is the live row-disposition authority. Its generated ledger must
+# remain byte-identical to the checked full-corpus report, including ordinary
+# receipt loads, typed applicability, and complete dependency plans.
+step phase20-ledger
+bun scripts/package-contract-v2-phase20-ledger.mjs --check
+
+# Phase 21 freezes the exact 30-row Phase 20 refusal cohort before tracking
+# proof-preserving reductions. Its taxonomy must retain the upstream and CJS
+# controls while keeping semantic terminal classes authoritative over prose.
+step phase21-ledger
+bun scripts/package-contract-v2-phase21-ledger.mjs --check
 
 # Proposal orchestration can change a refusal envelope without changing the
 # normalized Rust model. Keep the exact generator corpus in the local handoff

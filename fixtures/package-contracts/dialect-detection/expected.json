@@ -1,0 +1,476 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "6ba5f66a40045f3e2fbfe49a6b0f6638a897cd7d8e0847a93b48aad3986dc11a",
+            "path": "./index.ts",
+            "sha256": "557fc3dcce2572c7f517c5c24963193d4470ef45d50542bb188d9acd72aab646"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "557fc3dcce2572c7f517c5c24963193d4470ef45d50542bb188d9acd72aab646"
+          },
+          "exports": {
+            "assignedResource": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "conditionalIdentity": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "conditionalInlineCallback": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
+            "constructionCandidates": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "contextLocation": "summary-edec704f8e259266e00ac00731f83b98771059690b6214cf89f0ed83e3383ee7",
+            "contextParams": "summary-537157b5d7a4701b9dd08baa083b8a1e9c7ec2a21464203815850693b87d72e6",
+            "effectThroughMaybeAccessor": "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b",
+            "guardedIdentity": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "identityResult": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
+            "indirect": "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a",
+            "indirectResource": "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90",
+            "isObject": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "memoThroughConditionalAdapter": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "mountRouter": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "objectResult": "summary-e9fd61fe02bce93c3881b6afbd022c9fb1d7aa64a9dd4df2d1928c744a6d0d70",
+            "observe": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5",
+            "projectedAliasResult": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "projectedObjectResult": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "projectedTupleResult": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "returnedAccessor": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "returnedResource": "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b",
+            "t": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "tupleResult": "summary-793076c2e8ff281ce1240d113e7abbb7f4cd7881b4a2b32ea3cc3ce67412b71d"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:8bde69584886a6a22128e7fbd93bbbf6fc68649ed20eb665b3fff691ae3449b6",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "8bde69584886a6a22128e7fbd93bbbf6fc68649ed20eb665b3fff691ae3449b6"
+    },
+    "name": "dialect-detection-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-2a9eedbb9727fda169edf79942fe4b3fc949b326863b05733dec83a05f5be64b": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-537157b5d7a4701b9dd08baa083b8a1e9c7ec2a21464203815850693b87d72e6": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "store"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          },
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "reactive",
+              "role": "accessor"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-793076c2e8ff281ce1240d113e7abbb7f4cd7881b4a2b32ea3cc3ce67412b71d": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "items": [
+                {
+                  "kind": "store"
+                },
+                {
+                  "kind": "reactive",
+                  "role": "accessor"
+                }
+              ],
+              "kind": "tuple"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b": {
+      "call": {
+        "creates": [
+          "owner-requirement-0"
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "owner-requirement-0",
+            "kind": "create",
+            "owner": {
+              "requires": "required",
+              "requiresChildren": "required",
+              "source": "ambient-at-call"
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-bb1d0257e7b825b95a458c55a0922a73a7295e963d4f08a429b148b29e2e5c90": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "index": 0,
+              "kind": "parameter",
+              "path": []
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-e9fd61fe02bce93c3881b6afbd022c9fb1d7aa64a9dd4df2d1928c744a6d0d70": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "active",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                },
+                {
+                  "name": "pending",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-edec704f8e259266e00ac00731f83b98771059690b6214cf89f0ed83e3383ee7": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "kind": "object",
+              "properties": [
+                {
+                  "name": "pathname",
+                  "value": {
+                    "kind": "reactive",
+                    "role": "accessor"
+                  }
+                }
+              ]
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

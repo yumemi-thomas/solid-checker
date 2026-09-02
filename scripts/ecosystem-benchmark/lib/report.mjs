@@ -170,6 +170,14 @@ function buildFamilySection(family, results) {
     // uncertifiable.
     refusedEntrypoints: sumField(partials, "refusedEntrypoints"),
     refusedArtifactCases: sumField(partials, "refusedArtifactCases"),
+    // Summed over every probe that produced a contract, not only the partial
+    // ones: an inapplicable disposition is not a refusal, so a complete
+    // contract can and does record them, and restricting this to `partials`
+    // would silently drop the whole census on a successful row.
+    inapplicableArtifactCases: sumField(
+      contractProducing(familyResults),
+      "inapplicableArtifactCases"
+    ),
     successCount: successes.length,
     partialCount: partials.length,
     failureCount: failures.length,
@@ -191,6 +199,7 @@ function buildTotals(results) {
     generatedEntrypoints: sumField(contractProducing(results), "generatedEntrypoints"),
     refusedEntrypoints: sumField(partials, "refusedEntrypoints"),
     refusedArtifactCases: sumField(partials, "refusedArtifactCases"),
+    inapplicableArtifactCases: sumField(contractProducing(results), "inapplicableArtifactCases"),
     successCount: successes.length,
     partialCount: partials.length,
     failureCount: failures.length,
@@ -462,10 +471,16 @@ function emptyContentAccumulator() {
     probesFullyProven: 0,
     probesWithUnknowns: 0,
     probesWithRefusals: 0,
+    // Counted apart from `probesWithRefusals` on purpose: a refusal is an
+    // omitted claim, an inapplicable disposition says no consumer reaches a
+    // certifiable module there at all. Folding them together would make a
+    // clean package look partial.
+    probesWithInapplicable: 0,
     probesWithClosureNotes: 0,
     entrypointsEmitted: 0,
     entrypointsRefused: 0,
     artifactCasesRefused: 0,
+    artifactCasesInapplicable: 0,
     exportsTotal: 0,
     exportsProven: 0,
     exportsWithUnknown: 0,
@@ -494,6 +509,7 @@ function accumulateContent(accumulator, result) {
   accumulator.entrypointsEmitted += content.entrypointsEmitted ?? 0;
   accumulator.entrypointsRefused += content.entrypointsRefused ?? 0;
   accumulator.artifactCasesRefused += content.artifactCasesRefused ?? 0;
+  accumulator.artifactCasesInapplicable += content.artifactCasesInapplicable ?? 0;
   accumulator.exportsTotal += content.exportsTotal ?? 0;
   accumulator.exportsProven += content.exportsProven ?? 0;
   accumulator.exportsWithUnknown += content.exportsWithUnknown ?? 0;
@@ -515,6 +531,7 @@ function accumulateContent(accumulator, result) {
     (content.entrypointsRefused ?? 0) > 0 ||
     (content.artifactCasesRefused ?? 0) > 0
   ) accumulator.probesWithRefusals += 1;
+  if ((content.artifactCasesInapplicable ?? 0) > 0) accumulator.probesWithInapplicable += 1;
   if ((content.closureNotes ?? 0) > 0) accumulator.probesWithClosureNotes += 1;
 
   // A package is only fully proven when EVERY probe that produced a contract
@@ -758,6 +775,7 @@ function describeScope(scope) {
   if (scope.sentinel) filters.push("sentinel subset");
   for (const family of scope.families ?? []) filters.push(`family ${family}`);
   for (const target of scope.solidTargets ?? []) filters.push(`solid${target}`);
+  if (scope.probeIds?.length) filters.push(`${scope.probeIds.length} exact probe id(s)`);
   return (
     `PARTIAL -- ${filters.join(", ")} (${ran} probes run). ` +
     "Not comparable to a full-corpus run."
@@ -799,7 +817,20 @@ export function buildReport({
     durationMs: computeDurationMs(startedAt, finishedAt),
     checker: {
       nativeBin: checker?.nativeBin ?? null,
-      typeFactsBin: checker?.typeFactsBin ?? null
+      typeFactsBin: checker?.typeFactsBin ?? null,
+      // The registry cache certification children were allowed to read, or
+      // null when every registry byte was fetched fresh. Recorded so a wall
+      // time can be read knowing whether it includes registry latency.
+      registryCache: checker?.registryCache ?? null,
+      // Whether published catalogs were flushed to stable storage (the
+      // product default) or written without fsync because they were scratch.
+      durableWrites: checker?.durableWrites ?? true,
+      // Where a previous run's exact install resolutions were reused from, or
+      // null when every install resolved against the registry.
+      installLockfileCache: checker?.installLockfileCache ?? null,
+      // Where certifications linked their compiler-source packages from, or
+      // null when every private Type Facts project wrote its own copies.
+      materializedStore: checker?.materializedStore ?? null
     },
     manifest: {
       generatedAt: manifest?.generatedAt ?? null,
@@ -816,6 +847,7 @@ export function buildReport({
       sentinel: scope?.sentinel ?? false,
       families: scope?.families ?? [],
       solidTargets: scope?.solidTargets ?? [],
+      probeIds: scope?.probeIds ?? [],
       includeSupplemental: scope?.includeSupplemental ?? false,
       probesRun: everyResult.length
     },
@@ -887,6 +919,7 @@ function renderFamilySection(section) {
   lines.push(`- Generated entrypoints: ${section.generatedEntrypoints}`);
   lines.push(`- Refused entrypoints (partial contracts): ${section.refusedEntrypoints ?? 0}`);
   lines.push(`- Refused artifact cases (partial contracts): ${section.refusedArtifactCases ?? 0}`);
+  lines.push(`- Inapplicable artifact cases (recorded, not refused): ${section.inapplicableArtifactCases ?? 0}`);
   lines.push(`- Success (complete contracts): ${formatRate(section.successRate)}`);
   lines.push(`- Partial contracts: ${section.partialCount ?? 0}`);
   lines.push(`- Failures: ${section.failureCount}`);
@@ -1003,6 +1036,7 @@ function renderContractContentSection(content) {
   );
   lines.push(`- Probes with at least one unknown claim: ${content.probesWithUnknowns}`);
   lines.push(`- Probes with at least one refused entrypoint: ${content.probesWithRefusals}`);
+  lines.push(`- Probes with at least one inapplicable artifact case: ${content.probesWithInapplicable ?? 0}`);
   lines.push(`- Probes with at least one closure note: ${content.probesWithClosureNotes}`);
   lines.push(
     `- Exports proven: ${formatCount(content.exportsProven, content.exportsTotal, content.exportsProvenPercentage)}` +
@@ -1016,7 +1050,8 @@ function renderContractContentSection(content) {
   );
   lines.push(
     `- Entrypoints: ${content.entrypointsEmitted} emitted, ${content.entrypointsRefused} refused; ` +
-      `${content.artifactCasesRefused ?? 0} artifact cases refused`
+      `${content.artifactCasesRefused ?? 0} artifact cases refused, ` +
+      `${content.artifactCasesInapplicable ?? 0} artifact cases inapplicable`
   );
   lines.push(`- Closure notes (block byte-attested verification): ${content.closureNotes}`);
   // Counted apart from the line above because the two say different things: a
@@ -1243,6 +1278,18 @@ export function renderMarkdown(report) {
   lines.push(`- Duration: ${report.durationMs === null ? "unknown" : `${report.durationMs} ms`}`);
   lines.push(`- Checker native binary: ${report.checker?.nativeBin ?? "unknown"}`);
   lines.push(`- Type Facts binary: ${report.checker?.typeFactsBin ?? "unknown"}`);
+  lines.push(
+    `- Registry cache for certification: ${report.checker?.registryCache ?? "none (every registry byte fetched fresh)"}`
+  );
+  lines.push(
+    `- Durable catalog writes: ${report.checker?.durableWrites === false ? "off (scratch catalogs, no fsync)" : "on"}`
+  );
+  lines.push(
+    `- Install lockfile cache: ${report.checker?.installLockfileCache ?? "none (every install resolved against the registry)"}`
+  );
+  lines.push(
+    `- Materialized source store: ${report.checker?.materializedStore ?? "none (every private project wrote its own copies)"}`
+  );
   lines.push(
     `- Manifest generated at: ${report.manifest?.generatedAt ?? "unknown"} ` +
       `(rows: ${report.manifest?.rowCount ?? 0}, probes: ${report.manifest?.probeCount ?? 0})`

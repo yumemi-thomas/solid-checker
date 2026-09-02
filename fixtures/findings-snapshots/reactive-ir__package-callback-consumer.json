@@ -1,24 +1,54 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
-      "rule": "missing-owner",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/package-callback-consumer/App.tsx",
-      "start": 195,
-      "end": 211,
+      "start": 55,
+      "end": 159,
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
       "path": "fixtures/reactive-ir/package-callback-consumer/App.tsx",
-      "start": 459,
-      "end": 478,
+      "start": 55,
+      "end": 159,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-callback-consumer/App.tsx",
+      "start": 55,
+      "end": 159,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-callback-consumer/App.tsx",
+      "start": 55,
+      "end": 159,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-callback-consumer/App.tsx",
+      "start": 55,
+      "end": 159,
       "fixes": 0
     }
   ]

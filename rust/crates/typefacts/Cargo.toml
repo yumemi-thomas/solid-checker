@@ -16,3 +16,14 @@ serde.workspace = true
 serde_bytes.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+
+# Every producer spawn hashes the ~29 MB Type Facts executable to record and
+# pin its identity, and a corpus run spawns it thousands of times. On aarch64
+# the `sha2` crate only uses the SHA-256 hardware instructions behind its `asm`
+# feature (runtime-detected, software fallback retained); without it the hash
+# runs at about a fifth of hardware speed and costs ~60 ms per process. Scoped
+# to aarch64 because on x86_64 the same feature swaps in gcc-syntax assembly
+# that does not build under MSVC, while the default x86 backend already picks
+# SHA-NI at runtime. Digests are unchanged: SHA-256 is SHA-256.
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }

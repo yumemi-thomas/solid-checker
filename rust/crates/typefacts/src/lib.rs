@@ -168,6 +168,18 @@ pub enum Constructability {
     Unknown,
 }
 
+/// Closed runtime result of following one exact binding through its
+/// initializer and every direct write. `Mixed` and `Open` are explicit
+/// non-proofs; absence is represented by `Option` on [`EntityFact`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RuntimeBindingKind {
+    Callable,
+    NonCallable,
+    Mixed,
+    Open,
+}
+
 /// Checker-derived runtime value classes for one demanded expression.
 ///
 /// `unknown` means the checker could not provide a closed domain. In that
@@ -895,6 +907,11 @@ pub struct EntityFact {
     /// checker declining to close a domain.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constructability: Option<Constructability>,
+    /// Exact initializer/write census for a runtime binding. This is produced
+    /// only for an export-identity demand whose signature facts remained
+    /// unresolved. Property mutation is excluded from the write set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_binding_kind: Option<RuntimeBindingKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_value_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "primitive_value_domain_is_absent")]
@@ -1025,6 +1042,8 @@ pub enum TypeFactsError {
     Io(#[from] std::io::Error),
     #[error("source hash is not canonical sha256: {0:?}")]
     SourceHash(String),
+    #[error("certification invocation context must name a nonempty unique demand set")]
+    InvalidCertificationContext,
 }
 
 pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, TypeFactsError> {
@@ -1709,6 +1728,7 @@ mod tests {
             cancel_request_id: 2,
             module_graph: None,
             invocation_demands: Vec::new(),
+            export_value_demands: Vec::new(),
         };
         assert_eq!(
             encode_sidecar_request(&request).unwrap(),

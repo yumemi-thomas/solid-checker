@@ -31,6 +31,9 @@ if (process.argv[2] === "contract") {
       // generate, which imports nothing.
       const { probeContract } = await import("../scripts/probe-contract.mjs");
       await probeContract(process.argv.slice(4));
+    } else if (process.argv[3] === "certify") {
+      const { certifyContract } = await import("../scripts/certify-contract.mjs");
+      await certifyContract(process.argv.slice(4));
     } else if (process.argv[3] === "verify") {
       // The machine promotion path. It takes no decision, so it is not a mode
       // of `contract review`, whose whole shape is recorded human decisions --

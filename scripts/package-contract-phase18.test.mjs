@@ -27,12 +27,14 @@ const main = (overrides = {}) => ({
 });
 
 describe("Phase 18 stable schema-version-1 convergence", () => {
-  test("accepts a stable main and a receipt bound to its exact bytes", () => {
+  test("accepts a stable main and a policy-2 receipt bound to its exact bytes", () => {
     const documentBytes = bytes(main());
     const receiptBytes = bytes({
-      receiptVersion: 1,
-      wireDigest: wireDigest(documentBytes),
-      semanticModelVersion: 1
+      receiptVersion: 2,
+      payload: {
+        mainDigest: wireDigest(documentBytes),
+        semanticModelVersion: 1
+      }
     });
     const result = auditDocumentEntries([
       { path: "contracts/example.json", bytes: documentBytes },
@@ -76,7 +78,7 @@ describe("Phase 18 stable schema-version-1 convergence", () => {
         path: "accepted-contracts.json",
         bytes: bytes({
           format: "solid-checker-accepted-contract-catalog",
-          catalogVersion: 1,
+          catalogVersion: 2,
           contracts: []
         })
       },
@@ -91,7 +93,7 @@ describe("Phase 18 stable schema-version-1 convergence", () => {
     assert.equal(result.independentVersionedDocuments, 2);
   });
 
-  test("rejects a receipt carrying the pre-cut wire digest", () => {
+  test("rejects a receipt carrying a stale policy-2 main digest", () => {
     const documentBytes = bytes(main());
     assert.throws(
       () =>
@@ -100,13 +102,15 @@ describe("Phase 18 stable schema-version-1 convergence", () => {
           {
             path: "contracts/example.receipt.json",
             bytes: bytes({
-              receiptVersion: 1,
-              wireDigest: `sha256:${"0".repeat(64)}`,
-              semanticModelVersion: 1
+              receiptVersion: 2,
+              payload: {
+                mainDigest: `sha256:${"0".repeat(64)}`,
+                semanticModelVersion: 1
+              }
             })
           }
         ]),
-      /wireDigest does not bind/
+      /mainDigest does not bind/
     );
   });
 
@@ -135,7 +139,7 @@ describe("Phase 18 stable schema-version-1 convergence", () => {
   test("the checked repository is stable-only with semantic model 1", () => {
     const result = auditRepository();
     assert.ok(result.mainDocuments > 0);
-    assert.ok(result.receipts > 0);
+    assert.equal(result.receipts, 0);
     assert.ok(result.sourceOwners > 0);
     assert.equal(result.stableBoundaryTests, 1);
     assert.equal(result.semanticModelVersion, 1);

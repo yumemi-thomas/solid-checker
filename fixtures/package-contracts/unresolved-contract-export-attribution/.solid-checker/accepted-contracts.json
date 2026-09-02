@@ -1,5 +1,5 @@
 {
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "contracts": [
     {
       "document": "node_modules/partial-contract-package/solid-reactivity.json",
@@ -59,7 +59,7 @@
         },
         "specifier": "partial-contract-package"
       },
-      "receipt": "node_modules/partial-contract-package/solid-reactivity.receipt.json"
+      "status": "obsolete-policy1"
     }
   ],
   "format": "solid-checker-accepted-contract-catalog"

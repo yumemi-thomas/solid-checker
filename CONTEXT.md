@@ -101,9 +101,32 @@ _Avoid_: Phase list, callback list, execution trace
 A hash-bound artifact containing detailed fact transcripts, probe observations, and proof material for package-contract claims. Ordinary project analysis does not need it after acceptance.
 _Avoid_: Contract evidence field, audit log
 
+**Proof demand**:
+A verifier-derived, policy- and artifact-snapshot-bound requirement for one exact claim or positive fact, assigned to its authoritative fact owner. Callers may transport its opaque identity but cannot create, omit, satisfy, or declare it inapplicable.
+_Avoid_: Proof checklist, caller obligation, requested evidence field
+
+**Artifact snapshot**:
+The immutable content-addressed view of one independently acquired package artifact used for every read during a certification transaction. It is distinct from an artifact case (a selected resolution outcome) and from a Type Facts generation (a project-analysis state).
+_Avoid_: Package directory, temporary extraction, artifact case, generation
+
+**Probe gate**:
+A verifier-derived mandatory contradiction veto for one proposed closed claim. A contradiction blocks closure; success or finite non-observation never proves absence, completeness, or safety.
+_Avoid_: Runtime proof, passing probe, negative observation
+
+**Verified positive fact**:
+An analyzer-visible possible behavior retained only after its exact proof demand has an authoritative witness. It does not close its surrounding claim domain or imply that unobserved sibling behavior is absent.
+_Avoid_: Partial proof, inferred behavior, closed claim
+
 **Acceptance receipt**:
 A verifier-issued binding among a contract's wire and semantic identities, exact artifacts, proof material, and verification policy. It is the authority ordinary analysis uses to accept closed claims.
 _Avoid_: Verification report, signature, trust flag
+
+**Issuer provenance**:
+The authenticated channel through which a receipt gains trust: compiled
+built-in bytes, a configured persistent-local issuer, or an explicitly trusted
+portable issuer chain. A key ID, public key, or signature carried only inside
+the receipt is never issuer provenance.
+_Avoid_: Self-signed receipt, receipt key, trusted signature
 
 **Semantic digest**:
 A canonical identity of normalized package-contract meaning that excludes wire version, summary names, formatting, and evidence layout.

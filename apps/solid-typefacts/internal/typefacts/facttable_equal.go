@@ -122,6 +122,7 @@ func entityFactEqual(left, right EntityFact) bool {
 		left.Constructability == right.Constructability &&
 		left.ReferenceSpace == right.ReferenceSpace &&
 		left.RuntimeIdentity == right.RuntimeIdentity &&
+		left.RuntimeBindingKind == right.RuntimeBindingKind &&
 		runtimeValueDomainEqual(left.RuntimeValueDomain, right.RuntimeValueDomain) &&
 		left.PrimitiveValueDomain == right.PrimitiveValueDomain &&
 		slices.Equal(left.PrimitiveLiteralCandidates, right.PrimitiveLiteralCandidates) &&

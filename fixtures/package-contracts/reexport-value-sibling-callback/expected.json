@@ -1,0 +1,82 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "6a9291cfc6ecb39c4ab86588eaeaa421325b4c4a0e62bb52ee92c0357be20b90",
+            "path": "./index.js",
+            "sha256": "2b70b524370f2e43401a8d6941bd4f9f344c2fe781f8d54f267d8413dd2d0fe1"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "2b70b524370f2e43401a8d6941bd4f9f344c2fe781f8d54f267d8413dd2d0fe1"
+          },
+          "exports": {
+            "PREFIX": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "subscribe": "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:89f02cfcf4104aa00a3b3fee6fd74c5e56713f6ab7a0e56a2ca0e814687e42ce",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "89f02cfcf4104aa00a3b3fee6fd74c5e56713f6ab7a0e56a2ca0e814687e42ce"
+    },
+    "name": "reexport-value-sibling-callback",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "getThing"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    }
+  }
+}

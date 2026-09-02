@@ -1,0 +1,50 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "048521fdd0e7feb34e3880d6470d51eec8115be8741ba0bc0e08697d02c17786",
+            "path": "./index.mjs",
+            "sha256": "219b82db367bb0581469313258b65ab5f35d5f7fb6c237af310e9c826dac670f"
+          },
+          "declarations": {
+            "path": "./index.d.mts",
+            "sha256": "01ef698a55b332151747460c0d1f6582fb7c5fc81186c53deb9dc60472d5c0dc"
+          },
+          "exports": {
+            "packageName": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "packageVersion": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:84ef6a5ed1cdc2d994f3f3df0a028b11b60fa43d740e593fef66b752b6aa3bb7",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "84ef6a5ed1cdc2d994f3f3df0a028b11b60fa43d740e593fef66b752b6aa3bb7"
+    },
+    "name": "json-import-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

@@ -14,11 +14,13 @@
 //     [--rounds 5]
 //
 // The regression threshold is a ratio, SOLID_CHECKER_MAX_RELATIVE_REGRESSION
-// (default 1.35): interleaved same-machine medians are stable to a few
-// percent, so 35% headroom rejects real regressions the 100ms absolute
-// ceiling would wave through while staying clear of scheduling noise.
+// (default 1.25). Interleaved same-machine medians are stable to a few
+// percent: across ten consecutive shared-runner runs in September 2026 the
+// ratio stayed within 0.98-1.04 while the absolute numbers on the same runs
+// swung 1.6x, so 25% headroom rejects real regressions the absolute ceilings
+// cannot see while staying an order of magnitude clear of the noise.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -48,7 +50,7 @@ for (const [side, { bench, typefacts }] of Object.entries(sides)) {
 }
 const rounds = Number(argument("--rounds") ?? 5);
 const threshold = Number(
-  process.env.SOLID_CHECKER_MAX_RELATIVE_REGRESSION ?? 1.35
+  process.env.SOLID_CHECKER_MAX_RELATIVE_REGRESSION ?? 1.25
 );
 
 function run(command, arguments_) {
@@ -115,6 +117,7 @@ try {
   }
 
   let failed = false;
+  const summary = ["| Metric | Base (median) | Head (median) | Ratio | Limit | Verdict |", "| --- | --- | --- | --- | --- | --- |"];
   for (const [metric, unit] of [
     ["incremental", "ns/edit"],
     ["firstIr", "ns/source"]
@@ -126,6 +129,18 @@ try {
     if (ratio > threshold) failed = true;
     console.log(
       `${metric}: base ${base.toFixed(0)} ${unit}, head ${head.toFixed(0)} ${unit}, ratio ${ratio.toFixed(3)} (limit ${threshold}) ${verdict}`
+    );
+    // The per-round samples, so a borderline verdict can be read against
+    // the spread that produced it rather than the two medians alone.
+    console.log(
+      `  rounds: base [${samples.base[metric].map(value => value.toFixed(0)).join(", ")}], head [${samples.head[metric].map(value => value.toFixed(0)).join(", ")}]`
+    );
+    summary.push(`| ${metric} | ${base.toFixed(0)} ${unit} | ${head.toFixed(0)} ${unit} | ${ratio.toFixed(3)} | ${threshold} | ${verdict} |`);
+  }
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `### Base versus head on this runner (${rounds} interleaved rounds)\n\n${summary.join("\n")}\n\n`
     );
   }
   if (failed) {

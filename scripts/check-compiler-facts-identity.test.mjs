@@ -4,6 +4,7 @@ import { describe, test } from "vitest";
 import {
   assertIdentityDocuments,
   cargoCompilerPin,
+  compilerSourceManifest,
   rustStringConstant
 } from "./check-compiler-facts-identity.mjs";
 
@@ -16,7 +17,8 @@ const identity = {
   upstreamRevision: upstream,
   implementationRevision: implementation,
   distributionRevision: distribution,
-  semanticTraceVersion: 3
+  semanticTraceVersion: 3,
+  compilerFactsProtocol: 2
 };
 const cargo = `solidjs-compiler = { git = "https://example.invalid/solid", rev = "${distribution}" }`;
 const lock = `source = "git+https://example.invalid/solid?rev=${distribution}#${distribution}"`;
@@ -24,6 +26,9 @@ const adapter = `
 const EXPECTED_COMPILER_UPSTREAM_REVISION: &str = "${upstream}";
 const EXPECTED_COMPILER_IMPLEMENTATION_REVISION: &str =
     "${implementation}";
+pub const COMPILER_DISTRIBUTION_REVISION: &str = "${distribution}";
+pub const COMPILER_SOURCE_MANIFEST_SHA256: &str =
+    "${compilerSourceManifest(identity)}";
 const COMPILER_FACTS_IDENTITY: &str = "solid-v2:trace3:${implementation}";
 `;
 const conformance = { upstream: { revision: upstream } };

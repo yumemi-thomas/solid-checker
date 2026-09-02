@@ -1,0 +1,96 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5f1856feb22a7e8d99e3042fe5bbe5d808c8939d124b9a67fbbf2b7951758c98",
+            "path": "./index.js",
+            "sha256": "a571c4a15146f0d013643556e98a7ef020cf9d3a0c08b08be6adc0fab1c02d18"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "b7d3c9c3c5d7902806837473604ed13db1667be92712fa629ac9560ee4b2acf8"
+          },
+          "exports": {
+            "mount": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./assets/widget.js": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8bda9f691c385883d6a7469184957794570114352ed33c192a3779ecad182f8d",
+            "path": "./assets/widget.js",
+            "sha256": "c7bf5a4c429580f843d4f02cf94841e44aaf95ce23b0b26c612b992217bafcc9"
+          },
+          "declarations": {
+            "path": "./assets/widget.js",
+            "sha256": "c7bf5a4c429580f843d4f02cf94841e44aaf95ce23b0b26c612b992217bafcc9"
+          },
+          "exports": {
+            "render": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1assets~1*",
+            "typesBranch": "/exports/.~1assets~1*"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:4952d551ee2d525d47cce3affa32a5eebff63ecf75991c654a98be89d203da14",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "4952d551ee2d525d47cce3affa32a5eebff63ecf75991c654a98be89d203da14"
+    },
+    "name": "wildcard-asset-entrypoints-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

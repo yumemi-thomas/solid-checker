@@ -202,6 +202,153 @@ and accepts `--concurrency N` for an explicit comparison. Reports retain
 install and generation time separately for every probe and aggregate those
 phases under the combined worker timings section.
 
+With `--attempt-certification`, certification children read and fill a shared
+content-addressed registry cache (`rust/target/registry-cache` unless
+`--registry-cache DIR` or `SOLID_CHECKER_REGISTRY_CACHE` names another;
+`--no-registry-cache` fetches every byte fresh). Each certification acquires
+the packument and archive of its root and of every compiler-source dependency
+the lockfile selects; a wide-surface root names dozens, nearly every probe
+names `solid-js`, and before the cache those sequential round trips made the
+authoritative wall time a measurement of registry latency — the same
+`@tanstack/form-devtools` probe measured 53 s, 95 s, and 241 s of witness
+acquisition across three runs of identical inputs. The report's
+`checker.registryCache` names the cache a run used, or is null when it fetched
+fresh. See `scripts/ecosystem-benchmark/README.md` for what an entry is held
+to before it is reused.
+
+### Where the certified run's time goes
+
+Measured on 2026-09-02 on the 14-core (10 performance, 4 efficiency) authority
+host with a warm registry cache, 418 probes and 393 certification attempts
+(344 certified, 49 refused — the counts every configuration below reproduced):
+
+| Configuration | Wall | CPU (user + sys) |
+| --- | --- | --- |
+| checked-in before this change (registry fetched sequentially) | 236 s | — |
+| cache warm, 14 certification slots | 185-190 s | 1,530-1,590 s |
+| cache warm, 20 certification slots (new default) | 176-182 s | 1,580-1,650 s |
+| cache warm, 24 certification slots | 181 s | 1,610 s |
+| cache warm, 20 slots, loadable-only private projects | 173-185 s | 1,560-1,610 s |
+| + generated proposal handed to certification | 163 s | 1,312 s |
+| + hardware SHA-256 for the producer hash on aarch64 | 159 s | 1,157 s |
+| + generate and certify in a pool of CLI workers | 154 s | 812 s |
+| + no fsync for scratch catalogs, cloned execution images | 146.5 s | 894 s |
+| + install lockfile cache | 147 s | ~800 s |
+| + shared materialized store: linked sources, one execution image (current) | 73 s | ~840 s |
+
+Per-invocation accounting of the native binary for one 14-slot run:
+
+| Native mode | Invocations | Slot wall | CPU |
+| --- | --- | --- | --- |
+| `--project` (analysis and proposal emission) | 2,692 | 928 s | 717 s |
+| `--execute-contract-certification` | 384 | 1,300 s | 199 s |
+| planning, merge, validation | 2,259 | 11 s | 5 s |
+
+The remaining ~660 CPU-seconds are the JavaScript processes: chiefly each
+certification's declaration-closure resolution over its compiler-source
+packages (dozens per wide root), then the runner and the generation children.
+A native certification holds its slot for 3.4 s on average but uses 0.5 s of
+CPU. In isolation, 60% of its time is writing its private Type Facts project
+and removing it again; under the run's load average of about fifteen on
+fourteen cores the rest is time waiting for a core. That is why the drain now
+runs wider than the core count.
+
+The private project now carries only files a TypeScript program can load
+(`type_facts_program_can_load` in
+rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs):
+TypeScript and JavaScript modules in every module-format spelling and JSON,
+plus any path a plan lists as a program root. Source maps, declaration maps,
+READMEs, stylesheets and assets — 26% of the archive files in the corpus — are
+no longer written or removed. Authority does not move: the producer's
+transcript still names every file it read with its digest and the source
+census verifies each against the in-memory snapshot. The corpus reproduced
+every outcome, class and refusal reason, and wall time moved from 176-182 s to
+173-185 s while system time did not move at all, which is what places the
+remaining wait on the scheduler rather than on filesystem metadata.
+
+Two other engine-side experiments were measured and not kept: writing the
+private project from eight threads raised system time from 3 s to 11 s per
+certification on APFS with no wall gain, and deferring its removal to a thread
+joined at process exit moved nothing off the slot.
+
+`contract certify` no longer regenerates the proposal inside the benchmark:
+generation runs under the probe's certification importer and its emission
+(document, plan, refusal audit and the new `.certification-inputs.json`
+sidecar) is handed to `contract certify --proposal`, which admits it only when
+package identity, integrity, package root, importer, entrypoints, conditions
+and the document and plan digests all match, and regenerates otherwise. Rust's
+treatment of the proposal is unchanged — an untrusted candidate whose
+resolution, closure and exports are verified against the archive and whose
+claims must be proven — so the hand-over moves no authority. The importer path
+does not change the emitted document, plan or refusal audit, so the generation
+phase's own measurement is unchanged too. 334 of the 393 certification
+attempts reused their proposal (the rest had no emitted document to hand over);
+outcomes were identical and the run measured 163 s and 1,312 CPU-seconds.
+
+Every producer spawn hashes the ~29 MB Type Facts executable to record and pin
+its identity — in each of the ~1,800 `--project` processes and again per
+certification — and the `sha2` crate only uses the aarch64 SHA-256 instructions
+behind its `asm` feature, which the workspace never enabled. Enabling it for
+aarch64 only (rust/crates/typefacts/Cargo.toml; x86_64 keeps its runtime SHA-NI
+backend and the MSVC build is untouched) takes the per-spawn sidecar setup from
+about 81 ms to 33 ms and the corpus from 1,312 to 1,157 CPU-seconds, with
+digests and outcomes unchanged.
+
+The runner then stopped paying for a process per probe and phase: generation
+and certification run in a pool of long-lived CLI workers
+(scripts/ecosystem-benchmark/lib/cli-worker.mjs) that reproduce the CLI's
+stdout, stderr and exit status exactly and keep the per-request timeout and
+memory supervision. Total CPU fell from 1,157 to 812 seconds with identical
+outcomes and byte-identical stderr; wall time fell to 154 s, and the run is no
+longer CPU-bound — its slot time barely moved, so what remains is certification
+latency (a native certification still holds its slot for ~3.5 s while using
+~0.4 s of CPU).
+
+Two latency sources inside certification were then removed. Every published
+catalog, receipt and trust configuration was flushed with `sync_all` — an
+`F_FULLFSYNC` full-disk flush on Apple platforms, about ten per certification;
+the runner now sets `SOLID_CHECKER_DURABLE_WRITES=none` for its workers because
+every catalog it publishes is scratch removed seconds later (atomic visibility
+through rename is unchanged; the product default still flushes; the report
+records `checker.durableWrites`). And each certification copied the 29 MB
+Type Facts producer and the 22 MB checker into private execution directories
+before hashing and launching them — roughly 20 GB of writes per run; both are
+now APFS clones (copy-on-write private files, still hashed and verified as
+before, byte-copied where cloning is unavailable). Average witness acquisition
+fell from 5.0 s to 4.5-4.8 s under twenty-way concurrency and the corpus
+measured 146.5 s, with identical outcomes.
+
+With CPU no longer binding, per-stage wall-time instrumentation
+(`SOLID_CHECKER_TIMINGS`, `certificationStage` lines) showed where a
+certification's ~5 s of slot time went: launching the pinned producer took
+4.7 s on average with p50 5.6 s and p90 5.8 s — a near-constant cost — while
+materializing the private project, acquiring and verifying facts, and the two
+fresh-process verifications together took under 0.2 s. The constant was macOS
+assessing a newly created executable on its first launch: about half a second
+per fresh file, serialized system-wide, and every certification launched a fresh
+private copy of the 29 MB producer. The shared materialized store now also
+holds one verified execution image per producer digest, created once and
+launched by every certification (hashed against the pin before each launch,
+exactly as the private copy was); the producer launch fell to 0.15 s, witness
+acquisition from 4.85 s to 0.73 s, and the corpus from ~147 s to 73 s with
+identical outcomes. Linking compiler-source packages from the same store, the
+change that motivated it, turned out to save only I/O the machine had spare.
+
+Before the pool, what remained was CPU that is per-process by construction: about 420
+CPU-seconds of `--project` analysis across ~1,800 processes (median 0.19 s
+each, one Type Facts program per exact source closure by design), ~390
+CPU-seconds in the 393 `contract certify` JavaScript processes (≈1 s each, of
+which the active work profiled at ~0.3 s — the rest is runtime, module graph
+and JIT overhead per process), ~200 CPU-seconds of native certification, and
+~120 CPU-seconds in the generation processes. Measured and rejected: a wider
+generation pool (12 and 14 workers were slower than 8), a narrower per-child
+analysis fan-out (no change), and skipping the runtime axis while collecting
+compiler sources (declaration files are ~70% of the parsed bytes, so the gain
+would be a few percent). Below this, wall time on the 14-core host is
+CPU ÷ (cores it actually gets): ~1,160 CPU-seconds reach 150 s only when the
+host lends the run about eight cores, which it did not do during any run in
+this series (load averages of 5-15 from other processes throughout).
+
 ## Per-probe timeout
 
 The default is 300s, which the pinned sentinel set relies on: it deliberately
@@ -292,6 +439,10 @@ Every contract-generation invocation is classified into exactly one of:
 | `unsupported-package-shape` | The package's manifest or exports map cannot be resolved into an entrypoint at all. |
 | `no-esm-runtime-target` | No materialized ESM implementation target exists for a runtime entrypoint — typically a publishing mistake, such as an `exports` map naming a file the tarball does not contain. |
 | `no-exported-surface` | The ESM target resolved and parsed, and exports nothing. A side-effect-only module has no reactive surface to describe; this is a well-formed package, not a broken one. |
+| `missing-export-binding` | Both axes resolved and both export the name, but no exact runtime+declaration pair binds it — the legacy dual-root shape, where `main` and `types` describe different module graphs. |
+| `unavailable-published-target` | The entrypoint's resolved runtime or declaration target is a path the published tarball does not contain (`resolved target <path> is not a file`). Same publishing defect `no-esm-runtime-target` describes at whole-entrypoint granularity, but stated by the stable-v1 artifact-case resolver with the exact resolved path it refused on. |
+| `missing-closure-module` | A module the resolved declaration file imports is absent from the package's own published closure (`local closure module <specifier> from <path> was not found`) — either a sibling the tarball omits or a dependency layout the analyzed tree does not provide. |
+| `all-cases-inapplicable` | Every artifact case in the census was recorded inapplicable and none refused, so there is no certifiable case and no refusal reason to name. |
 | `cjs-only-entrypoint` | The entrypoint resolves to a CJS-only target, which contract generation does not support. |
 | `conditional-export-incompatible` | Conditional-export branches cannot be ordered or resolved into complete variant summaries. |
 | `incompatible-conditional-summaries` | Build targets disagree in a claim shape that cannot be represented as complete variants. |
@@ -2450,6 +2601,19 @@ across 291 probes. Its remaining generation failures are classified as
 unresolved or conflicting export kinds and unsupported ESM runtime targets;
 its refusals remain machine-visible semantic blockers, not silently accepted
 contracts.
+
+### Run-to-run variance
+
+Wall time still varies with the host: the same configuration measured 146.5 s,
+152 s and, once, 305 s, the last because Bun re-fetched package manifests from
+the registry for every install (install slot time 478 s against 74-232 s
+normally). Installs now reuse a previous run's exact resolution
+(`rust/target/install-locks`, keyed by the exact spec set, installed with
+`--frozen-lockfile`; see scripts/ecosystem-benchmark/README.md), which removes
+the registry from the install phase entirely on a warm cache while every
+expected package is still verified by version and lock integrity against the
+manifest. Total CPU is the stable figure to compare between changes; wall time
+alone says as much about the host's other load as about the checker.
 
 ## Exit-code contract
 

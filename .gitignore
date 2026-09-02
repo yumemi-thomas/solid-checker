@@ -84,6 +84,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/solid-reexport/node_modules/**
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/
 !fixtures/package-contracts/callback-reactive-arguments/node_modules/**
+!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/
+!fixtures/package-contracts/callback-slot-props-forwarding/node_modules/**
+!fixtures/package-contracts/callback-slot-derived-store/node_modules/
+!fixtures/package-contracts/callback-slot-derived-store/node_modules/**
+!fixtures/package-contracts/callback-slot-derived-store-server/node_modules/
+!fixtures/package-contracts/callback-slot-derived-store-server/node_modules/**
 # The dependency contract in this stub is the whole point of the fixture: it
 # advertises host conditions, so it only resolves when the generator passes the
 # analyzed target's export-map conditions through. Without this exception the
@@ -118,6 +124,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/parameter-member-forwarded/node_modules/**
 !fixtures/package-contracts/callback-execution-boundary/node_modules/
 !fixtures/package-contracts/callback-execution-boundary/node_modules/**
+!fixtures/package-contracts/destructured-parameter-callback/node_modules/
+!fixtures/package-contracts/destructured-parameter-callback/node_modules/**
 !fixtures/package-contracts/unreached-private-obligation/node_modules/
 !fixtures/package-contracts/unreached-private-obligation/node_modules/**
 !fixtures/package-contracts/uncaptured-source-return/node_modules/

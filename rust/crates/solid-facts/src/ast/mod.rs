@@ -13,11 +13,12 @@ use oxc_ast::ast::{
     ComputedMemberExpression, ConditionalExpression, Declaration, ExportAllDeclaration,
     ExportDefaultDeclaration, ExportDefaultDeclarationKind, ExportNamedDeclaration, Expression,
     FormalParameter, Function, FunctionType, IdentifierReference, IfStatement, ImportDeclaration,
-    ImportDeclarationSpecifier, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement,
-    JSXElementName, JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName,
-    NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, ReturnStatement,
-    SpreadElement, StaticMemberExpression, TSModuleBlock, TSModuleDeclarationName, UnaryExpression,
-    UpdateExpression, VariableDeclarator,
+    ImportDeclarationSpecifier, ImportExpression, JSXAttributeItem, JSXAttributeName,
+    JSXAttributeValue, JSXElement, JSXElementName, JSXExpression, LogicalExpression,
+    LogicalOperator, ModuleExportName, NewExpression, ObjectProperty, ObjectPropertyKind,
+    PropertyKey, PropertyKind, ReturnStatement, SpreadElement, StaticMemberExpression,
+    TSGlobalDeclaration, TSModuleBlock, TSModuleDeclaration, TSModuleDeclarationName,
+    UnaryExpression, UpdateExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
@@ -27,7 +28,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 37;
+pub const AST_FACTS_SCHEMA: u32 = 41;
 
 mod span_index;
 
@@ -41,14 +42,37 @@ pub struct AstFacts {
     pub calls: Vec<CallFact>,
     pub bindings: Vec<BindingFact>,
     pub functions: Vec<FunctionFact>,
+    /// Direct named function declarations, including overload signatures whose
+    /// body is absent. [`FunctionFact`] deliberately models executable
+    /// functions and therefore cannot distinguish a TypeScript overload
+    /// signature from some unrelated exported declaration with the same name.
+    /// Contract emission needs that exact distinction when counting runtime
+    /// export entries.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub function_declarations: Vec<FunctionDeclarationFact>,
     /// Class declarations and expressions. See [`ClassFact`]: a class is
     /// `typeof === "function"` at runtime but carries no call signature, so
     /// this is the only fact domain that can tell a contract generator the
     /// runtime kind of an exported class.
     #[serde(default)]
     pub classes: Vec<ClassFact>,
+    /// Runtime `namespace`/`module` declarations by their exact binding-name
+    /// span. This is positive declaration-kind evidence; a containing module
+    /// block is not equivalent because it may be nested inside another
+    /// declaration.
+    #[serde(default)]
+    pub namespace_declarations: Vec<NamedSpan>,
     pub imports: Vec<ImportFact>,
     pub exports: Vec<ExportFact>,
+    /// Every dynamic import or unshadowed CommonJS `require` call. A missing
+    /// specifier is an explicit nonliteral load, never a complete-empty
+    /// module census.
+    #[serde(default)]
+    pub module_loads: Vec<ModuleLoadFact>,
+    /// Syntax whose module/runtime reachability cannot be made finite from a
+    /// local specifier graph. These rows are scope-resolved by Oxc's binder.
+    #[serde(default)]
+    pub module_hazards: Vec<ModuleHazardFact>,
     /// The body block of every `namespace`, `module`, or `declare global`
     /// declaration in this file, sorted by span.
     ///
@@ -407,6 +431,13 @@ pub struct FunctionFact {
     pub directives: Vec<CompactString>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FunctionDeclarationFact {
+    pub name: NamedSpan,
+    pub has_body: bool,
+}
+
 impl FunctionFact {
     /// Whether this function's own directive prologue contains `directive`.
     #[must_use]
@@ -463,6 +494,38 @@ pub struct ImportFact {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub enum ModuleLoadKind {
+    DynamicImport,
+    Require,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleLoadFact {
+    pub span: Span,
+    pub kind: ModuleLoadKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub specifier: Option<CompactString>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ModuleHazardKind {
+    NonliteralDynamicLoading,
+    Eval,
+    OpaqueWasm,
+    MutableUnboundGlobal,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleHazardFact {
+    pub span: Span,
+    pub kind: ModuleHazardKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ExportKind {
     Named,
     Default,
@@ -477,8 +540,18 @@ pub struct ExportFact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub module: Option<CompactString>,
     pub type_only: bool,
+    /// `export * as name from "…"` publishes one namespace binding rather
+    /// than contributing the target's names to an export-star set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<CompactString>,
     pub specifiers: Vec<ExportSpecifierFact>,
     pub declarations: Vec<ExportSpecifierFact>,
+    /// Public declaration names that do not authenticate an exact value
+    /// binding. Identifier-named TypeScript `namespace`/`module`
+    /// declarations live here, including explicit `declare` forms; quoted
+    /// ambient modules never do.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declaration_surface_only: Vec<ExportSpecifierFact>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -828,6 +901,24 @@ impl AstFacts {
         })
     }
 
+    /// Whether `span` is exactly the runtime binding name of a TypeScript
+    /// `namespace` or identifier-named `module` declaration.
+    #[must_use]
+    pub fn declares_namespace_at(&self, span: Span) -> bool {
+        self.namespace_declarations
+            .binary_search_by_key(&span, |name| name.span)
+            .is_ok()
+    }
+
+    /// The direct function declaration whose binding name is exactly `span`.
+    #[must_use]
+    pub fn function_declaration_at(&self, span: Span) -> Option<&FunctionDeclarationFact> {
+        self.function_declarations
+            .binary_search_by_key(&span, |declaration| declaration.name.span)
+            .ok()
+            .map(|index| &self.function_declarations[index])
+    }
+
     /// Whether `span` is *exactly* the target an assignment overwrites without
     /// reading the previous value — plain `=` and nothing else.
     ///
@@ -955,9 +1046,13 @@ impl AstFacts {
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
+            function_declarations: Vec::new(),
             classes: Vec::new(),
+            namespace_declarations: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
+            module_loads: Vec::new(),
+            module_hazards: Vec::new(),
             module_blocks: Vec::new(),
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
@@ -1079,10 +1174,15 @@ struct Collector<'s, 'semantic> {
     calls: Vec<CallFact>,
     bindings: Vec<BindingFact>,
     functions: Vec<FunctionFact>,
+    function_declarations: Vec<FunctionDeclarationFact>,
     classes: Vec<ClassFact>,
+    namespace_declarations: Vec<NamedSpan>,
     imports: Vec<ImportFact>,
     exports: Vec<ExportFact>,
+    module_loads: Vec<ModuleLoadFact>,
+    module_hazards: Vec<ModuleHazardFact>,
     module_blocks: Vec<Span>,
+    ambient_module_depth: usize,
     identifiers: Vec<IdentifierFact>,
     reference_declarations: Vec<(Span, Span)>,
     awaits: Vec<Span>,
@@ -1117,6 +1217,61 @@ struct Collector<'s, 'semantic> {
     function_flow_depths: Vec<usize>,
 }
 
+struct UnresolvedAssignmentTargets<'semantic> {
+    scoping: &'semantic Scoping,
+    found: bool,
+}
+
+impl UnresolvedAssignmentTargets<'_> {
+    fn record(&mut self, identifier: &IdentifierReference<'_>) {
+        if identifier
+            .reference_id
+            .get()
+            .is_some_and(|reference| self.scoping.get_reference(reference).symbol_id().is_none())
+        {
+            self.found = true;
+        }
+    }
+}
+
+impl<'a> Visit<'a> for UnresolvedAssignmentTargets<'_> {
+    fn visit_simple_assignment_target(
+        &mut self,
+        target: &oxc_ast::ast::SimpleAssignmentTarget<'a>,
+    ) {
+        if let oxc_ast::ast::SimpleAssignmentTarget::AssignmentTargetIdentifier(identifier) = target
+        {
+            self.record(identifier);
+        } else if let Some(Expression::Identifier(identifier)) =
+            target.get_expression().map(peel_ts_sugar)
+        {
+            self.record(identifier);
+        }
+        // Member targets mutate a property rather than the object binding.
+    }
+
+    fn visit_assignment_target_with_default(
+        &mut self,
+        target: &oxc_ast::ast::AssignmentTargetWithDefault<'a>,
+    ) {
+        self.visit_assignment_target(&target.binding);
+    }
+
+    fn visit_assignment_target_property_identifier(
+        &mut self,
+        property: &oxc_ast::ast::AssignmentTargetPropertyIdentifier<'a>,
+    ) {
+        self.record(&property.binding);
+    }
+
+    fn visit_assignment_target_property_property(
+        &mut self,
+        property: &oxc_ast::ast::AssignmentTargetPropertyProperty<'a>,
+    ) {
+        self.visit_assignment_target_maybe_default(&property.binding);
+    }
+}
+
 #[derive(Default)]
 struct BindingMetadata {
     initializer: Option<OxcSpan>,
@@ -1135,10 +1290,15 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
+            function_declarations: Vec::new(),
             classes: Vec::new(),
+            namespace_declarations: Vec::new(),
             imports: Vec::new(),
             exports: Vec::new(),
+            module_loads: Vec::new(),
+            module_hazards: Vec::new(),
             module_blocks: Vec::new(),
+            ambient_module_depth: 0,
             identifiers: Vec::new(),
             reference_declarations: Vec::new(),
             awaits: Vec::new(),
@@ -1171,9 +1331,14 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.calls.sort_by_key(|fact| fact.span);
         self.bindings.sort_by_key(|fact| fact.declaration);
         self.functions.sort_by_key(|fact| fact.span);
+        self.function_declarations
+            .sort_by_key(|declaration| declaration.name.span);
         self.classes.sort_by_key(|fact| fact.span);
+        self.namespace_declarations.sort_by_key(|name| name.span);
         self.imports.sort_by_key(|fact| fact.span);
         self.exports.sort_by_key(|fact| fact.span);
+        self.module_loads.sort_by_key(|fact| fact.span);
+        self.module_hazards.sort_by_key(|fact| fact.span);
         self.module_blocks.sort_unstable();
         self.identifiers.sort_by_key(|identifier| identifier.span);
         self.reference_declarations.sort_unstable();
@@ -1203,9 +1368,13 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             calls: self.calls,
             bindings: self.bindings,
             functions: self.functions,
+            function_declarations: self.function_declarations,
             classes: self.classes,
+            namespace_declarations: self.namespace_declarations,
             imports: self.imports,
             exports: self.exports,
+            module_loads: self.module_loads,
+            module_hazards: self.module_hazards,
             module_blocks: self.module_blocks,
             identifiers: self.identifiers,
             reference_declarations: self.reference_declarations,
@@ -1617,7 +1786,36 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
     }
 
     fn is_global_undefined(&self, identifier: &IdentifierReference<'_>) -> bool {
-        identifier.name == "undefined"
+        self.is_unresolved_named(identifier, "undefined")
+    }
+
+    fn assignment_target_has_unresolved(&self, target: &AssignmentTarget<'_>) -> bool {
+        let mut visitor = UnresolvedAssignmentTargets {
+            scoping: self.scoping,
+            found: false,
+        };
+        visitor.visit_assignment_target(target);
+        visitor.found
+    }
+
+    fn simple_assignment_target_has_unresolved(
+        &self,
+        target: &oxc_ast::ast::SimpleAssignmentTarget<'_>,
+    ) -> bool {
+        let mut visitor = UnresolvedAssignmentTargets {
+            scoping: self.scoping,
+            found: false,
+        };
+        visitor.visit_simple_assignment_target(target);
+        visitor.found
+    }
+
+    /// Whether the binder resolved this spelling to no declaration in the
+    /// current program. This is deliberately stricter than a name check:
+    /// shadowed `require`, `eval`, and `WebAssembly` values are ordinary local
+    /// behavior and must not become package-closure hazards.
+    fn is_unresolved_named(&self, identifier: &IdentifierReference<'_>, name: &str) -> bool {
+        identifier.name == name
             && identifier.reference_id.get().is_some_and(|reference| {
                 self.scoping.get_reference(reference).symbol_id().is_none()
             })
@@ -1732,7 +1930,64 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_expression(self, expression);
     }
 
+    fn visit_import_expression(&mut self, expression: &ImportExpression<'a>) {
+        let specifier = if expression.options.is_none() {
+            match &expression.source {
+                Expression::StringLiteral(source) => Some(source.value.as_str().into()),
+                Expression::TemplateLiteral(source) if source.expressions.is_empty() => source
+                    .quasis
+                    .first()
+                    .and_then(|quasi| quasi.value.cooked.as_ref())
+                    .map(|value| value.as_str().into()),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        self.module_loads.push(ModuleLoadFact {
+            span: span(expression.span),
+            kind: ModuleLoadKind::DynamicImport,
+            specifier: specifier.clone(),
+        });
+        if specifier.is_none() {
+            self.module_hazards.push(ModuleHazardFact {
+                span: span(expression.span),
+                kind: ModuleHazardKind::NonliteralDynamicLoading,
+            });
+        }
+        walk::walk_import_expression(self, expression);
+    }
+
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
+        if let Expression::Identifier(callee) = &call.callee {
+            if self.is_unresolved_named(callee, "require") {
+                let specifier = match call.arguments.as_slice() {
+                    [Argument::StringLiteral(source)] => Some(source.value.as_str().into()),
+                    [Argument::TemplateLiteral(source)] if source.expressions.is_empty() => source
+                        .quasis
+                        .first()
+                        .and_then(|quasi| quasi.value.cooked.as_ref())
+                        .map(|value| value.as_str().into()),
+                    _ => None,
+                };
+                self.module_loads.push(ModuleLoadFact {
+                    span: span(call.span),
+                    kind: ModuleLoadKind::Require,
+                    specifier: specifier.clone(),
+                });
+                if specifier.is_none() {
+                    self.module_hazards.push(ModuleHazardFact {
+                        span: span(call.span),
+                        kind: ModuleHazardKind::NonliteralDynamicLoading,
+                    });
+                }
+            } else if self.is_unresolved_named(callee, "eval") {
+                self.module_hazards.push(ModuleHazardFact {
+                    span: span(call.span),
+                    kind: ModuleHazardKind::Eval,
+                });
+            }
+        }
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
             span: span(call.span),
@@ -1822,6 +2077,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_function(&mut self, function: &Function<'a>, flags: ScopeFlags) {
+        if matches!(
+            function.r#type,
+            FunctionType::FunctionDeclaration | FunctionType::TSDeclareFunction
+        ) && let Some(name) = &function.id
+        {
+            self.function_declarations.push(FunctionDeclarationFact {
+                name: NamedSpan {
+                    span: span(name.span),
+                },
+                has_body: function.body.is_some(),
+            });
+        }
         if let Some(body) = &function.body {
             self.functions.push(FunctionFact {
                 span: span(function.span),
@@ -1997,6 +2264,25 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_export_named_declaration(&mut self, declaration: &ExportNamedDeclaration<'a>) {
+        // Oxc represents a local `export { value }` name as a module-export
+        // name and does not walk it through `visit_identifier_reference`.
+        // Preserve the binder-selected declaration explicitly so consumers do
+        // not have to reconnect the export by spelling. This is load-bearing
+        // for a named export of a same-file default function/class declaration:
+        // TypeScript gives that declaration the canonical export identity
+        // `default`, even though its local binding has a source-level name.
+        for specifier in &declaration.specifiers {
+            if let ModuleExportName::IdentifierReference(identifier) = &specifier.local
+                && let Some(target) = identifier
+                    .reference_id
+                    .get()
+                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                    .map(|symbol| span(self.scoping.symbol_span(symbol)))
+            {
+                self.reference_declarations
+                    .push((span(identifier.span), target));
+            }
+        }
         self.exports.push(ExportFact {
             span: span(declaration.span),
             kind: ExportKind::Named,
@@ -2005,6 +2291,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .as_ref()
                 .map(|source| source.value.as_str().into()),
             type_only: declaration.export_kind.is_type(),
+            namespace: None,
             specifiers: declaration
                 .specifiers
                 .iter()
@@ -2020,8 +2307,34 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .declaration
                 .as_ref()
                 .map_or_else(Vec::new, export_declaration_names),
+            declaration_surface_only: declaration
+                .declaration
+                .as_ref()
+                .map_or_else(Vec::new, export_declaration_surface_names),
         });
         walk::walk_export_named_declaration(self, declaration);
+    }
+
+    fn visit_ts_module_declaration(&mut self, declaration: &TSModuleDeclaration<'a>) {
+        let introduces_ambient_context = declaration.declare
+            || matches!(&declaration.id, TSModuleDeclarationName::StringLiteral(_));
+        if self.ambient_module_depth == 0
+            && !introduces_ambient_context
+            && let TSModuleDeclarationName::Identifier(name) = &declaration.id
+        {
+            self.namespace_declarations.push(NamedSpan {
+                span: span(name.span),
+            });
+        }
+        self.ambient_module_depth += usize::from(introduces_ambient_context);
+        walk::walk_ts_module_declaration(self, declaration);
+        self.ambient_module_depth -= usize::from(introduces_ambient_context);
+    }
+
+    fn visit_ts_global_declaration(&mut self, declaration: &TSGlobalDeclaration<'a>) {
+        self.ambient_module_depth += 1;
+        walk::walk_ts_global_declaration(self, declaration);
+        self.ambient_module_depth -= 1;
     }
 
     /// Record the body of every `namespace`, `module`, and `declare global`
@@ -2049,12 +2362,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             kind: ExportKind::Default,
             module: None,
             type_only: false,
+            namespace: None,
             specifiers: vec![],
             declarations: vec![ExportSpecifierFact {
                 local: NamedSpan { span: span(local) },
                 exported: "default".into(),
                 type_only: false,
             }],
+            declaration_surface_only: vec![],
         });
         walk::walk_export_default_declaration(self, declaration);
     }
@@ -2065,8 +2380,10 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             kind: ExportKind::All,
             module: Some(declaration.source.value.as_str().into()),
             type_only: declaration.export_kind.is_type(),
+            namespace: declaration.exported.as_ref().map(module_export_name),
             specifiers: vec![],
             declarations: vec![],
+            declaration_surface_only: vec![],
         });
         walk::walk_export_all_declaration(self, declaration);
     }
@@ -2148,6 +2465,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
+        if self.assignment_target_has_unresolved(&expression.left) {
+            self.module_hazards.push(ModuleHazardFact {
+                span: span(expression.span),
+                kind: ModuleHazardKind::MutableUnboundGlobal,
+            });
+        }
         let plain = expression.operator == AssignmentOperator::Assign;
         let inner = expression.right.get_inner_expression();
         self.assignments.push(AssignmentFact {
@@ -2190,6 +2513,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_update_expression(&mut self, expression: &UpdateExpression<'a>) {
+        if self.simple_assignment_target_has_unresolved(&expression.argument) {
+            self.module_hazards.push(ModuleHazardFact {
+                span: span(expression.span),
+                kind: ModuleHazardKind::MutableUnboundGlobal,
+            });
+        }
         self.assignments.push(AssignmentFact {
             target: span(expression.argument.span()),
             value_span: span(expression.span()),
@@ -2199,6 +2528,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             array_slots: Vec::new(),
         });
         walk::walk_update_expression(self, expression);
+    }
+
+    fn visit_for_statement_left(&mut self, left: &oxc_ast::ast::ForStatementLeft<'a>) {
+        if let Some(target) = left.as_assignment_target()
+            && self.assignment_target_has_unresolved(target)
+        {
+            self.module_hazards.push(ModuleHazardFact {
+                span: span(left.span()),
+                kind: ModuleHazardKind::MutableUnboundGlobal,
+            });
+        }
+        walk::walk_for_statement_left(self, left);
     }
 
     fn visit_formal_parameter(&mut self, parameter: &FormalParameter<'a>) {
@@ -2505,6 +2846,14 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_static_member_expression(&mut self, member: &StaticMemberExpression<'a>) {
+        if let Expression::Identifier(object) = &member.object
+            && self.is_unresolved_named(object, "WebAssembly")
+        {
+            self.module_hazards.push(ModuleHazardFact {
+                span: span(member.span),
+                kind: ModuleHazardKind::OpaqueWasm,
+            });
+        }
         self.members.push(MemberFact {
             span: span(member.span),
             object: span(member.object.span()),
@@ -2637,6 +2986,22 @@ fn export_declaration_names(declaration: &Declaration<'_>) -> Vec<ExportSpecifie
         }
         Declaration::TSGlobalDeclaration(_) => vec![],
     }
+}
+
+fn export_declaration_surface_names(declaration: &Declaration<'_>) -> Vec<ExportSpecifierFact> {
+    let Declaration::TSModuleDeclaration(declaration) = declaration else {
+        return vec![];
+    };
+    let TSModuleDeclarationName::Identifier(name) = &declaration.id else {
+        return vec![];
+    };
+    vec![ExportSpecifierFact {
+        local: NamedSpan {
+            span: span(name.span),
+        },
+        exported: name.name.as_str().into(),
+        type_only: false,
+    }]
 }
 
 #[cfg(test)]
@@ -2849,9 +3214,18 @@ export const real = 3;
 "#;
         let facts = extract("namespaces.ts", source).unwrap();
         let text = |span: Span| &source[span.start as usize..span.end as usize];
+        let span_of = |name: &str| {
+            let start = u32::try_from(source.find(name).expect("name occurs in source")).unwrap();
+            Span::new(start, start + u32::try_from(name.len()).unwrap())
+        };
 
         // Three blocks: the two namespaces and `declare global`.
         assert_eq!(facts.module_blocks.len(), 3);
+        assert_eq!(facts.namespace_declarations.len(), 2);
+        assert!(facts.declares_namespace_at(span_of("Config")));
+        assert!(facts.declares_namespace_at(span_of("Unexported")));
+        assert!(!facts.declares_namespace_at(span_of("ambient")));
+        assert!(!facts.declares_namespace_at(span_of("real")));
         let module_level = facts
             .module_level_exports()
             .flat_map(|export| {
@@ -2883,6 +3257,66 @@ export const real = 3;
             facts.exports.len() > facts.module_level_exports().count(),
             "nested exports must remain in the syntactic table"
         );
+    }
+
+    #[test]
+    fn namespace_declaration_identity_excludes_every_ambient_context() {
+        let source = r#"
+export {};
+namespace RuntimeOuter { namespace RuntimeInner {} }
+module RuntimeModule {}
+declare namespace Ambient { namespace HiddenAmbient {} }
+declare module "pkg" { namespace HiddenStringModule {} }
+declare global { namespace HiddenGlobal {} }
+"#;
+        let facts = extract("namespace-identity.ts", source).unwrap();
+        let span_of = |name: &str| {
+            let start = u32::try_from(source.find(name).expect("name occurs in source")).unwrap();
+            Span::new(start, start + u32::try_from(name.len()).unwrap())
+        };
+
+        for runtime in ["RuntimeOuter", "RuntimeInner", "RuntimeModule"] {
+            assert!(
+                facts.declares_namespace_at(span_of(runtime)),
+                "{runtime} is runtime namespace syntax"
+            );
+        }
+        for ambient in [
+            "Ambient",
+            "HiddenAmbient",
+            "HiddenStringModule",
+            "HiddenGlobal",
+        ] {
+            assert!(
+                !facts.declares_namespace_at(span_of(ambient)),
+                "{ambient} is inside an ambient declaration"
+            );
+        }
+        assert_eq!(facts.namespace_declarations.len(), 3);
+    }
+
+    #[test]
+    fn exported_namespace_surface_is_exact_and_includes_explicit_declare() {
+        let source = r#"
+export namespace RuntimeSurface {}
+export declare namespace DeclaredSurface {}
+export const value = function () { namespace NestedInsideValue {} return 1; };
+export declare module "quoted" {}
+"#;
+        let facts = extract("namespace-surface.ts", source).unwrap();
+        let surfaces = facts
+            .module_level_exports()
+            .flat_map(|export| &export.declaration_surface_only)
+            .map(|declaration| declaration.exported.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(surfaces, ["RuntimeSurface", "DeclaredSurface"]);
+        assert!(facts.module_level_exports().any(|export| {
+            export
+                .declarations
+                .iter()
+                .any(|declaration| declaration.exported == "value")
+        }));
     }
 
     /// A class **static block** is neither a function body nor a module
@@ -3249,6 +3683,69 @@ renamed();"#,
     }
 
     #[test]
+    fn module_loading_and_opaque_hazards_are_scope_exact_and_explicit() {
+        let facts = extract(
+            "fixture.ts",
+            r#"
+                import("./literal.js");
+                import(`./template-literal.js`);
+                import(dynamicName);
+                require("./required.js");
+                require(`./template-required.js`);
+                eval(source);
+                WebAssembly.instantiate(bytes);
+                leaked = 1;
+                advanced++;
+                ({ destructured } = source);
+                for (iterated of values) {}
+                function local(require: (name: string) => unknown, eval: (text: string) => unknown) {
+                    require("not-a-module.js");
+                    eval("not-eval");
+                    let WebAssembly = { instantiate() {} };
+                    WebAssembly.instantiate(bytes);
+                    let leaked = 0;
+                    leaked = 2;
+                    let advanced = 0;
+                    advanced++;
+                    let destructured = 0;
+                    ({ destructured } = source);
+                    let iterated = 0;
+                    for (iterated of values) {}
+                }
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(facts.module_loads.len(), 5);
+        assert_eq!(
+            facts
+                .module_loads
+                .iter()
+                .filter_map(|load| load.specifier.as_deref())
+                .collect::<Vec<_>>(),
+            vec![
+                "./literal.js",
+                "./template-literal.js",
+                "./required.js",
+                "./template-required.js"
+            ]
+        );
+        assert_eq!(facts.module_hazards.len(), 7);
+    }
+
+    #[test]
+    fn distinguishes_namespace_reexports_from_export_stars() {
+        let facts = extract(
+            "fixture.ts",
+            r#"export * as namespace from "./namespace"; export * from "./star";"#,
+        )
+        .unwrap();
+
+        assert_eq!(facts.exports[0].namespace.as_deref(), Some("namespace"));
+        assert_eq!(facts.exports[1].namespace, None);
+    }
+
+    #[test]
     fn retains_runtime_and_type_only_export_declarations() {
         let facts = extract(
             "exports.ts",
@@ -3270,6 +3767,22 @@ renamed();"#,
                 ("value", false),
                 ("default", false)
             ]
+        );
+    }
+
+    #[test]
+    fn resolves_local_export_specifiers_to_their_exact_declarations() {
+        let facts = extract(
+            "exports.ts",
+            "export default function createX() {} export { createX };",
+        )
+        .unwrap();
+        let default_declaration = facts.exports[0].declarations[0].local.span;
+        let named_specifier = facts.exports[1].specifiers[0].local.span;
+
+        assert_eq!(
+            facts.reference_declaration(named_specifier),
+            Some(default_declaration)
         );
     }
 

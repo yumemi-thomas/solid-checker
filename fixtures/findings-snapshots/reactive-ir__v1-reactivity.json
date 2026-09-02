@@ -7,8 +7,18 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 133,
-      "end": 140,
+      "start": 113,
+      "end": 168,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 113,
+      "end": 168,
       "fixes": 0
     },
     {
@@ -109,6 +119,16 @@
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
       "start": 3340,
       "end": 3361,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 3830,
+      "end": 3835,
       "fixes": 0
     },
     {

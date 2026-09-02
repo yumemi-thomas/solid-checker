@@ -1,0 +1,46 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "1e272cb1bc5eb6836ba8507b6fe9f3892760a810485cf09558dc0d8e08d7d5db",
+            "path": "./index.ts",
+            "sha256": "263199c50fb46a1c06971586f756de961be5d7d1ab810f11dadd6200eca31a2a"
+          },
+          "declarations": {
+            "path": "./index.ts",
+            "sha256": "263199c50fb46a1c06971586f756de961be5d7d1ab810f11dadd6200eca31a2a"
+          },
+          "exports": {
+            "plain": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "schedule": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:b01b8c5bba6a878af4c1d9f15c785798b92402faa511f661e4f2c0b4a30099a9",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "b01b8c5bba6a878af4c1d9f15c785798b92402faa511f661e4f2c0b4a30099a9"
+    },
+    "name": "unknown-callback-claim",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

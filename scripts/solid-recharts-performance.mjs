@@ -23,6 +23,8 @@ const FIXTURE_ROOT = join(
   ROOT,
   "rust/target/contract-performance/solid-recharts-1.0.1/project-copy"
 );
+const PACKAGE_INTEGRITY =
+  "sha512-EKwNlogDiYm9YHN9CKbzaRGb3rOliIXPoE938ldwdOoOS0LlenwKrIVkxGx6Ty5dV2yZgTjXIU7ign6Hde9xDQ==";
 
 // Exact artifacts already populated by the authoritative ecosystem run. The
 // harness never asks a registry to resolve a range and never modifies a
@@ -123,7 +125,7 @@ function readJson(path) {
 
 function proposalStats(contract, plan) {
   assert.equal(contract.format, "solid-reactivity-contract");
-  assert.equal(contract.schemaVersion, 2);
+  assert.equal(contract.schemaVersion, 1);
   assert.equal(contract.semanticModelVersion, 1);
   assert.equal(plan.format, "solid-checker-contract-proposal-plan");
   assert.equal(plan.planVersion, 1);
@@ -136,15 +138,27 @@ function proposalStats(contract, plan) {
       exports += Object.keys(artifactCase.exports ?? {}).length;
     }
   }
-  return { exports, artifactCases, closureCandidates: plan.closureCandidates?.length ?? 0 };
+  return {
+    exports,
+    artifactCases,
+    closureCandidates: plan.closureCandidates?.length ?? 0,
+    unresolvedClaims: plan.unresolvedClaims?.length ?? 0,
+    semanticDigest: plan.semanticDigest
+  };
 }
 
 function assertGenerationShape(contract, plan, timing, directory) {
   const stats = proposalStats(contract, plan);
   assert.equal(contract.package.name, "solid-recharts");
   assert.equal(contract.package.version, "1.0.1");
-  assert.equal(stats.exports, 109, `generated artifacts kept for inspection at ${directory}`);
-  assert.ok(stats.closureCandidates > 0, "proposal plan carried no local closure candidates");
+  assert.equal(stats.artifactCases, 3, `generated artifacts kept for inspection at ${directory}`);
+  assert.equal(stats.exports, 327, `generated artifacts kept for inspection at ${directory}`);
+  assert.equal(stats.closureCandidates, 0);
+  assert.equal(stats.unresolvedClaims, 3270);
+  assert.equal(
+    stats.semanticDigest,
+    "sha256:cefe39379d4a292590856c5ba8dc9ee2a0dd34b2de3f7820d7b461262d9ee140"
+  );
   assert.ok(timing, "generation emitted no structured timing record");
   assert.ok(timing.targets.length >= 2);
   return stats;
@@ -159,7 +173,17 @@ function sample(packageRoot, index, env, keep) {
   try {
     const generated = run(
       process.execPath,
-      [CLI, "contract", "generate", "--package-root", packageRoot, "--output", contractFile],
+      [
+        CLI,
+        "contract",
+        "generate",
+        "--package-root",
+        packageRoot,
+        "--integrity",
+        PACKAGE_INTEGRITY,
+        "--output",
+        contractFile
+      ],
       { cwd: ROOT, env, timeout: 180_000 }
     );
     assert.equal(

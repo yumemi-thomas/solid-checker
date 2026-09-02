@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
-// Checks receipt-issued stable-v1 bundles without reimplementing semantic
-// expansion in JavaScript. Rust reproduces documents/receipts from checked
-// corpora; this layer checks the physical bundle/index inventory.
+// Checks active stable-v1 bundle indexes without reimplementing semantic
+// expansion in JavaScript. The Phase 19 cut intentionally has zero active
+// cases until policy-2 certification can reconstruct one.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -65,4 +65,4 @@ for (const location of ["pkg/contracts/bundled", "rust/crates/solid-dialect/cont
     }
   }
 }
-console.log(`checked ${contracts} receipt-issued bundle documents across both physical locations`);
+console.log(`checked ${contracts} active policy-2 bundle documents across both physical locations`);

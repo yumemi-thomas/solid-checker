@@ -1,0 +1,113 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "529f350f0f64f988a2dddfdfda60e20b0ab70acb3fa5960f1fd58eaf942ee071",
+            "path": "./index.js",
+            "sha256": "4299336e363a7b5bc67f468317aea6e3aafe831d59563a739dfaf5282b561143"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "e5f5665660ecd0c092cc052fdd4ba54ab868a7b412ffa465e4d79a86beb38ffe"
+          },
+          "exports": {
+            "direct": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
+            "retained": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "returned": "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:d1cad53184aa7028b1f00bdd488cdc672f416edbac5a2a04a124d02983f22f41",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d1cad53184aa7028b1f00bdd488cdc672f416edbac5a2a04a124d02983f22f41"
+    },
+    "name": "typefacts-implementation-transcript-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-30aab4b856518450ed6b0baee9dcdb5679db8fa5008354a3fc6db95cc52ad9e5": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "queued"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

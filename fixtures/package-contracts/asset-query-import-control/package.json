@@ -1,0 +1,8 @@
+{
+  "name": "asset-query-import-control",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  }
+}

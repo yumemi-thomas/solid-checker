@@ -2,16 +2,33 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "vitest";
+import {
+  createPackageIntegrityIndex,
+  packageIntegrity,
+  PackageIntegrityError,
+  packageIntegrityForVersion
+} from "../lib/package-integrity.mjs";
 
 import {
   buildInstallArguments,
   createProject,
+  installLockfileCacheEntry,
   installPackages,
   readInstalledVersions,
   readLockIntegrity,
   verifyInstall,
   withTemporaryProject
 } from "./lib/install.mjs";
+
+function writeInstalledPackage(projectDir, installedPath, name, version) {
+  const packageRoot = join(projectDir, ...installedPath.split("/"));
+  mkdirSync(packageRoot, { recursive: true });
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name, version }));
+  return packageRoot;
+}
+
+const hasIntegrityCode = code => error =>
+  error instanceof PackageIntegrityError && error.code === code;
 
 test("buildInstallArguments always disables lifecycle scripts and progress noise", () => {
   const args = buildInstallArguments({ specs: ["solid-js@1.9.14"] });
@@ -83,6 +100,248 @@ test("readLockIntegrity returns null for every name when there is no lockfile at
   await withTemporaryProject(async dir => {
     const integrity = readLockIntegrity(dir, ["solid-js"]);
     assert.equal(integrity["solid-js"], null);
+  });
+});
+
+test("exact dependency integrity never aliases a different installed version", async () => {
+  await withTemporaryProject(async dir => {
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: {
+        dep: ["dep@1.0.0", "", {}, "sha512-one"],
+        "dep@2.0.0": ["dep@2.0.0", "", {}, "sha512-two"]
+      }
+    }));
+    assert.equal(packageIntegrityForVersion(dir, "dep", "2.0.0"), "sha512-two");
+    assert.equal(packageIntegrityForVersion(dir, "dep", "3.0.0"), null);
+  });
+});
+
+test("Bun exact locators distinguish top-level and nested copies of the same identity", async () => {
+  await withTemporaryProject(async dir => {
+    const top = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    const nested = writeInstalledPackage(
+      dir,
+      "node_modules/parent/node_modules/dep",
+      "dep",
+      "1.0.0"
+    );
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: {
+        dep: ["dep@1.0.0", "", {}, "sha512-top"],
+        "parent/dep": ["dep@1.0.0", "", {}, "sha512-nested"]
+      }
+    }));
+
+    const index = createPackageIntegrityIndex(dir);
+    assert.equal(index.integrityForInstalledPackage(top, "dep", "1.0.0"), "sha512-top");
+    assert.equal(index.integrityForInstalledPackage(nested, "dep", "1.0.0"), "sha512-nested");
+    assert.equal(packageIntegrity(dir, "dep"), "sha512-top", "legacy lookup stays direct-root scoped");
+    assert.throws(
+      () => index.integrityForVersion("dep", "1.0.0"),
+      hasIntegrityCode("ambiguous-lock-selection")
+    );
+  });
+});
+
+test("Bun exact-identity locators retain the published graph selector fallback", async () => {
+  await withTemporaryProject(async dir => {
+    const root = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: {
+        "dep@1.0.0": ["dep@1.0.0", "", {}, "sha512-exact-locator"]
+      }
+    }));
+
+    assert.equal(
+      createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      "sha512-exact-locator"
+    );
+  });
+});
+
+test("Bun installed selection refuses an actual-locator plus exact-identity ambiguity", async () => {
+  await withTemporaryProject(async dir => {
+    const root = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: {
+        dep: ["dep@1.0.0", "", {}, "sha512-installed"],
+        "dep@1.0.0": ["dep@1.0.0", "", {}, "sha512-exact"]
+      }
+    }));
+
+    assert.throws(
+      () => createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      hasIntegrityCode("ambiguous-lock-selection")
+    );
+  });
+});
+
+test("Bun installed selection refuses missing integrity before duplicate cardinality", async () => {
+  await withTemporaryProject(async dir => {
+    const root = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: {
+        dep: ["dep@1.0.0", "", {}],
+        "dep@1.0.0": ["dep@1.0.0", "", {}, "sha512-exact"]
+      }
+    }));
+
+    assert.throws(
+      () => createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      hasIntegrityCode("missing-lock-integrity")
+    );
+  });
+});
+
+test("npm uses the exact package-lock packages path for top-level and nested copies", async () => {
+  await withTemporaryProject(async dir => {
+    const top = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    const nested = writeInstalledPackage(
+      dir,
+      "node_modules/parent/node_modules/dep",
+      "dep",
+      "1.0.0"
+    );
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({
+      packages: {
+        "node_modules/dep": { version: "1.0.0", integrity: "sha512-npm-top" },
+        "node_modules/parent/node_modules/dep": {
+          version: "1.0.0",
+          integrity: "sha512-npm-nested"
+        }
+      }
+    }));
+
+    const index = createPackageIntegrityIndex(dir);
+    assert.equal(index.integrityForInstalledPackage(top, "dep", "1.0.0"), "sha512-npm-top");
+    assert.equal(index.integrityForInstalledPackage(nested, "dep", "1.0.0"), "sha512-npm-nested");
+    assert.throws(
+      () => index.integrityForVersion("dep", "1.0.0"),
+      hasIntegrityCode("ambiguous-lock-selection")
+    );
+  });
+});
+
+test("an exact Bun selection takes precedence over a conflicting npm selection", async () => {
+  await withTemporaryProject(async dir => {
+    const root = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: { dep: ["dep@1.0.0", "", {}, "sha512-bun"] }
+    }));
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({
+      packages: {
+        "node_modules/dep": { version: "1.0.0", integrity: "sha512-stale-npm" }
+      }
+    }));
+
+    assert.equal(
+      createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      "sha512-bun"
+    );
+  });
+});
+
+test("npm exact-path fallback is allowed when Bun genuinely lacks the package identity", async () => {
+  await withTemporaryProject(async dir => {
+    const root = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: { other: ["other@1.0.0", "", {}, "sha512-other"] }
+    }));
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({
+      packages: {
+        "node_modules/dep": { version: "1.0.0", integrity: "sha512-npm" }
+      }
+    }));
+
+    assert.equal(
+      createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      "sha512-npm"
+    );
+  });
+});
+
+test("Bun locator disagreement refuses instead of falling through to exact npm bytes", async () => {
+  await withTemporaryProject(async dir => {
+    const nested = writeInstalledPackage(
+      dir,
+      "node_modules/parent/node_modules/dep",
+      "dep",
+      "1.0.0"
+    );
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: { dep: ["dep@1.0.0", "", {}, "sha512-wrong-locator"] }
+    }));
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({
+      packages: {
+        "node_modules/parent/node_modules/dep": {
+          version: "1.0.0",
+          integrity: "sha512-npm"
+        }
+      }
+    }));
+
+    assert.throws(
+      () => createPackageIntegrityIndex(dir).integrityForInstalledPackage(nested, "dep", "1.0.0"),
+      hasIntegrityCode("lock-locator-mismatch")
+    );
+  });
+});
+
+test("Bun identity disagreement at the exact locator refuses instead of falling through to npm", async () => {
+  await withTemporaryProject(async dir => {
+    const root = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: { dep: ["dep@2.0.0", "", {}, "sha512-wrong-identity"] }
+    }));
+    writeFileSync(join(dir, "package-lock.json"), JSON.stringify({
+      packages: {
+        "node_modules/dep": { version: "1.0.0", integrity: "sha512-npm" }
+      }
+    }));
+
+    assert.throws(
+      () => createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      hasIntegrityCode("lock-identity-mismatch")
+    );
+  });
+});
+
+test("an installed root whose path disagrees with its identity is refused", async () => {
+  await withTemporaryProject(async dir => {
+    const root = writeInstalledPackage(dir, "node_modules/other", "other", "1.0.0");
+    writeFileSync(join(dir, "bun.lock"), JSON.stringify({
+      packages: { other: ["dep@1.0.0", "", {}, "sha512-wrong"] }
+    }));
+    assert.throws(
+      () => createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      hasIntegrityCode("installed-root-mismatch")
+    );
+  });
+});
+
+test("an integrity index snapshots one exact lockfile for one planning transaction", async () => {
+  await withTemporaryProject(async dir => {
+    const lockPath = join(dir, "bun.lock");
+    const root = writeInstalledPackage(dir, "node_modules/dep", "dep", "1.0.0");
+    writeFileSync(lockPath, JSON.stringify({
+      packages: {
+        dep: ["dep@1.0.0", "", {}, "sha512-one"]
+      }
+    }));
+    const index = createPackageIntegrityIndex(dir);
+
+    writeFileSync(lockPath, JSON.stringify({
+      packages: {
+        dep: ["dep@1.0.0", "", {}, "sha512-mutated"]
+      }
+    }));
+
+    assert.equal(index.integrityForInstalledPackage(root, "dep", "1.0.0"), "sha512-one");
+    assert.equal(
+      createPackageIntegrityIndex(dir).integrityForInstalledPackage(root, "dep", "1.0.0"),
+      "sha512-mutated",
+      "an independent transaction must reread its own lockfile bytes"
+    );
   });
 });
 
@@ -187,4 +446,97 @@ test("installPackages surfaces a fake timeout without touching the network", asy
     spawnImpl: fakeSpawn
   });
   assert.equal(result.timedOut, true);
+});
+
+// ---------------------------------------------------------------------------
+// Install lockfile cache: a previous run's exact resolution is installed frozen
+// (no registry manifest), a miss resolves as before and is stored, and a frozen
+// failure falls back to the ordinary install.
+// ---------------------------------------------------------------------------
+
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+function resolvingFakeSpawn(calls, { frozenFails = false } = {}) {
+  return async ({ cwd, args, timeoutMs }) => {
+    calls.push({ cwd, args, timeoutMs });
+    if (args.includes("--frozen-lockfile")) {
+      if (frozenFails) return { status: 1, stdout: "", stderr: "lockfile had changes", timedOut: false };
+      return { status: 0, stdout: "frozen", stderr: "", timedOut: false };
+    }
+    // An ordinary install records the resolution Bun would have written.
+    const specs = args.filter(argument => !argument.startsWith("--") && argument !== "install");
+    writeFileSync(
+      join(cwd, "package.json"),
+      JSON.stringify({ name: "probe", private: true, dependencies: Object.fromEntries(specs.map(spec => spec.split("@").slice(0, -1).join("@")).map((name, index) => [name, specs[index].split("@").pop()])) })
+    );
+    writeFileSync(join(cwd, "bun.lock"), `{"lockfileVersion":2,"packages":{"resolved":"${specs.join(",")}"}}`);
+    return { status: 0, stdout: "resolved", stderr: "", timedOut: false };
+  };
+}
+
+test("a cache miss resolves as before and stores the exact resolution; a hit installs frozen", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-install-locks-"));
+  const cache = join(root, "locks");
+  try {
+    const first = join(root, "first");
+    mkdirSync(first);
+    await createProject({ root: first, specs: ["solid-js@1.9.14"] });
+    const calls = [];
+    const miss = await installPackages({ projectDir: first, specs: ["solid-js@1.9.14"], spawnImpl: resolvingFakeSpawn(calls), lockfileCache: cache });
+    assert.equal(miss.status, 0);
+    assert.equal(miss.lockfileReuse, "miss");
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].args.includes("solid-js@1.9.14"), "a miss resolves against the registry as before");
+    const entry = installLockfileCacheEntry(cache, ["solid-js@1.9.14"]);
+    assert.ok(existsSync(join(entry, "bun.lock")) && existsSync(join(entry, "package.json")), "the resolution is stored");
+
+    const second = join(root, "second");
+    mkdirSync(second);
+    await createProject({ root: second, specs: ["solid-js@1.9.14"] });
+    const hitCalls = [];
+    const hit = await installPackages({ projectDir: second, specs: ["solid-js@1.9.14"], spawnImpl: resolvingFakeSpawn(hitCalls), lockfileCache: cache });
+    assert.equal(hit.status, 0);
+    assert.equal(hit.lockfileReuse, "hit");
+    assert.equal(hitCalls.length, 1);
+    assert.deepEqual(hitCalls[0].args, ["install", "--ignore-scripts", "--no-progress", "--frozen-lockfile"]);
+    assert.equal(readFileSync(join(second, "bun.lock"), "utf8"), readFileSync(join(entry, "bun.lock"), "utf8"));
+    assert.match(readFileSync(join(second, "package.json"), "utf8"), /"solid-js"/, "the cached package.json carries the dependency set");
+
+    assert.notEqual(installLockfileCacheEntry(cache, ["solid-js@1.9.15"]), entry, "another version is another entry");
+    assert.equal(installLockfileCacheEntry(cache, ["b@1", "a@1"]), installLockfileCacheEntry(cache, ["a@1", "b@1"]), "spec order does not matter");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a frozen install that fails falls back to the ordinary install and refreshes the entry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-install-locks-"));
+  const cache = join(root, "locks");
+  try {
+    const entry = installLockfileCacheEntry(cache, ["solid-js@1.9.14"]);
+    mkdirSync(entry, { recursive: true });
+    writeFileSync(join(entry, "package.json"), '{"name":"probe","dependencies":{"solid-js":"1.9.14"}}');
+    writeFileSync(join(entry, "bun.lock"), '{"stale":true}');
+    const project = join(root, "project");
+    mkdirSync(project);
+    await createProject({ root: project, specs: ["solid-js@1.9.14"] });
+    const calls = [];
+    const result = await installPackages({ projectDir: project, specs: ["solid-js@1.9.14"], spawnImpl: resolvingFakeSpawn(calls, { frozenFails: true }), lockfileCache: cache });
+    assert.equal(result.status, 0);
+    assert.equal(result.lockfileReuse, "miss");
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].args.includes("--frozen-lockfile"));
+    assert.ok(calls[1].args.includes("solid-js@1.9.14"), "the ordinary install ran after the frozen failure");
+    assert.notEqual(readFileSync(join(entry, "bun.lock"), "utf8"), '{"stale":true}', "the entry was refreshed");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("without a lockfile cache installs resolve exactly as before", async () => {
+  const calls = [];
+  const result = await installPackages({ projectDir: "/tmp/does-not-need-to-exist-for-this-fake", specs: ["solid-js@1.9.14"], spawnImpl: async request => { calls.push(request); return { status: 0, stdout: "", stderr: "", timedOut: false }; } });
+  assert.equal(result.lockfileReuse, null);
+  assert.deepEqual(calls[0].args, ["install", "--ignore-scripts", "--no-progress", "solid-js@1.9.14"]);
 });

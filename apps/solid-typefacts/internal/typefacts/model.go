@@ -78,6 +78,12 @@ type EntityFact struct {
 	LibraryTypes     []string            `cbor:"libraryTypes,omitempty" json:"libraryTypes,omitempty"`
 	ReferenceSpace   ReferenceSpace      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity  RuntimeSymbolID     `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
+	// RuntimeBindingKind is the closed result of following the exact runtime
+	// binding through its initializer and every direct binding write. It is
+	// demanded only beside runtime identity for export-kind proof. Property
+	// mutation is not a binding write; mixed or dynamically open writes never
+	// become a callable/noncallable proof.
+	RuntimeBindingKind RuntimeBindingKind `cbor:"-" json:"-"`
 }
 
 // SymbolFact contains every legal symbol-keyed response for a generation.

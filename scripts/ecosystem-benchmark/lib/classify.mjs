@@ -31,6 +31,30 @@ export const FAILURE_CLASSES = [
   // and parsed fine, and simply exports nothing, as a side-effect-only module
   // does. Grouping them hid a well-formed package among broken publishes.
   "no-exported-surface",
+  // Sibling of the two above and deliberately next to them: the runtime and
+  // declaration axes each resolved and each exports the name, but no exact
+  // pair of runtime+declaration bindings backs it -- the legacy dual-root
+  // shape, where `main` and `types` describe different module graphs. It is
+  // neither "no target" nor "no exports", and landed `unclassified` until now.
+  "missing-export-binding",
+  // The stable-v1 artifact-case resolver's two "the published tarball does not
+  // contain what the manifest promises" facts, kept next to the three above
+  // because they are the same family of "the declared target did not survive
+  // publication". They are honest refusals under standard conditions, not a
+  // shape this module failed to recognize, and both landed `unclassified`
+  // until now:
+  //   - the entrypoint's own runtime/declaration target resolves to a path
+  //     that is not a file;
+  //   - a module the resolved declaration file imports is absent from the
+  //     package's own closure.
+  // Distinct from `no-esm-runtime-target`, which is the older whole-entrypoint
+  // verdict; these two name the exact resolved path the case refused on.
+  "unavailable-published-target",
+  "missing-closure-module",
+  // Every artifact case in the census was recorded inapplicable and none
+  // refused, so there is no certifiable case and also no refusal reason to
+  // name. Distinct from every failure class above, which all carry a cause.
+  "all-cases-inapplicable",
   "cjs-only-entrypoint",
   "conditional-export-incompatible",
   "incompatible-conditional-summaries",
@@ -62,17 +86,23 @@ export const FAILURE_CLASSES = [
   "unclassified"
 ];
 
+// The inapplicable suffix is optional and deliberately does NOT make a row
+// partial: a recorded disposition says no consumer reaches a certifiable module
+// at that entrypoint, which is not an omitted claim. Only the "refused and
+// omitted" suffix decides `partial-success`.
+//
+// Both counts are read from this pattern's own capture groups, never rescanned
+// out of the matched text, and every free segment is `\S+` rather than `.+`.
+// The package name and version in the "for <name>@<version>" slot come
+// verbatim from the analyzed package's manifest -- attacker-controlled text --
+// and a greedy `.+` there let a version string like `1.0.0-; 9 artifact
+// case(s) refused and omitted` land inside the match, where a rescan read it
+// as a real suffix and relabelled a complete contract `partial-success`. `\S+`
+// cannot span the space in "artifact case(s)", the suffixes are anchored in
+// fixed order after the path, and the counts come from the groups, so a
+// manifest string can no longer inject either count.
 const SUCCESS_PATTERN =
-  /^(?:generated unaccepted stable contract proposal for .+ at .+(?:; \d+ artifact case\(s\) refused and omitted)?; proof verification must issue its receipt|generated .+ contract with \d+ entrypoints at .+(?:; \d+ entrypoint\(s\) refused and omitted)?; review plan .+ \(\d+ checklist items\))$/m;
-
-// Historical schema-v1 benchmark logs may carry the old generator's own note
-// for a partial contract. Read it from the recorded statement rather than
-// inferred by comparing declared and generated entrypoint counts: a wildcard
-// subpath is one declared pattern expanding to many generated entrypoints, and
-// `sameAs` aliases collapse, so those two counts legitimately disagree on a
-// complete contract. The stable-v1 generator records finer-grained
-// artifact-case refusals with the same explicit suffix.
-const REFUSED_CASES_PATTERN = /;\s*(\d+) (entrypoint|artifact case)\(s\) refused and omitted/;
+  /^(?:generated unaccepted stable contract proposal for \S+ at \S+(?:; (?<refusedCases>\d+) artifact case\(s\) refused and omitted)?(?:; (?<inapplicableCases>\d+) artifact case\(s\) recorded inapplicable)?; proof verification must issue its receipt|generated \S+ contract with \d+ entrypoints at \S+(?:; (?<legacyRefusedCases>\d+) entrypoint\(s\) refused and omitted)?; review plan \S+ \(\d+ checklist items\))$/m;
 
 const INTEGRITY_PATTERN = /EINTEGRITY|integrity checksum failed|integrity mismatch|sha512 integrity/i;
 
@@ -86,12 +116,76 @@ const INTEGRITY_PATTERN = /EINTEGRITY|integrity checksum failed|integrity mismat
 // diagnostics never collapse into the wrong class.
 const MARKERS = [
   { class: "checker-crash", pattern: /SIGSEGV|SIGABRT|panicked at/i },
+  // The full-refusal exit with an empty refusal census: every artifact case was
+  // recorded inapplicable. Kept high because the shape is exact (the literal
+  // zero count) and cannot match a message that carries any refusal, while the
+  // named first-inapplicable reason below it is free text that a later marker
+  // could otherwise claim.
+  {
+    class: "all-cases-inapplicable",
+    pattern: /no certifiable artifact case; 0 case\(s\) refused/i
+  },
+  // A full-generation refusal can include attribution records for earlier
+  // open callback claims before Rust emits the terminal proposal conflict.
+  // `UnknownCallbackExecution` inside those records is evidence about how the
+  // proposal was reached, not the terminal reason it was rejected. Keep this
+  // exact conflict ahead of the broader parameter marker so diagnostic line
+  // order cannot relabel the geolocation refusal.
+  {
+    class: "export-kind-conflict",
+    pattern: /package contract value export .* cannot have function effects/i
+  },
   { class: "unresolved-parameter-behavior", pattern: /unresolved parameter behavior|UnknownCallbackExecution/i },
   {
     class: "dependency-contract-obligation",
-    pattern: /cannot statically expand external export-all|dependency contract for/i
+    pattern:
+      /cannot statically expand external export-all|dependency contract for|accepted dependency .* exact .* binding/i
+  },
+  // The two publish-defect attributions, ranked here on purpose.
+  //
+  // BELOW `dependency-contract-obligation`: one real refusal states the
+  // consumer-side obligation and then names the missing file that produced it
+  // in the same message ("dependency contract for <dep> has no entrypoint
+  // matching \".\"; resolved target <package-root>/dist/index.js is not a
+  // file" — pinned in scripts/package-contract-v2-phase21-ledger.test.mjs).
+  // The obligation is the terminal, actionable reason there and the absent
+  // byte is only its evidence. phase20's classifyArtifactApplicability and
+  // phase21's classifyPhase21Terminal both resolve that exact collision the
+  // same way (the semantic terminal wins), so these three stay in agreement.
+  //
+  // ABOVE every marker below them, and `unsupported-package-shape` in
+  // particular: its `package export target does not exist` alternative is this
+  // same family stated without a resolved path, and the exact-path form must
+  // win when one message carries both. Same argument against the broader
+  // "<pkg> has no supported ESM runtime entrypoints" / "has no runtime ESM
+  // exports" verdicts, which are whole-entrypoint statements rather than a
+  // named absent file.
+  //
+  // The two patterns are disjoint fixed phrases, so their order relative to
+  // each other is only for reading: entrypoint-target resolution comes first
+  // because closure walking cannot start until it succeeds. Every free segment
+  // is `\S+`, not `.+`, for the reason SUCCESS_PATTERN documents — the paths
+  // are package-controlled text and must not be allowed to span a space into
+  // the fixed wording on either side.
+  {
+    class: "unavailable-published-target",
+    pattern: /resolved target \S+ is not a file/i
+  },
+  {
+    class: "missing-closure-module",
+    pattern: /local closure module \S+ from \S+ was not found/i
   },
   { class: "cjs-only-entrypoint", pattern: /has only a CJS runtime target/i },
+  // Adjacent to `no-exported-surface` because it is the same family of
+  // "the target resolved, the surface did not": here the name IS exported on
+  // both axes but no exact runtime+declaration pair binds it, the legacy
+  // dual-root shape where `main` and `types` describe different module graphs.
+  // Ordered before the two broader export-surface markers so their looser
+  // wording cannot claim it.
+  {
+    class: "missing-export-binding",
+    pattern: /no exact runtime\/declaration binding for export/i
+  },
   // Ordered before `no-esm-runtime-target`: classification takes the most
   // specific marker first, and "has no runtime ESM exports" is a strictly
   // narrower statement than "has no supported ESM runtime entrypoints".
@@ -125,10 +219,6 @@ const MARKERS = [
   {
     class: "export-kind-unresolved",
     pattern: /runtime kind no closed type answers/i
-  },
-  {
-    class: "export-kind-conflict",
-    pattern: /package contract value export .* cannot have function effects/i
   },
   { class: "type-facts-failure", pattern: /native Solid compiler facts error|type facts|typefacts protocol/i },
   { class: "reactive-source-uncaptured", pattern: /ReactiveSourceUncaptured/ },
@@ -217,6 +307,11 @@ function extractDependencyContractDetail(text) {
     attachPathDetail(detail, exportAll[2]);
     return detail;
   }
+  const acceptedBinding = /accepted dependency (\S+) has no exact (?:runtime|declaration) binding/.exec(text);
+  if (acceptedBinding) {
+    detail.module = acceptedBinding[1];
+    return detail;
+  }
   const depContract = /dependency contract for (\S+) has no entrypoint matching "([^"]*)"/.exec(text);
   if (depContract) {
     detail.dependency = depContract[1];
@@ -276,12 +371,18 @@ function extractUnsupportedShapeDetail(text) {
   return detail;
 }
 
-function extractSuccessDetail(text) {
+function extractSuccessDetail(text, groups) {
   const detail = {};
   const match = /contract with (\d+) entrypoints at .*\((\d+) checklist items\)/.exec(text);
   if (match) {
     detail.entrypointCount = Number(match[1]);
     detail.checklistItems = Number(match[2]);
+  }
+  // Recorded, not omitted: read for the row's census, never for its outcome.
+  // Taken from the success pattern's own group so no manifest string can
+  // supply it.
+  if (groups?.inapplicableCases !== undefined) {
+    detail.inapplicableCases = Number(groups.inapplicableCases);
   }
   return detail;
 }
@@ -331,16 +432,25 @@ function classifyGeneratePhase({ status, stdout, stderr, raw }) {
   if (status === 0) {
     const successMatch = SUCCESS_PATTERN.exec(stdout);
     if (successMatch) {
-      const refused = REFUSED_CASES_PATTERN.exec(successMatch[0]);
-      const detail = extractSuccessDetail(successMatch[0]);
-      if (refused) {
+      // Historical schema-v1 benchmark logs carry the old generator's own note
+      // for a partial contract, counted in entrypoints; the stable-v1
+      // generator records finer-grained artifact-case refusals. Either way the
+      // count is read from the statement rather than inferred by comparing
+      // declared and generated entrypoint counts: a wildcard subpath is one
+      // declared pattern expanding to many generated entrypoints, and `sameAs`
+      // aliases collapse, so those two counts legitimately disagree on a
+      // complete contract.
+      const groups = successMatch.groups ?? {};
+      const detail = extractSuccessDetail(successMatch[0], groups);
+      const refusedCases = groups.refusedCases ?? groups.legacyRefusedCases;
+      if (refusedCases !== undefined) {
         return {
           class: "partial-success",
           signature: normalizeSignature(successMatch[0]),
           detail: {
             ...detail,
-            refusedCases: Number(refused[1]),
-            refusalUnit: refused[2] === "entrypoint" ? "entrypoint" : "artifact-case"
+            refusedCases: Number(refusedCases),
+            refusalUnit: groups.refusedCases === undefined ? "entrypoint" : "artifact-case"
           },
           raw
         };

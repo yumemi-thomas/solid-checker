@@ -645,6 +645,20 @@ report](phase18/2026-08-29-atomic-stable-version1-cut.md).
 220. Keep experimental surfaces explicit and revisit only against newer exact
      published authority.
 
+Completed 2026-08-30. Proof policy 2 is the active Rust-owned demand and
+receipt authority; policy-1 issuance and loading shortcuts are gone, all 73
+baseline receipts are retired with zero pending, and ordinary analysis accepts
+only provenance-authenticated receipt-v2 typestate. The uncached Phase 19
+ecosystem remeasurement produced 44 complete proposals, 314 partial proposals,
+and 60 full refusals. Every complete proposal reached exact archive
+reacquisition and snapshot-bound demand planning: five exposed artifact or
+closure replay mismatches and 39 reached Type Facts witness refusal. Zero
+receipts and zero exports were accepted by weakening proof. Finite wildcard
+census is bounded by the 1,024 artifact-case-candidate policy budget; oversized
+and genuinely dynamic surfaces remain exact local refusals. See the
+[Phase 19 plan and completion evidence](phase19/2026-08-29-proof-policy-v2-and-refusal-reduction-plan.md)
+and `benchmarks/package-contract-v2/phase19/report.json`.
+
 ## Final definition of done
 
 - One deep module owns compact document semantics.

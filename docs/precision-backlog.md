@@ -1,5 +1,2144 @@
 # Precision backlog
 
+## Reachability floors, and reading a parameter without calling it (2026-09-01)
+
+The certifier was refusing evidence it already had, and the fix for that turned
+out to depend on a fact the producer was not recording. Two changes consume a
+fact the producer already emitted; one repairs a disagreement between two
+censuses over the same syntax; and one — the reachability of a parameter use —
+adds the missing fact, at the cost of a wire protocol break, because admitting a
+read witness without it meant admitting reads from dead code.
+
+An adversarial review of the first three found exactly that hole and four
+smaller ones. What follows is the corrected round; every claim below is pinned by
+a test that fails without it.
+
+### One walk, so two censuses cannot disagree
+
+The call census and the parameter-use census both classify a node by where it
+sits in an implementation body, and they used to walk it separately — the call
+census threading reachability, the use census threading nothing at all. They now
+share `walkImplementationBodyLocked`
+(`apps/solid-typefacts/internal/typefacts/tsgo/invocation_transcripts.go`), which
+threads the two facts either census reads (nested-callable capture, fall-through
+reachability) and hands each node to an `observe` callback. A `ParameterUse`
+carries a `reach` field answered by that walk, so a `props.children` and a
+`sink(…)` on the same statement can never be given different answers.
+
+This is a wire break: **Type Facts handshake protocol 7 → 8**, frozen schema
+digest `sha256:f1ecaab6c1e0f4369f34490a06b262cc01cc1e9a867946e93fb26def3aa7c494`,
+`reach` required on `parameterUse`. A protocol-7 client refuses unknown
+transcript fields and a protocol-7 producer omits a field this protocol
+requires, so neither direction is a compatible extension.
+
+Three correctness repairs came with the shared walk, each pinned:
+
+- **`try { … } finally { return; }` no longer leaves the following statement
+  reachable.** The finally block's own completion is conjoined into the arms'
+  merge instead of being discarded (`conjoinReachability`), because a jump in a
+  `finally` overrides the one it interrupted. Its *contents* are still visited at
+  the reachability the `try` statement had, so `try { return } finally
+  { cleanup() }` still reports `cleanup()` as reached
+  (`TestCallCensusStopsAtAFinallyThatReturns`,
+  `TestCallCensusRunsAFinallyThatFollowsAReturn`). `controlFlowCensusLocked` did
+  **not** have this defect and was not changed: it treats a `try` as an opaque
+  construct and `constructCompletesNormally` refuses any `return` inside one, so
+  it answers `unknown` where the call census now answers `unreachable`. The two
+  still differ there, in the safe direction — the control-flow census never
+  claims more than the call census. Making it precise would mean giving it a real
+  `try` arm, which also owns its `tryReachability` unsupported marker; that is
+  not this slice.
+- **A construct entered from dead code stays dead.** Both censuses returned
+  `ReachUnknown` after a loop reached at `Unreachable`, quietly promoting code
+  after a `throw` to "may execute". They now return `Unreachable`.
+- **A branch a literal condition excludes is dead code.** `if (false) { … }` is
+  as unreachable as code after a `return`, and calling it reachable is what let a
+  property access there witness a read the export never performs.
+  `literalBranchReachLocked` rules out the arm a decidable literal condition
+  excludes — including the implicit `else`, so nothing falls through
+  `if (true) { return }`. Applied identically in both censuses.
+
+### The call census poisoned every statement after a loop; the control-flow census did not
+
+`implementationCallCensusLocked`
+(`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`)
+returned `ReachUnknown` after *any* iteration or switch statement, so a single
+`for (const [k, v] of Object.entries(props))` made every later call in the
+implementation unusable as execution evidence. `controlFlowCensusLocked` had
+already answered exactly this question for return sites — reachability *inside*
+a construct stays unknown, reachability *after* one that can only complete
+normally is what it was before it — with `constructCompletesNormally`. The call
+census simply never received that fix, so the two censuses disagreed about the
+same syntax.
+
+It now calls the same helper: `Reachable` after the construct when the census
+arrived `Reachable` and the construct provably completes normally; `ReachUnknown`
+for the construct's children, and for a construct that cannot complete normally
+(`while (true)` with no `break` out, a `return`/`throw`/escaping jump inside, a
+nested construct control can never leave). Pinned by nineteen shapes in
+`TestImplementationCallCensusKeepsCallsAfterAFallThroughConstructReachable`,
+which also asserts that every call *inside* the construct stays `ReachUnknown`,
+and by `TestImplementationCallCensusNeverPromotesAnUnreachableConstruct` for the
+one-way direction. This lifts `createRenderEffect` and `onCleanup` in
+`@solid-primitives/script-loader@3.0.0-next.2` back to `Reachable`, which is
+what `require_owner_operation_call` asks for; that row now certifies.
+
+**Which loop headers cannot end their loop** is read from the program's own
+text, and two indirections were reading as exitable when they are not:
+`const ALWAYS = true; while (ALWAYS)` (a unique, never-written `const`
+declaration, the same gate `collectReturnedCallablesThroughBindingLocked` uses)
+and `while (1 === 1)` (an equality comparison of two operands that each reduce
+to a primitive the text spells, refused across primitive kinds so no coercion
+rule is modelled). Both are now decided, so the dead code after such a loop is no
+longer promoted.
+
+**Retained approximation, stated rather than left implicit.** A condition no
+literal reading decides — `while (flag)`, `while (fn())` — is still treated as
+having an exit edge, so the statements after it keep the reachability they had.
+A `flag` that is provably always true therefore still yields "reachable" for code
+that never runs. This is deliberate: the alternative is asking the type checker
+whether an arbitrary expression is truthy, which would make reachability depend
+on inference rather than on the program's text. It is pinned as a decision by the
+`nonLiteralConditionStaysOptimistic` row, and the doc comment on
+`alwaysTruthyLiteralConditionLocked` — which previously described this direction
+backwards — now states it. Closing it needs a real value analysis, not a wider
+literal reader.
+
+### `ReachUnknown` is adequate evidence for a claim whose lower bound is zero
+
+`implementation_call_is_executed`, the `OperationKind::Read` branch, and
+`require_owner_operation_call`
+(`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`)
+required `Reachability::Reachable` of every witness, for every demand. A call in
+a `do … while` or `for … of` body is `Unknown` by construction — the body may run
+zero times — so a demand claiming *"may happen, zero or more times per call"* was
+refused by evidence of exactly the shape it claims.
+
+**Policy decision** (signed off by the policy owner, and it is a claim-strength
+decision, not a bug fix): a demand whose bound operation asserts no lower bound
+is witnessed by a call the implementation *may* execute. `ReachabilityFloor`
+names the two readings, `reach_admits_zero_lower_bound` states the premise, and
+the floor is derived from the demand's own bound and plumbed to each call site.
+It is never global.
+
+**Relaxing takes positive evidence, and `min == Some(0)` is the whole of it.**
+An operation carrying no cardinality at all has stated no bound, and silence is
+not the claim "zero or more": it keeps the strict floor. This is deliberately
+narrower than `Cardinality::strength`, which folds absence in with zero because
+it answers a different question ("may this be assumed guaranteed", where the two
+agree). The planner is where the difference is visible, and it is pinned there:
+an operation with no stated cardinality is marked `has_cardinality: false` by
+`inventory_export_facts` and is then demanded `operation-reachability` *without*
+an `operation-cardinality` demand, so no bound of its is ever checked by anything
+(`an_operation_that_states_no_cardinality_is_demanded_no_cardinality_family` in
+`solid-reactive-ir`). No emitted demand was found where absent cardinality
+coexists with occurrence semantics.
+
+What keeps refusing, each with a test:
+
+- `Reachability::Unreachable`, for any claim. Code after a `return` or a `throw`
+  never runs and witnesses nothing. Neither floor admits it.
+- an operation with `min >= 1`. The strict floor stands. This is the trap of the
+  tier: it looks like the same relaxation and is not
+  (`reachability_floor_follows_the_bound_operation_lower_bound`).
+- the reachable-return-site premise inside `implementation_call_is_executed`,
+  unchanged: a captured call still has to lie inside a callable a **reachable**
+  return site carries (`loop_body_call_executes_only_under_the_zero_lower_bound_floor`).
+- the `OperationKind::Return` branch's reachable-return requirement, untouched.
+- recursive value-shape demands, which assert what a position *is* rather than
+  how often it is reached, keep the strict floor explicitly. That decision now
+  lives in `operation_input_value_shape_evidence`, split from the plan lookup so
+  a test can hold it: `recursive_value_shape_evidence_keeps_the_strict_floor`
+  fails if the floor there is relaxed.
+- every fail-closed default in `callback_reachability_floor` — the floor
+  `argument-binding` and `callable-path` take, the two families that assert no
+  occurrence of their own. A non-callback subject, an ordinal past the callback
+  list, an ordinal naming a callback bound to a different operation, and an
+  operation absent from the export all read no bound and keep the strict floor
+  (`callback_floor_reads_the_bound_operation_and_fails_closed_everywhere_else`).
+
+`demand_id` does not move: it hashes the static policy manifest, the candidate
+semantic digest and the artifact roots, never the verifier's implementation.
+`@solid-primitives/marker`'s `mapMatch(text)` inside a `do … while` is the row
+this clears.
+
+### Reading a parameter is not calling it
+
+`require_operation_evidence`'s `Read` branch inspected `implementation.calls`
+only, so the only read it could see was one where the parameter *was the callee*.
+`const mapFn = props.children` reads `props` and calls nothing;
+`parameterUseCensusLocked` has been recording that exact fact all along
+(`ParameterUse{kind: propertyAccess, captured: false}`), and the branch never
+looked at `parameterUses`.
+
+It now accepts either witness. A `Read` operation whose input is
+`Parameter{index, path}` is discharged by a `ParameterUse` with a matching
+parameter index and binding path, `captured == false`, and kind in
+`{propertyAccess, directCall, aliasCall}`. Path matching is the same rule the
+call branch uses: the observed path may be *longer* (reading `props.of.keys` is
+reading `props`; using a destructured `{ children }` is using the object) and
+never shorter, and every segment the demand names has to be that exact property.
+
+**The use witness answers to the same floor as the call witness.** It reads the
+`reach` the producer now records for every use, so a `props.children` after a
+`return`, after a `throw`, or in a branch a literal condition excludes is
+`Unreachable` and witnesses nothing for any claim, and a use in a loop body is
+`Unknown` and witnesses only an operation whose own lower bound is zero
+(`parameter_read_use_answers_to_the_same_floor_as_a_call`). Exempting this loop
+from the floor was how a `min >= 1` read demand came to be dischargeable from
+dead code.
+
+What keeps refusing (`parameter_read_accepts_an_uncaptured_property_access_use`):
+`storage` and `return`, which hand the value somewhere without looking into it;
+`argumentKnown`, `argumentUnknown`, and `capture`, which do the same through a
+call or a closure; `unknownEscape`, which is the census saying it could not
+classify the use at all; and any captured use, for the reason a captured call is
+refused — nothing proves the closure holding it runs. `@solid-primitives/keyed`'s
+`MapEntries` is the row this clears; its only parameter-rooted *call*,
+`props.of.keys()`, is captured inside the `mapArray` source arrow and stays
+refused as such.
+
+The refusal tail moved with the branch: `parameter-rooted read has no exact
+implementation call` is now `… no exact implementation call or use`.
+
+### Still open, and two of them are not what the diagnosis thought
+
+- **`@tanstack/hotkeys@0.8.0::formatHotkey`** (demand
+  `sha256:12a42717…`) stays refused, and *not* for a reachability reason: with the
+  floor forced relaxed it still refuses. The read operation's input is
+  `Parameter{index: 0, path: ["includes"]}` while the shipped access is
+  `parsed.modifiers.includes(…)` — the demanded path drops the intermediate
+  `modifiers` segment. The census is refusing correctly.
+- **`@solid-primitives/keyed`'s `SetValues`** (`sha256:1ac6a2dd…` /
+  `sha256:0baa9fc5…`) is the same defect: the demand asks for
+  `Parameter{0, ["values"]}` where the code accesses `props.of.values()`. The
+  transcript records the uncaptured `props` property access, which does not name
+  `values`, so nothing witnesses it.
+
+  Both belong with the wrong-demand class already filed against
+  contract-proposal generation (`rust/crates/solid-reactive-ir`) — a read input
+  path built from the last segment of a nested member access rather than the whole
+  path. They leave the refusal list by being corrected, not by being discharged,
+  and widening the match to "the demanded segment appears somewhere in the
+  observed path" would be a guess, not a proof.
+- **`@solid-primitives/marker`**'s next demand refuses with `operation-input is
+  unsupported: implementation census only binds exact parameter-rooted operation
+  inputs` — a pre-existing fail-closed path this slice does not touch.
+- **An object rest element is named after its binding, not after a property that
+  exists.** `parameterCensusRootsLocked` takes `element.Name()` as the property
+  segment for every object binding element, so `function f({ a, ...rest })`
+  yields the root path `["rest"]` — but `rest` is the remainder object, not
+  `props.rest`. A demand for `Parameter{0, ["rest"]}` would therefore be
+  witnessed by any use of `rest`. **Pre-existing**: the call census builds
+  `bySymbol` from these same roots, so `parameter_value_source_matches` has
+  always had it; the read-use witness is now a *second* consumer of the same
+  roots, which widens the blast radius without introducing the defect. The fix is
+  to emit no path segment for a rest element (or a distinct segment kind that no
+  property demand can satisfy) — a producer change with its own fixture, not a
+  verifier one. Unmeasured: no probed row is known to demand such a path.
+- **A write to a property is recorded as a `propertyAccess` read of the object.**
+  `props.children = 1` records `kind: propertyAccess, captured: false` on
+  `props`, because `parameterUseKindLocked` classifies on the parent being a
+  property access without asking whether that access is an assignment target or a
+  `delete` operand. **Reviewed and deliberately not changed**: evaluating `props`
+  is required to store into it, so the record is a true read of `props` at path
+  `[]`, which is the only demand it can witness. Excluding it would need the
+  observed path to *name* the written property, and it never does — the recorded
+  path is the parameter's binding root, and `parameter_binding_matches` requires
+  the observed path to be at least as long as the demanded one, so a write to
+  `props.children` cannot witness a demand at `["children"]` today. The exclusion
+  is vacuous until some matcher admits an observed path shorter than the demanded
+  one; if that ever changes, this becomes real and the fix is a `write` flag on
+  the use plus the written segment.
+- The rows whose refusal is over-claimed inventory (`flux-store` ×3,
+  `@solidjs/meta@0.29.4`) and whose invoking position is in another package
+  (`@solid-primitives/until@0.1.1`) still refuse, with the same demand digests and
+  reason tails. Every generated contract in the probed set is byte-identical
+  before and after, including the newly certified `script-loader` row: the
+  verdict moved, the contract did not.
+
+
+## A callback invoked from a closure that flows into an invoking position (2026-09-01)
+
+`implementation_call_is_executed` had exactly one premise for a *captured* call —
+a call inside some nested callable: the call site lies **somewhere inside** a
+callable that a reachable **return site** provably carries. That premise is the
+whole of the returned-closure family, but it is not the only way a nested
+closure runs, and — as the review of this entry's first draft established — byte
+containment was never the right join for either half of it.
+`@solid-primitives/autofocus` is the clean counterexample for the missing
+premise: its entire body is
+
+```js
+createEffect(() => { const el = ref(); … })
+```
+
+and it returns nothing at all. The closure runs because `createEffect` runs it.
+Every carried-callable list is empty, so `ref()` was refused as unexecuted and
+the export's `invoke` claim stayed open — a missing premise, not an imprecise
+one.
+
+### The added premise, and the join that replaced containment
+
+A captured call is also executed when the callable **immediately containing it**
+is one an **already-executed call of the same implementation** hands to an
+argument slot *proven to be invoked*.
+
+The join is exact identity of that enclosing callable, not containment. A new
+producer fact, `ImplementationCall.enclosingCallable`, names the innermost
+callable containing each call (absent exactly when `captured` is false), and the
+premise asks whether *that* range is carried — by a reachable return site, or at
+a proven-invoking argument slot. Longer paths are reached by **composing** links,
+never by observing that bytes nest, and the recursion is what composes them.
+
+Containment was unsound, and one shape shows why:
+
+```js
+function storesInner(callback) {
+  effect(() => {
+    const inner = () => { callback(); };
+    registry.push(inner);
+  });
+}
+```
+
+`callback()` lies inside the range `effect` invokes, and `callback` never runs:
+the effect only *stores* `inner`. Containment cannot separate that from the
+debounce shape, which nests identically —
+`return (…) => { setTimeout(() => callback(…), wait) }` — and really does run.
+Under composition they separate cleanly: the debounce case is two proven links
+(the returned closure is carried by the return site; the arrow immediately
+containing `callback(…)` is carried at slot 0 of a `setTimeout` whose own
+enclosing callable is that returned closure), and the storing case has no
+second link, because `Array.prototype.push` is on no invoking table. **A callable
+that is merely defined, stored, pushed, or assigned breaks the chain**, and the
+demand stays open. Pinned by
+`a_merely_stored_inner_closure_breaks_the_invoking_chain`, which runs both
+shapes through the same fact skeleton, and by
+`TestEnclosingCallableNamesTheImmediatelyContainingCallable` on the producer
+side.
+
+The same discipline applies to the **return** branch: it too matches the exact
+enclosing callable rather than containment, and the debounce/scheduled controls
+still certify because they compose. The producer reports the argument side as
+`ImplementationCall.argumentCallables`; a spread ends the exact slots — see
+"What a nesting boundary is, what a slot index means" below.
+The outer-call recursion is bounded at depth 8 / 256 nodes, and exceeding a
+bound answers "not executed".
+
+**The argument descent is narrower than a return site's.** A returned value hands
+the caller everything inside it, so `carriedCallableLocationsLocked` may credit
+every element of `[fn, clear]`, every property of an object literal, and
+`Object.assign`'s target. An invoking argument slot may not:
+`addEventListener("click", { handleEvent, spare })` calls exactly `handleEvent`
+and never `spare`, so crediting both would assert execution of code the runtime
+cannot reach. `singleCallableLocationsLocked` keeps only the identity-preserving
+single-callable forms — the callable expression itself, the wrappers that erase
+at runtime, and a single-declaration binding naming exactly one callable — and
+the two descents are one function parameterized by `carriedCallableDescent` so
+the difference is stated rather than drifted into. An object or array literal at
+an argument slot therefore carries **nothing at all**, refusing the construction
+rather than trying to pick the right member out of it.
+
+### The three tiers, and where each stops
+
+- **Tier A — dialect primitive.** The callee resolves to an exact `solid-js`
+  import and `solid_dialect::unambiguous_callback_argument` fixes the slot as a
+  callback. This is byte-for-byte the gate `require_parameter_callback_flow`
+  already applied, so it adds no dialect surface. It refuses
+  `createEffect(fn, initialValue)` at slot 1, a locally shadowed `createMemo`
+  (whose `target_module` is not `solid-js`), and an unresolvable namespace member
+  (which carries neither target nor module).
+- **Tier B — reviewed default-library member.** A new producer fact,
+  `defaultLibraryInvoker` + `invokedArguments`, emitted only when the callee
+  resolves **by default-library symbol identity** — the way
+  `isDefaultLibraryObjectAssignLocked` resolves `Object.assign` — to a member of
+  the fixed table in `invoking_positions.go`. The verifier owns the table too:
+  `DefaultLibraryInvoker::from_wire` refuses an unrecognized name outright, and
+  the slot must appear in *both* the transmitted list and the verifier's own
+  table, so a widened or forged claim from the producer process is not evidence.
+  Refused on their merits: `removeEventListener` (removing a handler is not
+  evidence anything runs), a user type's own `forEach`, an `any`-typed receiver,
+  a locally shadowed `setTimeout`, and — the named trap —
+  `navigator.geolocation.watchPosition`, which really does invoke its callback
+  and is deliberately absent. Growing the table is an act of review; "the
+  browser probably calls it" is never a premise.
+- **Tier C — package-local helper.** The producer proves what the resolved local
+  callee's own body does with its parameters (below) and the verifier consumes
+  that fact rather than re-deriving semantics from a location. It refuses a
+  callee that stores its parameter, one that returns it, one whose
+  implementation is outside the analysed program, and any member or computed
+  callee — `handlers[key](cb)` names no single canonical symbol.
+- **Tier D — external package. Still open, deliberately.**
+  `@solid-primitives/until` hands its condition to `createBranch` from
+  `@solid-primitives/rootless`, and nothing in this artifact's transcript can
+  prove what that function does. The only sound route is an accepted dependency
+  contract for `@solid-primitives/rootless` composed through
+  `ProofFamily::AcceptedDependencyComposition`. A "well-known package" name list
+  is exactly the shortcut the precision contract forbids, so
+  `sha256:18a2f9ab…` stays refused.
+
+### The callee-parameter facts, and the strong/weak split
+
+For a call whose callee resolves to a callable with a body in the analysed
+program, the producer records three nested sets:
+
+- `calleeDirectlyCalledParameters` — the parameter appears as the **callee** of a
+  call in that body. The only one that by itself says the position is used as a
+  function.
+- `calleeStronglyInvokedParameters` — directly called, or forwarded as a **bare
+  identifier** at slot *j* of a further local callee whose slot *j* is itself
+  strongly invoked. Every hop is a plain forward and the chain terminates in a
+  direct call.
+- `calleeInvokedParameters` — the weak closure: strongly invoked, or the
+  parameter reaches a reviewed default-library invoker, or it is forwarded to a
+  local callee whose slot is merely invoked. This says the value *runs*; it does
+  not say the callee calls it.
+
+The split is load-bearing. `require_parameter_callback_flow` — the strong
+`callable-path` fallback — accepts only
+`calleeStronglyInvokedParameters`. Accepting the weak fact there would let a
+chain that terminates in `addEventListener` discharge a claim that the position
+is *callable*, which silently turns the `callable-path` family into
+`argument-binding`. `require_parameter_flow` gains nothing: its argument branch
+already accepts "argument of an executed call with a resolved target", so adding
+S4 there would be redundant width. Bounds: depth 4, a per-body node budget, a
+symbol cycle guard, and a per-callee-symbol memo that stores only an *exact*
+answer — one reached with no depth cut, cycle cut, or exhausted budget — because
+a truncated answer is bound to the context that truncated it.
+
+A parameter that is returned, stored on a property, or pushed onto an array
+appears in none of the three, including behind a condition
+(`function maybe(fn, on) { if (on) queue.push(fn); }`): every credit is a call
+position or a plain forward into one, never "flows somewhere".
+
+Two restrictions on *where in the body* a credit may come from carry the weight
+of all three sets, and both were review findings against the first draft:
+
+- **A call site inside a nested callable is credited only by composition.** A
+  call the body writes down is not a call the body makes.
+  `function storeLater(fn) { registry.push(() => { fn(); }); }` never invokes
+  `fn`, and crediting the call site because its bytes sit inside the body made
+  the closure-wrapped forward indistinguishable from a direct call — defeating
+  the property-storage refusal above by the single act of wrapping the stored
+  value in an arrow, and feeding both the Tier-C execution premise and the
+  S4-strong `callable-path` branch. So the site counts exactly when the callable
+  *immediately* containing it is handed to a slot something proves invoking, on
+  a call the body itself executes, recursively (see "Composition inside the
+  callee body" below). `registry.push` proves nothing about what it is handed,
+  so the stored closure still breaks the chain and the demand stays open.
+
+  There is deliberately **no return-site route** inside a callee body. A callee
+  that returns a closure hands it to its own caller, which here is the body
+  being analysed — and that body only *called* the callee, so nothing runs the
+  closure. `function returnsClosure(fn) { return () => fn(); }` proves nothing
+  about `fn`.
+- **An unreachable call site contributes nothing.** Statements after a `return`
+  or a `throw` are text, not execution. `ReachUnknown` is still credited, which
+  is deliberate and consistent with the in-body guarded-call precedent below and
+  with the claim strength stated in the next section. The walk mirrors
+  `implementationCallCensusLocked`'s reachability so the two agree about what
+  "this body executes that call" means.
+
+### Claim strength: this premise says *can execute*, and nothing may read more
+
+The Tier-B table is a **may-invoke** table by construction — the producer's own
+comment says "zero or more times" — and the premise it feeds is a *can execute*
+premise. That is a deliberate match, not an oversight, and it is written down
+here so no consumer quietly reads a lower bound out of it:
+
+- `p.then(onFulfilled, onRejected)` lists **both** slots. At most one handler
+  ever runs, and neither runs if the promise never settles.
+- `items.forEach(cb)` invokes nothing when `items` is empty; `.some` / `.find`
+  / `.findIndex` / `.every` short-circuit, and `.sort` never calls its
+  comparator for length ≤ 1.
+- A guarded call inside a callee body (`if (flag) fn()`) is credited at
+  `ReachUnknown`, the same strength the in-body direct-call premise has always
+  had.
+
+What the premise licenses is exactly the `Invoke` operation's own claim: this
+argument is a callback position the implementation runs, with **no lower bound
+on how many times**. `OperationKind::Invoke` demands nothing stronger, and the
+inventory records min 0 / max many. Anything that later wants "at least once"
+needs a different fact, not a stronger reading of this one — and the tier tables
+stay membership-reviewed rather than grown by analogy, because a table entry is
+a statement about a specific member's runtime.
+
+### Open policy question, inherited rather than introduced
+
+`callable-path` asserts the callback binding's value **is callable**.
+`@solid-primitives/utils` ships `access` as
+`(v) => typeof v === "function" ? v() : v`, and discharging
+`@solid-primitives/date-difference::createDateDifference` through it proves "the
+implementation calls this position as a function on some path", not "this
+position is always a function" — the published typing is
+`MaybeAccessor<number | Date | string>`, which genuinely is not always callable.
+
+That looseness is **not new**: an in-body `typeof date === "function" ? date() : date`
+passes `require_parameter_callback_flow` today, unchanged, and has since the
+family existed. S4-strong inherits exactly that strength through
+`calleeStronglyInvokedParameters` and introduces nothing weaker. The open
+question for the policy owner is whether `callable-path` should instead mean
+"always callable"; if it should, the *existing* guarded direct-call acceptance
+needs tightening first and `createDateDifference` becomes a wrong demand rather
+than a discharged one. Recorded here rather than silently settled.
+
+### `addEventListener` cannot be resolved in a shipped bundle
+
+`@solid-primitives/gestures@1.2.1::registerPointerListener`
+(`sha256:08be4b78…`) was expected to clear through Tier B and does **not**. Its
+runtime artifact is bundled JavaScript, and certification's private project runs
+it with `allowJs: true, checkJs: false`, so `registerPointerListener`'s own
+`node` parameter is `any` and `node.addEventListener` resolves to no symbol at
+all. That is the same `any`-typed receiver Tier B already refuses by design, so
+the row stays open with no fact emitted — the table declining to assert what it
+cannot resolve, not a gap in the table.
+
+The consequence is general: **the member half of the Tier-B table is largely
+unreachable for bundled artifacts**, and only bare globals (`setTimeout`,
+`requestAnimationFrame`, …) survive the erasure, because a global's own
+declarations are in the default library however the calling file is typed. That
+is why `@solid-primitives/utils::afterPaint` is provable and
+`registerPointerListener` is not. Pinned by
+`TestDefaultLibraryInvokerOverAShippedRuntimeArtifact`, which runs both shapes
+through a real `.js` artifact with the certification project's options. Closing
+it would need the *declared* signature's parameter type transferred into the
+untyped implementation — a new cross-artifact semantic claim, out of scope here
+and not attempted.
+
+### A construction runs what it carries, and is still not a call
+
+The implementation call census recorded call expressions only, so a `new`
+expression was not in `implementation.calls` at all and the ES executor position
+had nothing to carry a fact — the `PromiseConstructor` row the Tier-B table
+lists was dropped as unreachable. Under containment that gap was invisible;
+under composition it cost a row outright, because
+`@solidjs/signals::action` is
+
+```js
+function action(genFn) {
+  return (...args) => { … return new Promise((resolve, reject) => { const it = genFn(…args); … }); };
+}
+```
+
+`genFn(…)` is enclosed by the Promise executor arrow, and with no fact saying
+that arrow runs the chain stopped there. (Containment had "discharged" it by
+never asking what runs the executor — the same unsound step, on a case where the
+answer happens to be right.)
+
+**Construct expressions are now in the census**, with the same fields a call
+carries: reachability, `enclosingCallable`, target resolution through the same
+exact-symbol machinery, and the argument facts. The reviewed table gains its one
+construct row, in its own table keyed separately from the call tables, because
+the two questions differ: `Promise(fn)` is not a call the language allows and
+`new setTimeout(fn)` is not a construction it allows. `new Promise(executor)`
+invokes argument 0 — the ES specification requires the executor to run
+synchronously, before the constructor returns — resolved by default-library
+symbol identity like every other row. Still refused: `new UserClass(cb)` (not
+the library symbol), a locally shadowed `class Promise`, and
+`new Promise(...args)`, whose spread fixes no slot and therefore carries no
+proven callable.
+
+**Both kinds run what they carry; only one of them is a call.** The kind travels
+with every census entry (`ImplementationCall.kind`), and the two halves of the
+verifier read it differently on purpose:
+
+- the execution premise — `implementation_call_is_executed` and
+  `argument_slot_is_proven_invoking` — is kind-agnostic. It asks whether code
+  runs, and a construction runs its executor.
+- every claim whose witness says the implementation *calls* a value asks
+  `is_call_expression` first: the invoke flow, the callback flow, the
+  parameter-read evidence, the owner-primitive call, and the recursive-parameter
+  call. `new Cls(cb)` is a different claim about `cb` than `cls(cb)` and none of
+  those families was reviewed for it, so a construction satisfies none of them —
+  including the observed-callee list in the owner-requirement refusal message,
+  so a refusal tail does not move either. A construct site also states **no**
+  callee-parameter facts: those are claims about a resolved *function's* body,
+  and a constructor resolves differently.
+
+An *absent* kind deserializes to `CallKind::Unknown`, which those consumers
+refuse: absence is never read as "call". An *unrecognized* one does not become
+`Unknown` at all — `CallKind` carries no `#[serde(other)]` arm, so it fails
+deserialization and the whole transcript is rejected, which is the harder of the
+two failures and the intended one. (An earlier draft of this entry claimed both
+spellings default to `Unknown`; they do not, and the pin that was supposed to
+cover it used `"unknown"`, a *recognized* variant. Corrected and pinned by
+`an_unrecognized_call_kind_rejects_the_transcript_rather_than_defaulting`.)
+Pinned by `TestConstructExpressionsJoinTheCensusUnderTheirOwnTable`,
+`a_construction_executes_what_it_carries_and_is_still_not_a_call`, and
+`a_construction_satisfies_no_claim_whose_witness_says_call`, which mutation-kills
+each of the six kind gates on its own.
+
+`@solidjs/signals::action` clears as a result, and the three probes it was
+masking return to their earlier frontier: `@solidjs/signals@2.0.0-rc.3` and both
+`@solid-primitives/intersection-observer@3.0.0-next.3` probes are refused on
+`flatten`'s `callable-path` again (`sha256:14ebad21…`, `sha256:71e902d9…`,
+`sha256:b84ccad6…`).
+
+### Composition inside the callee body, and the premise the producer refuses to decide
+
+The Tier-C / S4 producer facts used to stop at every nested callable, and one
+real chain paid for it. `@solid-primitives/timer` proves
+`createIntervalCounter`'s `timeout` callable through
+`createPolled` → `createTimer`, and `createTimer` calls its `delay` parameter at
+
+```js
+createEffect(prevDelay => { … const currDelay = delay(); … });
+```
+
+— a direct call, but inside the arrow `createEffect` runs, not in `createTimer`'s
+own body.
+
+The callee-body walk now applies **the same composition premise the verifier
+applies to an exported implementation**, one body further in: a parameter call
+site inside a nested callable counts exactly when that callable is carried — by
+the same identity-preserving single-callable descent — at a proven-invoking slot
+of a call or construction in the callee body whose own site composes in turn.
+Same bounds as the verifier's premise (depth ≤ 8, 256 nodes), plus a cycle guard
+on the call sites themselves, which a self-referential
+`const f = () => { g(f); }` makes reachable. The invariant the fixer round
+established is preserved rather than weakened: the chain asks each link
+separately, so `registry.push(() => { fn(); })`, the closure-wrapped forward, and
+the expression-bodied `fn => () => fn()` all still emit **nothing**.
+
+The strength ladder is untouched. Composition changes *where* a call may sit,
+never what a chain proves: the terminal must still be a direct call of the
+parameter and every interprocedural hop a plain identifier forward, so a chain
+that reaches `addEventListener` inside an effect closure is invoked and still not
+strongly invoked. `calleeDirectlyCalledParameters` also keeps its narrow meaning
+— the parameter is called in the body's **own frame** — because a call the body
+reaches only through a closure it hands away is a different claim.
+
+**The last link is often a dialect fact, and the producer may not decide it.**
+`createEffect`'s slot 0 is a callback position; the producer knows no framework
+vocabulary, and reading one out of a module and a name is exactly the shortcut
+the precision contract forbids. So it states the syntax exactly and defers:
+`calleePendingInvocations` carries the same two claims, each with the
+invoking-slot premises it still needs — module, exported name, slot, argument
+count — and the verifier answers them on the table Tier A already owns
+(`unambiguous_callback_argument`, `solid-js` only). A premise it does not
+recognize leaves the claim unproven, an entry with no premises is malformed
+rather than unconditional, and a conjunction holds only if every premise does. A
+callee that names no module carries no premise at all, so a local helper, a
+member call, a computed callee and a bare global stay refused. Alternatives are
+capped at four routes of at most four premises each; a claim needing more is
+refused rather than transmitted.
+
+`sha256:209b1b7f…` (`timer@1.4.4`) certifies again, and `sha256:7f353a40…`
+(`timer@1.4.5-next.1`, floor and head) clears back to its own next frontier,
+*"operation-input is unsupported: implementation census only binds exact
+parameter-rooted operation inputs"*. Pinned by
+`TestCalleeBodyComposesThroughProvenInvokingPositions` and
+`a_deferred_dialect_premise_is_answered_here_or_the_claim_stays_open`.
+
+One consequence worth naming: the earlier note that "dialect invoking positions
+inside a callee body are not part of the producer's weak closure" no longer
+holds — a helper that hands its parameter to `createEffect` is now credited
+(weakly), through the same deferred premise. What stays open is anything whose
+missing premise is *not* a dialect slot: an external package's helper is Tier D
+either way.
+
+The array-iteration row is also narrower than "`Array.prototype`'s iteration
+methods": it is gated on the `Array` and `ReadonlyArray` containers, and the
+typed arrays' identically shaped methods are not on the reviewed table, so they
+stay open.
+
+### What a nesting boundary is, what a slot index means, and why the answer must not depend on the demand order
+
+Three defects in the extension's own machinery, all of the same family the
+rounds before them closed: a *syntactic* fact standing in for a *semantic* one.
+
+**Every function-like body is a nesting boundary.** `isCallableDeclaration` was
+`ArrowFunction | FunctionExpression | FunctionDeclaration | MethodDeclaration`,
+and every walk that asks "is this a nested callable" asked it — the call census,
+the parameter-use census, the control-flow censuses, and the extension's own
+callee-body walk. A getter, a setter, a constructor and a class's static block
+own bodies too, and none of them was one:
+
+```ts
+function stashGetter(cb: () => void) {
+  registry.push({ get value() { cb(); return 1; } });
+}
+```
+
+stores an object and calls nothing, and the census reported `cb()` as an
+uncaptured call `stashGetter` itself makes — `captured == false` with
+`reach == reachable` is the *strongest* form of every claim built on the census,
+and `calleeDirectlyCalledParameters = [0]` discharged the S4-strong branch for
+every caller of `stashGetter`. This is not an exotic shape: object-literal
+getters are the standard compiled-JSX lowering for a lazy prop
+(`createComponent(X, { get children() { … } })`), so every certified artifact
+shipping compiled JSX is in it. The predicate is now the compiler's own closed
+enumeration — `ast.IsFunctionLikeDeclaration` plus
+`ast.IsClassStaticBlockDeclaration`, shimmed for the purpose — so a kind a
+future compiler revision adds is covered without an edit here, rather than a
+hand-kept list that omits whichever kind has not bitten yet. Pinned in both
+walks and in all four member shapes by
+`TestEveryFunctionLikeBodyIsANestingBoundary`.
+
+**A spread ends the exact slots.** Every producer site that turned an argument
+expression into a slot index counted a `SpreadElement` as exactly one slot, so a
+spread of *n ≠ 1* elements understated every later position by *n − 1* — toward
+*lower* slots, which is the over-proof direction, because the reviewed tables
+list low slots as invoking. `target.addEventListener(...pair, cb)` writes `cb`
+second and passes it third, where the runtime reads an options bag and invokes
+nothing; the producer credited it as the listener. The producer cannot repair the
+shift, because a spread's length is a runtime property of the spread expression.
+So the answer is a **floor, never a renumbering** (`exactArgumentSlots`): slots
+before the first spread keep their exact meaning and are stated normally, and
+nothing at or after it is stated at all. Applied at all five positional sites —
+`argumentCallableLocationsLocked`, the census's `argumentParameters` (which keeps
+one entry per written argument, so its length still means the syntactic count
+every consumer reads, and withholds only the displaced entries),
+`calleeBodyWalk.carriedLocked`, `creditForwardedParametersLocked`, and
+`slotInvokingProofLocked`. The deferred premise is stricter still: it transmits an
+argument *count* as well as a slot, and a dialect answer can turn on that count
+(`mergeProps` reads every source below it; `createResource` gives argument 0 a
+different role at one argument than at two), so a spread anywhere in the list
+withholds the premise entirely — no prefix makes the runtime count knowable.
+Pinned, including the do-not-over-poison direction (a spread *after* a slot
+leaves that slot exact), by `TestASpreadEndsTheExactArgumentSlots` and
+`TestASpreadWithholdsTheDeferredPremise`.
+
+**The callee fact set is a pure function of the program.** The callee memo
+answered per callee symbol, and stored only *exact* answers — but whether an
+answer is exact depends on the depth it was computed at, because the walk
+refuses below `maxCalleeInvocationDepth`. A warm entry therefore lent its
+headroom to a later, deeper question: over one unchanged program and unchanged
+binaries, an export eight forwarding hops deep carried a pending fact when the
+seven shallower exports had been demanded before it in the same session, and
+carried none when it was demanded alone or first. The demand list is named by no
+receipt, no gate-cache key and no proof digest, so a package could certify in one
+run and be refused in the next with nothing changed. The memo is now keyed by
+**callee symbol and depth**, which is the whole question: an exact answer met no
+cut, so it depends on neither the interprocedural cycle guard's contents nor the
+caller's history, and a hit returns exactly what recomputing at that depth would.
+
+The alternative — dropping the depth bound in favour of the cycle guard and the
+node budget — was rejected deliberately: it is also deterministic, but it makes
+deep chains *productive* that the reviewed bound refuses, which is a soundness
+widening, and this round's job is to close over-proofs rather than open new
+reach. Keying by depth is the strictly narrowing repair (a warm entry could only
+ever have strengthened an answer, so nothing can newly certify), and the cost is
+recomputation at up to four depths. Pinned by
+`TestCalleeFactsDoNotDependOnDemandOrder`, which answers one program in three
+demand orders — deepest alone, ascending, deepest first — and compares the
+emitted facts byte for byte.
+
+### The census's concise-body exemption, removed
+
+`implementationCallCensusLocked` used to exempt the implementation's own body
+from the nesting test, which for a `const`-declared arrow export with a concise
+body means exempting the callable that *is* the return value. On
+`export const wrap = (cb: () => void) => () => cb();` the census stamped the
+`cb()` site `captured: false` — and three consumers read that field directly and
+mean *this body calls it*: the `Read` operation's evidence, the owner-primitive
+call, and the recursive-parameter subject. `wrapOwner = cb => () => { onCleanup(cb); … }`
+satisfied `implementation-owner-call:` for an implementation that only *returns*
+a closure that would.
+
+The exemption is gone: every callable is a boundary. Nothing is lost on the
+premise side, and that is why the change is safe rather than merely stricter —
+the reachable return site carries exactly the arrow that now encloses the call,
+so `implementation_call_is_executed` still composes through `enclosingCallable`
+and the returned-closure family is unchanged. Only the claims whose witness says
+*call* refuse it now. The two walks that disagreed by intent — the callee-body
+walk never copied the exemption — now agree by construction. Pinned by
+`TestAConciseCallableBodyIsStillANestedCallable`, which asserts both halves: the
+honest `captured`, and the return site carrying exactly that callable.
+
+`parameterUseCensusLocked` keeps the exemption, deliberately and narrowly: it is
+a different fact with a different consumer set (`ParameterUseKind::Capture` is a
+*refusal* trigger for operation reachability, so the exemption there costs
+reach rather than soundness in the families reviewed here), and moving it was not
+part of this round. Named below as open.
+
+### Still open after the extensions
+
+- **Tier D — an external package's invoking position.** `sha256:18a2f9ab…`
+  (`@solid-primitives/until`) needs an accepted dependency contract, not a name
+  list.
+- **`addEventListener` in bundled JavaScript**, `sha256:08be4b78…` and the
+  member half of the Tier-B table generally.
+- **A construct site states no callee-parameter facts.** A constructor whose
+  body invokes its own parameter proves nothing here; that resolution was not
+  reviewed. No probe in this set depends on it.
+- **An object or array literal at an argument slot carries nothing**, so a
+  bundle handed to an invoking slot proves nothing about any member of it.
+- **A `new` expression's dialect tier.** The deferred premise is emitted for
+  call sites only: no construct-position dialect vocabulary was reviewed.
+- **Any slot at or after a spread is refused rather than resolved**, and a call
+  with a spread anywhere states no deferred premise. `schedule(...pair, cb)`
+  really does put `cb` at a fixed position when `pair` has a fixed length; the
+  producer cannot read that length, so the honest answer is silence. This is an
+  over-refusal, and it is the one the precision contract asks for.
+- **A static block is treated as a nesting boundary though it runs eagerly.**
+  `class Holder { static { cb(); } }` inside a function body really does run
+  `cb()` when the class is evaluated. Stamping it `captured` costs reach and
+  never soundness, and the eager-evaluation claim was not reviewed; recorded so
+  that a later round widens it on purpose rather than by accident.
+- **`parameterUseCensusLocked` still exempts a concise callable body.** The call
+  census no longer does. The parameter-use fact feeds a different family, and
+  changing it would move `ParameterUseKind::DirectCall` to `Capture` for
+  `const`-declared concise-arrow exports, which the operation-reachability family
+  reads as an open escape. Not measured in this round's acceptance set, so not
+  changed in it.
+
+
+## A parameter-member read was rooted at its last segment (2026-09-01)
+
+A generated read operation's input is `Parameter { index, path }`, and the
+implementation census matches that `path` as a **prefix** of the access it
+observes (`type_facts::parameter_value_source_matches`). The generator built the
+path from the *last* segment of the member chain alone, so a read of
+`parsed.modifiers.includes(m)` published `["includes"]` — a claim that the
+parameter has an `includes` property. The observed access begins with
+`modifiers`, so the prefix never matched: the demand was not merely imprecise,
+it was unwitnessable by any runtime, and the row could only ever refuse.
+
+Two independent packages surfaced it:
+
+- `@tanstack/hotkeys@0.8.0::formatHotkey`, whose shipped `dist/format.js:34`
+  reads `parsed.modifiers.includes(modifier)`. The demand
+  `sha256:12a42717da8d6151…` carried `["includes"]`; it now carries
+  `["modifiers", "includes"]`. That digest is gone from the certification audit.
+- `@solid-primitives/keyed`'s `SetValues`, whose `props.of.values()` published
+  `["values"]` and now publishes `["of", "values"]`.
+
+`indexes::member_callee_receiver` now walks the whole chain from the callee to
+its root and answers the path from that root outward. The rules that keep every
+emitted segment a real property of the parameter:
+
+- **the root must be a plain identifier.** `EntitySymbols::at` answers a symbol
+  for any span the compiler emitted an entity at, and at a conditional,
+  sequence, logical, or call expression that symbol is some *operand's* — not
+  the value the chain walks through. Trusting it attributed properties of the
+  chain's *result* to a binding that never has them:
+  `(k ? options.a : options.b).c.slice(n)` was published as parameter `k`
+  reading `["c", "slice"]`, and `options().slice(n)` as `options` having a
+  `slice` property. Both are refused now, and the refusal is what makes the
+  truncation rule below sound: a path is only ever a true prefix of the real
+  access, never a path through a different value;
+- a segment the walk cannot name exactly — a computed access `a[b]`, or a
+  property whose source text the fact table does not carry — truncates the path
+  to the **longest exact prefix from the root**, and never skips a segment or
+  guesses one. `props[key].values()` answers `[]`; `props.of[key].values()`
+  answers `["of"]`;
+- a chain longer than `MEMBER_CALLEE_PATH_LIMIT` (32 segments) is truncated the
+  same way, to its first 32 segments from the root;
+- the read row is **kept in every one of those cases, not dropped**. Dropping it
+  would turn an unresolved access into the negative claim "this export performs
+  no parameter read", because the reads domain is emitted `Complete` once it is
+  known at all. (Refusing the *whole* access, as the compound-root and
+  computed-callee gates do, is a different thing: the export's other accesses
+  still publish, and an access that no row describes leaves the parameter
+  unclaimed rather than negated.);
+- a computed *callee* (`props.of[key]()`) is still refused outright, unchanged;
+- a callee that is not a member expression at all is refused, so an ordinary
+  `notify(callback)` is never read as a member access on its callee.
+
+**Why a truncated path stays sound under the exact matcher too.** The prefix
+argument covers `type_facts::parameter_value_source_matches`
+(`actual.path.len() >= expected.path.len()`), which is what the read
+operation's own evidence uses (`require_operation_evidence`, `OperationKind::Read`).
+Its sibling `parameter_value_source_exact` adds `actual.path.len() == path.len()`,
+and read inputs do reach it — at `require_operation_recursive_subject`, where a
+recursive-value demand rooted at an `OperationInput` is discharged by a
+reachable call whose callee is *exactly* the stated source. That is still a
+comparison against the path this contract **states**, never against the access
+the path was cut from, so a shorter path remains a weaker claim rather than a
+different one. The dangerous shape would be a demand that *extends* the stated
+path before matching it exactly, and that is unreachable for a parameter-rooted
+read input:
+
+- `contract_semantics::certification::inventory_value_shape` treats
+  `ValueShape::Parameter` as a **leaf**, so the only recursive-value demand a
+  parameter input produces carries an empty value path — pinned by
+  `a_parameter_operation_input_inventories_one_demand_at_the_empty_path`;
+- a demand rooted at an `OperationInput` with a *non-empty* value path exists
+  only for a structured input (object, tuple, array, choice, promise), and there
+  `type_facts::parameter_source` answers `UnsupportedDemand`, which the `?` in
+  `require_operation_recursive_subject` propagates — the demand fails rather
+  than being discharged, so the `source_path.push(property)` extension below it
+  never runs on a truncated read path;
+- the `require_parameter_callback_flow` route is additionally gated on
+  `callable.asserts_callable()`, and `recursive_value_callability` answers
+  `DemandedCallability::Unknown` for every `Parameter` shape;
+- the remaining exact-match consumers take `callback.from`, which
+  `inferred_contract::normalize_export` always builds with an empty path.
+
+The argument is therefore bounded by two premises rather than by the prefix rule
+alone: `Parameter` stays a leaf of the value inventory, and the chain root stays
+an identifier. A change to either reopens the channel.
+
+The row still names a path only when every contributing access agrees on it
+exactly, and agreement is now decided on whole paths rather than last segments —
+`props.source.slice()` and `props.other.slice()` no longer collapse into one
+agreed claim about `slice`. `contracts::project_reactive_reads` also stopped
+truncating with `path.last()` when reading an accepted contract back in, which
+would otherwise have round-tripped a correct path down to its last segment.
+
+Pinned by `fixtures/package-contracts/parameter-member-read-path`, and by unit
+tests in `indexes.rs` covering the full-path emission, the single-segment
+control, both unnameable-segment truncations, both sides of the 32-segment
+boundary, all three compound roots, a call at the root, and the two callee
+gates. Reverting the walk to last-segment rooting, dropping the identifier gate,
+or turning the depth limit back into a refusal each fails those tests.
+
+Remaining approximations, all deliberate and all fail-closed:
+
+- **Disagreeing accesses publish no path rather than their longest common
+  prefix.** `props.of.keys()` and `props.of.get(k)` in the same export agree on
+  `["of"]`, and an LCP would be a sound and stronger claim than the empty path
+  published today. It is left alone here because
+  `@solid-primitives/keyed@1.5.3`'s `MapEntries` read row is the pinned control
+  for the unnamed spelling; moving to an LCP is a separate precision slice.
+- **Optional links are invisible to the fact model.** `solid-facts` records no
+  optionality on `MemberFact`, so `props.of?.values()` is rooted identically to
+  `props.of.values()` and publishes `["of", "values"]`. The claim stays sound —
+  when the chain short-circuits the access never happens and the demand simply
+  goes unwitnessed — but the generator cannot currently distinguish the two. A
+  dedicated optionality fact is the follow-up.
+- **A multi-segment path is not resolved at consumer call sites.**
+  `interproc`'s per-call-site resolution of `parameter.member()` answers for one
+  property of the argument. A longer path needs the value at the intermediate
+  segment first, so it now records a `parameter-member-path-unresolved` dispatch
+  obligation and contributes no read, where it previously resolved the last
+  segment against the argument itself — a different property of a different
+  value.
+- **A truncated access weakens the whole row when it disagrees with a sibling.**
+  An export that both reads `options.good.slice(n)` and walks a chain past the
+  depth limit publishes two disagreeing paths, so the row names none — the
+  export's `["good", "slice"]` claim is lost to the truncation of the other
+  access. Keeping the deeper access as a row is still the right trade (dropping
+  it would negate it), but a longest-common-prefix rule would recover both; it
+  is the same follow-up as the disagreement item above.
+- **Producer and consumer peel different TypeScript sugar.**
+  `AstFacts::peel_ts_sugar_span` peels parentheses, `as`, `satisfies`, type
+  assertions and `!`, so the IR correctly roots `(options as Opts).source.slice(n)`
+  and `options!.source.slice(n)` at `options`. The Type Facts producer's
+  `parameterValueSourceLocked`
+  (`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`)
+  unwraps only `ParenthesizedExpression` and answers `nil` for the rest, so
+  those *correct* demands can never be witnessed and the row refuses. Pre-existing
+  and fail-closed, and it belongs beside the optional-chaining note above: both
+  are populations of structurally unwitnessable read demands, not wrong ones.
+  Closing it means teaching the producer the same peeling.
+
+
+## 2026-09-01 — A primitive callback slot no longer roots an ungrounded invoke claim
+
+`primitive_callback_execution` in
+`rust/crates/solid-reactive-ir/src/interproc.rs` answers *how* a callback at a
+primitive's argument would run relative to the exported call. The contract
+inventory in the same module read a row there as permission to publish an
+`invoke` operation rooted at whatever exported parameter was forwarded into that
+slot. The row says nothing about whether the slot holds a callback, and two
+shapes in the measured ecosystem published claims about values the shipped code
+never invokes:
+
+- `@solid-primitives/flux-store`'s
+  `createFluxStore(initialState, createMethods)` claimed
+  `callbacks: [{from: {arg: 0, path: []}}]`, `kind: invoke`, `tracking: tracked`,
+  `at: {schedule: queued}`. The body's only use of argument 0 is
+  `createStore(initialState)` (`0.1.1 dist/index.js:25-32`,
+  `1.0.0-next.2 dist/index.js:24-31`). Solid 1.x has no compute form for
+  `createStore` at all; Solid 2.0 has one, but only in the derived
+  `createStore(fn, initial, options?)` overload, whose plain twin declares its
+  first parameter `NoFn<T> | Store<NoFn<T>>`.
+- `@solidjs/meta@0.29.4`'s
+  `Stylesheet = props => createComponent(Link, mergeProps({rel}, props))`,
+  declared `Component<Omit<JSX.LinkHTMLAttributes<HTMLLinkElement>, "rel">>`,
+  claimed the same shape on its props parameter, from a `(MergeProps, _)` row
+  that matched every argument index. `@solidjs/router@1.0.0`'s `A` and `Route`
+  are the same shape.
+
+The certification census refused all four, correctly and permanently: `invoke`
+evidence for a value nothing invokes cannot exist, so no widening of the proof
+side could ever have discharged them. These rows leave the refusal set by
+**withdrawal**, not by discharge.
+
+`primitive_slot_roots_parameter_invoke` now requires three premises before the
+inventory constructs the claim. The value must not be *proven* non-callable
+(`Callability::Unknown` is the absence of an answer and withdraws nothing, so
+untyped JavaScript distributions are unaffected). A slot whose behavior is
+conditional on callability — `mergeProps`, and 2.0's `createSignal`,
+`createStore`, `createOptimistic`, `createOptimisticStore`, each of which has a
+plain form declared to exclude functions beside a derived form that takes a
+compute — additionally requires callability *proven*, because an unproven answer
+is the missing premise rather than a licence to assert. And the dialect must own
+the slot, which is what separates 1.x's `createStore(store?, options?)` and
+`createSignal(value, options?)` from their 2.0 namesakes.
+
+**There is deliberately no arity premise, and an earlier draft's was wrong.**
+It dropped the store pair's row at `argument_count < 2`, on the ground that 2.0's
+derived form requires the seed store at argument 1. The runtime does not
+dispatch on arity: `createStore(first, second, third)` returns the derived store
+whenever `typeof first === "function"` (`@solidjs/signals` `dist/dev.js:9371`;
+`solid-js@2.0.0-rc.3 dist/server.js:896` routes the same shape through
+`createProjection`, and `createOptimisticStore` at `:912` delegates to
+`createStore`). The premise's own justification — that `NoFn<T>` makes a
+one-argument callable `createStore` a type error, so no `tsc`-clean fixture could
+contain it — was also wrong: `NoFn` is the *client* entrypoint's. The published
+**server** entrypoint (`types/server/signals.d.ts:136-143`) declares the plain
+form `createStore<T extends object>(store: T | Store<T>, options?)` with no
+`NoFn`, and a function type satisfies `T extends object`, so
+`createStore(compute)` compiles clean there and really is derived. That case is
+now pinned end to end by
+`fixtures/package-contracts/callback-slot-derived-store-server`
+(`projectSeedless`), beside its `plainStore` negative at the same arity. The rule
+is callability and only callability.
+
+`createMemo`, `createProjection`, `createTrackedEffect` and `dynamic` take the
+compute at argument 0 in every overload, so they keep the weak premise and keep
+publishing on untyped artifacts. The row table itself is unchanged: it is also
+the reach of the wrapper-chain fold, where a *missing* row makes the chain refuse
+and the inner slot's own answer stand — a stronger claim, not a weaker one
+(`fixtures/package-contracts/callback-deferred-untracked-chain`'s
+`unestablishedScheduleShape` pins that, and deleting the `mergeProps` row
+regressed it from open to a false same-stack claim before the premises were moved
+to the inventory).
+
+Named negative cases, pinned by the dialect fixture pair
+`fixtures/package-contracts/callback-slot-props-forwarding` (1.x) and
+`callback-slot-derived-store` (2.0), plus
+`callback-slot-derived-store-server` for the server entrypoint: a props object at
+either `mergeProps` argument; `createStore(initial)` and
+`createStore(initial, options)` under 1.x even with a provably callable argument;
+`createSignal(fn)` under 1.x, which stores the function as the signal's value;
+`createStore(initial)` and `createStore(initial, {name})` under 2.0, at both the
+plain form's arity and the derived form's; `createOptimisticStore(initial)` and
+`createOptimistic(initial)` under 2.0; and `createSignal(initial)` under 2.0 with
+an object-typed argument. The positives that must survive: a `mergeProps` source
+proven callable through a read signature (`WithLazyExtras`) *and* one proven
+through the signature-less `Function` supertype
+(`WithOpaqueExtras`, `Callability::UntypedCallable`); 2.0's
+`createStore(compute, seed)`, `createStore(compute)` on the server typings,
+`createOptimisticStore(compute, seed)`, `createSignal(fn)` and
+`createOptimistic(fn)`; and `createMemo` in both dialects.
+
+### Remaining approximations
+
+- **`createFluxStore`'s real callbacks are still not inventoried.**
+  `createMethods.getters` and `createMethods.actions` are argument 1 behind a
+  property path, and the generator's `ContractCallback` carries a parameter index
+  with no path (`inferred_contract.rs` hard-codes `path: Vec::new()`). Withdrawing
+  the false row leaves the export's callback domain **open**, not closed-empty, so
+  nothing false is asserted in the other direction — but the export remains
+  uncertifiable rather than correctly described. Re-rooting needs the model to
+  grow a path, which is a separate change.
+- **An artifact with no types at all keeps nothing at a conditional slot.**
+  The conditional premise is a pure function of the compiler's callability
+  answer for the argument span, and a JavaScript distribution whose parameters
+  carry no inline annotation and no JSDoc answers nothing at all — a sibling
+  `index.d.ts` types the *declaration* file, not the runtime artifact's parameter
+  spans. Measured, at this branch's base, on a package whose `index.js` is
+  compiled from the same source as `callback-slot-derived-store-server`'s
+  `index.ts`: both the seedless and the seeded derived `createStore` lose their
+  row, and both come back the moment the same `index.js` carries
+  `@param {(store: Cart) => void}` (proven `Callable`) or `@param {Function}`
+  (proven `UntypedCallable`). So the withdrawal is exactly the
+  absent-proof case and is the fail-closed direction — but any package that
+  genuinely forwards a callback into `mergeProps` or 2.0's
+  `createSignal`/`createStore` family from an untyped distribution silently
+  loses a true claim, and nothing in the repository would notice. Closing it
+  needs a callability fact the runtime artifact's own shape can supply.
+- **The `MergeProps` row is not a dialect inconsistency**, contrary to an
+  earlier draft of this entry. `Solid1x::callback_execution_at` answers
+  `Some(Execution::Tracked)` for `MergeProps` at every
+  `argument < argument_count`, *ahead* of the `callback_executions` lookup,
+  because `mergeProps(...sources)` is variadic and the flat table cannot say so;
+  `merge_props_function_sources_are_variadic_tracked_computations`
+  (`rust/crates/solid-dialect/src/solid_1x.rs`) pins exactly that, and it makes
+  the `MergeProps => DuringCall` arm of `Solid1x::tracked_callback_timing`
+  reachable rather than dead. Solid 2.0 spells its own primitive
+  `Primitive::Merge` and carries no `MergeProps` row, so no 1.x row leaks across
+  the dialect seam. Nothing here is open; the note is retained because the
+  earlier claim sent the dialect owner after a non-problem.
+
+## 2026-09-01 — A `tracked` callback row takes its schedule from the dialect, not from the word
+
+`inferred_contract.rs`'s `callback_operation` mapped every `execution:
+"tracked"` row onto `(Schedule::Queued, Tracking::Tracked)`, hardcoded, with no
+consultation of `Dialect::tracked_callback_timing`. `tracked` is an
+*attribution* word — it says the runtime subscribes the callback's reads — and it
+carries no schedule column at all, deliberately: 1.x `createMemo` and
+`createRenderEffect` run their compute during the creating call while 1.x
+`createEffect` queues it, and 2.0 disagrees with 1.x on `createEffect`. Reading
+`queued` out of the word published a promise the runtime breaks before the
+export even returns. `Solid1x::tracked_callback_timing` states
+`CreateMemo | CreateRenderEffect | CreateComputed | CreateResource | MergeProps
+=> DuringCall`; `Solid2` states
+`CreateMemo | CreateSignal | CreateOptimistic | CreateProjection | CreateEffect |
+CreateRenderEffect => DuringCall` and `CreateTrackedEffect => AfterCall`.
+
+`ContractCallback` now carries a `schedule: Option<CallbackSchedule>` beside the
+word. `interproc.rs`'s `composed_tracked_schedule` derives it from the wrappers
+the callback actually sits under: a wrapper the dialect says merely queues wins
+outright, a chain whose tracked wrappers all run during their own call is
+`same-stack`, and a wrapper the dialect states no timing for leaves the schedule
+`Unestablished`. `Unestablished` emits the invoke operation with **no execution
+point at all** rather than a guessed one — the attribution claim is proven and
+survives on its own. `contracts.rs`'s `project_callbacks` carries an ingested
+contract row's own schedule through the same field, so re-emitting a row
+republishes what the contract said instead of the default.
+
+Rows this corrected, all measured at this branch's base:
+
+| row | was | is | dialect fact |
+| --- | --- | --- | --- |
+| `callback-slot-props-forwarding` `WithLazyExtras` / `WithOpaqueExtras` (1.x `mergeProps`) | `queued` | `same-stack` | `MergeProps => DuringCall` |
+| `callback-slot-props-forwarding` `derive` (1.x `createMemo`) | `queued` | `same-stack` | `CreateMemo => DuringCall` |
+| `callback-slot-derived-store` `derive` (2.0 `createMemo`) | `queued` | `same-stack` | `CreateMemo => DuringCall` |
+| `callback-slot-derived-store` `makeDerivedSignal` / `makeDerivedOptimistic` (2.0) | `queued` | `same-stack` | `CreateSignal`/`CreateOptimistic` `=> DuringCall` |
+| `callback-slot-derived-store` `projectStore` / `projectOptimisticStore` (2.0 store pair) | `queued` | *no execution point* | 2.0 states none for either store primitive |
+| `@solidjs/router@1.0.0` `createAsync` / `createAsyncStore` (ecosystem, not a repository snapshot) | `queued` | `same-stack` | the chain's tracked wrappers are all `DuringCall` |
+
+### Remaining approximations
+
+- **Two other producers of the word still leave the schedule unstated, and the
+  consumer's `queued` default stands for them.** Both are pre-existing and
+  neither is an inventory claim:
+  - the *direct-invocation* rung of `interprocedural_contributions` (the
+    `chain_execution` fallback around `interproc.rs:1211`), which is why
+    `fixtures/package-contracts/callback-deferred-untracked-chain`'s
+    `memoInsideUntrack` — `untrack(() => createMemo(() => handle()))`, a chain
+    whose only tracked wrapper is 1.x `createMemo`'s `DuringCall` — still
+    publishes `queued` where `same-stack` is the true answer. Its sibling
+    `trackedShape` (`createEffect`) publishes `queued` correctly, so the fixture
+    does not distinguish the two today;
+  - `contract_callback_execution`'s `ExecutionRole::TrackedJsx` arm
+    (`lib.rs`), a compiler-lowering role with no wrapper chain to compose.
+- **The `Unestablished` schedule is not yet represented in the certification
+  census.** An invoke operation with no execution point states less than one
+  with a schedule, which is the honest reading, but no proof family currently
+  demands or discharges the missing column.
+
+## Six ways the demand-honesty round proved less than it claimed (2026-09-01)
+
+An adversarial review of the round below found two facts that were *false*, one
+witness with no premise, one guard the verifier trusted instead of checking, one
+premise discharged by an unrelated fact, and one false positive. Every fix here
+makes a fact stricter; none teaches anything to agree.
+
+### Reachability after a construct ignored constructs nested inside it
+
+`constructCompletesNormally`
+(`apps/solid-typefacts/internal/typefacts/tsgo/invocation_transcripts.go`) read
+the loop-exit-edge question of the construct it was classifying and of no other
+node. A `while (true)` inside a `try`, a `for (;;)` inside a `for … of`, an
+endless loop in a `switch` clause: control entering any of them never reaches
+the bottom of the construct wrapping it, and the statement after that construct
+was nonetheless reported `reachable`. Reachability is a *proof of execution*
+downstream — `implementation_call_is_executed` gates callback-execution evidence
+on it — so this was a false certification, not a precision loss.
+
+The scan now asks a separate question of every nested loop / `try` / `switch`:
+`constructTraps`, "can control leave this at all". A construct control can never
+leave falsifies its container. A jump *out* of the nested construct is
+deliberately not a trap — the enclosing scan already classifies that jump, which
+is what keeps `outer: for (…) { while (true) { break outer } }` falling through.
+Recursion is memoized and depth-capped, and the cap answers "trapped", the
+conservative direction. Pinned by five shapes in
+`TestFallThroughConstructsKeepFollowingStatementsReachable`.
+
+### `while (1)` and `while (!0)` were credited with an exit edge
+
+`isTrueKeyword` matched `KindTrueKeyword` and nothing else, so every other
+spelling of an endless loop kept its fall-through edge and produced the same
+false `reachable`. `alwaysTruthyLiteralCondition` now decides literal
+conditions: `true`, a non-zero numeric literal, a non-empty string literal, and
+`!` applied to an always-falsy literal. It deliberately does **not** consult the
+type checker's truthiness of an arbitrary expression — `while (keys)` keeps its
+exit edge, which is the Unknown-preserving direction. The doc comment claimed to
+answer `false` while answering `true`; it now states the pinned behaviour,
+including that a label wrapping a construct *is* the construct.
+
+### A returned closure's *mentions* discharged a call it never contains
+
+`ReturnSite.captures` was the union of parameter indices the returned callables
+mention. The consumer used it as the premise "this callback may be invoked by
+the returned value" for any call marked `captured` — a flag that means only
+"inside *some* nested callable". Nothing linked the call's enclosing callable to
+any returned one, so a `callback()` in a closure the implementation never
+returns was discharged by a returned closure that merely *names* `callback`.
+
+The wire fact is now `carriedCallables`: the exact source ranges of the callables
+each return site provably carries, and the consumer joins by containment. A call
+inside a carried range is reached by invoking the returned value; a call outside
+every range is not, whatever anything mentions. Containment is transitive on
+purpose, because a returned debounced function schedules its callback from an
+arrow it hands to `setTimeout`. Pinned by
+`TestCarriedCallablesBindContainmentNotMention` (producer) and
+`implementation_flow_requires_direct_or_returned_closure_execution` (consumer).
+Protocol 7's schema digest moves with it.
+
+### A reassigned function declaration still resolved to its own body
+
+`collectReturnedCallablesThroughBindingLocked` accepted any callable declaration
+the symbol owned. A hoisted `function fn() { callback() }` binds a *mutable*
+variable, so `fn = () => {}; return fn` returned a closure the descent still
+described as calling `callback`. The descent now refuses when the declaring file
+writes to the binding anywhere, decided by the compiler's own
+`ast.GetAssignmentTarget` so a shadowing inner `fn` is not mistaken for a write
+to this one. Scanning the declaring file alone is exact for what matters: an
+imported binding is read-only and TypeScript refuses an assignment to one.
+
+### A root-path demand with no callability assertion discharged on nothing
+
+The tri-state's `Unknown` is the absence of a callability premise. At a
+*non-empty* path the sibling premises carry the demand — the path must be in the
+producer census, complete, present. At the **empty** path there is no census
+entry either, so `(root, Unknown)` reached `require_root_callability`'s
+unconditional first arm and recorded the positive fact as proved by nothing.
+
+The first repair was to refuse that combination outright, and it was wrong in
+the other direction: D1 makes *every* implementation-derived root shape
+(`Reactive`, `Tuple`, `Object`, …) demand `Unknown`, so an unconditional refusal
+makes those facts permanently unprovable. Measured on the ecosystem corpus that
+cost 25 certified rows — among them `@solid-primitives/scheduled`
+`createScheduled`, which clears every one of its callable-path demands and then
+died on the root shape.
+
+`require_verifiable_root_premise`
+(`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`)
+now supplies the missing premise instead of refusing: at `(root, Unknown)` the
+producer's *observation* of that value must be closed — no open reason in the
+value or any alternative, every finite partition complete, the primitive domain
+not the explicit `unknown` marker, and a callability actually answered. A
+producer that says "I did not finish looking at this value" still proves
+nothing and the fact stays open.
+
+That is sound rather than a weakening. The fact discharged is the IR's shape
+claim, and the demand asserts nothing about callability, so nothing is asserted
+onto the declaration — the keyed class of contradiction (an
+implementation-derived shape demanding non-callability of a declaration that
+says otherwise) cannot recur, because there is no assertion to disagree with.
+What the closed answer establishes is the one thing the root needs: that the
+producer exhaustively observed the value the fact is about. Non-root Unknown
+paths are untouched throughout.
+
+`require_recursive_subject` (the selected-call path) has the same shape and is
+deliberately not changed here: it verifies the operation binding and the formal
+parameter's existence before reaching the root arm, so it is not premise-free.
+It is the narrower version of the same question and is still worth closing.
+
+### The overload set's completeness was trusted, not verified
+
+`require_export_call_signatures` documented that "the producer reports an
+overload set all-or-nothing" and checked nothing. It now refuses a transcript
+that populates both `callSignature` and `callSignatures`, and requires the set's
+own ordinals to be exactly `0..len-1` with every signature agreeing that
+`overloadCount == len`. That is exact for the ambient overload sets package
+typings actually contain; an overloaded function *with an implementation body*
+reports `overloadCount == len + 1` and is refused as "not the complete declared
+set", which fails closed. The producer's own gate is now one testable function
+(`completeOverloadSet`) rather than loop control flow, so a `break` that becomes
+a `continue` can no longer widen the answer.
+
+### Remaining approximations from this slice
+
+- **The `ObjectConstructor` container arm of `isDefaultLibrarySymbolLocked` has
+  no reachable negative case.** Given the receiver check that precedes the only
+  call passing a container, `Object.assign` cannot resolve to a default-library
+  `assign` declared anywhere but `ObjectConstructor`, so no TypeScript source
+  distinguishes the arm from its removal. The "every declaration is a default
+  library" quantifier beside it *is* falsifiable and is pinned by a
+  `declare global { interface ObjectConstructor { assign… } }` augmentation.
+- **A call inside a never-invoked closure nested within a carried callable still
+  discharges.** Containment answers "reached by invoking the returned value" for
+  the callable itself and everything lexically inside it; an orphan arrow
+  declared but never called inside a returned closure is inside that range. This
+  is strictly narrower than the union it replaces and matches the premise the
+  round set out to bind, but it is not the exact "is invoked" relation.
+- **A construct is refused whenever a nested construct traps, without asking
+  whether that nested construct is on every path.** `switch (x) { case 0: while
+  (true) {} default: break }` does fall through on the `default` arm and is
+  answered `unknown`. Over-reporting a trap costs precision only.
+
+## Three certification demands stopped asserting things the IR cannot know (2026-09-01)
+
+A demand is a claim the analyzer asks the compiler to confirm. Thirty-two rows
+of the "Type Facts demand is locally open" refusal set were not missing producer
+facts: they were demands asserting something false, which no honest producer can
+ever confirm. All three fixes are on the demand side. Nothing was taught to
+agree.
+
+### A boolean callability forced every unclassified shape to claim non-callability
+
+`recursive_value_is_callable` in
+`rust/crates/solid-reactive-ir/src/contract_semantics/certification.rs` was
+`matches!(shape, Callable | Reactive)`. Because the demand field was a `bool`,
+every other `ValueShape` — `Parameter`, `Tuple`, `Object`, `Array`, `Store`,
+`Cleanup` — became the assertion `callable: false`, i.e. *this runtime value is
+provably non-callable*. The IR had made no such claim; the shape simply is not
+the `Callable` constructor.
+
+Measured contradictions:
+
+- `@solid-primitives/utils` `accessArray` demanded non-callability of
+  `Parameter { 0, path: ["map"] }`. That is `Array.prototype.map`. The compiler
+  answers `callable`, correctly, and the row refused with "operation value path
+  has the wrong callability".
+- `@solid-primitives/gestures` `getCenterOfTwoPoints`, the same shape on
+  `["getBoundingClientRect"]`.
+- `@solid-primitives/spring` `createDerivedSpring` demanded non-callability of a
+  return root the package's own `.d.ts` declares `Accessor<T>`.
+- `@solid-primitives/keyed` `Entries` is the mirror. The IR modelled its return
+  as `Reactive { accessor }` from the *implementation*'s `createMemo(...)`; the
+  *declaration* says `JSX.Element`, which is non-callable. Declaration and
+  implementation legitimately disagree, so a demand derived from one and
+  verified against the other is unprovable by construction.
+
+`DemandedCallability` (`Unknown` / `Callable` / `NonCallable`) replaces the
+boolean. Only three constructors assert, and they are exactly the three grounded
+in a *type-kind* observation rather than in implementation analysis:
+`Callable` and `Component` (a closed `ExportKindProof` call or construct
+signature — see `reconcile_entry_export_kind`, which refuses the export outright
+when no closed type answers) and `Plain` (that proof's closed negative). Every
+other constructor reaches the model through `return_shape`/`reads` in
+`rust/crates/solid-facts-backend/src/inferred_contract.rs`, from the
+implementation, and now asserts `Unknown`.
+
+`Unknown` is the *absence* of a premise, not a weaker one. Every other part of
+the same demand still verifies: the value path must still exist in the producer
+census, still be complete, closed and present, and the operation's flow evidence
+is unchanged. It also withdraws the `CallablePath` family for that subject,
+because a demand that does not claim callability has no callable path to prove.
+The consumers are `require_root_callability`, the new
+`require_path_callability`, the two branch gates in
+`require_operation_recursive_subject`, `require_export_recursive_subject` and
+`require_recursive_subject`, all in
+`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`.
+
+Pinned by `only_type_kind_shapes_assert_a_demanded_callability` and
+`an_unasserted_callability_demands_no_callable_path_family` (certification.rs)
+and `an_unasserted_callability_verifies_the_path_without_a_callability_premise`
+(type_facts.rs), which asserts both halves: the previously-contradictory demand
+now verifies, and an absent or locally open path still refuses.
+
+### Demanding "the" signature of an overload set asked for a nonexistent object
+
+`require_export_call_signature` refused with "exported callable has no unique
+compiler signature" whenever `GetSignaturesOfType` returned more than one.
+`@solid-primitives/cookies` `createServerCookie`, `@corvu/utils`'s default and
+`@solidjs/router`'s `action` are genuine two-overload exports; there is no
+single signature to name, and picking one would answer a different question than
+the one asked.
+
+The generalization is universal, not existential: **a premise that holds for
+every overload holds for the export**, whichever one a caller selects. So the
+producer now reports `callSignatures`, the complete set, when the type has more
+than one (`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`),
+and `require_export_call_signatures` returns all of them for the caller to
+require of each. The set is all-or-nothing at the producer: a signature whose
+current declaration cannot be selected empties the whole field, so "every
+overload" can never silently narrow to "every overload we could describe".
+
+This is a wire break — a protocol-6 client rejects unknown transcript fields —
+so `TypeFactsHandshakeProtocol` is 7 and the frozen schema digest moves with it.
+
+### A destructuring pattern was resolved as an alias of the value it destructures
+
+`direct_value_symbols` in `rust/crates/solid-reactive-ir/src/indexes.rs` ran the
+`initializer_identifier` rung — the one that makes `const alias = original`
+carry `original`'s identity — before looking at the binding's shape. For
+`const { href } = props`, that answered **`props`** for a call written
+`href(...)`. The callback derivation then found `props` in the parameter list and
+published a `callbacks` row saying parameter 0 is invoked: the props object
+itself, called as a function. `@solidjs/router`'s `Navigate` published exactly
+that, and certification refused it correctly — the call is on a member, and no
+compiler fact can confirm a props object is invoked.
+
+The rung is now gated on `BindingShape::Identifier`. The object-slot branch below
+it still resolves a destructured property on its own evidence; a slot with no
+inspectable value keeps the binding's own symbol, so the false row is not
+published at all. Pinned by the `destructured-parameter-callback` generator
+fixture (`Parameter` positive, `ObjectPattern`/`ArrayPattern` silent,
+`MemberAlias` control).
+
+### Remaining approximations from this slice
+
+- **A member-bound callback cannot be expressed.** The honest positive claim for
+  `const { onData } = props; onData(1)` is a callback at `arg: 0, path:
+  ["onData"]`. `ContractCallback` (`rust/crates/solid-reactive-ir/src/lib.rs`)
+  carries only a parameter index, so the semantic model has no member path for a
+  callback binding. The generator publishes silence — the `callbacks` domain
+  stays open and a consumer fails closed — rather than a false row. Extending
+  `ContractCallback` with a member path, and populating it from the object-slot
+  evidence, would recover the claim.
+- **`@solidjs/meta` `Stylesheet` is a different defect, not this one.** It still
+  refuses with "callback parameter has neither an exact direct call nor an exact
+  dialect callback flow" for the same `arg: 0, path: []` shape, but its source is
+  `props => <Link rel="stylesheet" {...props}/>` — no destructuring, and nothing
+  invokes `props`. The claim reaches `Stylesheet` through a JSX spread into
+  `Link`, whose own behaviour is `MetaTag`'s `get name()` getter read inside a
+  `createRenderEffect`. Reading a getter is not invoking the object. Not
+  diagnosed further here.
+- **`@solid-primitives/spring` `createDerivedSpring` is now honestly open one
+  level down.** With the root's false non-callability withdrawn, the demand for
+  the tuple item the IR claims (`[Tuple(0)]`) refuses because the declared result
+  `Accessor<WidenSpringTarget<T>>` has no tuple index. The IR modelled
+  `return springValue` (from `const [springValue] = createSpring(...)`) as the
+  whole `createSpring` tuple. That is a shape defect, not a callability one, and
+  it is unfixed.
+- **`namePlugin`, `FaviconLink`, `SignalContextProvider`** still refuse on export
+  *root* callability. Those demands are the grounded ones (`Plain`, `Component`),
+  so the tri-state deliberately leaves them asserting; the divergence is between
+  the closed `ExportKindProof` the proposal was built from and the export-value
+  transcript's own `callability`, which is a producer/adapter question.
+
+## The certify child's TypeScript-program retention, and the width it was costing (2026-09-01)
+
+Not a precision movement: **no verdict, claim, digest, receipt, or report
+semantic changes**, and this is recorded here only because it moved the resource
+policy the previous entry installed. Six probes were measured end to end before
+and after; every field of every probe result is equivalent (see below).
+
+**What was retained.** `moduleDescription` in
+`packages/cli/scripts/artifact-resolution.mjs` cached each module's description
+with the `SourceFile` *and the `TypeChecker`* that produced it. The checker
+retains its whole `ts.Program`, and `parseModule` builds a fresh standalone
+program for every module needing symbol identity, so one
+`ArtifactResolutionSession`'s description cache held one live program per such
+module for the session's lifetime. A published dependency graph's preparation
+walks dozens of packages under one session.
+
+Phase-delta instrumentation on `corvu@0.7.2` (42 graph nodes), sampling
+`process.memoryUsage()` at every stage boundary:
+
+| phase | RSS | heapUsed |
+| --- | --- | --- |
+| artifact acquisition ends | 86 MB | 8 MB |
+| **graph preparation ends** | **3179 MB** | **1997 MB** |
+| graph acquisition ends | 3188 MB | 2192 MB |
+| 42 in-process proposal generations end | 3446 MB | 2722 MB |
+| witness acquisition ends | 3450 MB | 27 MB |
+
+The entire cost is one phase, and it tracks the program count exactly: RSS rose
+with `parseModule` calls at roughly 70 MB each. The proposal generations that
+were the intuitive suspect add 258 MB across all 42. The heap collapses to
+27 MB once preparation's caches are dropped, which is what says *retention*
+rather than working set.
+
+**Two repairs, both in `artifact-resolution.mjs`:**
+
+1. `moduleDescription` extracts the syntax hazard census while the program is
+   live and retains only that plain-data result; `closureForRoots` reads the
+   cached rows (copying each, because `canonicalClosure` sorts in place) instead
+   of recomputing from a retained AST. The census is a pure function of
+   (relative path, file text), and the relative path is determined by the cache
+   key, which already keys the specifier targets computed from the same package
+   root. Alone this took `corvu` from 3622 MB to 1055 MB.
+2. `PROGRAM_OPTIONS` gains `noLib`. These programs answer one question, in
+   `syntaxHazards` and nowhere else: does this identifier's symbol have a
+   declaration in *this same source file*? With `noResolve` already excluding
+   every imported module, the default library is the only other declaration
+   source a program has -- and a `lib.*.d.ts` declaration is never a declaration
+   in an analyzed package file, so "resolves elsewhere" and "resolves to
+   nothing" both read as *not locally bound*. Checked as well as argued: across
+   6740 real installed package files (2507 needing a checker) the census is
+   byte-identical with and without the library set. The library set is 86 source
+   files re-parsed and re-bound per program, measured at ~63 MB resident each.
+
+**Measured, per probe, whole process tree, `ps` sampled at 2 Hz.** The
+watchdog was raised to 32 GiB for the measurement so the pre-repair peaks could
+be observed rather than truncated at the kill.
+
+| probe | before | after | verdict before/after |
+| --- | --- | --- | --- |
+| `@solidjs/start@2.0.3` | 30539 MB | 731 MB | certified / certified |
+| `@solid-devtools/transform@0.10.4` | 25126 MB | 762 MB | certified / certified |
+| `@kobalte/core@2.0.0-alpha.0` | 10385 MB | 644 MB | refused / refused |
+| `@tanstack/solid-db@0.2.40` | 5994 MB | 589 MB | refused / refused |
+| `corvu@0.7.2` | 3754 MB | 705 MB | certified / certified |
+| `@solidjs/web@2.0.0-rc.3` | 3666 MB | 496 MB | refused / refused |
+
+Five of these six are among the 38 probes the previous entry's 4 GiB ceiling
+killed outright; all six now complete under the unchanged ceiling and produce a
+real verdict.
+
+**Equivalence.** Each probe's whole result document was diffed field by field,
+ignoring only wall-clock timings, absolute temporary paths, and the identity
+digests that hash those paths -- the dependency plan's node/leaf/cycle ids, its
+`graphDigest`, and the published-graph digest quoted in a refusal reason. Those
+are run-specific by construction: the harness installs each probe into a fresh
+`mkdtemp` directory whose absolute path is hashed into `identity.runtime.path`.
+The ignore set was validated by running the *same* code twice and confirming the
+two runs differ in exactly those places and nowhere else. Under it, all six
+probes are equivalent, contract content digests included.
+
+**Width restored.** `CERTIFICATION_MEMORY_SHARE_BYTES` in
+`scripts/ecosystem-benchmark/run.mjs` moves from 8 GiB to 2 GiB -- ~2.7x the
+measured worst peak of 762 MB -- so a 48 GB host runs the full cores-bounded
+width of 14 again instead of 6, while a 4 GB machine still floors at two slots.
+The 4 GiB probe ceiling is deliberately **unchanged**: at ~5x the measured worst
+peak it is a guard against pathology, and lowering it toward the measured peak
+would start deciding rows. The certification row now carries a `memoryExceeded`
+flag so a watchdog kill is machine-queryable rather than only prose in `reason`.
+
+**What remains, honestly.** The peaks above are still hundreds of megabytes, and
+that is mostly JavaScriptCore's allocator high-water rather than live data:
+forcing a full GC at the phase boundary drops `corvu`'s live heap to 26 MB while
+RSS stays at 490 MB. Reducing it further means creating fewer transient
+programs, not releasing more references. Also unchanged, and still open from the
+previous entry: `acquirePublishedArtifact` buffers each archive and packument
+whole in memory with no per-dependency cap.
+
+## Certification witness programs now carry their authenticated dependency typings (2026-08-31)
+
+Ordinary root certification built its witness program from the target package's
+snapshot alone. Every cross-package type reference in that package's own
+declarations -- `Accessor` and `JSX` from `solid-js`, `Component`, `Context`, a
+cross-package base class -- therefore resolved to `any`, and the producer's
+`callabilityOfType` correctly fail-closed to Unknown on `any`. Contract
+*generation* resolves those same names against the installed tree and records
+definite facts, so the two halves disagreed and 75 ecosystem rows refused
+`export root is not compiler-proved callable or constructable` at live
+export-value verification.
+
+The fix supplies evidence; it relaxes no determination. `callabilityOfType` and
+`require_root_callability` are untouched. Ordinary root certification now names
+its declaration-only closure through the *same* authenticated channel a
+published graph node already uses -- integrity-verified published archives
+replayed against exact Bun lock selections -- and Rust materializes those
+snapshots into the private project so `moduleResolution: "bundler"` resolves
+them. No installed `node_modules` byte is ever read as evidence, and the tsconfig
+the witness program uses is unchanged.
+
+### Drops are name-scoped, because a per-copy drop is substitution
+
+The first version of this change dropped individual copies and claimed that
+removing evidence is always the fail-closed direction. **That claim is false**,
+and adversarial review caught it. `moduleResolution: "bundler"` walks up
+`node_modules`, so withholding a *nested* copy while a *hoisted* copy of the same
+name survives does not make the module unresolvable -- it hands the lookup to a
+different version, whose bytes the source census accepts because they are
+authentic under their own marker. The determination then comes from
+authentic-but-wrong-version declarations. Measured against the published
+typings, with `foo`'s `.d.ts` importing `Callback` from `bar`:
+
+| private project | `IsCallable<typeof value>` | verdict |
+| --- | --- | --- |
+| nested `bar@2` (non-callable) shadows hoisted `bar@1` -- the install truth | `false` | non-callable |
+| nested copy dropped, hoisted `bar@1` kept | **`true`** | **flipped** |
+| whole `bar` name withheld | `TS2307 Cannot find module 'bar'` | `any`, demand open |
+
+So both halves withhold whole package names, all-or-nothing:
+
+- The CLI records every package name it could not name or acquire and excludes
+  every copy of that name, globally across certification inputs (the private
+  project is materialized once from their union). An unnameable grandchild
+  poisons its own name only; the rest of the collected subtree still travels.
+- Rust's `retain_authenticated_source_packages` partitions by package name and
+  withholds the whole group if any member fails authentication, poisoning both
+  the name the lock selection claims and the name the installed root occupies.
+- A name whose authenticated copies cannot occupy distinct places in the private
+  project is withheld too, rather than colliding on `write_immutable_project_file`
+  -- which would be an `AlreadyExists` source-census failure, a hard failure class
+  this path must not have.
+
+Only then is a drop really "the module cannot be resolved". Published-graph
+nodes keep the old fatal behavior throughout, because a node's canonical
+identity binds its `source_dependencies_root`.
+
+Everything else about an absence stays a non-event: a missing lockfile, a copy
+the lock does not select exactly, an uninstalled package, unresolvable
+declarations, an oversized registry document, an unreachable archive -- each
+withholds a name and leaves the demand open, and none of them aborts a
+certification. The source census is unchanged, so a producer-consulted file
+outside an authenticated snapshot is still refused outright.
+
+### The closure a receipt was proved against is now named by the receipt
+
+The verdict depends on which declaration-only closure was materialized, so a
+receipt has to say which one that was; otherwise an auditor cannot tell a
+full-closure certification from a partial-closure one. `certification_sources_root`
+composes the sorted canonical source identities -- mirroring the graph's
+`source_dependencies_root` -- and every Type Facts witness binding folds it in.
+An empty closure has its own well-defined root, so "nothing was supplied" is a
+statement the receipt makes rather than an absence, and a withheld source is
+indistinguishable from one never supplied.
+
+Census site paths are now **project-relative** before hashing, for all three
+site kinds (`typefacts-verifier-source`, `typefacts-source`,
+`typefacts-source-snapshot`). They previously carried the producer-reported
+absolute path inside a temporary directory keyed on pid and a counter, which
+made every evidence root -- and every receipt witness root -- unique per run and
+incomparable across certifications of the same bytes. The project-relative path
+plus the content digest is what the site actually asserts. This is a deliberate
+receipt movement: it affects the existing package-own and verifier-source sites,
+not only the ones this change added.
+
+Remaining fail-closed cases this does **not** close:
+
+- **The TypeScript DOM library is not a package.** Solid 1.x types
+  `JSX.Element` as `Node | ...`, and `Node` is a `lib.dom.d.ts` type. The witness
+  program's tsconfig is deliberately unchanged, so `Node` remains an error type
+  and any Solid 1.x export whose proof needs `JSX.Element` still fails closed --
+  `@solid-primitives/keyed`'s `Entries` is the observed case.
+- Packages whose type-providing dependency is outside the authenticated set for
+  any of the reasons listed above.
+
+Named follow-up, not fixed here: acquisition buffers each archive and packument
+whole in memory, with no per-dependency cap. That is the pre-existing
+`acquirePublishedArtifact` pattern, but the root path now runs it once per
+declaration-only dependency instead of once per row, so the peak is multiplied
+by closure size.
+
+Pinned by, in `rust/crates/solid-facts-backend/src/contract_certification.rs`
+unless noted:
+
+- `root_certification_proves_a_cross_package_type_only_from_authenticated_sources`
+  -- the same plan, claim, and demand graph refuses with no sources and
+  certifies with the authenticated snapshot.
+- `root_certification_withholds_every_copy_of_a_name_one_copy_could_not_authenticate`
+  -- the substitution shape above. Deleting the name-scoping makes it certify
+  from the surviving hoisted copy.
+- `root_certification_drops_a_source_whose_lock_selection_claims_other_bytes`
+  -- deleting the source authentication makes it certify.
+- `root_certification_drops_a_source_installed_outside_an_exact_node_modules_coordinate`
+  and `root_certification_withholds_a_name_whose_copies_collide_in_the_private_project`.
+- `certification_sources_root_names_the_exact_closure_a_receipt_was_proved_against`
+  -- a full closure differs from an empty one, a withheld source equals an
+  absent one, and neither moves the demand graph.
+- `graph_nodes_still_refuse_a_source_they_cannot_authenticate` -- the graph path
+  keeps refusing on bad root, lock disagreement, and duplicate.
+- `certification_source_request_tests` in `main.rs` -- a graph node refuses a
+  planning that carries its own nested source set.
+- In `packages/cli/test/contract-workflow.test.mjs`:
+  `a package name one entrypoint could not authenticate is withheld from every
+  entrypoint` pins the CLI half of the same rule, including that one unnameable
+  grandchild does not discard its whole collected subtree.
+
+This adds no finding and reports nothing, so it cannot duplicate a `tsc`
+diagnostic; it only lets the checker see the types `tsc` would have seen.
+
+## Two authenticated-demand regressions from the non-export proof policy (2026-08-31)
+
+Landing "Authenticate non-export Type Facts demands" (`0fcaf82e`) introduced two
+certification-time regressions that no `make verify` gate exercised (the
+ecosystem certification runs only in the lead-owned benchmark). Both are now
+fixed and pinned by regression tests that run inside `make verify`.
+
+- **Value-only case sets refused as "multiple installation identities."**
+  `export_implementation_location`
+  (`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`)
+  filtered every plan in the batch/graph by the runtime binding's
+  `snapshot_root` and refused the moment more than one matched. But a value-only
+  case set carries one plan per alternative artifact case of a single package,
+  and the batch identity check requires all of them to share one `snapshot_root`
+  -- so any package with two or more alternative cases always refused. Because
+  `snapshot_root` is a content hash, every matching plan materializes
+  byte-identical sources; the resolver now binds the first materialized owner
+  (still failing closed when none is materialized). This restored certification
+  for the corvu / corvu-next / `@solid-devtools/logger` clusters and every
+  multi-case `@solid-primitives` package. Pinned by
+  `implementation_location_binds_first_owner_for_shared_snapshot_root`.
+
+- **Producer nil dereference in the returned-closure census.** The producer's
+  new returned-closure resolution
+  (`apps/solid-typefacts/internal/typefacts/tsgo/invocation_transcripts.go`)
+  left the resolved closure node nil when a returned identifier's symbol had no
+  value declaration and not exactly one declaration (e.g. a namespace import),
+  then called `isCallableDeclaration(nil)` -> `ast.IsArrowFunction(nil)`, which
+  panicked and took down the whole certification session (crashing
+  `@solid-primitives/media`, `page-visibility`, and any package with that
+  returned shape). A nil closure is a missing-evidence frontier: it now yields
+  no proven captures (a fail-closed open premise) instead of crashing. Pinned by
+  `TestExportImplementationTranscriptKeepsReturnedNilClosureOpen`.
+
+Neither fix loosens subject binding or produces a finding, so neither duplicates
+a `tsc` diagnostic: the first only removes a spurious multiplicity refusal
+between byte-identical owners, and the second only replaces a crash with the
+existing open-premise path.
+
+## Symbol-less callback obligations no longer contaminate value siblings (2026-08-31)
+
+"Normalize callback obligations by exact symbol" (`696834fc`) made
+`contract_generation_obligation_target_names` select an obligation's target by
+its exact owning-function symbol, but kept a `function_identity` fallback for
+obligations whose owner is anonymous and so carries an empty symbol. When a
+package republishes bindings through `export *`, one runtime identity is shared
+across every republished binding, so a symbol-less callback obligation raised by
+an anonymous forwarder in the same module could match a value sibling by
+identity alone and open a callbacks domain the operation-graph invariant then
+refuses.
+
+The fallback now excludes value-kind exports. A callback obligation proves a
+callback is forwarded, so its invocation subject is callable by construction;
+without symbol provenance an identity-only match is not proof that any value
+sibling is that subject, so it must never reach one. The exact-symbol path is
+untouched, so the geolocation true positive (obligation symbol equal to its own
+value-export symbol) stays marked and refused. This closes a latent
+contamination path, pinned by a unit regression test (the shared identity only
+arises from a real cross-package `export *` composition) and by the
+`reexport-value-sibling-callback` fixture for the companion exact-symbol path.
+
+## A non-callable value export's open call-path no longer manufactures function effects on composition (2026-08-31)
+
+The five `@tanstack/solid-*` wrapper rows (`.:IR`, `.:initialServerFormState`,
+`.:ALL_KEYS`, `.:dataTagErrorSymbol`, `.:PERSISTER_KEY_PREFIX`) refused with
+`normalized operation graph is invalid: package contract value export … cannot
+have function effects` when the wrapper's contract was generated with its
+dependency composed. An earlier note hypothesised this was a symbol-resolution
+defect in `contract_generation_obligation_target_names` ("mechanism (b)": the
+callback obligation's `function_symbol` resolving to the value export through
+re-export aliasing). Instrumenting the real composed refusal for
+`@tanstack/solid-db@0.2.40 -> .:IR` disproved that: **no** callback obligation
+reaches the value export through that function. The refusing `IR` summary is
+`kind: "value"` with `open_claims: {Callbacks, Reads, Creates, Returns}` and
+every corresponding claim `Open`, and it is built by
+`project_accepted_export` (`rust/crates/solid-reactive-ir/src/contracts.rs`),
+not by obligation attribution.
+
+The mechanism is composition, not attribution. `IR` is
+`import * as ir from "./query/ir.js"; export { ir as IR }` — a non-callable
+namespace value. Its call-path effects are vacuous (a value is never invoked),
+and standalone generation of `@tanstack/db@0.8.5` correctly certifies `IR` as a
+plain value with an empty summary. But a *proposal* dependency keeps that
+export's call-path domains **open** (unresolved — forwarders inside `ir.js`
+reachable only via the namespace). When the wrapper's generation composes that
+proposal, `project_accepted_export` opened the callbacks/reads/returns/creates
+domains from the export's non-closed knowledge *regardless of callability*,
+manufacturing function effects on a value export — the exact inconsistency the
+operation-graph invariant then refuses.
+
+`project_accepted_export` now closes those vacuous domains for a non-callable
+(`kind == "value"`) export: an *open* call-path domain projects as
+closed-empty instead of open, matching standalone generation. Only open domains
+are closed; a genuinely *known* effect is left intact, so a real
+value-with-effects defect still refuses, and certified value exports (already
+closed-empty) are unchanged. The geolocation true positive is untouched: it is
+a generation-time `reconcile_entry_export_kind` conflict on a genuinely callable
+runtime whose declaration is a value, in a different code path, still pinned by
+`an_exact_invocation_symbol_preserves_a_real_export_kind_conflict`.
+
+The closing is gated by `shape_may_be_callable` (added after adversarial review
+caught a false certification): only a *proven* non-callable shape has its open
+domains closed. A `ValueShape::Unknown` (an `any`/error shape, reachable through
+the untrusted wire-decode seam) or a `Choice` union whose membership is not
+exhaustively non-callable stays open and continues to fail closed — closing them
+would assert "invokes no callback" about something that may be callable, from
+missing knowledge. Pinned by `shape_may_be_callable_keeps_unproven_callability_open`.
+
+Residual, measured: clearing this false refusal moves all five wrapper rows off
+the function-effects error, but four of them then refuse at the deeper
+`export root is not compiler-proved callable or constructable` Type Facts stage
+(the largest remaining ecosystem refusal class), so the net certified movement is
+small. That callability class is a separate, open producer-evidence question.
+
+Pinned by
+`contract_document::tests::composing_a_value_export_with_open_call_path_never_manufactures_function_effects`,
+which drives the `MINIMAL` golden's open-call-path value export through
+`project_untrusted_proposal_for_generation` -> `AcceptedContractIndex` ->
+`project_accepted_export` and reproduces the exact `{Callbacks, Reads, Creates,
+Returns}` shape before the fix. It cannot be a self-contained package-contract
+corpus fixture: the corpus runs single-package `generate` with no composed
+dependency, and the open call-path on a value export only arises from composing
+a proposal dependency.
+
+## Dependency graph edges match a re-export from any module of the parent package (2026-08-31)
+
+The native published-graph matcher assumed a package's external re-export lived
+in its *entry* module: both `graph_request_edges` and the authoritative
+planned-node matcher required the dependency edge's importer to equal the
+parent's entry runtime path. But Node resolution is per-importing-module, and the
+JS node builder correctly records the importer as the *source module* that issued
+the import. They agree only when the re-export sits in the entry module, so
+`@solid-primitives/form@1.0.0-next.2` (re-exports `@solid-primitives/a11y` from
+`dist/form-control.js`) and `@tanstack/ai-solid@0.19.1` (via `@tanstack/ai`'s
+`dist/esm/types.js`) refused with `has no exact dependency node`.
+
+The request-ordering matcher now accepts an importer under the parent's
+`package_root` (component-wise containment; a name-prefix sibling like `foo-bar`
+vs `foo` does not match). The authoritative matcher is *tightened*, not relaxed:
+it admits the importer only if it equals `<package_root>/<entry.path>` for a
+Runtime- or Declaration-role entry of the parent's **verified** (replayed,
+digest-pinned) closure, so every admitted importer is a proven byte-identity
+module of the closure. The identity/artifact-case/semantic-digest checks and the
+ambiguity/reachability censuses remain the fail-closed backstop, and the
+transplanted-leaf regression (importer outside the package root) stays rejected.
+Pinned by `native_published_graph_matches_a_non_entry_module_reexport`.
+
+The constants are plain values (`Symbol()`, `Set`, string, object, namespace
+object) `tsc` says nothing about, so certifying them duplicates no diagnostic.
+Verified offline for `.:IR` (@tanstack/solid-db) and `.:ALL_KEYS`
+(@tanstack/solid-hotkeys): both now pass the demand-planning stage where the
+function-effects refusal lived. **Remaining, separate from this fix:** past that
+stage the witness-acquisition / live Type Facts export-value verification raises
+its own refusals (for `IR`, the resolved value declaration `query/ir` is not the
+snapshot-selected `index.d.ts` suffix; for `@tanstack/hotkeys`'s
+`createSequenceMatcher`, "operation value path has the wrong callability"). Those
+are a distinct certification stage and are not addressed here; whether each of
+the five rows fully certifies is the authoritative ecosystem re-measure's call.
+
+## Two refusal classes became a recorded inapplicable disposition (2026-08-31)
+
+The ecosystem benchmark counted every omitted artifact case as a refusal. Two
+classes inside that count assert nothing about certifiable behavior, and
+carrying them as refusals made a row look unproven where nothing was ever
+provable.
+
+An artifact case is now recorded as **inapplicable** -- with a class and a
+reason, never certified, never counted as a refusal, never suppressing a sibling
+case or the proposal -- in exactly two situations, decided from the export-map
+selection alone before any analysis (`artifactCaseDisposition` in
+`packages/cli/scripts/generate-package-contract.mjs`):
+
+- **`unpublished-conditional-target`** -- the runtime target is absent from the
+  artifact *and* the selection traversed at least one **private namespaced**
+  export condition (a name containing `/` or starting with `@`).
+  `@solid-devtools/debugger@0.28.1` is the shape: `"@solid-devtools/source":
+  "./src/index.ts"` beside `"files": ["dist"]`, so the source tree is omitted
+  from the tarball on purpose. The artifact itself proves the target
+  unpublished, and namespacing is the published convention for a condition one
+  tool opts into by name, so no consumer reaches it without naming it.
+- **`non-module-target`** -- the selected runtime target's filename is one of an
+  exact positive list of non-executable resources (`.map`, `.json`, `.css`,
+  images, fonts, `.txt`/`.md`/`.html`). `@kobalte/solidbase`'s
+  `"./default-theme/*"` enumerates sourcemaps, JSON, and CSS beside real
+  modules; an entrypoint over one of those has no ESM runtime surface.
+
+Boundaries that deliberately keep full refusal semantics: a missing target
+reached through standard conditions only stays a refusal, because real
+consumers do fail there and that is a defective publish; a missing target behind
+a **bare-name** custom condition stays a refusal for the same reason, because
+the ecosystem that owns the name activates it unconditionally (`bun`,
+`workerd`, `edge-light`, `react-native`, `electron`, `svelte`, and `solid`
+itself, which vite-plugin-solid and solid-start switch on for every Solid
+consumer); the `.` entrypoint under the empty/default partition can only ever
+reach standard conditions, so its refusal always stands; and `blocked`,
+`conditions-unmatched`, `not-exported`, invalid target syntax, and traversal are
+properties of the package and are untouched.
+
+Both questions are decided against one shared vocabulary in
+`packages/cli/scripts/artifact-resolution.mjs`. `isCustomCondition` answers
+"this resolver does not define the name", reading
+`RESOLVER_STANDARD_CONDITIONS`, `MUTUALLY_EXCLUSIVE_CONDITION_AXES`, and
+`ECOSYSTEM_DEFAULT_CONDITIONS` (`solid`); `isPrivateNamespacedCondition` narrows
+that to the namespaced names the disposition rule acts on. `solid` is
+deliberately *not* in `RESOLVER_STANDARD_CONDITIONS`: that list is the
+census-exclusion list of names active without a consumer naming them, and the
+resolver does not activate `solid` implicitly (Rust's replay does not either,
+and the two must select the same target), so the census still enumerates it as
+an axis and really exercises the branch --
+`fixtures/package-contracts/conditional-targets` pins the resulting refusal.
+
+Non-module extensions are a **positive** list, not the complement of the
+resolver's `RUNTIME_EXTENSIONS`. The complement swallowed `.node` and `.wasm`
+and every unknown suffix, and an entrypoint of that kind is emphatically not
+"nothing to assert" -- the closure already names those two as
+native-code/opaque-wasm hazards -- so everything outside the positive list keeps
+certify-or-refuse. A `.d.ts` runtime target still ends in a module extension and
+keeps whatever disposition it has today; a target with no extension is not
+answered by the rule at all.
+
+The rule is about *entrypoints only*. An asset that an analyzed module imports
+is still an ordinary closure member with the role the closure gives it; the
+`asset-import` and `asset-query-import` fixtures pin that path unchanged.
+
+Representation: the proposal refusal sidecar
+(`solid-checker-contract-proposal-refusals`, `refusalVersion` 1) gained an
+additive sibling array `inapplicable`, whose rows carry `entrypoint`,
+`conditions`, `stage`, `class`, and `reason`. No version bump: every consumer
+validates `format`, `refusalVersion`, and `Array.isArray(refusals)`, and every
+one of them counts `refusals.length` as the refusal total, so a separate array
+makes "never counted as a refusal" true by construction. A `disposition` field
+*inside* `refusals` would have needed each counter edited and would have kept
+the pollution wherever one was missed.
+
+There is no Rust twin to add. Rust never enumerates the manifest census: it
+replays the resolution of the cases a proposal *contains*
+(`resolve_snapshot_export`), and the case-set completeness check in
+`rust/crates/solid-facts-backend/src/main.rs` compares planning against the
+proposal document's own cases. An inapplicable case is omitted from the
+proposal exactly as a refused case already is, so both sides stay in agreement
+without a new surface.
+
+Regression pins: `fixtures/package-contracts/unpublished-conditional-target`
+(namespaced-condition case inapplicable, sibling entrypoints certify, and a
+`browser` arm whose missing target still refuses),
+`fixtures/package-contracts/conditional-targets` (a missing target behind the
+bare-name `solid` condition refuses, while the shipped `development`/`default`
+branches still certify) and
+`fixtures/package-contracts/wildcard-asset-entrypoints` (module entrypoint
+certifies, `.map`/`.json`/`.css` entrypoints inapplicable, zero refusals). The
+`.` default-partition boundary is pinned by the generator unit test *a fully
+refused proposal writes every artifact-case refusal before throwing*, which now
+also asserts an empty `inapplicable` census.
+
+Remaining approximation: the classification is filename- and
+existence-based, not a proof that the target has no ESM surface. A `.js` file
+that is in fact a CJS bundle, or a `.ts` target that ships but cannot be parsed,
+is untouched by this change and keeps its current refusal. The 1,280 `.ts`
+"resolved target is not a file" cases are reduced only where a *namespaced*
+condition selected them; a `.ts` target missing behind standard or bare-name
+conditions is still a refusal. Namespacing is likewise a convention, not a
+proof: a package that ships a private branch under a bare name, or a public one
+under a namespaced name, is classified by the convention rather than by
+evidence, and only the artifact's own absent target keeps that fail-closed.
+
+Benchmark classification, same date: `export-kind-conflict` was promoted above
+`unresolved-parameter-behavior` in `MARKERS` so a full-generation refusal
+carrying earlier `UnknownCallbackExecution` attribution records cannot be
+relabelled by diagnostic line order. That rank is deliberate and was chosen from
+the one real sample (the `createGeolocation` geolocation refusal); the risk it
+carries is that any future message embedding the exact phrase "package contract
+value export ... cannot have function effects" inside a differently-caused
+refusal would now be claimed by this class first. No such shape is known.
+
+## Callback obligations do not create value-export function domains (2026-08-31)
+
+Contract-generation `UnknownCallbackExecution` obligations previously carried
+only a function's runtime identity. A re-exported module namespace can share
+that identity with several exported bindings, so direct attribution set
+`callbacks` to OPEN on value siblings that never had an invocation subject.
+Those constants were then correctly refused by the invariant that a closed
+value export cannot carry function effects.
+
+The IR obligation now also carries the exact compiler symbol of its owning
+function. Joined entrypoints select exports by that canonical symbol first and
+never fall back to broader runtime identity when symbol provenance exists. The
+negative regressions keep value siblings closed and forbid fallback after an
+unmatched exact symbol. The real geolocation conflict remains symbol-matched,
+so the pinned downstream refusal is unchanged.
+
+## Package imports maps fail closed until Rust replays them (2026-08-31)
+
+The generator's proposal closure followed a matched `#specifier` into the
+package's own imports map and pulled the resolved module into the closure
+(`closureForRoots` in `packages/cli/scripts/artifact-resolution.mjs`, via
+`packageImportTargetOrUnknown`). The certifier has no imports-map support at
+all: `SnapshotPackageManifest` carries no `imports` field, and `resolve_local`
+in `rust/crates/solid-facts-backend/src/contract_certification/module_closure.rs`
+treats every `#specifier` as External. The two therefore build different
+closures for the same artifact, and the proposal could only ever be rejected on
+replay with a closure mismatch -- a refusal reported at certification time, with
+no reason naming the actual cause.
+
+A matched `#specifier` resolving to a local module is now an explicit
+artifact-case refusal at generation time, code `package-imports-unsupported`,
+applicability `unsupported-artifact-shape`, reason "package imports-map target
+`./x.mjs` resolves into the closure; certifier replay does not support imports
+maps yet". Fail-closed and named, rather than emitted and rejected later.
+
+An **unmatched** `#specifier` is unchanged and still certifies: the census row
+that activates no environment condition cannot say which arm a consumer selects,
+which is unknown rather than absent, so the specifier stays an opaque frontier
+and every claim reachable through the binding stays open.
+`fixtures/package-contracts/conditional-imports-side-effect` pins that.
+
+Fixed while there: in `closureForRoots` an unmatched `#specifier` fell through
+into the **external dependency census**, where `locateExternalFrom` derived a
+package name from `#platform`. It now takes the same unaccepted-external
+frontier the other two closure builders already gave it, and never a census row.
+
+**Named follow-up: teach the Rust certifier the imports map.** That means an
+`imports` field on `SnapshotPackageManifest`, `resolve_local` resolving a
+`#specifier` through it with the case's own conditions, and the generator's
+refusal above deleted in the same change. Until then every package that uses a
+matched imports map is uncertifiable, which is a real coverage hole rather than
+a proof.
+
+Regression pins: the generator unit tests *a matched package imports target
+refuses the proposal closure until Rust replays imports maps* and *an unmatched
+package imports specifier stays an open frontier, never an external dependency*
+in `packages/cli/test/artifact-resolution.test.mjs`. Graph **planning**
+(`resolvePackageDependencyPlanClosure`) is a different operation with no
+replayed closure and still follows the alias exactly; its own test is unchanged.
+
+Package-scope ownership is also exact: a `#specifier` in a nested dependency is
+selected against the nearest `package.json` owning the importing module, not
+the certification root manifest, and the module cache binds that owner manifest
+digest. A dependency-owned match reaches the existing
+`package-imports-unsupported` refusal; a dependency cannot inherit a parent
+package's imports map. Rust imports-map replay remains the named follow-up.
+
+## Conditional targets backtrack the way Node resolves them (2026-08-31)
+
+Node's PACKAGE_TARGET_RESOLVE continues to the next key when a matched key's own
+target resolves to nothing. Both sides returned on the first *matching* key
+instead, so `"./a": {"vendor": {"browser": "./missing.js"}, "default":
+"./index.js"}` refused under conditions `["vendor"]` -- reporting a defect where
+every real consumer resolves `./index.js`.
+
+`selectTarget` in `packages/cli/scripts/artifact-resolution.mjs` and its twin
+`select_target` in
+`rust/crates/solid-facts-backend/src/contract_certification.rs` now backtrack
+identically: a nested selection that matched no condition continues to the next
+key, and only an object that yields nothing at all refuses. Rust needed a
+`TargetSelectionError::ConditionsUnmatched` variant to tell that outcome apart
+from the refusals that must still stop where they happen -- a `null` (blocked)
+target, a target the snapshot does not contain, and an invalid target are
+properties of the package, not unmatched conditions, and none of them
+backtracks.
+
+Trace semantics: an abandoned branch's steps and conditions-taken are
+**discarded, never merged**. Both implementations copy the context per key
+rather than extending a shared list, so the hashed resolution trace names
+exactly the branch a consumer's resolution traverses; recording a condition the
+selection walked away from would put a name in the receipt that no resolution
+ever took.
+
+Top-level unmatched conditions are untouched:
+`fixtures/package-contracts/conditional-export-absence` and
+`torture-conditional-semantics` pin those refusals and neither snapshot moved.
+Focused pins: *a nested object that selects nothing backtracks to the next
+sibling key* (`packages/cli/test/artifact-resolution.test.mjs`) and
+*an_unmatched_nested_condition_backtracks_to_the_next_sibling_key*
+(`contract_certification.rs`).
+
+## Legacy runtime resolution reads `module` again (2026-08-31)
+
+The v2 artifact-resolution boundary resolved a legacy (no-`exports`) manifest's
+runtime axis through `main`, then `index.js`, and never consulted `module`. That
+lost a distinction the pre-v2 generator already made (see "Legacy
+`module`/`main` provenance was invisible"): a legacy dual package whose `main`
+is the CJS transpile of the same source landed on the CJS sibling and was
+refused with "no runtime ESM exports", even though the artifact ships a real
+ESM build.
+
+Legacy runtime resolution now prefers the `module` target when it is declared
+and names a file inside the artifact, falling back to `main` and then
+`index.js`. The trace branch is `legacy:module`, so the certifier replays the
+same field and receipts stay attributable. The declarations axis is unchanged:
+`module` never names a typing, so it is not consulted there.
+
+A declared `module` target that names no file in the artifact -- or is a
+traversal, an escaping path, or a non-string -- is not a refusal. Node consumers
+never read `module` at all, so the `main` surface is the one every runtime
+consumer loads and is still real; resolution falls back to it.
+
+Both the Rust snapshot replay (`resolve_legacy` in
+`rust/crates/solid-facts-backend/src/contract_certification.rs`) and the
+JavaScript generator (`resolvePackageExport` in
+`packages/cli/scripts/artifact-resolution.mjs`) select the field by the same
+predicate, so the generator and the certifier cannot disagree about which field
+won. The two sides still validate the *selected* legacy target differently --
+Rust rejects traversal, `node_modules`, and percent-encoded segments; the
+JavaScript `main`/`index` path does not -- which predates this change and
+remains a fail-closed mismatch at certification rather than a silent
+divergence.
+
+Regression pins: `fixtures/package-contracts/legacy-module-entry` (present
+`module` wins, `legacy:module`), `legacy-module-absent` (absent `module` falls
+back, `legacy:main`), and `legacy-dual-root`, whose refusal moved from the
+runtime axis to the declaration axis -- it publishes no `types`/`typings`, so
+declarations still fall back to the CJS `main`, which carries no declaration
+binding for the ESM build's export. That remains exactly refused; a legacy dual
+package with no published typings is still uncertifiable, and this change does
+not let the generator assume the two builds agree. Unit pins:
+`legacy_runtime_resolution_prefers_a_present_module_target_over_main` and
+`legacy_runtime_resolution_falls_back_to_main_when_module_is_unusable` in
+`contract_certification.rs`, plus the matching pair in
+`packages/cli/test/artifact-resolution.test.mjs`.
+
+The ecosystem benchmark was not re-run, so `benchmarks/ecosystem/report.json`
+still records the old behavior. Its seven full-row `no-exported-surface`
+refusals were spot-checked against the warm local package cache instead, with
+no network access and no install. Six declare a present `module`; five of them
+now generate a proposal through `legacy:module`
+(`@solid-primitives/{until,countdown,date-difference,reducer}`,
+`@solid-devtools/extension-adapter@0.12.1`). `@solid-devtools/ext-adapter@0.17.0`
+still refuses, now truthfully: its ESM build is a side-effect-only entry that
+exports nothing, so "no runtime ESM exports" is a fact about the artifact
+rather than about the field that was resolved.
+`@solid-devtools/babel-plugin@0.3.1` declares no `module` at all and is
+genuinely CJS-only; it keeps refusing unchanged.
+
+## Type Facts authenticates non-export proof subjects (2026-08-31)
+
+Policy-2 certification formerly allowed an export-value transcript to answer
+only `Export`-rooted recursive value and domain-closure demands. Selected-call,
+callback-binding, operation, and operation-value demands for the same export
+were refused before the in-repo Type Facts producer could inspect the runtime
+implementation.
+
+The verifier-owned declaration harness still authenticates the public export
+value and signature. Each demand now additionally binds the snapshot-replayed
+runtime identifier span, and protocol 6 returns an exhaustive implementation
+transcript: parameter flows, exact resolved calls with reachability, returned
+closure captures, and control-flow facts. Family adapters consume only the
+local premise they need. A reachable callback call inside `try/finally` can
+therefore certify while whole-function control flow remains open; a captured
+call certifies only when a reachable return proves that exact parameter is
+captured by the returned closure.
+
+The transcript also preserves an exact direct-import type reference when the
+private declaration harness cannot load a peer package. Only the dialect-owned
+`solid-js` `Accessor` and `Setter` exports may close an otherwise unknown root
+callability premise; a same-named local or third-party type stays open. Return
+value provenance likewise authenticates direct closures and exact
+`solid-js#createSignal` tuple items, and requires every reachable return branch
+to establish the demanded callable path before it closes.
+
+Missing runtime identifier bindings, ambiguous signatures, unresolved call
+targets, unknown call reachability, retained-but-unreturned closures, tighter
+than `0..many` cardinality, and unsupported operation kinds remain explicit
+uncertifiable frontiers. A parameter used only inside a captured callback also
+remains open unless exact callback-owner evidence proves that callback's
+execution; a dialect fact for a nested call is not authority for its containing
+helper. Constructable classes follow the existing runtime
+function-shape rule; a value proof still requires both non-callable and
+non-constructable negatives. The generated
+`typefacts-implementation-transcript` fixture pins direct and returned-closure
+positives plus the retained-closure negative without duplicating a TypeScript
+diagnostic.
+
+## Phase 21 published dependency graph transaction (2026-08-31)
+
+Published dependency certification no longer treats recursive eager child
+certification as proposal preparation. One run now deduplicates canonical nodes
+by full artifact and resolution identity, generates dependency-first frontiers,
+and submits one deduplicated case set to one native bottom-up certification
+transaction. All reuse is bounded by its authority: immutable archive snapshots
+and dependency-closure memo entries are transaction-local, closure hits rehash
+current bytes through current realpaths, package and lock identity is reread,
+and facts are shared only across independently canonicalized equal source
+programs in one native emission request. Open dependency proposals and retained
+refusal audits remain generation-only material. The final transaction replays
+every archive, lock selection, graph root, source closure, proposal, and policy
+input independently, and a fresh ordinary analyzer process must authenticate
+and select the issued policy-2 receipt.
+
+The final focused uncached Corvu graph certifies in 7.997 seconds (8.352 seconds
+end to end) with 18 roots, 42 canonical nodes, 25 acquired published artifacts,
+179 compiler-closure sources, one native transaction, and one Type Facts batch.
+Proposal generation takes 5.762 seconds and native witness acquisition 2.015
+seconds. The final focused Kobalte probe takes 21.144 seconds, including 19.564
+seconds of proposal generation for 629 artifact-case candidates. Its exact
+source programs form 621 batches and avoid only eight fact builds: no facts are
+shared across unequal programs. The earlier condition-compatible batching
+result remains rejected, and recursive eager child certification was not
+reintroduced.
+
+The final-code certified-release uncached 418-row corpus takes 112.595 seconds,
+7.405 seconds beneath the hard two-minute gate. Its report SHA-256 is
+`c4fdede40e69dcccada59749d9fec277db4a5c0a06956d4b5ed1649f41d33478`.
+It contains 52 complete-contract generator successes, 324 partials, and 42
+failures, with 41 certified and 61 exactly refused certification attempts. The
+regenerated Phase 21 ledger
+records every one of the 30 baseline fully refused rows: Corvu verifies, 15
+dependency rows retain exact semantic or proof-policy refusals, Geolocation is
+partial with an absent published target, Context is a confirmed upstream
+declaration defect, and the five missing-byte plus seven CJS/no-ESM controls
+remain fail-closed.
+
+The 15 checker-addressable exact refusals are not one bucket disguised as a
+resolution: one lacks the installed `@solidjs/router`, four lack the installed
+`@solidjs/web` layout, three reach unresolved TanStack package-import targets,
+five retain value-export/function-effect normalization contradictions, and two
+hit unsupported non-export Type Facts transcript demands. The report preserves
+six raw `unclassified` observations for provenance; the Phase 21 ledger gives
+them exact terminal classes while retaining the observed value separately.
+
+The JavaScript dependency plan digest still contains temporary absolute paths
+and omits `rootIdentity`. It is diagnostic planning evidence only; native graph
+reconstruction, authenticated inputs, receipt issuance, and fresh-process
+selection do not trust it. This limitation is not a relaxation of archive,
+lockfile, graph-root, source-closure, receipt, or policy authority.
+
 ## Uncertifiable baseline and evidence-owner matrix (2026-08-21)
 
 The dirty-worktree baseline was coherent on the current source: the Reactive
@@ -7981,3 +10120,826 @@ and unstable-protocol domains remain open. Wildcard-only surfaces, missing or
 non-file targets, unresolved callable kinds, external export-all without
 accepted dependency semantics, closure hazards, stale receipts, and
 unsupported artifact shapes continue to fail closed.
+
+## 2026-08-30 — Phase 19 authenticates policy 2 and remeasures every complete proposal
+
+The active loader now requires receipt version 2 and authenticated built-in,
+persistent-local, or portable issuer provenance. Caller proof-file issuance,
+the checked-corpus acceptance shortcut, and policy-1 loading are removed. All
+73 baseline policy-1 receipt documents have final retired/demoted dispositions
+with zero pending; both first-party bundle indexes remain empty because no case
+has yet reconstructed the complete policy-2 demand graph. This is a deliberate
+loss of accepted coverage, not a demotion of proof into warnings or guesses.
+
+The uncached 418-row generator remeasurement produced 44 structurally complete
+proposals, 314 partial proposals, and 60 full refusals: 358/418 (85.65%) remain
+generatable. Compatible condition axes and finite wildcard resolution moved
+four formerly partial rows to structurally complete without accepting any
+semantics. The same census removes four synthetic `browser,node` artifact-case
+refusals from the focused contract corpus while retaining every real empty-case
+or merge refusal. One `@kobalte/core` source wildcard would require 1,120
+entrypoint/condition candidates and is refused against the Rust-owned 1,024
+candidate budget; its independently bounded root surface remains generatable.
+The five historical wildcard full-row failures were remeasured and now name
+deeper export, dependency, no-surface, or artifact owners. They unlock zero
+verified exports. Dynamic and opaque shapes remain open at their exact leaf.
+
+All 44 structurally complete rows then underwent real policy-2 attempts against
+exact registry bytes. Five stopped during snapshot/provenance or closure replay
+(one duplicate archive member and four closure digest mismatches). Thirty-nine
+reached witness acquisition and exposed 1,456 exact Type Facts-owned demand
+instances; no attempt reached semantic certification or receipt issuance.
+Across the attempted graphs, 71 instances of each artifact-wide family were
+reconstructed from immutable snapshots, but serialized artifact evidence is
+not treated as authority and no surrounding claim domain closed. The current
+proposal corpus contains 4,562 exports and 41,072 open claim leaves; policy-2
+verified exports, verified analyzer-visible positive facts, locally closed
+domains, receipts, accepted-load samples, and accepted-query samples all remain
+zero. Null cost/byte percentiles in the Phase 19 report mean “stage not
+reached,” never zero-cost verification.
+
+## 2026-08-30 — Context 0.3.2 is a confirmed published-declaration defect
+
+The authenticated `@solid-primitives/context@0.3.2` archive imports
+`../node_modules/solid-js/types/reactive/signal.js` from `dist/index.d.ts`.
+That path requires a nested peer inside the package archive, but the archive
+contains no `node_modules` tree and the real `solid-js` peer is hoisted. A
+strict published-typing oracle reports TS2307 on that exact import. The
+`@solid-primitives/source` export condition also names unpublished
+`./src/index.ts` bytes. Phase 21 therefore retains both artifact-case refusals
+and assigns the remaining owner to the upstream package; it does not create a
+fixture-only nested layout or add a duplicate checker diagnostic. The exact
+archive, layout, and oracle are recorded in
+`docs/package-contract-v2/phase21/context-upstream-declaration-defect.md`.
+
+## 2026-08-31 — A query-suffixed specifier is an asset import, not a missing module
+
+A bundler resource query (`./read-preferred-language-cookie.js?raw`) was read as
+part of the filename, so the artifact resolver reported a file the package ships
+as a missing local closure module and refused the whole artifact case. That
+shape produced 204 recorded `local closure module ... was not found` refusals in
+the ecosystem census, all from `@kobalte/solidbase`.
+
+The specifier is now opaque on both sides of the closure. Stripping the query
+and walking into the module would be worse than the refusal, not better: the
+binding's value is the loader's product -- a string for `?raw`, a URL string for
+`?url`, a constructor for `?worker` -- and never the target module's exports, so
+walking in would attribute the target's semantics to a binding that has none.
+The specifier therefore contributes no closure edge and no resolved binding,
+only the `unaccepted-external-dependency` frontier an unaccepted bare dependency
+contributes, and every claim of the artifact case stays open.
+
+This is deliberately conservative in three places. The frontier carries no
+`affectedExports`, so one asset import leaves every export of that artifact case
+unprovable rather than only the exports reachable through the binding; a query
+target that is absent from the package is as opaque as one that is present,
+because no loader-independent resolution exists for either; and a `#` fragment,
+a `#imports` specifier carrying a query, and a bare specifier carrying one are
+all opaque too, the last being kept out of the external dependency census
+because no package entrypoint answers to a suffixed subpath. An unsuffixed
+relative specifier with no file still refuses, and a literal on-disk filename
+containing `?` or `#` stays unreachable from a specifier.
+
+`fixtures/package-contracts/asset-query-import` pins the semantics: the same
+shipped file imported as a module and as `?raw` yields a proposal with both
+exports, twenty open claims, and no proof candidate. The published-graph
+acquisition still refuses a node whose closure carries an opaque asset frontier,
+exactly as it refuses `node:` and every other non-package external specifier;
+that path is unchanged.
+
+## 2026-09-01 — A re-exported runtime chunk is a witness-program member
+
+The private Type Facts witness project listed only the harness plus the export
+bindings' own runtime paths of a single representative plan in its
+`tsconfig.json` `files`. Its harness imports declaration modules, and TypeScript
+resolves every declaration re-export specifier to the sibling `.d.ts`, so a
+runtime chunk that a re-export alone names never became a program member. The
+producer's `sourceFileFor` then found nothing and returned an implementation
+transcript open with `sourceUnavailable` — for a file the package ships.
+`@tanstack/devtools-ui@0.7.1` (`ensureDevtoolsFonts`, implemented in
+`dist/esm/styles/semantic-theme.js` and reached through `dist/esm/internal.js`)
+and `@kobalte/core@2.0.0-alpha.0` (`ColorModeProvider`) were the two ecosystem
+rows the census recorded under that reason.
+
+The program's file census now also lists each plan's independently replayed
+runtime module closure, and it covers every plan the one project serves rather
+than only the plan whose package root was materialized first. `sourceUnavailable`
+was never evidence that a package ships no source, and this is not new authority:
+adding a source file to the program asserts no flow and no fact, the bytes are
+the same authenticated snapshot materialization as before, and every premise is
+still proved against the snapshot. Only the closure's runtime-axis entries are
+listed — declarations remain TypeScript's to resolve and are pinned by the
+declaration source census, resolution inputs are not modules — and a path the
+materialized snapshot does not carry is dropped, so a demand whose module is
+genuinely absent stays open exactly as it was. The closure is the package's own
+module graph: `resolve_local` classifies every bare specifier as external and
+records it as a dependency edge or an opaque frontier instead of visiting it, so
+no dependency's internals enter the program beyond what materialization already
+placed.
+
+`@tanstack/devtools-ui@0.7.1|solid1|only` now certifies. `@kobalte/core@2.0.0-alpha.0|solid2|only`
+clears the open premise and refuses one stage later, on `recursive-value-shape`
+for `createDomCollection` ("operation value path has the wrong callability") —
+an unrelated open claim that remains outstanding. The program grew from 2 files
+to 47 for `@corvu/utils@0.4.2` and from 2 to 237 for `@kobalte/core`; witness
+acquisition moved within run-to-run noise on a debug binary.
+
+## 2026-09-01 — Twenty-four generator fixtures were asserted by nothing
+
+The normalized-v2 migration (`474c101f`) deleted the Rust generator process
+suite in `rust/crates/solid-facts-backend/tests/contracts_process.rs`, which
+shrank from roughly 1738 lines to 121, and moved fixture registration to
+`fixtures/package-contracts/corpus.json`. Thirty-three fixture directories were
+named by the deleted tests; only some were carried into the new manifest.
+Twenty-four `fixtures/package-contracts/` directories were left registered
+nowhere and referenced by name nowhere, so their claims were asserted by no
+gate at all for four weeks. They had no snapshots either, so nothing about them
+was even observable.
+
+Twenty-three are now registered in the corpus with reviewed snapshots. Nothing
+about the analyzer changed; what changed is that these claims are now falsifiable.
+Every one of the resolution branches `legacy:index` (runtime), `legacy:main`
+(declarations) and the `legacy:module`/`legacy:index` pair was unpinned, as was
+the CJS-only runtime refusal, the `accepted-dependency-binding` refusal on an
+external re-export — the most common refusal class on real registry packages —
+and the deferral of a callback that escapes through a returned callable whose
+identity `Object.assign` preserves.
+
+`carried-value-kind` is the exception and stays unregistered. Its claim is that
+an installed dependency's own semantic document cannot launder a false value
+kind, and it depends on `.solid-checker/accepted-contracts.json` reaching
+analysis. `contract generate` — the only driver `scripts/contract-corpus.mjs`
+runs — never loads that catalog; `acceptedDependencies` defaults to `{}` and is
+supplied only by `contract certify`, which no repository gate runs over a
+fixture. Registering it would pin an `accepted-dependency-binding` refusal that
+is an artifact of the wrong driver while the laundering claim stayed untested.
+It is not dead: it is one of the twenty-one tracked catalogs
+`auditPhase19Cut().obsoletePolicy1Catalogs` counts, and that count already
+describes those catalogs as policy-1. The claim needs a certification gate, or a
+policy-2 reissue of the fixture's catalog, before it asserts anything again.
+
+## 2026-09-01 — The invoking-position round re-measured: 331 verified, every movement owned
+
+The full 418-probe re-measure after the invoking-position round (chain
+composition, reach-carrying parameter uses, dialect-derived schedules,
+full-chain read rooting) moved seventeen verdicts: 320/73/25 became
+**331 verified / 62 exact refusals / 25 not attempted**. Fourteen gains, three
+losses, all attributed:
+
+- Twelve gains were the round's named acceptance targets (async ×2, autofocus,
+  date-difference, flux-store ×3, meta 0.29.4, router 1.0.0, script-loader ×2,
+  timer 1.4.4). flux-store and meta certify by *withdrawal* of the ungrounded
+  arg-0 invoke claims — their callback domains stay open, nothing false is
+  asserted.
+- `solid-js@2.0.0-rc.3` was a bonus of the read-rooting repair: its old
+  `$$component` demand pinned path `["set"]` — the same last-member-segment
+  defect as hotkeys — and the corrected full path is witnessable by the
+  signature census.
+- `@kobalte/utils@0.9.2` left the open-root-observation class because the
+  generation changes re-rooted/withdrew the `debugPolygon` demand whose root
+  observation was open (`Polygon = Point[]`, the M1c array `openIndex`
+  misattribution). It left by claim movement, not by the producer closing the
+  observation; the M1c producer defect itself is still open and still owns the
+  remaining rows of that class.
+- **Three honest losses**, both premised on the unsound deep-containment rule
+  the adversarial review killed (a call site credited through byte containment
+  alone): `@solid-primitives/input-mask@1.0.0-next.2` floor+head — `replacer`
+  runs inside an arrow handed to `String.prototype.replace`, which is
+  deliberately not on the reviewed default-library invoker table; recover by
+  adding `String.prototype.replace`/`replaceAll` (replacer at slot 1) as a
+  reviewed table row with shadow/user-typed negative pins. And
+  `@solid-primitives/jsx-parser@0.2.0` — `render` runs inside a closure
+  returned by the *returned* closure; the chain premise models return-carry
+  only at the export implementation's own return sites, so a second-order
+  return needs a per-callable return-carry fact before it can compose. Both
+  old certifications drew the right conclusion from a premise the review
+  proved unsound in general; they stay refused until the sound premise exists.
+
+## 2026-09-01 — Producer roots distinguish local answers from subtree enumeration
+
+The producer-root round remeasured the complete 418-probe corpus at **340
+verified / 53 exact refusals / 25 not attempted**, from 331/62/25. Every status
+or first-refusal movement is attributed below. The canonical debug checker was
+rebuilt before focused probes, the Type Facts producer was rebuilt after the
+wire change, and the full report is bound by SHA-256
+`c23caf2b0816ce759e473e66252dd1e841775eaaa9a1b255a01659d489f33519`.
+
+The Type Facts protocol is now 9, with schema digest
+`sha256:1a9cda6d1e2423bf9c07d42b56718c2b63f63584ca9db357f51772e09d59cf7b`.
+`CallablePathFact.complete` once again means that the node itself was answered;
+the new required `subtreeEnumerated` field says whether the producer exhausted
+its descendants. Exact positive demands require a present, locally closed
+node. Whole-census demands additionally require an enumerated subtree. Missing
+wire data is rejected rather than defaulted, and an absent node cannot claim a
+non-enumerated subtree.
+
+The producer no longer stamps the root-shape observation with `openIndex` for
+three exact cases where the index belongs to TypeScript's apparent member
+surface: a fixed tuple without optional/rest elements, the intrinsic index of a
+known primitive string domain, and an exact global `Array`/`ReadonlyArray`
+numeric index whose value is the element type. Path facts retain `openIndex`, so
+this closes no hidden member census. A separate latent defect stamped an
+index-signature owner's openness on its last recursively visited descendant;
+the owner now receives the reason. String/symbol author indexes, augmented
+tuples/arrays, unions with an open constituent, optional/rest tuples, boxed
+`String`, generic array-likes, and shadowed declarations remain open.
+
+Adversarial review found three permissive defects while splitting the wire, and
+all three were repaired before remeasurement: exact positive consumers had
+accepted `Absent`; instantiable generic path nodes were emitted locally
+complete; and synthetic union absence was invented below cycle/depth/open
+prefixes. Required and optional present nodes can discharge exact positive
+demands only when locally closed. Synthetic absence is emitted only below a
+required, reasonless, locally complete, subtree-enumerated prefix. No
+`require_verifiable_root_premise` guard was relaxed.
+
+Eleven rows became verified, with their prior first demand digests:
+
+- fixed tuple roots: reducer `d01d94212fb4701ac719bdd00cf8f9b5b92f5e0da5097bbac761cf6f512325b9`,
+  selection `59c2bdc4e38a0f0ec9e36d23be21c6794327c1fbf57a3d414fd3d7f78f18f29b`,
+  share `cca72a938c3337e5fe0cb39fcb576584c31d7d4df7164b47d1ca20acd02fd160`,
+  controlled-props `2275b99fa1c2153803f4c41371bf94a033868f06423ec696ae170b2d86185c36`,
+  and cookies floor+head
+  `16f840b92d4ab22f01ab0be4fc1a1651450ffab2883354c8b7d065a490e47d48`;
+- tuple root plus the local/subtree split: websocket floor+head
+  `5108bf30341276093d839251f86ee093a0277bb39289f2deb10bfe8600c2044e`;
+- primitive-string apparent indexing: TanStack solid-hotkeys
+  `b378eced209d466d4fdd56c0da3ab5080667d1efb367cc1423a7692fab7bd923`;
+- Corvu utils 1.x
+  `6435189c4f5db8b6ffa1e800120cae4ff79e9a7014934e78dd712f22d4bcf88c`
+  and Corvu-next utils
+  `b381a04cd73ab6bbc28fd91a24cd5b077bef5335819861bcfe5062ff61481441`.
+  These two were unexpected but are not over-proof: the demand belongs to
+  exported subpath `./create/controllableSignal`, whose authenticated `.d.ts`,
+  `.js`, and `.jsx` all explicitly default-export the callable. The diagnosis
+  had inspected the unrelated package-root declaration.
+
+Two previous certifications were deliberately removed: flux-store floor and
+head now stop at
+`a73e5975ad750e6a1856af4f0dd44840aab011b46e09f30bbe89a82241e5a84f`
+because the required path is instantiable and carries `unresolvedGeneric`.
+Those rows were false certifications produced by local completeness on a
+caller-chosen generic. Recovery requires a real generic premise, not another
+consumer exception.
+
+Six refused rows advanced to later exact blockers without certifying:
+
+- db-store: `d5d6bbc4…` open tuple root -> `3bb4a83e…` an actual descendant
+  `openIndex`;
+- i18n 1.x: `5d48e2da…` -> `8e2a7a25…`, absent `proxyTranslator.bind`;
+- i18n 2.x floor+head: `2bd38ac7…` -> `bb9c0374…`, open
+  `missingKeyAsPath` root;
+- utils 2.x floor+head: `83483402…` -> `ecbf77c9…`, absent
+  `wrapSetter.slice`;
+- Kobalte core: `32c3e7f3…` depth truncation -> `1808f351…`, the requested
+  alternative is locally `Absent`.
+
+The producer transcript dump for favicon falsified the diagnosis's early-
+refusal hypothesis: the transcript completes, but its exact export root is
+still `openType` with unknown callability/constructability. Both
+`1df2f037…` rows remain refused and need a narrower producer investigation.
+The published-typing must-not-clear controls (`@solid-devtools/ui`,
+`solid-devtools`, `@solidjs/web`, TanStack store/form, and the generic i18n
+inputs) remain refused. The five certified control probes remain certified.
+All 25 not-attempted rows are unchanged.
+
+## 2026-09-01 — Type Facts identity refusals name stable evidence, not an opaque build-dependent subject
+
+`TypeFactsCertificationError::IdentityMismatch` was a fieldless variant raised
+from nineteen sites, so every plan, envelope, count, location, and
+implementation disagreement produced the same sentence. The guards remain
+fail-closed, but now report a literal site/field and oriented expected/actual
+values. Path identities are package-relative or explicitly redacted; pair-aware
+rendering distinguishes unequal private roots whose safe suffixes collide.
+Tests pin all four expected/actual implementation-presence combinations, the
+schedule root/count split, guard precedence, and path-redaction collisions.
+
+Focused canonical reproducers show the underlying M9 failure: a scheduled
+authenticated implementation location is `Some`, while the producer returns
+`None`. The TanStack query and persist-client rows remain exact refusals; no
+semantic authority changed. Case-set requests now sort by stable package
+coordinates before digest, removing digest order as the source of the first
+failing graph-node name. The identity/evidence pairing remains digest-keyed
+after acquisition. Two repeated debug probes selected the same package
+coordinate; release-profile confirmation is deferred to the Round 2 full
+remeasurement. M9 is diagnosable, not yet semantically repaired.
+
+## 2026-09-01 — Explicit re-exports take precedence over export stars during proposal emission
+
+The package-contract emission walk now mirrors ECMA-262 export precedence per
+module: one explicit runtime binding is followed without consulting that
+module's bare export stars. Aliases follow their source name; type-only and
+namespace exports cannot masquerade as runtime stars; duplicate explicit
+specifier/default/namespace-export bindings refuse before identical candidates
+can collapse; the reviewed TypeScript class+namespace merge remains one runtime
+binding through an exact AST namespace-declaration-name fact, without collapsing
+duplicate const/class/destructuring declarations; and distinct star identities
+remain ambiguous. Ambient or string-named modules provide no runtime namespace
+fact, and a nested namespace cannot reclassify its containing declaration. The same precedence check runs
+before a local program summary can bypass re-export validation.
+
+The canonical `motion-solidjs@0.6.0|solid1|only` artifact-stage reproducer has
+no demand digest. Before the change it stopped while generating
+`framer-motion` `./dom`, where public `delay` had two candidate identities.
+After the change that dependency proposal emits and the resolver binds
+`delay` to `motion-dom`'s `delayInSeconds`. The outer probe does not certify:
+it advances to `motion-solidjs`'s local `addScaleCorrector` import/re-export,
+whose generation pass lacks an accepted dependency contract. That later
+refusal is retained; missing authenticated composition is not inferred from
+matching bytes or a resolved path. The Round 2 full-corpus movement and report
+digest remain deferred until all bounded artifact-mechanics slices land.
+
+## 2026-09-01 — Declaration extension substitution follows the selected module format
+
+The live package resolver and authenticated snapshot replay now substitute
+declaration extensions from the selected module format: `.mjs`/`.mts` can use
+only `.d.mts`, `.cjs`/`.cts` only `.d.cts`, and ordinary JavaScript/TypeScript
+suffixes use `.d.ts` before retaining the pre-existing source fallback. Direct
+`.d.*` targets and the six extensionless stem/directory candidates keep their
+prior order. No identity or suffix comparison was relaxed, so a missing
+format-matching declaration still refuses instead of borrowing a declaration
+the compiler did not read.
+
+Adversarial review found that the first Rust implementation disagreed with
+Node's `extname` for legal leading-dot basenames such as `dist/.mjs`, and that
+the extensionless test protected only the first candidate. Snapshot replay now
+uses the same leading-dot and multi-dot extension classification as the
+JavaScript resolver. Both implementations pin all six extensionless candidates
+as successively first-present, and dotfile tests include the wrongly formatted
+sibling that the rejected implementation would have selected. Re-review found
+no remaining live/replay divergence or over-proof.
+
+The canonical `@tanstack/ai-solid@0.19.1|solid1|only` reproducer advanced from
+the `@ag-ui/core` exact-subject mismatch at demand
+`2dd8afbd69ebe886683183c10f6e080712c0de1d0e21362540280f7fe8f4048f`
+(`events-Bg2nO3O2.d.mts` live versus snapshot-selected
+`events-JPFRVbr9.d.ts`) to demand
+`54f2616d91b9d1f7f571f5b77919feccd0dd20c036afed72c214a9ee5180cf46`
+on `@tanstack/ai`'s `parseWithStandardSchema`. That later root observation is
+open and therefore remains an exact refusal. The diagnosis's prediction that
+M2 alone would certify the row was falsified by the byte-reproducer; the M2
+selection defect is gone, but the unrelated open producer premise is not
+inferred. The parallel proposal refusal for `@tanstack/ai-client`'s missing
+exact `StorageUnavailableError` runtime binding also remains unchanged.
+
+The non-updating contract-corpus run exposed two expected fixture movements.
+`json-import` had used its `.mjs` runtime file as its declaration; it now carries
+an exact `index.d.mts`, remains a successful JSON-import fixture, and its
+generated contract/proposal snapshots name that declaration and digest.
+`legacy-dual-root` deliberately publishes no declarations, so its `.cjs` main
+now refuses earlier at `declarations-not-found` instead of analyzing the CJS
+runtime bytes and failing later on export identity. Both snapshots were
+reviewed at their non-updating failures before being regenerated; no other
+corpus snapshot moved.
+
+All seven artifact-mechanics publisher-defect controls remain refused:
+`@tanstack/solid-start-server` ×3 still lacks `#tanstack-router-entry`, and the
+Solid 2 TanStack query/persist-client rows ×4 still lack the undeclared
+`@solidjs/web` peer that `tsc` reports. The Round 2 full 418-probe remeasurement
+and authoritative report digest remain deferred until the remaining bounded
+artifact slices land; this slice changes the first refusal within one row, not
+its verdict.
+
+## 2026-09-01 — Byte-identical canonical archive duplicates are idempotent
+
+Authenticated archive ingestion now accepts a repeated canonical regular-file
+path only when the second member's bytes are exactly equal to the first. Both
+payloads still count against the expanded-byte limit and both entries count
+against the member limit; unequal bytes remain `DuplicateMember`. The logical
+file map, member count, and snapshot root are therefore identical to a
+hypothetical archive containing one copy. Repeated zero-sized directory entries
+remain inert, while file/directory kind conflicts, unsupported links, unsafe
+paths, and case-fold collisions remain fatal.
+
+Adversarial review found three archive-topology/resource defects while removing
+the blanket duplicate refusal. Explicit empty directories initially did not
+participate in ancestor topology, case-different ancestors such as a `Dist`
+file plus `dist/child` escaped that topology on case-insensitive extractors,
+and nonzero directory payloads bypassed expanded-byte accounting. The final
+ingestor validates file prefixes against both exact and folded explicit
+directory/file topology and rejects nonzero directory payloads before
+discarding the entry. Both archive orders, byte-identical case collisions,
+symlink/hardlink collisions, conflicting duplicate bytes, and a duplicate that
+crosses the expanded-byte limit are mutation-pinned. Final re-review found no
+remaining bounded M7 over-permission.
+
+The canonical `@solid-primitives/start@0.0.4|solid1|only` reproducer has no
+demand digest. Before the change certification stopped at artifact provenance
+with `duplicate archive member: dist/index.cjs`; after the change the same
+authenticated tarball certifies through catalog publication. The focused
+single-member/duplicate-member test pins the unchanged snapshot root. All eight
+artifact-mechanics must-not-clear rows retain their exact defects: the three
+Start Server rows lack `#tanstack-router-entry`, four Solid 2 TanStack
+query/persist rows lack the undeclared `@solidjs/web` peer, and
+`@solid-primitives/context@0.3.2` still refuses its absent published declaration
+closure module. No protocol, schema, or generated artifact changed. The Round 2
+full 418-probe remeasurement remains deferred until the remaining bounded
+artifact slices land.
+
+## 2026-09-01 — Default-export resolver and Type Facts identities are separate
+
+M5's two default-export mismatches came from one overloaded replay field. Three
+identities are now explicit: the module resolver's canonical target name, the
+export selector that actually addresses that target from its terminal file,
+and the producer's exact query name at the replayed span. They coincide for
+ordinary exports but not for every default or aliased form. For
+`export default createX`, the resolver target and terminal selector remain
+`default` while the runtime query name is `createX`. For
+`export default function createX`, the runtime query name is `createX`, the
+declaration query name is `default`, and a same-file `export { createX }`
+retains its resolver name and selector while following the binder-selected
+default declaration span. Exact-name equality was not relaxed.
+
+The necessary AST premise is exact binder identity, not spelling:
+`ExportNamedDeclaration` local specifiers now contribute their Oxc
+`reference_id -> symbol_id -> declaration span` to the existing reference table.
+Replay recognizes a default function or class only when that exact declaration
+span is the default declaration's binding identifier. Anonymous defaults retain
+no synthetic identity. Forced-exact harnesses import with the terminal selector
+and verify with the separate producer query name; resolution-variant and
+evidence identities bind all distinct fields. Star-candidate identity also
+includes the terminal selector, so paths to `default` and to a same-named live
+binding cannot collapse.
+
+The canonical before/after rows were:
+
+- `@solid-primitives/local-store@1.1.4|solid1|only`: before, demand
+  `sha256:174bb5aa2e0dcae2c5cfd3883b5358050541f3fd8a4e559de81951ea5efefaad`
+  refused the internally inconsistent runtime identity. After, that demand is
+  discharged, but the row honestly remains refused at demand
+  `sha256:19c7d299065f90f653a83b32d2fcae879786e32da9c9942ab3a89d4dd8dcc645`:
+  the required recursive value path is locally open with
+  `unresolvedGeneric`. The diagnosis's predicted certification was therefore
+  falsified; the root-closure gate remains unchanged.
+- `@solid-primitives/tween@1.4.1|solid1|only`: before, demand
+  `sha256:53bc385769aecf2468dce0903cc8795b2d832d96f3470697742bb283c1136d49`
+  refused the declaration-name mismatch. After, the same authenticated row
+  certifies through catalog publication; there is no refusing after-demand.
+
+Adversarial review found four load-bearing gaps before final acceptance. The
+resolver name was not mutation-pinned independently from the query name, a
+forced-exact harness could incorrectly use a non-importable identity as named
+import syntax, and star fan-in could collapse paths to distinct default versus
+live bindings without a terminal-selector key. Finally, dependency declaration
+authentication treated public/selector aliases as declaration identity, which
+could accept a different same-file declaration; only exact replayed resolver or
+query identities are now authoritative. All four are pinned, along with named
+functions/classes, forward named exports,
+`export { x as default }` versus `export default x`, local re-export/import
+propagation, unplanned external defaults, exact mismatch, and anonymous-default
+refusal. The three Start Server rows, four Solid 2 TanStack
+query/persist rows, and the `@solid-primitives/context` declaration defect retain
+their exact fail-closed causes. No Type Facts protocol, schema, snapshot, or
+generated artifact changed. The Round 2 full 418-probe remeasurement remains
+deferred until the remaining bounded artifact slices land.
+
+## 2026-09-01 — Namespace exports retain their exact module-object identity
+
+Declaration replay now preserves a local `import * as N` followed by
+`export { N }` as the exact namespace target module instead of falling back to
+the entry declaration file. Direct `export * as N from "./module"` uses the
+same identity. The private verifier harness imports that terminal target with
+`import * as`, and Type Facts accepts it only when the compiler returns a
+quoted module name equal to the exact snapshot-selected declaration/source
+path with its TypeScript-supported extension removed. Ordinary named exports
+still require their exact declaration name and path; a quoted name by itself
+is not authority.
+
+The canonical `@tanstack/solid-db@0.2.40|solid1|only` before-demand was
+`sha256:b9a804368e8a7fd546f0ae1b10915131d9da2afa32b01915542628df38da366b`.
+It refused because `@tanstack/db`'s `IR` resolved to
+`dist/esm/query/ir.d.ts` while replay had incorrectly selected
+`dist/esm/index.d.ts`. The final canonical reproducer discharges that demand
+and advances to a distinct artifact-resolution refusal: the public runtime
+resolution names `dist/esm/index.js` while exact namespace replay selects
+`dist/esm/query/ir.js`. The outer row consequently remains an honest
+dependency-contract refusal at missing exact runtime binding
+`createTransaction`; there is no after-demand digest because the later stop is
+before Type Facts demand verification.
+
+Adversarial mutation review exposed two pre-existing fallback
+over-permissions while pinning M3. An unplanned external namespace import could
+be reclassified as a declaration local to the exporting file, and a type-only
+namespace import followed by an unmarked export specifier could take the same
+fallback. External namespaces now retain an explicit `*` sentinel that
+dependency replay rejects fail-closed, and type-only imported locals cannot
+enter only a local export-specifier fallback. Indirect re-exports with the same
+spelling remain valid because their source module, not the unrelated local
+type-only import, owns the specifier. Tests pin local/direct namespaces,
+type-only and external refusals, same-spelling indirect re-exports, every
+accepted declaration/source extension, quoted-name/path disagreement, and the
+exact namespace harness form. Final re-review found no remaining bounded M3
+over-proof.
+
+All eight artifact-mechanics must-not-clear probes remain refused: the three
+Start Server rows, the four Solid 2 TanStack query/persist rows, and
+`@solid-primitives/context@0.3.2`. No protocol, schema, snapshot, or generated
+artifact changed. The Round 2 full 418-probe remeasurement remains deferred
+until the remaining bounded artifact slices land.
+
+## 2026-09-01 — Source census attribution follows materialized package roots
+
+Type Facts source-census verification now attributes a producer source to the
+longest exact materialized package-root prefix. Private-project verification
+reads those roots back from the project object that performed materialization;
+the public replay path uses the exact authenticated resolved/installed package
+roots rather than reconstructing a sibling `node_modules` tree beside the
+tsconfig. When artifact resolution authenticated both logical and real package
+roots, the public path admits both exact spellings so TypeScript's symlink
+realpath does not create a false refusal. A package archive's own
+`dist/.../node_modules/<name>/...` member therefore remains owned by that
+package unless an independently authenticated nested package root is the exact
+longer prefix. The unauthenticated-external-source pass consumes the same root
+table, and the selected snapshot must contain the exact remainder with the
+producer's exact digest; there is no retry against a shorter or same-named
+root.
+
+The canonical `solid-recharts@1.0.1|solid1|only` refusal had no demand digest.
+Before this slice, witness acquisition misattributed
+`dist/browser/node_modules/csstype/index.d.ts` to the hoisted `csstype@3.2.3`
+snapshot and refused with `producer source digest differs from snapshot:
+index.d.ts`. After the change, the member is charged to the authenticated
+`solid-recharts` snapshot and the row certifies through catalog publication.
+
+Adversarial review found an order-dependent collision in the first
+implementation: distinct authenticated snapshots whose byte-compatible files
+materialized at one root could leave attribution to whichever root-table entry
+sorted first. Equal roots now deduplicate only when snapshot root, archive
+provenance root, and stable evidence prefix all agree; every other collision
+refuses. An exact duplicate that includes the owner remains owner-attributed.
+Tests pin vendored-owner, authenticated nested, and hoisted roots; root-boundary
+prefix collisions; equal-root identity conflicts; absent members; digest
+mismatches; stable evidence paths; and the prohibition on falling back after
+the longest root is selected. The first full verification pass caught a graph
+false refusal: reconstructing each graph node's target from that node's own
+installation path did not describe the already-materialized shared project.
+The project now records every plan and graph-source target as it writes it, and
+the bottom-up graph regression exercises those recorded roots. A separate
+monorepo regression pins the public path where the tsconfig is under
+`packages/app` but the authenticated package is hoisted at the repository
+root; a pnpm-style regression pins the authenticated realpath while refusing a
+different store version. Final re-review found no remaining bounded M6
+over-proof or order dependence.
+
+The three Start Server publisher defects and four Solid 2 TanStack
+query/persist undeclared-peer defects retain their exact refusal reasons.
+`@solid-primitives/context@0.3.2` still stops before certification because its
+published declaration closure is absent. No protocol, schema, snapshot, or
+generated artifact changed. The Round 2 full 418-probe remeasurement remains
+deferred until M10 lands.
+
+## 2026-09-01 — Optional dynamic peers become exact conditional edges
+
+M10 no longer treats every failed package lookup as proof that an optional
+peer is absent. The only conditional edge is an exact `package-not-found` for
+an unshadowed dynamic `import()` whose bare package name is owned by the root
+package's authenticated `peerDependencies` and has literal
+`peerDependenciesMeta.optional: true`. An ancestor-by-ancestor `lstat` census
+must also prove that no entry exists. Static imports, `require`, undeclared or
+non-boolean optional metadata, nested package scopes, installed-but-broken
+packages, and filesystem errors all remain refusal paths. The diagnostic graph
+records a nonempty, identity-bearing `conditionalDependencies` census;
+conditional-only, leaf-refusal, resource-refusal, and cycle-refusal statuses
+are mutually distinguished and the Phase 20 ledger checks that a
+`conditional-only` label has complete nonempty evidence.
+
+Adversarial review found that the planning hazard's old colon-delimited
+`source` string could not safely carry permission: a valid archive filename
+containing `:` could redirect the absence check to another spelling. Planning
+hazards now carry structured `importerPath` and `specifier` fields, and their
+map key, ordering, and digest bind those fields plus dynamic/optional identity.
+The display-only source string remains diagnostic. A colon-bearing importer
+with a present-but-broken actual peer is pinned as a refusal.
+
+The same slice closes three later mechanics exposed by the byte-reproducer.
+The registry request uses npm's abbreviated install metadata representation,
+so unrelated packument strings cannot trip the unchanged bounded-JSON limit;
+the returned bytes remain the exact authenticated input. Runtime and
+declaration export surfaces are now separate: an additive declaration census
+is replayed exactly from archive bytes and bound into the policy-2 resolved
+import root before runtime/declaration binding intersection. TypeScript
+namespace declarations—including explicit `export declare namespace`—receive
+an exact `AstFacts` declaration-surface-only fact (schema 40), never a value
+binding; quoted ambient modules and nested module blocks do not qualify.
+External namespace imports are retained as semantic re-export edges, but `*`
+cannot be supplied by an accepted dependency and therefore remains
+fail-closed. The `torture-dts-disagreement` fixture was first observed at its
+non-updating two-file refusal and then repinned: `runtimeFactory` is the sole
+shared exact export, while runtime-only and declaration-only names are both
+excluded.
+
+The canonical `@solidjs/testing-library@0.8.10|solid1|only` row has no demand
+digest before or after because it stops before Type Facts demand verification.
+Its outer verdict and first refusal remain the honest
+`@testing-library/dom` dependency-contract obligation. Internally, however,
+the exact dependency graph changes from graph root
+`sha256:849b60b34d61d5e33818a24c16da87842efe6ef30803f3355b5f8eb8539b0954`
+with 20 leaves (including an `@solidjs/router` package-not-found leaf) to
+`sha256:c876dbcf1c0dbd8e1b995d0c484e77d27019e60a44533a46854bb84ccbd25e43`
+with 19 leaves plus one `absent-optional-peer` conditional. The diagnosis's
+prediction that M10 alone would certify the row was falsified. Exact graph
+acquisition reaches later honest boundaries, including CommonJS/module-loading
+frontiers in `pretty-format@27.5.1`; those are not reclassified as ESM proof.
+
+The nine targeted controls retained their verdicts and first-refusal
+signatures: `solid-recharts@1.0.1` remains certified; all three Start Server
+rows still lack `#tanstack-router-entry`; all four Solid 2 TanStack
+query/persist rows still lack the undeclared `@solidjs/web` peer; and
+`@solid-primitives/context@0.3.2` still lacks its published declaration closure
+module. Their diagnostic graph roots move where applicable because the newly
+structured planning-hazard identity is intentionally digest-bearing, but no
+control gains a conditional edge. No Type Facts protocol or public contract
+schema changed; the internal AST facts schema moved from 39 to 40. The Round 2
+full 418-probe remeasurement remains deferred until this individually green
+slice lands.
+
+## 2026-09-01 — Artifact-mechanics round: three exact recoveries, no hidden gains
+
+The authoritative 418-probe remeasurement records 344 complete proposals, 37
+partial proposals, and 37 fully refused proposals. Certification is now 343
+verified, 50 exact refusals, and 25 not attempted. Relative to the checked-in
+producer-roots report, exactly three certification verdicts moved and all three
+were the bounded artifact-mechanics acceptances:
+
+| probe | before | after |
+| --- | --- | --- |
+| `@solid-primitives/start@0.0.4\|solid1\|only` | exact refusal before demand planning: byte-identical canonical archive member `dist/index.cjs` appeared twice | verified; M7 retains one authenticated member identity |
+| `@solid-primitives/tween@1.4.1\|solid1\|only` | exact refusal at `sha256:53bc385769aecf2468dce0903cc8795b2d832d96f3470697742bb283c1136d49`: declaration name disagreed with default-export replay | verified; M5 keeps resolver, selector, and producer query identities separate |
+| `solid-recharts@1.0.1\|solid1\|only` | exact refusal before a demand digest: vendored `dist/browser/node_modules/csstype/index.d.ts` was charged to the hoisted `csstype` snapshot | verified; M6 attributes the source to the longest exact materialized package root |
+
+The remaining bounded mechanisms advanced only to later honest refusals:
+
+- M2, `@tanstack/ai-solid@0.19.1`, moved from declaration-substitution demand
+  `sha256:2dd8afbd69ebe886683183c10f6e080712c0de1d0e21362540280f7fe8f4048f`
+  to operation-reachability demand
+  `sha256:1097d02a3424f9c13e8f456a8f606bb17382e3d0f698f8cacb6ea7ca87671389`.
+- M3, `@tanstack/solid-db@0.2.40`, moved from namespace-suffix demand
+  `sha256:b9a804368e8a7fd546f0ae1b10915131d9da2afa32b01915542628df38da366b`
+  to the locally open recursive-value demand
+  `sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983`.
+- M5, `@solid-primitives/local-store@1.1.4`, discharged identity demand
+  `sha256:174bb5aa2e0dcae2c5cfd3883b5358050541f3fd8a4e559de81951ea5efefaad`
+  and now refuses the distinct operation-reachability demand
+  `sha256:446606d9de553833a6e31e24febc2b56fcf04d92e1cef042d314bb2007d96c99`.
+- M8, `motion-solidjs@0.6.0`, no longer reports two accepted identities for
+  `delay`; it remains refused before demand planning because `addScaleCorrector`
+  resolves outside the authenticated package.
+- M10, `@solidjs/testing-library@0.8.10`, no longer treats absent optional
+  `@solidjs/router` as a fatal edge; it remains refused before a demand digest
+  because the later `@testing-library/dom/build/index.js` entry has no runtime
+  ESM exports.
+- M9 made both opaque identity stops deterministic. `@tanstack/solid-query`
+  reaches demand
+  `sha256:1e5287b5f6ac0365df170c68881e1c20a57c87d64fa0ea59ffc460be4336d496`
+  and refuses an unavailable implementation transcript;
+  `@tanstack/solid-query-persist-client` names the exact
+  `implementation_location` disagreement and has no demand digest.
+
+All seven publisher-defect controls remain refused: the three Solid Start
+Server rows still lack `#tanstack-router-entry`, and the four Solid 2 TanStack
+query/persist rows still lack the undeclared `@solidjs/web` peer that `tsc`
+reports as TS2307. The separate `@solid-primitives/context@0.3.2` declaration-
+closure must-not-clear control also remains refused. No proposal class moved,
+and there was no unexpected certification gain or loss.
+
+The first full measurement exposed a latent M8 regression in both
+`solid-recharts@2.0.0-beta.1` Solid 2 rows: two overload signatures plus their
+implementation were counted as three runtime exports. The invalid measurement
+was not pinned. AST facts schema 41 now records exact direct function-
+declaration names and whether each has a body. Runtime `.ts`/`.mts` overloads
+collapse only with exactly one body; declaration `.d.ts`/`.d.mts`/`.d.cts`
+overloads collapse only with zero bodies. Empty sets, mixed declaration kinds,
+ambient runtime-source signatures, declaration-file bodies, and duplicate
+implementations are mutation-pinned refusals. Adversarial review first caught
+the vacuous empty-set star suppression and then the declaration-file body
+over-permission; both were fixed before the final 418-probe run. The final
+Solid 2 floor and head rows are again verified, so neither is a verdict
+movement in the authoritative report. No Type Facts protocol or public contract
+schema changed in this repair.
+
+## 2026-09-01 — Dependency receipts prove exact closed claims, not interchangeable bytes
+
+Authenticated dependency composition no longer treats receipt identity as
+semantic authority for every `DependencyClosure` demand. Receipt
+authentication retains the normalized contract decoded from the exact signed
+canonical main, and composition resolves the demanded semantic claim ID
+against that contract's actual closed-claim census after all dependency-node,
+binding, policy, issuer, scope, and revocation checks succeed. A closed
+`callbacks` claim therefore cannot discharge an open `throws` claim merely
+because both attempts use the same receipt bytes. Package, artifact-case,
+export, domain, and nested value path remain part of exact claim identity;
+malformed IDs and open claims refuse.
+
+The current demand graph names the parent contract's claim ID. Claim IDs bind
+package and artifact identity, and the graph carries no authenticated mapping
+from that parent claim to a dependency export/path. Cross-package semantic
+composition therefore now fails closed with `MissingClosedClaim`; inventing a
+name- or domain-based correspondence would recreate the defect in a different
+form. Artifact-only dependency demands continue to authenticate, and a direct
+composition regression proves that an exact dependency claim is accepted when
+the requirement carries that dependency's own ID. An authenticated
+parent-to-dependency semantic mapping remains prerequisite work for the later
+composition recovery.
+
+Adversarial review required mutation pins at the full seam rather than only at
+the normalized-model helper. Tests now authenticate one receipt whose exact
+closed callbacks claim succeeds and whose exact open throws claim refuses;
+combine a missing claim with a wrong importer or stale revocation epoch to pin
+identity/trust precedence; and vary package, artifact case, export, domain,
+nested tuple path, and ID spelling independently. Existing artifact-only
+composition remains the positive control. No Type Facts protocol, public
+contract schema, snapshot, benchmark report, or generated artifact changed.
+The full 418-probe Round 3 remeasurement is deferred until the remaining Round
+3 slices land; the authenticated composition lane is not currently used by the
+ecosystem runner, so this repair is expected to unlock zero rows and may only
+remove any future verdict that depended on the vacuous witness.
+
+## 2026-09-01 — String replacement remains refused without runtime-method identity
+
+The proposed `String.prototype.replace` / `replaceAll` default-library invoker
+rows were implemented, byte-reproduced, adversarially reviewed, and reverted.
+Static default-library symbol identity does not authenticate either writable
+runtime method. A package can assign a function that stores replacer slot 1 to
+`String.prototype.replace` or `replaceAll` without adding or changing a
+TypeScript declaration; primitive-string receiver and search-value guards then
+still resolve the default-library symbol while the runtime callback never
+executes. `Object.defineProperty` provides the same counterexample without an
+assignment to the named property. Adding the rows would therefore widen Tier B
+past its proof and is not an admissible recovery.
+
+The trial also falsified the expected direct recovery for both
+`@solid-primitives/input-mask@1.0.0-next.2` Solid 2 probes. Before and after the
+narrowed trial, floor and head both refuse operation-reachability demand
+`sha256:1d45f9b9cc61b8e9646b4981f78fbbc43464ed0843385ea2859613f07ac3a1df`
+for `regexMaskToFn` with `callback parameter has no exact direct-call or
+resolved-argument flow`. The shipped JavaScript's returned-arrow `value`
+parameter is untyped under `allowJs: true, checkJs: false`, so its member call
+does not resolve an exact receiver symbol; independently, its `regex` search
+value retains the `@@replace` dispatch frontier. Recovering these rows now
+requires both an authenticated declaration-to-runtime callable/parameter bridge
+and a premise that binds the actual replacement method and search dispatch. A
+name table or apparent receiver type is insufficient.
+
+The protocol-10 and schema-vocabulary trial was reverted with the producer and
+consumer rows. Protocol 9 and its existing schema digest remain authoritative.
+No benchmark report, snapshot, generated ledger, or tracked binary changed.
+The full 418-probe Round 3 remeasurement remains deferred until the remaining
+Round 3 slices land; these two probes remain exact fail-closed cases.
+
+## 2026-09-02 — Second-order return carry is exact, bounded, and branch-strengthened
+
+Type Facts protocol 10 adds an exact per-callable return-carry census. A nested
+callable may authorize another callable only through matching path-and-span
+identities, a reachable return site, an explicit `carryReach` lower-bound
+premise, and recursive proof that the return owner itself executes. Conditional
+value alternatives are `Unknown` and satisfy only a may-execute floor; a
+nonliteral conditional return statement has the same may-only strength.
+Unsupported nested control flow omits the whole callable census, absence of
+either root or nested `carryReach` is never authority, and recursion is bounded
+to eight links and 256 visited nodes. The protocol-10 schema digest is
+`sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84`.
+
+Adversarial review found and killed eight independent over-proof routes before
+the slice was accepted: optimistic `if` return statements; missing site strength
+for an identifier initialized by a ternary; labeled-block jumps bypassing
+return, direct-call, and argument-callable evidence; `Unknown` being positive
+may-execute evidence; switch-clause statement ordering; cross-construct jump
+targets; source-order mistakes for sibling branches and `for` updates; and a
+`continue` overridden by an intervening `finally`. The final producer withholds
+positive call/use evidence by exact callable owner and jump-target region:
+`break` owns the whole target subtree, while `continue` owns only the loop body
+unless a `try` lies between it and the target. Tests distinguish break from
+continue, exact and multiply nested labels, target-external `try`, switch cases,
+dead rows, concise-arrow bodies, deep callable nesting, exact path/span identity,
+missing premises, and return-only depth/cycle bounds.
+
+The exact `@solid-primitives/jsx-parser@0.2.0|solid1|only` reproduction moved
+from operation-reachability refusal
+`sha256:3e9278c1f7fe2dd462f91312a3e02919829ea96486b48efc0913bae42a93b012`
+for artifact case
+`ce93bfaf22ad79c324056e933345f563f07b902bcc92d6f7e4f6a6e2576139b0:createToken`
+to an authenticated ordinary receipt. The canonical source chain is now proved
+as `createToken -> returned props closure -> possible token closure -> untrack
+slot 0 -> render(props)`, never from lexical containment alone.
+
+The clean 418-probe Round 3 report records exactly one certification movement:
+343 verified / 50 exact refusals / 25 not attempted becomes 344 / 49 / 25.
+An initial full run timed out while Bun was resolving
+`@solid-primitives/graphql@3.0.0-next.0`; an immediate canonical single-row
+reproducer certified it, and the replacement full run also certified it. The
+timeout report was therefore rejected as infrastructure noise rather than
+pinned as a semantic loss. Gesture v1 remains refused at callable-path demand
+`sha256:2c22a34db13743242edc3a737c021eb3d3de4bf747e118b06c30915ad2bf86db`,
+and `until` remains refused at operation-cardinality demand
+`sha256:15fde3fc57c55117d494a2ece2bd31fbd42fb424f58cf0e6b998eaa5e9878251`.
+
+The attempted runner shortcut for seven not-attempted rows was reverted. A
+generic no-runtime-ESM rule cleared the explicit side-effect-only
+`@solid-devtools/ext-adapter` control, while pre-authentication `.d.ts`
+classification bypassed archive member-kind and symlink/hardlink invariants.
+Those rows require an authenticated `ArtifactApplicability` premise; suffixes,
+empty surfaces, and pre-replay declaration guesses remain non-authoritative.
+The String replacement recovery also remains blocked as recorded above. No
+composition recovery was attempted after the claim-blind dependency witness
+repair: parent-to-dependency semantic mapping is still absent and stays
+fail-closed.

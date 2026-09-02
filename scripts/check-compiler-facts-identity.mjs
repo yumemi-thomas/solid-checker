@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +38,17 @@ export function rustStringConstant(source, name) {
   );
 }
 
+export function compilerSourceManifest(identity) {
+  const canonical =
+    "solid-checker:solid-v2-compiler-source-manifest:v1\n" +
+    `upstream=${identity.upstreamRevision}\n` +
+    `implementation=${identity.implementationRevision}\n` +
+    `distribution=${identity.distributionRevision}\n` +
+    `trace=${identity.semanticTraceVersion}\n` +
+    `protocol=${identity.compilerFactsProtocol}\n`;
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
+}
+
 export function assertIdentityDocuments({ identity, cargo, lock, adapter, conformance, notices, report }) {
   if (identity.format !== 1 || identity.documentKind !== "solid-checker-solid2-compiler-facts-identity") {
     throw new Error("compiler facts identity: invalid identity document envelope");
@@ -63,6 +75,20 @@ export function assertIdentityDocuments({ identity, cargo, lock, adapter, confor
     identity.implementationRevision
   ) {
     throw new Error("compiler facts identity: adapter implementation revision drifted");
+  }
+  if (
+    rustStringConstant(adapter, "COMPILER_DISTRIBUTION_REVISION") !==
+    identity.distributionRevision
+  ) {
+    throw new Error("compiler facts identity: adapter distribution revision drifted");
+  }
+  const sourceManifest = requireMatch(
+    adapter,
+    /COMPILER_SOURCE_MANIFEST_SHA256:\s*&str\s*=\s*\n?\s*"(sha256:[0-9a-f]{64})"/,
+    "COMPILER_SOURCE_MANIFEST_SHA256"
+  );
+  if (sourceManifest !== compilerSourceManifest(identity)) {
+    throw new Error("compiler facts identity: compiler source-manifest digest drifted");
   }
   if (!adapter.includes(`solid-v2:trace${identity.semanticTraceVersion}:${identity.implementationRevision}`)) {
     throw new Error("compiler facts identity: adapter cache identity drifted");

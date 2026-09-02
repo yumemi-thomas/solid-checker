@@ -1,5 +1,5 @@
 {
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "contracts": [
     {
       "document": "node_modules/laundered-dependency/solid-reactivity.json",
@@ -75,7 +75,7 @@
         },
         "specifier": "laundered-dependency"
       },
-      "receipt": "node_modules/laundered-dependency/solid-reactivity.receipt.json"
+      "status": "obsolete-policy1"
     },
     {
       "document": "node_modules/laundered-typed-dependency/solid-reactivity.json",
@@ -135,7 +135,7 @@
         },
         "specifier": "laundered-typed-dependency"
       },
-      "receipt": "node_modules/laundered-typed-dependency/solid-reactivity.receipt.json"
+      "status": "obsolete-policy1"
     }
   ],
   "format": "solid-checker-accepted-contract-catalog"

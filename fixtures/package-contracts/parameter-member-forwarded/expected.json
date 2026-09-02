@@ -22,6 +22,28 @@
           }
         }
       ]
+    },
+    "./direct": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "29104cf2fb5191a3a5ce0bc893357cc4ef2b0c121e8e477f1166924c74c74121",
+            "path": "./channel.js",
+            "sha256": "e9a25ba3bc2a95e5ca23c06bad054060a6ab0a9643ff9f39ee46416dc5efb240"
+          },
+          "declarations": {
+            "path": "./channel.js",
+            "sha256": "e9a25ba3bc2a95e5ca23c06bad054060a6ab0a9643ff9f39ee46416dc5efb240"
+          },
+          "exports": {
+            "channelFor": "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1direct",
+            "typesBranch": "/exports/.~1direct"
+          }
+        }
+      ]
     }
   },
   "format": "solid-reactivity-contract",
@@ -38,6 +60,42 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
+    "summary-1e894f7835b78b11b2f89340a930e972546c1b597833c2f245deb58699ebad1e": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "read-0",
+            "inputs": [
+              {
+                "index": 0,
+                "kind": "parameter",
+                "path": [
+                  "getThing"
+                ]
+              }
+            ],
+            "kind": "read",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "reads": [
+          "read-0"
+        ]
+      },
+      "shape": "callable"
+    },
     "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
       "call": {},
       "shape": "callable"

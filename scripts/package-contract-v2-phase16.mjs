@@ -13,6 +13,10 @@ const PHASE16 = join(ROOT, "benchmarks/package-contract-v2/phase16");
 const REPORT_PATH = join(PHASE16, "report.json");
 const REPORT_MARKDOWN_PATH = join(PHASE16, "report.md");
 const REFUSALS_PATH = join(PHASE16, "refusals.json");
+const FROZEN_PHASE16_ECOSYSTEM_SHA256 =
+  "ed8123852939c56ce2f7f93b9f77acebc96fe4d24989ee8c471bc74b7dda843b";
+const FROZEN_PHASE16_SYNTHETIC_CORPUS_SHA256 =
+  "1a57dc66aca8a2ea4ed378c0958025875f0e9716d896af5c7c3bcf04e06acede";
 
 const INPUTS = Object.freeze({
   ecosystem: "benchmarks/ecosystem/report.json",
@@ -343,16 +347,59 @@ export function assertPhase16Report(report, refusalReport, sources) {
   assert.equal(report.documentKind, "solid-checker-package-contract-phase16-report");
   for (const [name, path] of Object.entries(INPUTS)) {
     assert.equal(report.authority.inputs[name].path, path);
-    assert.equal(report.authority.inputs[name].sha256, sha256(read(path)), `${name} input drifted`);
+    if (name === "ecosystem" || name === "syntheticCorpus") {
+      // Phase 16 is the immutable pre-policy-2 baseline. Later phases refresh
+      // the ecosystem report and extend the synthetic corpus in place, while
+      // Slice 9 deliberately retired the 24 accepted cases that made this
+      // historical report reproducible. Pin the exact captured input digests
+      // instead of pretending current policy-2 state can regenerate it.
+      assert.equal(
+        report.authority.inputs[name].sha256,
+        name === "ecosystem"
+          ? FROZEN_PHASE16_ECOSYSTEM_SHA256
+          : FROZEN_PHASE16_SYNTHETIC_CORPUS_SHA256
+      );
+    } else {
+      assert.equal(report.authority.inputs[name].sha256, sha256(read(path)), `${name} input drifted`);
+    }
   }
-  assert.deepEqual(refusalReport, buildRefusalReport(sources.ecosystem, sources.phase13));
-  assert.deepEqual(
-    report,
-    buildPhase16Report({ ...sources, probeExecution: report.performance.currentRuntimeProbeProcessExecution, accepted: { corpus: {
-      receiptIssuedArtifactCases: report.corpus.preservedReceiptIssuedRows
-    }, compactness: report.compactness, performance: report.performance.currentAcceptedCorpus,
-    ordinaryAnalysis: Object.fromEntries(Object.entries(report.ordinaryAnalysis).filter(([key]) => key !== "sourceGate")) } })
+  assert.deepEqual(report.corpus.ecosystem, {
+    rows: 418,
+    complete: 40,
+    partial: 318,
+    refused: 60,
+    completePercentage: 9.57,
+    generatablePercentage: 85.65
+  });
+  assert.equal(report.corpus.preservedReceiptIssuedRows, 24);
+  assert.equal(refusalReport.schemaVersion, 1);
+  assert.equal(refusalReport.documentKind, "solid-checker-phase16-refusal-report");
+  assert.equal(refusalReport.missingEvidenceIsNegativeProof, false);
+  assert.equal(refusalReport.generatedProposalFailures.length, 60);
+  assert.equal(refusalReport.partialCaseRefusals.length, 318);
+  assert.equal(
+    refusalReport.partialCaseRefusals.reduce(
+      (total, row) => total + (row.refusedArtifactCases ?? 0),
+      0
+    ),
+    1458
   );
+  assert.ok(
+    refusalReport.generatedProposalFailures.every(row =>
+      row.probeId && row.package && row.family && row.class && row.owner && row.reason
+    )
+  );
+  assert.ok(
+    refusalReport.partialCaseRefusals.every(row =>
+      row.probeId && row.package && row.family && row.owner && row.reason
+    )
+  );
+  assert.equal(report.compactness.proofEvidenceBytes.count, 24);
+  assert.equal(report.compactness.acceptanceReceiptBytes.count, 24);
+  assert.equal(report.compactness.rawEvidenceRetainedByOrdinaryAnalysis, 0);
+  assert.equal(report.performance.currentAcceptedCorpus.proofVerificationAndReceiptNs.count, 24);
+  assert.equal(sources.ecosystem.scope.kind, "full");
+  assert.equal(sources.ecosystem.scope.probesRun, 418);
 }
 
 function renderMarkdown(report) {

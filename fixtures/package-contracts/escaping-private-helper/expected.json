@@ -1,0 +1,299 @@
+{
+  "entrypoints": {
+    "./argument": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "18858b24d6d6226603d5daa5f8a392c5699acde863b385fd11d9d2f059140a52",
+            "path": "./argument.js",
+            "sha256": "aca233bbc3d577670835588e97202e4301ba42600f88266334702b617dce1bf5"
+          },
+          "declarations": {
+            "path": "./argument.d.ts",
+            "sha256": "67c87e9353518624028ed881420db7708d03e701f48bf0c2eeddbc1e961fd521"
+          },
+          "exports": {
+            "Escaped": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1argument/default",
+            "typesBranch": "/exports/.~1argument/types"
+          }
+        }
+      ]
+    },
+    "./builtin": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "66dd2f75dfa9ced2aae38b323b1e72eff4c680f61d927ef85182f969fba71241",
+            "path": "./builtin.jsx",
+            "sha256": "b2cc90716feab77281b87039ce9514cf5baf894fbf01901c458e9805e77b65b1"
+          },
+          "declarations": {
+            "path": "./builtin.d.ts",
+            "sha256": "cb0bef8ea179f758040d4b9419b295c300a27c38f9001e9790020787314b6bcf"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1builtin/default",
+            "typesBranch": "/exports/.~1builtin/types"
+          }
+        }
+      ]
+    },
+    "./called": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "e350deb6ab3d129682645fac288f2148e77777c20345b2bd1082a34acd30f5db",
+            "path": "./called.js",
+            "sha256": "18d2d599c4ecc150a9655c385ef90b306f47b721a98f25ccc224ee3c5c7883c3"
+          },
+          "declarations": {
+            "path": "./called.d.ts",
+            "sha256": "9c69d63fb8fb4f42ccaaf6a519282448a3981835be1a51caca10e3a4ec267125"
+          },
+          "exports": {
+            "Direct": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1called/default",
+            "typesBranch": "/exports/.~1called/types"
+          }
+        }
+      ]
+    },
+    "./children": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "0190b6ee44650ee11f8c2edeaf0b23d7d9fbc2e051769e0535b466aa6651f522",
+            "path": "./children.jsx",
+            "sha256": "7b09c2dad0a11beb7bb82e386d9ef470c9a636d918f359b621a1debb9d609339"
+          },
+          "declarations": {
+            "path": "./children.d.ts",
+            "sha256": "e774e6bb653d906422694023c6dbc80ede5f436a4b5666e6842450288c162c8b"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1children/default",
+            "typesBranch": "/exports/.~1children/types"
+          }
+        }
+      ]
+    },
+    "./closed": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "fc7d441fa67be794f3344df1326d109712ecd95ce2bda7e61da44f7abf2a8555",
+            "path": "./closed.jsx",
+            "sha256": "daf0b2c7811844e0c1ce22277aefbed14fc2eb6d1ba1b55255e9d89f778d0fc3"
+          },
+          "declarations": {
+            "path": "./closed.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1closed/default",
+            "typesBranch": "/exports/.~1closed/types"
+          }
+        }
+      ]
+    },
+    "./intrinsic": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "7349ae7354477c7788d60c813e708455805f729a293da7604f934d5436e34457",
+            "path": "./intrinsic.jsx",
+            "sha256": "2b1d5a94e3744271a4865b720ae0d6bd3b9b3f3d5a70208562354da9027a56fe"
+          },
+          "declarations": {
+            "path": "./intrinsic.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1intrinsic/default",
+            "typesBranch": "/exports/.~1intrinsic/types"
+          }
+        }
+      ]
+    },
+    "./member-tag": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d92e68d1a2f06978b1f78517c628acb280f283f1374dc7dcdea9c55806a0404b",
+            "path": "./member-tag.jsx",
+            "sha256": "2176c2aef86bb91ea29f3eb4bf93a85489aec410477fcf3a289f4039dc2f51bb"
+          },
+          "declarations": {
+            "path": "./member-tag.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1member-tag/default",
+            "typesBranch": "/exports/.~1member-tag/types"
+          }
+        }
+      ]
+    },
+    "./member-tag-children": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5ab4e3c4dec02e1657249507a33fb09c8abfc9c3c93eebbdded13fc0fa632136",
+            "path": "./member-tag-children.jsx",
+            "sha256": "ef2a913e07a17757a165b7d31b2a7bec87e663c1d1c9cdb5ad41af89955acde4"
+          },
+          "declarations": {
+            "path": "./member-tag-children.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1member-tag-children/default",
+            "typesBranch": "/exports/.~1member-tag-children/types"
+          }
+        }
+      ]
+    },
+    "./prop-value": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "68456754d7b4314b26b540813e392d3083d1ad7e5d3593754d0c407a270eb543",
+            "path": "./prop-value.jsx",
+            "sha256": "b782a56f9f622e34464fae7fd446c26e7db471cf21f21ece8c1a39ec018c2c1b"
+          },
+          "declarations": {
+            "path": "./prop-value.d.ts",
+            "sha256": "90413c15159993deaa9eef6ae5088d3e05267b2d32e2c3662db132dd8c5f5dfd"
+          },
+          "exports": {
+            "Held": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1prop-value/default",
+            "typesBranch": "/exports/.~1prop-value/types"
+          }
+        }
+      ]
+    },
+    "./rendered": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "1888abdb2d807f2268c0f5e902f836c9cdfd5fda74feac032d5c07a28c968894",
+            "path": "./rendered.jsx",
+            "sha256": "d82989cf08f621a3c9f0051895b850da4d52ac85d8e495d45a59911d121ca41c"
+          },
+          "declarations": {
+            "path": "./rendered.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1rendered/default",
+            "typesBranch": "/exports/.~1rendered/types"
+          }
+        }
+      ]
+    },
+    "./returned": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "ecaa4a64b6793b2bd0a0f319346055c01d1e3f0994b1f6bf43f2e236c96b0309",
+            "path": "./returned.js",
+            "sha256": "1dcc95c4205784d67efa6bda7b7826995eba4855e413b4a31ee022236ecbfb53"
+          },
+          "declarations": {
+            "path": "./returned.d.ts",
+            "sha256": "86722c5ee819f39c7e462f5fd2ffc858469c8b123e3ae736bdda0e8a5230809b"
+          },
+          "exports": {
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "makePanel": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1returned/default",
+            "typesBranch": "/exports/.~1returned/types"
+          }
+        }
+      ]
+    },
+    "./shadowed": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "5a0ddf31c1c90ec0611bb7bbfcba017c2e630df867a368b4bec2e5b1542d5cb5",
+            "path": "./shadowed.jsx",
+            "sha256": "8182047b42c387f42de523cdc5394df24a50408ecea807efb9e059733fe4bc21"
+          },
+          "declarations": {
+            "path": "./shadowed.d.ts",
+            "sha256": "f8d33478101fe008554b9ca59f8ce3eeae9e342ffc9d69531e8b7d979d163e1a"
+          },
+          "exports": {
+            "App": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Isolated": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1shadowed/default",
+            "typesBranch": "/exports/.~1shadowed/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:b169b833028663446b393993b23eb1d3351a5355cdb4a14638f99ed66b0d64fc",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "b169b833028663446b393993b23eb1d3351a5355cdb4a14638f99ed66b0d64fc"
+    },
+    "name": "escaping-private-helper",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

@@ -36,7 +36,8 @@ current program generation. Its identity is a SHA-256 digest over:
 
 - call versus construct kind;
 - canonical target identity;
-- exact current declaration location and overload ordinal;
+- exact current declaration location, selected overload ordinal, and complete
+  same-kind declaration count;
 - minimum argument count and rest presence;
 - instantiated formal type descriptors in formal order; and
 - instantiated return type descriptor.
@@ -179,6 +180,13 @@ old replies, mismatched project IDs, schema mismatch, and producer-build
 mismatch fail before facts are exposed. A transcript never survives an update
 without a fresh request and fresh envelope.
 
+Policy-2 certification calls `Session::certification_invocations` through the
+backend's private-execution adapter. Its non-serializable identity additionally
+binds the compile-time executable and source-manifest pins, exact launched PID,
+session and restart epoch, project generation, snapshot root, demand-graph root,
+and every proof-demand ID. Changing the launch arguments or transport mode drops
+the certification pin.
+
 ## Completeness lattice
 
 Every proof-bearing domain uses the same four states:
@@ -254,3 +262,9 @@ schema digest changes atomically and refuses mixed peers. The packed retained
 table remains schema 17 because invocation transcripts are not table rows.
 Rebuilding the local producer changes the source-manifest digest and build ID in
 the same commit.
+
+Phase 19 subsequently moves the handshake from 3 to 4 while retaining lifecycle
+schema 1. Protocol 4 adds `overloadCount`, includes it in selected-signature
+identity v2, and marks unresolved instantiable type leaves locally open. This
+lets policy 2 refuse cherry-picked overload closure without contaminating exact
+sibling value paths.

@@ -212,6 +212,91 @@ pub enum Primitive {
     RepeatMap,
 }
 
+/// Owner-requirement category carried by an exact primitive call. Kept in the
+/// dialect vocabulary so proof adapters never reconstruct Solid behavior from
+/// a function name in shared infrastructure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OwnerRequirementRole {
+    Effect,
+    Cleanup,
+    SettledCleanup,
+}
+
+/// Returns an owner-requirement role only when every dialect that recognizes
+/// the exact export name assigns the same role. An unrecognized or disputed
+/// name stays open rather than inheriting behavior from another dialect.
+#[must_use]
+pub fn unambiguous_owner_requirement_role(name: &str) -> Option<OwnerRequirementRole> {
+    let mut roles = [Version::V1, Version::V2]
+        .into_iter()
+        .filter_map(|version| {
+            let dialect = version.dialect();
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name)).then_some(primitive)
+        })
+        .filter_map(|primitive| match primitive {
+            Primitive::CreateEffect
+            | Primitive::CreateRenderEffect
+            | Primitive::CreateTrackedEffect => Some(OwnerRequirementRole::Effect),
+            Primitive::OnCleanup => Some(OwnerRequirementRole::Cleanup),
+            Primitive::OnSettled => Some(OwnerRequirementRole::SettledCleanup),
+            _ => None,
+        });
+    let first = roles.next()?;
+    roles.all(|role| role == first).then_some(first)
+}
+
+/// Returns true only when every dialect that canonically exports `name`
+/// identifies `argument` as a callback for this exact call shape.
+#[must_use]
+pub fn unambiguous_callback_argument(name: &str, argument: usize, argument_count: usize) -> bool {
+    let answers = [Version::V1, Version::V2]
+        .into_iter()
+        .filter_map(|version| {
+            let dialect = version.dialect();
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name))
+                .then(|| dialect.callback_execution_at(primitive, argument, argument_count))
+        })
+        .collect::<Vec<_>>();
+    let Some(Some(first)) = answers.first().copied() else {
+        return false;
+    };
+    answers.into_iter().all(|answer| answer == Some(first))
+}
+
+/// Returns true only when the exact public type export is function-shaped in
+/// every dialect that recognizes it from this module.
+#[must_use]
+pub fn unambiguous_callable_type(origin_module: &str, name: &str) -> bool {
+    let roles = [Version::V1, Version::V2]
+        .into_iter()
+        .filter_map(|version| version.dialect().type_role(origin_module, name))
+        .collect::<Vec<_>>();
+    !roles.is_empty()
+        && roles
+            .into_iter()
+            .all(|role| matches!(role, TypeRole::Accessor | TypeRole::Setter))
+}
+
+/// Returns true only for a tuple item whose callability is fixed by every
+/// dialect that canonically exports the exact primitive name.
+#[must_use]
+pub fn unambiguous_callable_result_tuple_item(name: &str, index: usize) -> bool {
+    let answers = [Version::V1, Version::V2]
+        .into_iter()
+        .filter_map(|version| {
+            let dialect = version.dialect();
+            let primitive = dialect.primitive(name)?;
+            (dialect.name_of(primitive) == Some(name)).then_some(match primitive {
+                Primitive::CreateSignal => matches!(index, 0 | 1),
+                _ => false,
+            })
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|answer| answer)
+}
+
 /// The role a JSX tag plays as a boundary.
 ///
 /// Callers ask for the role, never the name: 1.x spells the async boundary
@@ -2395,5 +2480,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn owner_requirement_roles_need_unambiguous_dialect_ownership() {
+        assert_eq!(
+            unambiguous_owner_requirement_role("createEffect"),
+            Some(OwnerRequirementRole::Effect)
+        );
+        assert_eq!(
+            unambiguous_owner_requirement_role("onCleanup"),
+            Some(OwnerRequirementRole::Cleanup)
+        );
+        assert_eq!(
+            unambiguous_owner_requirement_role("onSettled"),
+            Some(OwnerRequirementRole::SettledCleanup)
+        );
+        assert_eq!(unambiguous_owner_requirement_role("effect"), None);
+        assert_eq!(unambiguous_owner_requirement_role("createUnknown"), None);
+    }
+
+    #[test]
+    fn implementation_roles_require_canonical_cross_dialect_agreement() {
+        assert!(unambiguous_callback_argument("createMemo", 0, 1));
+        assert!(!unambiguous_callback_argument("createEffect", 1, 2));
+        assert!(!unambiguous_callback_argument("effect", 0, 1));
+        assert!(unambiguous_callable_result_tuple_item("createSignal", 0));
+        assert!(unambiguous_callable_result_tuple_item("createSignal", 1));
+        assert!(!unambiguous_callable_result_tuple_item("createSignal", 2));
+        assert!(!unambiguous_callable_result_tuple_item("createUnknown", 0));
+        assert!(unambiguous_callable_type("solid-js", "Accessor"));
+        assert!(unambiguous_callable_type("solid-js", "Setter"));
+        assert!(!unambiguous_callable_type("user-module", "Accessor"));
+        assert!(!unambiguous_callable_type("solid-js", "Signal"));
     }
 }

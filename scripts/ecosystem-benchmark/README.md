@@ -40,8 +40,94 @@ make build-checker-debug
 make build-checker-release
 ```
 
-The runner defaults to `min(available CPUs, 8)` workers. `--concurrency N`
-remains available for controlled comparisons or memory-constrained hosts.
+The runner defaults to `min(available CPUs, 8)` install/generation workers.
+Historically expensive rows start first, while each package proposal retains a
+separately bounded adaptive fan-out across its exact source programs. On hosts
+with more than eight CPUs, already-complete rows certify in the otherwise-idle
+outer slots without reducing generation below eight. Once proposal work
+drains, certification can expand to `min(available CPUs + 6, 20)` outer
+workers — wider than the core count, because a certification child mostly
+waits on filesystem metadata rather than a core once registry bytes are cached
+— with each child's ordinary artifact-analysis width reduced to preserve a
+host-wide bound. Certification
+reuses the exact install already verified for generation; native code still
+replays every archive, lockfile, graph root, source closure, proposal, and
+policy input before issuing a receipt. `--concurrency N` and
+`--certification-concurrency N` remain available for controlled comparisons or
+memory-constrained hosts.
+
+Generation and certification run inside a pool of long-lived CLI workers
+(`lib/cli-worker.mjs`, `lib/cli-worker-pool.mjs`) rather than one CLI process
+per probe and phase. A worker imports the two CLI functions once and serves one
+request at a time, reproducing the CLI's stdout, stderr and exit status exactly;
+the pool keeps the per-request timeout and memory supervision by killing the
+worker that serves the request, recycles workers after 64 requests, and never
+shares state between requests (every call builds its own resolution session and
+scratch, as a fresh process would). The ~800 process starts a corpus run used to
+pay for cost more CPU than the work they carried.
+
+Certifications link their compiler-source packages from a shared materialized
+store (`rust/target/materialized-store`, `SOLID_CHECKER_MATERIALIZED_STORE`)
+instead of writing thousands of files into every private Type Facts project:
+one symlink per source package, with the producer running under
+`preserveSymlinks` so every path it reports stays inside the project. An entry
+holds exactly the loadable files of one authenticated snapshot under its
+content root; before it is linked every file is re-read and its digest compared
+with the in-memory snapshot, an entry that disagrees is rebuilt, and the source
+census afterwards still verifies every file the producer read against the
+snapshot bytes — a tampered or stale entry can cost a refusal, never a wrong
+receipt. The same store holds the verified execution images of the Type Facts
+producer and the checker (`images/<digest>/`), created once and launched by
+every certification afterwards instead of a fresh private copy each time —
+macOS assesses a newly created executable on its first launch, about half a
+second each and serialized system-wide, which under twenty concurrent
+certifications had made the producer launch cost ~5 s, the whole of witness
+acquisition. Each image is still hashed against its pin before every launch.
+`--no-materialized-store` writes every copy as before; the report records the
+choice under `checker.materializedStore`.
+
+Installs reuse a previous run's exact resolution: each probe's resolved
+`package.json` and `bun.lock` are kept under `rust/target/install-locks`,
+keyed by the exact spec set, and a later run places them in the project and
+installs with `--frozen-lockfile` — no registry manifest is consulted and the
+transitive resolution is the one recorded. Every expected package is still
+verified by version and lock integrity against the manifest exactly as before,
+a frozen install that fails falls back to the ordinary install, and a manifest
+re-pin is a different key. `--no-install-lockfile-cache` resolves every install
+against the registry; the report records the choice under
+`checker.installLockfileCache`. Before this, install slot time swung between
+74 s and 478 s across otherwise identical runs as Bun re-fetched manifests.
+
+Certification children run with `SOLID_CHECKER_DURABLE_WRITES=none`: every
+catalog a probe publishes lives in a temporary directory removed seconds
+later, so the full-disk flushes (`F_FULLFSYNC` on Apple platforms, about ten
+per certification) that make a real publication crash-durable buy nothing here.
+Atomic visibility is unchanged — every publication still writes to a temporary
+path and renames it into place — and the product default flushes;
+`--durable-writes` restores it for a run. The report records the choice under
+`checker.durableWrites`.
+
+Generation runs under the certification importer of its probe and
+certification receives the emitted proposal through `contract certify
+--proposal`, so the proposal each probe's generation phase measured is verified
+rather than regenerated; certify admits the hand-over only when identity,
+integrity, importer, census and document digests match, and regenerates
+otherwise (the certification audit records `reusedProposal`).
+
+Certification children share a content-addressed registry cache,
+`rust/target/registry-cache` by default (`--registry-cache DIR`,
+`SOLID_CHECKER_REGISTRY_CACHE`, or `--no-registry-cache` to fetch every byte
+fresh). Each certification acquires the packument and archive of its root and
+of every compiler-source dependency the lockfile selects from the registry, and
+nearly every probe names `solid-js`; before the cache, a wide-surface root
+spent minutes in sequential registry round trips and the corpus wall time
+tracked registry latency rather than the checker. An entry is addressed by the
+exact (origin, package, version, integrity), is written only after the archive
+hashed to that integrity, and is used only when it still does and its packument
+still names that exact record — the checks a fresh acquisition passes — with
+Rust re-deriving the snapshot from the bytes as before. The report records the
+cache location under `checker.registryCache` (null when disabled) so a wall
+time can be read knowing whether it includes registry latency.
 
 Each JSON result records `installDurationMs` and `generationDurationMs`
 separately. The Markdown report aggregates those as worker timings, with the
@@ -58,6 +144,15 @@ counts unknown claims per domain, refused entrypoints, closure notes, and
 positive behavioral rows. It reads them inside `runProbe`, before cleanup
 removes the output directory — moving that read later would silently measure
 nothing.
+
+Artifact cases the generator recorded as *inapplicable* are counted separately,
+as `artifactCasesInapplicable`, and never added to `artifactCasesRefused`. An
+entrypoint no consumer reaches as a module — an unpublished target behind a
+custom export condition, or a sourcemap/JSON/CSS entrypoint — asserts nothing
+about certifiable behavior, so counting it as a refusal would make a row look
+unproven where nothing was ever provable. See the sidecar's `inapplicable`
+array and `artifactCaseDisposition` in
+`packages/cli/scripts/generate-package-contract.mjs`.
 
 It is additive: no outcome class, success rate, baseline comparison, or
 floor/head diff depends on it, and a result with no `contractContent` still

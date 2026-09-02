@@ -1,0 +1,18 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "legacy-dual-root-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "unsupported-artifact-shape",
+      "reason": "no declaration target exists for <package-root>/dist/node.cjs"
+    }
+  ],
+  "inapplicable": []
+}

@@ -29,8 +29,8 @@ use sha2::{Digest, Sha256};
 use solid_facts_backend::{
     DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement, SourceChange, SourceFile,
     TypeFactsSession, accepted_contract_catalog_members, bundled_first_party_contract_index,
-    discovered_contract_paths, imported_package_roots, read_accepted_contract_catalog,
-    semantic_demand_options_for_enablement,
+    discovered_contract_paths, imported_package_roots, read_accepted_contract_catalog_with_trust,
+    read_policy2_trust_configuration, semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
 use solid_reactive_ir::RuntimeEnvironment;
@@ -45,6 +45,8 @@ struct CheckRequest {
     project_id: String,
     #[serde(default)]
     accepted_contract_catalog: String,
+    #[serde(default)]
+    receipt_trust_configuration: String,
     #[serde(default)]
     presets: Vec<String>,
     #[serde(default)]
@@ -616,9 +618,12 @@ fn answer(
     } else {
         Some(PathBuf::from(&check.accepted_contract_catalog))
     };
+    let trust = (!check.receipt_trust_configuration.is_empty())
+        .then(|| read_policy2_trust_configuration(Path::new(&check.receipt_trust_configuration)))
+        .transpose()?;
     let contracts = catalog
         .as_deref()
-        .map(read_accepted_contract_catalog)
+        .map(|path| read_accepted_contract_catalog_with_trust(path, trust.as_ref()))
         .transpose()?
         .unwrap_or_default()
         .with_fallback(bundled);
@@ -650,8 +655,16 @@ fn answer(
     let modules = imported_package_roots(&facts);
     state.last = Some(CachedAnswer {
         generation: state.session.generation(),
-        explicit: vec![check.accepted_contract_catalog.clone()],
-        contract_files: contract_files(state, &modules, &check.accepted_contract_catalog)?,
+        explicit: vec![
+            check.accepted_contract_catalog.clone(),
+            check.receipt_trust_configuration.clone(),
+        ],
+        contract_files: contract_files(
+            state,
+            &modules,
+            &check.accepted_contract_catalog,
+            &check.receipt_trust_configuration,
+        )?,
         presets: check.presets.clone(),
         enable_rules: check.enable_rules.clone(),
         runtime: check.runtime.clone(),
@@ -679,10 +692,18 @@ fn cached_answer(
     let Some(cached) = &state.last else {
         return Ok(None);
     };
-    let current = contract_files(state, &cached.modules, &check.accepted_contract_catalog)?;
+    let current = contract_files(
+        state,
+        &cached.modules,
+        &check.accepted_contract_catalog,
+        &check.receipt_trust_configuration,
+    )?;
     Ok(cached.snapshot_if_current(
         state.session.generation(),
-        std::slice::from_ref(&check.accepted_contract_catalog),
+        &[
+            check.accepted_contract_catalog.clone(),
+            check.receipt_trust_configuration.clone(),
+        ],
         &current,
         &check.presets,
         &check.enable_rules,
@@ -697,6 +718,7 @@ fn contract_files(
     state: &State,
     modules: &[String],
     accepted_catalog: &str,
+    receipt_trust_configuration: &str,
 ) -> Result<Vec<ContractFile>, Box<dyn Error>> {
     let directory = state
         .project
@@ -720,6 +742,9 @@ fn contract_files(
     if let Some(catalog) = catalog {
         paths.extend(accepted_contract_catalog_members(&catalog)?);
         paths.push(catalog);
+    }
+    if !receipt_trust_configuration.is_empty() {
+        paths.push(PathBuf::from(receipt_trust_configuration));
     }
     paths.sort();
     paths.dedup();
@@ -750,6 +775,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let payload = serde_json::to_vec(&CheckRequest {
         project_id: request.project_id.clone(),
         accepted_contract_catalog: request.accepted_contract_catalog.clone(),
+        receipt_trust_configuration: request.receipt_trust_configuration.clone(),
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
         runtime: request.runtime.clone(),
@@ -931,6 +957,7 @@ mod tests {
         let mut repeated = CheckRequest {
             project_id: "project".into(),
             accepted_contract_catalog: String::new(),
+            receipt_trust_configuration: String::new(),
             presets: vec!["z".into(), "preferences".into(), "z".into()],
             enable_rules: vec![
                 "prefer-show".into(),

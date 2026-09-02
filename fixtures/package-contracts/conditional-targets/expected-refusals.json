@@ -1,0 +1,20 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "conditional-targets-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": ".",
+      "conditions": [
+        "solid"
+      ],
+      "stage": "artifact-case",
+      "applicability": "unavailable-published-target",
+      "reason": "resolved target <package-root>/unbuilt-solid.jsx is not a file"
+    }
+  ],
+  "inapplicable": []
+}

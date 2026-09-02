@@ -27,6 +27,7 @@ const (
 	wireTransitionEntityHasPrimitiveValueDomain
 	wireTransitionEntityHasConstructability
 	wireTransitionEntityHasPrimitiveLiteralCandidates
+	wireTransitionEntityHasRuntimeBindingKind
 )
 
 const (
@@ -216,6 +217,9 @@ func writeWireTransitionEntityRun(
 		if tableSchema >= TypeFactsTableSchemaVersionV16 && len(entity.PrimitiveLiteralCandidates) != 0 {
 			flags |= wireTransitionEntityHasPrimitiveLiteralCandidates
 		}
+		if tableSchema >= TypeFactsTableSchemaVersionV18 && entity.RuntimeBindingKind != RuntimeBindingAbsent {
+			flags |= wireTransitionEntityHasRuntimeBindingKind
+		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
 		}
@@ -312,6 +316,12 @@ func writeWireTransitionEntityRun(
 					return fmt.Errorf("entity %d has unknown primitive literal kind %q", index, candidate.Kind)
 				}
 			}
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV18 && entity.RuntimeBindingKind != RuntimeBindingAbsent {
+			if entity.RuntimeBindingKind < RuntimeBindingCallable || entity.RuntimeBindingKind > RuntimeBindingOpen {
+				return fmt.Errorf("entity %d has unknown runtime binding kind %d", index, entity.RuntimeBindingKind)
+			}
+			w.u64(uint64(entity.RuntimeBindingKind - 1))
 		}
 		previousStart = start
 	}

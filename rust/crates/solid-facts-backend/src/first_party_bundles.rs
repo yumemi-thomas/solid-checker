@@ -23,17 +23,12 @@ use thiserror::Error;
 
 use crate::{
     artifact_resolution::{ClosureManifest, ClosurePackageIdentity},
-    contract_workflow::{
-        CheckedCorpusAcceptance, ContractWorkflowError, accept_checked_corpus_case,
-    },
+    contract_workflow::ContractWorkflowError,
     diagnostics::installed_package_integrity,
 };
 
 const CONFORMANCE_BYTES: &[u8] =
     include_bytes!("../../../../benchmarks/package-contract-v2/phase13/conformance.json");
-const REVIEWED_SUPPORT_BYTES: &[u8] = include_bytes!(
-    "../../../../benchmarks/package-contract-v2/phase14/solid2-reviewed-support.json"
-);
 const AUDIT_BYTES: &[u8] =
     include_bytes!("../../../../benchmarks/package-contract-v2/phase0/rc3/audit.json");
 
@@ -79,48 +74,7 @@ struct EmbeddedBundle {
     receipt: &'static [u8],
 }
 
-const EMBEDDED_BUNDLES: &[EmbeddedBundle] = &[
-    EmbeddedBundle {
-        document: include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solid-js.json"),
-        receipt: include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solid-js.receipt.json"),
-    },
-    EmbeddedBundle {
-        document: include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solidjs-signals.json"),
-        receipt: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-signals.receipt.json"
-        ),
-    },
-    EmbeddedBundle {
-        document: include_bytes!("../../../../pkg/contracts/bundled/solid-v2/solidjs-web.json"),
-        receipt: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-web.receipt.json"
-        ),
-    },
-    EmbeddedBundle {
-        document: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-web--server-functions-browser-client.json"
-        ),
-        receipt: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-web--server-functions-browser-client.receipt.json"
-        ),
-    },
-    EmbeddedBundle {
-        document: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-web--server-functions-node-server.json"
-        ),
-        receipt: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-web--server-functions-node-server.receipt.json"
-        ),
-    },
-    EmbeddedBundle {
-        document: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json"
-        ),
-        receipt: include_bytes!(
-            "../../../../pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.receipt.json"
-        ),
-    },
-];
+const EMBEDDED_BUNDLES: &[EmbeddedBundle] = &[];
 
 struct NamedDocument {
     name: &'static str,
@@ -135,23 +89,6 @@ macro_rules! solid1_authority_document {
                 "../../../../benchmarks/package-contract-v2/phase14/solid-v1-authority/",
                 $stem,
                 ".json"
-            )),
-        }
-    };
-}
-
-macro_rules! solid1_embedded_bundle {
-    ($stem:literal) => {
-        EmbeddedBundle {
-            document: include_bytes!(concat!(
-                "../../../../pkg/contracts/bundled/solid-v1/",
-                $stem,
-                ".json"
-            )),
-            receipt: include_bytes!(concat!(
-                "../../../../pkg/contracts/bundled/solid-v1/",
-                $stem,
-                ".receipt.json"
             )),
         }
     };
@@ -184,26 +121,7 @@ const SOLID1_AUTHORITY_DOCUMENTS: &[NamedDocument] = &[
     solid1_authority_document!("rootless-root-default"),
 ];
 
-const EMBEDDED_SOLID1_BUNDLES: &[EmbeddedBundle] = &[
-    solid1_embedded_bundle!("solid-root-browser-development"),
-    solid1_embedded_bundle!("solid-root-browser-production"),
-    solid1_embedded_bundle!("solid-root-node"),
-    solid1_embedded_bundle!("solid-store-browser-development"),
-    solid1_embedded_bundle!("solid-store-browser-production"),
-    solid1_embedded_bundle!("solid-store-node"),
-    solid1_embedded_bundle!("solid-web-browser-development"),
-    solid1_embedded_bundle!("solid-web-browser-production"),
-    solid1_embedded_bundle!("solid-web-node"),
-    solid1_embedded_bundle!("solid-universal-development"),
-    solid1_embedded_bundle!("solid-universal-production"),
-    solid1_embedded_bundle!("solid-h-jsx-runtime-default"),
-    solid1_embedded_bundle!("solid-h-jsx-dev-runtime-default"),
-    solid1_embedded_bundle!("solid-web-storage-default"),
-    solid1_embedded_bundle!("scheduled-root-browser"),
-    solid1_embedded_bundle!("scheduled-root-node"),
-    solid1_embedded_bundle!("debounce-root-default"),
-    solid1_embedded_bundle!("rootless-root-default"),
-];
+const EMBEDDED_SOLID1_BUNDLES: &[EmbeddedBundle] = &[];
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -357,60 +275,16 @@ pub(crate) fn solid2_rc3_bundles_with_measurements()
         }
     }
 
-    let checked_authority = [
-        (CONFORMANCE_BYTES.len() as u64).to_be_bytes().as_slice(),
-        CONFORMANCE_BYTES,
-        (REVIEWED_SUPPORT_BYTES.len() as u64)
-            .to_be_bytes()
-            .as_slice(),
-        REVIEWED_SUPPORT_BYTES,
-    ]
-    .concat();
-    let mut bundles = Vec::new();
+    // The checked corpus remains an oracle for proposal construction, but it
+    // is not proof authority. Every case currently reaches at least the
+    // mandatory live probe gate, whose authenticated harness binding is still
+    // unavailable, so the policy-2 cut retires rather than grandfathers these
+    // policy-1 bundles.
     for ((package_name, artifact_id), (artifact, package)) in grouped {
         let complete = ContractProposal::new(package, vec![artifact]).normalize()?;
-        if !has_local_closure(&complete) {
-            // An all-open case has no behavior that a receipt can authorize.
-            // The conformance corpus still records the exact open domain, but
-            // publishing it as an accepted analyzer input would grant no fact.
-            continue;
-        }
-        let CheckedCorpusAcceptance {
-            accepted,
-            measurements,
-        } = accept_checked_corpus_case(
-            &complete,
-            "solid-checker-phase14-rc3-bundle-authority",
-            &checked_authority,
-            true,
-        )
-        .map_err(|error| {
-            inconsistent(format!(
-                "cannot issue {package_name}:{artifact_id} from checked corpus: {error}"
-            ))
-        })?;
-        let accepted_case = crate::contract_document::decode(&accepted.document)
-            .and_then(|proposal| proposal.normalize())
-            .map_err(|error| {
-                inconsistent(format!("generated accepted document is invalid: {error}"))
-            })?
-            .artifact_cases()[0]
-            .id
-            .clone();
-        bundles.push(MeasuredFirstPartyBundle {
-            bundle: FirstPartyBundle {
-                file_stem: bundle_stem(&package_name, &artifact_id),
-                package: package_name,
-                artifact_case: accepted_case,
-                selector: None,
-                document: accepted.document,
-                receipt: accepted.receipt,
-            },
-            measurements,
-        });
+        let _ = (package_name, artifact_id, complete);
     }
-    bundles.sort_by(|left, right| left.bundle.file_stem.cmp(&right.bundle.file_stem));
-    Ok(bundles)
+    Ok(Vec::new())
 }
 
 /// Replays the normalized Solid 1 authority captured during the atomic Phase
@@ -444,7 +318,6 @@ pub(crate) fn solid1_bundles_with_measurements()
         ));
     }
     let mut seen = BTreeSet::new();
-    let mut bundles = Vec::new();
     for case in authority.cases {
         if case.legacy_authority.trim().is_empty() || !seen.insert(case.document.clone()) {
             return Err(inconsistent(
@@ -484,47 +357,14 @@ pub(crate) fn solid1_bundles_with_measurements()
                 case.document
             )));
         }
-        if !has_local_closure(&normalized) {
-            // Exact acquisition can prove an exported subpath while the
-            // runtime/declaration pair exposes no common value binding. Keep
-            // that case in the authority census, but an empty semantic case
-            // has nothing a receipt may authorize for analysis.
-            continue;
-        }
-        let CheckedCorpusAcceptance {
-            accepted,
-            measurements,
-        } = accept_checked_corpus_case(
-            &normalized,
-            "solid-checker-phase14-solid1-normalized-authority",
-            source,
-            true,
-        )
-        .map_err(|error| {
-            inconsistent(format!(
-                "Solid 1 authority {} cannot issue a receipt: {error}",
-                case.document
-            ))
-        })?;
-        bundles.push(MeasuredFirstPartyBundle {
-            bundle: FirstPartyBundle {
-                file_stem: case.stem,
-                package: case.package,
-                artifact_case: artifact.id.clone(),
-                selector: Some(case.selector),
-                document: accepted.document,
-                receipt: accepted.receipt,
-            },
-            measurements,
-        });
+        let _ = (case.stem, case.selector, normalized);
     }
     if seen.len() != sources.len() {
         return Err(inconsistent(
             "Solid 1 authority carries an unindexed document",
         ));
     }
-    bundles.sort_by(|left, right| left.bundle.file_stem.cmp(&right.bundle.file_stem));
-    Ok(bundles)
+    Ok(Vec::new())
 }
 
 /// Builds receipt-validated analyzer inputs for exact first-party imports
@@ -1212,56 +1052,18 @@ fn trace_pointer(trace: &[String]) -> String {
     )
 }
 
-fn bundle_stem(package: &str, artifact: &str) -> String {
-    match (package, artifact) {
-        ("solid-js", "solid-browser-development") => "solid-js".into(),
-        ("@solidjs/signals", "signals-development") => "solidjs-signals".into(),
-        ("@solidjs/web", "web-browser-development") => "solidjs-web".into(),
-        _ => format!(
-            "{}--{artifact}",
-            package.trim_start_matches('@').replace(['/', '@'], "-")
-        ),
-    }
-}
-
 fn inconsistent(message: impl Into<String>) -> FirstPartyBundleError {
     FirstPartyBundleError::Inconsistent(message.into())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     use super::*;
-    use crate::contract_document;
 
     #[test]
-    fn checked_rc3_corpus_produces_receipt_issued_single_case_bundles() {
-        let bundles = solid2_rc3_bundles().unwrap();
-        assert_eq!(
-            bundles
-                .iter()
-                .map(|bundle| bundle.file_stem.as_str())
-                .collect::<BTreeSet<_>>(),
-            BTreeSet::from([
-                "solid-js",
-                "solidjs-signals",
-                "solidjs-web",
-                "solidjs-web--server-functions-browser-client",
-                "solidjs-web--server-functions-node-server",
-                "solidjs-web--web-node-server",
-            ])
-        );
-        for bundle in bundles {
-            let contract = contract_document::decode(&bundle.document)
-                .unwrap()
-                .normalize()
-                .unwrap();
-            assert_eq!(contract.package().name, bundle.package);
-            assert_eq!(contract.artifact_cases().len(), 1);
-            assert_eq!(contract.artifact_cases()[0].id, bundle.artifact_case);
-            assert!(!bundle.receipt.is_empty());
-        }
+    fn policy1_checked_corpora_have_no_active_receipt_issued_bundles() {
+        assert!(solid2_rc3_bundles().unwrap().is_empty());
+        assert!(solid1_bundles().unwrap().is_empty());
     }
 
     #[cfg(unix)]

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
@@ -152,7 +153,7 @@ func (p *project) resolvedDeclaration(signature *checker.Signature, node *ast.No
 		symbol = p.canonicalSymbol(symbol)
 		result.Symbol = p.idFor(symbol)
 		result.OriginModule = declarationModule(symbol)
-		if !strings.HasPrefix(symbol.Name, ast.InternalSymbolNamePrefix) {
+		if utf8.ValidString(symbol.Name) && !strings.HasPrefix(symbol.Name, ast.InternalSymbolNamePrefix) {
 			result.Name = symbol.Name
 		}
 	}
@@ -184,13 +185,14 @@ func (p *project) resolvedDeclaration(signature *checker.Signature, node *ast.No
 		if ownerSymbol == symbol {
 			continue
 		}
+		ownerName, _ := invocationPropertyName(ownerSymbol.Name)
 		name := owner.Name()
 		if name == nil {
 			name = owner
 		}
 		result.Owners = append(result.Owners, typefacts.DeclarationOwner{
 			Symbol: p.idFor(ownerSymbol),
-			Name:   ownerSymbol.Name,
+			Name:   ownerName,
 			Kind:   strings.TrimPrefix(owner.KindString(), "Kind"),
 			Location: typefacts.Location{
 				Path:      filepath.Clean(ownerSource.FileName()),

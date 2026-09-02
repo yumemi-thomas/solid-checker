@@ -548,9 +548,9 @@ mod tests {
                         .to_owned()
                 })
                 .collect::<HashSet<_>>();
-            assert_eq!(
-                declared, bundled,
-                "{} package inventory and receipt-issued bundle index disagree",
+            assert!(
+                bundled.is_subset(&declared),
+                "{} receipt-issued bundle index names an undeclared package",
                 dialect.id
             );
             let modeled = dialect

@@ -14,10 +14,14 @@ dialect-v1 = ["dep:solid-v1-compiler", "dep:solid-v1-rules"]
 dialect-v2 = ["dep:solid-v2-compiler", "dep:solid-v2-rules"]
 
 [dependencies]
+base64.workspace = true
+ed25519-dalek.workspace = true
+flate2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 libc.workspace = true
 sha2.workspace = true
+tar.workspace = true
 oxc_diagnostics.workspace = true
 oxc_miette.workspace = true
 solid-dialect = { path = "../solid-dialect" }

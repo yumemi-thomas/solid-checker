@@ -1,17 +1,22 @@
 use sha2::{Digest, Sha256};
+use solid_facts::compiler::{AnalysisRequest, CompilerOptions, ExecutionMap};
 use solid_facts_backend::{
     ArtifactResolutionFailure, ArtifactResolver, BundledEvidenceStore, ClosureManifest,
-    ContractFailure, EvidenceKey, EvidenceStore, EvidenceStoreFailure, HostResolutionAdapter,
-    ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
-    ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
-    StandaloneResolutionAdapter, encode_acceptance_receipt, load_accepted_contract,
+    ContractFailure, ContractWorkflowError, EvidenceKey, EvidenceStore, EvidenceStoreFailure,
+    HostResolutionAdapter, ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority,
+    ResolutionTrace, ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget,
+    ResolvedFile, ResolvedImport, StandaloneResolutionAdapter, encode_inferred_entrypoint_workflow,
+    load_accepted_contract, merge_contract_proposals, merge_plans,
 };
-use solid_reactive_ir::contract_semantics::{
-    AcceptanceReceipt, Digest as SemanticDigest, VerifierIdentity,
-};
+use solid_reactive_ir::{ContractClaim, ContractExport, ContractReactiveRead};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::{fs, time::SystemTime};
+use std::{
+    fs,
+    io::Write,
+    process::{Command, Stdio},
+    time::SystemTime,
+};
 
 fn resolved() -> ResolvedImport {
     let root = "/project/node_modules/solid-js";
@@ -58,12 +63,206 @@ fn resolved() -> ResolvedImport {
                 },
             },
         )]),
+        declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::Host,
     }
 }
 
 fn digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[test]
+fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpath() {
+    let mut subpath = resolved();
+    subpath.specifier = "solid-js/web".into();
+    subpath.requested_entrypoint = "./web".into();
+    let exports = BTreeMap::from([(
+        "version".into(),
+        ContractExport {
+            kind: "value".into(),
+            reactive_reads: ContractClaim::Known(Vec::new()),
+            returns: ContractClaim::Known(None),
+            callbacks: ContractClaim::Known(Vec::new()),
+            owner_requirements: ContractClaim::Known(Vec::new()),
+            async_behavior: ContractClaim::Known(String::new()),
+            open_claims: Default::default(),
+        },
+    )]);
+
+    assert!(
+        encode_inferred_entrypoint_workflow(
+            "solid-js",
+            "2.0.0-rc.3",
+            "./web",
+            exports.clone(),
+            &subpath,
+            false,
+        )
+        .is_ok()
+    );
+    assert!(matches!(
+        encode_inferred_entrypoint_workflow(
+            "solid-js",
+            "2.0.0-rc.3",
+            ".",
+            exports,
+            &subpath,
+            false,
+        ),
+        Err(ContractWorkflowError::Contract(
+            ContractFailure::IdentityMismatch { .. }
+        ))
+    ));
+}
+
+#[test]
+fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
+    let exports = BTreeMap::from([(
+        "version".into(),
+        ContractExport {
+            kind: "function".into(),
+            reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
+                kind: "parameter-member".into(),
+                label: String::new(),
+                parameter: Some(0),
+                path: None,
+            }]),
+            returns: ContractClaim::Known(None),
+            callbacks: ContractClaim::Known(Vec::new()),
+            owner_requirements: ContractClaim::Known(Vec::new()),
+            async_behavior: ContractClaim::Known(String::new()),
+            open_claims: Default::default(),
+        },
+    )]);
+    let mut primary = resolved();
+    primary.runtime_trace = ResolutionTrace {
+        branch: "/exports/./node".into(),
+        steps: vec![ResolutionTraceStep {
+            condition: "node".into(),
+            target: "./dist/solid.js".into(),
+        }],
+    };
+    primary.declaration_trace = ResolutionTrace {
+        branch: "/exports/./types".into(),
+        steps: vec![ResolutionTraceStep {
+            condition: "types".into(),
+            target: "./types/index.d.ts".into(),
+        }],
+    };
+    let first = encode_inferred_entrypoint_workflow(
+        "solid-js",
+        "2.0.0-rc.3",
+        ".",
+        exports.clone(),
+        &primary,
+        false,
+    )
+    .unwrap();
+    let mut alternate = resolved();
+    alternate.runtime_trace = ResolutionTrace {
+        branch: "/exports/./browser".into(),
+        steps: vec![ResolutionTraceStep {
+            condition: "browser".into(),
+            target: "./dist/solid.js".into(),
+        }],
+    };
+    alternate.declaration_trace = primary.declaration_trace.clone();
+    let second = encode_inferred_entrypoint_workflow(
+        "solid-js",
+        "2.0.0-rc.3",
+        ".",
+        exports,
+        &alternate,
+        false,
+    )
+    .unwrap();
+    let merged = merge_contract_proposals(
+        [first.document.as_slice(), second.document.as_slice()],
+        false,
+    )
+    .unwrap();
+    let plan = merge_plans(
+        &merged,
+        [(first.document, first.plan), (second.document, second.plan)],
+    )
+    .unwrap();
+    let plan: serde_json::Value = serde_json::from_slice(&plan).unwrap();
+    assert!(
+        plan["closureCandidates"]
+            .as_array()
+            .is_some_and(|candidates| !candidates.is_empty())
+    );
+}
+
+#[test]
+fn compiler_certification_child_binds_the_live_pid_request_and_materialized_output() {
+    fn launch(nonce: &str) -> (u32, serde_json::Value) {
+        let analysis = AnalysisRequest::new(
+            "input.tsx",
+            "const view = <div>{count()}</div>;",
+            CompilerOptions::default(),
+        );
+        let request = serde_json::json!({
+            "protocol": 1,
+            "nonce": nonce,
+            "snapshotRoot": format!("sha256:{}", "1".repeat(64)),
+            "demandGraphRoot": format!("sha256:{}", "2".repeat(64)),
+            "demandId": format!("sha256:{}", "3".repeat(64)),
+            "analysis": analysis,
+        });
+        let mut child = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .arg("--internal-compiler-certification-session")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let process_id = child.id();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(&serde_json::to_vec(&request).unwrap())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        (process_id, serde_json::from_slice(&output.stdout).unwrap())
+    }
+
+    let (first_pid, first) = launch("session-one");
+    let (second_pid, second) = launch("session-two");
+    for (pid, nonce, response) in [
+        (first_pid, "session-one", &first),
+        (second_pid, "session-two", &second),
+    ] {
+        assert_eq!(response["processId"], pid);
+        assert_eq!(response["nonce"], nonce);
+        assert_eq!(
+            response["compilerIdentity"],
+            "solid-v2:trace3:7f4e1135943c1fb01231d1bda707b4a1856a5607"
+        );
+        assert_eq!(
+            response["compilerSourceManifestSha256"],
+            "sha256:613049ba60fa514c662bd9350adb4b0ed9c3031e4f80f2bd1ecb23d56846fde0"
+        );
+        let map: ExecutionMap = serde_json::from_value(response["executionMap"].clone()).unwrap();
+        assert!(map.semantic_model.source_operations_complete);
+        assert!(!map.semantic_model.generated_operations_complete);
+        assert!(!map.semantic_model.operations.is_empty());
+        assert_eq!(
+            map.semantic_model.producer.unwrap().output_sha256,
+            format!(
+                "{:x}",
+                Sha256::digest(response["output"].as_str().unwrap().as_bytes())
+            )
+        );
+    }
+    assert_eq!(first["requestSha256"], second["requestSha256"]);
 }
 
 fn development_document() -> Vec<u8> {
@@ -87,7 +286,7 @@ fn malformed_documents_fail_through_the_single_loading_interface() {
 }
 
 #[test]
-fn normalized_stable_schema_refuses_a_receipt_not_issued_for_its_semantics() {
+fn normalized_stable_schema_reports_policy1_receipts_as_obsolete() {
     let document = development_document();
     let receipt = format!(
         "{{\"receiptVersion\":1,\"wireDigest\":\"{}\",\"semanticModelVersion\":1,\"semanticDigest\":\"sha256:{zeros}\",\"artifactsDigest\":\"sha256:{zeros}\",\"closureDigest\":\"sha256:{zeros}\",\"proofRoot\":\"sha256:{zeros}\",\"closedClaimsRoot\":\"sha256:{zeros}\",\"verifier\":{{\"build\":\"phase-2-test\",\"policy\":1}}}}",
@@ -98,8 +297,9 @@ fn normalized_stable_schema_refuses_a_receipt_not_issued_for_its_semantics() {
     let result = load_accepted_contract(&document, receipt.as_bytes(), &resolved());
     assert!(matches!(
         result,
-        Err(ContractFailure::ReceiptMismatch {
-            field: "semanticDigest"
+        Err(ContractFailure::UnsupportedReceiptVersion {
+            expected: 2,
+            actual: 1
         })
     ));
 }
@@ -120,7 +320,7 @@ fn replacement_contract_requires_the_format_discriminator() {
 }
 
 #[test]
-fn a_stale_receipt_is_rejected_before_normalization() {
+fn policy1_stale_receipt_is_obsolete_before_any_binding_is_trusted() {
     let document = development_document();
     let zeros = "0".repeat(64);
     let receipt = format!(
@@ -129,8 +329,9 @@ fn a_stale_receipt_is_rejected_before_normalization() {
 
     assert!(matches!(
         load_accepted_contract(&document, receipt.as_bytes(), &resolved()),
-        Err(ContractFailure::ReceiptMismatch {
-            field: "wireDigest"
+        Err(ContractFailure::UnsupportedReceiptVersion {
+            expected: 2,
+            actual: 1
         })
     ));
 }
@@ -232,42 +433,4 @@ fn project_local_receipts_are_canonical_content_addressed_and_idempotent() {
     .unwrap();
     assert_eq!(uppercase, first);
     fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn acceptance_receipt_encoding_is_deterministic_and_complete() {
-    let semantic = |byte: char| {
-        SemanticDigest::parse(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
-    };
-    let receipt = AcceptanceReceipt {
-        receipt_version: 1,
-        wire_digest: semantic('1'),
-        semantic_model_version: 1,
-        semantic_digest: semantic('2'),
-        artifacts_digest: semantic('3'),
-        closure_digest: semantic('4'),
-        proof_root: semantic('5'),
-        closed_claims_root: semantic('6'),
-        verifier: VerifierIdentity {
-            build: "phase-11-test".into(),
-            policy: 1,
-        },
-    };
-    let first = encode_acceptance_receipt(&receipt).unwrap();
-    let second = encode_acceptance_receipt(&receipt).unwrap();
-    assert_eq!(first, second);
-    assert_eq!(first.last(), Some(&b'\n'));
-    let decoded: serde_json::Value = serde_json::from_slice(&first).unwrap();
-    assert_eq!(decoded["wireDigest"], receipt.wire_digest.as_str());
-    assert_eq!(decoded["semanticDigest"], receipt.semantic_digest.as_str());
-    assert_eq!(
-        decoded["artifactsDigest"],
-        receipt.artifacts_digest.as_str()
-    );
-    assert_eq!(decoded["closureDigest"], receipt.closure_digest.as_str());
-    assert_eq!(decoded["proofRoot"], receipt.proof_root.as_str());
-    assert_eq!(
-        decoded["closedClaimsRoot"],
-        receipt.closed_claims_root.as_str()
-    );
 }

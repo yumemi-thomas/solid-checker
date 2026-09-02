@@ -9,8 +9,8 @@
 use std::collections::BTreeSet;
 
 use solid_reactive_ir::{
-    ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement, ContractReturn,
-    OwnerRequirementOperation, PackageContract,
+    CallbackSchedule, ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
+    ContractReturn, OwnerRequirementOperation, PackageContract,
     contract_semantics::{
         ArrayLength, ArtifactCase, CallClaims, CallSemantics, CallbackInvocation,
         CapabilityKnowledge, Cardinality, CardinalityScope, ContractProposal, Event,
@@ -24,7 +24,9 @@ use solid_reactive_ir::{
 };
 
 use crate::{
-    artifact_resolution::{ResolvedImport, proposal_identity, select_and_bind},
+    artifact_resolution::{
+        ResolvedImport, proposal_identity, select_and_bind, select_and_bind_with_external_targets,
+    },
     contract_interface::ContractFailure,
 };
 
@@ -39,7 +41,19 @@ pub(crate) fn normalize_inferred_contract_with_candidates(
     inferred: &PackageContract,
     resolved: &ResolvedImport,
 ) -> Result<(NormalizedContract, Vec<SemanticClaimSubject>), ContractFailure> {
-    let selected = normalize_inferred_contract_identity(inferred, resolved)?;
+    normalize_inferred_contract_with_candidates_and_external_targets(
+        inferred,
+        resolved,
+        &BTreeSet::new(),
+    )
+}
+
+pub(crate) fn normalize_inferred_contract_with_candidates_and_external_targets(
+    inferred: &PackageContract,
+    resolved: &ResolvedImport,
+    external_targets: &BTreeSet<(String, String)>,
+) -> Result<(NormalizedContract, Vec<SemanticClaimSubject>), ContractFailure> {
+    let selected = normalize_inferred_contract_identity(inferred, resolved, external_targets)?;
     let package = selected.package().clone();
     let mut cases = selected.artifact_cases().to_vec();
     let mut candidates = Vec::new();
@@ -63,6 +77,7 @@ pub(crate) fn normalize_inferred_contract_with_candidates(
 fn normalize_inferred_contract_identity(
     inferred: &PackageContract,
     resolved: &ResolvedImport,
+    external_targets: &BTreeSet<(String, String)>,
 ) -> Result<NormalizedContract, ContractFailure> {
     let entrypoint = inferred
         .entrypoints
@@ -83,7 +98,11 @@ fn normalize_inferred_contract_identity(
     let normalized = ContractProposal::new(package, vec![artifact_case])
         .normalize()
         .map_err(model_failure)?;
-    select_and_bind(&normalized, resolved)
+    if external_targets.is_empty() {
+        select_and_bind(&normalized, resolved)
+    } else {
+        select_and_bind_with_external_targets(&normalized, resolved, external_targets)
+    }
 }
 
 fn normalize_export(
@@ -131,8 +150,8 @@ fn normalize_export(
                 .enumerate()
                 .map(|(index, read)| {
                     let id = OperationId(format!("{prefix}read-{index}"));
-                    let input = match (read.parameter, read.member.as_ref()) {
-                        (Some(parameter), member) => ValueShape::Parameter {
+                    let input = match (read.parameter, read.path.as_ref()) {
+                        (Some(parameter), path) => ValueShape::Parameter {
                             index: u16::try_from(parameter).map_err(|_| {
                                 ContractFailure::InvalidSemanticModel {
                                     reason: format!(
@@ -140,7 +159,11 @@ fn normalize_export(
                                     ),
                                 }
                             })?,
-                            path: member.cloned().into_iter().collect(),
+                            // The whole access path from the parameter. An
+                            // absent path named no segment exactly and stays
+                            // empty, which claims only "read through this
+                            // parameter" -- the weakest claim the model has.
+                            path: path.cloned().unwrap_or_default(),
                         },
                         (None, _) => ValueShape::Reactive {
                             role: ReactiveRole::Accessor,
@@ -247,10 +270,31 @@ fn callback_operation(
     callback: &ContractCallback,
     resources: &mut Vec<Resource>,
 ) -> Result<Operation, ContractFailure> {
+    // `inline` and `deferred` carry their schedule in the word. `tracked` does
+    // not: it is an attribution word, and 1.x `createMemo`/`mergeProps` have
+    // already run the callback when the export returns while 1.x `createEffect`
+    // has not. Reading `queued` out of `tracked` published that falsehood for
+    // every retained row; the schedule now travels with the row, from
+    // [`solid_dialect::Dialect::tracked_callback_timing`] by way of
+    // `composed_tracked_schedule`. `Unestablished` is the dialect refusing to
+    // say, and emits no execution point rather than a guessed one -- the
+    // attribution claim survives on its own.
     let (schedule, tracking) = match callback.execution.as_str() {
         "inline" => (Some(Schedule::SameStack), Tracking::Untracked),
         "deferred" => (Some(Schedule::Queued), Tracking::Untracked),
-        "tracked" => (Some(Schedule::Queued), Tracking::Tracked),
+        "tracked" => (
+            match callback.schedule {
+                Some(CallbackSchedule::SameStack) => Some(Schedule::SameStack),
+                Some(CallbackSchedule::External) => Some(Schedule::External),
+                Some(CallbackSchedule::Unestablished) => None,
+                // A producer that stated no schedule for the row keeps the
+                // consumer's historical default. Recorded in
+                // docs/precision-backlog.md: the compiler-lowering callback
+                // roles are the remaining path that reaches here.
+                Some(CallbackSchedule::Queued) | None => Some(Schedule::Queued),
+            },
+            Tracking::Tracked,
+        ),
         other => return invalid(format!("unknown callback execution {other:?}")),
     };
     let mut operation = operation(
@@ -268,6 +312,11 @@ fn callback_operation(
         None,
     );
     operation.schedule = schedule;
+    // The execution point and the schedule are one fact in the document format
+    // and must be known together, so an unestablished schedule drops both.
+    if schedule.is_none() {
+        operation.at = None;
+    }
     operation.tracking = tracking;
     operation.owner = match callback.owner.as_deref() {
         Some("none" | "unowned") => owner_none(),

@@ -1,0 +1,45 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c9e7ee71de058784559c74d4ca31adf3fac07f4102ef3ead46f016e110063542",
+            "path": "./index.js",
+            "sha256": "c283dfcfdbe156498ccc4e5181d92833f267b0ad72b4206df4951d218a735d9a"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "4a8ecda6b4cff83ec675ed26048a6122f8ec7a7ee54b0a204add076976656f7e"
+          },
+          "exports": {
+            "runtimeFactory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:f7903018fe9a4c18a3294406f22566f459b86aa237f5e1289d11b48daaf30cf5",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "f7903018fe9a4c18a3294406f22566f459b86aa237f5e1289d11b48daaf30cf5"
+    },
+    "name": "torture-dts-disagreement-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

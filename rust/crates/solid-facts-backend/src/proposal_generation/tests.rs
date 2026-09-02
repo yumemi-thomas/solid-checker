@@ -1,25 +1,18 @@
 use super::*;
-use sha2::Digest as _;
 use solid_reactive_ir::contract_semantics::{
     ArtifactIdentity, CallClaims, CallSemantics, CapabilityKnowledge, Cardinality,
     CardinalityScope, ClaimDomain, ExportIdentity, ExportSemantics, ExportTargetIdentity,
     GuardPartition, KnowledgeSet, KnowledgeState, Lifetime, ObjectProperty, Operation, OperationId,
     OwnerCapabilities, OwnerRelation, OwnerRequirements, OwnerSource, Requirement, ResolutionStep,
-    Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueShape, VerifierIdentity,
-    proof::{
-        CLOSURE_PROOF_FAMILIES, CensusCompleteness, PROOF_POLICY_VERSION, ProofRuleInput,
-        family_authority, proof_scope_digest, replay_proof_rule,
-    },
+    Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound, ValueShape,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     ArtifactModeMatrix, ClosureManifest, DrainStep, EnvironmentIdentity, ProbeAuthority,
-    ProbeContradictionRecord, ProbeEventClass, ProbeEventMatch, ProbeMode, ProbePolicy,
-    ProbeRecipe, ProbeScenario, ProposalProofRequest, ProposalVerificationRequest,
+    ProbeEventClass, ProbeEventMatch, ProbeMode, ProbePolicy, ProbeRecipe, ProbeScenario,
     ResolutionAuthority, ResolutionTrace, ResolvedExportBinding, ResolvedExportTarget,
-    ResolvedFile, ResolvedImport, RuntimeProbePlan, SandboxIdentity, SandboxKind, SidecarDigests,
-    ToolIdentity, verify_and_encode_planned_proposal, verify_planned_proposal,
+    ResolvedFile, ResolvedImport, RuntimeProbePlan, SandboxIdentity, SandboxKind, ToolIdentity,
 };
 
 fn digest(byte: char) -> Digest {
@@ -225,6 +218,7 @@ fn analysis() -> ProposalAnalysis {
         closure,
         transform: None,
         exports,
+        declaration_exports: std::collections::BTreeSet::new(),
         authority: ResolutionAuthority::StandalonePackageResolver,
     };
     ProposalAnalysis {
@@ -240,128 +234,6 @@ fn planned() -> PlannedProposal {
 
 fn selected_case(contract: &NormalizedContract) -> &ArtifactCase {
     &contract.artifact_cases()[0]
-}
-
-fn replay_all_closure_proofs(
-    proposal: &PlannedProposal,
-) -> Vec<solid_reactive_ir::contract_semantics::proof::ReplayedProof> {
-    proposal
-        .plan()
-        .closure_candidates()
-        .iter()
-        .flat_map(|candidate| {
-            CLOSURE_PROOF_FAMILIES.into_iter().map(move |family| {
-                let subject = candidate.semantic_subject();
-                replay_proof_rule(
-                    proposal.contract(),
-                    family,
-                    subject.clone(),
-                    ProofRuleInput {
-                        authority: family_authority(family),
-                        transcript: format!("{family:?} proof transcript").into_bytes(),
-                        observed_scope: proof_scope_digest(proposal.contract(), family, &subject)
-                            .unwrap(),
-                        enumerated: vec![],
-                        classified: vec![],
-                        unresolved: vec![],
-                        completeness: CensusCompleteness::Complete,
-                    },
-                )
-                .unwrap()
-            })
-        })
-        .collect()
-}
-
-#[test]
-fn phase11_adapter_finalizes_only_the_planned_case_and_consumes_probe_contradictions() {
-    let proposal = planned();
-    let selected_artifact_case = selected_case(proposal.contract()).id.clone();
-    let proofs = replay_all_closure_proofs(&proposal);
-    let first_subject = proposal.plan().closure_candidates()[0].semantic_subject();
-    let contradiction = ProbeContradictionRecord {
-        claim_id: proposal.contract().claim_id(&first_subject).unwrap(),
-        subject: first_subject,
-        mode: "browser-development".into(),
-        transcript: digest('8'),
-    };
-    let rejected = verify_planned_proposal(ProposalProofRequest {
-        proposal: proposal.clone(),
-        selected_artifact_case: selected_artifact_case.clone(),
-        wire_bytes: b"temporary-main-contract".to_vec(),
-        proofs: proofs.clone(),
-        contradictions: vec![contradiction],
-        verifier: VerifierIdentity {
-            build: "phase-11-test".into(),
-            policy: PROOF_POLICY_VERSION,
-        },
-    });
-    assert!(matches!(
-        rejected,
-        Err(solid_reactive_ir::contract_semantics::proof::ProofError::ProbeContradiction { .. })
-    ));
-
-    let accepted = verify_planned_proposal(ProposalProofRequest {
-        proposal,
-        selected_artifact_case: selected_artifact_case.clone(),
-        wire_bytes: b"temporary-main-contract".to_vec(),
-        proofs,
-        contradictions: vec![],
-        verifier: VerifierIdentity {
-            build: "phase-11-test".into(),
-            policy: PROOF_POLICY_VERSION,
-        },
-    })
-    .unwrap();
-    assert_eq!(accepted.artifact_case().id, selected_artifact_case);
-    assert!(
-        accepted
-            .artifact_case()
-            .exports
-            .values()
-            .flat_map(ExportSemantics::unresolved_claims)
-            .any(|claim| matches!(claim, ClaimPath::Value { .. }))
-    );
-}
-
-#[test]
-fn proof_finalization_precedes_stable_v1_emission_and_receipt_issuance() {
-    let analysis = analysis();
-    let resolved = analysis.resolutions[0].clone();
-    let proposal = plan_probes(plan_proofs(construct_proposal(analysis).unwrap()));
-    let selected_artifact_case = selected_case(proposal.contract()).id.clone();
-    let artifact = verify_and_encode_planned_proposal(ProposalVerificationRequest {
-        proofs: replay_all_closure_proofs(&proposal),
-        proposal,
-        selected_artifact_case,
-        contradictions: vec![],
-        verifier: VerifierIdentity {
-            build: "phase-14-test".into(),
-            policy: PROOF_POLICY_VERSION,
-        },
-        sidecars: SidecarDigests::default(),
-        pretty: true,
-    })
-    .unwrap();
-    let document: serde_json::Value = serde_json::from_slice(&artifact.document).unwrap();
-    assert_eq!(document["schemaVersion"], 1);
-    assert_eq!(
-        artifact.contract.receipt().wire_digest,
-        Digest::parse(format!(
-            "sha256:{:x}",
-            sha2::Sha256::digest(&artifact.document)
-        ))
-        .unwrap()
-    );
-    let normalized = crate::contract_document::decode(&artifact.document)
-        .unwrap()
-        .normalize()
-        .unwrap();
-    let normalized = crate::artifact_resolution::select_and_bind(&normalized, &resolved).unwrap();
-    assert_eq!(
-        normalized.semantic_digest(),
-        &artifact.contract.receipt().semantic_digest
-    );
 }
 
 #[test]

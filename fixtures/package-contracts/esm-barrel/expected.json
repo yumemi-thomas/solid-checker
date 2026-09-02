@@ -1,0 +1,55 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "54f52a372c748968b87737e1879773c5d3aaff1b7022cadbf80ef6bc9f8eb018",
+            "path": "./index.mjs",
+            "sha256": "23117759da8e21468bb4901f94964f272d14fe70793ba7b47875a8da46ee9d9b"
+          },
+          "declarations": {
+            "path": "./index.d.mts",
+            "sha256": "17cd27d928a303281246012890cd96b5d1038f02ebf0cb4420f2bb511fa5ad59"
+          },
+          "exports": {
+            "bootstrapSource": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f",
+            "createAlias": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "createConditional": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "createFromMemberFactory": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "createLocal": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "createValue": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "factoryComponent": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.",
+            "typesBranch": "/exports/."
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:d796afca8c9b507d904ceefe3468a7bdd284ea0a992cfe14b3570cac5802d95a",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "d796afca8c9b507d904ceefe3468a7bdd284ea0a992cfe14b3570cac5802d95a"
+    },
+    "name": "esm-barrel-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

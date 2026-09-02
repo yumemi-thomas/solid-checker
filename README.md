@@ -214,13 +214,13 @@ solid-checker contract generate \
   --output .solid-checker/contracts/example-package/solid-reactivity.json
 ```
 
-Generation never grants acceptance. Review the proposal, satisfy its proof
-plan, and run `solid-checker contract verify` to issue a receipt. Register the
-accepted document, receipt, and full exact import resolution in
-`.solid-checker/accepted-contracts.json`. The analyzer does not discover an
-unreceipted file by package name and does not accept a hand-authored negative
-claim. See [package contracts](docs/package-contracts.md) for the complete
-workflow and trust boundary.
+Generation never grants acceptance. Policy-1 proof-file verification is
+retired; the active loader requires a receipt-version-2 payload plus explicit
+issuer provenance. Until the automatic `solid-checker contract certify`
+workflow can discharge every demand and atomically publish that result, the
+proposal remains uncertifiable. See
+[package contracts](docs/package-contracts.md) for the trust boundary and
+current migration state.
 
 ## Publishing a Solid library?
 

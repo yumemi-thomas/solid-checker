@@ -23,6 +23,7 @@ pub struct AcceptedSemanticIdentity {
     pub proof_root: Digest,
     pub closed_claims_root: Digest,
     pub verifier: VerifierIdentity,
+    pub authentication: Option<ReceiptAuthenticationIdentity>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -40,6 +41,12 @@ pub struct AcceptedContractInput {
     pub importer: String,
     pub specifier: String,
     pub contract: AcceptedContract,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum UncertifiableImportReason {
+    Unspecified,
+    ObsoletePolicy1,
 }
 
 /// A resolved analyzer use, retaining exact identity rather than a public name
@@ -81,7 +88,7 @@ impl AcceptedContractUse<'_> {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct AcceptedContractIndex {
     imports: BTreeMap<(String, String), Vec<AcceptedContract>>,
-    uncertifiable_imports: BTreeSet<(String, String)>,
+    uncertifiable_imports: BTreeMap<(String, String), UncertifiableImportReason>,
     identity: Vec<AcceptedImportIdentity>,
 }
 
@@ -113,7 +120,7 @@ impl AcceptedContractIndex {
         identity.sort();
         Ok(Self {
             imports,
-            uncertifiable_imports: BTreeSet::new(),
+            uncertifiable_imports: BTreeMap::new(),
             identity,
         })
     }
@@ -123,16 +130,42 @@ impl AcceptedContractIndex {
         mut self,
         imports: impl IntoIterator<Item = (String, String)>,
     ) -> Self {
-        self.uncertifiable_imports.extend(imports);
+        self.uncertifiable_imports.extend(
+            imports
+                .into_iter()
+                .map(|key| (key, UncertifiableImportReason::Unspecified)),
+        );
         self.uncertifiable_imports
-            .retain(|key| !self.imports.contains_key(key));
+            .retain(|key, _| !self.imports.contains_key(key));
         self
     }
 
     #[must_use]
     pub fn is_uncertifiable(&self, importer: &str, specifier: &str) -> bool {
         self.uncertifiable_imports
-            .contains(&(importer.to_owned(), specifier.to_owned()))
+            .contains_key(&(importer.to_owned(), specifier.to_owned()))
+    }
+
+    #[must_use]
+    pub fn uncertifiable_reason(
+        &self,
+        importer: &str,
+        specifier: &str,
+    ) -> Option<UncertifiableImportReason> {
+        self.uncertifiable_imports
+            .get(&(importer.to_owned(), specifier.to_owned()))
+            .copied()
+    }
+
+    #[must_use]
+    pub fn with_uncertifiable_import_reasons(
+        mut self,
+        imports: impl IntoIterator<Item = ((String, String), UncertifiableImportReason)>,
+    ) -> Self {
+        self.uncertifiable_imports.extend(imports);
+        self.uncertifiable_imports
+            .retain(|key, _| !self.imports.contains_key(key));
+        self
     }
 
     /// Adds fallback accepted imports without replacing an exact host entry.
@@ -161,7 +194,7 @@ impl AcceptedContractIndex {
         self.uncertifiable_imports
             .extend(fallback.uncertifiable_imports);
         self.uncertifiable_imports
-            .retain(|key| !self.imports.contains_key(key));
+            .retain(|key, _| !self.imports.contains_key(key));
         self
     }
 
@@ -175,7 +208,7 @@ impl AcceptedContractIndex {
     #[must_use]
     pub fn cache_fingerprint(&self) -> [u8; 32] {
         let mut hash = Sha256::new();
-        hash.update(b"solid-checker-accepted-contract-index-v1");
+        hash.update(b"solid-checker-accepted-contract-index-v2");
         hash.update((self.identity.len() as u64).to_be_bytes());
         for binding in &self.identity {
             hash_text(&mut hash, &binding.importer);
@@ -196,11 +229,25 @@ impl AcceptedContractIndex {
             hash_text(&mut hash, semantic.closed_claims_root.as_str());
             hash_text(&mut hash, &semantic.verifier.build);
             hash.update(semantic.verifier.policy.to_be_bytes());
+            match &semantic.authentication {
+                Some(authentication) => {
+                    hash.update([1]);
+                    hash_text(&mut hash, authentication.receipt_digest.as_str());
+                    hash_text(&mut hash, authentication.policy_digest.as_str());
+                    hash_text(&mut hash, authentication.trust_store_digest.as_str());
+                    hash.update(authentication.revocation_epoch.to_be_bytes());
+                }
+                None => hash.update([0]),
+            }
         }
         hash.update((self.uncertifiable_imports.len() as u64).to_be_bytes());
-        for (importer, specifier) in &self.uncertifiable_imports {
+        for ((importer, specifier), reason) in &self.uncertifiable_imports {
             hash_text(&mut hash, importer);
             hash_text(&mut hash, specifier);
+            hash.update([match reason {
+                UncertifiableImportReason::Unspecified => 0,
+                UncertifiableImportReason::ObsoletePolicy1 => 1,
+            }]);
         }
         hash.finalize().into()
     }
@@ -262,6 +309,26 @@ impl AcceptedContractIndex {
                 importer: importer.into(),
                 specifier: specifier.into(),
             })
+    }
+
+    /// Enumerates the runtime surface of the one receipt-authenticated
+    /// artifact case selected for this exact import occurrence.
+    ///
+    /// This is the only safe way for a consumer to expand an external
+    /// `export *`: package names alone cannot select between nested installs,
+    /// conditions, entrypoints, or artifact cases.
+    pub fn public_export_names(
+        &self,
+        importer: &str,
+        specifier: &str,
+    ) -> Result<BTreeSet<String>, SemanticQueryError> {
+        Ok(self
+            .contract(importer, specifier)?
+            .artifact_case()
+            .exports
+            .keys()
+            .cloned()
+            .collect())
     }
 }
 

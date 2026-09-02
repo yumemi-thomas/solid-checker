@@ -7,6 +7,7 @@
 //! uncertainty, and canonical semantic identity stay inside this deep module.
 
 mod canonical;
+pub mod certification;
 mod consumer;
 mod guards;
 pub mod proof;
@@ -17,7 +18,7 @@ pub use consumer::{
     AcceptedContractIndex, AcceptedContractInput, AcceptedContractUse, AcceptedImportIdentity,
     AcceptedSemanticIdentity, CallSiteFacts, FiniteFact, InstantiatedClaim, InstantiatedExport,
     OpenDomainDiagnostic, OpenDomainReason, PropertyFact, SemanticQueryError,
-    native_claim_precedence,
+    UncertifiableImportReason, native_claim_precedence,
 };
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -397,6 +398,30 @@ impl NormalizedContract {
             &subject.path,
         ))
     }
+
+    /// Answers whether one exact semantic claim is closed in this contract.
+    ///
+    /// Claim identity binds the package, artifact case, export, and semantic
+    /// path. Callers must not substitute a matching domain name or receipt
+    /// digest for this lookup.
+    #[must_use]
+    pub fn contains_closed_claim_id(&self, value: &str) -> bool {
+        let Ok(expected) = SemanticClaimId::parse(value.to_owned()) else {
+            return false;
+        };
+        self.artifact_cases.iter().any(|artifact_case| {
+            artifact_case.exports.iter().any(|(export_name, export)| {
+                validate::closed_claims(export).into_iter().any(|path| {
+                    let subject = SemanticClaimSubject {
+                        artifact_case: artifact_case.id.clone(),
+                        export: export_name.clone(),
+                        path: SemanticClaimPath::Domain(path),
+                    };
+                    self.claim_id(&subject).is_ok_and(|claim| claim == expected)
+                })
+            })
+        })
+    }
 }
 
 /// A semantic proposition address, independent of compact-wire layout.
@@ -485,6 +510,17 @@ pub struct VerifierIdentity {
     pub policy: u32,
 }
 
+/// Authentication identity retained by policy-2 accepted typestate. The
+/// receipt digest binds every signed certification root; trust-store identity
+/// and revocation epoch prevent cache reuse across a trust-policy change.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ReceiptAuthenticationIdentity {
+    pub receipt_digest: Digest,
+    pub policy_digest: Digest,
+    pub trust_store_digest: Digest,
+    pub revocation_epoch: u64,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcceptanceReceipt {
     pub receipt_version: u16,
@@ -496,6 +532,7 @@ pub struct AcceptanceReceipt {
     pub proof_root: Digest,
     pub closed_claims_root: Digest,
     pub verifier: VerifierIdentity,
+    pub authentication: Option<ReceiptAuthenticationIdentity>,
 }
 
 /// Accepted typestate. It intentionally exposes no constructor: only
@@ -540,6 +577,7 @@ impl AcceptedContract {
             proof_root: self.receipt.proof_root.clone(),
             closed_claims_root: self.receipt.closed_claims_root.clone(),
             verifier: self.receipt.verifier.clone(),
+            authentication: self.receipt.authentication.clone(),
         }
     }
 

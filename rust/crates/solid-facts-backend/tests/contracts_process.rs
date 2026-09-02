@@ -14,7 +14,7 @@ fn root() -> PathBuf {
 }
 
 #[test]
-fn cli_validation_accepts_every_receipt_issued_stable_v1_bundle() {
+fn cli_validation_accepts_every_retired_bundle_main_as_a_proposal() {
     let directory = root().join("pkg/contracts/bundled/solid-v2");
     for entry in fs::read_dir(directory).unwrap() {
         let path = entry.unwrap().path();
@@ -71,7 +71,7 @@ fn checked_bundle_generator_is_reproducible_in_both_physical_locations() {
 }
 
 #[test]
-fn accepted_fixture_catalog_reaches_the_process_analyzer() {
+fn retired_fixture_catalog_no_longer_supplies_package_semantics() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
         return;
     };
@@ -94,10 +94,10 @@ fn accepted_fixture_catalog_reaches_the_process_analyzer() {
     );
     let findings = decode_findings(&output.stdout);
     assert!(findings.iter().any(|finding| {
-        finding["rule"] == "strict-read-untracked"
-            && finding["message"]
+        finding["rule"] == "package-contract-incomplete"
+            && finding["analysisContext"]
                 .as_str()
-                .is_some_and(|message| message.contains("count"))
+                .is_some_and(|context| context.starts_with("obsolete-policy1-receipt:"))
     }));
 }
 

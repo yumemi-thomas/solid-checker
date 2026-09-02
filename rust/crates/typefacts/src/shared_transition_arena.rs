@@ -216,6 +216,8 @@ mod tests {
             unknown_import_paths: Vec::new(),
             invocation_transcripts: Vec::new(),
             invocation_envelope: None,
+            export_value_transcripts: Vec::new(),
+            export_value_envelope: None,
             client_decode_ns: 0,
             client_response_bytes: 37,
             client_request_send_ns: 0,

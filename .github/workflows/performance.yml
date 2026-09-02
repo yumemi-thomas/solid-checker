@@ -69,22 +69,26 @@ jobs:
           cargo build --release --manifest-path rust/Cargo.toml \
             -p solid-facts-backend --bin solid-checker-session-bench
 
-      - name: Certify absolute performance invariants
+      # Structural invariants (export scaling, Type Facts payload, cached
+      # reuse) are enforced here. The wall-time ceilings are only reported:
+      # across ten consecutive runs of the same commit these runners measured
+      # the incremental edit at 65-106 ms and first IR at 154-246 us/source, a
+      # 1.6x swing no fixed ceiling can sit inside, while the interleaved
+      # base/head comparison below stayed within 0.98-1.04. That comparison is
+      # the regression gate; the ceilings are enforced where the machine is
+      # controlled (make verify-performance, scripts/verify.sh).
+      - name: Certify performance invariants
         env:
           SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
-          # Shared runners currently vary from about 165-193us/source for the
-          # same analyzer. Keep this as a gross absolute guard; the interleaved
-          # base/head comparison below is the regression gate.
-          SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE: 225000
-        run: bun benchmarks/verify-performance.mjs
+        run: bun benchmarks/verify-performance.mjs --wall-time-gate report
 
-      # The relative gate: race the merge base against the head on this same
+      # The regression gate: race the merge base against the head on this same
       # runner, interleaved so scheduler drift cancels. Pull requests compare
       # their merge base; pushes and manual runs compare the preceding main
-      # commit. This is what catches a 26ms -> 60ms regression that still clears
-      # the shared-runner absolute ceiling above. Only the two binaries are
-      # cached, never a measurement: both sides are still timed here, on one
-      # machine, in this run.
+      # commit. This is what catches a 26ms -> 60ms regression that a shared
+      # runner's absolute numbers cannot distinguish from a slow day. Only the
+      # two binaries are cached, never a measurement: both sides are still
+      # timed here, on one machine, in this run.
       - name: Check out the merge base
         if: steps.base-runtime.outputs.cache-hit != 'true'
         run: git worktree add /tmp/perf-base "${{ steps.base.outputs.sha }}"

@@ -21,6 +21,21 @@ type SymbolID string
 // across aliases and reexports. Unlike SymbolID it is not a lookup handle.
 type RuntimeSymbolID string
 
+// RuntimeBindingKind is an exact census over a runtime binding's initializer
+// and direct writes. The zero value means the census was not demanded or the
+// queried span did not identify a runtime binding. Open means at least one
+// possible write could not be classified; Mixed means closed writes disagree.
+// Neither is proof of a runtime kind.
+type RuntimeBindingKind uint8
+
+const (
+	RuntimeBindingAbsent RuntimeBindingKind = iota
+	RuntimeBindingCallable
+	RuntimeBindingNonCallable
+	RuntimeBindingMixed
+	RuntimeBindingOpen
+)
+
 // TypeDescriptor exposes source identity for named types without leaking a
 // backend AST. It is available through the optional TypeDescriber capability.
 type TypeDescriptor struct {

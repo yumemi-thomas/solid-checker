@@ -13,10 +13,10 @@ use std::{
 
 use solid_dialect::Dialect;
 use solid_facts::ProjectFacts;
-use typefacts::{Callability, Constructability, Location, ReferenceSpace};
+use typefacts::{Callability, Constructability, Location, ReferenceSpace, RuntimeBindingKind};
 
 use super::{
-    ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
+    CallbackSchedule, ContractCallback, ContractClaim, ContractExport, ContractOwnerRequirement,
     ContractReactiveRead, ContractReturn, EntitySymbols, OwnerRequirementOperation,
     PackageContract, ReactiveSourceKind, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead,
     SummaryReads, SymbolId, location, location_order,
@@ -24,16 +24,33 @@ use super::{
 use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
 use crate::contract_semantics::{
     AcceptedContractIndex, AcceptedContractUse, ClaimDomain, KnowledgeSet, OperationKind,
-    OwnerSource, Requirement, Schedule, Tracking, ValueShape, ValueSource,
+    OwnerSource, Requirement, Schedule, Tracking, UncertifiableImportReason, ValueShape,
+    ValueSource,
 };
 use crate::identity::symbol_id;
 use crate::pipeline::parallel_slice_results;
+
+/// Whether a value-kind export's shape leaves open the possibility that it is
+/// callable, in which case its open call-path domains must NOT be closed to
+/// empty. `Unknown` (an `any`/error shape) and a `Choice` union whose
+/// membership is not exhaustively known, or that contains a callable member,
+/// are possibly-callable and stay open (fail closed). Every other value shape
+/// is proven non-callable, so its vacuous call-path domains may be closed.
+fn shape_may_be_callable(shape: &ValueShape) -> bool {
+    match shape {
+        ValueShape::Callable | ValueShape::Component | ValueShape::Unknown => true,
+        ValueShape::Choice(members) => {
+            !members.is_closed() || members.items().iter().any(shape_may_be_callable)
+        }
+        _ => false,
+    }
+}
 
 /// Projects an already receipt-validated normalized export into the compact
 /// indexes used by the current interprocedural solver. This is deliberately
 /// downstream of exact import/artifact selection: no schema version, summary
 /// ID, condition label, evidence spelling, or closure-array mechanic is inspected.
-pub(crate) fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
+pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractExport {
     let export = accepted.export();
     let mut open_claims = BTreeSet::new();
     let kind = if matches!(export.shape, ValueShape::Callable | ValueShape::Component) {
@@ -42,11 +59,50 @@ pub(crate) fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> Con
         "value"
     };
 
-    let callbacks = project_callbacks(export, &mut open_claims);
-    let reactive_reads = project_reactive_reads(export, &mut open_claims);
-    let returns = project_return(export, &mut open_claims);
-    let owner_requirements = project_owner_requirements(export, &mut open_claims);
+    let mut callbacks = project_callbacks(export, &mut open_claims);
+    let mut reactive_reads = project_reactive_reads(export, &mut open_claims);
+    let mut returns = project_return(export, &mut open_claims);
+    let mut owner_requirements = project_owner_requirements(export, &mut open_claims);
     let async_behavior = project_async_behavior(export, &mut open_claims);
+
+    if kind == "value" && !shape_may_be_callable(&export.shape) {
+        // A *proven* non-callable value export is never invoked, so every
+        // call-path function-effect domain is vacuously empty. A composed
+        // *proposal* dependency can still carry that export's call-path
+        // knowledge as open (unresolved) -- e.g. a namespace/constant
+        // re-exported past forwarders it never exposes as call targets.
+        // Projecting that as open would manufacture function effects on a value
+        // export, the exact inconsistency `validate_export` refuses with "value
+        // export cannot have function effects". Standalone generation already
+        // certifies such an export effect-free, so composing its proposal must
+        // agree rather than refuse the importing package. Only the *open*
+        // (vacuous) domains are closed here; a genuinely known effect is left
+        // intact so a real value-with-effects defect still refuses.
+        //
+        // The `shape_may_be_callable` guard is load-bearing: a shape whose
+        // callability is *not* proven (an `Unknown`/`any` shape, or a `Choice`
+        // union whose membership is not exhaustively non-callable) must keep its
+        // open domains and continue to fail closed. Closing them would assert
+        // "invokes no callback / performs no read" about something that may in
+        // fact be callable -- manufacturing a negative claim from missing
+        // knowledge, which the precision contract forbids.
+        if callbacks.is_open() {
+            callbacks = ContractClaim::Known(Vec::new());
+            open_claims.remove(&ClaimDomain::Callbacks);
+        }
+        if reactive_reads.is_open() {
+            reactive_reads = ContractClaim::Known(Vec::new());
+            open_claims.remove(&ClaimDomain::Reads);
+        }
+        if returns.is_open() {
+            returns = ContractClaim::Known(None);
+            open_claims.remove(&ClaimDomain::Returns);
+        }
+        if owner_requirements.is_open() {
+            owner_requirements = ContractClaim::Known(Vec::new());
+            open_claims.remove(&ClaimDomain::Creates);
+        }
+    }
 
     ContractExport {
         kind: kind.into(),
@@ -84,6 +140,18 @@ fn project_callbacks(
         callbacks.push(ContractCallback {
             parameter: usize::from(index),
             execution: execution.into(),
+            // `projected_execution` collapses a tracked operation onto one
+            // attribution word, which has no schedule column. Carry the
+            // operation's own schedule beside it so re-emitting an ingested row
+            // republishes what the contract said rather than a default: a
+            // tracked row with no execution point means the producer
+            // established none, which is a different fact from `queued`.
+            schedule: (execution == "tracked").then_some(match operation.schedule {
+                Some(Schedule::SameStack) => CallbackSchedule::SameStack,
+                Some(Schedule::Queued) => CallbackSchedule::Queued,
+                Some(Schedule::External) => CallbackSchedule::External,
+                None => CallbackSchedule::Unestablished,
+            }),
             arguments: operation.inputs.iter().map(project_return_shape).collect(),
             owner: match operation.owner.source {
                 OwnerSource::None => Some("none".into()),
@@ -136,23 +204,26 @@ fn project_reactive_reads(
             continue;
         };
         match operation.inputs.first() {
+            // Carry the whole path back. Keeping only `path.last()` would
+            // round-trip an accepted `["modifiers", "includes"]` down into a
+            // claim about a `includes` property of the parameter itself.
             Some(ValueShape::Parameter { index, path }) => reads.push(ContractReactiveRead {
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(usize::from(*index)),
-                member: path.last().cloned(),
+                path: Some(path.clone()),
             }),
             Some(ValueShape::Reactive { .. }) => reads.push(ContractReactiveRead {
                 kind: "accessor".into(),
                 label: "normalized reactive read".into(),
                 parameter: None,
-                member: None,
+                path: None,
             }),
             Some(ValueShape::Store { .. }) => reads.push(ContractReactiveRead {
                 kind: "store-path".into(),
                 label: "normalized store read".into(),
                 parameter: None,
-                member: None,
+                path: None,
             }),
             _ => {
                 open.insert(ClaimDomain::Reads);
@@ -682,13 +753,16 @@ fn resolve_contract_imports_inner(
             }
             let Some(contract) = exact.get(&(file.path.to_string(), import.module.to_string()))
             else {
-                if accepted.is_uncertifiable(file.path.as_str(), &import.module) {
+                if let Some(reason) =
+                    accepted.uncertifiable_reason(file.path.as_str(), &import.module)
+                {
                     push_missing_accepted_import(
                         &mut missing_exports,
                         file,
                         import,
                         entities,
                         dialect,
+                        reason,
                     );
                 }
                 continue;
@@ -971,6 +1045,7 @@ fn push_missing_accepted_import(
     import: &solid_facts::ast::ImportFact,
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
+    reason: UncertifiableImportReason,
 ) {
     for binding in &import.bindings {
         if binding.type_only || !binding.runtime_referenced {
@@ -996,6 +1071,7 @@ fn push_missing_accepted_import(
                         &import.module,
                         export,
                         location(file.path.shared(), member.property),
+                        reason,
                     );
                 }
             }
@@ -1012,6 +1088,7 @@ fn push_missing_accepted_import(
                 &import.module,
                 export,
                 location(file.path.shared(), import.span),
+                reason,
             );
         }
     }
@@ -1022,6 +1099,7 @@ fn push_missing_accepted_export(
     module: &str,
     export: &str,
     location: Location,
+    reason: UncertifiableImportReason,
 ) {
     missing.push(StaticDefect {
         kind: StaticDefectKind::PackageContractExportMissing {
@@ -1030,7 +1108,15 @@ fn push_missing_accepted_export(
             reexported: false,
         },
         location,
-        analysis_context: "no receipt-accepted contract matches this exact import".into(),
+        analysis_context: match reason {
+            UncertifiableImportReason::Unspecified => {
+                "no receipt-accepted contract matches this exact import"
+            }
+            UncertifiableImportReason::ObsoletePolicy1 => {
+                "obsolete-policy1-receipt: policy 1 cannot authorize analyzer semantics"
+            }
+        }
+        .into(),
         fixes: vec![],
         uncertain: false,
     });
@@ -1059,7 +1145,7 @@ pub(super) struct ContractAnalysis<'a> {
     /// its callback domain open — see
     /// `interproc::push_unaccounted_parameter_escapes`.
     pub(super) escaped_parameters: &'a [Vec<usize>],
-    pub(super) invoked_parameter_members: &'a [Vec<(usize, String)>],
+    pub(super) invoked_parameter_members: &'a [Vec<(usize, Vec<String>)>],
     pub(super) semantics: ContractSemantics<'a>,
 }
 
@@ -1072,7 +1158,7 @@ struct ContractExportNode<'a> {
     structured_return: Option<&'a ContractReturn>,
     callbacks: &'a [ContractCallback],
     escaped_parameters: &'a [usize],
-    invoked_parameter_members: &'a [(usize, String)],
+    invoked_parameter_members: &'a [(usize, Vec<String>)],
 }
 
 impl<'a> ContractExportNode<'a> {
@@ -1117,28 +1203,32 @@ fn contract_export_function(
                         |returned| returned.label.clone(),
                     ),
                 parameter: None,
-                member: None,
+                path: None,
             };
             seen_reactive_reads
                 .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
                 .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
-    let mut members_by_parameter = BTreeMap::<usize, HashSet<&str>>::new();
-    for (parameter, member) in invoked_parameter_members {
-        members_by_parameter
+    // One row per parameter, carrying the access path only when every
+    // contributing access agrees on it exactly. Paths are compared whole:
+    // `props.of.values()` and `props.other.values()` are two different
+    // accesses that a last-segment comparison would have collapsed into one
+    // claim about `values`.
+    let mut paths_by_parameter = BTreeMap::<usize, HashSet<&[String]>>::new();
+    for (parameter, path) in invoked_parameter_members {
+        paths_by_parameter
             .entry(*parameter)
             .or_default()
-            .insert(member.as_str());
+            .insert(path.as_slice());
     }
-    for (parameter, members) in members_by_parameter {
+    for (parameter, paths) in paths_by_parameter {
         if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string())) {
             reactive_reads.push(ContractReactiveRead {
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(parameter),
-                member: (members.len() == 1)
-                    .then(|| members.into_iter().next().unwrap().to_owned()),
+                path: (paths.len() == 1).then(|| paths.into_iter().next().unwrap().to_vec()),
             });
         }
     }
@@ -1958,7 +2048,7 @@ pub fn export_kind_proof_from_entity(
     }
     let callability = entity.and_then(|entity| entity.callability);
     let constructability = entity.and_then(|entity| entity.constructability);
-    match (callability, constructability) {
+    let signature_proof = match (callability, constructability) {
         (Some(Callability::Callable | Callability::UntypedCallable), _)
         | (_, Some(Constructability::Constructable)) => ExportKindProof::Callable,
         (Some(Callability::NonCallable), Some(Constructability::NonConstructable)) => {
@@ -1968,6 +2058,32 @@ pub fn export_kind_proof_from_entity(
             ExportKindProof::Unresolvable(callability, constructability)
         }
         _ => ExportKindProof::Unanswered,
+    };
+    // A closed census of the exact runtime binding corrects a declaration-
+    // surface negative. Published packages commonly ship `index.js` beside
+    // `index.d.ts`; the configured compiler may attach the declaration
+    // module's non-callable answer to the runtime declarator even though the
+    // exact runtime symbol is initialized and remains bound to a function.
+    // Only the closed callable census corrects that contradiction. Open/mixed
+    // censuses and a non-callable census beside a positive signature retain
+    // the established fail-closed signature rule.
+    if entity.and_then(|entity| entity.runtime_binding_kind) == Some(RuntimeBindingKind::Callable) {
+        return ExportKindProof::Callable;
+    }
+    match signature_proof {
+        ExportKindProof::Unresolvable(_, _) | ExportKindProof::Unanswered => {
+            match entity.and_then(|entity| entity.runtime_binding_kind) {
+                Some(RuntimeBindingKind::Callable) => ExportKindProof::Callable,
+                Some(RuntimeBindingKind::NonCallable) => ExportKindProof::NonCallable,
+                // A mixed or open write census is explicit evidence that no
+                // closed runtime kind exists. Preserve the signature failure
+                // so the caller refuses with its established diagnostic.
+                Some(RuntimeBindingKind::Mixed | RuntimeBindingKind::Open) | None => {
+                    signature_proof
+                }
+            }
+        }
+        _ => signature_proof,
     }
 }
 
@@ -2051,6 +2167,7 @@ mod native_overlay_tests {
             callbacks: ContractClaim::Known(vec![ContractCallback {
                 parameter: 1,
                 execution: "inline".into(),
+                schedule: None,
                 arguments: Vec::new(),
                 owner: None,
             }]),
@@ -2101,6 +2218,7 @@ mod callback_contradiction_tests {
         ContractCallback {
             parameter,
             execution: execution.into(),
+            schedule: None,
             arguments: Vec::new(),
             owner: None,
         }
@@ -2157,7 +2275,10 @@ mod export_kind_proof_tests {
     use solid_facts::ast;
     use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
     use solid_facts::core::{Generation, Span};
-    use typefacts::{Callability, Constructability, EntityFact, Location, PrimitiveValueDomain};
+    use typefacts::{
+        Callability, Constructability, EntityFact, Location, PrimitiveValueDomain,
+        RuntimeBindingKind,
+    };
 
     const PATH: &str = "artifact.ts";
 
@@ -2178,6 +2299,7 @@ mod export_kind_proof_tests {
             resolved_call: None,
             callability,
             constructability,
+            runtime_binding_kind: None,
             runtime_value_domain: None,
             primitive_value_domain: PrimitiveValueDomain::default(),
             primitive_literal_candidates: None,
@@ -2203,6 +2325,16 @@ mod export_kind_proof_tests {
         name: &str,
         callability: Option<Callability>,
         constructability: Option<Constructability>,
+    ) -> ExportKindProof {
+        proof_with_binding(source, name, callability, constructability, None)
+    }
+
+    fn proof_with_binding(
+        source: &str,
+        name: &str,
+        callability: Option<Callability>,
+        constructability: Option<Constructability>,
+        runtime_binding_kind: Option<RuntimeBindingKind>,
     ) -> ExportKindProof {
         let ast = ast::extract(PATH, source).unwrap();
         let start = u32::try_from(source.find(name).expect("name occurs in source")).unwrap();
@@ -2234,7 +2366,10 @@ mod export_kind_proof_tests {
                 1,
                 "fixture",
                 Vec::new(),
-                vec![entity(span, callability, constructability)],
+                vec![EntityFact {
+                    runtime_binding_kind,
+                    ..entity(span, callability, constructability)
+                }],
                 Vec::new(),
                 Vec::new(),
             ),
@@ -2243,6 +2378,58 @@ mod export_kind_proof_tests {
             runtime_symbol_redirects: Default::default(),
         };
         export_kind_proof(&facts, &location)
+    }
+
+    #[test]
+    fn exact_runtime_binding_census_closes_only_signature_failures() {
+        let source = "export const value = opaque();";
+        assert_eq!(
+            proof_with_binding(
+                source,
+                "value",
+                Some(Callability::Unknown),
+                Some(Constructability::Unknown),
+                Some(RuntimeBindingKind::Callable),
+            ),
+            ExportKindProof::Callable
+        );
+        assert_eq!(
+            proof_with_binding(
+                source,
+                "value",
+                Some(Callability::Unknown),
+                Some(Constructability::Unknown),
+                Some(RuntimeBindingKind::NonCallable),
+            ),
+            ExportKindProof::NonCallable
+        );
+        for open in [RuntimeBindingKind::Mixed, RuntimeBindingKind::Open] {
+            assert_eq!(
+                proof_with_binding(
+                    source,
+                    "value",
+                    Some(Callability::Unknown),
+                    Some(Constructability::Unknown),
+                    Some(open),
+                ),
+                ExportKindProof::Unresolvable(Callability::Unknown, Constructability::Unknown)
+            );
+        }
+    }
+
+    #[test]
+    fn exact_runtime_binding_census_corrects_sibling_declaration_signature_conflicts() {
+        let source = "export const published = () => {};";
+        assert_eq!(
+            proof_with_binding(
+                source,
+                "published",
+                Some(Callability::NonCallable),
+                Some(Constructability::NonConstructable),
+                Some(RuntimeBindingKind::Callable),
+            ),
+            ExportKindProof::Callable
+        );
     }
 
     const CALLABILITIES: [Option<Callability>; 6] = [
@@ -2581,5 +2768,45 @@ mod export_kind_proof_tests {
         });
         assert_eq!(raised.kind, "function");
         assert!(matches!(raised.callbacks, ContractClaim::Open));
+    }
+
+    #[test]
+    fn shape_may_be_callable_keeps_unproven_callability_open() {
+        // Guards the value-export call-path closing in `project_accepted_export`:
+        // only a *proven* non-callable shape may have its open call-path domains
+        // closed to empty. A shape whose callability is not proven must return
+        // true here so its domains stay open and it fails closed -- closing them
+        // would manufacture "invokes no callback" from missing knowledge.
+        use super::shape_may_be_callable;
+        use crate::contract_semantics::{KnowledgeSet, ValueShape};
+
+        // Callable / possibly-callable shapes: keep open.
+        assert!(shape_may_be_callable(&ValueShape::Callable));
+        assert!(shape_may_be_callable(&ValueShape::Component));
+        assert!(shape_may_be_callable(&ValueShape::Unknown));
+        // A union with a callable member is possibly callable.
+        assert!(shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Complete(vec![ValueShape::Plain, ValueShape::Callable,])
+        )));
+        // A union whose membership is not exhaustively known could hide a
+        // callable member.
+        assert!(shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Partial(vec![ValueShape::Plain,])
+        )));
+        assert!(shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Unknown
+        )));
+
+        // Proven non-callable value shapes: closable.
+        assert!(!shape_may_be_callable(&ValueShape::Plain));
+        assert!(!shape_may_be_callable(&ValueShape::Object(
+            KnowledgeSet::Unknown
+        )));
+        assert!(!shape_may_be_callable(&ValueShape::Choice(
+            KnowledgeSet::Complete(vec![
+                ValueShape::Plain,
+                ValueShape::Object(KnowledgeSet::Unknown),
+            ])
+        )));
     }
 }

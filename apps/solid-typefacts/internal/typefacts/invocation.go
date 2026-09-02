@@ -39,6 +39,14 @@ type InvocationDemand struct {
 	Census        bool     `cbor:"census,omitempty" json:"census,omitempty"`
 }
 
+// ExportValueDemand asks for the exact value of one expression. Certification
+// points it at a deterministic imported binding, never at an invented call.
+type ExportValueDemand struct {
+	Location               Location  `cbor:"location" json:"location"`
+	ImplementationLocation *Location `cbor:"implementationLocation,omitempty" json:"implementationLocation,omitempty"`
+	CallableDepth          int       `cbor:"callableDepth,omitempty" json:"callableDepth,omitempty"`
+}
+
 type ArgumentBindingDisposition string
 
 const (
@@ -125,14 +133,15 @@ type Discriminant struct {
 }
 
 type CallablePathFact struct {
-	Alternative      int                        `cbor:"alternative" json:"alternative"`
-	Path             []PathSegment              `cbor:"path,omitempty" json:"path,omitempty"`
-	Presence         PathPresence               `cbor:"presence" json:"presence"`
-	Callability      Callability                `cbor:"callability" json:"callability"`
-	Constructability InvocationConstructability `cbor:"constructability" json:"constructability"`
-	Declaration      *Declaration               `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Complete         bool                       `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons      []string                   `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	Alternative       int                        `cbor:"alternative" json:"alternative"`
+	Path              []PathSegment              `cbor:"path,omitempty" json:"path,omitempty"`
+	Presence          PathPresence               `cbor:"presence" json:"presence"`
+	Callability       Callability                `cbor:"callability" json:"callability"`
+	Constructability  InvocationConstructability `cbor:"constructability" json:"constructability"`
+	Declaration       *Declaration               `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Complete          bool                       `cbor:"complete,omitempty" json:"complete,omitempty"`
+	SubtreeEnumerated bool                       `cbor:"subtreeEnumerated" json:"subtreeEnumerated"`
+	OpenReasons       []string                   `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 type FinitePartitionAxis string
@@ -184,21 +193,229 @@ type InvocationValueFact struct {
 	OpenReasons      []string                   `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
+type ExportValueTranscript struct {
+	Location      Location             `cbor:"location" json:"location"`
+	QueryName     string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
+	Target        SymbolID             `cbor:"target,omitempty" json:"target,omitempty"`
+	Declaration   *ResolvedDeclaration `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Value         InvocationValueFact  `cbor:"value" json:"value"`
+	CallablePaths []CallablePathFact   `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
+	// The exported value's one call signature, present only when its type has
+	// exactly one. An overload set reports CallSignatures instead; the two are
+	// never both populated, so no consumer can mistake one overload for "the"
+	// signature.
+	CallSignature *SelectedSignature `cbor:"callSignature,omitempty" json:"callSignature,omitempty"`
+	// Every call signature of an overloaded exported value, in declaration
+	// order. Populated only when the type has more than one, and only when
+	// every one of them could be described.
+	CallSignatures []SelectedSignature             `cbor:"callSignatures,omitempty" json:"callSignatures,omitempty"`
+	Implementation *ExportImplementationTranscript `cbor:"implementation,omitempty" json:"implementation,omitempty"`
+	Complete       bool                            `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons    []string                        `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
+type ExportImplementationTranscript struct {
+	Location      Location             `cbor:"location" json:"location"`
+	QueryName     string               `cbor:"queryName,omitempty" json:"queryName,omitempty"`
+	Target        SymbolID             `cbor:"target,omitempty" json:"target,omitempty"`
+	Declaration   *ResolvedDeclaration `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Signature     *SelectedSignature   `cbor:"signature,omitempty" json:"signature,omitempty"`
+	ParameterUses []ParameterUse       `cbor:"parameterUses,omitempty" json:"parameterUses,omitempty"`
+	ControlFlow   *ControlFlowCensus   `cbor:"controlFlow,omitempty" json:"controlFlow,omitempty"`
+	// CallableReturns records the return-carry edges owned by each nested
+	// callable in this implementation. The top-level implementation's return
+	// sites remain in ControlFlow; these rows let a consumer compose a returned
+	// callable that itself returns another callable, without treating lexical
+	// nesting as execution.
+	CallableReturns []CallableReturnCensus `cbor:"callableReturns,omitempty" json:"callableReturns,omitempty"`
+	Calls           []ImplementationCall   `cbor:"calls,omitempty" json:"calls,omitempty"`
+	Complete        bool                   `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons     []string               `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
+type ParameterValueSource struct {
+	ParameterIndex int           `cbor:"parameterIndex" json:"parameterIndex"`
+	Path           []PathSegment `cbor:"path,omitempty" json:"path,omitempty"`
+}
+
+type ImplementationCall struct {
+	Location Location     `cbor:"location" json:"location"`
+	Reach    Reachability `cbor:"reach" json:"reach"`
+	// Kind separates `f(x)` from `new F(x)`. Both are recorded, because both
+	// run the callables they are handed — `new Promise(executor)` runs its
+	// executor synchronously, and a census that omitted it would leave the
+	// executor's body unprovable — but they are not interchangeable: a
+	// consumer whose claim is "this implementation *calls* the value" must be
+	// able to refuse a construction, so the distinction is always transmitted
+	// rather than left implicit in the absence of a field.
+	//
+	// A construct site deliberately carries no callee-parameter facts: the
+	// three CalleeXxxParameters fields below are about the body of a resolved
+	// *function*, and a constructor's resolution was not reviewed here.
+	Kind               CallKind                `cbor:"kind" json:"kind"`
+	Target             SymbolID                `cbor:"target,omitempty" json:"target,omitempty"`
+	TargetName         string                  `cbor:"targetName,omitempty" json:"targetName,omitempty"`
+	TargetModule       string                  `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
+	Declaration        *ResolvedDeclaration    `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	CalleeParameter    *ParameterValueSource   `cbor:"calleeParameter,omitempty" json:"calleeParameter,omitempty"`
+	ArgumentParameters []*ParameterValueSource `cbor:"argumentParameters,omitempty" json:"argumentParameters,omitempty"`
+	Captured           bool                    `cbor:"captured,omitempty" json:"captured,omitempty"`
+	// EnclosingCallable is the exact source range of the *innermost* callable
+	// that contains this call, or nil when the call sits directly in the
+	// implementation's own body. It is the link a consumer needs to compose a
+	// chain: a call is reached through a carried callable only when that
+	// callable is the one immediately containing it, so that every callable
+	// between must be shown to run on its own merits rather than assumed from
+	// byte nesting. Captured is true exactly when this is non-nil.
+	EnclosingCallable *Location `cbor:"enclosingCallable,omitempty" json:"enclosingCallable,omitempty"`
+	// ArgumentCallables are, per argument slot, the exact source ranges of the
+	// callables that slot provably carries — and carries by identity: the
+	// callable expression itself, the wrappers that erase at runtime, and a
+	// single-declaration binding naming exactly one callable. A literal that
+	// stores several callables in one value is deliberately absent, because a
+	// slot whose runtime picks one named property does not run the others.
+	// Absence is never proof that a slot carries nothing.
+	ArgumentCallables []ImplementationArgumentCallable `cbor:"argumentCallables,omitempty" json:"argumentCallables,omitempty"`
+	// DefaultLibraryInvoker names the exact standard-library member this call's
+	// callee resolves to, and InvokedArguments the argument slots that member's
+	// runtime invokes zero or more times. Both are emitted only for a member of
+	// a fixed reviewed table, resolved by default-library symbol identity
+	// rather than by spelling; every other callee emits neither.
+	DefaultLibraryInvoker DefaultLibraryInvoker `cbor:"defaultLibraryInvoker,omitempty" json:"defaultLibraryInvoker,omitempty"`
+	InvokedArguments      []int                 `cbor:"invokedArguments,omitempty" json:"invokedArguments,omitempty"`
+	// CalleeDirectlyCalledParameters are the parameter indices this call's
+	// callee calls directly in its own body — the strongest of the three, and
+	// the only one that by itself proves the argument at that slot is used as a
+	// function.
+	CalleeDirectlyCalledParameters []int `cbor:"calleeDirectlyCalledParameters,omitempty" json:"calleeDirectlyCalledParameters,omitempty"`
+	// CalleeInvokedParameters are the parameter indices the callee's body sends
+	// to *some* proven invoking position: called directly, forwarded to a
+	// further local callee that invokes that slot, or handed to a reviewed
+	// default-library invoker. Reaching a default-library invoker proves the
+	// value runs; it does not prove the callee itself calls it.
+	CalleeInvokedParameters []int `cbor:"calleeInvokedParameters,omitempty" json:"calleeInvokedParameters,omitempty"`
+	// CalleeStronglyInvokedParameters are the parameter indices whose forwarding
+	// chain is a plain identifier forward at every hop and *terminates in a
+	// direct call*. A chain that ends at `addEventListener` is invoked but not
+	// strongly invoked: it proves execution, not that this callee treats the
+	// position as a function.
+	CalleeStronglyInvokedParameters []int `cbor:"calleeStronglyInvokedParameters,omitempty" json:"calleeStronglyInvokedParameters,omitempty"`
+	// CalleePendingInvocations are the same two claims, each still missing one
+	// premise this producer may not decide: whether a named argument slot of a
+	// named imported function is a callback position. The callee's body calls
+	// its parameter from inside a callable it hands to that slot, so the claim
+	// holds exactly when the slot invokes what it is given.
+	//
+	// The producer states the syntax and refuses to state the semantics: it
+	// knows no framework vocabulary, and inferring one from a module and a
+	// name is exactly the shortcut the precision contract forbids. The
+	// verifier owns that table and answers each requirement itself; a
+	// requirement it does not recognize leaves the claim unproven.
+	//
+	// An entry with no requirements is not an unconditional claim — it is a
+	// malformed one, and a consumer must refuse it rather than read it as a
+	// fact that needs nothing.
+	CalleePendingInvocations []CalleePendingInvocation `cbor:"calleePendingInvocations,omitempty" json:"calleePendingInvocations,omitempty"`
+}
+
+// CalleePendingInvocation is one conditional callee-parameter claim: parameter
+// Parameter of this call's callee is invoked (and, when Strong, invoked by a
+// chain of plain forwards terminating in a direct call) provided every slot in
+// Requires really does invoke the callable handed to it.
+type CalleePendingInvocation struct {
+	Parameter int                   `cbor:"parameter" json:"parameter"`
+	Strong    bool                  `cbor:"strong,omitempty" json:"strong,omitempty"`
+	Requires  []InvokingSlotPremise `cbor:"requires,omitempty" json:"requires,omitempty"`
+}
+
+// InvokingSlotPremise names one argument slot of one resolved imported callee,
+// exactly as the source spells it: the module the callee was imported from,
+// the name it was exported under, the slot, and the call's argument count —
+// everything a dialect owner needs to answer "does this position run what it
+// is given", and nothing that presumes the answer.
+type InvokingSlotPremise struct {
+	Module        string `cbor:"module" json:"module"`
+	Name          string `cbor:"name" json:"name"`
+	Slot          int    `cbor:"slot" json:"slot"`
+	ArgumentCount int    `cbor:"argumentCount" json:"argumentCount"`
+}
+
+// ImplementationArgumentCallable binds one argument slot of a call to the exact
+// source ranges of the callables that slot provably carries.
+type ImplementationArgumentCallable struct {
+	Argument  int        `cbor:"argument" json:"argument"`
+	Locations []Location `cbor:"locations,omitempty" json:"locations,omitempty"`
+}
+
+// DefaultLibraryInvoker is the closed set of standard-library members this
+// producer will vouch for as invoking one of their arguments. It is a closed
+// enum rather than a free string because a consumer must be able to refuse an
+// unrecognized value outright: an invoker nobody reviewed is not evidence.
+//
+// Membership is a reviewed act. `EventTarget.removeEventListener` is absent
+// because removing a handler is not evidence anything runs, and
+// `navigator.geolocation.watchPosition` is absent because "the browser probably
+// calls it" is not a premise — growing this table means auditing the member,
+// not noticing it.
+type DefaultLibraryInvoker string
+
+const (
+	DefaultLibraryInvokerSetTimeout            DefaultLibraryInvoker = "setTimeout"
+	DefaultLibraryInvokerSetInterval           DefaultLibraryInvoker = "setInterval"
+	DefaultLibraryInvokerQueueMicrotask        DefaultLibraryInvoker = "queueMicrotask"
+	DefaultLibraryInvokerRequestAnimationFrame DefaultLibraryInvoker = "requestAnimationFrame"
+	DefaultLibraryInvokerRequestIdleCallback   DefaultLibraryInvoker = "requestIdleCallback"
+	DefaultLibraryInvokerAddEventListener      DefaultLibraryInvoker = "addEventListener"
+	DefaultLibraryInvokerPromiseThen           DefaultLibraryInvoker = "promiseThen"
+	DefaultLibraryInvokerPromiseCatch          DefaultLibraryInvoker = "promiseCatch"
+	DefaultLibraryInvokerPromiseFinally        DefaultLibraryInvoker = "promiseFinally"
+	DefaultLibraryInvokerArrayIteration        DefaultLibraryInvoker = "arrayIteration"
+	// DefaultLibraryInvokerPromiseConstructor is the one construct-expression
+	// row: `new Promise(executor)` runs its executor synchronously, before the
+	// constructor returns. It is emitted only for the exact default-library
+	// `Promise` symbol, so a user class of that name and a locally shadowed
+	// binding both stay open.
+	DefaultLibraryInvokerPromiseConstructor DefaultLibraryInvoker = "promiseConstructor"
+)
+
+type ImplementationValueSourceKind string
+
+const (
+	ImplementationValueDirectCallable ImplementationValueSourceKind = "directCallable"
+	ImplementationValueCallResult     ImplementationValueSourceKind = "callResult"
+)
+
+type ImplementationValueSource struct {
+	Path         []PathSegment                 `cbor:"path,omitempty" json:"path,omitempty"`
+	Kind         ImplementationValueSourceKind `cbor:"kind" json:"kind"`
+	Target       SymbolID                      `cbor:"target,omitempty" json:"target,omitempty"`
+	TargetName   string                        `cbor:"targetName,omitempty" json:"targetName,omitempty"`
+	TargetModule string                        `cbor:"targetModule,omitempty" json:"targetModule,omitempty"`
+	TargetPath   []PathSegment                 `cbor:"targetPath,omitempty" json:"targetPath,omitempty"`
+}
+
+type DeclaredTypeReference struct {
+	Name   string `cbor:"name" json:"name"`
+	Module string `cbor:"module" json:"module"`
+}
+
 type SelectedParameter struct {
-	Index         int                 `cbor:"index" json:"index"`
-	Symbol        SymbolID            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	Declaration   *Declaration        `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Rest          bool                `cbor:"rest,omitempty" json:"rest,omitempty"`
-	Optional      bool                `cbor:"optional,omitempty" json:"optional,omitempty"`
-	Defaulted     bool                `cbor:"defaulted,omitempty" json:"defaulted,omitempty"`
-	Value         InvocationValueFact `cbor:"value" json:"value"`
-	CallablePaths []CallablePathFact  `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
+	Index         int                    `cbor:"index" json:"index"`
+	Symbol        SymbolID               `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	Declaration   *Declaration           `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Rest          bool                   `cbor:"rest,omitempty" json:"rest,omitempty"`
+	Optional      bool                   `cbor:"optional,omitempty" json:"optional,omitempty"`
+	Defaulted     bool                   `cbor:"defaulted,omitempty" json:"defaulted,omitempty"`
+	Value         InvocationValueFact    `cbor:"value" json:"value"`
+	DeclaredType  *DeclaredTypeReference `cbor:"declaredType,omitempty" json:"declaredType,omitempty"`
+	CallablePaths []CallablePathFact     `cbor:"callablePaths,omitempty" json:"callablePaths,omitempty"`
 }
 
 type SelectedSignature struct {
 	Identity             string              `cbor:"identity" json:"identity"`
 	Declaration          ResolvedDeclaration `cbor:"declaration" json:"declaration"`
 	OverloadOrdinal      int                 `cbor:"overloadOrdinal" json:"overloadOrdinal"`
+	OverloadCount        int                 `cbor:"overloadCount" json:"overloadCount"`
 	MinimumArgumentCount int                 `cbor:"minimumArgumentCount" json:"minimumArgumentCount"`
 	HasRest              bool                `cbor:"hasRest,omitempty" json:"hasRest,omitempty"`
 	Parameters           []SelectedParameter `cbor:"parameters,omitempty" json:"parameters,omitempty"`
@@ -221,12 +438,19 @@ const (
 )
 
 type ParameterUse struct {
-	ParameterIndex int              `cbor:"parameterIndex" json:"parameterIndex"`
-	BindingPath    []PathSegment    `cbor:"bindingPath,omitempty" json:"bindingPath,omitempty"`
-	Location       Location         `cbor:"location" json:"location"`
-	Kind           ParameterUseKind `cbor:"kind" json:"kind"`
-	Alias          bool             `cbor:"alias,omitempty" json:"alias,omitempty"`
-	Captured       bool             `cbor:"captured,omitempty" json:"captured,omitempty"`
+	ParameterIndex int           `cbor:"parameterIndex" json:"parameterIndex"`
+	BindingPath    []PathSegment `cbor:"bindingPath,omitempty" json:"bindingPath,omitempty"`
+	Location       Location      `cbor:"location" json:"location"`
+	// Reach is whether invoking the implementation reaches this use, answered by
+	// the same body walk that answers it for a call in the same position. A use
+	// after a `return`, after a `throw`, or in a branch a literal condition
+	// excludes is `unreachable`; a use inside a loop body, a `switch`, or a
+	// `try` is `unknown`, because control may not enter. Without it a consumer
+	// cannot tell an executed read from one in dead code.
+	Reach    Reachability     `cbor:"reach" json:"reach"`
+	Kind     ParameterUseKind `cbor:"kind" json:"kind"`
+	Alias    bool             `cbor:"alias,omitempty" json:"alias,omitempty"`
+	Captured bool             `cbor:"captured,omitempty" json:"captured,omitempty"`
 }
 
 type Reachability string
@@ -241,7 +465,42 @@ type ReturnSite struct {
 	Location Location             `cbor:"location" json:"location"`
 	Reach    Reachability         `cbor:"reach" json:"reach"`
 	Value    *InvocationValueFact `cbor:"value,omitempty" json:"value,omitempty"`
-	Captures []int                `cbor:"captures,omitempty" json:"captures,omitempty"`
+	// CarriedCallables are the exact source ranges of the callables this
+	// returned value provably carries. A consumer asking whether a call inside
+	// a nested callable is reachable through the returned value answers it by
+	// containment: the call site lies within one of these ranges, or it does
+	// not. An empty list is never proof that nothing is carried.
+	CarriedCallables []Location `cbor:"carriedCallables,omitempty" json:"carriedCallables,omitempty"`
+	// CarryReach is the lower-bound strength of this particular value-return
+	// edge. It is absent only for a bare return. Reach remains the
+	// optimistic control-flow observation used by existing consumers; a
+	// conditional statement return therefore needs this separate premise before
+	// it may authorize execution of the value it returns.
+	CarryReach *Reachability               `cbor:"carryReach,omitempty" json:"carryReach,omitempty"`
+	Sources    []ImplementationValueSource `cbor:"sources,omitempty" json:"sources,omitempty"`
+}
+
+// CallableReturnCensus is the exact return-carry census for one nested
+// callable. Absence is never proof that the callable returns nothing.
+type CallableReturnCensus struct {
+	Callable Location                  `cbor:"callable" json:"callable"`
+	Returns  []CallableReturnCarrySite `cbor:"returns,omitempty" json:"returns,omitempty"`
+}
+
+type CallableReturnCarrySite struct {
+	Location         Location               `cbor:"location" json:"location"`
+	Reach            Reachability           `cbor:"reach" json:"reach"`
+	CarryReach       *Reachability          `cbor:"carryReach,omitempty" json:"carryReach,omitempty"`
+	CarriedCallables []CallableCarryBinding `cbor:"carriedCallables,omitempty" json:"carriedCallables,omitempty"`
+}
+
+// CallableCarryBinding names one exact callable and whether the returned value
+// carries it on every path through the return expression or only on a possible
+// alternative. Unknown is usable only by a consumer asking a may-execute
+// question; Unreachable carries no authority.
+type CallableCarryBinding struct {
+	Location Location     `cbor:"location" json:"location"`
+	Reach    Reachability `cbor:"reach" json:"reach"`
 }
 
 type ThrowSite struct {
@@ -298,9 +557,20 @@ type InvocationAnswer struct {
 	Envelope    InvocationEnvelope     `cbor:"envelope" json:"envelope"`
 }
 
+type ExportValueAnswer struct {
+	Transcripts []ExportValueTranscript `cbor:"transcripts,omitempty" json:"transcripts,omitempty"`
+	Envelope    InvocationEnvelope      `cbor:"envelope" json:"envelope"`
+}
+
 // InvocationAnalyzer is the optional exact compiler capability behind the
 // invocation lifecycle operation. A backend without it must fail the request;
 // it may not synthesize a partial transcript from weaker Project methods.
 type InvocationAnalyzer interface {
 	InvocationTranscripts(context.Context, []InvocationDemand) (InvocationAnswer, error)
+}
+
+// ExportValueAnalyzer is intentionally separate from InvocationAnalyzer: an
+// implementation cannot answer exported-value proof from a selected call.
+type ExportValueAnalyzer interface {
+	ExportValueTranscripts(context.Context, []ExportValueDemand) (ExportValueAnswer, error)
 }

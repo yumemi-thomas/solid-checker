@@ -6,8 +6,11 @@ BUN ?= bun
 # default because clean CI images do not necessarily have nextest installed;
 # compare with `make CARGO_TEST_RUNNER='nextest run' test-rust` when available.
 CARGO_TEST_RUNNER ?= test
+TYPEFACTS_CERTIFICATION_ENV = \
+	SOLID_TYPEFACTS_CERTIFICATION_SHA256="sha256:$$(shasum -a 256 bin/solid-typefacts | awk '{print $$1}')" \
+	SOLID_TYPEFACTS_SOURCE_MANIFEST_SHA256="sha256:$$(node scripts/typefacts-source-identity.mjs --build-id "$(SOLID_CHECKER_BUILD_ID)" --digest)"
 
-.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-delta verify-performance phase0-baseline phase16-report phase16-check phase18-audit phase19-audit phase20-ledger phase21-ledger compiler-facts-identity corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean clean-verify
 
 build: build-rust
 
@@ -18,29 +21,29 @@ build-typefacts:
 
 build-rust: build-typefacts
 	mkdir -p bin
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
+	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
 	cp rust/target/debug/solid-checker-rust bin/solid-checker-rust
 
 # A fresh source build for gates. Unlike build-rust this does not rebuild the
 # pinned TypeFacts producer or overwrite the packaged/check-in binary under bin/.
-build-checker-debug:
-	cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
+build-checker-debug: build-typefacts
+	$(TYPEFACTS_CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 # A fresh optimized checker for performance measurements. Like the debug gate
 # build, this leaves the checked-in packaged binary under bin/ untouched.
-build-checker-release:
-	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
+build-checker-release: build-typefacts
+	$(TYPEFACTS_CERTIFICATION_ENV) cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 package: build-typefacts
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
+	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" $(BUN) scripts/package-rust.mjs --output dist/solid-checker
 
 test: test-rust test-cli
 
 test-rust: build-typefacts
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
+	$(TYPEFACTS_CERTIFICATION_ENV) SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_TEST_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) $(CARGO_TEST_RUNNER) --manifest-path $(RUST_MANIFEST) --workspace
 
 test-cli:
 	$(BUN) install --cwd packages/cli --ignore-scripts --no-progress --frozen-lockfile
@@ -63,6 +66,15 @@ phase16-check:
 
 phase18-audit:
 	$(BUN) scripts/package-contract-phase18.mjs
+
+phase19-audit:
+	$(BUN) scripts/package-contract-phase19.mjs
+
+phase20-ledger:
+	$(BUN) scripts/package-contract-v2-phase20-ledger.mjs --check
+
+phase21-ledger:
+	$(BUN) scripts/package-contract-v2-phase21-ledger.mjs --check
 
 compiler-facts-identity:
 	$(BUN) scripts/check-compiler-facts-identity.mjs
@@ -180,12 +192,17 @@ ecosystem-sentinel:
 	  $(BUN) scripts/ecosystem-benchmark/run.mjs --sentinel
 
 # The full discovered corpus is also the product-speed measurement, so it uses
-# a fresh optimized binary. run.mjs chooses min(available CPUs, 8) workers;
-# pass --concurrency explicitly when comparing another scheduling policy.
+# a fresh optimized binary. run.mjs keeps eight install/generation slots,
+# uses the remaining host slots for certification, then expands the receipt
+# drain to twenty after proposal work is claimed. Pass --concurrency or
+# --certification-concurrency to compare another scheduling policy.
+# Certification children share rust/target/registry-cache so the measured
+# wall time is the checker's, not the registry's; --no-registry-cache
+# restores fetch-everything-fresh acquisition.
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
-	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 \
+	  $(BUN) scripts/ecosystem-benchmark/run.mjs --timeout 600 --attempt-certification \
 	  --thresholds scripts/ecosystem-benchmark/phase16-thresholds.json
 
 .PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark

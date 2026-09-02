@@ -1,0 +1,118 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "c79d2ce0ebc532cff409b4b8f1ae9287b614b332efa75f864373aa3849285310",
+            "path": "./index.js",
+            "sha256": "42c75f24865818986875274ef47aab104ad8e3459a41f629bedcf62bc613e416"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "8c158374f6e577dd153bfde1a4dbab49d475cca83badfa7753c9cf7a0c1222e2"
+          },
+          "exports": {
+            "observe": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./browser-gap": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "acb46c8476011aefdcd8531a534c05c8927a5521ff202d428cd1107e287e30a6",
+            "path": "./browser-gap.js",
+            "sha256": "5009c5f4ad6c0b171a5874dd66e8a9d04881db539207deaaf680b5ff56e475a6"
+          },
+          "declarations": {
+            "path": "./browser-gap.d.ts",
+            "sha256": "9dd0e4e83a383c5a98e71a8ac0944403a7aad49ad43f224c8356408cf28c6b7c"
+          },
+          "exports": {
+            "schedule": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1browser-gap/import",
+            "typesBranch": "/exports/.~1browser-gap/types"
+          }
+        }
+      ]
+    },
+    "./source": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "a0a8623225a2917cdbc7ea05c4577e3ae8889e35ed0d008aabc11cdce5d9e269",
+            "path": "./source.js",
+            "sha256": "49ecf4f19e128defc398121b4f07dbd504300123b6d3b0898a7455a3c2f00ccb"
+          },
+          "declarations": {
+            "path": "./source.d.ts",
+            "sha256": "e73056855ccb1812fa6aaab130bd4c9b996014aefe12b0cf37941cd34ef5b792"
+          },
+          "exports": {
+            "track": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1source/import",
+            "typesBranch": "/exports/.~1source/types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:eed7d9d10ad5a6a233a8cfdb7b7cee0142e48586d39f63b3ccf2a920e000eeee",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "eed7d9d10ad5a6a233a8cfdb7b7cee0142e48586d39f63b3ccf2a920e000eeee"
+    },
+    "name": "unpublished-conditional-target-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    }
+  }
+}

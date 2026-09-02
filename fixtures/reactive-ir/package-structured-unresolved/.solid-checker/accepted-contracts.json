@@ -1,5 +1,5 @@
 {
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "contracts": [
     {
       "document": "node_modules/bare-package/solid-reactivity.json",
@@ -59,7 +59,7 @@
         },
         "specifier": "bare-package"
       },
-      "receipt": "node_modules/bare-package/solid-reactivity.receipt.json"
+      "status": "obsolete-policy1"
     },
     {
       "document": "node_modules/bare-package/solid-reactivity.json",
@@ -119,7 +119,7 @@
         },
         "specifier": "bare-package"
       },
-      "receipt": "node_modules/bare-package/solid-reactivity.receipt.json"
+      "status": "obsolete-policy1"
     }
   ],
   "format": "solid-checker-accepted-contract-catalog"

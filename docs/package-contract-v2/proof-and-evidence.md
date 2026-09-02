@@ -82,6 +82,28 @@ requires compiler execution facts; dependency composition requires an already
 accepted dependency contract; and probe consistency requires runtime-probe
 authority. One authority cannot stand in for another.
 
+Policy 2 makes dependency and probe applicability verifier-owned. Every exact
+external closure edge is crossed with every proposed parent closure, producing
+a canonical `(dependency package, dependency artifact, parent export, parent
+claim)` requirement. Multi-package certification is dependency-first and
+cycles are refused before receipt use. Probe consistency is not a proof-witness
+family: every proposed closure gets a mandatory veto gate, a contradiction
+rejects that closure, and successful finite non-observation cannot close it.
+Policy-2 receipt authentication is implemented behind the internal native/WASM
+seam. These schedules still remain unsatisfied in the active product until the
+receipt cut and directly launched probe-harness identity are complete.
+
+Receipt v2 requires the canonical compact stable-v1 main and authenticates a
+domain-separated binary payload over the complete artifact, certification,
+producer, dependency, probe, policy, and verifier identity. A built-in entry is
+trusted only through its independently compiled receipt digest; persistent
+local and portable entries require strict Ed25519 verification against a
+configured trust-store entry that constrains issuer kind, scope, policy digest,
+and verifier build. Revocation epoch and trust-store digest remain part of the
+authenticated identity. Publication synchronizes content-addressed main and
+receipt objects before atomically replacing one catalog pointer. This loader is
+not an active analyzer authority until the Slice 9 cut.
+
 ## Closure obligations
 
 Before closing one claim domain, the verifier proves:

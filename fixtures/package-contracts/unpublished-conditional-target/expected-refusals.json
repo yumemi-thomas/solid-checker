@@ -1,0 +1,30 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "unpublished-conditional-target-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./browser-gap",
+      "conditions": [
+        "browser"
+      ],
+      "stage": "artifact-case",
+      "applicability": "unavailable-published-target",
+      "reason": "resolved target <package-root>/missing-browser.js is not a file"
+    }
+  ],
+  "inapplicable": [
+    {
+      "entrypoint": "./source",
+      "conditions": [
+        "unpublished-conditional-target/source"
+      ],
+      "stage": "artifact-case",
+      "class": "unpublished-conditional-target",
+      "reason": "runtime target is unpublished behind private namespaced export condition(s) \"unpublished-conditional-target/source\""
+    }
+  ]
+}

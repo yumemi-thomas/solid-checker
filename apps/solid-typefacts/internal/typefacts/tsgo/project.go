@@ -77,6 +77,36 @@ type project struct {
 	// EvalSymlinks is semantic for linked packages but must not be repeated
 	// for every entity carrying the same declaration path.
 	runtimePaths map[string]string
+	// assignedSymbols memoizes, per source file of the accepted generation,
+	// the set of symbols that file writes to. Proving a hoisted function
+	// declaration still denotes its own body needs the answer once per file
+	// rather than once per returned-callable resolution. Checker-owned symbol
+	// pointers make it generation-scoped, like runtimePaths.
+	assignedSymbols map[*ast.SourceFile]map[*ast.Symbol]struct{}
+	// calleeInvocations memoizes what a callable's body does with its own
+	// parameters, per callee symbol *and the depth it was asked at*, for the
+	// accepted generation. The descent reads a whole body per callee and real
+	// packages call the same small helpers from every export, so the answer is
+	// asked for far more often than it changes.
+	//
+	// The depth belongs in the key because it is an input to the answer. The
+	// walk refuses below maxCalleeInvocationDepth, so a callee asked at depth 3
+	// has one body of headroom where the same callee asked at depth 0 has four,
+	// and the deeper question can be answered "no evidence" where the shallower
+	// one is answered exactly. Keying by symbol alone let a warm entry lend its
+	// headroom to a later, deeper question: an export certified or not
+	// depending on which *other* exports had been demanded before it, over the
+	// same source and the same binaries. Nothing in a receipt, a gate-cache key
+	// or a proof digest names the demand list, so that dependence had to go.
+	//
+	// Only an *exact* answer is stored — one computed without a depth cut, a
+	// cycle cut, or an exhausted budget. An exact answer met no cut, so it does
+	// not depend on the interprocedural cycle guard's contents either, and a
+	// hit returns precisely what recomputing at that same depth would. With the
+	// depth in the key that makes the emitted fact set a pure function of the
+	// program. Checker-owned symbol pointers make it generation-scoped, like
+	// assignedSymbols.
+	calleeInvocations map[calleeInvocationKey]*calleeInvocationFacts
 	// resolved-call caches are generation-scoped and populated only by
 	// resolvedCall demands. Signatures and symbols are checker-owned pointers,
 	// so every accepted update drops the maps as it installs the new checker.
@@ -244,6 +274,8 @@ func (p *project) ReleaseAnalysisState() {
 	p.filesByName = nil
 	p.currentSourceFiles = nil
 	p.runtimePaths = nil
+	p.assignedSymbols = nil
+	p.calleeInvocations = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
 	p.callDiagnostics = nil
@@ -514,6 +546,8 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.versions = candidateVersions
 	p.generation++
 	p.runtimePaths = nil
+	p.assignedSymbols = nil
+	p.calleeInvocations = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {
 			p.exportedIdentities = make(map[*ast.Symbol]preservedExportIdentity)

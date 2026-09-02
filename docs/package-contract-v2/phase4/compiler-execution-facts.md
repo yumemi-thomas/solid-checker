@@ -24,6 +24,13 @@ semantic implementation revisions; source/output/source-map digests; mode; and
 the full effective compiler configuration. The semantic implementation and
 distribution commits are separate because no commit can contain its own hash.
 
+Policy-2 package certification adds a separate live-session envelope. The
+backend copies and hashes the running verifier image into a private execution
+directory, launches one fresh hidden compiler child per exact proof demand, and
+binds child PID, nonce, canonical request digest, snapshot root, demand-graph
+root, and proof-demand ID. Serialized execution maps remain audit data and
+cannot construct this authority token.
+
 ## Execution facts
 
 Disposition, trigger, schedule, tracking, cardinality, and owner are orthogonal
@@ -56,6 +63,15 @@ generated operations are exact positive facts, but the set remains open until
 the producer has an independent census over every generated semantic wrapper.
 Solid 1 trace v2 also closes source operations only. Neither adapter may turn
 an absent generated-operation row into complete-negative knowledge.
+
+For a materialized transform, the certification child performs the same
+compile twice with semantic tracing enabled and disabled. Generated code and
+source-map bytes must be identical. These exact returned bytes are not yet a
+package-contract witness: schema-v1 `transform` identifies the producing tool,
+while the output itself is a virtual generated closure entry. Until a
+neighboring immutable sidecar binds both byte sets independently, transformed
+artifact certification remains refused. This also avoids treating absent
+generated wrappers as completely censused.
 
 ## Deep normalization
 

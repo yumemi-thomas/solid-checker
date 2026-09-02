@@ -35,22 +35,64 @@ Generation acquires exact runtime, declaration, export, and closure identities
 without executing package code. It enumerates finite entrypoints and condition
 partitions, refuses wildcard/unbounded surfaces, and preserves unresolved
 semantic leaves as local open claims. The proposal cannot affect analysis
-until the Rust proof checker accepts its exact bytes and issues a receipt:
+until policy-2 certification verifies every demanded witness and issues an
+authenticated receipt. Policy-1 proof-file issuance is retired:
 
 ```sh
 solid-checker contract review solid-reactivity.json
-solid-checker contract verify solid-reactivity.json \
-  --plan solid-reactivity.json.proposal.json \
-  --proof proof-transcript.json \
-  --artifact-case artifact-case:…
+solid-checker contract verify # deterministic migration refusal
 ```
 
-Register the accepted document, its receipt, and the independently acquired
-full import resolution in `.solid-checker/accepted-contracts.json`. The native
-checker rejects name-only, stale, unreceipted, or artifact-mismatched inputs.
+`solid-checker contract certify --integrity 'sha512-…'` now owns exact registry
+reacquisition, Rust demand planning, witness scheduling, issuer invocation,
+and catalog-last publication. The initial policy-2 producer rollout fails
+closed at the first unavailable live witness adapter; `--audit-output` records
+the exact demand-local refusal but is explicitly non-replayable authority.
+Until every demanded producer answers and an issuer is configured, the native
+checker reports the exact import as uncertifiable rather than accepting
+name-only, stale, unreceipted, or artifact-mismatched input.
 `solid-checker contract probe` is a separate opt-in falsification workflow;
 ordinary generation and analysis never execute dependency code, and a passing
 probe never closes a claim.
+
+`contract generate` writes a `.certification-inputs.json` sidecar beside the
+proposal (with the existing `.proposal.json` and `.refusals.json`) recording
+the emitted artifact cases, their resolutions, and the identity they were
+generated under. `contract certify --proposal <FILE>` reuses that emission
+instead of regenerating it when the package identity, integrity, package root,
+certification importer, entrypoints and conditions all match and the document
+and plan still carry the recorded digests; anything else regenerates. Reuse
+moves no authority: Rust verifies every resolution against the authenticated
+archive and proves every claim before a receipt exists, exactly as it does for
+an in-process generation. Generate under `--certification-importer` set to the
+path certification will use (its name derives from the package root and the
+catalog) for the hand-over to be admissible.
+
+`SOLID_CHECKER_MATERIALIZED_STORE` names a directory where certification keeps
+the loadable files of each compiler-source snapshot (content-addressed, linked
+into each private Type Facts project instead of written) and the verified
+execution images of the producer and checker (launched in place instead of
+copied per certification). Every entry is re-verified against the in-memory
+snapshot or the pin before use and the source census still verifies every file
+the producer reads, so the store is a cache, never an authority. Unset, every
+certification writes its own private copies.
+
+Published catalogs, receipts and trust configurations are written to a
+temporary path, flushed to stable storage, and renamed into place.
+`SOLID_CHECKER_DURABLE_WRITES=none` skips the flush (atomic visibility is
+unchanged; only crash durability is relaxed) for callers whose catalogs are
+scratch, such as the ecosystem benchmark. Leave it unset for a real
+publication.
+
+Certification acquires every named package — the root and each compiler-source
+dependency the lockfile selects — from the registry, up to
+`SOLID_CHECKER_REGISTRY_CONCURRENCY` (default 8) at a time. Setting
+`SOLID_CHECKER_REGISTRY_CACHE` to a directory keeps acquisitions that
+authenticated against their pinned sha512 integrity, addressed by exact
+(origin, package, version, integrity); a later acquisition of the same identity
+reuses those bytes only after re-checking that the archive still hashes to the
+integrity and the packument still carries that exact record. Unset, every
+acquisition fetches from the registry.
 
 Check which dependencies still need one, and which have a contract that no
 longer matches the installed version:

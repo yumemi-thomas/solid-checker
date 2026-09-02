@@ -837,10 +837,32 @@ test("renderMarkdown covers both Solid versions and every family, and flags trun
     results,
     startedAt: "2026-08-21T09:00:00.000Z",
     finishedAt: "2026-08-21T09:30:00.000Z",
-    checker: { nativeBin: "/repo/rust/target/debug/solid-checker-rust", typeFactsBin: "/repo/bin/solid-typefacts" }
+    checker: {
+      nativeBin: "/repo/rust/target/debug/solid-checker-rust",
+      typeFactsBin: "/repo/bin/solid-typefacts",
+      registryCache: "/repo/rust/target/registry-cache"
+    }
   });
+  assert.equal(report.checker.registryCache, "/repo/rust/target/registry-cache");
+  assert.equal(report.checker.durableWrites, true, "absent means the product default");
 
   const markdown = renderMarkdown(report);
+  assert.ok(markdown.includes("- Durable catalog writes: on"));
+  assert.equal(report.checker.installLockfileCache, null);
+  assert.ok(markdown.includes("- Install lockfile cache: none (every install resolved against the registry)"));
+  assert.equal(report.checker.materializedStore, null);
+  assert.ok(markdown.includes("- Materialized source store: none (every private project wrote its own copies)"));
+  assert.ok(markdown.includes("- Registry cache for certification: /repo/rust/target/registry-cache"));
+  const fresh = renderMarkdown(
+    buildReport({
+      manifest: makeManifest({ results }),
+      results,
+      startedAt: "2026-08-21T09:00:00.000Z",
+      finishedAt: "2026-08-21T09:30:00.000Z",
+      checker: { nativeBin: "/repo/bin/a", typeFactsBin: "/repo/bin/b" }
+    })
+  );
+  assert.ok(fresh.includes("- Registry cache for certification: none (every registry byte fetched fresh)"));
   assert.match(markdown, /## Solid 1\.x/);
   assert.match(markdown, /## Solid 2\.x/);
   assert.match(markdown, /## Combined/);
@@ -1142,4 +1164,26 @@ test("a filtered report identifies itself as partial rather than reading as a fu
   });
   assert.equal(full.scope.kind, "full");
   assert.match(renderMarkdown(full), /- Scope: full corpus/);
+});
+
+test("an exact-probe report retains its complete row identity set", () => {
+  const results = [makeResult({ package: "@kobalte/core", version: "0.13.13", family: "kobalte" })];
+  const probeIds = ["@kobalte/core@0.13.13|solid1|only"];
+  const report = buildReport({
+    manifest: makeManifest({ results }),
+    results,
+    startedAt: "2026-08-21T09:00:00.000Z",
+    finishedAt: "2026-08-21T09:01:00.000Z",
+    scope: {
+      kind: "filtered",
+      sentinel: false,
+      families: [],
+      solidTargets: [],
+      probeIds,
+      includeSupplemental: false
+    }
+  });
+
+  assert.deepEqual(report.scope.probeIds, probeIds);
+  assert.match(renderMarkdown(report), /1 exact probe id\(s\)/);
 });

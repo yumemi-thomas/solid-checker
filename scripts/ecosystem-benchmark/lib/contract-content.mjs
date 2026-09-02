@@ -88,10 +88,18 @@ export function summarizeContractDocument(contract) {
   let exportsWithoutSummary = 0;
   let exportsAllDomainsUnknown = 0;
   let artifactCasesTotal = 0;
+  const artifactCaseRecords = [];
 
-  for (const entrypoint of Object.values(contract.entrypoints)) {
-    for (const artifactCase of artifactCases(entrypoint)) {
+  for (const [entrypointName, entrypoint] of Object.entries(contract.entrypoints)) {
+    for (const [caseIndex, artifactCase] of artifactCases(entrypoint).entries()) {
       artifactCasesTotal += 1;
+      artifactCaseRecords.push({
+        entrypoint: entrypointName,
+        caseIndex,
+        artifact: artifactCase?.artifact ?? null,
+        declarations: artifactCase?.declarations ?? null,
+        resolution: artifactCase?.resolution ?? null
+      });
       for (const reference of Object.values(artifactCase?.exports ?? {})) {
         exportsTotal += 1;
         const summary = contract.summaries[referenceId(reference)];
@@ -127,6 +135,7 @@ export function summarizeContractDocument(contract) {
   return {
     entrypointsEmitted: Object.keys(contract.entrypoints).length,
     artifactCasesTotal,
+    artifactCases: artifactCaseRecords,
     exportsTotal,
     exportsProven,
     exportsWithUnknown,
@@ -173,6 +182,7 @@ export function summarizeContract({
   contract,
   reviewPlan,
   refusals = null,
+  inapplicable = null,
   refusedEntrypointsFromStdout = null,
   mainBytes = null,
   planBytes = null
@@ -189,6 +199,10 @@ export function summarizeContract({
     Array.isArray(refusals.refusals)
       ? refusals.refusals
       : [];
+  // Recorded artifact-case dispositions. They are census decisions, never
+  // refusals: an entrypoint no consumer can reach as a module asserts nothing
+  // about certifiable behavior, so it must not be counted as one.
+  const inapplicableArtifactCases = Array.isArray(inapplicable) ? inapplicable : [];
   const operationCount = Object.values(document.behavioralRows).reduce(
     (total, count) => total + count,
     0
@@ -201,9 +215,12 @@ export function summarizeContract({
     fullyProven: false,
     entrypointsEmitted: document.entrypointsEmitted,
     artifactCasesTotal: document.artifactCasesTotal,
+    artifactCases: document.artifactCases,
     entrypointsRefused: refusedEntrypoints,
     artifactCasesRefused: refusedArtifactCases.length,
     artifactCaseRefusals: refusedArtifactCases,
+    artifactCasesInapplicable: inapplicableArtifactCases.length,
+    artifactCaseInapplicabilities: inapplicableArtifactCases,
     refusedEntrypointNames: [],
     exportsTotal: document.exportsTotal,
     exportsProven: document.exportsProven,
@@ -254,14 +271,38 @@ function readJsonBytesOrNull(path) {
   }
 }
 
+export function readProposalRefusalAudit(contractPath) {
+  const audit = readJsonBytesOrNull(refusalPathFor(contractPath));
+  if (
+    audit?.value?.format !== "solid-checker-contract-proposal-refusals" ||
+    audit.value.refusalVersion !== 1 ||
+    !Array.isArray(audit.value.refusals)
+  ) return null;
+  return {
+    package: audit.value.package ?? null,
+    refusals: audit.value.refusals,
+    // Additive under the same envelope version: a sidecar written before the
+    // disposition census existed simply has none.
+    inapplicable: Array.isArray(audit.value.inapplicable) ? audit.value.inapplicable : [],
+    bytes: audit.bytes
+  };
+}
+
 export function readContractContent(contractPath, refusedEntrypointsFromStdout = null) {
   const contract = readJsonBytesOrNull(contractPath);
   const reviewPlan = readJsonBytesOrNull(reviewPlanPathFor(contractPath));
-  const refusals = readJsonBytesOrNull(refusalPathFor(contractPath));
+  const refusalAudit = readProposalRefusalAudit(contractPath);
   return summarizeContract({
     contract: contract?.value ?? null,
     reviewPlan: reviewPlan?.value ?? null,
-    refusals: refusals?.value ?? null,
+    refusals: refusalAudit === null
+      ? null
+      : {
+          format: "solid-checker-contract-proposal-refusals",
+          refusalVersion: 1,
+          refusals: refusalAudit.refusals
+        },
+    inapplicable: refusalAudit?.inapplicable ?? null,
     refusedEntrypointsFromStdout,
     mainBytes: contract?.bytes ?? null,
     planBytes: reviewPlan?.bytes ?? null

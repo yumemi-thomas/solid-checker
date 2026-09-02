@@ -1,0 +1,81 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "66710de287f87cc6c7c5bb6ac3879304552e5bfd5ef580c74e76199f97cf29fe",
+            "path": "./index.js",
+            "sha256": "0adced753ac397e728fd49706ddd647f79482261a6959c22f5b98be8b2068b68"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "fccf25ebacc7e48d19b350dc830b561dc9149870d0bcf7f444286654035ca6af"
+          },
+          "exports": {
+            "ArrayPattern": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "MemberAlias": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "ObjectPattern": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
+            "Parameter": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:c014693bdc9e622193e99f5bbcbf61066bc942f3df510c07a5fc8c79434f2459",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "c014693bdc9e622193e99f5bbcbf61066bc942f3df510c07a5fc8c79434f2459"
+    },
+    "name": "destructured-parameter-callback",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

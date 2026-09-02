@@ -7,6 +7,81 @@ compile_error!("solid-facts-backend requires at least one dialect feature");
 mod artifact_resolution;
 mod bounded_json;
 mod cache;
+mod contract_certification;
+pub use contract_certification::report_certification_timing;
+
+/// Whether published artifacts are flushed to stable storage before they are
+/// made visible. Atomic visibility never changes: every publication still
+/// writes to a temporary path and renames it into place, so a reader sees a
+/// whole file or nothing. What `SOLID_CHECKER_DURABLE_WRITES=none` relaxes is
+/// crash durability — the `fsync` (an `F_FULLFSYNC` full-disk flush on Apple
+/// platforms) of the file and its directory before the rename. That is the
+/// right trade only where the published artifact is scratch, as in the
+/// ecosystem benchmark, whose catalogs live in a temporary directory removed
+/// seconds later; the product default flushes. Read once per process.
+pub fn durable_writes_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        !matches!(
+            std::env::var("SOLID_CHECKER_DURABLE_WRITES")
+                .ok()
+                .as_deref()
+                .map(str::trim),
+            Some("none") | Some("0")
+        )
+    })
+}
+
+/// `File::sync_all` under the process durability policy; see
+/// [`durable_writes_enabled`].
+pub fn durable_sync(file: &std::fs::File) -> std::io::Result<()> {
+    if durable_writes_enabled() {
+        file.sync_all()
+    } else {
+        Ok(())
+    }
+}
+
+/// Creates `destination` as a private copy of `source`, refusing an existing
+/// destination. On APFS the copy is a `clonefile(2)` — a copy-on-write file
+/// with its own inode that shares no future with the source, so it is exactly
+/// as private as a byte copy and costs no data write; everywhere else, and
+/// whenever the clone is refused, the bytes are copied. Callers that need the
+/// copy's identity hash the destination afterwards, as they always did, so the
+/// guarantee ("this exact private file is what launches") is unchanged.
+/// Returns whether the destination was cloned rather than written.
+pub fn clone_or_copy_file(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> std::io::Result<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+        let source_c = std::ffi::CString::new(source.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+        let destination_c = std::ffi::CString::new(destination.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+        // SAFETY: both pointers are valid NUL-terminated paths for the call.
+        let status = unsafe { libc::clonefile(source_c.as_ptr(), destination_c.as_ptr(), 0) };
+        if status == 0 {
+            return Ok(true);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            return Err(error);
+        }
+        // Not APFS, a cross-volume path, or a filesystem that refuses clones:
+        // fall through to the byte copy.
+    }
+    let mut input = std::fs::File::open(source)?;
+    let mut output = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(destination)?;
+    std::io::copy(&mut input, &mut output)?;
+    durable_sync(&output)?;
+    Ok(false)
+}
 mod contract_document;
 mod contract_interface;
 mod contract_workflow;
@@ -17,13 +92,42 @@ mod evidence_sidecars;
 mod first_party_bundles;
 mod inferred_contract;
 mod phase16_benchmark;
-mod proof_checker;
 mod proposal_generation;
 mod runtime_probe_wire;
 mod runtime_probes;
 mod wire;
 
 pub use cache::{CacheStats, FactsCache};
+pub use contract_certification::{
+    ArtifactSnapshot, ArtifactSnapshotError, AuthenticatedPolicy2Receipt, BuiltInReceiptEntry,
+    CanonicalDependencyNodeIdentity, CertificationPlan, CertificationPlanningError,
+    CertificationPlanningTransaction, CertificationRequest, ConfiguredReceiptIssuer,
+    DependencyCompositionError, DependencyCompositionRequirement, DependencyCompositionSchedule,
+    DependencyNodeIdentity, DependencyQueueNode, DependencyReceiptCompositionError,
+    FinalizedGraphNode, FinalizedPolicy2Contract, FinalizedPolicy2Graph, InspectedProbeGateBatch,
+    LocalArtifact, LockPinnedArchive, Policy2FinalizationError, Policy2ReceiptBindings,
+    Policy2ReceiptError, Policy2ReceiptProvenance, Policy2TrustConfiguration, Policy2TrustEntry,
+    Policy2TrustStore, ProbeGate, ProbeGateError, ProbeGateOutcome, ProbeGateOutcomeKind,
+    ProbeGateSchedule, PublishedArchive, PublishedContractGraphPlan,
+    PublishedGraphCertificationError, PublishedGraphLockSelection, PublishedGraphNodeRequest,
+    PublishedGraphPlanningError, PublishedGraphSourceRequest, PublishedPolicy2Catalog,
+    ReceiptIssuerKind, ReceiptPublicationError, SnapshotLimits, SnapshotVerifiedClosure,
+    SnapshotVerifiedExports, SnapshotVerifiedResolution, TypeFactsCertificationError,
+    TypeFactsCertificationSchedule, TypeFactsProducerPin, UntrustedArtifactEnvelope,
+    VerifiedDependencyComposition, VerifiedProbeGateBatch, VerifiedTypeFactsEvidence,
+    WitnessWireError, authenticate_policy2_receipt, canonicalize_policy2_main,
+    certify_published_contract_graph_case_set, certify_value_only_case_set,
+    decode_policy2_trust_configuration, encode_policy2_trust_configuration,
+    issue_builtin_policy2_receipt, issue_policy2_receipt, plan_certification,
+    plan_published_contract_graph, policy2_main_semantic_digest, policy2_policy_digest,
+    policy2_resolved_import_root, policy2_trust_configuration_for_issuer, publish_policy2_catalog,
+};
+#[cfg(feature = "dialect-v2")]
+pub use contract_certification::{
+    CompilerCertificationConfiguration, CompilerCertificationError, CompilerCertificationSchedule,
+    LiveCompilerEvidenceBatch, VerifiedCompilerEvidence,
+    is_compiler_certification_session_argument, serve_compiler_certification_session,
+};
 pub use contract_document::SidecarDigests;
 pub use contract_interface::{
     AcceptedContractSource, AcceptedDependencyEdge, AffectedClaimDomain, ArtifactResolutionFailure,
@@ -33,12 +137,13 @@ pub use contract_interface::{
     ImportRequest, LocalEvidenceStore, ReceiptStore, ResolutionAuthority, ResolutionTrace,
     ResolutionTraceStep, ResolvedExportBinding, ResolvedExportTarget, ResolvedFile, ResolvedImport,
     StandaloneResolutionAdapter, TypeFactsResolutionAdapter, accepted_contract_catalog_members,
-    encode_acceptance_receipt, load_accepted_contract, load_accepted_contract_index,
-    read_accepted_contract_catalog,
+    load_accepted_contract, load_accepted_contract_index, load_authenticated_policy2_contract,
+    load_authenticated_policy2_embedded_contract, read_accepted_contract_catalog,
+    read_accepted_contract_catalog_with_trust, read_policy2_trust_configuration,
+    read_proposal_dependency_catalog_for_generation,
 };
 pub use contract_workflow::{
-    AcceptedArtifacts, ContractWorkflowError, ProposalArtifacts, merge_plans,
-    review as review_contract_document, verify as verify_contract_proposal,
+    ContractWorkflowError, ProposalArtifacts, merge_plans, review as review_contract_document,
 };
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
@@ -60,10 +165,6 @@ pub use first_party_bundles::{
     solid1_bundles, solid2_rc3_bundles,
 };
 pub use phase16_benchmark::phase16_benchmark_report;
-pub use proof_checker::{
-    ProposalProofRequest, ProposalVerificationError, ProposalVerificationRequest,
-    VerifiedContractArtifact, verify_and_encode_planned_proposal, verify_planned_proposal,
-};
 pub use proposal_generation::{
     ConstructedProposal, LocalProposalClaim, PlannedProposal, PositiveOperationCandidate,
     ProbeCandidate, ProofObligation, ProofObligationKind, ProofPlannedProposal, ProposalAnalysis,
@@ -93,6 +194,24 @@ pub fn validate_contract_document(bytes: &[u8]) -> Result<(), ContractFailure> {
     Ok(())
 }
 
+/// Plans policy-2 certification from one stable-v1 open proposal without
+/// exposing its wire model. Artifact bytes and the independently acquired
+/// resolution are replayed by [`plan_certification`] before any demand IDs are
+/// returned to orchestration.
+pub fn plan_contract_document_certification(
+    document: &[u8],
+    import_request: ImportRequest,
+    resolved_import: ResolvedImport,
+    artifact: UntrustedArtifactEnvelope,
+) -> Result<CertificationPlan, CertificationPlanningError> {
+    CertificationPlanningTransaction::new().plan_contract_document(
+        document,
+        import_request,
+        resolved_import,
+        artifact,
+    )
+}
+
 /// Encodes one exact artifact's analyzer inference as an unaccepted
 /// stable-v1 proposal. Every proposed closure is opened before emission;
 /// only the proof checker can later finalize it and issue a receipt.
@@ -114,6 +233,75 @@ pub fn encode_inferred_contract_workflow(
 ) -> Result<ProposalArtifacts, ContractWorkflowError> {
     let (proposal, candidates) =
         inferred_contract::normalize_inferred_contract_with_candidates(inferred, resolved)?;
+    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
+}
+
+/// Emits one exact entrypoint's analyzer inference while keeping the resolved
+/// package subpath explicit at the construction seam. A caller cannot reuse
+/// an export map inferred for `.` to answer `./web`, even when both subpaths
+/// happen to expose the same public names.
+pub fn encode_inferred_entrypoint_workflow(
+    package_name: &str,
+    package_version: &str,
+    requested_entrypoint: &str,
+    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
+    resolved: &ResolvedImport,
+    pretty: bool,
+) -> Result<ProposalArtifacts, ContractWorkflowError> {
+    encode_inferred_entrypoint_workflow_with_external_targets(
+        package_name,
+        package_version,
+        requested_entrypoint,
+        exports,
+        resolved,
+        &std::collections::BTreeSet::new(),
+        pretty,
+    )
+}
+
+/// Proposal-only graph acquisition seam. External targets are untrusted
+/// candidates admitted solely so native dependency-graph planning can replay
+/// them against child archives; this function never accepts or certifies them.
+pub fn encode_inferred_entrypoint_workflow_with_external_targets(
+    package_name: &str,
+    package_version: &str,
+    requested_entrypoint: &str,
+    exports: std::collections::BTreeMap<String, solid_reactive_ir::ContractExport>,
+    resolved: &ResolvedImport,
+    external_targets: &std::collections::BTreeSet<(String, String)>,
+    pretty: bool,
+) -> Result<ProposalArtifacts, ContractWorkflowError> {
+    if requested_entrypoint != resolved.requested_entrypoint {
+        return Err(ContractFailure::IdentityMismatch {
+            reason: format!(
+                "inferred entrypoint {requested_entrypoint:?} does not match resolved entrypoint {:?}",
+                resolved.requested_entrypoint
+            ),
+        }
+        .into());
+    }
+    let inferred = solid_reactive_ir::PackageContract {
+        package: solid_reactive_ir::ContractPackage {
+            name: package_name.to_owned(),
+            version: package_version.to_owned(),
+            integrity: String::new(),
+        },
+        entrypoints: [(
+            requested_entrypoint.to_owned(),
+            solid_reactive_ir::ContractEntrypoint { exports },
+        )]
+        .into(),
+        source_path: String::new(),
+    };
+    inferred
+        .validate()
+        .map_err(|reason| ContractFailure::InvalidSemanticModel { reason })?;
+    let (proposal, candidates) =
+        inferred_contract::normalize_inferred_contract_with_candidates_and_external_targets(
+            &inferred,
+            resolved,
+            external_targets,
+        )?;
     contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
 }
 

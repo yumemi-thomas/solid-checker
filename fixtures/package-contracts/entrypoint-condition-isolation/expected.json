@@ -1,0 +1,117 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8a62fb8077448ab724fa53b16b9b4672fdfa938c18cdd852f05a63a2b7ed46ec",
+            "path": "./server.js",
+            "sha256": "c83c79cfdb7cf89d11debcc2a5201cefc7e2a2d110011d427f369115bd37fe81"
+          },
+          "declarations": {
+            "path": "./server.js",
+            "sha256": "c83c79cfdb7cf89d11debcc2a5201cefc7e2a2d110011d427f369115bd37fe81"
+          },
+          "exports": {
+            "sameName": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./node",
+            "typesBranch": "/exports/./node"
+          }
+        },
+        {
+          "artifact": {
+            "closureSha256": "d321190ec07302a057d7312c2cbd896e4ae10bf3ed5a81c7c8ca89fb19bdfd4f",
+            "path": "./web.js",
+            "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
+          },
+          "declarations": {
+            "path": "./web.js",
+            "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
+          },
+          "exports": {
+            "sameName": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./default",
+            "typesBranch": "/exports/./default"
+          }
+        }
+      ]
+    },
+    "./jsx-runtime": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "d321190ec07302a057d7312c2cbd896e4ae10bf3ed5a81c7c8ca89fb19bdfd4f",
+            "path": "./web.js",
+            "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
+          },
+          "declarations": {
+            "path": "./web.js",
+            "sha256": "19867e1ae01c5f4be5061a5e8ed7045552887c595ebb9d78c051a9ac140b3563"
+          },
+          "exports": {
+            "sameName": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1jsx-runtime",
+            "typesBranch": "/exports/.~1jsx-runtime"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:f6871eb719f8aae0e700f216f18451491946fb246e43330d064de7eef7b88e93",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "f6871eb719f8aae0e700f216f18451491946fb246e43330d064de7eef7b88e93"
+    },
+    "name": "entrypoint-condition-isolation-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61": {
+      "call": {
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "return",
+            "kind": "return",
+            "output": {
+              "index": 0,
+              "kind": "parameter",
+              "path": []
+            },
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ],
+        "returns": [
+          "return"
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

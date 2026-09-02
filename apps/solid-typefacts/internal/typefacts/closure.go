@@ -433,6 +433,24 @@ func (p *DemandClosure) InvocationTranscripts(
 	return provider.InvocationTranscripts(ctx, demands)
 }
 
+// ExportValueTranscripts answers exact expression values from the retained
+// compiler program without mutating the editor demand table.
+func (p *DemandClosure) ExportValueTranscripts(
+	ctx context.Context,
+	demands []ExportValueDemand,
+) (ExportValueAnswer, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return ExportValueAnswer{}, errors.New("closure project is closed")
+	}
+	provider, ok := p.backend.(ExportValueAnalyzer)
+	if !ok {
+		return ExportValueAnswer{}, ErrInvocationFactsUnavailable
+	}
+	return provider.ExportValueTranscripts(ctx, demands)
+}
+
 // resolveSymbolEvidence answers one Rust-owned closure worklist batch. It does
 // not retain the returned rows: ownership crosses the process seam immediately.
 func (p *DemandClosure) resolveSymbolEvidence(
