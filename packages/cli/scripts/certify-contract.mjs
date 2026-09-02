@@ -14,6 +14,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -68,6 +69,16 @@ Options:
                           after authenticated artifact acquisition
   --audit-output <FILE>   Write a non-replayable diagnostic transcript
   -h, --help              Show this help
+
+Environment:
+  SOLID_CHECKER_REGISTRY_CACHE <DIR>
+                          Content-addressed store for registry bytes already
+                          acquired for an exact (origin, package, version,
+                          integrity). Unset or empty: every acquisition
+                          fetches from the registry.
+  SOLID_CHECKER_REGISTRY_CONCURRENCY <N>
+                          Parallel registry acquisitions per certification
+                          (default 8)
 `;
 
 export const contractCertificationStages = Object.freeze([
@@ -226,16 +237,11 @@ async function checkedResponse(response, label) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-async function acquirePublishedArtifact({ options, manifest, scratch, fetch_ = fetch }) {
-  const metadataResponse = await fetch_(
-    exactRegistryPackageUrl(options.registryOrigin, manifest.name),
-    // The install-v1 packument preserves the exact version/dist identity Rust
-    // authenticates while excluding unrelated readmes and publisher metadata
-    // that can exceed the pinned bounded-JSON string limit. The response bytes
-    // themselves still cross the native provenance boundary unchanged.
-    { headers: { accept: "application/vnd.npm.install-v1+json" } }
-  );
-  const metadataBytes = await checkedResponse(metadataResponse, "registry metadata acquisition");
+/// The exact registry record the acquisition is allowed to use, or a thrown
+/// refusal. Both the fresh path and the cache path run this on the metadata
+/// bytes they are about to hand Rust, so a cached packument is held to the
+/// same checks as a freshly served one.
+function selectExactRegistryRecord(metadataBytes, options, manifest) {
   let metadata;
   try {
     metadata = JSON.parse(new TextDecoder().decode(metadataBytes));
@@ -258,14 +264,148 @@ async function acquirePublishedArtifact({ options, manifest, scratch, fetch_ = f
   ) {
     throw new Error("registry tarball URL is outside the exact registry origin");
   }
-  const archiveResponse = await fetch_(selected.dist.tarball, {
-    headers: { accept: "application/octet-stream" }
-  });
-  const archiveBytes = await checkedResponse(archiveResponse, "package archive acquisition");
-  const metadataPath = join(scratch, "registry-metadata.json");
-  const archivePath = join(scratch, "package.tgz");
-  writeFileSync(metadataPath, metadataBytes);
-  writeFileSync(archivePath, archiveBytes);
+  return selected;
+}
+
+/// `true` when the archive bytes hash to the sha512 SRI the caller pinned,
+/// `false` when they do not, and `null` when the integrity is not a sha512
+/// SRI at all and so cannot be checked here.
+function archiveMatchesIntegrity(archiveBytes, integrity) {
+  const match = /^sha512-([A-Za-z0-9+/]+={0,2})$/.exec(integrity ?? "");
+  if (!match) return null;
+  return createHash("sha512").update(archiveBytes).digest("base64") === match[1];
+}
+
+/// Registry acquisitions are content-addressed: an exact (origin, package,
+/// version, integrity) names one archive, and the archive is self-authenticating
+/// through its sha512 SRI. `SOLID_CHECKER_REGISTRY_CACHE` names a directory
+/// where acquisitions already made for that exact identity are kept so the
+/// same bytes need not cross the network again — every ecosystem probe that
+/// depends on `solid-js` otherwise re-downloads the same packument and tarball.
+///
+/// What the cache does *not* weaken: an entry is used only when its archive
+/// still hashes to the pinned integrity and its packument still carries the
+/// exact version record that names that integrity inside the same origin —
+/// the identical checks the fresh path performs — and Rust re-derives the
+/// snapshot from those bytes and refuses any lock disagreement exactly as
+/// before. What it does not preserve is packument freshness for fields
+/// outside the exact version record, which no certification input reads.
+/// Unset or empty disables it; every read and write is best-effort and falls
+/// back to a fresh registry acquisition.
+export function registryCacheRoot(env = process.env) {
+  const raw = env.SOLID_CHECKER_REGISTRY_CACHE;
+  if (raw === undefined || raw === "") return null;
+  return resolve(raw);
+}
+
+export function registryAcquisitionConcurrency(env = process.env) {
+  const raw = env.SOLID_CHECKER_REGISTRY_CONCURRENCY;
+  if (raw === undefined || raw === "") return 8;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(
+      `SOLID_CHECKER_REGISTRY_CONCURRENCY must be a positive integer, got ${JSON.stringify(raw)}`
+    );
+  }
+  return value;
+}
+
+const REGISTRY_CACHE_FORMAT = "v1";
+
+function registryCacheEntry(cacheRoot, options, manifest) {
+  const key = createHash("sha256")
+    .update(
+      JSON.stringify([options.registryOrigin, manifest.name, manifest.version, options.integrity])
+    )
+    .digest("hex");
+  return join(cacheRoot, REGISTRY_CACHE_FORMAT, key.slice(0, 2), key);
+}
+
+function readRegistryCacheEntry(entry, options, manifest) {
+  const metadataPath = join(entry, "registry-metadata.json");
+  const archivePath = join(entry, "package.tgz");
+  if (!existsSync(metadataPath) || !existsSync(archivePath)) return null;
+  try {
+    const metadataBytes = new Uint8Array(readFileSync(metadataPath));
+    const archiveBytes = new Uint8Array(readFileSync(archivePath));
+    selectExactRegistryRecord(metadataBytes, options, manifest);
+    if (archiveMatchesIntegrity(archiveBytes, options.integrity) !== true) {
+      throw new Error("cached archive does not hash to the pinned integrity");
+    }
+    return { metadataPath, archivePath };
+  } catch {
+    // An entry that fails its own checks is not evidence of anything; drop it
+    // so the fresh acquisition below can replace it.
+    rmSync(entry, { recursive: true, force: true });
+    return null;
+  }
+}
+
+function writeRegistryCacheEntry(entry, metadataBytes, archiveBytes) {
+  let staging = null;
+  try {
+    mkdirSync(dirname(entry), { recursive: true });
+    staging = mkdtempSync(`${entry}.staging-`);
+    writeFileSync(join(staging, "registry-metadata.json"), metadataBytes);
+    writeFileSync(join(staging, "package.tgz"), archiveBytes);
+    // Publish atomically. Concurrent certifications race to fill the same
+    // entry with identical content; whichever rename lands first wins and
+    // the other staging directory is discarded below.
+    renameSync(staging, entry);
+    staging = null;
+  } catch {
+    // Best-effort: a cache that cannot be written only costs the next
+    // acquisition a network round trip.
+  } finally {
+    if (staging) rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+async function acquirePublishedArtifact({
+  options,
+  manifest,
+  scratch,
+  fetch_ = fetch,
+  cacheRoot = registryCacheRoot()
+}) {
+  const cacheEntry = cacheRoot ? registryCacheEntry(cacheRoot, options, manifest) : null;
+  const cached = cacheEntry ? readRegistryCacheEntry(cacheEntry, options, manifest) : null;
+  let metadataPath;
+  let archivePath;
+  if (cached) {
+    // Rust only reads these paths, and the entry outlives every scratch
+    // directory, so the validated bytes are named in place: a certification
+    // with dozens of sources otherwise rewrites tens of megabytes it already
+    // holds on disk.
+    ({ metadataPath, archivePath } = cached);
+  } else {
+    const metadataResponse = await fetch_(
+      exactRegistryPackageUrl(options.registryOrigin, manifest.name),
+      // The install-v1 packument preserves the exact version/dist identity Rust
+      // authenticates while excluding unrelated readmes and publisher metadata
+      // that can exceed the pinned bounded-JSON string limit. The response bytes
+      // themselves still cross the native provenance boundary unchanged.
+      { headers: { accept: "application/vnd.npm.install-v1+json" } }
+    );
+    const metadataBytes = await checkedResponse(
+      metadataResponse,
+      "registry metadata acquisition"
+    );
+    const selected = selectExactRegistryRecord(metadataBytes, options, manifest);
+    const archiveResponse = await fetch_(selected.dist.tarball, {
+      headers: { accept: "application/octet-stream" }
+    });
+    const archiveBytes = await checkedResponse(archiveResponse, "package archive acquisition");
+    metadataPath = join(scratch, "registry-metadata.json");
+    archivePath = join(scratch, "package.tgz");
+    writeFileSync(metadataPath, metadataBytes);
+    writeFileSync(archivePath, archiveBytes);
+    // Only bytes that already authenticate against the pinned integrity are
+    // worth remembering; anything else Rust is about to refuse anyway.
+    if (cacheEntry && archiveMatchesIntegrity(archiveBytes, options.integrity) === true) {
+      writeRegistryCacheEntry(cacheEntry, metadataBytes, archiveBytes);
+    }
+  }
   return Object.freeze({
     registryOrigin: options.registryOrigin,
     metadataPath,
@@ -1426,28 +1566,37 @@ export async function acquireRootCompilerSources({ options, generated, scratch, 
     perInput.push(canonicalCompilerSources(found));
   }
   const acquiredByKey = new Map();
-  for (const source of new Set(perInput.flat())) {
-    try {
-      const artifact = await acquirePublishedArtifact({
-        options: { registryOrigin: options.registryOrigin, integrity: source.integrity },
-        manifest: source.manifest,
-        scratch: source.scratch,
-        fetch_
-      });
-      acquiredByKey.set(source.key, {
-        packageName: source.packageName,
-        packageVersion: source.packageVersion,
-        registryOrigin: artifact.registryOrigin,
-        registryMetadata: artifact.metadataPath,
-        archive: artifact.archivePath,
-        lockfile: source.lockfile,
-        lockLocator: source.lockLocator,
-        installedPackageRoot: source.installedPackageRoot
-      });
-    } catch {
-      withheldNames.add(source.packageName);
+  // Each source costs two registry round trips (packument, then archive) and
+  // a wide-surface root names dozens of them; acquiring them one after another
+  // made registry latency, not analysis, the dominant certification cost.
+  // Every acquisition is keyed by exact identity, so completion order does
+  // not affect which sources are named.
+  await mapWithExactConcurrency(
+    [...new Set(perInput.flat())],
+    registryAcquisitionConcurrency(),
+    async source => {
+      try {
+        const artifact = await acquirePublishedArtifact({
+          options: { registryOrigin: options.registryOrigin, integrity: source.integrity },
+          manifest: source.manifest,
+          scratch: source.scratch,
+          fetch_
+        });
+        acquiredByKey.set(source.key, {
+          packageName: source.packageName,
+          packageVersion: source.packageVersion,
+          registryOrigin: artifact.registryOrigin,
+          registryMetadata: artifact.metadataPath,
+          archive: artifact.archivePath,
+          lockfile: source.lockfile,
+          lockLocator: source.lockLocator,
+          installedPackageRoot: source.installedPackageRoot
+        });
+      } catch {
+        withheldNames.add(source.packageName);
+      }
     }
-  }
+  );
   return perInput.map(sources =>
     sources
       .map(source => acquiredByKey.get(source.key))

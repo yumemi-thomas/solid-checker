@@ -202,6 +202,60 @@ and accepts `--concurrency N` for an explicit comparison. Reports retain
 install and generation time separately for every probe and aggregate those
 phases under the combined worker timings section.
 
+With `--attempt-certification`, certification children read and fill a shared
+content-addressed registry cache (`rust/target/registry-cache` unless
+`--registry-cache DIR` or `SOLID_CHECKER_REGISTRY_CACHE` names another;
+`--no-registry-cache` fetches every byte fresh). Each certification acquires
+the packument and archive of its root and of every compiler-source dependency
+the lockfile selects; a wide-surface root names dozens, nearly every probe
+names `solid-js`, and before the cache those sequential round trips made the
+authoritative wall time a measurement of registry latency — the same
+`@tanstack/form-devtools` probe measured 53 s, 95 s, and 241 s of witness
+acquisition across three runs of identical inputs. The report's
+`checker.registryCache` names the cache a run used, or is null when it fetched
+fresh. See `scripts/ecosystem-benchmark/README.md` for what an entry is held
+to before it is reused.
+
+### Where the certified run's time goes
+
+Measured on 2026-09-02 on the 14-core (10 performance, 4 efficiency) authority
+host with a warm registry cache, 418 probes and 393 certification attempts
+(344 certified, 49 refused — the counts every configuration below reproduced):
+
+| Configuration | Wall | CPU (user + sys) |
+| --- | --- | --- |
+| checked-in before this change (registry fetched sequentially) | 236 s | — |
+| cache warm, 14 certification slots | 185-190 s | 1,530-1,590 s |
+| cache warm, 20 certification slots (new default) | 176-178 s | 1,580-1,650 s |
+| cache warm, 24 certification slots | 181 s | 1,610 s |
+
+Per-invocation accounting of the native binary for one 14-slot run:
+
+| Native mode | Invocations | Slot wall | CPU |
+| --- | --- | --- | --- |
+| `--project` (analysis and proposal emission) | 2,692 | 928 s | 717 s |
+| `--execute-contract-certification` | 384 | 1,300 s | 199 s |
+| planning, merge, validation | 2,259 | 11 s | 5 s |
+
+The remaining ~660 CPU-seconds are the JavaScript processes: chiefly each
+certification's declaration-closure resolution over its compiler-source
+packages (dozens per wide root), then the runner and the generation children.
+A native certification holds its slot for 3.4 s on average but uses 0.5 s of
+CPU: the rest is waiting on filesystem metadata while it writes its private
+Type Facts project — every file of every source snapshot, about 5,000 files
+for `@tanstack/form-devtools` — and removes it again, contended across every
+concurrent child. That is why the drain now runs wider than the core count.
+
+Two engine-side experiments were measured and not kept: writing the private
+project from eight threads raised system time from 3 s to 11 s per
+certification on APFS with no wall gain, and deferring its removal to a thread
+joined at process exit moved nothing off the slot. The candidates that remain
+are semantic-adjacent and are recorded rather than taken here: materializing
+only files a TypeScript program can load (26% of archive files are source
+maps, READMEs and assets), sharing declaration-closure parses between a
+certification's proposal generation and its source collection, and the
+per-batch `--project` cost itself.
+
 ## Per-probe timeout
 
 The default is 300s, which the pinned sentinel set relies on: it deliberately

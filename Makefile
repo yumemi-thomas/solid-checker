@@ -194,8 +194,11 @@ ecosystem-sentinel:
 # The full discovered corpus is also the product-speed measurement, so it uses
 # a fresh optimized binary. run.mjs keeps eight install/generation slots,
 # uses the remaining host slots for certification, then expands the receipt
-# drain to fourteen after proposal work is claimed. Pass --concurrency or
+# drain to twenty after proposal work is claimed. Pass --concurrency or
 # --certification-concurrency to compare another scheduling policy.
+# Certification children share rust/target/registry-cache so the measured
+# wall time is the checker's, not the registry's; --no-registry-cache
+# restores fetch-everything-fresh acquisition.
 ecosystem-benchmark: build-checker-release
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \

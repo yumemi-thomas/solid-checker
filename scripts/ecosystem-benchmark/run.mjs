@@ -60,6 +60,12 @@ const DEFAULT_MANIFEST = join(ROOT, "scripts/ecosystem-benchmark/manifest.json")
 const DEFAULT_SENTINEL = join(ROOT, "scripts/ecosystem-benchmark/sentinel.json");
 const DEFAULT_CLI = join(ROOT, "packages/cli/bin/solid-checker.mjs");
 const DEFAULT_SCHEDULE_REPORT = join(ROOT, "benchmarks/ecosystem/report.json");
+// Content-addressed registry bytes shared by every certification child of a
+// run (and across runs). Lives under rust/target with the other ignored,
+// reclaimable build products; `make clean` wipes it. See
+// packages/cli/scripts/certify-contract.mjs for what an entry is and the
+// checks it is held to before it is used.
+const DEFAULT_REGISTRY_CACHE = join(ROOT, "rust/target/registry-cache");
 const DEFAULT_TIMEOUT_SECONDS = 300;
 const PROGRESS_HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -76,6 +82,15 @@ const DEFAULT_CONCURRENCY = recommendedConcurrency();
 // Certification is a large share of measured worker time. Let its drain phase
 // use the host directly while generation retains its smaller install-safe
 // outer pool; the child artifact-analysis width is derived separately below.
+//
+// The drain may run wider than the core count. Once registry bytes come from
+// the shared cache, a certification child spends most of its slot time waiting
+// on filesystem metadata — materializing and removing its private Type Facts
+// project — rather than on a core: on the 14-core authority host the 384
+// native certifications of one corpus run held 1,300 s of slot time for 199 s
+// of CPU. Six extra slots, the same number generation reserves, fill that
+// waiting time: 176-178 s against 185-190 s at a cores-bounded fourteen, with
+// identical outcomes, and 24 slots were no faster than 20.
 //
 // The width is bounded by memory as well as cores, because a heavy probe's
 // process tree is a real working set and enough of them in flight together can
@@ -105,8 +120,11 @@ export function recommendedCertificationConcurrency(
   const memorySlots = Number.isFinite(totalMemoryBytes) && totalMemoryBytes > 0
     ? Math.max(2, Math.floor(totalMemoryBytes / CERTIFICATION_MEMORY_SHARE_BYTES))
     : 2;
-  return Math.min(14, parallelism, memorySlots);
+  return Math.min(CERTIFICATION_SLOT_CEILING, parallelism + CERTIFICATION_OVERSUBSCRIPTION, memorySlots);
 }
+
+const CERTIFICATION_OVERSUBSCRIPTION = 6;
+const CERTIFICATION_SLOT_CEILING = 20;
 
 export function certificationConcurrencyFromEnvironment(env = process.env) {
   const raw = env.SOLID_CHECKER_CERTIFICATION_CONCURRENCY;
@@ -166,6 +184,24 @@ export function startProgressHeartbeat({
 // Verifies the two binaries execution absolutely cannot proceed without.
 // Exported standalone (rather than folded into `main`) so a test can prove
 // the exact missing path is named without needing real binaries on disk.
+// The registry cache handed to certification children: an explicit
+// `--registry-cache` wins, then a non-empty SOLID_CHECKER_REGISTRY_CACHE from
+// the environment, then the repository default; `--no-registry-cache` yields
+// null, which the hooks pass down as an empty variable so a child never
+// inherits a cache the run said not to use.
+export function resolveRegistryCache({
+  option = null,
+  disabled = false,
+  env = process.env,
+  fallback = DEFAULT_REGISTRY_CACHE
+} = {}) {
+  if (disabled) return null;
+  if (option) return resolve(option);
+  const fromEnvironment = env.SOLID_CHECKER_REGISTRY_CACHE;
+  if (fromEnvironment !== undefined && fromEnvironment !== "") return resolve(fromEnvironment);
+  return fallback;
+}
+
 export function checkRequiredBinaries(env = process.env) {
   const problems = [];
   const nativeBin = env.SOLID_CHECKER_NATIVE_BIN ?? null;
@@ -1162,6 +1198,12 @@ function usage() {
   --certification-concurrency <N>
                          separate certification pool, currently
                          ${DEFAULT_CERTIFICATION_CONCURRENCY}
+  --registry-cache <DIR> content-addressed store for registry bytes shared by
+                         every certification child; default
+                         SOLID_CHECKER_REGISTRY_CACHE, else
+                         rust/target/registry-cache
+  --no-registry-cache    fetch every registry byte fresh, as a certification
+                         run outside this harness does
   --attempt-certification
                          attempt policy-2 certification for every structurally
                          complete proposal and retain its exact first refusal
@@ -1194,6 +1236,8 @@ function parseArgs(argv) {
     timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
     concurrency: DEFAULT_CONCURRENCY,
     certificationConcurrency: DEFAULT_CERTIFICATION_CONCURRENCY,
+    registryCache: null,
+    noRegistryCache: false,
     attemptCertification: false,
     keepTemp: false,
     includeSupplemental: false,
@@ -1249,6 +1293,12 @@ function parseArgs(argv) {
         break;
       case "--certification-concurrency":
         options.certificationConcurrency = Number(takeValue(argv, index++, arg));
+        break;
+      case "--registry-cache":
+        options.registryCache = takeValue(argv, index++, arg);
+        break;
+      case "--no-registry-cache":
+        options.noRegistryCache = true;
         break;
       case "--attempt-certification":
         options.attemptCertification = true;
@@ -1391,7 +1441,8 @@ function buildRealHooks({
   nativeBin,
   typeFactsBin,
   cliPath,
-  certificationInnerConcurrency
+  certificationInnerConcurrency,
+  registryCache = null
 }) {
   const generationEnvironment = {
     ...process.env,
@@ -1401,7 +1452,10 @@ function buildRealHooks({
   const certificationEnvironment = {
     ...generationEnvironment,
     SOLID_CHECKER_ARTIFACT_ANALYSIS_BATCH_CONCURRENCY:
-      String(certificationInnerConcurrency)
+      String(certificationInnerConcurrency),
+    // Empty, not absent, when disabled: the child must not pick a cache up
+    // from the inherited environment that this run decided against.
+    SOLID_CHECKER_REGISTRY_CACHE: registryCache ?? ""
   };
   return {
     now: () => Date.now(),
@@ -1685,13 +1739,20 @@ async function main(argv = process.argv.slice(2)) {
     }
   }
 
+  const registryCache = options.attemptCertification
+    ? resolveRegistryCache({
+        option: options.registryCache,
+        disabled: options.noRegistryCache
+      })
+    : null;
   const hooks = buildRealHooks({
     nativeBin: binaries.nativeBin,
     typeFactsBin: binaries.typeFactsBin,
     cliPath: DEFAULT_CLI,
     certificationInnerConcurrency: recommendedCertificationInnerConcurrency(
       options.certificationConcurrency
-    )
+    ),
+    registryCache
   });
   const scheduleCosts = historicalScheduleCosts();
 
@@ -1735,7 +1796,11 @@ async function main(argv = process.argv.slice(2)) {
       // documented top-level `checker: { nativeBin, typeFactsBin }` field has
       // no other source of this data -- see lib/report.mjs's own comment on
       // this parameter.
-      checker: { nativeBin: binaries.nativeBin, typeFactsBin: binaries.typeFactsBin },
+      checker: {
+        nativeBin: binaries.nativeBin,
+        typeFactsBin: binaries.typeFactsBin,
+        registryCache
+      },
       scope
     });
   } catch (error) {

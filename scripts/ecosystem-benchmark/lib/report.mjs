@@ -817,7 +817,11 @@ export function buildReport({
     durationMs: computeDurationMs(startedAt, finishedAt),
     checker: {
       nativeBin: checker?.nativeBin ?? null,
-      typeFactsBin: checker?.typeFactsBin ?? null
+      typeFactsBin: checker?.typeFactsBin ?? null,
+      // The registry cache certification children were allowed to read, or
+      // null when every registry byte was fetched fresh. Recorded so a wall
+      // time can be read knowing whether it includes registry latency.
+      registryCache: checker?.registryCache ?? null
     },
     manifest: {
       generatedAt: manifest?.generatedAt ?? null,
@@ -1265,6 +1269,9 @@ export function renderMarkdown(report) {
   lines.push(`- Duration: ${report.durationMs === null ? "unknown" : `${report.durationMs} ms`}`);
   lines.push(`- Checker native binary: ${report.checker?.nativeBin ?? "unknown"}`);
   lines.push(`- Type Facts binary: ${report.checker?.typeFactsBin ?? "unknown"}`);
+  lines.push(
+    `- Registry cache for certification: ${report.checker?.registryCache ?? "none (every registry byte fetched fresh)"}`
+  );
   lines.push(
     `- Manifest generated at: ${report.manifest?.generatedAt ?? "unknown"} ` +
       `(rows: ${report.manifest?.rowCount ?? 0}, probes: ${report.manifest?.probeCount ?? 0})`

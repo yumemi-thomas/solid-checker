@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync
@@ -24,6 +26,8 @@ import {
   locateExternalDependencyPackageRoot,
   parseCertifyArguments,
   publishedGraphPreparationConcurrency,
+  registryAcquisitionConcurrency,
+  registryCacheRoot,
   runContractCertificationPipeline,
   validatedReusableDependencyRefusalAuditBytes
 } from "../scripts/certify-contract.mjs";
@@ -1062,7 +1066,7 @@ test("batched merge isolation preserves order and accepts valid intervals togeth
 // A minimal installed tree for the root-path declaration-only source walk:
 // `root-package`'s typings import `alpha` and `beta`, both installed side by
 // side, and only the ones the caller lists reach the Bun lockfile.
-function writeRootSourceInstall(project, { lockedNames }) {
+function writeRootSourceInstall(project, { lockedNames, integrityOf = name => `sha512-${name}` }) {
   const write = (path, body) => {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, body);
@@ -1087,7 +1091,7 @@ function writeRootSourceInstall(project, { lockedNames }) {
   declarationOnly("alpha");
   declarationOnly("beta");
   const packages = Object.fromEntries(
-    lockedNames.map(name => [name, [`${name}@1.0.0`, "", {}, `sha512-${name}`]])
+    lockedNames.map(name => [name, [`${name}@1.0.0`, "", {}, integrityOf(name)]])
   );
   write(join(project, "bun.lock"), `${JSON.stringify({ lockfileVersion: 2, packages }, null, 2)}\n`);
 }
@@ -1110,9 +1114,10 @@ function rootSourceGenerated(project) {
 
 // Serves any package the registry stub was told about; every other name fails
 // acquisition the way an unreachable registry would.
-function registryStub(served) {
+function registryStub(served, requests = []) {
   const origin = "https://registry.npmjs.org/";
   return async url => {
+    requests.push(url);
     // `<origin>/<name>` for a packument, `<origin>/<name>/-/<file>.tgz` for the
     // archive; both address the same package name.
     const path = decodeURIComponent(url.slice(origin.length));
@@ -1133,7 +1138,7 @@ function registryStub(served) {
                 name,
                 version: "1.0.0",
                 dist: {
-                  integrity: `sha512-${name}`,
+                  integrity: record.integrity ?? `sha512-${name}`,
                   tarball: `https://registry.npmjs.org/${name}/-/${name}-1.0.0.tgz`
                 }
               }
@@ -1386,6 +1391,183 @@ test("a package name one entrypoint could not authenticate is withheld from ever
     // `mid` still travels: one unnameable grandchild poisons its own name, not
     // the whole collected subtree.
     assert.deepEqual([...new Set(names)], ["mid"]);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Registry acquisition cache. An entry is addressed by exact (origin, name,
+// version, integrity) and is only ever *used* when its archive still hashes to
+// that integrity and its packument still names it — the fresh path's checks.
+// ---------------------------------------------------------------------------
+
+function sriOf(bytes) {
+  return `sha512-${createHash("sha512").update(new Uint8Array(bytes)).digest("base64")}`;
+}
+
+async function withRegistryCache(cacheRoot, body) {
+  const previous = process.env.SOLID_CHECKER_REGISTRY_CACHE;
+  process.env.SOLID_CHECKER_REGISTRY_CACHE = cacheRoot;
+  try {
+    return await body();
+  } finally {
+    if (previous === undefined) delete process.env.SOLID_CHECKER_REGISTRY_CACHE;
+    else process.env.SOLID_CHECKER_REGISTRY_CACHE = previous;
+  }
+}
+
+function cacheEntries(cacheRoot) {
+  const entries = [];
+  const format = join(cacheRoot, "v1");
+  if (!existsSync(format)) return entries;
+  for (const shard of readdirSync(format)) {
+    for (const entry of readdirSync(join(format, shard))) {
+      if (!entry.includes(".staging-")) entries.push(join(format, shard, entry));
+    }
+  }
+  return entries.sort();
+}
+
+async function acquireAlphaBeta(project, scratchName, fetch_) {
+  const scratch = join(project, scratchName);
+  mkdirSync(scratch, { recursive: true });
+  const [emitted] = await acquireRootCompilerSources({
+    options: {
+      packageRoot: join(project, "node_modules/root-package"),
+      registryOrigin: "https://registry.npmjs.org",
+      integrity: "sha512-root-package"
+    },
+    generated: rootSourceGenerated(project),
+    scratch,
+    fetch_
+  });
+  return emitted.sort((left, right) => left.packageName.localeCompare(right.packageName));
+}
+
+test("registryCacheRoot and registryAcquisitionConcurrency read their environment exactly", () => {
+  assert.equal(registryCacheRoot({}), null);
+  assert.equal(registryCacheRoot({ SOLID_CHECKER_REGISTRY_CACHE: "" }), null);
+  assert.equal(
+    registryCacheRoot({ SOLID_CHECKER_REGISTRY_CACHE: "/tmp/registry-cache" }),
+    "/tmp/registry-cache"
+  );
+  assert.equal(registryAcquisitionConcurrency({}), 8);
+  assert.equal(registryAcquisitionConcurrency({ SOLID_CHECKER_REGISTRY_CONCURRENCY: "" }), 8);
+  assert.equal(registryAcquisitionConcurrency({ SOLID_CHECKER_REGISTRY_CONCURRENCY: "3" }), 3);
+  for (const raw of ["0", "-1", "1.5", "many"]) {
+    assert.throws(
+      () => registryAcquisitionConcurrency({ SOLID_CHECKER_REGISTRY_CONCURRENCY: raw }),
+      /positive integer/
+    );
+  }
+});
+
+test("a registry acquisition that authenticates is reused without a network round trip", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-registry-cache-"));
+  const cacheRoot = join(project, "registry-cache");
+  try {
+    const archives = {
+      alpha: new TextEncoder().encode("alpha archive bytes").buffer,
+      beta: new TextEncoder().encode("beta archive bytes").buffer
+    };
+    const integrityOf = name => sriOf(archives[name]);
+    writeRootSourceInstall(project, { lockedNames: ["alpha", "beta"], integrityOf });
+    const served = {
+      alpha: { archive: archives.alpha, integrity: integrityOf("alpha") },
+      beta: { archive: archives.beta, integrity: integrityOf("beta") }
+    };
+
+    await withRegistryCache(cacheRoot, async () => {
+      const coldRequests = [];
+      const cold = await acquireAlphaBeta(project, "scratch-cold", registryStub(served, coldRequests));
+      assert.deepEqual(cold.map(source => source.packageName), ["alpha", "beta"]);
+      assert.equal(coldRequests.length, 4, "a cold cache fetches packument and archive per source");
+      assert.equal(cacheEntries(cacheRoot).length, 2, "both authenticated acquisitions are kept");
+
+      const warmRequests = [];
+      const warm = await acquireAlphaBeta(project, "scratch-warm", registryStub(served, warmRequests));
+      assert.deepEqual(warmRequests, [], "a warm cache performs no registry request");
+      assert.deepEqual(warm.map(source => source.packageName), ["alpha", "beta"]);
+      for (const [index, source] of warm.entries()) {
+        assert.ok(
+          source.archive.startsWith(cacheRoot),
+          "a warm acquisition names the validated cache bytes in place instead of copying them"
+        );
+        assert.deepEqual(readFileSync(source.archive), readFileSync(cold[index].archive));
+        assert.deepEqual(
+          readFileSync(source.registryMetadata),
+          readFileSync(cold[index].registryMetadata)
+        );
+      }
+    });
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a cache entry whose archive no longer hashes to its integrity is discarded, not used", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-registry-cache-"));
+  const cacheRoot = join(project, "registry-cache");
+  try {
+    const archive = new TextEncoder().encode("alpha archive bytes").buffer;
+    const integrity = sriOf(archive);
+    writeRootSourceInstall(project, { lockedNames: ["alpha"], integrityOf: () => integrity });
+    const served = { alpha: { archive, integrity } };
+
+    await withRegistryCache(cacheRoot, async () => {
+      await acquireAlphaBeta(project, "scratch-cold", registryStub(served));
+      const [entry] = cacheEntries(cacheRoot);
+      assert.ok(entry, "the authenticated acquisition was cached");
+      writeFileSync(join(entry, "package.tgz"), "tampered archive bytes");
+
+      const requests = [];
+      const [source] = await acquireAlphaBeta(project, "scratch-warm", registryStub(served, requests));
+      assert.equal(requests.length, 2, "the tampered entry forces a fresh acquisition");
+      assert.equal(sriOf(readFileSync(source.archive)), integrity, "the emitted archive is the registry's");
+      const [replaced] = cacheEntries(cacheRoot);
+      assert.equal(replaced, entry, "the entry is re-addressed identically");
+      assert.equal(sriOf(readFileSync(join(entry, "package.tgz"))), integrity, "and refilled with authenticated bytes");
+    });
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("an acquisition whose archive does not match the pinned integrity is never cached", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-registry-cache-"));
+  const cacheRoot = join(project, "registry-cache");
+  try {
+    // The stub's default `sha512-<name>` integrity is not the hash of the
+    // bytes it serves: Rust will refuse these, so remembering them would only
+    // replay a refusal from disk.
+    writeRootSourceInstall(project, { lockedNames: ["alpha"] });
+    const archive = new TextEncoder().encode("not a real tarball").buffer;
+    await withRegistryCache(cacheRoot, async () => {
+      const [source] = await acquireAlphaBeta(project, "scratch", registryStub({ alpha: { archive } }));
+      assert.equal(source.packageName, "alpha", "the acquisition itself still flows to Rust unchanged");
+      assert.deepEqual(cacheEntries(cacheRoot), []);
+    });
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("without SOLID_CHECKER_REGISTRY_CACHE every acquisition is fetched fresh", async () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-registry-cache-"));
+  try {
+    const archive = new TextEncoder().encode("alpha archive bytes").buffer;
+    const integrity = sriOf(archive);
+    writeRootSourceInstall(project, { lockedNames: ["alpha"], integrityOf: () => integrity });
+    const served = { alpha: { archive, integrity } };
+    await withRegistryCache("", async () => {
+      const first = [];
+      await acquireAlphaBeta(project, "scratch-1", registryStub(served, first));
+      const second = [];
+      await acquireAlphaBeta(project, "scratch-2", registryStub(served, second));
+      assert.equal(first.length, 2);
+      assert.equal(second.length, 2);
+    });
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

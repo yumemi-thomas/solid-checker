@@ -45,14 +45,31 @@ Historically expensive rows start first, while each package proposal retains a
 separately bounded adaptive fan-out across its exact source programs. On hosts
 with more than eight CPUs, already-complete rows certify in the otherwise-idle
 outer slots without reducing generation below eight. Once proposal work
-drains, certification can expand to `min(available CPUs, 14)` outer workers,
-with each child's ordinary artifact-analysis width reduced to preserve a
+drains, certification can expand to `min(available CPUs + 6, 20)` outer
+workers — wider than the core count, because a certification child mostly
+waits on filesystem metadata rather than a core once registry bytes are cached
+— with each child's ordinary artifact-analysis width reduced to preserve a
 host-wide bound. Certification
 reuses the exact install already verified for generation; native code still
 replays every archive, lockfile, graph root, source closure, proposal, and
 policy input before issuing a receipt. `--concurrency N` and
 `--certification-concurrency N` remain available for controlled comparisons or
 memory-constrained hosts.
+
+Certification children share a content-addressed registry cache,
+`rust/target/registry-cache` by default (`--registry-cache DIR`,
+`SOLID_CHECKER_REGISTRY_CACHE`, or `--no-registry-cache` to fetch every byte
+fresh). Each certification acquires the packument and archive of its root and
+of every compiler-source dependency the lockfile selects from the registry, and
+nearly every probe names `solid-js`; before the cache, a wide-surface root
+spent minutes in sequential registry round trips and the corpus wall time
+tracked registry latency rather than the checker. An entry is addressed by the
+exact (origin, package, version, integrity), is written only after the archive
+hashed to that integrity, and is used only when it still does and its packument
+still names that exact record — the checks a fresh acquisition passes — with
+Rust re-deriving the snapshot from the bytes as before. The report records the
+cache location under `checker.registryCache` (null when disabled) so a wall
+time can be read knowing whether it includes registry latency.
 
 Each JSON result records `installDurationMs` and `generationDurationMs`
 separately. The Markdown report aggregates those as worker timings, with the

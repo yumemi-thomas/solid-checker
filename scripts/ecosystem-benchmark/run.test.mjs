@@ -15,6 +15,7 @@ import {
   recommendedCertificationConcurrency,
   recommendedConcurrency,
   resolveProbeIdFilter,
+  resolveRegistryCache,
   unknownExplicitProbeIds,
   runBenchmark,
   runScope,
@@ -903,26 +904,32 @@ test("recommendedConcurrency bounds Bun install and outer proposal contention", 
 test("recommendedCertificationConcurrency fills the bounded drain pool within memory", () => {
   const gib = 1024 * 1024 * 1024;
   const plenty = 1024 * gib;
-  assert.equal(recommendedCertificationConcurrency(1, plenty), 1);
-  assert.equal(recommendedCertificationConcurrency(8, plenty), 8);
-  assert.equal(recommendedCertificationConcurrency(12, plenty), 12);
-  assert.equal(recommendedCertificationConcurrency(14, plenty), 14);
-  assert.equal(recommendedCertificationConcurrency(32, plenty), 14);
+  // The drain runs six slots wider than the core count, capped at twenty: a
+  // certification child mostly waits on filesystem metadata once registry
+  // bytes are cached, so cores-bounded width left the host under-used
+  // (measured 185-190 s at 14 slots against 176-178 s at 20 on the 14-core
+  // authority host, identical outcomes; 24 was no faster than 20).
+  assert.equal(recommendedCertificationConcurrency(1, plenty), 7);
+  assert.equal(recommendedCertificationConcurrency(8, plenty), 14);
+  assert.equal(recommendedCertificationConcurrency(12, plenty), 18);
+  assert.equal(recommendedCertificationConcurrency(14, plenty), 20);
+  assert.equal(recommendedCertificationConcurrency(32, plenty), 20);
   assert.equal(recommendedCertificationConcurrency(Number.NaN, plenty), 2);
   // The drain width reserves one memory share per slot. The share is 2 GiB,
   // ~2.7x the worst process-tree peak measured across the heavy tail after the
   // resolver stopped retaining one `ts.Program` per module (762 MiB, down from
   // 30.5 GB for the worst probe), so a 48 GB host now runs the full
   // cores-bounded width instead of the six slots an 8 GiB share allowed.
-  assert.equal(recommendedCertificationConcurrency(14, 48 * gib), 14);
+  assert.equal(recommendedCertificationConcurrency(14, 48 * gib), 20);
   assert.equal(recommendedCertificationConcurrency(14, 16 * gib), 8);
   // The share still bounds a small machine below its core count, and the floor
   // keeps two slots on a host too small for even one share.
   assert.equal(recommendedCertificationConcurrency(14, 8 * gib), 4);
   assert.equal(recommendedCertificationConcurrency(14, 1 * gib), 2);
-  // Memory never lifts the width above cores, and an unknown size stays at the
-  // conservative floor rather than the cores-only width.
-  assert.equal(recommendedCertificationConcurrency(4, plenty), 4);
+  // Memory never lifts the width above the oversubscribed core bound, and an
+  // unknown size stays at the conservative floor rather than the cores-only
+  // width.
+  assert.equal(recommendedCertificationConcurrency(4, plenty), 10);
   assert.equal(recommendedCertificationConcurrency(14, Number.NaN), 2);
 });
 
@@ -1046,6 +1053,38 @@ test("checkRequiredBinaries reports both env vars missing when unset", () => {
   assert.equal(result.ok, false);
   assert.ok(result.problems.some(problem => problem.includes("SOLID_CHECKER_NATIVE_BIN is not set")));
   assert.ok(result.problems.some(problem => problem.includes("SOLID_TYPEFACTS_BIN is not set")));
+});
+
+test("resolveRegistryCache prefers the flag, then the environment, then the repository default", () => {
+  const fallback = "/repo/rust/target/registry-cache";
+  assert.equal(resolveRegistryCache({ env: {}, fallback }), fallback);
+  assert.equal(
+    resolveRegistryCache({ env: { SOLID_CHECKER_REGISTRY_CACHE: "" }, fallback }),
+    fallback,
+    "an empty variable is not a cache location"
+  );
+  assert.equal(
+    resolveRegistryCache({ env: { SOLID_CHECKER_REGISTRY_CACHE: "/elsewhere/cache" }, fallback }),
+    "/elsewhere/cache"
+  );
+  assert.equal(
+    resolveRegistryCache({
+      option: "/flag/cache",
+      env: { SOLID_CHECKER_REGISTRY_CACHE: "/elsewhere/cache" },
+      fallback
+    }),
+    "/flag/cache"
+  );
+  assert.equal(
+    resolveRegistryCache({
+      option: "/flag/cache",
+      disabled: true,
+      env: { SOLID_CHECKER_REGISTRY_CACHE: "/elsewhere/cache" },
+      fallback
+    }),
+    null,
+    "--no-registry-cache wins over every source"
+  );
 });
 
 test("checkRequiredBinaries reports ok when both paths exist", () => {

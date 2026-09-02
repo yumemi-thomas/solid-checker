@@ -837,10 +837,26 @@ test("renderMarkdown covers both Solid versions and every family, and flags trun
     results,
     startedAt: "2026-08-21T09:00:00.000Z",
     finishedAt: "2026-08-21T09:30:00.000Z",
-    checker: { nativeBin: "/repo/rust/target/debug/solid-checker-rust", typeFactsBin: "/repo/bin/solid-typefacts" }
+    checker: {
+      nativeBin: "/repo/rust/target/debug/solid-checker-rust",
+      typeFactsBin: "/repo/bin/solid-typefacts",
+      registryCache: "/repo/rust/target/registry-cache"
+    }
   });
+  assert.equal(report.checker.registryCache, "/repo/rust/target/registry-cache");
 
   const markdown = renderMarkdown(report);
+  assert.ok(markdown.includes("- Registry cache for certification: /repo/rust/target/registry-cache"));
+  const fresh = renderMarkdown(
+    buildReport({
+      manifest: makeManifest({ results }),
+      results,
+      startedAt: "2026-08-21T09:00:00.000Z",
+      finishedAt: "2026-08-21T09:30:00.000Z",
+      checker: { nativeBin: "/repo/bin/a", typeFactsBin: "/repo/bin/b" }
+    })
+  );
+  assert.ok(fresh.includes("- Registry cache for certification: none (every registry byte fetched fresh)"));
   assert.match(markdown, /## Solid 1\.x/);
   assert.match(markdown, /## Solid 2\.x/);
   assert.match(markdown, /## Combined/);

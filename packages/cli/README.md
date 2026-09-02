@@ -55,6 +55,16 @@ name-only, stale, unreceipted, or artifact-mismatched input.
 ordinary generation and analysis never execute dependency code, and a passing
 probe never closes a claim.
 
+Certification acquires every named package — the root and each compiler-source
+dependency the lockfile selects — from the registry, up to
+`SOLID_CHECKER_REGISTRY_CONCURRENCY` (default 8) at a time. Setting
+`SOLID_CHECKER_REGISTRY_CACHE` to a directory keeps acquisitions that
+authenticated against their pinned sha512 integrity, addressed by exact
+(origin, package, version, integrity); a later acquisition of the same identity
+reuses those bytes only after re-checking that the archive still hashes to the
+integrity and the packument still carries that exact record. Unset, every
+acquisition fetches from the registry.
+
 Check which dependencies still need one, and which have a contract that no
 longer matches the installed version:
 
