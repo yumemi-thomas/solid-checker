@@ -22,7 +22,6 @@ use solid_facts::compiler::{
 use solid_reactive_ir::contract_semantics::certification::{
     ProofDemandSubject, ProofFamily, ProofWitnessVariant, WitnessBinding,
 };
-#[cfg(unix)]
 use std::{
     collections::BTreeMap,
     fs::{self, File},
