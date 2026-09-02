@@ -33,6 +33,7 @@ export { locateExternalDependencyPackageRoot } from "./artifact-resolution.mjs";
 import {
   CERTIFICATION_INPUTS_FORMAT,
   artifactCaseDisposition,
+  declaredApplicabilityClaims,
   finiteArtifactCandidates,
   finiteConditionPartitions,
   finiteEntrypoints,
@@ -454,7 +455,12 @@ function certificationPlannings(generated, artifactSnapshot) {
     exportConditions: [...new Set([...input.conditions, "import"])].sort(),
     registryOrigin: artifactSnapshot.registryOrigin,
     registryMetadata: artifactSnapshot.metadataPath,
-    archive: artifactSnapshot.archivePath
+    archive: artifactSnapshot.archivePath,
+    // Every planning carries the whole declared applicability census, not a
+    // share of it: each one is an independent native transaction, and a case
+    // the proposal omitted must be re-proved by whichever transaction accepts
+    // that proposal.
+    inapplicableCases: generated.inapplicableCases ?? []
   }));
 }
 
@@ -965,27 +971,57 @@ export function reusableProposalInputs({
     return null;
   }
   let expected;
+  let expectedClaims;
   try {
     const current = finiteEntrypoints(manifest, entrypoints, packageRoot);
-    expected = new Set(
-      finiteArtifactCandidates(
+    const candidates = finiteArtifactCandidates(
+      manifest,
+      current.entrypoints,
+      finiteConditionPartitions(manifest, conditions),
+      packageRoot
+    ).map(candidate => ({
+      ...candidate,
+      disposition: artifactCaseDisposition({
         manifest,
-        current.entrypoints,
-        finiteConditionPartitions(manifest, conditions),
-        packageRoot
-      )
-        .filter(candidate =>
-          artifactCaseDisposition({
-            manifest,
-            packageRoot,
-            entrypoint: candidate.entrypoint,
-            conditions: candidate.conditions
-          }) === null
-        )
+        packageRoot,
+        entrypoint: candidate.entrypoint,
+        conditions: candidate.conditions
+      })
+    }));
+    expected = new Set(
+      candidates
+        .filter(candidate => candidate.disposition === null)
         .map(candidate => artifactCaseCoordinate(candidate.entrypoint, candidate.conditions))
+    );
+    // A reused proposal omitted these cases on the strength of a content
+    // premise. Recompute the census rather than trusting the sidecar's copy of
+    // it: an omitted claim would reach certification unproved, and an invented
+    // one would refuse a proposal for a case that was never omitted.
+    expectedClaims = new Set(
+      declaredApplicabilityClaims(
+        candidates
+          .filter(candidate => candidate.disposition !== null)
+          .map(candidate => ({
+            entrypoint: candidate.entrypoint,
+            conditions: candidate.conditions,
+            class: candidate.disposition.class,
+            reason: candidate.disposition.reason
+          }))
+      ).map(claim => artifactCaseCoordinate(claim.entrypoint, claim.conditions))
     );
   } catch {
     return null;
+  }
+  // A sidecar written before this field existed declares nothing, which is
+  // admissible only for a package whose census claims nothing: the equality
+  // below refuses reuse the moment a claim would have to travel unproved.
+  const declaredClaims = Array.isArray(inputs.inapplicableCases)
+    ? inputs.inapplicableCases
+    : [];
+  if (declaredClaims.length !== expectedClaims.size) return null;
+  for (const claim of declaredClaims) {
+    const coordinate = artifactCaseCoordinate(claim?.entrypoint, claim?.conditions);
+    if (coordinate === null || !expectedClaims.has(coordinate)) return null;
   }
   for (const input of inputs.certificationInputs) {
     const coordinate = artifactCaseCoordinate(input?.entrypoint, input?.conditions);
@@ -1815,7 +1851,8 @@ async function executeNativeCertification({
       registryOrigin: artifactSnapshot.registryOrigin,
       registryMetadata: artifactSnapshot.metadataPath,
       archive: artifactSnapshot.archivePath,
-      sourceDependencies: sourceDependenciesByInput[index] ?? []
+      sourceDependencies: sourceDependenciesByInput[index] ?? [],
+      inapplicableCases: generated.inapplicableCases ?? []
   }));
   const execution = {
     schemaVersion: plannings.length === 1 ? 1 : 2,
@@ -2029,6 +2066,7 @@ function reuseEmittedProposal({ options, manifest, certificationImporter, propos
     plan: `${proposalOutput}.proposal.json`,
     schemaVersion: 1,
     certificationInputs: admitted.certificationInputs,
+    inapplicableCases: admitted.inapplicableCases ?? [],
     accepted: false
   };
 }

@@ -259,6 +259,46 @@ Semantic incompleteness opens only its claim domain:
 - unproved guard branch;
 - opaque external dependency for one behavior.
 
+An artifact case that asserts nothing about certifiable behavior is neither of
+those. It is recorded in the proposal refusal sidecar's additive `inapplicable`
+array — with a class and a reason, never certified, never counted as a refusal,
+never suppressing a sibling case or the proposal — and omitted from the proposal
+exactly as a refused case is. Three classes exist:
+
+- `unpublished-conditional-target` — the runtime target is absent from the
+  artifact and the selection traversed a private namespaced export condition;
+- `non-module-target` — the runtime target's filename is one of an exact
+  positive list of non-executable resources;
+- `non-emitting-module-target` — the runtime target emits no JavaScript at all.
+  Two premises answer that, and the member's suffix selects exactly one, which
+  the recorded reason names: `erasable-statements`, where every module-level
+  statement in the bytes is erasable and at least one declares a name (the
+  filename is not read at all); and `declaration-file`, where the authenticated
+  member's suffix is `.d.ts`/`.d.mts`/`.d.cts`, its bytes parse under
+  declaration-file grammar, every statement is erasable or a re-export form, and
+  an ambient gate finds no implementation body, initializer, expression
+  statement or side-effect import anywhere. TypeScript decides declaration-file
+  semantics by suffix and emits nothing for such a file at all, including for
+  the re-export forms a plain module would emit — so the suffix is admitted as
+  evidence, but only for a member the archive has authenticated and only
+  conjoined with the ambient parse and gate.
+
+Only the third is decided from file *content*, so only it carries an
+applicability tag (`verifier-proved-type-only`) and travels to certification as
+a declared claim in the planning request's `inapplicableCases`. Rust re-proves
+the identical predicate against the authenticated archive's bytes
+(`ArtifactSnapshot::prove_non_emitting_module_target`), re-deriving the premise
+from the authenticated member path, and refuses the whole proposal when a claim
+is refuted, naming the case and the first emitting statement. The other two are
+properties of the export map and the artifact's member list, which the certifier
+replays for every case anyway.
+
+All three classes say "there is no runtime surface to certify here", not "a
+consumer reaching this succeeds": a consumer importing the `.css` entrypoint, or
+a `.d.ts` one, fails either way. The statement predicate has two
+implementations — TypeScript's AST in the generator, Oxc's in the verifier — held
+to one answer by the shared corpus `fixtures/module-emission/cases.json`.
+
 The entire document is refused only when identity, selection, or normalization
 cannot be trusted.
 

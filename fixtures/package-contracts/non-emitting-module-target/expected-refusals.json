@@ -1,0 +1,43 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "non-emitting-module-target-package",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [
+    {
+      "entrypoint": "./types/barrel.d.ts",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (declaration-file): 2 module-level statement(s)"
+    },
+    {
+      "entrypoint": "./types/hyperscript.d.ts",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (declaration-file): 3 module-level statement(s)"
+    },
+    {
+      "entrypoint": "./types/kinds.ts",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (erasable-statements): 2 module-level statement(s)"
+    },
+    {
+      "entrypoint": "./types/renderer.d.ts",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (declaration-file): 2 module-level statement(s)"
+    }
+  ]
+}

@@ -1,0 +1,1142 @@
+{
+  "format": "solid-checker-module-emission-cases",
+  "casesVersion": 1,
+  "cases": [
+    {
+      "name": "type alias",
+      "source": "type Local = 1;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "exported type alias",
+      "source": "export type ValidationState = \"valid\" | \"invalid\";\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "interface",
+      "source": "interface Marker {}\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "exported interface",
+      "source": "export interface RangeValue<T> { start: T; end: T }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "kobalte utils src/types.ts",
+      "source": "export type ValidationState = \"valid\" | \"invalid\";\n\nexport type Orientation = \"horizontal\" | \"vertical\";\n\nexport interface RangeValue<T> {\n\tstart: T;\n\tend: T;\n}\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "universal types/universal.d.ts",
+      "source": "export interface RendererOptions<N> {\n  createElement(tag: string): N;\n}\nexport declare function createRenderer<N>(options: RendererOptions<N>): N;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare function",
+      "source": "declare function f(): void;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "exported declare function",
+      "source": "export declare function f(): void;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "bodyless overload signature",
+      "source": "export function overloaded(value: string): void;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "overload signature plus implementation",
+      "source": "export function f(v: string): void;\nexport function f(v: unknown) { return v; }\n",
+      "module": {
+        "emitting": "function declaration"
+      },
+      "declarationFile": {
+        "emitting": "function declaration"
+      }
+    },
+    {
+      "name": "declare const",
+      "source": "export declare const value: number;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare let",
+      "source": "declare let value: number;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare var",
+      "source": "declare var value: number;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare class",
+      "source": "export declare class Widget { mount(): void }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare abstract class",
+      "source": "export declare abstract class Base { abstract mount(): void }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare enum",
+      "source": "declare enum Direction { Up }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "exported declare enum",
+      "source": "export declare enum Direction { Up }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare const enum",
+      "source": "declare const enum Direction { Up }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare namespace",
+      "source": "declare namespace Legacy { const value: number; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "exported declare namespace",
+      "source": "export declare namespace Legacy { const value: number; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "ambient module by string literal",
+      "source": "declare module \"image:*\" {\n  import type { P } from \"@solidjs/image\";\n  const props: P;\n  export default props;\n}\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "image env.d.ts",
+      "source": "declare module \"image:*\" {\n  import type { SolidImageProps } from \"@solidjs/image\";\n\n  const props: Pick<SolidImageProps<unknown>, \"src\" | \"transformer\">;\n\n  export default props;\n}\n\ndeclare module \"*?image\" {\n  import type { SolidImageProps } from \"@solidjs/image\";\n\n  const props: Pick<SolidImageProps<unknown>, \"src\" | \"transformer\">;\n\n  export default props;\n}\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "ambient module augmentation of a package",
+      "source": "declare module \"vitest\" {\n  interface Matchers<T> { toHaveNoDiagnostics(): T }\n}\nexport {};\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare global",
+      "source": "declare global { interface Window { solid: unknown } }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "bare global block",
+      "source": "global { interface Window { solid: unknown } }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare module with no body",
+      "source": "declare namespace Legacy;\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "import type",
+      "source": "import type { Signal } from \"solid-js\";\n",
+      "module": "non-declaring",
+      "declarationFile": "non-declaring"
+    },
+    {
+      "name": "import type plus alias",
+      "source": "import type { Signal } from \"solid-js\";\nexport type Alias = Signal<number>;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "import type default",
+      "source": "import type Signal from \"solid-js\";\nexport type Alias = Signal;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "import type namespace",
+      "source": "import type * as Solid from \"solid-js\";\nexport type Alias = Solid.Signal<number>;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export type from",
+      "source": "export type { Signal } from \"solid-js\";\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export type star from",
+      "source": "export type * from \"solid-js\";\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export type star as from",
+      "source": "export type * as Solid from \"solid-js\";\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "inline type specifier re-export",
+      "source": "export { type Signal } from \"solid-js\";\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "inline type specifier local re-export",
+      "source": "type Local = 1;\nexport { type Local };\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export as namespace alone",
+      "source": "export as namespace Solid;\n",
+      "module": "non-declaring",
+      "declarationFile": "non-declaring"
+    },
+    {
+      "name": "export as namespace plus interface",
+      "source": "export as namespace Solid;\nexport interface Marker {}\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export default interface",
+      "source": "export default interface Options { mode: \"a\" | \"b\" }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export default declare-free interface plus type",
+      "source": "export type T = 1;\nexport default interface Options { mode: T }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "marker export brace after a declaration",
+      "source": "export interface Marker {}\nexport {};\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declaration then trailing marker and type export",
+      "source": "declare const value: number;\nexport { value };\n",
+      "module": {
+        "emitting": "value export specifier"
+      },
+      "declarationFile": {
+        "emitting": "value export specifier"
+      }
+    },
+    {
+      "name": "zero bytes",
+      "source": "",
+      "module": "empty",
+      "declarationFile": "empty"
+    },
+    {
+      "name": "only a line comment",
+      "source": "// nothing here\n",
+      "module": "empty",
+      "declarationFile": "empty"
+    },
+    {
+      "name": "only a block comment",
+      "source": "/* nothing here */\n",
+      "module": "empty",
+      "declarationFile": "empty"
+    },
+    {
+      "name": "only whitespace",
+      "source": "\n\n\t\n",
+      "module": "empty",
+      "declarationFile": "empty"
+    },
+    {
+      "name": "export brace alone",
+      "source": "export {};\n",
+      "module": "non-declaring",
+      "declarationFile": "non-declaring"
+    },
+    {
+      "name": "export brace twice",
+      "source": "export {}\nexport {}\n",
+      "module": "non-declaring",
+      "declarationFile": "non-declaring"
+    },
+    {
+      "name": "shebang then nothing",
+      "source": "#!/usr/bin/env node\n",
+      "module": "empty",
+      "declarationFile": "empty"
+    },
+    {
+      "name": "shebang then a type",
+      "source": "#!/usr/bin/env node\nexport type T = 1;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "byte order mark then a type",
+      "source": "\ufeffexport type T = 1;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "byte order mark then export brace",
+      "source": "\ufeffexport {};\n",
+      "module": "non-declaring",
+      "declarationFile": "non-declaring"
+    },
+    {
+      "name": "CRLF type module",
+      "source": "export type T = 1;\r\nexport interface I {}\r\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "CRLF side-effect module",
+      "source": "import { start } from \"./dep.js\";\r\nstart();\r\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "side-effect import",
+      "source": "import \"./effects.js\";\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "side-effect import of a package",
+      "source": "import \"solid-js\";\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "default value import",
+      "source": "import start from \"./dep.js\";\nexport type T = 1;\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "named value import",
+      "source": "import { start } from \"./dep.js\";\nexport type T = 1;\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "namespace value import",
+      "source": "import * as all from \"./dep.js\";\nexport type T = 1;\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "all-type-specifier value clause",
+      "source": "import { type Signal } from \"solid-js\";\nexport type T = Signal<1>;\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "import equals require",
+      "source": "import plugin = require(\"./dep.js\");\n",
+      "module": {
+        "emitting": "import-equals declaration"
+      },
+      "declarationFile": {
+        "emitting": "import-equals declaration"
+      }
+    },
+    {
+      "name": "import equals namespace member",
+      "source": "declare namespace N { const B: number }\nimport A = N.B;\n",
+      "module": {
+        "emitting": "import-equals declaration"
+      },
+      "declarationFile": {
+        "emitting": "import-equals declaration"
+      }
+    },
+    {
+      "name": "export import equals",
+      "source": "declare namespace N { const B: number }\nexport import A = N.B;\n",
+      "module": {
+        "emitting": "import-equals declaration"
+      },
+      "declarationFile": {
+        "emitting": "import-equals declaration"
+      }
+    },
+    {
+      "name": "ext-adapter side-effect-only entrypoint",
+      "source": "import { start } from \"./dep.js\";\n\nstart();\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "diagnostics vitest matcher registration",
+      "source": "import { expect } from \"vitest\";\n\nexpect.extend({});\n",
+      "module": {
+        "emitting": "value import"
+      },
+      "declarationFile": {
+        "emitting": "value import"
+      }
+    },
+    {
+      "name": "top-level call with no import",
+      "source": "start();\n",
+      "module": {
+        "emitting": "expression statement"
+      },
+      "declarationFile": {
+        "emitting": "expression statement"
+      }
+    },
+    {
+      "name": "use strict directive",
+      "source": "\"use strict\";\nvar plugin = 1;\n",
+      "module": {
+        "emitting": "directive"
+      },
+      "declarationFile": "refused"
+    },
+    {
+      "name": "use strict directive alone",
+      "source": "\"use strict\";\n",
+      "module": {
+        "emitting": "directive"
+      },
+      "declarationFile": {
+        "emitting": "directive"
+      }
+    },
+    {
+      "name": "commonjs module.exports",
+      "source": "module.exports = { plugin };\n",
+      "module": {
+        "emitting": "expression statement"
+      },
+      "declarationFile": {
+        "emitting": "expression statement"
+      }
+    },
+    {
+      "name": "commonjs exports member",
+      "source": "exports.plugin = 1;\n",
+      "module": {
+        "emitting": "expression statement"
+      },
+      "declarationFile": {
+        "emitting": "expression statement"
+      }
+    },
+    {
+      "name": "babel-plugin commonjs prelude",
+      "source": "\"use strict\";\nvar __create = Object.create;\nmodule.exports = { devtoolsPlugin };\n",
+      "module": {
+        "emitting": "directive"
+      },
+      "declarationFile": "refused"
+    },
+    {
+      "name": "export assignment",
+      "source": "declare const plugin: number;\nexport = plugin;\n",
+      "module": {
+        "emitting": "export assignment"
+      },
+      "declarationFile": {
+        "emitting": "export assignment"
+      }
+    },
+    {
+      "name": "exported const",
+      "source": "export const value = 1;\n",
+      "module": {
+        "emitting": "variable declaration"
+      },
+      "declarationFile": {
+        "emitting": "variable declaration"
+      }
+    },
+    {
+      "name": "bare const",
+      "source": "const value = 1;\n",
+      "module": {
+        "emitting": "variable declaration"
+      },
+      "declarationFile": {
+        "emitting": "variable declaration"
+      }
+    },
+    {
+      "name": "uninitialized const in ambient grammar",
+      "source": "export const value: number;\n",
+      "module": {
+        "emitting": "variable declaration"
+      },
+      "declarationFile": {
+        "emitting": "variable declaration"
+      }
+    },
+    {
+      "name": "using declaration",
+      "source": "using handle = acquire();\n",
+      "module": {
+        "emitting": "variable declaration"
+      },
+      "declarationFile": "refused"
+    },
+    {
+      "name": "exported function",
+      "source": "export function mount() {}\n",
+      "module": {
+        "emitting": "function declaration"
+      },
+      "declarationFile": {
+        "emitting": "function declaration"
+      }
+    },
+    {
+      "name": "exported class",
+      "source": "export class Widget {}\n",
+      "module": {
+        "emitting": "class declaration"
+      },
+      "declarationFile": {
+        "emitting": "class declaration"
+      }
+    },
+    {
+      "name": "decorated class",
+      "source": "@sealed\nexport class Widget {}\n",
+      "module": {
+        "emitting": "class declaration"
+      },
+      "declarationFile": {
+        "emitting": "class declaration"
+      }
+    },
+    {
+      "name": "exported enum",
+      "source": "export enum Direction { Up }\n",
+      "module": {
+        "emitting": "enum declaration"
+      },
+      "declarationFile": {
+        "emitting": "enum declaration"
+      }
+    },
+    {
+      "name": "bare enum",
+      "source": "enum Direction { Up }\n",
+      "module": {
+        "emitting": "enum declaration"
+      },
+      "declarationFile": {
+        "emitting": "enum declaration"
+      }
+    },
+    {
+      "name": "const enum without declare",
+      "source": "const enum Direction { Up }\n",
+      "module": {
+        "emitting": "enum declaration"
+      },
+      "declarationFile": {
+        "emitting": "enum declaration"
+      }
+    },
+    {
+      "name": "instantiated namespace",
+      "source": "namespace Runtime { export const value = 1 }\n",
+      "module": {
+        "emitting": "namespace declaration"
+      },
+      "declarationFile": {
+        "emitting": "namespace declaration"
+      }
+    },
+    {
+      "name": "type-only namespace without declare",
+      "source": "namespace Types { export interface I {} }\n",
+      "module": {
+        "emitting": "namespace declaration"
+      },
+      "declarationFile": {
+        "emitting": "namespace declaration"
+      }
+    },
+    {
+      "name": "default export of a literal",
+      "source": "export default 1;\n",
+      "module": {
+        "emitting": "default export"
+      },
+      "declarationFile": {
+        "emitting": "default export"
+      }
+    },
+    {
+      "name": "default export of a call",
+      "source": "export default createRenderer();\n",
+      "module": {
+        "emitting": "default export"
+      },
+      "declarationFile": {
+        "emitting": "default export"
+      }
+    },
+    {
+      "name": "default export of an object",
+      "source": "export default { mode: 1 };\n",
+      "module": {
+        "emitting": "default export"
+      },
+      "declarationFile": {
+        "emitting": "default export"
+      }
+    },
+    {
+      "name": "default export of an undeclared identifier",
+      "source": "export default renderer;\n",
+      "module": {
+        "emitting": "default export"
+      },
+      "declarationFile": {
+        "emitting": "default export of an undeclared binding"
+      }
+    },
+    {
+      "name": "default export of a declared const",
+      "source": "declare const _default: unknown;\nexport default _default;\n",
+      "module": {
+        "emitting": "default export"
+      },
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "h types/hyperscript.d.ts",
+      "source": "type ExpandableNode = Node & {\n    [key: string]: any;\n};\ndeclare const $ELEMENT: unique symbol;\nexport type HyperElement = {\n    (): ExpandableNode | ExpandableNode[];\n    [$ELEMENT]: true;\n};\nexport type HyperScript = {\n    (...args: any[]): HyperElement | ExpandableNode[];\n    Fragment: (props: {\n        children: any;\n    }) => any;\n};\ndeclare const _default: HyperScript;\nexport default _default;\n",
+      "module": {
+        "emitting": "default export"
+      },
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "default export function",
+      "source": "export default function mount() {}\n",
+      "module": {
+        "emitting": "function declaration"
+      },
+      "declarationFile": {
+        "emitting": "function declaration"
+      }
+    },
+    {
+      "name": "default export class",
+      "source": "export default class Widget {}\n",
+      "module": {
+        "emitting": "class declaration"
+      },
+      "declarationFile": {
+        "emitting": "class declaration"
+      }
+    },
+    {
+      "name": "default export declare class",
+      "source": "export default class Widget {}\nexport type T = 1;\n",
+      "module": {
+        "emitting": "class declaration"
+      },
+      "declarationFile": {
+        "emitting": "class declaration"
+      }
+    },
+    {
+      "name": "export star",
+      "source": "export * from \"./universal.js\";\n",
+      "module": {
+        "emitting": "re-export of all names"
+      },
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "universal types/index.d.ts",
+      "source": "export * from \"./universal.js\";\n",
+      "module": {
+        "emitting": "re-export of all names"
+      },
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export star as namespace",
+      "source": "export * as universal from \"./universal.js\";\n",
+      "module": {
+        "emitting": "re-export of all names"
+      },
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "h types/index.d.ts",
+      "source": "export { default, type HyperScript, type HyperElement } from \"./hyperscript.js\";\n",
+      "module": {
+        "emitting": "value export specifier"
+      },
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "named value re-export",
+      "source": "export { createRenderer } from \"./universal.js\";\n",
+      "module": {
+        "emitting": "value export specifier"
+      },
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "export brace from",
+      "source": "export {} from \"./dep.js\";\n",
+      "module": {
+        "emitting": "re-export of no names"
+      },
+      "declarationFile": "non-declaring"
+    },
+    {
+      "name": "local value re-export",
+      "source": "declare function f(): void;\nexport { f };\n",
+      "module": {
+        "emitting": "value export specifier"
+      },
+      "declarationFile": {
+        "emitting": "value export specifier"
+      }
+    },
+    {
+      "name": "declare function with a body",
+      "source": "export declare function f(): void { return; }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "declare class with a method body",
+      "source": "declare class C { m() { return 1; } }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "declare class with a constructor body",
+      "source": "declare class C { constructor() { this.x = 1; } }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "declare class with a getter body",
+      "source": "declare class C { get x() { return 1; } }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "declare const with an initializer",
+      "source": "declare const value = 1;\n",
+      "module": "non-emitting",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "declare class with a property initializer",
+      "source": "declare class C { value = 1; }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "declare class with a static block",
+      "source": "declare class C { static { } }\n",
+      "module": "non-emitting",
+      "declarationFile": {
+        "emitting": "class static block"
+      }
+    },
+    {
+      "name": "declare class with an accessor initializer",
+      "source": "declare class C { accessor value = 1; }\n",
+      "module": "non-emitting",
+      "declarationFile": {
+        "emitting": "property initializer"
+      }
+    },
+    {
+      "name": "ambient module with an expression statement",
+      "source": "declare module \"m\" { export const value: number; start(); }\n",
+      "module": "non-emitting",
+      "declarationFile": {
+        "emitting": "expression statement"
+      }
+    },
+    {
+      "name": "ambient module with a side-effect import",
+      "source": "declare module \"m\" { import \"./effects.js\"; export const value: number; }\n",
+      "module": "non-emitting",
+      "declarationFile": {
+        "emitting": "side-effect import"
+      }
+    },
+    {
+      "name": "ambient module with an initializer",
+      "source": "declare module \"m\" { export const value = 1; }\n",
+      "module": "non-emitting",
+      "declarationFile": {
+        "emitting": "variable initializer"
+      }
+    },
+    {
+      "name": "declare namespace with a function body",
+      "source": "declare namespace N { export function f() { return 1; } }\n",
+      "module": "non-emitting",
+      "declarationFile": {
+        "emitting": "implementation body"
+      }
+    },
+    {
+      "name": "declare global with a body",
+      "source": "declare global { function f(): void { return; } }\n",
+      "module": "non-emitting",
+      "declarationFile": {
+        "emitting": "implementation body"
+      }
+    },
+    {
+      "name": "declare class with a signature only",
+      "source": "declare class C { m(): void; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare class with an index signature",
+      "source": "declare class C { [key: string]: unknown; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "declare class with a bodyless getter",
+      "source": "declare class C { get x(): number; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "if statement",
+      "source": "if (globalThis.solid) start();\n",
+      "module": {
+        "emitting": "control-flow statement"
+      },
+      "declarationFile": {
+        "emitting": "control-flow statement"
+      }
+    },
+    {
+      "name": "for-of loop",
+      "source": "for (const item of items) start(item);\n",
+      "module": {
+        "emitting": "loop statement"
+      },
+      "declarationFile": {
+        "emitting": "loop statement"
+      }
+    },
+    {
+      "name": "while loop",
+      "source": "while (ready) start();\n",
+      "module": {
+        "emitting": "loop statement"
+      },
+      "declarationFile": {
+        "emitting": "loop statement"
+      }
+    },
+    {
+      "name": "block statement",
+      "source": "{ start(); }\n",
+      "module": {
+        "emitting": "block statement"
+      },
+      "declarationFile": {
+        "emitting": "block statement"
+      }
+    },
+    {
+      "name": "empty statement",
+      "source": ";\n",
+      "module": {
+        "emitting": "empty statement"
+      },
+      "declarationFile": {
+        "emitting": "empty statement"
+      }
+    },
+    {
+      "name": "throw statement",
+      "source": "throw new Error(\"boom\");\n",
+      "module": {
+        "emitting": "executable statement"
+      },
+      "declarationFile": {
+        "emitting": "executable statement"
+      }
+    },
+    {
+      "name": "try statement",
+      "source": "try { start(); } catch {}\n",
+      "module": {
+        "emitting": "control-flow statement"
+      },
+      "declarationFile": {
+        "emitting": "control-flow statement"
+      }
+    },
+    {
+      "name": "switch statement",
+      "source": "switch (mode) { default: start(); }\n",
+      "module": {
+        "emitting": "control-flow statement"
+      },
+      "declarationFile": {
+        "emitting": "control-flow statement"
+      }
+    },
+    {
+      "name": "labeled statement",
+      "source": "outer: start();\n",
+      "module": {
+        "emitting": "control-flow statement"
+      },
+      "declarationFile": {
+        "emitting": "control-flow statement"
+      }
+    },
+    {
+      "name": "debugger statement",
+      "source": "debugger;\n",
+      "module": {
+        "emitting": "executable statement"
+      },
+      "declarationFile": {
+        "emitting": "executable statement"
+      }
+    },
+    {
+      "name": "generic arrow type alias",
+      "source": "export type Cast = <T>(value: T) => T;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "jsx component module",
+      "source": "export function Widget() { return <div />; }\n",
+      "module": {
+        "emitting": "function declaration"
+      },
+      "declarationFile": "unparsable"
+    },
+    {
+      "name": "jsx element at top level",
+      "source": "<div />;\n",
+      "module": {
+        "emitting": "expression statement"
+      },
+      "declarationFile": "unparsable"
+    },
+    {
+      "name": "tsx-only generic arrow value",
+      "source": "export const cast = <T,>(value: T) => value;\n",
+      "module": {
+        "emitting": "variable declaration"
+      },
+      "declarationFile": {
+        "emitting": "variable declaration"
+      }
+    },
+    {
+      "name": "unparsable declaration",
+      "source": "export const = ;\n",
+      "module": "unparsable",
+      "declarationFile": "unparsable"
+    },
+    {
+      "name": "unparsable function",
+      "source": "function (\n",
+      "module": "unparsable",
+      "declarationFile": "unparsable"
+    },
+    {
+      "name": "unterminated string",
+      "source": "export type T = \"\n",
+      "module": "unparsable",
+      "declarationFile": "unparsable"
+    },
+    {
+      "name": "decorated ambient method",
+      "source": "declare class C { @dec m(): void; }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "decorated ambient class",
+      "source": "@dec\ndeclare class C { m(): void; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "decorated ambient field",
+      "source": "declare class C { @dec value: number; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "decorated ambient accessor",
+      "source": "declare class C { @dec accessor value: number; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "decorated ambient method with arguments",
+      "source": "declare class C { @dec({ mode: \"a\" }) m(): void; }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "decorated ambient parameter",
+      "source": "declare class C { m(@dec value: number): void; }\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    },
+    {
+      "name": "decorated ambient getter",
+      "source": "declare class C { @dec get value(): number; }\n",
+      "module": "refused",
+      "declarationFile": "refused"
+    },
+    {
+      "name": "decorated emitting class",
+      "source": "@dec\nexport class Widget {}\n",
+      "module": {
+        "emitting": "class declaration"
+      },
+      "declarationFile": {
+        "emitting": "class declaration"
+      }
+    },
+    {
+      "name": "ambient parameter initializer",
+      "source": "declare function f(a: number = 1): void;\n",
+      "module": {
+        "emitting": "ambient parameter initializer"
+      },
+      "declarationFile": {
+        "emitting": "ambient parameter initializer"
+      }
+    },
+    {
+      "name": "ambient parameter arrow initializer",
+      "source": "declare function f(cb = () => {}): void;\n",
+      "module": {
+        "emitting": "ambient parameter initializer"
+      },
+      "declarationFile": {
+        "emitting": "ambient parameter initializer"
+      }
+    },
+    {
+      "name": "ambient method parameter initializer",
+      "source": "declare class C { m(a: number = 1): void; }\n",
+      "module": {
+        "emitting": "ambient parameter initializer"
+      },
+      "declarationFile": {
+        "emitting": "ambient parameter initializer"
+      }
+    },
+    {
+      "name": "ambient module parameter initializer",
+      "source": "declare module \"m\" { export function f(a: number = 1): void; }\n",
+      "module": {
+        "emitting": "ambient parameter initializer"
+      },
+      "declarationFile": {
+        "emitting": "ambient parameter initializer"
+      }
+    },
+    {
+      "name": "emitting parameter initializer",
+      "source": "export function f(a: number = 1) { return a; }\n",
+      "module": {
+        "emitting": "function declaration"
+      },
+      "declarationFile": {
+        "emitting": "function declaration"
+      }
+    },
+    {
+      "name": "ambient parameter without initializer",
+      "source": "declare function f(a?: number): void;\n",
+      "module": "non-emitting",
+      "declarationFile": "non-emitting"
+    }
+  ]
+}

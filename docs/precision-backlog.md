@@ -11443,3 +11443,395 @@ refusals, inserting the three marker rows in ledger order.
 Wall time again is **not** attributable to this change: 140.2 s with 115.9 s
 of install time, against the committed baseline's 71.3 s / 55.9 s, on the same
 loaded host as the previous slice; the quiet-host measurement remains owed.
+
+## 2026-09-02 — A non-emitting entrypoint is inapplicable, proved against the archive
+
+Nine ecosystem rows were never attempted because the census enumerated
+entrypoints over published *source* and *declaration* directories and every one
+of them refused. Three unrelated mechanisms sat behind that number
+(`docs/package-contract-v2/phase21/2026-09-02-artifact-applicability-diagnosis.md`),
+and this slice builds exactly one of them: the artifact case whose selected
+runtime target emits no JavaScript at all.
+
+### The premise, and why it is stated as emission
+
+An artifact case is now recorded `inapplicable: non-emitting-module-target`
+when the runtime target selected by the export-map replay is a member whose
+exact bytes parse as a TypeScript module in which **every module-level
+statement is erasable** and **at least one of them declares a name**. Erasable:
+a type alias, an interface, any `declare`d declaration (function, class,
+variable, namespace, ambient module, `global`) other than a non-`declare`
+`enum`, a bodyless function signature, `import type`, `export type`, an export
+declaration all of whose specifiers are type-only, `export {}` with no
+specifiers, and `export as namespace X`. Emitting: any import with a value
+clause (a bare `import "./effects.js"` included), any expression statement or
+directive, any non-`declare` function/class/`enum`/variable/namespace, any
+`export =` or `module.exports`, any `export default <expression>`, and any
+re-export naming a value.
+
+Stating it as *emission* rather than as an empty *export surface* is the whole
+difference between this rule and the one reverted earlier the same day. A
+side-effect-only module exports nothing and emits everything:
+`@solid-devtools/ext-adapter@0.17.0`'s `dist/index.js`,
+`@solidjs/diagnostics@2.0.0-rc.3`'s `dist/vitest.js`
+(`import { expect } from "vitest"; expect.extend({...})`), and
+`@solid-devtools/babel-plugin@0.3.1`'s CommonJS bundle all have an empty ESM
+surface and all still refuse — with the same reason as each other, which is the
+point. Stating it as emission rather than as a `.d.ts` **suffix** is the other
+difference: a suffix is the publisher's claim about a file, and the reverted
+rule read it before anything had authenticated the bytes. Here a `.js` member
+whose content is `export declare function f(): void;` gets the same answer as
+the identical bytes in a `.d.ts`, and `non-emitting-module-target-control` pins
+that both ways.
+
+Two boundaries keep the rule from absorbing a broken build, and they are one
+rule with two messages rather than two rules: the module must **declare at least
+one name**. A module with no module-level statements at all — zero bytes, or
+only comments — answers `Empty` ("has no module-level statements at all"); one
+whose whole body is `export {}` answers `NonDeclaring` ("declares nothing at
+all"). Both refuse. The variants are kept apart only so the refusal says which
+shape it saw; the JS side collapses them, because it returns "no answer" either
+way. `@solid-devtools/shared@0.20.0` ships both spellings of that same emptiness
+(a 0-byte `dist/index.js` and a `src/index.ts` that is literally `export {}`),
+and `multi-entrypoint`'s `./empty` already pinned the `export {}` refusal as
+deliberate.
+
+**The deliberate trade, stated so it is reviewable.** Both premises say "there
+is no runtime surface to certify here", *not* "a consumer reaching this
+succeeds". A Node consumer that reaches one of these entrypoints fails —
+`ERR_UNKNOWN_FILE_EXTENSION` for a `.ts`/`.d.ts` target, a `SyntaxError` for
+ambient bytes under a `.js` name — and the rule records the case as inapplicable
+anyway. That is the same standing `non-module-target` has held since
+2026-08-31: a consumer importing the `.css` entrypoint also fails, and the case
+still asserts nothing about certifiable behavior because there is no module
+there to assert about. It is a real weakening of "a target real consumers reach
+and fail on stays a refusal", chosen once and applied to both classes, and the
+line it draws is *nothing to certify* versus *something we could not prove*.
+
+Two consequences of that choice are inapplicable by design rather than by
+oversight, and both are pinned in the shared corpus: `interface X {}` with no
+export at all (a module with a declaration and no surface), and a bodyless
+overload signature with no implementation (a `tsc` error). The rule tells a
+written module from a broken build; it does not tell an exported surface from a
+private one, and `statement_declares` is documented in those terms.
+
+### The second premise: a declaration file, after authentication
+
+The bytes-only premise cannot reach a `.d.ts` barrel, and it should not: the
+identical bytes in a `.ts` are a working re-export. What separates them is the
+member's suffix — which is exactly what TypeScript itself reads to decide
+declaration-file semantics, and a declaration file emits no JavaScript at all,
+re-exports included.
+
+So a second premise admits the suffix, under three conjoined conditions, none of
+which may be dropped:
+
+1. the member is a **regular file in the authenticated archive** whose
+   package-relative path ends in `.d.ts`, `.d.mts` or `.d.cts`, read from the
+   snapshot rather than from anything the proposal said;
+2. its bytes parse cleanly under **declaration-file grammar** — the only grammar
+   whose semantics the suffix claims;
+3. every module-level statement is erasable **or** a re-export form
+   (`export * from`, `export * as ns from`, `export { … } from` including a
+   `default` specifier, `export default <Identifier>` naming a binding these
+   same bytes declare ambiently), the module declares or re-exports at least one
+   name, **and** an ambient gate finds no implementation body, initializer,
+   expression statement or side-effect import anywhere in the tree.
+
+Condition 3's gate is what keeps the suffix honest, and it is the answer to the
+obvious objection. A publisher's `.d.ts` claim is only credible while the bytes
+are ambient; an implementation body (TS1183) or an initializer (TS1039) is
+TypeScript refusing the file as a declaration file, so the suffix stops speaking
+for it. Condition 1 is the answer to the other objection: the 2026-09-02 revert
+rejected classifying a `.d.ts` *before authentication*, where a member-kind or
+symlink substitution could decide the answer — here `from_archive` has already
+refused a non-regular member, a case-folding collision and a duplicate member
+whose bytes differ.
+
+A member's suffix selects **exactly one** premise; they are not a fallback
+chain. A `.d.ts` carrying `declare const value = 1;` is therefore refused even
+though the bytes-only premise erases it, and the recorded reason names which
+premise answered (`erasable-statements` or `declaration-file`) so a row's
+sidecar says which evidence cleared each case. The verifier re-derives the
+premise from the authenticated path, so a generator that named the wrong one
+cannot borrow the other's answer.
+
+### The claim is proved against authenticated bytes, not asserted
+
+The row *class* is produced by generation, which reads the installed tree, so a
+generator-only rule would be the reverted pre-authentication classification with
+a better predicate. It is therefore split:
+
+- `nonEmittingModuleTarget` (`packages/cli/scripts/artifact-resolution.mjs`)
+  decides the disposition from the installed bytes, and
+  `artifactCaseDisposition` records the case with
+  `applicability: "verifier-proved-type-only"` and omits it from the proposal
+  exactly as a refused case is. **What Rust checks is stated precisely, because
+  it is narrower than it sounds:** the certifier replays the resolution of the
+  cases a proposal *contains* (`resolve_snapshot_export`) and re-proves the
+  claims it is *handed*; `main.rs`'s policy-2 case-set checks are about the
+  cases named in one transaction agreeing with each other (no duplicate case, no
+  transplanted coordinate), not about the manifest census being complete. So a
+  case omitted with **no** claim beside it is invisible to Rust — that is the
+  pre-existing 2026-08-31 structure, where a refused case is omitted the same
+  way, and the reuse lane is the one place it is closed (`reusableProposalInputs`
+  recomputes the census and refuses reuse unless the declared claim set matches
+  it exactly).
+- Every such case travels to certification in the planning request's additive
+  `inapplicableCases`, and `prove_declared_applicability`
+  (`rust/crates/solid-facts-backend/src/main.rs`) re-proves the identical
+  predicate against `snapshot.read(path)` of the authenticated archive through
+  `ArtifactSnapshot::prove_non_emitting_module_target`
+  (`contract_certification.rs`), before the proposal document is even read. A
+  claim the archive refutes refuses the **whole** proposal, naming the case and
+  the first emitting statement with its kind and byte range; a declared class
+  Rust cannot prove refuses it too. `ArtifactSnapshot::from_archive` already
+  refuses a non-regular member, a case-folding collision and a duplicate member
+  whose bytes differ, so the archive invariants the revert named are closed
+  below the premise rather than beside it.
+- The statement predicate itself lives with the syntax owner:
+  `solid_facts::ast::module_emission` (`rust/crates/solid-facts/src/ast/emission.rs`).
+  Its JS mirror is `statementEmits` / `statementDeclares` /
+  `declarationFileStatement` over TypeScript's AST. The two are separate
+  implementations over separate parsers, and what holds them together is one
+  **shared corpus**, `fixtures/module-emission/cases.json`: 146 snippets, each
+  carrying a verdict per premise, deserialized by
+  `the_shared_corpus_answers_both_premises_case_for_case` in `emission.rs` and by
+  `every case answers exactly what the corpus records, under both premises` in
+  `packages/cli/test/artifact-resolution.test.mjs`. 292 verdicts, both sides,
+  one file — so a divergence is a test failure rather than a whole-proposal
+  refusal in the field.
+
+  Both ladders are now identical (`.ts` → declaration syntax → `.tsx`), and the
+  order is deliberately **not** load-bearing: every configuration that parses
+  cleanly is answered from the same statement table, so the ladder only widens
+  which bytes get an answer at all. `every_parse_order_agrees_on_every_case`
+  pins that by running all six permutations over the whole corpus, which is what
+  makes flipping the order a dead mutation rather than an untested choice. Bytes
+  no configuration accepts are an error rather than an answer.
+
+  Where the two *grammars* genuinely disagree — Oxc refuses an ambient
+  implementation body outright, TypeScript accepts it and reaches the mirror
+  gate — the corpus records the verdict as `refused`, whose contract is "no side
+  answers non-emitting". That is the load-bearing half; the exact refusal
+  variant is deliberately unpinned for those seven cases, and
+  `refusedByPeerGrammar` on the JS side exists solely so the generator never
+  claims what the verifier cannot parse.
+- Reuse (`--proposal`) recomputes the claim census from the current manifest and
+  compares it to the sidecar's copy, so an omitted claim cannot reach
+  certification unproved and an invented one cannot refuse a proposal for a case
+  that was never omitted. A sidecar predating the field is admissible only for a
+  package that claims nothing.
+
+No `refusalVersion` bump: the `inapplicable` array is additive and no consumer
+counts it, exactly as on 2026-08-31. `applicability` is written only on this
+class, so the two export-map dispositions' recorded rows are byte-unchanged.
+The benchmark classifier needed no change either — the inapplicable vocabulary
+is data in the message, never a class it enumerates — and
+`classify.test.mjs` now pins that.
+
+### Measured, per row
+
+Fourteen exact probes, debug checker + `bin/solid-typefacts` (build id `dev`),
+against the same rows the diagnosis measured. `refused / inapplicable`:
+
+| Row | Before | After | Verdict |
+|---|---|---|---|
+| `@kobalte/utils@2.0.0-alpha.0\|solid2\|only` | partial, 1 / 0 | **success, 0 / 1, certified** (3.1 s) | recovered |
+| `@solidjs/h@2.0.0-rc.3\|solid2\|only` | partial, 2 / 0 | **success, 0 / 2, certified** (3.1 s) | recovered |
+| `@solidjs/image@0.1.0\|solid1\|only` | partial, 1 / 2 | **success, 0 / 3, certified** (2.7 s) | recovered |
+| `@solidjs/universal@2.0.0-rc.3\|solid2\|only` | partial, 2 / 0 | **success, 0 / 2, certified** (2.3 s) | recovered |
+| `@kobalte/core@0.13.13\|solid1\|only` | partial, 52 / 0 | partial, 41 / 11 | unchanged, as predicted |
+| `@kobalte/solidbase@0.6.13\|solid1\|only` | partial, 59 / 94 | partial, 33 / 120 | unchanged, as predicted |
+| `@solidjs/diagnostics@2.0.0-rc.3\|solid2\|only` | partial, 1 / 1 | partial, 1 / 1 | held |
+| `@solid-devtools/ext-adapter@0.17.0\|solid1\|only` | `no-exported-surface`, 1 / 0 | identical | held |
+| `@solid-devtools/babel-plugin@0.3.1\|solid1\|only` | `no-exported-surface`, 1 / 0 | identical | held |
+| `@solid-devtools/shared@0.20.0\|solid1\|only` | partial, 5 / 1 | identical | held |
+| `@solid-primitives/{marker@0.2.2,i18n@2.2.1,scheduled@1.5.3}\|solid1\|only` | success, certified | identical, certified | held |
+| `@solid-primitives/utils@6.4.1\|solid1\|only` | partial, 1 / 2, certified | identical, certified (`complete: true`, `exact-leaf-refusal`) | held |
+
+**Four rows, 344 → 348 verified of 418, 25 → 21 not attempted**, at 2.3–3.1 s of
+certification each. Which premise cleared each case is in the sidecar reason:
+
+| Row | Cases cleared | Premise |
+|---|---|---|
+| `@kobalte/utils` | `./src/types.ts` | `erasable-statements` |
+| `@kobalte/core` | 11 × `src/**/types.ts` | `erasable-statements` |
+| `@solidjs/image` | `./env` | `declaration-file` |
+| `@solidjs/h` | `./types/index.d.ts`, `./types/hyperscript.d.ts` | `declaration-file` |
+| `@solidjs/universal` | `./types/index.d.ts`, `./types/universal.d.ts` | `declaration-file` |
+| `@kobalte/solidbase` | 26 × `default-theme/**/*.d.ts` | `declaration-file` |
+
+The first slice of this work shipped the bytes-only premise alone and recovered
+**two** of the four rows; `@solidjs/h` and `@solidjs/universal` needed the
+declaration-file premise, because three of their six members are non-emitting
+only under declaration-file semantics:
+`export { default, type HyperScript } from "./hyperscript.js"`,
+`export * from "./universal.js"`, and
+`declare const _default; export default _default;`. As bytes those are a working
+barrel and an evaluated default export — and the control fixture ships the
+identical barrel bytes under a `.js` name, where the case **certifies** as the
+real re-export it is.
+
+### Generation cost
+
+The disposition parses each artifact-case candidate's bytes, and a wildcard
+census enumerates hundreds of members, so the two widest rows were measured.
+`generationDurationMs`, same host, install time excluded:
+
+| Row | Before the slice | Slice, unmemoized | Slice, memoized + bounded |
+|---|---|---|---|
+| `@kobalte/core@0.13.13` (508 candidates) | 118.9 s | 104.6 s | **55.0 s** |
+| `@kobalte/solidbase@0.6.13` (183 candidates) | 65.1 s | 29.5 s | **26.4 s** |
+
+Generation got *cheaper*, not dearer: a case recorded inapplicable is never
+prepared, never analyzed and never sent to the emitter, and that outweighs the
+parse by a wide margin. The parse itself is paid once per distinct file per
+process — memoized on a SHA-256 of the exact bytes, so the census pass and the
+reuse-validation pass share it — and skipped entirely above 512 KiB. The
+absolute numbers are from a loaded shared host and the run-to-run spread is
+wide; the direction is the claim, not the second decimal.
+
+The byte bound is a **yield cap**, not a free win: a genuinely non-emitting
+bundled `.d.ts` above it — a rolled-up types file, which real packages do
+ship — never becomes inapplicable, and its artifact case keeps
+certify-or-refuse semantics. The verifier deliberately carries no bound, because
+it only ever re-proves claims the generator makes; that asymmetry can only mean
+fewer claims, never a claim the archive is not asked about.
+
+### What stays open
+
+- **M1's refusal message is still false, and untouched.** No target row reaches
+  it any more — the disposition omits these cases before the batch is built — but
+  the guard is still there and still wrong for any *emitting* target whose
+  runtime closure includes a declaration file. It reads *"contract emission batch
+  target N names source outside its configured project"* for a file that **is**
+  in the tsconfig the generator wrote; the real predicate is "this target's
+  project files include a declaration file", because the Type Facts producer
+  never reports one (`tsgo/project.go` skips `IsDeclarationFile`). The guard
+  exists twice (`main.rs:346` and `main.rs:5234`), so the pipeline structurally
+  cannot build facts for a `.d.ts` entry file at all, and the refusal is charged
+  to the wrong target index. Worth a separate message-and-attribution fix; note
+  that fixing it *without* an applicability premise would convert a false
+  refusal into a false certification, which is what §1.6 of the diagnosis
+  measured. `non-emitting-module-target-control`'s `./implemented` and
+  `./evaluated-default` are refused by this guard rather than by the premise
+  they are testing — the pin still works (widening the premise moves them from
+  `refusals` to `inapplicable`), but their reason string is not the premise's.
+- **`@kobalte/core@0.13.13`** — 41 of its 52 refusals are Vitest test modules
+  with value imports and top-level calls, structurally identical in
+  authenticated bytes to the ext-adapter control. No sound separator exists
+  ("imports an undeclared dependency" is not a proof of inapplicability, and
+  every kobalte contributor resolves and executes those files), so they stay
+  refused; and the diagnosis measured that even waved through, the row refuses
+  at callable-path demand `sha256:a8312af5…` for `Accordion` 313 s later.
+- **`@solidjs/diagnostics` `./vitest`, `@solid-devtools/{ext-adapter,babel-plugin}`**
+  — side-effect-only by design, deliberately fail-closed.
+- **`@solid-devtools/shared@0.20.0`** — the empty-module question is answered
+  *refused* by choice, and `./chunk-DTKGRNV6` refuses independently.
+- **`@kobalte/solidbase@0.6.13`** — 26 cases moved, the row will not:
+  `virtual:solidbase/components` has no runtime binding for `mdxComponents`, and
+  `src/config/route-config.js` is not a file.
+- **`@solid-primitives/utils@6.4.1`'s root case**, and therefore every
+  consumer's composition against it, is blocked on `solid-js/web`'s `isServer`
+  having no exact runtime binding — plus the accepted lane not being passed to
+  the runner at all (`run.mjs` never passes `--accepted-contracts`, and every
+  probe gets a fresh catalog). Neither is an applicability question. The row
+  itself is attempted and certified today, through the dependency-plan disjunct.
+- **The declaration-file premise trusts the suffix on an authenticated member.**
+  Conditions 2 and 3 above make it a conjunction rather than a guess, and the
+  gate is pinned in both directions by the control fixture and the shared corpus,
+  but it remains the one place in this rule where a *filename* participates in a
+  proof. A publisher that ships an ambient-looking `.d.ts` a bundler nonetheless
+  executes (through a resolver alias, say) would be classified by the convention
+  rather than by that resolver's behavior — the same standing the
+  namespaced-condition convention has held since 2026-08-31.
+- **Ten corpus cases have no pinned refusal variant**, only the guarantee that
+  neither side answers non-emitting: those are the shapes where Oxc's grammar
+  refuses what TypeScript's parser accepts — an ambient implementation body, an
+  ambient property initializer, a bodyless namespace, `using`, a directive in
+  declaration syntax, and a decorator on an ambient *method-like* member
+  (`declare class C { @dec m(): void; }`), which is refused while the same
+  decorator on the class, on an ambient field, on an `accessor` field and on a
+  parameter is accepted by both. `refusedByPeerGrammar` exists to keep the
+  generator from claiming what the verifier cannot parse, and it is a
+  hand-maintained mirror of another parser's grammar — the most likely place for
+  a future divergence, and the reason the corpus rather than either
+  implementation is the oracle. Two review rounds found two such divergences
+  (`export default interface`, then the decorated ambient method), which is the
+  honest base rate for a mirror this shape.
+- **One rule is a deliberate joint narrowing rather than a mirror.** A parameter
+  default in a bodyless signature (`declare function f(a = 1): void;`) is TS1039
+  and emits nothing, and the two parsers disagreed about it in opposite
+  directions depending on whether the default was an arrow. Rather than mirror
+  either, both sides now refuse every ambient parameter initializer under both
+  premises. It costs a shape that could have been cleared, and it is one rule in
+  one place on each side instead of two accidents.
+- **The two statement tables are duplicated by construction**, in TypeScript and
+  in Oxc, and they are held together by `fixtures/module-emission/cases.json`
+  rather than by a shared implementation. A divergence outside the corpus still
+  refuses a whole proposal. A single owner would need the generator to ask Rust
+  for the answer before it can decide a disposition, which is a process boundary
+  this slice does not add. The corpus is the mitigation, not a proof: it covers
+  146 snippets, and the classes it deliberately leaves coarse are the ten
+  grammar disagreements recorded as `refused`.
+
+Regression pins. `fixtures/module-emission/cases.json` is the shared statement
+corpus, read by both implementations' test suites (146 snippets × 2 premises =
+292 verdicts), and it carries the decorator and ambient-parameter families that
+the two review rounds' divergences came from.
+`fixtures/package-contracts/non-emitting-module-target`: a type-only `.ts`
+cleared by the bytes premise, and three `.d.ts` members cleared by the
+declaration-file one — an ambient declaration naming a value export, a
+`export * from` + named re-export barrel, and a default export of an ambient
+binding — beside a module sibling reached through the same wildcard that
+certifies, with zero refusals.
+`fixtures/package-contracts/non-emitting-module-target-control`: side-effect-only
+ESM, a `vitest` matcher module behind an optional peer, a CommonJS bundle,
+`export default 1`, and a non-`declare` `enum` all stay ordinary; a `.js` member
+carrying ambient bytes and a lone `declare enum` are inapplicable; and the three
+declaration-file traps — the identical barrel bytes under a `.js` suffix (which
+**certifies**), a `.d.ts` with an initializer, and a `.d.ts` whose default export
+is an evaluated call — are not cleared.
+`fixtures/package-contracts/wildcard-asset-entrypoints`: a 0-byte and a
+comments-only member both refuse, and the asset class stays
+`non-module-target`. `fixtures/package-contracts/multi-entrypoint`: `export {}`
+still refuses. `fixtures/package-contracts/declaration-sibling-reach`:
+unchanged, because the disposition selects the runtime axis only.
+Both verifier call sites are pinned by tests that fail when the call is deleted:
+`a_planning_request_refuses_a_declared_applicability_the_archive_refutes`
+(process-level, `tests/contracts_process.rs`) and
+`a_graph_node_refuses_a_declared_applicability_the_archive_refutes` (a unit test
+on the node converter, because the graph lane pins the Type Facts producer before
+it converts a node and a `cargo test` build carries no producer digest).
+
+### Re-measured: 352 verified / 45 exact refusals / 21 not attempted
+
+The complete 418-probe corpus was re-run with the fresh release checker after
+the fixer rounds (`make ecosystem-benchmark`; report SHA-256
+`c811a28354e25dec9d3ab3c1e9ac77e6abf44343b93f85d7b2b798a799849b11`). Against
+the committed report, exactly four rows moved, each from a never-attempted
+partial proposal to a complete proposal that certifies:
+`@kobalte/utils@2.0.0-alpha.0|solid2|only`, `@solidjs/h@2.0.0-rc.3|solid2|only`,
+`@solidjs/image@0.1.0|solid1|only` and `@solidjs/universal@2.0.0-rc.3|solid2|only`.
+Proposal states moved 344 complete / 37 partial to 348 / 33; fully refused
+stayed at 37. Six further rows kept their status and their first refusal while
+refused artifact cases became inapplicable ones under the two premises:
+`@kobalte/core@0.13.13` 52/0 → 41/11, `@kobalte/solidbase@0.6.13` 59/94 →
+33/120, `@kobalte/utils@0.9.2` 5/0 → 4/1, `@solidjs/start@2.0.3` 3/0 → 2/1,
+`@solidjs/web@2.0.0-rc.3` 38/0 → 25/13, `solid-js@2.0.0-rc.3` 21/1 → 12/10, and
+`solid-js@1.9.14` 54/1 → 38/17 (the last three keep byte-identical demand
+digests). `@tanstack/solid-query-persist-client@5.102.5` flipped its expected
+`implementation_location` back from `build/modern/createPersister.js` to
+`src/createPersister.ts` — the run-to-run identity nondeterminism filed as M9,
+not a movement of this slice. No row lost certification.
+
+The Phase 21 ledger was regenerated and re-pinned; the Phase 20 test pins moved
+348 → 352 verified, 25 → 21 not attempted, 344 → 348 complete proposals, with
+the four rows inserted in ledger order.
+
+Wall time this run was 73.2 s with 70.3 s of install time, against the committed
+baseline's 71.3 s / 55.9 s, on a host that had returned to its normal load. That
+settles the question the two previous entries left open: neither the census
+round nor the argument-provenance round carries a measurable wall-time cost; the
+136–149 s runs recorded on 2026-09-02 were host contention.

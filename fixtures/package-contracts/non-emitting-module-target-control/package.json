@@ -1,0 +1,29 @@
+{
+  "name": "non-emitting-module-target-control-package",
+  "version": "1.0.0",
+  "type": "module",
+  "peerDependencies": {
+    "vitest": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    },
+    "./effects": "./effects.js",
+    "./vitest": "./vitest.js",
+    "./cjs": "./bundle.cjs",
+    "./default-export": "./default-export.js",
+    "./enum": "./runtime-enum.ts",
+    "./ambient-js": "./ambient.js",
+    "./declare-enum": "./declare-enum.ts",
+    "./runtime-barrel": "./runtime-barrel.js",
+    "./implemented": "./implemented.d.ts",
+    "./evaluated-default": "./evaluated-default.d.ts"
+  }
+}

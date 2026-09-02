@@ -27,6 +27,12 @@ use crate::artifact_resolution::{
     ImportRequest, ResolutionTrace, ResolutionTraceStep, ResolvedFile, ResolvedImport,
 };
 use crate::contract_interface::ContractFailure;
+use solid_facts::ast::{ModuleEmission, ModuleFlavor};
+
+/// The member suffixes TypeScript itself reads as declaration-file semantics.
+/// Matched against the authenticated archive member path, lowercased, and only
+/// ever conjoined with the ambient-only parse.
+const DECLARATION_MEMBER_SUFFIXES: [&str; 3] = [".d.ts", ".d.mts", ".d.cts"];
 
 #[cfg(feature = "dialect-v2")]
 mod compiler_facts;
@@ -1354,6 +1360,110 @@ impl ArtifactSnapshot {
         self.files.get(package_relative_path).map(AsRef::as_ref)
     }
 
+    /// Re-proves one declared `non-emitting-module-target` applicability claim
+    /// against this authenticated archive, and returns the runtime target the
+    /// claim is about.
+    ///
+    /// A proposal omits such an artifact case exactly as it omits a refused
+    /// one, and its generator records the case as inapplicable from the
+    /// *installed* tree — bytes nothing has authenticated. This is where the
+    /// claim becomes a proof instead of an assertion: the runtime target is
+    /// re-selected from snapshot-owned manifest bytes, and the member's exact
+    /// archive bytes must answer [`ModuleEmission::NonEmitting`]. Every archive
+    /// invariant the claim needs is already closed by
+    /// [`ArtifactSnapshot::from_archive`], which refuses a non-regular member,
+    /// a case-folding collision, and a duplicate member whose bytes differ, so
+    /// no symlink or alias can substitute the bytes read here.
+    ///
+    /// The member's suffix selects the premise — `.d.ts`/`.d.mts`/`.d.cts` gets
+    /// the declaration-file premise, everything else the bytes-only one — and
+    /// exactly one runs, so a `.d.ts` carrying an implementation body is refused
+    /// here even though the bytes-only premise would have erased it.
+    ///
+    /// The claim is refused — and with it the whole proposal — when the target
+    /// resolves elsewhere, is absent, is not UTF-8, or does not parse, and for
+    /// each of the three shapes the premise itself rejects: the member has no
+    /// module-level statements at all (`Empty`), it declares nothing at all
+    /// (`NonDeclaring`), or it emits (`Emitting`, named with the exact
+    /// statement kind and byte range).
+    pub fn prove_non_emitting_module_target(
+        &self,
+        entrypoint: &str,
+        conditions: &BTreeSet<&str>,
+    ) -> Result<String, ArtifactSnapshotError> {
+        let manifest: SnapshotPackageManifest = serde_json::from_slice(
+            self.read("package.json")
+                .expect("snapshot creation requires package.json"),
+        )
+        .map_err(|error| {
+            ArtifactSnapshotError::ApplicabilityUnproved(format!(
+                "snapshot package manifest cannot drive resolution: {error}"
+            ))
+        })?;
+        let mut active = conditions.clone();
+        active.insert("import");
+        let selected = resolve_snapshot_export(
+            self,
+            &manifest,
+            entrypoint,
+            &active,
+            ResolutionAxis::Runtime,
+        )
+        .map_err(|error| {
+            ArtifactSnapshotError::ApplicabilityUnproved(format!(
+                "runtime target does not resolve in the authenticated archive: {error}"
+            ))
+        })?;
+        let bytes = self.read(&selected.path).ok_or_else(|| {
+            ArtifactSnapshotError::ApplicabilityUnproved(format!(
+                "runtime target {:?} is not a snapshot file",
+                selected.path
+            ))
+        })?;
+        let source = std::str::from_utf8(bytes).map_err(|error| {
+            ArtifactSnapshotError::ApplicabilityUnproved(format!(
+                "runtime target {:?} is not UTF-8 text: {error}",
+                selected.path
+            ))
+        })?;
+        // The premise is selected from the *authenticated* path rather than
+        // from anything the proposal said. `from_archive` has already refused a
+        // non-regular member, a case-folding collision and a duplicate whose
+        // bytes differ, so the suffix names bytes nothing can substitute —
+        // which is the whole difference from the pre-authentication
+        // classification reverted on 2026-09-02.
+        let lowered = selected.path.to_lowercase();
+        let flavor = if DECLARATION_MEMBER_SUFFIXES
+            .iter()
+            .any(|suffix| lowered.ends_with(suffix))
+        {
+            ModuleFlavor::DeclarationFile
+        } else {
+            ModuleFlavor::Module
+        };
+        match solid_facts::ast::module_emission(source, flavor).map_err(|error| {
+            ArtifactSnapshotError::ApplicabilityUnproved(format!(
+                "runtime target {:?} {error}",
+                selected.path
+            ))
+        })? {
+            ModuleEmission::NonEmitting => Ok(selected.path),
+            ModuleEmission::Empty => Err(ArtifactSnapshotError::ApplicabilityUnproved(format!(
+                "runtime target {:?} has no module-level statements at all",
+                selected.path
+            ))),
+            ModuleEmission::NonDeclaring => Err(ArtifactSnapshotError::ApplicabilityUnproved(
+                format!("runtime target {:?} declares nothing at all", selected.path),
+            )),
+            ModuleEmission::Emitting(statement) => {
+                Err(ArtifactSnapshotError::ApplicabilityUnproved(format!(
+                    "runtime target {:?} emits JavaScript: {statement}",
+                    selected.path
+                )))
+            }
+        }
+    }
+
     #[must_use]
     pub fn root(&self) -> &str {
         &self.root
@@ -1524,6 +1634,12 @@ pub enum ArtifactSnapshotError {
     ModuleClosure(String),
     #[error("artifact export binding mismatch: {0}")]
     ExportBindings(String),
+    /// A declared artifact-case applicability the authenticated archive does
+    /// not prove. It is deliberately its own variant: the other mismatches say
+    /// a supplied record disagrees with the archive, while this one says a case
+    /// the proposal *omitted* should not have been omitted.
+    #[error("declared artifact-case applicability is unproved: {0}")]
+    ApplicabilityUnproved(String),
 }
 
 fn requested_entrypoint(
@@ -3016,6 +3132,261 @@ mod tests {
         members.extend(files.iter().copied());
         ArtifactSnapshot::from_published(&published_archive(&members), SnapshotLimits::policy_2())
             .unwrap()
+    }
+
+    fn applicability_snapshot(manifest: &[u8], files: &[(&str, &[u8])]) -> ArtifactSnapshot {
+        let mut members = vec![("package/package.json", manifest)];
+        members.extend(files.iter().copied());
+        ArtifactSnapshot::from_published(&published_archive(&members), SnapshotLimits::policy_2())
+            .unwrap()
+    }
+
+    fn prove_applicability(
+        manifest: &[u8],
+        files: &[(&str, &[u8])],
+        entrypoint: &str,
+        conditions: &[&str],
+    ) -> Result<String, ArtifactSnapshotError> {
+        let snapshot = applicability_snapshot(manifest, files);
+        let active: BTreeSet<&str> = conditions.iter().copied().collect();
+        snapshot.prove_non_emitting_module_target(entrypoint, &active)
+    }
+
+    const WILDCARD_TYPES_MANIFEST: &[u8] = br#"{
+        "name":"fixture-package","version":"1.2.3","type":"module",
+        "exports":{".":"./dist/index.js","./types/*":"./types/*"}
+    }"#;
+
+    #[test]
+    fn an_authenticated_non_emitting_target_proves_its_declared_applicability() {
+        // `@solidjs/universal`'s ambient declaration: the export census reads
+        // `createRenderer` as a runtime name, and only the emission premise
+        // answers that no runtime module exists to bind it.
+        assert_eq!(
+            prove_applicability(
+                WILDCARD_TYPES_MANIFEST,
+                &[
+                    ("package/dist/index.js", b"export const answer = 42;"),
+                    (
+                        "package/types/universal.d.ts",
+                        b"export interface Options {}\nexport declare function createRenderer(options: Options): void;",
+                    ),
+                ],
+                "./types/universal.d.ts",
+                &[],
+            ),
+            Ok("types/universal.d.ts".into())
+        );
+    }
+
+    #[test]
+    fn the_proof_reads_bytes_rather_than_the_published_filename() {
+        // The bytes-only premise is blind to the filename: ambient bytes under a
+        // runtime suffix are answered exactly as in a `.d.ts`.
+        assert_eq!(
+            prove_applicability(
+                br#"{"name":"fixture-package","version":"1.2.3","exports":{"./ambient":"./ambient.js"}}"#,
+                &[(
+                    "package/ambient.js",
+                    b"export declare function createRenderer(): void;",
+                )],
+                "./ambient",
+                &[],
+            ),
+            Ok("ambient.js".into())
+        );
+        // The same re-export bytes under a *runtime* suffix: here the premise is
+        // the bytes-only one, and a barrel a consumer really evaluates refuses.
+        // Which premise a member gets is its suffix's job, and
+        // `an_authenticated_declaration_member_admits_its_suffix_only_with_ambient_bytes`
+        // pins the other half of this pair.
+        let refusal = prove_applicability(
+            br#"{"name":"fixture-package","version":"1.2.3","exports":{"./barrel":"./barrel.js"}}"#,
+            &[("package/barrel.js", b"export * from \"./universal.js\";")],
+            "./barrel",
+            &[],
+        )
+        .expect_err("a re-export in a runtime member emits");
+        assert!(
+            format!("{refusal}").contains("re-export of all names"),
+            "{refusal}"
+        );
+    }
+
+    #[test]
+    fn a_side_effect_only_target_refuses_the_claim_and_names_the_statement() {
+        let refusal = prove_applicability(
+            WILDCARD_TYPES_MANIFEST,
+            &[
+                ("package/dist/index.js", b"export const answer = 42;"),
+                (
+                    "package/types/effects.d.ts",
+                    b"import { start } from \"./dep.js\";\nstart();",
+                ),
+            ],
+            "./types/effects.d.ts",
+            &[],
+        )
+        .expect_err("a value import and a top-level call emit");
+        let rendered = format!("{refusal}");
+        assert!(rendered.contains("types/effects.d.ts"), "{rendered}");
+        assert!(rendered.contains("emits JavaScript"), "{rendered}");
+        assert!(
+            rendered.contains("value import at bytes 0..33"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_empty_or_unparsable_target_refuses_the_claim() {
+        for (bytes, expected) in [
+            (&b""[..], "has no module-level statements at all"),
+            (
+                &b"// a comment only\n"[..],
+                "has no module-level statements at all",
+            ),
+            // `export {}` alone is the other spelling of the same emptiness.
+            (&b"export {};\n"[..], "declares nothing at all"),
+            (
+                &b"export const = ;"[..],
+                "do not parse as a TypeScript module",
+            ),
+        ] {
+            let refusal = prove_applicability(
+                WILDCARD_TYPES_MANIFEST,
+                &[
+                    ("package/dist/index.js", b"export const answer = 42;"),
+                    ("package/types/broken.d.ts", bytes),
+                ],
+                "./types/broken.d.ts",
+                &[],
+            )
+            .expect_err("neither an empty nor an unparsable member proves anything");
+            assert!(format!("{refusal}").contains(expected), "{refusal}");
+        }
+    }
+
+    #[test]
+    fn a_claim_the_archive_cannot_even_resolve_refuses() {
+        for entrypoint in ["./types/absent.d.ts", "./not-exported"] {
+            let refusal = prove_applicability(
+                WILDCARD_TYPES_MANIFEST,
+                &[("package/dist/index.js", b"export const answer = 42;")],
+                entrypoint,
+                &[],
+            )
+            .expect_err("an unresolvable claim is not an applicability proof");
+            assert!(
+                matches!(refusal, ArtifactSnapshotError::ApplicabilityUnproved(_)),
+                "{refusal}"
+            );
+        }
+    }
+
+    /// The declaration-file premise, and the shapes it must not clear.
+    #[test]
+    fn an_authenticated_declaration_member_admits_its_suffix_only_with_ambient_bytes() {
+        let module = |name: &str, bytes: &[u8]| {
+            let manifest = format!(
+                r#"{{"name":"fixture-package","version":"1.2.3","exports":{{".":"./dist/index.js","./target":"./{name}"}}}}"#
+            );
+            let member = format!("package/{name}");
+            let files: Vec<(&str, &[u8])> = vec![
+                ("package/dist/index.js", b"export const answer = 42;"),
+                (member.as_str(), bytes),
+            ];
+            prove_applicability(manifest.as_bytes(), &files, "./target", &[])
+        };
+
+        // `@solidjs/universal`'s and `@solidjs/h`'s barrels: a declaration file
+        // emits no module at all, so it emits no re-export either.
+        assert_eq!(
+            module("types/index.d.ts", b"export * from \"./universal.js\";\n"),
+            Ok("types/index.d.ts".into())
+        );
+        assert_eq!(
+            module(
+                "types/index.d.ts",
+                b"export { default, type HyperScript } from \"./hyperscript.js\";\n"
+            ),
+            Ok("types/index.d.ts".into())
+        );
+        // `@solidjs/h`'s `types/hyperscript.d.ts`: a default export naming a
+        // binding these same bytes declare ambiently.
+        assert_eq!(
+            module(
+                "types/hyperscript.d.ts",
+                b"declare const _default: unknown;\nexport default _default;\n"
+            ),
+            Ok("types/hyperscript.d.ts".into())
+        );
+        for suffix in ["d.mts", "d.cts"] {
+            assert_eq!(
+                module(
+                    &format!("types/index.{suffix}"),
+                    b"export * from \"./universal.js\";\n"
+                ),
+                Ok(format!("types/index.{suffix}"))
+            );
+        }
+
+        // Must not clear: the identical barrel bytes in a member the suffix
+        // does not cover are a working re-export, so the bytes-only premise
+        // decides and refuses.
+        for name in ["types/index.ts", "types/index.js", "types/index.mjs"] {
+            let refusal = module(name, b"export * from \"./universal.js\";\n")
+                .expect_err("a barrel in a runtime member emits");
+            assert!(
+                format!("{refusal}").contains("re-export of all names"),
+                "{name}: {refusal}"
+            );
+        }
+        // Must not clear: an implementation body or an initializer means the
+        // member is not the declaration file its suffix claims (TS1183/TS1039).
+        for bytes in [
+            &b"export declare function f(): void { return; }\n"[..],
+            &b"declare class C { m() { return 1; } }\nexport type T = 1;\n"[..],
+            &b"declare const value = 1;\nexport type T = 1;\n"[..],
+            &b"declare module \"m\" { export const value = 1; }\n"[..],
+        ] {
+            let refusal = module("types/index.d.ts", bytes)
+                .expect_err("ambient bytes carrying an implementation are not a declaration file");
+            assert!(
+                matches!(refusal, ArtifactSnapshotError::ApplicabilityUnproved(_)),
+                "{refusal}"
+            );
+        }
+        // Must not clear: a default export of an evaluated expression.
+        let refusal = module("types/index.d.ts", b"export default createRenderer();\n")
+            .expect_err("an evaluated default export is not ambient");
+        assert!(format!("{refusal}").contains("default export"), "{refusal}");
+    }
+
+    #[test]
+    fn the_proof_reads_the_runtime_axis_and_never_the_declarations_axis() {
+        // The `types` arm is a non-emitting declaration file and the runtime
+        // arm is a real module. A proof that consulted the declarations axis
+        // would clear this case; the runtime axis refuses it.
+        let manifest = br#"{
+            "name":"fixture-package","version":"1.2.3",
+            "exports":{"./widget":{"types":"./widget.d.ts","default":"./widget.js"}}
+        }"#;
+        let refusal = prove_applicability(
+            manifest,
+            &[
+                ("package/widget.js", b"export function mount() {}"),
+                (
+                    "package/widget.d.ts",
+                    b"export declare function mount(): void;",
+                ),
+            ],
+            "./widget",
+            &[],
+        )
+        .expect_err("the runtime arm emits");
+        let rendered = format!("{refusal}");
+        assert!(rendered.contains("widget.js"), "{rendered}");
+        assert!(rendered.contains("function declaration"), "{rendered}");
     }
 
     #[test]

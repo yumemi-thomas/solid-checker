@@ -45,6 +45,7 @@ import {
   artifactAnalysisBatchConcurrencyLimit,
   artifactApplicabilityForRefusal,
   artifactCaseDisposition,
+  declaredApplicabilityClaims,
   finiteArtifactCandidates,
   finiteConditionPartitions,
   finiteEntrypoints,
@@ -1771,7 +1772,211 @@ test("an emitted proposal is refused for reuse on any parameter or byte mismatch
       },
       "a resolution computed under another spelling of the package root"
     );
+    // The census claims nothing here, so any declared claim is invented: a
+    // proposal must not be reusable while it asserts an omission the current
+    // census never made.
+    attempt(
+      {
+        inputs: {
+          inapplicableCases: [
+            {
+              entrypoint: "./types/index.d.ts",
+              conditions: [],
+              class: "non-emitting-module-target",
+              reason: "runtime target emits no JavaScript"
+            }
+          ]
+        }
+      },
+      "a declared applicability claim the current census does not make"
+    );
   } finally {
     rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a reused proposal must declare exactly the applicability claims the census makes", () => {
+  const project = mkdtempSync(join(tmpdir(), "solid-checker-proposal-reuse-claims-"));
+  const write = (path, body) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+  };
+  try {
+    const packageRoot = join(project, "node_modules/root-package");
+    write(
+      join(packageRoot, "package.json"),
+      `{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js","./types/kinds.d.ts":"./types/kinds.d.ts"}}\n`
+    );
+    write(join(packageRoot, "dist/index.js"), "export const value = () => {};\n");
+    write(join(packageRoot, "types/kinds.d.ts"), "export type Kind = 1;\n");
+    const importer = certificationImporterPathFor({
+      packageRoot,
+      catalog: join(project, "out/root.json.accepted-catalog")
+    });
+    const documentBytes = Buffer.from('{"format":"stable","package":{"name":"root-package"}}\n');
+    const planBytes = Buffer.from('{"format":"plan"}\n');
+    const claim = {
+      entrypoint: "./types/kinds.d.ts",
+      conditions: [],
+      class: "non-emitting-module-target",
+      reason:
+        "runtime target emits no JavaScript (erasable-statements): 1 module-level statement(s)"
+    };
+    const inputs = {
+      format: "solid-checker-contract-certification-inputs",
+      inputsVersion: 1,
+      package: { name: "root-package", version: "1.0.0" },
+      integrity: "sha512-root",
+      packageRoot,
+      certificationImporter: importer,
+      entrypoints: [],
+      conditions: [],
+      document: { path: join(project, "out/root.json"), sha256: sha256Of(documentBytes) },
+      plan: { path: join(project, "out/root.json.proposal.json"), sha256: sha256Of(planBytes) },
+      certificationInputs: [
+        {
+          entrypoint: ".",
+          conditions: [],
+          resolution: { specifier: "root-package", importer, packageRoot }
+        }
+      ],
+      inapplicableCases: [claim]
+    };
+    const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+    const current = {
+      manifest,
+      packageRoot,
+      integrity: "sha512-root",
+      certificationImporter: importer,
+      entrypoints: [],
+      conditions: []
+    };
+    const attempt = override =>
+      reusableProposalInputs({
+        inputs: { ...inputs, ...override },
+        documentBytes,
+        planBytes,
+        ...current
+      });
+
+    const admitted = attempt({});
+    assert.ok(admitted, "the declared claim matches the recomputed census");
+    assert.deepEqual(admitted.inapplicableCases, [claim]);
+
+    // A sidecar written before the field existed, or one that dropped the
+    // claim, would let the omitted case reach certification unproved.
+    assert.equal(attempt({ inapplicableCases: undefined }), null, "no claim census at all");
+    assert.equal(attempt({ inapplicableCases: [] }), null, "an emptied claim census");
+    assert.equal(
+      attempt({ inapplicableCases: [{ ...claim, entrypoint: "." }] }),
+      null,
+      "a claim over another case"
+    );
+    assert.equal(
+      attempt({ inapplicableCases: [claim, claim] }),
+      null,
+      "a duplicated claim"
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("only a content-premise disposition travels to certification as a claim", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-claims-"));
+  mkdirSync(join(root, "types"), { recursive: true });
+  writeFileSync(join(root, "index.js"), "export const value = 1;\n");
+  writeFileSync(join(root, "effects.js"), 'import { a } from "./index.js";\na();\n');
+  writeFileSync(join(root, "empty.js"), "");
+  writeFileSync(join(root, "tokens.json"), "{}\n");
+  writeFileSync(join(root, "types/kinds.ts"), "export type Kind = 1;\n");
+  writeFileSync(join(root, "types/kinds.d.ts"), "export type Kind = 1;\n");
+  writeFileSync(
+    join(root, "types/ambient.d.ts"),
+    "export declare function createRenderer(): void;\n"
+  );
+  // The same barrel bytes under both suffixes, and a `.d.ts` carrying an
+  // implementation that its suffix cannot vouch for.
+  writeFileSync(join(root, "types/barrel.ts"), 'export * from "./kinds.js";\n');
+  writeFileSync(join(root, "types/barrel.d.ts"), 'export * from "./kinds.js";\n');
+  writeFileSync(join(root, "types/implemented.d.ts"), "declare const value = 1;\n");
+  const manifest = {
+    exports: {
+      ".": "./index.js",
+      "./effects": "./effects.js",
+      "./empty": "./empty.js",
+      "./tokens.json": "./tokens.json",
+      "./types/kinds.ts": "./types/kinds.ts",
+      "./types/kinds.d.ts": "./types/kinds.d.ts",
+      "./types/ambient.d.ts": "./types/ambient.d.ts",
+      "./types/barrel.ts": "./types/barrel.ts",
+      "./types/barrel.d.ts": "./types/barrel.d.ts",
+      "./types/implemented.d.ts": "./types/implemented.d.ts",
+      "./private": { "vendor/source": "./src/private.ts", default: "./index.js" }
+    }
+  };
+  const disposition = (entrypoint, conditions = []) =>
+    artifactCaseDisposition({ manifest, packageRoot: root, entrypoint, conditions });
+  try {
+    // A type-only module and an ambient declaration file both carry the
+    // applicability claim certification must prove, and the recorded reason
+    // names which premise answered — the member's suffix chooses it.
+    for (const [entrypoint, arm] of [
+      ["./types/kinds.ts", "erasable-statements"],
+      ["./types/kinds.d.ts", "declaration-file"],
+      ["./types/ambient.d.ts", "declaration-file"]
+    ]) {
+      assert.deepEqual(
+        disposition(entrypoint),
+        {
+          class: ARTIFACT_DISPOSITION.NonEmittingModuleTarget,
+          applicability: ARTIFACT_APPLICABILITY.TypeOnlyExport,
+          reason: `runtime target emits no JavaScript (${arm}): 1 module-level statement(s)`
+        },
+        entrypoint
+      );
+    }
+    // The premise that admits the suffix is strictly narrower on the shapes
+    // that make a `.d.ts` claim false, and strictly wider on the re-export
+    // forms a declaration file also erases.
+    assert.equal(disposition("./types/barrel.ts"), null);
+    assert.deepEqual(disposition("./types/barrel.d.ts"), {
+      class: ARTIFACT_DISPOSITION.NonEmittingModuleTarget,
+      applicability: ARTIFACT_APPLICABILITY.TypeOnlyExport,
+      reason: "runtime target emits no JavaScript (declaration-file): 1 module-level statement(s)"
+    });
+    assert.equal(disposition("./types/implemented.d.ts"), null);
+    // A real module, a side-effect-only module, and a member with no
+    // statements at all all keep certify-or-refuse.
+    assert.equal(disposition("."), null);
+    assert.equal(disposition("./effects"), null);
+    assert.equal(disposition("./empty"), null);
+
+    // The export-map dispositions are unchanged and carry no claim: Rust
+    // replays the export map and the member list for every case anyway.
+    assert.deepEqual(disposition("./tokens.json"), {
+      class: ARTIFACT_DISPOSITION.NonModuleTarget,
+      reason: 'runtime target extension ".json" is not an executable module'
+    });
+    const rows = [
+      { entrypoint: "./types/kinds.ts", conditions: [], ...disposition("./types/kinds.ts") },
+      { entrypoint: "./tokens.json", conditions: [], ...disposition("./tokens.json") },
+      {
+        entrypoint: "./private",
+        conditions: ["vendor/source"],
+        ...disposition("./private", ["vendor/source"])
+      }
+    ];
+    assert.deepEqual(declaredApplicabilityClaims(rows), [
+      {
+        entrypoint: "./types/kinds.ts",
+        conditions: [],
+        class: ARTIFACT_DISPOSITION.NonEmittingModuleTarget,
+        reason:
+          "runtime target emits no JavaScript (erasable-statements): 1 module-level statement(s)"
+      }
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

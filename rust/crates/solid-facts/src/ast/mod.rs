@@ -30,8 +30,12 @@ use thiserror::Error;
 
 pub const AST_FACTS_SCHEMA: u32 = 41;
 
+mod emission;
 mod span_index;
 
+pub use emission::{
+    EmittingStatement, ModuleEmission, ModuleEmissionError, ModuleFlavor, module_emission,
+};
 pub use span_index::{AstSpanIndex, LazySpanIndex};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

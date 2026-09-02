@@ -34,7 +34,8 @@ const VERSIONED_FORMATS = new Map([
   ["solid-checker-runtime-probe-request", { field: "schemaVersion", version: 2 }],
   ["solid-checker-runtime-probe-plan", { field: "schemaVersion", version: 2 }],
   ["solid-checker-runtime-probe-runs", { field: "schemaVersion", version: 2 }],
-  ["solid-checker-runtime-probe-evaluation", { field: "schemaVersion", version: 2 }]
+  ["solid-checker-runtime-probe-evaluation", { field: "schemaVersion", version: 2 }],
+  ["solid-checker-module-emission-cases", { field: "casesVersion", version: 1 }]
 ]);
 
 const ACTIVE_JSON_PREFIXES = [
@@ -50,6 +51,7 @@ const ACTIVE_JSON_PREFIXES = [
 ];
 
 const ACTIVE_JSON_FILES = new Set([
+  "fixtures/module-emission/cases.json",
   "fixtures/ownership-cases/cases.json",
   "fixtures/ownership-cases/migration-ledger.json",
   "fixtures/tsc-oracle/packages.json",

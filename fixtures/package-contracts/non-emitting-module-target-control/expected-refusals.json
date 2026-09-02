@@ -1,0 +1,70 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "non-emitting-module-target-control-package",
+    "version": "1.0.0"
+  },
+  "refusals": [
+    {
+      "entrypoint": "./cjs",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/bundle.cjs has no runtime ESM exports"
+    },
+    {
+      "entrypoint": "./default-export",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/default-export.js exports \"default\", whose runtime kind no closed type answers (Unknown, Unknown); publishing kind \"value\" would certify it invokes no caller-supplied callback"
+    },
+    {
+      "entrypoint": "./effects",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/effects.js has no runtime ESM exports"
+    },
+    {
+      "entrypoint": "./evaluated-default",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: contract emission batch target 7 names source outside its configured project: <package-root>/evaluated-default.d.ts"
+    },
+    {
+      "entrypoint": "./implemented",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: contract emission batch target 8 names source outside its configured project: <package-root>/implemented.d.ts"
+    },
+    {
+      "entrypoint": "./vitest",
+      "conditions": [],
+      "stage": "artifact-case",
+      "applicability": "runtime-module",
+      "reason": "solid-checker-rust: emit package contract: entry file <package-root>/vitest.js has no runtime ESM exports"
+    }
+  ],
+  "inapplicable": [
+    {
+      "entrypoint": "./ambient-js",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (erasable-statements): 1 module-level statement(s)"
+    },
+    {
+      "entrypoint": "./declare-enum",
+      "conditions": [],
+      "stage": "artifact-case",
+      "class": "non-emitting-module-target",
+      "applicability": "verifier-proved-type-only",
+      "reason": "runtime target emits no JavaScript (erasable-statements): 1 module-level statement(s)"
+    }
+  ]
+}

@@ -119,3 +119,172 @@ fn proposal_emission_requires_exact_resolution_and_a_separate_plan() {
     assert!(stderr.contains("--contract-resolution"));
     assert!(stderr.contains("--emit-proposal-plan"));
 }
+
+/// A real gzipped npm tarball with matching registry metadata, written where a
+/// certification request can name them.
+fn published_artifact(
+    directory: &std::path::Path,
+    members: &[(&str, &[u8])],
+) -> (PathBuf, PathBuf) {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use sha2::{Digest as _, Sha512};
+
+    let mut archive = Vec::new();
+    {
+        let encoder = flate2::write::GzEncoder::new(&mut archive, flate2::Compression::none());
+        let mut builder = tar::Builder::new(encoder);
+        for (path, bytes) in members {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_entry_type(tar::EntryType::Regular);
+            header.set_cksum();
+            builder.append_data(&mut header, path, *bytes).unwrap();
+        }
+        builder.into_inner().unwrap().finish().unwrap();
+    }
+    let integrity = format!("sha512-{}", STANDARD.encode(Sha512::digest(&archive)));
+    let metadata = format!(
+        r#"{{"versions":{{"1.0.0":{{"name":"root-package","version":"1.0.0","dist":{{"integrity":"{integrity}","tarball":"https://registry.npmjs.org/root-package/-/root-package-1.0.0.tgz"}}}}}}}}"#
+    );
+    let archive_path = directory.join("root-package-1.0.0.tgz");
+    let metadata_path = directory.join("root-package.json");
+    fs::write(&archive_path, &archive).unwrap();
+    fs::write(&metadata_path, metadata.as_bytes()).unwrap();
+    (archive_path, metadata_path)
+}
+
+fn applicability_planning_request(
+    directory: &std::path::Path,
+    archive: &std::path::Path,
+    metadata: &std::path::Path,
+    claims: serde_json::Value,
+) -> PathBuf {
+    let request = serde_json::json!({
+        "schemaVersion": 1,
+        // Deliberately absent: a declared applicability claim is re-proved
+        // before the proposal document is even read, so a refuted claim must
+        // refuse here and a proved one must fall through to this path.
+        "proposal": directory.join("absent-proposal.json").to_string_lossy(),
+        "resolution": {
+            "specifier": "root-package",
+            "importer": "/project/src/app.ts",
+            "requestedEntrypoint": ".",
+            "packageName": "root-package",
+            "packageVersion": "1.0.0",
+            "packageIntegrity": "sha512-AA==",
+            "packageRoot": "/project/node_modules/root-package",
+            "packageManifest": { "path": "/p/package.json", "digest": "sha256:00" },
+            "runtime": { "path": "/p/dist/index.js", "digest": "sha256:00" },
+            "declarations": { "path": "/p/types/index.d.ts", "digest": "sha256:00" },
+            "closure": { "digest": "sha256:00", "entries": [], "dependencies": [], "hazards": [] },
+            "authority": "host"
+        },
+        "exportConditions": ["import"],
+        "registryOrigin": "https://registry.npmjs.org",
+        "registryMetadata": metadata.to_string_lossy(),
+        "archive": archive.to_string_lossy(),
+        "inapplicableCases": claims
+    });
+    let path = directory.join("certification-request.json");
+    fs::write(&path, format!("{request:#}\n")).unwrap();
+    path
+}
+
+const APPLICABILITY_MEMBERS: &[(&str, &[u8])] = &[
+    (
+        "package/package.json",
+        br#"{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js","./types/*":"./types/*"}}"#,
+    ),
+    ("package/dist/index.js", b"export const answer = 42;"),
+    (
+        "package/types/effects.d.ts",
+        b"import { start } from \"./dep.js\";\nstart();\n",
+    ),
+    (
+        "package/types/kinds.d.ts",
+        b"export type Kind = 1;\n",
+    ),
+];
+
+/// The claim a proposal carries for an omitted artifact case is re-proved
+/// against the authenticated archive by the *planning* request path. Deleting
+/// that call site makes this test fail: a refuted claim would reach the
+/// (deliberately absent) proposal instead of refusing.
+#[test]
+fn a_planning_request_refuses_a_declared_applicability_the_archive_refutes() {
+    let directory = temporary_directory("phase21-applicability-planning");
+    let (archive, metadata) = published_artifact(&directory, APPLICABILITY_MEMBERS);
+    let request = applicability_planning_request(
+        &directory,
+        &archive,
+        &metadata,
+        serde_json::json!([{
+            "entrypoint": "./types/effects.d.ts",
+            "conditions": [],
+            "class": "non-emitting-module-target",
+            "reason": "runtime target emits no JavaScript (declaration-file): 2 module-level statement(s)"
+        }]),
+    );
+    let output = checker()
+        .args([
+            "--plan-contract-certification",
+            &request.to_string_lossy(),
+            "--certification-plan-output",
+            &directory.join("plan.json").to_string_lossy(),
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("artifact case ./types/effects.d.ts"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("non-emitting-module-target"), "{stderr}");
+    assert!(stderr.contains("emits JavaScript"), "{stderr}");
+    assert!(stderr.contains("value import at bytes 0..33"), "{stderr}");
+    assert!(
+        !stderr.contains("could not read certification proposal"),
+        "the claim must be refused before the proposal is read: {stderr}"
+    );
+}
+
+/// The control that makes the test above a proof rather than a coincidence: a
+/// claim the archive *proves* gets past the same call site and fails on the
+/// absent proposal instead.
+#[test]
+fn a_planning_request_proves_a_declared_applicability_and_continues() {
+    let directory = temporary_directory("phase21-applicability-planning-proved");
+    let (archive, metadata) = published_artifact(&directory, APPLICABILITY_MEMBERS);
+    for claims in [
+        serde_json::json!([]),
+        serde_json::json!([{
+            "entrypoint": "./types/kinds.d.ts",
+            "conditions": [],
+            "class": "non-emitting-module-target",
+            "reason": "runtime target emits no JavaScript (declaration-file): 1 module-level statement(s)"
+        }]),
+    ] {
+        let request = applicability_planning_request(&directory, &archive, &metadata, claims);
+        let output = checker()
+            .args([
+                "--plan-contract-certification",
+                &request.to_string_lossy(),
+                "--certification-plan-output",
+                &directory.join("plan.json").to_string_lossy(),
+            ])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("could not read certification proposal"),
+            "{stderr}"
+        );
+        assert!(
+            !stderr.contains("declared artifact-case applicability"),
+            "{stderr}"
+        );
+    }
+}

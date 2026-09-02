@@ -47,6 +47,8 @@
     "multi-entrypoint",
     "multi-role-callback-parameter",
     "namespace-export-surface",
+    "non-emitting-module-target",
+    "non-emitting-module-target-control",
     "non-literal-dynamic-import",
     "observer-and-string",
     "open-dynamic-import-attribution",

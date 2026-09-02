@@ -1,0 +1,126 @@
+{
+  "entrypoints": {
+    ".": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "e1cda2c4eb5a4ceacd9587d28deaee9f8d9bbdf223b45a40b2888009486cc989",
+            "path": "./index.js",
+            "sha256": "dc3513c58440632d480d49be1c6e25ec0ec91d12761af2ea42ae5ed22d1eddf1"
+          },
+          "declarations": {
+            "path": "./index.d.ts",
+            "sha256": "b7d3c9c3c5d7902806837473604ed13db1667be92712fa629ac9560ee4b2acf8"
+          },
+          "exports": {
+            "mount": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/./import",
+            "typesBranch": "/exports/./types"
+          }
+        }
+      ]
+    },
+    "./enum": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "de07cac49dbca9f0d0ac96fc584531ce575f292b5436f27a45e5ebcccfed8bde",
+            "path": "./runtime-enum.ts",
+            "sha256": "efee844b7898f3031e4a34c9cc2e2ce02814e37187180159e2413458e33093a6"
+          },
+          "declarations": {
+            "path": "./runtime-enum.ts",
+            "sha256": "efee844b7898f3031e4a34c9cc2e2ce02814e37187180159e2413458e33093a6"
+          },
+          "exports": {
+            "Direction": "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1enum",
+            "typesBranch": "/exports/.~1enum"
+          }
+        }
+      ]
+    },
+    "./runtime-barrel": {
+      "cases": [
+        {
+          "artifact": {
+            "closureSha256": "8db7cd1288e2bb3d19efa33b60596f6042b4cecfe18149e655603a27645347fd",
+            "path": "./runtime-barrel.js",
+            "sha256": "3818059da34b6ca9f5de317f661eeaa025b9fe904f3c9616da8b423f70547d6c"
+          },
+          "declarations": {
+            "path": "./runtime-barrel.js",
+            "sha256": "3818059da34b6ca9f5de317f661eeaa025b9fe904f3c9616da8b423f70547d6c"
+          },
+          "exports": {
+            "start": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b"
+          },
+          "resolution": {
+            "runtimeBranch": "/exports/.~1runtime-barrel",
+            "typesBranch": "/exports/.~1runtime-barrel"
+          }
+        }
+      ]
+    }
+  },
+  "format": "solid-reactivity-contract",
+  "package": {
+    "integrity": "fixture:sha256:248944a1de2bf572d6b640b29ef2bfbffd34e6c300a6a0ff18c9662484f95ff2",
+    "manifest": {
+      "path": "./package.json",
+      "sha256": "248944a1de2bf572d6b640b29ef2bfbffd34e6c300a6a0ff18c9662484f95ff2"
+    },
+    "name": "non-emitting-module-target-control-package",
+    "version": "1.0.0"
+  },
+  "schemaVersion": 1,
+  "semanticModelVersion": 1,
+  "sidecars": {},
+  "summaries": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
+          {
+            "at": {
+              "event": "call",
+              "schedule": "same-stack"
+            },
+            "count": {
+              "max": "many",
+              "min": 0,
+              "scope": "call"
+            },
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "untracked",
+            "trigger": {
+              "event": "call"
+            }
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-9e39ae0c7e2ea319f8927579b9b3b548dc58ef37fa2468bc2fa2d8fccf24407f": {
+      "call": {},
+      "shape": "plain"
+    },
+    "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b": {
+      "call": {},
+      "shape": "callable"
+    }
+  }
+}

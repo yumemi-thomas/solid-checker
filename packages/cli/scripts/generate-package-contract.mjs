@@ -25,6 +25,7 @@ import {
   MUTUALLY_EXCLUSIVE_CONDITION_AXES,
   RESOLVER_STANDARD_CONDITIONS,
   isPrivateNamespacedCondition,
+  nonEmittingModuleTarget,
   nonModuleTargetExtension,
   resolvePackageExport,
   selectPackageExportTarget
@@ -48,8 +49,21 @@ export const ARTIFACT_APPLICABILITY = Object.freeze({
  */
 export const ARTIFACT_DISPOSITION = Object.freeze({
   UnpublishedConditionalTarget: "unpublished-conditional-target",
-  NonModuleTarget: "non-module-target"
+  NonModuleTarget: "non-module-target",
+  NonEmittingModuleTarget: "non-emitting-module-target"
 });
+
+/**
+ * The dispositions whose premise is a property of *file content* rather than of
+ * the export map and the artifact's member list. Rust replays the export map
+ * and the member list for every case it certifies, so those two classes need no
+ * separate proof; a content premise is read from the installed tree here, which
+ * nothing has authenticated, so each such case travels to certification as a
+ * declared claim that the authenticated archive must re-prove.
+ */
+export const VERIFIER_PROVED_DISPOSITIONS = Object.freeze([
+  ARTIFACT_DISPOSITION.NonEmittingModuleTarget
+]);
 
 /**
  * The disposition of one exact artifact case, decided from the export-map
@@ -77,6 +91,36 @@ export const ARTIFACT_DISPOSITION = Object.freeze({
  * kind is a native-code/opaque-wasm hazard rather than "nothing to assert", and
  * still refuses. Assets remain ordinary closure members; this rule only says an
  * *entrypoint* must be a module.
+ *
+ * `non-emitting-module-target`: the selected runtime target emits no JavaScript
+ * at all (`nonEmittingModuleTarget`), so no consumer reaches a certifiable
+ * runtime surface here and an artifact case over it asserts nothing. Two
+ * premises answer that, and a member's suffix selects exactly one, which the
+ * recorded reason names:
+ *
+ * - `erasable-statements` — every module-level statement in the bytes is
+ *   erasable. Blind to the filename by construction: a `.js` member whose
+ *   content is `export declare function f(): void;` is answered exactly like
+ *   the identical bytes in a `.d.ts`.
+ * - `declaration-file` — the member's suffix is `.d.ts`/`.d.mts`/`.d.cts`, its
+ *   bytes parse under declaration-file grammar, and they contain no
+ *   implementation body, initializer, expression statement or side-effect
+ *   import. TypeScript decides declaration-file semantics by suffix and emits
+ *   nothing for such a file at all, including for the re-export forms a plain
+ *   module *would* emit — which is why `export * from "./universal.js"` is
+ *   answered here and refused under the other premise, where the same bytes are
+ *   a working barrel.
+ *
+ * It is deliberately narrower than "exports nothing", because a side-effect-only
+ * module exports nothing and emits everything. Two further boundaries keep it
+ * narrow: a module that declares nothing is not an answer (a zero-byte member,
+ * or one whose whole body is `export {}`, is what a broken build looks like),
+ * and the suffix is admitted only conjoined with the ambient parse and only for
+ * a member the archive has authenticated — which is what separates this from
+ * the pre-authentication `.d.ts` classification reverted on 2026-09-02.
+ *
+ * This is the one disposition decided from file content, so it is also the one
+ * that travels to certification as a claim the authenticated archive re-proves.
  */
 export function artifactCaseDisposition({
   manifest,
@@ -105,7 +149,19 @@ export function artifactCaseDisposition({
       reason: `runtime target extension ${JSON.stringify(extension)} is not an executable module`
     };
   }
-  if (selected.exists) return null;
+  if (selected.exists) {
+    const nonEmitting = nonEmittingModuleTarget(selected.path);
+    if (nonEmitting) {
+      return {
+        class: ARTIFACT_DISPOSITION.NonEmittingModuleTarget,
+        applicability: ARTIFACT_APPLICABILITY.TypeOnlyExport,
+        reason:
+          `runtime target emits no JavaScript (${nonEmitting.arm}): ` +
+          `${nonEmitting.statements} module-level statement(s)`
+      };
+    }
+    return null;
+  }
   const namespaced = selected.conditions.filter(condition =>
     isPrivateNamespacedCondition(condition)
   );
@@ -116,6 +172,22 @@ export function artifactCaseDisposition({
       `runtime target is unpublished behind private namespaced export condition(s) ` +
       `${namespaced.map(condition => JSON.stringify(condition)).join(", ")}`
   };
+}
+
+/**
+ * The declared applicability claims a proposal carries to certification: one
+ * row per recorded inapplicable case whose class is decided from file content.
+ * Rust re-proves each against the authenticated archive.
+ */
+export function declaredApplicabilityClaims(inapplicable) {
+  return inapplicable
+    .filter(row => VERIFIER_PROVED_DISPOSITIONS.includes(row.class))
+    .map(row => ({
+      entrypoint: row.entrypoint,
+      conditions: row.conditions ?? [],
+      class: row.class,
+      reason: row.reason
+    }));
 }
 
 export function artifactApplicabilityForRefusal(error) {
@@ -613,7 +685,8 @@ function writeCertificationInputs(output, plan, {
   certificationImporter,
   entrypoints,
   conditions,
-  certificationInputs
+  certificationInputs,
+  inapplicableCases = []
 }) {
   const digest = path => `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
   writeFileSync(
@@ -630,7 +703,8 @@ function writeCertificationInputs(output, plan, {
         conditions,
         document: { path: output, sha256: digest(output) },
         plan: { path: plan, sha256: digest(plan) },
-        certificationInputs
+        certificationInputs,
+        inapplicableCases
       },
       null,
       2
@@ -1098,6 +1172,13 @@ export async function generatePackageContract(
           conditions,
           stage: "artifact-case",
           class: disposition.class,
+          // Only a content-premise disposition carries an applicability tag:
+          // it names the proof certification owes for this case. The
+          // export-map dispositions have nothing to prove and stay as they
+          // were recorded on 2026-08-31.
+          ...(disposition.applicability
+            ? { applicability: disposition.applicability }
+            : {}),
           reason: disposition.reason
         });
         caseIndex += 1;
@@ -1338,6 +1419,10 @@ export async function generatePackageContract(
     artifactCases: emittedArtifactCases,
     refusedArtifactCases: refusals.length,
     inapplicableArtifactCases: inapplicable.length,
+    // The subset of the inapplicable census whose premise is file content.
+    // Certification carries these to Rust and refuses the whole proposal if the
+    // authenticated archive refutes one; see `VERIFIER_PROVED_DISPOSITIONS`.
+    inapplicableCases: declaredApplicabilityClaims(inapplicable),
     certificationInputs: certificationProposals.map(proposal => ({
       entrypoint: proposal.entrypoint,
       conditions: proposal.conditions,
@@ -1352,7 +1437,8 @@ export async function generatePackageContract(
     certificationImporter: options.certificationImporter,
     entrypoints: options.entrypoints,
     conditions: options.conditions,
-    certificationInputs: result.certificationInputs
+    certificationInputs: result.certificationInputs,
+    inapplicableCases: result.inapplicableCases
   });
   if (!quiet) {
     process.stdout.write(

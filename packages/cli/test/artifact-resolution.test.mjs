@@ -11,6 +11,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import {
@@ -23,6 +24,10 @@ import {
   resolvePackageDependencyPlanClosure,
   isCustomCondition,
   isPrivateNamespacedCondition,
+  MODULE_EMISSION_FLAVOR,
+  declarationFileFlavor,
+  moduleEmission,
+  nonEmittingModuleTarget,
   nonModuleTargetExtension,
   resolvePackageExport,
   selectPackageExportTarget,
@@ -2114,6 +2119,165 @@ test("non-module target extensions are exactly the non-executable resource list"
   expect(nonModuleTargetExtension("./a.d.ts")).toBeUndefined();
   // No extension is not answered here.
   expect(nonModuleTargetExtension("./bin")).toBeUndefined();
+});
+
+describe("module emission answers both premises from one shared corpus", () => {
+  // `fixtures/module-emission/cases.json` is read by *both* implementations:
+  // this suite and `solid_facts::ast::emission`'s tests. That is the whole
+  // mechanism holding the TypeScript and Oxc statement tables together — a
+  // divergence between them refuses a whole proposal in the field, so it has to
+  // be a test failure here first. Never edit a verdict to match an
+  // implementation; work out which side is wrong.
+  const corpus = JSON.parse(
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../../fixtures/module-emission/cases.json"),
+      "utf8"
+    )
+  );
+
+  const render = answer =>
+    answer.verdict === "emitting" ? `emitting:${answer.kind}` : answer.verdict;
+  const shown = verdict => (typeof verdict === "string" ? verdict : `emitting:${verdict.emitting}`);
+  const satisfied = (verdict, answer) =>
+    verdict === "refused" ? answer !== "non-emitting" : shown(verdict) === answer;
+
+  test("the corpus envelope is the audited one", () => {
+    expect(corpus.format).toBe("solid-checker-module-emission-cases");
+    expect(corpus.casesVersion).toBe(1);
+    expect(corpus.cases.length).toBeGreaterThanOrEqual(100);
+    expect(new Set(corpus.cases.map(entry => entry.name)).size).toBe(corpus.cases.length);
+  });
+
+  test("every case answers exactly what the corpus records, under both premises", () => {
+    const mismatches = [];
+    for (const entry of corpus.cases) {
+      for (const [column, flavor] of [
+        ["module", MODULE_EMISSION_FLAVOR.Module],
+        ["declarationFile", MODULE_EMISSION_FLAVOR.DeclarationFile]
+      ]) {
+        const answer = render(moduleEmission(entry.source, flavor));
+        if (!satisfied(entry[column], answer)) {
+          mismatches.push(`${entry.name} [${column}]: answered ${answer}, corpus says ${shown(entry[column])}`);
+        }
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  test("no case is answered non-emitting under both premises by accident", () => {
+    // The two premises are not a fallback chain: exactly one runs per member,
+    // chosen by suffix. This pins the cases where they deliberately disagree,
+    // so a change that collapsed them into one would fail here.
+    const disagreeing = corpus.cases.filter(
+      entry =>
+        (entry.module === "non-emitting") !== (entry.declarationFile === "non-emitting")
+    );
+    expect(disagreeing.map(entry => entry.name).sort()).toEqual([
+      "ambient module with a side-effect import",
+      "ambient module with an expression statement",
+      "ambient module with an initializer",
+      "declare class with a static block",
+      "declare class with an accessor initializer",
+      "declare const with an initializer",
+      "declare global with a body",
+      "declare namespace with a function body",
+      "default export of a declared const",
+      "export star",
+      "export star as namespace",
+      "h types/hyperscript.d.ts",
+      "h types/index.d.ts",
+      "named value re-export",
+      "universal types/index.d.ts"
+    ].sort());
+  });
+});
+
+describe("the runtime target's suffix selects exactly one premise", () => {
+  const answer = (body, name) => {
+    const root = mkdtempSync(join(tmpdir(), "solid-checker-emission-"));
+    roots.push(root);
+    const path = join(root, name);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+    return nonEmittingModuleTarget(path);
+  };
+
+  test("a declaration suffix selects the declaration-file premise", () => {
+    for (const name of ["index.d.ts", "index.d.mts", "index.d.cts", "INDEX.D.TS"]) {
+      expect(declarationFileFlavor(name)).toBe(MODULE_EMISSION_FLAVOR.DeclarationFile);
+    }
+    for (const name of ["index.ts", "index.js", "index.mjs", "index.tsx", "index", "adts.ts"]) {
+      expect(declarationFileFlavor(name)).toBe(MODULE_EMISSION_FLAVOR.Module);
+    }
+  });
+
+  test("identical bytes get one answer per premise, and the suffix picks it", () => {
+    // The bytes-only premise is blind to the filename: an ambient declaration
+    // in a runtime member is answered exactly as in a `.d.ts`.
+    const ambient = "export declare function createRenderer(): void;\n";
+    for (const name of ["member.js", "member.mjs", "member.ts", "member.tsx", "member"]) {
+      expect(answer(ambient, name), name).toEqual({
+        statements: 1,
+        arm: "erasable-statements"
+      });
+    }
+    expect(answer(ambient, "member.d.ts")).toEqual({
+      statements: 1,
+      arm: "declaration-file"
+    });
+
+    // `@solidjs/universal`'s barrel: a declaration file emits no module and so
+    // no re-export either, while the identical bytes in a runtime member are a
+    // working barrel and must refuse.
+    const barrel = 'export * from "./universal.js";\n';
+    expect(answer(barrel, "index.d.ts")).toEqual({ statements: 1, arm: "declaration-file" });
+    for (const name of ["index.ts", "index.js", "index.mjs"]) {
+      expect(answer(barrel, name), name).toBeUndefined();
+    }
+
+    // A `.d.ts` carrying an implementation is not the declaration file its
+    // suffix claims, even though the bytes-only premise erases it.
+    expect(answer("declare const value = 1;\n", "index.d.ts")).toBeUndefined();
+    expect(answer("declare const value = 1;\n", "index.ts")).toEqual({
+      statements: 1,
+      arm: "erasable-statements"
+    });
+  });
+
+  test("a module that declares nothing is not an answer under either premise", () => {
+    for (const name of ["index.ts", "index.d.ts"]) {
+      expect(answer("", name), name).toBeUndefined();
+      expect(answer("// only a comment\n", name), name).toBeUndefined();
+      expect(answer("export {};\n", name), name).toBeUndefined();
+    }
+  });
+
+  test("bytes that are not text, too large, or absent are not an answer", () => {
+    const root = mkdtempSync(join(tmpdir(), "solid-checker-emission-"));
+    roots.push(root);
+    const binary = join(root, "member.d.ts");
+    writeFileSync(binary, Buffer.from([0xff, 0xfe, 0x00, 0x41]));
+    expect(nonEmittingModuleTarget(binary)).toBeUndefined();
+    expect(nonEmittingModuleTarget(join(root, "absent.d.ts"))).toBeUndefined();
+    // The byte bound can only lose a disposition, never invent one.
+    const huge = join(root, "huge.d.ts");
+    writeFileSync(huge, `export type T = 1;\n${"// padding\n".repeat(60_000)}`);
+    expect(nonEmittingModuleTarget(huge)).toBeUndefined();
+  });
+
+  test("the answer is memoized by exact bytes, not by path", () => {
+    const root = mkdtempSync(join(tmpdir(), "solid-checker-emission-"));
+    roots.push(root);
+    const first = join(root, "a.d.ts");
+    const second = join(root, "b.d.ts");
+    writeFileSync(first, "export type T = 1;\n");
+    writeFileSync(second, "export type T = 1;\n");
+    expect(nonEmittingModuleTarget(first)).toEqual(nonEmittingModuleTarget(second));
+    // Same path, different bytes: the memo key is the content, so the answer
+    // must move.
+    writeFileSync(first, "export const value = 1;\n");
+    expect(nonEmittingModuleTarget(first)).toBeUndefined();
+  });
 });
 
 test("export target selection reports the conditions traversed and target presence", () => {

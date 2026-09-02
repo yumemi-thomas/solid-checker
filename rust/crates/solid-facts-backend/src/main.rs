@@ -193,6 +193,78 @@ struct ContractCertificationPlanningRequest {
     /// planning nested inside a graph node must leave this empty.
     #[serde(default)]
     source_dependencies: Vec<ContractCertificationSourceRequest>,
+    /// Artifact cases the generator recorded inapplicable and therefore omitted
+    /// from the proposal, each carrying the class it claims. The claim is
+    /// decided by the generator from the *installed* tree, which nothing has
+    /// authenticated, so every one of them is re-proved here against the
+    /// archive before planning proceeds.
+    #[serde(default)]
+    inapplicable_cases: Vec<ContractCertificationInapplicableCase>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContractCertificationInapplicableCase {
+    entrypoint: String,
+    #[serde(default)]
+    conditions: Vec<String>,
+    class: String,
+    #[serde(default)]
+    reason: String,
+}
+
+/// The only applicability class a proposal may declare for an omitted case
+/// today. Every other class the generator records — an unpublished conditional
+/// target, a non-module resource extension — is decided from the export map and
+/// the artifact's own member list, which Rust replays anyway; this one is
+/// decided from file *content*, so it is the one that needs re-proving.
+const NON_EMITTING_MODULE_TARGET: &str = "non-emitting-module-target";
+
+/// Re-proves every declared applicability claim against the authenticated
+/// archive. A claim the archive refutes refuses the whole proposal: the case it
+/// covers was omitted from the proposal on the strength of that claim, so
+/// accepting the proposal while the claim is false would silently delete a real
+/// refusal from the ledger.
+fn prove_declared_applicability(
+    archive: &solid_facts_backend::PublishedArchive,
+    claims: &[ContractCertificationInapplicableCase],
+) -> Result<(), Box<dyn std::error::Error>> {
+    if claims.is_empty() {
+        return Ok(());
+    }
+    for claim in claims {
+        if claim.class != NON_EMITTING_MODULE_TARGET {
+            return Err(format!(
+                "artifact case {} declares unprovable applicability class {:?}",
+                claim.entrypoint, claim.class
+            )
+            .into());
+        }
+    }
+    let snapshot = solid_facts_backend::ArtifactSnapshot::from_published(
+        archive,
+        solid_facts_backend::SnapshotLimits::policy_2(),
+    )
+    .map_err(|error| format!("declared artifact-case applicability cannot be replayed: {error}"))?;
+    for claim in claims {
+        let conditions = claim
+            .conditions
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        snapshot
+            .prove_non_emitting_module_target(&claim.entrypoint, &conditions)
+            .map_err(|error| {
+                format!(
+                    "artifact case {} (conditions [{}]) claims {} because {:?}, but {error}",
+                    claim.entrypoint,
+                    claim.conditions.join(","),
+                    claim.class,
+                    claim.reason
+                )
+            })?;
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -510,12 +582,6 @@ fn certification_plan_from_request_in(
         )
         .into());
     }
-    let proposal = fs::read(&request.proposal).map_err(|error| {
-        format!(
-            "could not read certification proposal {}: {error}",
-            request.proposal
-        )
-    })?;
     let import_request = solid_facts_backend::ImportRequest {
         specifier: request.resolution.specifier.clone(),
         importer: request.resolution.importer.clone(),
@@ -538,6 +604,16 @@ fn certification_plan_from_request_in(
             )
         })?,
     )?;
+    // Before the proposal is even read: the cases it omits were omitted on the
+    // strength of these claims, so a false one refuses whatever the document
+    // says.
+    prove_declared_applicability(&archive, &request.inapplicable_cases)?;
+    let proposal = fs::read(&request.proposal).map_err(|error| {
+        format!(
+            "could not read certification proposal {}: {error}",
+            request.proposal
+        )
+    })?;
     // Root-path sources are evidence supply only, so one that cannot even be
     // assembled from its local bytes is dropped for the same reason Rust drops
     // one that will not authenticate: see `plan_contract_document_with_sources`.
@@ -621,6 +697,7 @@ fn certification_graph_node_from_request(
         fs::read(&planning.registry_metadata)?,
         fs::read(&planning.archive)?,
     )?;
+    prove_declared_applicability(&archive, &planning.inapplicable_cases)?;
     let lock = solid_facts_backend::PublishedGraphLockSelection::from_bun_lock(
         &fs::read(lockfile)?,
         lock_locator,
@@ -6689,6 +6766,45 @@ mod certification_source_request_tests {
         .to_string()
     }
 
+    /// A real gzipped npm tarball with matching registry metadata, so the
+    /// applicability proof runs against authenticated bytes exactly as it does
+    /// in a certification.
+    fn published_archive(members: &[(&str, &[u8])]) -> solid_facts_backend::PublishedArchive {
+        let (archive, metadata) = published_archive_bytes(members);
+        solid_facts_backend::PublishedArchive::new(
+            "https://registry.npmjs.org",
+            "root-package",
+            "1.0.0",
+            metadata,
+            archive,
+        )
+        .expect("published coordinates")
+    }
+
+    fn published_archive_bytes(members: &[(&str, &[u8])]) -> (Vec<u8>, Vec<u8>) {
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        use sha2::Sha512;
+        let mut archive = Vec::new();
+        {
+            let encoder = flate2::write::GzEncoder::new(&mut archive, flate2::Compression::none());
+            let mut builder = tar::Builder::new(encoder);
+            for (path, bytes) in members {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(bytes.len() as u64);
+                header.set_mode(0o644);
+                header.set_entry_type(tar::EntryType::Regular);
+                header.set_cksum();
+                builder.append_data(&mut header, path, *bytes).unwrap();
+            }
+            builder.into_inner().unwrap().finish().unwrap();
+        }
+        let integrity = format!("sha512-{}", STANDARD.encode(Sha512::digest(&archive)));
+        let metadata = format!(
+            r#"{{"versions":{{"1.0.0":{{"name":"root-package","version":"1.0.0","dist":{{"integrity":"{integrity}","tarball":"https://registry.npmjs.org/root-package/-/root-package-1.0.0.tgz"}}}}}}}}"#
+        );
+        (archive, metadata.into_bytes())
+    }
+
     fn source() -> ContractCertificationSourceRequest {
         serde_json::from_str(
             r#"{
@@ -6727,6 +6843,212 @@ mod certification_source_request_tests {
             error.to_string(),
             "a graph node's planning must not carry its own declaration-only source set"
         );
+    }
+
+    /// A declared applicability claim reaches Rust as request data, defaults to
+    /// an empty list, and refuses an unparsable field rather than ignoring it.
+    #[test]
+    fn a_planning_request_carries_declared_applicability_claims() {
+        let absent: ContractCertificationPlanningRequest =
+            serde_json::from_str(&planning(Vec::new())).unwrap();
+        assert!(absent.inapplicable_cases.is_empty());
+
+        let declared: ContractCertificationPlanningRequest = serde_json::from_value({
+            let mut value: serde_json::Value = serde_json::from_str(&planning(Vec::new())).unwrap();
+            value["inapplicableCases"] = serde_json::json!([{
+                "entrypoint": "./types/universal.d.ts",
+                "conditions": [],
+                "class": "non-emitting-module-target",
+                "reason": "every module-level statement is non-emitting",
+            }]);
+            value
+        })
+        .unwrap();
+        assert_eq!(declared.inapplicable_cases.len(), 1);
+        assert_eq!(
+            declared.inapplicable_cases[0].class,
+            "non-emitting-module-target"
+        );
+
+        let mut unknown_field: serde_json::Value =
+            serde_json::from_str(&planning(Vec::new())).unwrap();
+        unknown_field["inapplicableCases"] = serde_json::json!([{
+            "entrypoint": "./types/universal.d.ts",
+            "class": "non-emitting-module-target",
+            "disposition": "trust me",
+        }]);
+        assert!(
+            serde_json::from_value::<ContractCertificationPlanningRequest>(unknown_field).is_err()
+        );
+    }
+
+    /// An empty claim list costs nothing: the request never builds a snapshot,
+    /// so the failure is the ordinary absent-artifact one.
+    #[test]
+    fn no_declared_claim_leaves_the_request_path_untouched() {
+        assert!(
+            prove_declared_applicability(&published_archive(&[]), &[]).is_ok(),
+            "an empty claim list must not even read the archive"
+        );
+    }
+
+    #[test]
+    fn a_declared_class_rust_cannot_prove_refuses_the_proposal() {
+        let claim = ContractCertificationInapplicableCase {
+            entrypoint: "./types/universal.d.ts".into(),
+            conditions: Vec::new(),
+            class: "verifier-trust-me".into(),
+            reason: String::new(),
+        };
+        let error = prove_declared_applicability(&published_archive(&[]), &[claim])
+            .expect_err("an unknown applicability class is not provable");
+        assert_eq!(
+            error.to_string(),
+            "artifact case ./types/universal.d.ts declares unprovable applicability class \"verifier-trust-me\""
+        );
+    }
+
+    /// The disagreement case: the generator omitted `./types/effects.d.ts` from
+    /// the proposal claiming it emits nothing, and the authenticated bytes say
+    /// otherwise. The whole proposal is refused, and the refusal names the case
+    /// and the first emitting statement.
+    #[test]
+    fn a_claim_the_archive_refutes_refuses_the_whole_proposal() {
+        let members: &[(&str, &[u8])] = &[
+            (
+                "package/package.json",
+                br#"{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js","./types/*":"./types/*"}}"#,
+            ),
+            ("package/dist/index.js", b"export const answer = 42;"),
+            (
+                "package/types/effects.d.ts",
+                b"import { start } from \"./dep.js\";\nstart();",
+            ),
+            (
+                "package/types/pure.d.ts",
+                b"export declare function pure(): void;",
+            ),
+        ];
+        let claim = |entrypoint: &str| ContractCertificationInapplicableCase {
+            entrypoint: entrypoint.into(),
+            conditions: Vec::new(),
+            class: NON_EMITTING_MODULE_TARGET.into(),
+            reason: "every module-level statement is non-emitting".into(),
+        };
+
+        assert!(
+            prove_declared_applicability(
+                &published_archive(members),
+                &[claim("./types/pure.d.ts")]
+            )
+            .is_ok(),
+            "a true claim is proved from the archive"
+        );
+
+        let error = prove_declared_applicability(
+            &published_archive(members),
+            &[claim("./types/pure.d.ts"), claim("./types/effects.d.ts")],
+        )
+        .expect_err("a refuted claim refuses the proposal");
+        let rendered = error.to_string();
+        assert!(
+            rendered.contains("artifact case ./types/effects.d.ts"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("non-emitting-module-target"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("emits JavaScript"), "{rendered}");
+        assert!(
+            rendered.contains("value import at bytes 0..33"),
+            "{rendered}"
+        );
+    }
+
+    /// The graph-node converter has its own `prove_declared_applicability` call
+    /// site, and it must survive deletion just as the planning one does.
+    ///
+    /// This is a unit test rather than a process test on purpose: the graph lane
+    /// is only reachable through `--execute-contract-certification`, which
+    /// resolves the configured issuer *and* pins the Type Facts producer before
+    /// it converts any node — and a `cargo test` build of this binary carries no
+    /// producer digest, so a process-level graph test would refuse on the pin
+    /// before reaching the code under test. The converter itself is called here
+    /// with exactly the request shape that lane hands it.
+    #[test]
+    fn a_graph_node_refuses_a_declared_applicability_the_archive_refutes() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-graph-applicability-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let (archive, metadata) = published_archive_bytes(&[
+            (
+                "package/package.json",
+                br#"{"name":"root-package","version":"1.0.0","exports":{".":"./dist/index.js","./types/*":"./types/*"}}"#,
+            ),
+            ("package/dist/index.js", b"export const answer = 42;"),
+            (
+                "package/types/effects.d.ts",
+                b"import { start } from \"./dep.js\";\nstart();\n",
+            ),
+            ("package/types/kinds.d.ts", b"export type Kind = 1;\n"),
+        ]);
+        let archive_path = directory.join("root-package-1.0.0.tgz");
+        let metadata_path = directory.join("root-package.json");
+        let proposal_path = directory.join("proposal.json");
+        fs::write(&archive_path, &archive).unwrap();
+        fs::write(&metadata_path, &metadata).unwrap();
+        // Readable, and never reached: the node converter reads the proposal
+        // before the archive, so these bytes have to exist, and the lockfile
+        // below is what a proved claim falls through to.
+        fs::write(&proposal_path, b"{}\n").unwrap();
+
+        let node = |entrypoint: &str| -> ContractCertificationGraphNodeRequest {
+            let mut planning: serde_json::Value =
+                serde_json::from_str(&planning(Vec::new())).unwrap();
+            planning["proposal"] = serde_json::json!(proposal_path.to_string_lossy());
+            planning["archive"] = serde_json::json!(archive_path.to_string_lossy());
+            planning["registryMetadata"] = serde_json::json!(metadata_path.to_string_lossy());
+            planning["inapplicableCases"] = serde_json::json!([{
+                "entrypoint": entrypoint,
+                "conditions": [],
+                "class": NON_EMITTING_MODULE_TARGET,
+                "reason": "runtime target emits no JavaScript",
+            }]);
+            serde_json::from_value(serde_json::json!({
+                "planning": planning,
+                "lockfile": "/does/not/exist/bun.lock",
+                "lockLocator": "root-package@1.0.0",
+                "sourceDependencies": [],
+            }))
+            .unwrap()
+        };
+
+        let Err(refuted) = certification_graph_node_from_request(node("./types/effects.d.ts"))
+        else {
+            panic!("a refuted claim must refuse the node");
+        };
+        let refuted = refuted.to_string();
+        assert!(
+            refuted.contains("artifact case ./types/effects.d.ts"),
+            "{refuted}"
+        );
+        assert!(refuted.contains("emits JavaScript"), "{refuted}");
+        assert!(refuted.contains("value import at bytes 0..33"), "{refuted}");
+
+        // The control: a proved claim gets past the same call site and fails on
+        // the (deliberately absent) lockfile instead.
+        let Err(proved) = certification_graph_node_from_request(node("./types/kinds.d.ts")) else {
+            panic!("this request has no lockfile and cannot plan");
+        };
+        let proved = proved.to_string();
+        assert!(
+            !proved.contains("declared artifact-case applicability"),
+            "{proved}"
+        );
+        fs::remove_dir_all(&directory).ok();
     }
 
     /// The same node without the nested set gets past the refusal and fails on

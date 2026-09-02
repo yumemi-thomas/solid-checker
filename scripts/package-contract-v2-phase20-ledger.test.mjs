@@ -79,16 +79,18 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // return-carry rounds landed 2026-09-01/02 (see docs/precision-backlog.md).
   // The return-carry slice adds exactly jsx-parser's authenticated receipt; the
   // apparent-member census slice (2026-09-02) adds exactly i18n@2.2.1, and the
-  // argument-provenance slice (2026-09-02) adds exactly the three marker rows.
+  // argument-provenance slice (2026-09-02) adds exactly the three marker rows, and
+  // the non-emitting-module applicability slice (2026-09-02) adds exactly
+  // @kobalte/utils 2.0, @solidjs/h, @solidjs/image and @solidjs/universal.
   assert.deepEqual(ledger.summary.proposalStates, {
-    complete: 344,
+    complete: 348,
     "fully-refused": 37,
-    partial: 37
+    partial: 33
   });
   assert.deepEqual(ledger.summary.certificationStates, {
     "exact-refusal": 45,
-    "not-attempted": 25,
-    verified: 348
+    "not-attempted": 21,
+    verified: 352
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -96,7 +98,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 348);
+  assert.equal(ledger.summary.verifiedRows, 352);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -128,6 +130,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@corvu/tooltip@0.2.2|solid1|only",
       "@corvu/utils@0.4.2|solid1|only",
       "@kobalte/utils@0.9.2|solid1|only",
+      "@kobalte/utils@2.0.0-alpha.0|solid2|only",
       "@solid-devtools/extension-adapter@0.12.1|solid1|only",
       "@solid-devtools/frontend@0.15.4|solid1|only",
       "@solid-devtools/logger@0.9.11|solid1|only",
@@ -393,7 +396,9 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/websocket@2.0.0-next.3|solid2|head",
       "@solid-primitives/workers@2.0.1-next.1|solid2|floor",
       "@solid-primitives/workers@2.0.1-next.1|solid2|head",
+      "@solidjs/h@2.0.0-rc.3|solid2|only",
       "@solidjs/html@2.0.0-rc.3|solid2|only",
+      "@solidjs/image@0.1.0|solid1|only",
       "@solidjs/meta@0.29.4|solid1|only",
       "@solidjs/meta@1.0.0-next.2|solid2|floor",
       "@solidjs/meta@1.0.0-next.2|solid2|head",
@@ -401,6 +406,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solidjs/start@2.0.3|solid1|only",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|floor",
       "@solidjs/start-devtools@1.0.0-next.4|solid2|head",
+      "@solidjs/universal@2.0.0-rc.3|solid2|only",
       "@tanstack/ai-devtools-core@0.5.8|solid1|only",
       "@tanstack/charts@0.15.0|solid1|only",
       "@tanstack/devtools@0.14.2|solid1|only",

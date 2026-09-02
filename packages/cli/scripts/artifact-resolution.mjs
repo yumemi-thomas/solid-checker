@@ -146,6 +146,561 @@ export function nonModuleTargetExtension(path) {
   return NON_MODULE_EXTENSIONS.includes(extension.toLowerCase()) ? extension : undefined;
 }
 
+/**
+ * The module-emission premises, mirrored from `solid_facts::ast::module_emission`.
+ *
+ * `MODULE` is decided by the bytes alone: parsed as a TypeScript module, is
+ * every module-level statement erasable? It never reads the filename — a member
+ * called `index.js` whose content is `export declare function f(): void;` gets
+ * the same answer as the identical bytes called `index.d.ts`, because a suffix
+ * is a publisher's claim about a file while the statement list is evidence
+ * about it.
+ *
+ * `DECLARATION_FILE` is the narrower premise that admits the suffix, and only
+ * ever conjoined with an ambient-only parse: TypeScript decides declaration-file
+ * semantics by suffix and emits no JavaScript for such a file at all, including
+ * for the re-export forms a plain module would emit. The caller owes the suffix
+ * check on an authenticated member; this owes the proof that the bytes are
+ * really ambient, which is what the gate below is for.
+ *
+ * Exactly one premise runs for a member, chosen by its suffix, so their answers
+ * never race. Every verdict is re-proved in Rust against authenticated archive
+ * bytes, and a disagreement refuses the whole proposal — so the two statement
+ * tables are held to the same shared corpus,
+ * `fixtures/module-emission/cases.json`, read by the tests on both sides.
+ */
+export const MODULE_EMISSION_FLAVOR = Object.freeze({
+  Module: "module",
+  DeclarationFile: "declaration-file"
+});
+
+// Identical to Rust's `MODULE_LADDER`, and identical in order. The order is not
+// load-bearing — every configuration that parses cleanly is answered from the
+// same statement table — and the Rust suite pins that over the whole corpus by
+// running all six permutations.
+const MODULE_EMISSION_LADDER = Object.freeze([".ts", ".d.ts", ".tsx"]);
+
+// The member suffixes TypeScript itself reads as declaration-file semantics.
+const DECLARATION_FILE_EXTENSIONS = Object.freeze([".d.ts", ".d.mts", ".d.cts"]);
+
+// A candidate this large is never a hand-written type module; it is a bundle.
+// The bound keeps one pathological member from paying for up to three parses,
+// and it can only ever *lose* a disposition, never invent one.
+//
+// That loss is a real yield cap, not a free win: a genuinely non-emitting
+// bundled `.d.ts` above the bound — a rolled-up types file, which is a shape
+// real packages ship — never becomes inapplicable, and its artifact case keeps
+// certify-or-refuse semantics instead. The verifier deliberately has **no**
+// bound: it only ever re-proves claims this side makes, so the asymmetry can
+// only mean fewer claims, never a claim the archive is not asked about.
+const MODULE_EMISSION_BYTE_LIMIT = 512 * 1024;
+
+/**
+ * The declaration-suffix arm this member's path selects, or `undefined` for the
+ * bytes-only arm. Exactly one arm ever runs.
+ */
+export function declarationFileFlavor(path) {
+  const lowered = path.toLowerCase();
+  return DECLARATION_FILE_EXTENSIONS.some(extension => lowered.endsWith(extension))
+    ? MODULE_EMISSION_FLAVOR.DeclarationFile
+    : MODULE_EMISSION_FLAVOR.Module;
+}
+
+function hasDeclareModifier(node) {
+  return (node.modifiers ?? []).some(
+    modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword
+  );
+}
+
+/**
+ * Whether one module-level statement emits JavaScript. Fail-closed: only the
+ * kinds proved erasable answer `false`, and every unrecognized kind emits.
+ */
+function statementEmits(statement) {
+  const { SyntaxKind } = ts;
+  switch (statement.kind) {
+    case SyntaxKind.TypeAliasDeclaration:
+    case SyntaxKind.InterfaceDeclaration:
+    // `export as namespace React;` names a UMD global for type consumers.
+    case SyntaxKind.NamespaceExportDeclaration:
+      return false;
+    // `declare namespace`/`declare module`/`declare global`, and an ambient
+    // module named by a string literal (`declare module "image:*"`), are
+    // erased. An instantiated `namespace N { ... }` emits an object.
+    case SyntaxKind.ModuleDeclaration:
+      return !(
+        hasDeclareModifier(statement) ||
+        statement.name?.kind === SyntaxKind.StringLiteral ||
+        (statement.flags & ts.NodeFlags.GlobalAugmentation) !== 0
+      );
+    case SyntaxKind.EnumDeclaration:
+    case SyntaxKind.ClassDeclaration:
+    case SyntaxKind.VariableStatement:
+      return !hasDeclareModifier(statement);
+    // A bodyless function declaration is an ambient signature or an overload
+    // signature; a real overload's implementation is a separate statement with
+    // a body, so an overloaded function still emits.
+    case SyntaxKind.FunctionDeclaration:
+      return !hasDeclareModifier(statement) && Boolean(statement.body);
+    // Only `import type` is erased. A bare `import "./effects.js"` has no
+    // clause at all and is exactly the side-effect import this must never
+    // clear, and an all-type-specifier clause stays emitting because whether it
+    // survives is a compiler-option question, not a property of these bytes.
+    case SyntaxKind.ImportDeclaration:
+      return statement.importClause?.isTypeOnly !== true;
+    case SyntaxKind.ExportDeclaration: {
+      if (statement.isTypeOnly) return false;
+      // `export * from "m"` and `export * as ns from "m"`.
+      if (!statement.exportClause) return true;
+      if (statement.exportClause.kind !== SyntaxKind.NamedExports) return true;
+      const elements = statement.exportClause.elements ?? [];
+      // `export {}` marks a module and emits nothing; `export {} from "m"`
+      // still evaluates `m`.
+      if (elements.length === 0) return Boolean(statement.moduleSpecifier);
+      return elements.some(element => element.isTypeOnly !== true);
+    }
+    // Both `export = value` and `export default <expression>`: the emitted
+    // module binds an evaluated expression, including an identifier whose only
+    // declaration in the file is ambient.
+    case SyntaxKind.ExportAssignment:
+      return true;
+    default:
+      return true;
+  }
+}
+
+/**
+ * Whether an erasable statement introduces at least one name — a type, an
+ * ambient value, a namespace, or a global augmentation. A statement that only
+ * re-exports locals (`export {}`, `export { type Local }`) or only imports for
+ * local use (`import type`) introduces none of its own, so a module made
+ * entirely of those is vacuous rather than a type module. Whether the name is
+ * *exported* is deliberately not the question: `interface Marker {}` with no
+ * export is a deliberate declaration, and this rule is about telling a written
+ * module from a broken build.
+ */
+function statementDeclares(statement) {
+  const { SyntaxKind } = ts;
+  switch (statement.kind) {
+    case SyntaxKind.TypeAliasDeclaration:
+    case SyntaxKind.InterfaceDeclaration:
+    case SyntaxKind.EnumDeclaration:
+    case SyntaxKind.ModuleDeclaration:
+    case SyntaxKind.FunctionDeclaration:
+    case SyntaxKind.ClassDeclaration:
+    case SyntaxKind.VariableStatement:
+      return true;
+    // `export type { Signal } from "solid-js"` adds `Signal` to this module's
+    // names; `export { type Local }` only re-exports one.
+    case SyntaxKind.ExportDeclaration:
+      return Boolean(
+        statement.moduleSpecifier &&
+          (!statement.exportClause ||
+            statement.exportClause.kind !== SyntaxKind.NamedExports ||
+            (statement.exportClause.elements ?? []).length > 0)
+      );
+    default:
+      return false;
+  }
+}
+
+/**
+ * The grammar Oxc refuses outright where TypeScript's parser is permissive.
+ *
+ * This is not a semantic rule; it is parity. Rust re-proves every claim with
+ * Oxc, whose declaration grammar rejects an ambient implementation body, an
+ * ambient property initializer, a bodyless namespace and a `using` declaration
+ * as parse errors. A claim made here that Rust cannot even parse refuses the
+ * whole proposal, so these shapes must never be answered on this side either.
+ * The shared corpus records each of them as refused under both premises.
+ */
+function refusedByPeerGrammar(statement) {
+  const { SyntaxKind } = ts;
+  // `declare namespace N;` — a namespace with no body at all.
+  if (statement.kind === SyntaxKind.ModuleDeclaration && !statement.body) return true;
+  if (!hasDeclareModifier(statement)) return false;
+  // `declare function f(): void { }` — an ambient implementation.
+  if (statement.kind === SyntaxKind.FunctionDeclaration) return Boolean(statement.body);
+  if (statement.kind === SyntaxKind.ClassDeclaration) {
+    // An ambient member implementation, or a plain field initializer. A static
+    // block and an `accessor` field are deliberately absent: the peer grammar
+    // accepts both, and the declaration-file premise's own gate answers them.
+    return (statement.members ?? []).some(member => {
+      if (member.kind === SyntaxKind.PropertyDeclaration) {
+        return (
+          Boolean(member.initializer) &&
+          !(member.modifiers ?? []).some(
+            modifier => modifier.kind === SyntaxKind.AccessorKeyword
+          )
+        );
+      }
+      if (!METHOD_LIKE_MEMBER_KINDS.includes(member.kind)) return false;
+      // A decorator on an ambient *method-like* member: the peer grammar
+      // refuses exactly this shape and accepts a decorator on the class, on an
+      // ambient field, on an `accessor` field and on a parameter, each of which
+      // the shared corpus pins as agreeing.
+      if ((member.modifiers ?? []).some(modifier => modifier.kind === SyntaxKind.Decorator)) {
+        return true;
+      }
+      return Boolean(member.body);
+    });
+  }
+  return false;
+}
+
+const METHOD_LIKE_MEMBER_KINDS = Object.freeze([
+  ts.SyntaxKind.MethodDeclaration,
+  ts.SyntaxKind.Constructor,
+  ts.SyntaxKind.GetAccessor,
+  ts.SyntaxKind.SetAccessor
+]);
+
+/**
+ * A parameter default inside a signature with no body. TS1039 forbids an
+ * initializer in an ambient context, and a bodyless signature is either ambient
+ * or an overload — so this is a shape TypeScript rejects and nothing emits from,
+ * and both premises refuse it rather than half-answering it. A default in a real
+ * implementation is not this: that function has a body, so it is already an
+ * emitting statement (or gated as an implementation body).
+ *
+ * Applied under *both* premises, unlike `ambientGateViolation`, because the peer
+ * implementation accepts these bytes and would otherwise answer non-emitting
+ * where this side refuses — or the reverse.
+ */
+function ambientParameterInitializer(node) {
+  const { SyntaxKind } = ts;
+  let found = false;
+  const visit = current => {
+    if (found) return;
+    const signature =
+      current.kind === SyntaxKind.FunctionDeclaration ||
+      METHOD_LIKE_MEMBER_KINDS.includes(current.kind);
+    if (signature && !current.body) {
+      for (const parameter of current.parameters ?? []) {
+        if (parameter.initializer) {
+          found = true;
+          return;
+        }
+      }
+    }
+    ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return found ? "ambient parameter initializer" : undefined;
+}
+
+/**
+ * The declaration-file premise's ambient gate: an implementation body, an
+ * initializer, an expression statement or a side-effect import anywhere in the
+ * tree means these bytes are not the declaration file the suffix claims. Those
+ * are exactly the shapes TypeScript refuses in an ambient context (TS1183,
+ * TS1039), and refusing them is what stops the suffix from doing the work on
+ * its own.
+ */
+function ambientGateViolation(node) {
+  const { SyntaxKind } = ts;
+  let violation;
+  const visit = current => {
+    if (violation) return;
+    switch (current.kind) {
+      case SyntaxKind.FunctionDeclaration:
+      case SyntaxKind.MethodDeclaration:
+      case SyntaxKind.Constructor:
+      case SyntaxKind.GetAccessor:
+      case SyntaxKind.SetAccessor:
+      case SyntaxKind.FunctionExpression:
+        if (current.body) violation = "implementation body";
+        break;
+      case SyntaxKind.VariableDeclaration:
+        if (current.initializer) violation = "variable initializer";
+        break;
+      // `accessor value = 1` is a PropertyDeclaration carrying an
+      // `AccessorKeyword` *modifier*, so there is no separate node to inspect
+      // and no `AccessorKeyword` case here — the modifier token has no
+      // initializer of its own. Oxc models the same syntax as a distinct
+      // `AccessorProperty` node, which is why the peer gate has an arm this one
+      // does not need.
+      case SyntaxKind.PropertyDeclaration:
+        if (current.initializer) violation = "property initializer";
+        break;
+      case SyntaxKind.ClassStaticBlockDeclaration:
+        violation = "class static block";
+        break;
+      case SyntaxKind.ExpressionStatement:
+        violation = "expression statement";
+        break;
+      case SyntaxKind.ImportDeclaration:
+        if (!current.importClause) violation = "side-effect import";
+        break;
+      default:
+        break;
+    }
+    if (!violation) ts.forEachChild(current, visit);
+  };
+  visit(node);
+  return violation;
+}
+
+/**
+ * A declaration file also erases every re-export form, because it emits no
+ * module at all. The bytes-only premise cannot: there the same bytes are a
+ * working barrel. Returns "declares", "inert" or an emitting kind.
+ */
+function declarationFileStatement(statement, ambient, inDirectivePrologue = false) {
+  const { SyntaxKind } = ts;
+  if (statement.kind === SyntaxKind.ExportDeclaration && !statement.isTypeOnly) {
+    if (statement.moduleSpecifier) {
+      // `export * from "m"`, `export * as ns from "m"`, `export { name } from
+      // "m"` and `export { default } from "m"` all name something.
+      // `export {} from "m"` names nothing and evaluates nothing here, so it is
+      // vacuous rather than emitting.
+      if (!statement.exportClause) return "declares";
+      if (statement.exportClause.kind !== SyntaxKind.NamedExports) return "declares";
+      return (statement.exportClause.elements ?? []).length > 0 ? "declares" : "inert";
+    }
+  }
+  if (statement.kind === SyntaxKind.ExportAssignment && !statement.isExportEquals) {
+    // `export default _default;` where `_default` is a `declare`d binding in
+    // these same bytes: the whole file is ambient, so there is no expression to
+    // evaluate. An identifier nothing here declares, or any other expression,
+    // is not that shape.
+    const expression = statement.expression;
+    if (expression?.kind === SyntaxKind.Identifier) {
+      return ambient.has(expression.text)
+        ? "declares"
+        : "default export of an undeclared binding";
+    }
+  }
+  if (statementEmits(statement)) return emittingKind(statement, inDirectivePrologue);
+  return statementDeclares(statement) ? "declares" : "inert";
+}
+
+/** The names a file's own top-level `declare`d declarations bind. */
+function ambientBindings(statements) {
+  const { SyntaxKind } = ts;
+  const names = new Set();
+  for (const statement of statements) {
+    switch (statement.kind) {
+      case SyntaxKind.VariableStatement:
+        if (hasDeclareModifier(statement)) {
+          for (const declaration of statement.declarationList.declarations) {
+            if (declaration.name?.kind === SyntaxKind.Identifier) {
+              names.add(declaration.name.text);
+            }
+          }
+        }
+        break;
+      case SyntaxKind.FunctionDeclaration:
+        if ((hasDeclareModifier(statement) || !statement.body) && statement.name) {
+          names.add(statement.name.text);
+        }
+        break;
+      case SyntaxKind.ClassDeclaration:
+      case SyntaxKind.EnumDeclaration:
+        if (hasDeclareModifier(statement) && statement.name) names.add(statement.name.text);
+        break;
+      case SyntaxKind.ModuleDeclaration:
+        if (statement.name?.kind === SyntaxKind.Identifier) names.add(statement.name.text);
+        break;
+      default:
+        break;
+    }
+  }
+  return names;
+}
+
+/**
+ * Names why a statement emits, in the exact vocabulary
+ * `solid_facts::ast::EmittingStatement::kind` uses.
+ */
+function emittingKind(statement, inDirectivePrologue = false) {
+  const { SyntaxKind } = ts;
+  if (
+    inDirectivePrologue &&
+    statement.kind === SyntaxKind.ExpressionStatement &&
+    statement.expression?.kind === SyntaxKind.StringLiteral
+  ) {
+    // Oxc lifts the whole leading string-literal prologue into
+    // `Program::directives`, so it names this "directive". It emits either way.
+    return "directive";
+  }
+  switch (statement.kind) {
+    case SyntaxKind.EnumDeclaration:
+      return "enum declaration";
+    case SyntaxKind.ModuleDeclaration:
+      return "namespace declaration";
+    case SyntaxKind.FunctionDeclaration:
+      return "function declaration";
+    case SyntaxKind.ClassDeclaration:
+      return "class declaration";
+    case SyntaxKind.VariableStatement:
+      return "variable declaration";
+    case SyntaxKind.ImportEqualsDeclaration:
+      return "import-equals declaration";
+    case SyntaxKind.ImportDeclaration:
+      return "value import";
+    case SyntaxKind.ExportDeclaration: {
+      if (!statement.exportClause || statement.exportClause.kind !== SyntaxKind.NamedExports) {
+        return "re-export of all names";
+      }
+      return (statement.exportClause.elements ?? []).length === 0
+        ? "re-export of no names"
+        : "value export specifier";
+    }
+    case SyntaxKind.ExportAssignment:
+      return statement.isExportEquals ? "export assignment" : "default export";
+    case SyntaxKind.ExpressionStatement:
+      return "expression statement";
+    case SyntaxKind.Block:
+      return "block statement";
+    case SyntaxKind.EmptyStatement:
+      return "empty statement";
+    case SyntaxKind.IfStatement:
+    case SyntaxKind.SwitchStatement:
+    case SyntaxKind.TryStatement:
+    case SyntaxKind.WithStatement:
+    case SyntaxKind.LabeledStatement:
+      return "control-flow statement";
+    case SyntaxKind.DoStatement:
+    case SyntaxKind.ForInStatement:
+    case SyntaxKind.ForOfStatement:
+    case SyntaxKind.ForStatement:
+    case SyntaxKind.WhileStatement:
+      return "loop statement";
+    case SyntaxKind.BreakStatement:
+    case SyntaxKind.ContinueStatement:
+    case SyntaxKind.ReturnStatement:
+    case SyntaxKind.ThrowStatement:
+    case SyntaxKind.DebuggerStatement:
+      return "executable statement";
+    default:
+      return "statement";
+  }
+}
+
+function parseModuleEmissionSource(source, extension) {
+  const file = ts.createSourceFile(
+    `solid-checker-artifact-case${extension}`,
+    source,
+    ts.ScriptTarget.Latest,
+    false
+  );
+  // A parse this cannot confirm is clean is not an answer. The `?? [{}]` fails
+  // closed if the compiler ever stops exposing the diagnostics.
+  return (file.parseDiagnostics ?? [{}]).length > 0 ? undefined : file;
+}
+
+/**
+ * Answers one premise for exact module bytes. Returns
+ * `{ verdict: "non-emitting", statements }`, `{ verdict: "empty" }`,
+ * `{ verdict: "non-declaring" }`, `{ verdict: "unparsable" }` or
+ * `{ verdict: "emitting", kind }` — the same vocabulary as Rust's
+ * `ModuleEmission`, so the shared corpus can hold both sides to it.
+ */
+export function moduleEmission(source, flavor = MODULE_EMISSION_FLAVOR.Module) {
+  const declarationFile = flavor === MODULE_EMISSION_FLAVOR.DeclarationFile;
+  // A declaration file has exactly one grammar, and admitting the suffix as
+  // evidence is only sound while the parse is the ambient one.
+  const ladder = declarationFile ? [".d.ts"] : MODULE_EMISSION_LADDER;
+  for (const extension of ladder) {
+    const file = parseModuleEmissionSource(source, extension);
+    if (!file) continue;
+    const statements = file.statements ?? [];
+    if (statements.length === 0) return { verdict: "empty" };
+    for (const statement of statements) {
+      if (refusedByPeerGrammar(statement)) {
+        return { verdict: "emitting", kind: "unparsable to the verifier grammar" };
+      }
+    }
+    const ambientParameter = ambientParameterInitializer(file);
+    if (ambientParameter) return { verdict: "emitting", kind: ambientParameter };
+    let declares = false;
+    if (declarationFile) {
+      const ambient = ambientBindings(statements);
+      let prologue = true;
+      for (const statement of statements) {
+        const answer = declarationFileStatement(statement, ambient, prologue);
+        prologue = false;
+        if (answer === "declares") declares = true;
+        else if (answer !== "inert") return { verdict: "emitting", kind: answer };
+      }
+    } else {
+      let prologue = true;
+      for (const statement of statements) {
+        if (statementEmits(statement)) {
+          return { verdict: "emitting", kind: emittingKind(statement, prologue) };
+        }
+        prologue = false;
+        declares = declares || statementDeclares(statement);
+      }
+    }
+    if (!declares) return { verdict: "non-declaring" };
+    if (declarationFile) {
+      // Only now: bytes TypeScript would refuse in an ambient context are not a
+      // declaration file, so the suffix cannot speak for them.
+      const violation = ambientGateViolation(file);
+      if (violation) return { verdict: "emitting", kind: violation };
+    }
+    return { verdict: "non-emitting", statements: statements.length };
+  }
+  return { verdict: "unparsable" };
+}
+
+// One artifact-case candidate is asked twice — once while the census decides
+// dispositions and once while a reused proposal is revalidated — and a wildcard
+// census asks about hundreds of members. Memoize by exact bytes so the parse is
+// paid once per distinct file per process, and bound the table so a pathological
+// package cannot retain the whole tree.
+const MODULE_EMISSION_MEMO = new Map();
+const MODULE_EMISSION_MEMO_LIMIT = 8192;
+
+/**
+ * The selected runtime target's exact bytes emit no JavaScript at all, under
+ * the one premise its suffix selects. Answers `{ statements, arm }` —
+ * `erasable-statements` for the bytes-only premise, `declaration-file` for the
+ * suffix-admitting one — or `undefined` for every other file, including one
+ * that cannot be read, is larger than the byte bound, does not parse, has no
+ * statements whatsoever, or declares nothing.
+ *
+ * A module that declares nothing is deliberately not an answer. A module that
+ * declares at least one type is a deliberate type module; a file with no
+ * statements at all — zero bytes, or only comments — is indistinguishable from
+ * a broken build, and so is one whose whole body is `export {}`, which is how
+ * `@solid-devtools/shared` spells the same emptiness as its zero-byte sibling.
+ */
+export function nonEmittingModuleTarget(path) {
+  let bytes;
+  try {
+    bytes = readFileSync(path);
+  } catch {
+    return undefined;
+  }
+  if (bytes.length > MODULE_EMISSION_BYTE_LIMIT) return undefined;
+  const flavor = declarationFileFlavor(path);
+  const key = `${flavor}:${sha256(bytes)}`;
+  if (MODULE_EMISSION_MEMO.has(key)) return MODULE_EMISSION_MEMO.get(key);
+  const answer = uncachedNonEmittingModuleTarget(bytes, flavor);
+  if (MODULE_EMISSION_MEMO.size >= MODULE_EMISSION_MEMO_LIMIT) MODULE_EMISSION_MEMO.clear();
+  MODULE_EMISSION_MEMO.set(key, answer);
+  return answer;
+}
+
+function uncachedNonEmittingModuleTarget(bytes, flavor) {
+  const source = bytes.toString("utf8");
+  // Mirror Rust's `str::from_utf8` exactly: a lossy decode would let invalid
+  // bytes parse here and refuse there.
+  if (!Buffer.from(source, "utf8").equals(bytes)) return undefined;
+  const emission = moduleEmission(source, flavor);
+  if (emission.verdict !== "non-emitting") return undefined;
+  return {
+    statements: emission.statements,
+    arm:
+      flavor === MODULE_EMISSION_FLAVOR.DeclarationFile
+        ? "declaration-file"
+        : "erasable-statements"
+  };
+}
+
 // These programs answer exactly one kind of question, in `syntaxHazards` and
 // nowhere else: does the symbol this identifier resolves to have a declaration
 // in *this same source file*? `noResolve` already keeps every imported module

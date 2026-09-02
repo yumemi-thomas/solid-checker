@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-02T09:43:32.908Z
-- Finished: 2026-09-02T09:45:53.148Z
-- Duration: 140240 ms
+- Started: 2026-09-02T13:51:16.883Z
+- Finished: 2026-09-02T13:52:30.049Z
+- Duration: 73166 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -21,15 +21,15 @@
 - Declared entrypoints: 44
 - Generated entrypoints: 32
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 58
-- Inapplicable artifact cases (recorded, not refused): 3
-- Success (complete contracts): 2/6 (33.33%)
-- Partial contracts: 3
+- Refused artifact cases (partial contracts): 40
+- Inapplicable artifact cases (recorded, not refused): 21
+- Success (complete contracts): 3/6 (50%)
+- Partial contracts: 2
 - Failures: 1
 
 | Package | Version | Probe | Outcome | Class |
 | --- | --- | --- | --- | --- |
-| @solidjs/image | 0.1.0 | only | partial-success | partial-success |
+| @solidjs/image | 0.1.0 | only | success | success |
 | @solidjs/meta | 0.29.4 | only | success | success |
 | @solidjs/router | 1.0.0 | only | success | success |
 | @solidjs/start | 2.0.3 | only | partial-success | partial-success |
@@ -49,8 +49,8 @@ Failure details:
 - Declared entrypoints: 14
 - Generated entrypoints: 561
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 116
-- Inapplicable artifact cases (recorded, not refused): 94
+- Refused artifact cases (partial contracts): 78
+- Inapplicable artifact cases (recorded, not refused): 132
 - Success (complete contracts): 0/4 (0%)
 - Partial contracts: 3
 - Failures: 1
@@ -380,7 +380,7 @@ Failure groups:
 Failure details:
 - **motion-solidjs@0.6.0** (only, dependency-contract-obligation): solid-checker: no certifiable artifact case; 2 case(s) refused; first refusal: .: accepted dependency motion-utils has no exact runtime binding for export MotionGlobalConfig
 
-**Solid 1.x totals:** 130/168 (77.38%) complete, 16 partial, 22 failed
+**Solid 1.x totals:** 131/168 (77.98%) complete, 15 partial, 22 failed
 
 ## Solid 2.x
 
@@ -391,17 +391,17 @@ Failure details:
 - Declared entrypoints: 46
 - Generated entrypoints: 30
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 68
-- Inapplicable artifact cases (recorded, not refused): 3
-- Success (complete contracts): 7/15 (46.67%)
-- Partial contracts: 7
+- Refused artifact cases (partial contracts): 42
+- Inapplicable artifact cases (recorded, not refused): 29
+- Success (complete contracts): 9/15 (60%)
+- Partial contracts: 5
 - Failures: 1
 
 | Package | Version | Probe | Outcome | Class |
 | --- | --- | --- | --- | --- |
 | @solidjs/diagnostics | 2.0.0-rc.3 | only | partial-success | partial-success |
 | @solidjs/element | 2.0.0-rc.3 | only | failure | dependency-contract-obligation |
-| @solidjs/h | 2.0.0-rc.3 | only | partial-success | partial-success |
+| @solidjs/h | 2.0.0-rc.3 | only | success | success |
 | @solidjs/html | 2.0.0-rc.3 | only | success | success |
 | @solidjs/meta | 1.0.0-next.2 | floor | success | success |
 | @solidjs/meta | 1.0.0-next.2 | head | success | success |
@@ -409,7 +409,7 @@ Failure details:
 | @solidjs/signals | 2.0.0-rc.3 | only | success | success |
 | @solidjs/start-devtools | 1.0.0-next.4 | floor | success | success |
 | @solidjs/start-devtools | 1.0.0-next.4 | head | success | success |
-| @solidjs/universal | 2.0.0-rc.3 | only | partial-success | partial-success |
+| @solidjs/universal | 2.0.0-rc.3 | only | success | success |
 | @solidjs/vite-plugin | 3.0.0-next.34 | floor | partial-success | partial-success |
 | @solidjs/vite-plugin | 3.0.0-next.34 | head | partial-success | partial-success |
 | @solidjs/web | 2.0.0-rc.3 | only | partial-success | partial-success |
@@ -428,16 +428,16 @@ Failure details:
 - Declared entrypoints: 3
 - Generated entrypoints: 66
 - Refused entrypoints (partial contracts): 0
-- Refused artifact cases (partial contracts): 5
-- Inapplicable artifact cases (recorded, not refused): 0
-- Success (complete contracts): 0/2 (0%)
-- Partial contracts: 2
+- Refused artifact cases (partial contracts): 4
+- Inapplicable artifact cases (recorded, not refused): 1
+- Success (complete contracts): 1/2 (50%)
+- Partial contracts: 1
 - Failures: 0
 
 | Package | Version | Probe | Outcome | Class |
 | --- | --- | --- | --- | --- |
 | @kobalte/core | 2.0.0-alpha.0 | only | partial-success | partial-success |
-| @kobalte/utils | 2.0.0-alpha.0 | only | partial-success | partial-success |
+| @kobalte/utils | 2.0.0-alpha.0 | only | success | success |
 
 ### Solid Primitives
 
@@ -799,7 +799,7 @@ Failure details:
 | motion-solidjs | 0.7.0-beta.4 | floor | partial-success | partial-success |
 | motion-solidjs | 0.7.0-beta.4 | head | partial-success | partial-success |
 
-**Solid 2.x totals:** 214/250 (85.6%) complete, 21 partial, 15 failed
+**Solid 2.x totals:** 217/250 (86.8%) complete, 18 partial, 15 failed
 
 ### Beta-only packages
 
@@ -849,12 +849,12 @@ None.
 - Probes fully proven (no unknown claim, no refused entrypoint, no closure note): 0/381 (0%)
 - Packages fully proven (every one of their probes): 0/190 (0%)
 - Probes with at least one unknown claim: 381
-- Probes with at least one refused entrypoint: 37
-- Probes with at least one inapplicable artifact case: 311
+- Probes with at least one refused entrypoint: 33
+- Probes with at least one inapplicable artifact case: 318
 - Probes with at least one closure note: 0
 - Exports proven: 0/8847 (0%) (with unknown: 8847, without a summary: 0)
 - Of those unknown exports: 31 unknown in every measured domain (the generator said nothing about them at all), 0 unknown only inside a conditional variant (the default resolution is fully claimed)
-- Entrypoints: 1128 emitted, 0 refused; 365 artifact cases refused, 465 artifact cases inapplicable
+- Entrypoints: 1128 emitted, 0 refused; 282 artifact cases refused, 548 artifact cases inapplicable
 - Closure notes (block byte-attested verification): 0
 - Attested closure notes (record complete, runtime unbounded): 0
 
@@ -905,8 +905,8 @@ Read the domain columns together, not separately: 31 of the 8847 unknown exports
 
 | Family | Contracts | Fully proven | With unknowns | With refusals | Exports proven | Unknown claims |
 | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 19 | 0/19 (0%) | 19 | 10 | 0/1638 (0%) | 14761 |
-| Kobalte | 5 | 0/5 (0%) | 5 | 5 | 0/3558 (0%) | 32022 |
+| Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14761 |
+| Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 32022 |
 | Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17423 |
 | Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2632 |
 | TanStack | 38 | 0/38 (0%) | 38 | 8 | 0/271 (0%) | 2439 |
@@ -940,8 +940,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 2005340 ms
-- Phases: install 115917 ms, generation 752453 ms, harness 1136970 ms
+- Worker time: 986413 ms
+- Phases: install 70323 ms, generation 382574 ms, harness 533516 ms
 
 ### Top failure signatures
 
@@ -974,11 +974,10 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Partial contracts
 
-- @kobalte/core@0.13.13 (kobalte): 508 entrypoint(s) generated, 0 entrypoint(s) and 52 artifact case(s) refused
+- @kobalte/core@0.13.13 (kobalte): 508 entrypoint(s) generated, 0 entrypoint(s) and 41 artifact case(s) refused
 - @kobalte/core@2.0.0-alpha.0 (kobalte): 59 entrypoint(s) generated, 0 entrypoint(s) and 4 artifact case(s) refused
-- @kobalte/solidbase@0.6.13 (kobalte): 33 entrypoint(s) generated, 0 entrypoint(s) and 59 artifact case(s) refused
-- @kobalte/utils@0.9.2 (kobalte): 20 entrypoint(s) generated, 0 entrypoint(s) and 5 artifact case(s) refused
-- @kobalte/utils@2.0.0-alpha.0 (kobalte): 7 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
+- @kobalte/solidbase@0.6.13 (kobalte): 33 entrypoint(s) generated, 0 entrypoint(s) and 33 artifact case(s) refused
+- @kobalte/utils@0.9.2 (kobalte): 20 entrypoint(s) generated, 0 entrypoint(s) and 4 artifact case(s) refused
 - @solid-devtools/debugger@0.28.1 (solid-devtools): 4 entrypoint(s) generated, 0 entrypoint(s) and 30 artifact case(s) refused
 - @solid-devtools/locator@0.16.7 (solid-devtools): 1 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
 - @solid-devtools/shared@0.20.0 (solid-devtools): 4 entrypoint(s) generated, 0 entrypoint(s) and 5 artifact case(s) refused
@@ -991,13 +990,10 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 - @solid-primitives/virtual@1.0.0-next.4 (solid-primitives): 1 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
 - @solid-primitives/virtual@1.0.0-next.4 (solid-primitives): 1 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
 - @solidjs/diagnostics@2.0.0-rc.3 (official-solid): 4 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
-- @solidjs/h@2.0.0-rc.3 (official-solid): 3 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
-- @solidjs/image@0.1.0 (official-solid): 2 entrypoint(s) generated, 0 entrypoint(s) and 1 artifact case(s) refused
-- @solidjs/start@2.0.3 (official-solid): 10 entrypoint(s) generated, 0 entrypoint(s) and 3 artifact case(s) refused
-- @solidjs/universal@2.0.0-rc.3 (official-solid): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
+- @solidjs/start@2.0.3 (official-solid): 10 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
 - @solidjs/vite-plugin@3.0.0-next.34 (official-solid): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
 - @solidjs/vite-plugin@3.0.0-next.34 (official-solid): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
-- @solidjs/web@2.0.0-rc.3 (official-solid): 10 entrypoint(s) generated, 0 entrypoint(s) and 38 artifact case(s) refused
+- @solidjs/web@2.0.0-rc.3 (official-solid): 10 entrypoint(s) generated, 0 entrypoint(s) and 25 artifact case(s) refused
 - @tanstack/solid-pacer@0.22.0 (tanstack): 1 entrypoint(s) generated, 0 entrypoint(s) and 13 artifact case(s) refused
 - @tanstack/solid-router@1.170.30 (tanstack): 1 entrypoint(s) generated, 0 entrypoint(s) and 6 artifact case(s) refused
 - @tanstack/solid-router@2.0.0-rc.2 (tanstack): 1 entrypoint(s) generated, 0 entrypoint(s) and 4 artifact case(s) refused
@@ -1009,8 +1005,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 - motion-solidjs@0.7.0-beta.4 (motion-solidjs): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
 - motion-solidjs@0.7.0-beta.4 (motion-solidjs): 1 entrypoint(s) generated, 0 entrypoint(s) and 2 artifact case(s) refused
 - solid-devtools@0.34.5 (solid-devtools): 1 entrypoint(s) generated, 0 entrypoint(s) and 7 artifact case(s) refused
-- solid-js@1.9.14 (official-solid): 18 entrypoint(s) generated, 0 entrypoint(s) and 54 artifact case(s) refused
-- solid-js@2.0.0-rc.3 (official-solid): 1 entrypoint(s) generated, 0 entrypoint(s) and 21 artifact case(s) refused
+- solid-js@1.9.14 (official-solid): 18 entrypoint(s) generated, 0 entrypoint(s) and 38 artifact case(s) refused
+- solid-js@2.0.0-rc.3 (official-solid): 1 entrypoint(s) generated, 0 entrypoint(s) and 12 artifact case(s) refused
 
 ### Shared dependency blockers
 
@@ -1035,8 +1031,8 @@ None.
 
 | Family | Solid 1.x complete/total | Solid 2.x complete/total |
 | --- | --- | --- |
-| Official Solid | 2/6 (33.33%) | 7/15 (46.67%) |
-| Kobalte | 0/4 (0%) | 0/2 (0%) |
+| Official Solid | 3/6 (50%) | 9/15 (60%) |
+| Kobalte | 0/4 (0%) | 1/2 (50%) |
 | Solid Primitives | 92/97 (94.85%) | 182/194 (93.81%) |
 | Corvu | 7/11 (63.64%) | 15/17 (88.24%) |
 | TanStack | 22/36 (61.11%) | 8/18 (44.44%) |
