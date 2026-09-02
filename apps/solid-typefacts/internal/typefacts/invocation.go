@@ -286,7 +286,28 @@ type ImplementationCall struct {
 	// nor defaulted, and everything else it declines to model leaves the list
 	// empty. Every consumer must fail closed on an empty list.
 	ArgumentSources [][]ImplementationValueSource `cbor:"argumentSources,omitempty" json:"argumentSources,omitempty"`
-	Captured        bool                          `cbor:"captured,omitempty" json:"captured,omitempty"`
+	// CalleeSources is the value provenance of the *callee expression* — the
+	// same trace ReturnSite.Sources carries for a returned expression and
+	// ArgumentSources carries for an argument, applied to node.Expression().
+	//
+	// It answers "what created the value being called", which is a different
+	// question from every other callee fact on this struct. Target, TargetName,
+	// TargetModule, Declaration and CalleeParameter state the *resolution* of
+	// the callee — which symbol it is, which declaration, which parameter — and
+	// they stay exactly as they are; a consumer that wants "the callee is
+	// parameter N" keeps reading CalleeParameter. This field states instead
+	// that the value in callee position came out of some other call: for
+	// `const [read] = createSignal(0); … read()` the resolution is a
+	// BindingElement and the provenance is `createSignal`'s tuple slot 0.
+	//
+	// An empty list means the producer traced nothing. It never means the
+	// callee is not an accessor, never means the callee is plain, and never
+	// means the callee carries no provenance — an ordinary `arr.push(x)` traces
+	// nothing here, and so does a computed callee, a reassigned binding and
+	// `(options.storage || createSignal)(…)`. Every consumer must fail closed
+	// on an empty list.
+	CalleeSources []ImplementationValueSource `cbor:"calleeSources,omitempty" json:"calleeSources,omitempty"`
+	Captured      bool                        `cbor:"captured,omitempty" json:"captured,omitempty"`
 	// EnclosingCallable is the exact source range of the *innermost* callable
 	// that contains this call, or nil when the call sits directly in the
 	// implementation's own body. It is the link a consumer needs to compose a

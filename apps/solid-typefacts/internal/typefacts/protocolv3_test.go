@@ -34,9 +34,9 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 // and the fact that the digest above is the schema file's. The third, the build
 // id, is stamped at link time and is covered by the Rust process tests.
 func TestHandshakeDeclaresTheOperationSetsProtocol(t *testing.T) {
-	if typefacts.TypeFactsHandshakeProtocol != 12 {
+	if typefacts.TypeFactsHandshakeProtocol != 13 {
 		t.Fatalf(
-			"handshake protocol = %d, want 12: protocol 12 adds per-argument value provenance and narrows the value tracer's identifier arm",
+			"handshake protocol = %d, want 13: protocol 13 adds callee value provenance to the implementation call census",
 			typefacts.TypeFactsHandshakeProtocol,
 		)
 	}

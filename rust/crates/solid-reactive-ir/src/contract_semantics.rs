@@ -30,6 +30,19 @@ pub const SEMANTIC_MODEL_VERSION: u16 = 1;
 pub const SEMANTIC_DIGEST_ALGORITHM: &str = "sha256";
 /// Domain separator frozen for semantic-model version 1 contract identities.
 pub const SEMANTIC_DIGEST_DOMAIN: &str = "solid-checker:normalized-package-contract";
+/// The digest domain for a contract in which at least one operation states
+/// composed provenance.
+///
+/// A second domain rather than a second model version, because the model is
+/// unchanged: `composedFrom` is an additive optional field, every document
+/// that omits it still validates, and `semanticModelVersion` stays 1. What
+/// needs separating is the *byte stream*, so that a contract with no composed
+/// operation keeps hashing exactly what it hashed before the field existed —
+/// and with it every policy-2 receipt already issued for it. A contract that
+/// does carry provenance is a new document making a new claim, and it gets a
+/// digest in its own family.
+pub const SEMANTIC_DIGEST_DOMAIN_COMPOSED: &str =
+    "solid-checker:normalized-package-contract:composed-provenance";
 pub const SEMANTIC_CLAIM_ID_VERSION: u16 = 1;
 
 /// Local knowledge for one immediate collection-valued claim domain.
@@ -1090,6 +1103,28 @@ pub enum BehaviorStrength {
     Guaranteed,
 }
 
+/// The `(export, operation)` an operation was composed from, inside the same
+/// artifact case.
+///
+/// A *positive* claim, not a hint: "the behaviour this operation describes is
+/// that export's own operation, performed through this export's call to it".
+/// The export is named because a consumer has to resolve the composing call's
+/// callee to it exactly, and the operation is named because a composed row
+/// says which of the target's operations it is — "some read of that export"
+/// would be a claim about a set.
+///
+/// Composition is intra-package and same-stack by construction. The operation
+/// id is qualified with this artifact case, so a provenance can never name
+/// another package's export; and a consumer must prove the composing call is
+/// a reachable, uncaptured *call*, so the composed row's `at: call /
+/// schedule: same-stack` stamp survives the hop rather than being inherited
+/// through a closure.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ComposedFrom {
+    pub export: String,
+    pub operation: OperationId,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Operation {
     pub id: OperationId,
@@ -1104,6 +1139,13 @@ pub struct Operation {
     pub inputs: Vec<ValueShape>,
     pub output: Option<ValueShape>,
     pub resources: BTreeSet<ResourceId>,
+    /// The `(export, operation)` of the same artifact case this operation was
+    /// composed from, when the generator could name it exactly.
+    ///
+    /// `None` is every other case and keeps the operation's own evidence the
+    /// only route to discharging it. Provenance may only *add* a discharge
+    /// route, never remove one.
+    pub composed_from: Option<ComposedFrom>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

@@ -408,6 +408,28 @@ pub struct ImplementationCall {
     /// closed when it is missing or empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub argument_sources: Vec<Vec<ImplementationValueSource>>,
+    /// The traced value provenance of the *callee expression* — the same trace
+    /// [`ReturnSite::sources`] carries for a returned expression and
+    /// `argument_sources` carries for an argument, applied to the callee.
+    ///
+    /// It answers "what created the value being called", which nothing else on
+    /// this struct answers. `target`, `target_name`, `target_module`,
+    /// `declaration` and `callee_parameter` state the callee's *resolution* —
+    /// which symbol, which declaration, which parameter — and they are
+    /// unchanged by this field's presence: a consumer whose claim is "the callee
+    /// is parameter N" keeps reading `callee_parameter`. The two coexist because
+    /// they disagree usefully: `read()` for `const [read] = createSignal(0)`
+    /// resolves to a `BindingElement` and traces to `createSignal`'s tuple slot
+    /// 0.
+    ///
+    /// **An empty list means the producer traced nothing.** It is never "the
+    /// callee is not an accessor", never "the callee is plain", and never a
+    /// claim about the callee at all: an ordinary `arr.push(x)` traces nothing
+    /// here, and so do a computed callee, a reassigned binding, and
+    /// `(options.storage || createSignal)(…)`. Every consumer fails closed on
+    /// an empty list, and a *short* trace is the same absence.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callee_sources: Vec<ImplementationValueSource>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub captured: bool,
     /// The exact source range of the *innermost* callable containing this call,

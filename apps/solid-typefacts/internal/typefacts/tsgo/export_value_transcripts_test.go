@@ -1259,3 +1259,198 @@ func exportImplementationForSolidMake(
 	}
 	return answer.Transcripts[0].Implementation
 }
+
+// `calleeSources`: the provenance of the value being *called*, from the same
+// tracer and the same gates the argument slots use.
+//
+// It answers a question no other field on the census answers. Target,
+// TargetName, TargetModule, Declaration and CalleeParameter state the callee's
+// *resolution* — for `read()` bound by `const [read] = createSignal(0)` that is
+// a BindingElement — and the provenance states that the value came out of
+// createSignal's tuple slot 0. Both are transmitted, because a consumer whose
+// claim is "the callee is parameter N" reads the resolution and a consumer
+// whose claim is "the callee is a dialect accessor" reads the trace.
+func TestCalleeSourcesTraceTheCalledValuesProvenance(t *testing.T) {
+	source := `import { createSignal } from "solid-js";
+function localSignal(value: unknown): [() => unknown, (next: unknown) => void] {
+  return createSignal(value);
+}
+export function make(
+  cb: () => void,
+  flag: boolean,
+  options: { storage?: typeof createSignal },
+) {
+  const [read, write] = createSignal(1);
+  read();
+  write(2);
+  const [own] = localSignal(3);
+  own();
+  const [picked] = (options.storage || createSignal)(4);
+  picked();
+  let [mutable] = createSignal(5);
+  if (flag) { [mutable] = createSignal(6); }
+  mutable();
+  cb();
+  const holder: { read?: () => unknown } = { read };
+  holder.read!();
+  createSignal(7);
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	call := func(needle string) typefacts.ImplementationCall {
+		t.Helper()
+		start := strings.Index(source, needle)
+		if start < 0 {
+			t.Fatalf("needle %q is absent from the fixture", needle)
+		}
+		for _, found := range implementation.Calls {
+			if found.Location.StartByte == start {
+				return found
+			}
+		}
+		t.Fatalf("call at %q (byte %d) is absent from the census: %#v", needle, start, implementation.Calls)
+		return typefacts.ImplementationCall{}
+	}
+	tupleSlot := func(needle, name string) int {
+		t.Helper()
+		found := call(needle)
+		sources := found.CalleeSources
+		if len(sources) != 1 {
+			t.Fatalf("call %q traced %#v callee sources, want exactly one", needle, sources)
+		}
+		source := sources[0]
+		if source.Kind != typefacts.ImplementationValueCallResult || len(source.Path) != 0 ||
+			source.Target == "" || source.TargetName != name ||
+			len(source.TargetPath) != 1 || source.TargetPath[0].Kind != typefacts.PathSegmentTuple ||
+			source.TargetPath[0].Index == nil {
+			t.Fatalf("call %q traced %#v, want a root-path %s tuple result", needle, source, name)
+		}
+		return *source.TargetPath[0].Index
+	}
+
+	// The accessor half: the whole point of the field. Slot identity is
+	// load-bearing, because a consumer comparing roles reads the slot.
+	if got := tupleSlot("read()", "createSignal"); got != 0 {
+		t.Fatalf("accessor callee = slot %d, want 0", got)
+	}
+	// The setter half, from the same declaration. A rule that read "traced to
+	// createSignal" without the slot would call this an accessor read.
+	if got := tupleSlot("write(2)", "createSignal"); got != 1 {
+		t.Fatalf("setter callee = slot %d, want 1", got)
+	}
+	// A locally declared factory is traced, with the empty module that says so.
+	// Whether `localSignal` is a dialect primitive is not the producer's
+	// question; the empty module is what a consumer refuses on.
+	if got := tupleSlot("own()", "localSignal"); got != 0 {
+		t.Fatalf("locally declared factory callee = slot %d, want 0", got)
+	}
+	if module := call("own()").CalleeSources[0].TargetModule; module != "" {
+		t.Fatalf("locally declared factory module = %q, want empty", module)
+	}
+
+	// The resolution and the provenance coexist and disagree usefully: the
+	// callee resolves to a binding element and traces to a call result.
+	resolved := call("read()")
+	if resolved.Declaration == nil || resolved.Declaration.Kind != "BindingElement" {
+		t.Fatalf("callee declaration = %#v, want the binding element", resolved.Declaration)
+	}
+	if resolved.TargetName != "read" {
+		t.Fatalf("callee target name = %q, want the resolved binding's own name", resolved.TargetName)
+	}
+
+	for _, row := range []struct{ needle, why string }{
+		// `(options.storage || createSignal)(4)` resolves to no callee symbol,
+		// so the binding traces to nothing at all.
+		{"picked()", "a non-identifier creator callee"},
+		// One declaration but assigned elsewhere: the initializer is not the
+		// value.
+		{"mutable()", "a reassigned let binding"},
+		// A parameter is not an array binding element of a variable
+		// declaration, so a callback callee traces nothing — it keeps going
+		// through calleeParameter, which is a different claim.
+		{"cb()", "a parameter callee"},
+		// An ordinary member call. Every such call in a body has an empty
+		// trace, which is why the read rule cannot be universally quantified.
+		{"holder.read!()", "a property-read callee"},
+		// The creator itself: an imported identifier is not a binding element.
+		{"createSignal(7)", "an imported callee"},
+	} {
+		if traced := call(row.needle).CalleeSources; len(traced) != 0 {
+			t.Fatalf("%s traced %#v, want nothing", row.why, traced)
+		}
+	}
+	// And the parameter callee still states the resolution it always stated:
+	// the new field withdraws nothing.
+	if parameter := call("cb()").CalleeParameter; parameter == nil || parameter.ParameterIndex != 0 {
+		t.Fatalf("parameter callee = %#v, want parameter 0", parameter)
+	}
+}
+
+// A call the producer traced no callee provenance for omits the field, and the
+// Rust client's `Vec<ImplementationValueSource>` reads that omission as an
+// empty list. Never `null`: a nil Go slice that encoded as `0xf6` would fail
+// the whole transcript with "invalid type: null, expected a sequence", which is
+// how the argumentSources encoding was pinned.
+func TestCalleeSourcesOmitAnUntracedCalleeAndRoundTripEmpty(t *testing.T) {
+	source := `export function make(cb: () => void) {
+  cb();
+}
+void make;
+`
+	implementation := exportImplementationForSolidMake(t, source)
+	var call *typefacts.ImplementationCall
+	for index := range implementation.Calls {
+		if implementation.Calls[index].CalleeParameter != nil {
+			call = &implementation.Calls[index]
+			break
+		}
+	}
+	if call == nil {
+		t.Fatalf("census = %#v, want the parameter call", implementation.Calls)
+	}
+	if len(call.CalleeSources) != 0 {
+		t.Fatalf("callee sources = %#v, want nothing traced", call.CalleeSources)
+	}
+	encoded, err := wirecbor.Marshal(call)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte("calleeSources")) {
+		t.Fatalf("an untraced callee encodes the key anyway: %#x", encoded)
+	}
+	var roundTripped typefacts.ImplementationCall
+	if err := wirecbor.Unmarshal(encoded, &roundTripped); err != nil {
+		t.Fatal(err)
+	}
+	if len(roundTripped.CalleeSources) != 0 {
+		t.Fatalf("round-tripped callee sources = %#v, want an empty list", roundTripped.CalleeSources)
+	}
+
+	// And a traced callee does carry the key, so the omission above is the
+	// absence of a trace rather than the absence of the field.
+	traced := exportImplementationForSolidMake(t, `import { createSignal } from "solid-js";
+export function make() {
+  const [read] = createSignal(1);
+  read();
+}
+void make;
+`)
+	found := false
+	for _, candidate := range traced.Calls {
+		if len(candidate.CalleeSources) == 0 {
+			continue
+		}
+		found = true
+		encoded, err := wirecbor.Marshal(candidate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(encoded, []byte("calleeSources")) {
+			t.Fatalf("a traced callee omits the key: %#x", encoded)
+		}
+	}
+	if !found {
+		t.Fatalf("census = %#v, want one traced callee", traced.Calls)
+	}
+}

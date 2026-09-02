@@ -426,6 +426,19 @@ func (p *project) implementationCallCensusLocked(
 			}
 			call.Target, call.TargetName, call.TargetModule, call.Declaration =
 				p.implementationCallTargetLocked(node.Expression())
+			// The value provenance of the callee, from the same tracer the
+			// return sites and the argument slots use. It answers a different
+			// question than the resolution just above — "what created the value
+			// being called" rather than "which symbol is it" — and the two
+			// coexist: `read()` for `const [read] = createSignal(0)` resolves
+			// to a BindingElement and traces to createSignal's tuple slot 0.
+			//
+			// Recorded for a construction as well. This is a value trace, not
+			// the callee-parameter resolution the construct branch below
+			// withholds, so nothing about a constructor's resolution is being
+			// claimed; a consumer whose claim is about a *call* still checks
+			// Kind first.
+			call.CalleeSources = p.returnValueSourcesLocked(node.Expression())
 			call.ArgumentCallables = p.argumentCallableLocationsLocked(node)
 			call.DefaultLibraryInvoker, call.InvokedArguments = p.defaultLibraryInvokerLocked(node)
 			if !construct {

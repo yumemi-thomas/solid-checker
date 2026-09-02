@@ -1050,6 +1050,20 @@ impl ContractExport {
     }
 }
 
+/// Where a composed reactive-read row was composed from: the export whose own
+/// read this row is, and the ordinal of that read in *that* export's own list.
+///
+/// The ordinal is what makes the claim addressable: `normalize_export` names a
+/// read operation `read-<ordinal>` over the same list in the same order, so
+/// `ComposedReactiveRead { export: "createPolled", read: 0 }` names exactly
+/// `createPolled:operation:read-0` and nothing else. A name alone would name a
+/// set.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComposedReactiveRead {
+    pub export: String,
+    pub read: usize,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractReactiveRead {
     pub kind: String,
@@ -1067,6 +1081,33 @@ pub struct ContractReactiveRead {
     /// named path can be runtime-probed without guessing which property to
     /// instrument.
     pub path: Option<Vec<String>>,
+    /// The symbol of the summary node this row was composed from, when the
+    /// read was discovered in *another* node and reached this one across a
+    /// call edge. Unresolved provenance: an internal node identity, never
+    /// published.
+    ///
+    /// [`contract_export_summaries`] resolves it to `composed_from` and clears
+    /// it, so an emitted contract never carries it and a consumer can never
+    /// read a provenance the aggregation could not name. It is a field rather
+    /// than a side table because the per-node projection is cached and
+    /// parallel: the node that discovers a read is knowable there, and the
+    /// export it is published under is not.
+    ///
+    /// The symbol's own text rather than the interned identity, because this
+    /// type crosses the crate boundary and the interner does not. It is only
+    /// ever compared for equality against another symbol's text.
+    pub composed_owner: Option<String>,
+    /// The published provenance: this row's read is the named export's own,
+    /// performed through this export's call to it.
+    ///
+    /// `None` is every case the aggregation could not name exactly — an owner
+    /// that is not an export of this project, an owner exported under more
+    /// than one name, an owner whose own read list does not carry a row with
+    /// this row's identity, and a row the export performs itself. A consumer
+    /// reads `None` as "no provenance stated" and falls back to requiring the
+    /// export's own evidence; provenance may only ever *add* a discharge
+    /// route.
+    pub composed_from: Option<ComposedReactiveRead>,
 }
 
 /// When a `tracked` callback row runs, relative to the export returning.
@@ -2195,6 +2236,7 @@ mod tests {
                 end_byte: start + 11,
             },
             origin_context: symbol.into(),
+            owner: None,
         }
     }
 

@@ -13,7 +13,7 @@ use solid_reactive_ir::{
     ContractReturn, OwnerRequirementOperation, PackageContract,
     contract_semantics::{
         ArrayLength, ArtifactCase, CallClaims, CallSemantics, CallbackInvocation,
-        CapabilityKnowledge, Cardinality, CardinalityScope, ContractProposal, Event,
+        CapabilityKnowledge, Cardinality, CardinalityScope, ComposedFrom, ContractProposal, Event,
         ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition, KnowledgeSet,
         Lifetime, NormalizedContract, ObjectProperty, Operation, OperationId, OperationKind,
         OwnerCapabilities, OwnerProduction, OwnerRelation, OwnerRequirements, OwnerSource,
@@ -171,12 +171,23 @@ fn normalize_export(
                             capabilities: KnowledgeSet::Unknown,
                         },
                     };
-                    operations.push(operation(
-                        id.clone(),
-                        OperationKind::Read,
-                        vec![input],
-                        None,
-                    ));
+                    let mut read_operation =
+                        operation(id.clone(), OperationKind::Read, vec![input], None);
+                    // The provenance the IR could name exactly. `read-<n>` is
+                    // this same naming rule applied to the *other* export's
+                    // own list, which is why the IR carries an ordinal rather
+                    // than a label: the ordinal is the operation's name.
+                    read_operation.composed_from =
+                        read.composed_from
+                            .as_ref()
+                            .map(|composed| ComposedFrom {
+                                export: composed.export.clone(),
+                                operation: OperationId(format!(
+                                    "{}:{}:operation:read-{}",
+                                    artifact_case.id, composed.export, composed.read
+                                )),
+                            });
+                    operations.push(read_operation);
                     Ok(id)
                 })
                 .collect::<Result<Vec<_>, ContractFailure>>()?,
@@ -364,6 +375,7 @@ fn operation(
         inputs,
         output,
         resources: BTreeSet::new(),
+        composed_from: None,
     }
 }
 

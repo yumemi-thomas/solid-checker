@@ -302,6 +302,16 @@ pub(crate) struct ContractExportFragment {
     pub(crate) direct: Vec<(String, ContractExport)>,
     pub(crate) syntax: Vec<(String, ContractExport, bool)>,
     pub(crate) dependencies: HashSet<ContractNodeKey>,
+    /// The export name to summary-node symbol bindings this file publishes.
+    ///
+    /// It answers the one question a per-node projection cannot: under which
+    /// exported name is the node that discovered a composed read published?
+    /// Aggregation inverts these, and a node exported under more than one
+    /// name — or under none — publishes no provenance at all. This is a
+    /// nomination for aggregation to resolve, never authority: the certifier
+    /// re-derives the same binding from the compiler's own authenticated
+    /// export table before it discharges anything.
+    pub(crate) owners: Vec<(String, SymbolId)>,
 }
 
 #[derive(Default)]

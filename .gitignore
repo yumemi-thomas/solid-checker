@@ -42,6 +42,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/bundled-rootless-consumer/node_modules/**
 !fixtures/package-contracts/shorthand-block-scope/node_modules/
 !fixtures/package-contracts/shorthand-block-scope/node_modules/**
+!fixtures/package-contracts/composed-operation-provenance/node_modules/
+!fixtures/package-contracts/composed-operation-provenance/node_modules/**
+!fixtures/package-contracts/composed-operation-shadowed-target/node_modules/
+!fixtures/package-contracts/composed-operation-shadowed-target/node_modules/**
 # Dialect detection reads the installed solid-js version from these stubs.
 !fixtures/reactive-ir/dialect-solid-*/node_modules/
 !fixtures/reactive-ir/dialect-solid-*/node_modules/**

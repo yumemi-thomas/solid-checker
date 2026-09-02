@@ -4,28 +4,34 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 12 because the implementation call census now
-// carries argumentSources: per written argument slot, the traced value
-// provenance of the expression written there, from the same tracer that already
-// answers it for a return site. The same change *narrows* that tracer's
+// TypeFactsHandshakeProtocol is 13 because the implementation call census now
+// carries calleeSources: the traced value provenance of the *callee
+// expression*, from the same returnValueSourcesLocked walk and under the same
+// gates that answer argumentSources for an argument. It answers "what created
+// the value being called", which no other field on ImplementationCall answers
+// — Target, TargetName, TargetModule, Declaration and CalleeParameter state the
+// callee's *resolution* and are unchanged. An empty list is the producer's
+// silence, never a negative claim about the callee.
+//
+// It is a break in both directions even though it is only additive:
+// ImplementationCall denies unknown fields, so a protocol-12 consumer rejects a
+// protocol-13 census outright, and a protocol-12 producer's silence on the field
+// is indistinguishable from "traced nothing" for every call, which a
+// protocol-13 consumer would read as "no callee anywhere has provenance". The
+// digest and build id move with the number, and the handshake refuses on any
+// mismatch.
+//
+// Protocol 12 added argumentSources: per written argument slot, the traced value
+// provenance of the expression written there, and narrowed that tracer's
 // identifier arm, which followed a symbol's first declaration and therefore
 // traced a reassignable or redeclared binding to an initializer that need not
-// be the value — a ReturnSite.Sources a protocol-11 producer states and a
-// protocol-12 producer withholds.
-//
-// Both halves change meaning, not only size: a protocol-11 consumer reading a
-// protocol-12 census would find argument provenance it does not know how to
-// bound, and a protocol-11 producer's return sources carry authority a
-// protocol-12 consumer must not grant them. ImplementationCall also denies
-// unknown fields in both directions, so the added field alone is a break. The
-// digest and build id still move with it, and the handshake refuses on any
-// mismatch.
+// be the value.
 //
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 12
-	TypeFactsSchemaSHA256             = "sha256:3d97fa9a3cb8d0b0ac1ca7f8b116a07cfa5774efdefcb7ddc1d8ab51d72f60e0"
+	TypeFactsHandshakeProtocol uint64 = 13
+	TypeFactsSchemaSHA256             = "sha256:1e85e91a37409d8c4d1527ac9778155e10f6ff400cfa2c7e5dbeab0f771866ec"
 )
 
 type ServiceHandshake struct {

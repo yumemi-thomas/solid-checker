@@ -33,6 +33,7 @@ fn operation(id: &str, min: u32) -> Operation {
         },
         inputs: vec![],
         output: None,
+        composed_from: None,
         resources: BTreeSet::new(),
     }
 }

@@ -65,6 +65,7 @@ fn operation(id: &str, kind: OperationKind) -> Operation {
         inputs: vec![],
         output: None,
         resources: BTreeSet::new(),
+        composed_from: None,
     }
 }
 
@@ -1012,6 +1013,166 @@ fn semantic_model_v1_digest_algorithm_and_golden_vector_are_frozen() {
     assert_eq!(
         normalized.semantic_digest().as_str(),
         "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9"
+    );
+}
+
+/// The provenance digest family is separate, frozen, and disjoint from the
+/// legacy one.
+///
+/// The vector above is what pins the half that matters most: a contract with
+/// no composed operation hashes exactly the bytes it hashed before
+/// `composed_from` existed, so every policy-2 receipt already issued for such
+/// a contract keeps authenticating. This pins the other half — that a contract
+/// which *does* state provenance lands in its own family, under its own
+/// domain, with its own frozen vector.
+#[test]
+fn composed_provenance_digest_family_is_separate_and_frozen() {
+    assert_eq!(
+        SEMANTIC_DIGEST_DOMAIN_COMPOSED,
+        "solid-checker:normalized-package-contract:composed-provenance"
+    );
+
+    let read = operation("read", OperationKind::Read);
+    let write = operation("write", OperationKind::Write);
+    let owner = resource("owner", ResourceKind::Owner);
+    let cleanup = resource("cleanup", ResourceKind::Cleanup);
+    let plain = |composed: Option<ComposedFrom>| {
+        let mut read = read.clone();
+        read.composed_from = composed;
+        let mut behavior = call(
+            vec![read.clone(), write.clone()],
+            vec![owner.clone(), cleanup.clone()],
+        );
+        behavior.edges = vec![OperationEdge {
+            kind: EdgeKind::Data,
+            from: read.id.clone(),
+            to: write.id.clone(),
+        }];
+        proposal_with(ValueShape::Plain, behavior)
+            .normalize()
+            .unwrap()
+    };
+    // The same contract, with and without provenance on one row. The two
+    // digests are in different families and neither is the other's.
+    assert_eq!(
+        plain(None).semantic_digest().as_str(),
+        "sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9",
+        "a provenance-free contract must keep the legacy vector byte for byte"
+    );
+    assert_eq!(
+        plain(Some(ComposedFrom {
+            export: "createPolled".into(),
+            operation: OperationId("case:createPolled:operation:read-0".into()),
+        }))
+        .semantic_digest()
+        .as_str(),
+        "sha256:6d2c93ab74d0543599ce2729ae2d705a197bc70242eeee1d7ff69d08a2563700"
+    );
+}
+
+/// Provenance is part of the operation's identity, so it is part of the
+/// digest.
+///
+/// The two proposals state the same rows and differ only in where one of them
+/// says the read happens. A digest that could not tell them apart would let an
+/// acceptance receipt for the plain row authenticate the composed one, whose
+/// evidence is an entirely different premise.
+#[test]
+fn composed_provenance_moves_the_semantic_digest() {
+    let plain = operation("read", OperationKind::Read);
+    let mut composed = plain.clone();
+    composed.composed_from = Some(ComposedFrom {
+        export: "createPolled".into(),
+        operation: OperationId("case:createPolled:operation:read-0".into()),
+    });
+    let digest = |operation| {
+        proposal_with(ValueShape::Plain, call(vec![operation], vec![]))
+            .normalize()
+            .unwrap()
+            .semantic_digest()
+            .as_str()
+            .to_owned()
+    };
+    assert_ne!(digest(plain), digest(composed));
+}
+
+/// Only a `read` operation may state provenance, and never its own export's
+/// operation.
+///
+/// Both refusals are the model's, not the certifier's: a published
+/// `composedFrom` on an `invoke` row would be a fact whose premise was never
+/// reviewed, and one naming this export's own operation is a cycle wearing a
+/// proof's clothes.
+#[test]
+fn composed_provenance_is_refused_on_a_non_read_and_on_its_own_export() {
+    let mut invoke = operation("invoke", OperationKind::Invoke);
+    // The control: the same row without provenance normalizes, so the refusal
+    // below is the guard's and not the proposal's shape.
+    assert!(
+        proposal_with(
+            ValueShape::Plain,
+            call(vec![operation("invoke", OperationKind::Invoke)], vec![]),
+        )
+        .normalize()
+        .is_ok()
+    );
+    invoke.composed_from = Some(ComposedFrom {
+        export: "other".into(),
+        operation: OperationId("case:other:operation:read-0".into()),
+    });
+    let error = proposal_with(ValueShape::Plain, call(vec![invoke], vec![]))
+        .normalize()
+        .expect_err("provenance on an invoke operation");
+    assert!(
+        format!("{error:?}").contains("only a read operation may state composed provenance"),
+        "{error:?}"
+    );
+
+    // Two well-formed reads, both in the closed `reads` claim, so validation
+    // reaches the provenance guard instead of stopping at a node with no
+    // positive claim behind it. The `call` helper cannot build this: it
+    // *overwrites* `claims.reads` per operation, so a two-read proposal built
+    // with it is malformed and every assertion about it passes for the wrong
+    // reason.
+    let mut read = operation("read", OperationKind::Read);
+    let sibling = operation("sibling", OperationKind::Read);
+    read.composed_from = Some(ComposedFrom {
+        export: "self".into(),
+        operation: sibling.id.clone(),
+    });
+    let two_reads = |operations: Vec<Operation>| {
+        let mut claims = closed_claims();
+        claims.reads =
+            KnowledgeSet::Complete(operations.iter().map(|row| row.id.clone()).collect());
+        CallSemantics::new(
+            claims,
+            operations,
+            vec![],
+            vec![],
+            GuardPartition {
+                cases: KnowledgeSet::complete(vec![]),
+            },
+        )
+    };
+    // The control: the same two rows, with no provenance, normalize.
+    assert!(
+        proposal_with(
+            ValueShape::Plain,
+            two_reads(vec![
+                operation("read", OperationKind::Read),
+                sibling.clone(),
+            ]),
+        )
+        .normalize()
+        .is_ok(),
+        "the two-read proposal itself must be well formed, or the guard below is untested"
+    );
+    let error = proposal_with(ValueShape::Plain, two_reads(vec![read, sibling]))
+        .normalize()
+        .expect_err("a provenance naming this export's own operation");
+    assert!(
+        format!("{error:?}").contains("composed provenance names an operation of the composing"),
+        "{error:?}"
     );
 }
 

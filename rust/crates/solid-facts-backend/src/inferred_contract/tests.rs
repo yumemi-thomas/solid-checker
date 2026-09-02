@@ -97,6 +97,8 @@ fn inferred_normalization_keeps_unknowns_local_and_emits_only_open_proposals() {
             label: String::new(),
             parameter: Some(0),
             path: None,
+            composed_owner: None,
+            composed_from: None,
         }]),
         returns: ContractClaim::Open,
         ..ContractExport::default()
@@ -134,6 +136,8 @@ fn parameter_indexes_outside_the_normalized_limit_are_refused_not_clamped() {
             label: String::new(),
             parameter: Some(usize::MAX),
             path: None,
+            composed_owner: None,
+            composed_from: None,
         }]),
         ..ContractExport::default()
     };

@@ -1,5 +1,233 @@
 # Precision backlog
 
+## A `read` operation's locally created accessor now has a census witness (2026-09-03)
+
+`@solid-primitives/timer@1.4.5-next.1|solid2|floor` and `|head` refused
+`operation-reachability` demand
+`sha256:1aee58a94efcff998c64340690189232b89ab9cdfbaf4bc6d816b428b80adf62` on
+`createIntervalCounter:operation:read-0[0] is reactive/accessor, and the
+implementation census binds only parameter-rooted operation inputs`, and with
+that export's read demands skipped, on `createPolled:read-0`
+(`sha256:11db83ae87bdfb7c7cf42b64749106a7134547b94bf0a967671e1e1f54fc7f3f`).
+Both rows now **certify**. The change is two mechanisms that had to land
+together; this entry owns the first.
+
+**Producer.** `ImplementationCall.calleeSources`: the traced value provenance
+of the callee expression, from the same `returnValueSourcesLocked` walk and the
+same gates that answer `argumentSources` for an argument. Handshake protocol
+12 → 13, `TYPE_FACTS_SCHEMA_SHA256`
+`sha256:3d97fa9a3cb8d0b0ac1ca7f8b116a07cfa5774efdefcb7ddc1d8ab51d72f60e0` →
+`sha256:1e85e91a37409d8c4d1527ac9778155e10f6ff400cfa2c7e5dbeab0f771866ec`.
+`docs/typefacts/adr/0025-v1-callee-value-provenance.md` records the decision,
+the rule, and why the protocol number had to move in both directions.
+
+**Consumer.** `require_reactive_read_operation_input` answers the three
+families that died in `operation_input_parameter_root` for a `read` operation
+whose `inputs[0]` is `ValueShape::Reactive`: `operation-reachability` and
+`operation-cardinality` through the `Read` arm of
+`require_operation_evidence`, and `recursive-value-shape` through
+`require_operation_recursive_subject` at the empty path.
+
+What stays open, exactly:
+
+- **Which read.** The rule is **existential**, not universal: at least one
+  reachable, uncaptured call whose callee traces to an unambiguous dialect
+  result of the demanded role. It has to be. A `read` operation carries no
+  span — `ContractReactiveRead` drops the read's origin and
+  `ValueShape::Reactive` carries nothing — so the operation cannot be matched
+  to *a* call; and universal quantification would be vacuously false for every
+  real body, because every ordinary member call has an empty `calleeSources`.
+  **Consequence: multiple reads of the same `(kind, label)` collapse onto one
+  row** in `contract_export_function`'s dedup, and the row is witnessed by a
+  *set* — every matching call is written into the witness list so the receipt
+  records what it was proved against rather than implying a site. Naming a site
+  would need the read's origin in the contract model.
+- **The `captured` veto's consequence.** It is kept for the read families and
+  it is load-bearing: these operations are stamped `at: call / schedule:
+  same-stack` by `inferred_contract.rs`'s shared constructor, and
+  `ContractReactiveRead` has no schedule column, so the uncaptured gate is the
+  only enforcement of that stamp anywhere. A genuinely queued read therefore
+  cannot be published as one and so cannot be proved as one either; the repair
+  is the 2026-09-02 parameter-read diagnosis §4.A's, not this one's. Mechanism
+  A's `MayExecute`/`captured` relaxation is deliberately **not** reused here:
+  its claim is about what a call passes, this one's is about what the export
+  does.
+- **A no-counterexample clause was implemented and removed.** It refused the
+  demand when any admitted call proved the *other* role. The motivating
+  argument — that ignoring `setPolled(v)` would certify a setter write as an
+  accessor read — was wrong: `traced_source_proves_role` is asked about the
+  *demanded* role, so such a call can never be a witness and the clause bought
+  no soundness. It only added a false refusal, because writing a signal and
+  reading it in one body is ordinary:
+  `const [g, setG] = createSignal(3); setG(4); return g();` publishes an
+  accessor read honestly witnessed by `g()` and the clause refused it because
+  `setG(4)` sat beside it. Now pinned as a positive row.
+- **Every callee that traces to nothing**: a computed callee
+  (`(options.storage || createSignal)(…)`), a reassigned `let`, a redeclared
+  `var`, `const c = createMemo(fn); c()` (the identifier arm hops only through
+  an array binding element), a property read, and an imported identifier. A
+  callee that is a *parameter* also traces nothing and keeps going through
+  `calleeParameter` and `require_parameter_read_evidence` — a different witness
+  against a different fact.
+- **`Plain`, `Object`, `Callable`, `Tuple`, `Choice` and `Store` inputs** stay
+  unsupported for the reasons the 2026-09-02 argument-provenance entry records.
+- **The self-artifact premise.** `solid-js@1.9.14|solid1|only` stays refused on
+  the **same** demand and family as before —
+  `recursive-value-shape`
+  `sha256:5463f0ed0af9a202b45f80b731fdba6d9048d2898f3ab5847973ec4156370f7c`,
+  `ErrorBoundary:read-0` — and the digest is unchanged because that contract
+  carries no composed operation. What moved is only the *reason*, from "the
+  implementation census binds only parameter-rooted operation inputs" to this
+  arm's attributable "has no reachable uncaptured call whose callee traces to
+  an unambiguous dialect reactive/accessor". Its 123 read demands are reachable
+  by this arm in shape and blocked by module identity: `createSignal` is
+  declared locally in `dist/solid.js`, so `target_module` is empty and
+  `exports_value_from` correctly answers false. The row was not forced.
+
+Traps pinned as Go producer tests
+(`TestCalleeSourcesTraceTheCalledValuesProvenance`,
+`TestCalleeSourcesOmitAnUntracedCalleeAndRoundTripEmpty`) and Rust unit tests
+(`reactive_read_operation_input_is_proved_by_a_traced_dialect_callee`,
+`reactive_read_operation_input_refuses_every_unproven_callee`,
+`reactive_read_operation_input_arm_claims_only_reactive_read_inputs`).
+
+## A composed read now names the export it was composed from (2026-09-03)
+
+The second half of the timer rows. `createIntervalCounter`'s census is the
+single call `createPolled(timeout, options)`; nothing in its own transcript
+witnesses the read its row claims, and mechanism B alone left it refused. The
+IR was already keeping the composed read byte-identical to its source — the
+`SummaryRead` propagated across the call edge retains the `depSignal()` origin
+*inside* `createPolled` — and the loss was the projection in
+`contract_export_function`, which kept only `(kind, label)`.
+
+**Model and wire.** `Operation.composed_from: Option<ComposedFrom { export,
+operation }>`, published as an optional additive `composedFrom` on a `read`
+operation in `schema/solid-reactivity.schema.json`; documented in
+`docs/package-contract-v2/wire-format.md`. `SEMANTIC_MODEL_VERSION` stays **1**:
+the field is additive, and every document that omits it still validates.
+
+**No existing digest moved, and that took domain separation.**
+`canonical::operation` folds the field in through `option`, which stamps a
+discriminator whether or not the field is set — so folding it into the one
+stream would have moved the semantic digest of **every** contract carrying any
+operation at all, and with it every policy-2 receipt already issued for one
+(`authenticate_policy2_receipt` compares `semanticDigest`), while
+`schemaVersion` and `semanticModelVersion` both stayed 1. That is a
+receipt-compatibility break, which version 1 does not get to make. It was
+implemented that way first and measured: **47 of 82** generator fixtures moved
+their `expected-proposal.json`, each by exactly one line (`semanticDigest`) —
+28 of the remaining 35 carry a proposal with no operation, 5 are fail-closed
+refusals with no proposal snapshot, and 2 were the new fixtures.
+
+Omitting the `None` encoding inside a single stream is *not* the alternative: a
+streaming hash carries no descriptor, so a field written only when present is
+self-delimiting merely by argument about how the neighbouring fields happen to
+encode. The change therefore uses **two disjoint digest families**, separated
+by their domain string. A contract with no composed operation emits the legacy
+stream byte for byte under `SEMANTIC_DIGEST_DOMAIN`; a contract with at least
+one emits the provenance stream under the new
+`SEMANTIC_DIGEST_DOMAIN_COMPOSED`. Each family is injective on its own, the two
+cannot collide because the domain is the length-prefixed first thing written,
+and the family is a function of the contract rather than a mode a caller
+chooses.
+
+Measured after the repair: the frozen golden vector is **unchanged** at
+`sha256:23c3aef34b18c809cbfe185cb53ed4b37275ab6486da190b37f4e18d8291c2b9`
+(with the provenance family's own vector frozen beside it at
+`sha256:6d2c93ab74d0543599ce2729ae2d705a197bc70242eeee1d7ff69d08a2563700`), the
+contract corpus moves **only the two new fixtures**, and every ecosystem demand
+digest returns to its pre-change value: until `sha256:15fde3fc…`,
+`@solidjs/signals` `sha256:78a16558…`, `@tanstack/solid-db`
+`sha256:69512bb4…`. A provenance-carrying contract is a new document making a
+new claim, and it gets a digest in its own family.
+
+**Resolution is a nomination, never authority.** The IR carries the discovering
+node's *symbol* on `ContractReactiveRead.composed_owner`, and
+`resolve_composed_reactive_reads` (in `aggregate_contract_fragments`, the only
+place that knows both the node identities and the export names) turns it into a
+published `composed_from` — publishing nothing when the owner is not an export
+of the project, is exported under more than one name, or carries no read row
+with this row's `(kind, label)`. The certifier then re-derives the binding from
+the compiler's own authenticated export table, so a nomination this pass got
+wrong refuses rather than discharges.
+
+**Consumer.** `require_composed_operation` requires both halves: a call in the
+composing export's census that is a `call`, admitted by the operation's floor,
+**uncaptured**, and resolving to the target by declaration *identity* (symbol,
+source file, exact byte range, plus the snapshot-replayed runtime export name)
+— never by declaration name; and the target's own claim for the named
+operation, field for field, itself discharged from the target's own census,
+recursively through `MAX_COMPOSITION_DEPTH = 8`.
+
+What stays open, exactly:
+
+- **Cross-package composition is NOT done.** Composition is intra-package: the
+  operation id is qualified with this artifact case, and an accepted
+  dependency's export is in neither this case nor this census. The
+  `@solid-primitives/until@0.1.1` row stays refused on
+  `argument_slot_is_proven_invoking`, whose missing dependency tier is a
+  separate slice blocked on a prerequisite outside itself (see the 2026-09-02
+  composition-provenance diagnosis §C.3).
+- **Multi-hop provenance names the *discovering* node, not the immediate hop.**
+  A read propagated E ← E' ← E'' publishes `composedFrom` naming E'', and E's
+  census has no call to E'' — so a two-hop chain refuses. Fail-closed, and the
+  recursion in `require_composed_operation` is currently exercised only by the
+  target's own provenance, not by a measured chain.
+- **A provenance may name a project export that the artifact case does not
+  surface**, and the consumer refuses it. `composed-operation-shadowed-target`
+  pins the case: `otherReadSignal` is exported by `other.js` but the package
+  exports `./index.js` alone, so `composesTheImportedTarget:read-0` publishes a
+  target the case cannot resolve. That is a refusal, never a silently believed
+  fact — but a generator that dropped such a nomination would be the stronger
+  document.
+- **`inferred_contract.rs` still stamps `at: call / schedule: same-stack`**
+  rather than deriving it. Composition inherits that; the uncaptured premise at
+  every hop is what keeps it from *adding* a non-same-stack link of its own.
+- **A read discovered in a private helper carries no provenance** and stays
+  refused, deliberately: "some node in this package performs the read" is the
+  claim the 2026-09-01 dependency-composition scoping study forbids.
+- **Row inflation from the widened dedup key.** `contract_export_function`'s
+  key is now `(kind, label, composed_owner)`, so an export that reads its own
+  signal *and* calls a target whose read has the same `(kind, label)` publishes
+  **two** rows differing only in id and provenance —
+  `readsItsOwnSignalAndComposesTheSameShape` in
+  `fixtures/package-contracts/composed-operation-provenance` is the pinned case,
+  and a private helper reading the same signal produces it too. Collapsing them
+  would publish one claim that this export's own census must witness *and* a
+  composed claim it cannot, and the stronger demand would silently disappear —
+  so the inflation is the correct trade, not a defect. It does mean a package
+  whose exports fan out over one shared signal grows its read-row count, and
+  every added row is an added demand.
+- **The depth bound is only reachable from a foreign document.** Cycles are
+  refused by the visited set, which the generator can never produce anyway
+  (provenance names the *discovering* node, so a published chain is one hop),
+  and `MAX_COMPOSITION_DEPTH = 8` then bites only on an acyclic chain of nine
+  distinct exports — a shape only a hand-written or third-party document can
+  state. It is pinned by
+  `composed_operation_chain_refuses_cycles_and_bounds_its_depth`, driven by a
+  test resolver rather than by any corpus row.
+
+New fixtures: `fixtures/package-contracts/composed-operation-provenance`
+(published; withheld through a returned closure; withheld for a private helper;
+withheld for an owner exported under two names; and two rows for one identity)
+and `composed-operation-shadowed-target` (named by identity where two modules
+declare the same name). The phase-19 `stableMainDocuments` pin moves 171 → 173
+for their two main documents.
+
+Certifier premises pinned by unit tests over a plan-free resolver:
+`composed_operation_chain_proves_one_hop_and_refuses_every_broken_premise`
+(one hop, two hops, an unproven target, no composing call, an unresolvable
+target, an out-of-range foreign ordinal `read-9`),
+`composed_operation_chain_refuses_a_target_with_a_different_claim`,
+`composed_operation_chain_refuses_a_composing_row_that_claims_resources` —
+`composed_operation_states_the_same_claim` requires the composing row's
+`resources` to be **empty** rather than ignoring them, because a resource id is
+qualified by its owning export so the two sets can never be equal, and
+ignoring the composing row's would let it publish a resource relation this
+premise proves nothing about — and
+`composed_operation_chain_refuses_cycles_and_bounds_its_depth`.
+
 ## A destructured name carried the shape of the value it destructures (2026-09-03)
 
 `@solid-primitives/spring@0.1.2` `createDerivedSpring` refused
@@ -12911,3 +13139,21 @@ three `@solidjs/signals`-dependent certified rows stay certified:
 and `|floor`.
 
 No corpus verdict moved in either direction, so no ledger re-pin is due.
+
+### Re-measured: 355 verified / 42 exact refusals / 21 not attempted
+
+The complete 418-probe corpus was re-run after both halves of this slice and
+their fixer round (`make ecosystem-benchmark`; report SHA-256 recorded in the
+Phase 21 ledger's `authority.currentReport`). Against the committed report,
+exactly two verdicts moved, both refused → verified:
+`@solid-primitives/timer@1.4.5-next.1|solid2|floor` and `|head`, certified
+through `createIntervalCounter:read-0`'s composed provenance to
+`createPolled:read-0` and that read's callee provenance to `createSignal`
+slot 0. Because the digest family is domain-separated, every provenance-free
+contract kept its semantic digest: `until`, `@solidjs/signals` and
+`@tanstack/solid-db` refuse on byte-identical demands, `solid-js@1.9.14` keeps
+demand `5463f0ed…` (`ErrorBoundary:read-0`) with the reason now attributable
+to mechanism B's missing witness, and `motion-solidjs@0.6.0` only alternated
+its first-refused entrypoint (`.` ↔ `./v1`), the reporting-order flip recorded
+earlier. Ledgers re-pinned: Phase 20 moved 353 → 355 verified and 44 → 42
+exact refusals. Wall time 72.3 s.

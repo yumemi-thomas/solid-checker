@@ -36,26 +36,35 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:3d97fa9a3cb8d0b0ac1ca7f8b116a07cfa5774efdefcb7ddc1d8ab51d72f60e0";
-/// 12 adds `argumentSources` to the implementation call census: per written
-/// argument slot, the traced value provenance of the expression written there,
-/// from the same tracer that already answers it for a return site. It also
-/// *narrows* that tracer's identifier arm, which followed a symbol's first
-/// declaration and so traced a reassignable binding to an initializer that may
-/// not be the value — a `ReturnSite.sources` a protocol-11 producer states and
-/// a protocol-12 producer withholds.
+    "sha256:1e85e91a37409d8c4d1527ac9778155e10f6ff400cfa2c7e5dbeab0f771866ec";
+/// 13 adds `calleeSources` to the implementation call census: the traced value
+/// provenance of the *callee expression*, from the same
+/// `returnValueSourcesLocked` walk and under the same gates that answer
+/// `argumentSources` for an argument. It answers "what created the value being
+/// called", which no other field on `ImplementationCall` answers — `target`,
+/// `target_name`, `target_module`, `declaration` and `callee_parameter` state
+/// the callee's *resolution* and are unchanged. An empty list is the producer's
+/// silence, never a negative claim about the callee.
 ///
-/// Both halves are a change of meaning, not only of size. A protocol-11
-/// consumer reading a protocol-12 census would find argument provenance it does
-/// not know how to bound, and a protocol-11 producer's return sources carry
-/// authority a protocol-12 consumer must not grant them. `ImplementationCall`
-/// also denies unknown fields in both directions, so the added field alone is a
-/// break. The digest and build id still move with it, and the handshake refuses
-/// a producer that differs on any one of the three.
+/// It is a break in both directions even though it is only additive:
+/// `ImplementationCall` denies unknown fields, so a protocol-12 consumer
+/// rejects a protocol-13 census outright, and a protocol-12 producer's silence
+/// on the field is indistinguishable from "traced nothing" for every call — a
+/// protocol-13 consumer reading it would conclude that no callee anywhere has
+/// provenance. The digest and build id move with the number, and the handshake
+/// refuses a producer that differs on any one of the three.
+///
+/// 12 added `argumentSources`: per written argument slot, the traced value
+/// provenance of the expression written there, from the same tracer that
+/// already answers it for a return site. It also *narrowed* that tracer's
+/// identifier arm, which followed a symbol's first declaration and so traced a
+/// reassignable binding to an initializer that may not be the value — a
+/// `ReturnSite.sources` a protocol-11 producer states and a protocol-12
+/// producer withholds.
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 12;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 13;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

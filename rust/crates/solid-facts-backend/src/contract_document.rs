@@ -313,6 +313,28 @@ impl CompactIds {
         Ok(id.0.strip_prefix(&self.operation_prefix).unwrap_or(&id.0))
     }
 
+    /// The local spelling of an operation of *another* export of the same
+    /// artifact case.
+    ///
+    /// The prefix has to match exactly: an id that does not carry this
+    /// artifact case and that export is a provenance the document cannot
+    /// state, and emitting the qualified id verbatim would put another
+    /// artifact case's identity into a field this side re-qualifies with its
+    /// own on the way back in.
+    fn operation_in<'a>(
+        &self,
+        export: &str,
+        id: &'a OperationId,
+    ) -> Result<&'a str, ContractFailure> {
+        id.0.strip_prefix(&format!("{}:{export}:operation:", self.source_case))
+            .ok_or_else(|| ContractFailure::InvalidSemanticModel {
+                reason: format!(
+                    "composed provenance {:?} does not name an operation of {export:?} in this artifact case",
+                    id.0
+                ),
+            })
+    }
+
     fn resource<'a>(&self, id: &'a ResourceId) -> Result<&'a str, ContractFailure> {
         Ok(id.0.strip_prefix(&self.resource_prefix).unwrap_or(&id.0))
     }
@@ -534,6 +556,15 @@ fn compact_operation(
                     .map(|resource| Ok(json!(ids.resource(resource)?)))
                     .collect::<Result<_, ContractFailure>>()?,
             ),
+        );
+    }
+    if let Some(composed) = &operation.composed_from {
+        object.insert(
+            "composedFrom".into(),
+            json!({
+                "export": composed.export,
+                "operation": ids.operation_in(&composed.export, &composed.operation)?,
+            }),
         );
     }
     Ok(JsonValue::Object(object))
@@ -1404,6 +1435,22 @@ struct WireOperation {
     output: Option<WireValue>,
     #[serde(default)]
     resources: Vec<String>,
+    #[serde(default, rename = "composedFrom")]
+    composed_from: Option<WireComposedFrom>,
+}
+
+/// The `(export, operation)` a composed operation was composed from, inside
+/// the same artifact case.
+///
+/// The operation is named in the document's *local* spelling — `read-0`, the
+/// same spelling this export's own operation ids use — and is qualified with
+/// the named export by [`IdScope::operation_in`]. A document therefore cannot
+/// state a provenance outside its own artifact case at all: the qualification
+/// is this side's, not the document's.
+#[derive(Clone, Deserialize)]
+struct WireComposedFrom {
+    export: String,
+    operation: String,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -2317,18 +2364,29 @@ fn hash_text(hash: &mut Sha256, value: &str) {
 }
 
 struct IdScope {
+    case: String,
     prefix: String,
 }
 
 impl IdScope {
     fn new(case: &str, export: &str) -> Self {
         Self {
+            case: case.into(),
             prefix: format!("{case}:{export}"),
         }
     }
 
     fn operation(&self, id: &str) -> OperationId {
         OperationId(format!("{}:operation:{id}", self.prefix))
+    }
+
+    /// The qualified id of an operation of *another* export of the same
+    /// artifact case.
+    ///
+    /// The case comes from this scope, never from the document, so a stated
+    /// provenance is confined to the artifact case whose document stated it.
+    fn operation_in(&self, export: &str, id: &str) -> OperationId {
+        OperationId(format!("{}:{export}:operation:{id}", self.case))
     }
 
     fn resource(&self, id: &str) -> ResourceId {
@@ -2637,6 +2695,12 @@ fn expand_operation(operation: WireOperation, ids: &IdScope) -> Result<Operation
             .map(|value| expand_value(value, ids))
             .transpose()?,
         resources,
+        composed_from: operation.composed_from.as_ref().map(|composed| {
+            solid_reactive_ir::contract_semantics::ComposedFrom {
+                export: composed.export.clone(),
+                operation: ids.operation_in(&composed.export, &composed.operation),
+            }
+        }),
     })
 }
 
@@ -3279,6 +3343,17 @@ mod tests {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../benchmarks/package-contract-v2/phase6/conditional-owned-effect.json"
     ));
+    /// The generator fixture that publishes a composed `read` operation.
+    ///
+    /// Included as a golden so `composedFrom` is exercised in **both**
+    /// directions by the round-trip below: `WireComposedFrom` and
+    /// `IdScope::operation_in` on the way in, `CompactIds::operation_in` on
+    /// the way out. A field that only ever encoded, or only ever decoded,
+    /// would pass every other test in this module.
+    const COMPOSED: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../fixtures/package-contracts/composed-operation-provenance/expected.json"
+    ));
 
     fn normalized(bytes: &[u8]) -> NormalizedContract {
         decode(bytes).unwrap().normalize().unwrap()
@@ -3312,7 +3387,7 @@ mod tests {
 
     #[test]
     fn all_goldens_round_trip_through_identical_normalized_semantics() {
-        for bytes in [MINIMAL, SIGNAL, CONDITIONAL] {
+        for bytes in [MINIMAL, SIGNAL, CONDITIONAL, COMPOSED] {
             let first = normalized(bytes);
             let encoded = encode(&first, &SidecarDigests::default(), true).unwrap();
             let second = normalized(&encoded);
@@ -3322,6 +3397,45 @@ mod tests {
                 encode(&second, &SidecarDigests::default(), true).unwrap()
             );
         }
+    }
+
+    /// The composed golden really carries the field, and it survives the
+    /// round trip as the same `(export, operation)` pair.
+    ///
+    /// Without this the round-trip above would still pass if both directions
+    /// dropped `composedFrom` together.
+    #[test]
+    fn composed_provenance_survives_the_round_trip_in_both_directions() {
+        let normalized_contract = normalized(COMPOSED);
+        let composed = normalized_contract.artifact_cases()[0]
+            .exports
+            .values()
+            .flat_map(|export| export.call.operations.iter())
+            .filter_map(|operation| operation.composed_from.as_ref())
+            .collect::<Vec<_>>();
+        // Two rows in that fixture compose the same target: the export that
+        // only calls it, and the export that also reads its own signal.
+        assert_eq!(composed.len(), 2, "{composed:?}");
+        for provenance in composed {
+            assert_eq!(provenance.export, "readsItsOwnSignal");
+            // The qualified id is this side's, built from the artifact case
+            // and the named export — a document states only the local
+            // `read-0`.
+            assert!(
+                provenance
+                    .operation
+                    .0
+                    .ends_with(":readsItsOwnSignal:operation:read-0"),
+                "{:?}",
+                provenance.operation
+            );
+        }
+        let encoded = encode(&normalized_contract, &SidecarDigests::default(), true).unwrap();
+        assert!(
+            String::from_utf8_lossy(&encoded).contains("\"composedFrom\""),
+            "the encoder dropped the provenance"
+        );
+        assert_eq!(normalized(&encoded), normalized_contract);
     }
 
     #[test]

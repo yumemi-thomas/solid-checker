@@ -212,18 +212,31 @@ fn project_reactive_reads(
                 label: String::new(),
                 parameter: Some(usize::from(*index)),
                 path: Some(path.clone()),
+                // An *accepted* contract's operation is projected back with no
+                // provenance, deliberately. Composition is intra-package: the
+                // claim it discharges is "this export performs the read
+                // through its call to that export of the same artifact case",
+                // and an accepted dependency's export is in neither this
+                // artifact case nor this census. Carrying it here would make a
+                // cross-package composition the consumer has no premise for.
+                composed_owner: None,
+                composed_from: None,
             }),
             Some(ValueShape::Reactive { .. }) => reads.push(ContractReactiveRead {
                 kind: "accessor".into(),
                 label: "normalized reactive read".into(),
                 parameter: None,
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }),
             Some(ValueShape::Store { .. }) => reads.push(ContractReactiveRead {
                 kind: "store-path".into(),
                 label: "normalized store read".into(),
                 parameter: None,
                 path: None,
+                composed_owner: None,
+                composed_from: None,
             }),
             _ => {
                 open.insert(ClaimDomain::Reads);
@@ -1204,9 +1217,30 @@ fn contract_export_function(
                     ),
                 parameter: None,
                 path: None,
+                // Provenance is stated exactly when the read was discovered in
+                // a *different* node and travelled here across a call edge.
+                // A read the export performs itself carries none, and neither
+                // does a row whose discovering node the summary could not
+                // identify — `None` is the fail-closed value at both ends.
+                composed_owner: read
+                    .owner
+                    .as_ref()
+                    .filter(|owner| node.symbol.as_ref() != Some(*owner))
+                    .map(|owner| owner.as_str().to_owned()),
+                composed_from: None,
             };
+            // The dedup key carries the provenance, so a read the export
+            // performs itself and a read of the same `(kind, label)` it
+            // performs through a call stay two rows. Collapsing them onto one
+            // would publish a single claim that the export's own census has to
+            // witness *and* a composed claim it cannot, and the stronger of
+            // the two demands would silently disappear.
             seen_reactive_reads
-                .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
+                .insert((
+                    reactive_read.kind.clone(),
+                    reactive_read.label.clone(),
+                    reactive_read.composed_owner.clone(),
+                ))
                 .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
@@ -1223,12 +1257,17 @@ fn contract_export_function(
             .insert(path.as_slice());
     }
     for (parameter, paths) in paths_by_parameter {
-        if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string())) {
+        if seen_reactive_reads.insert(("parameter-member".into(), parameter.to_string(), None)) {
             reactive_reads.push(ContractReactiveRead {
                 kind: "parameter-member".into(),
                 label: String::new(),
                 parameter: Some(parameter),
                 path: (paths.len() == 1).then(|| paths.into_iter().next().unwrap().to_vec()),
+                // A parameter-member read is rooted at *this* export's own
+                // parameter, so it is never composed from another export's
+                // row.
+                composed_owner: None,
+                composed_from: None,
             });
         }
     }
@@ -1569,6 +1608,7 @@ fn contract_export_fragment(
         {
             fragment.dependencies.insert(node_keys[target].clone());
             fragment.direct.push((name.clone(), summary.clone()));
+            fragment.owners.push((name.clone(), symbol.clone()));
         }
     }
     // `module_level_exports`, not `exports`: an `export` inside a `namespace`
@@ -1626,6 +1666,15 @@ fn contract_export_fragment(
                 })
                 .unwrap_or_else(value_contract_export);
             let summary = promote_callable_export(facts, file, specifier.local.span, summary);
+            if let Some(symbol) = graph
+                .entities
+                .get(&location(file.path.shared(), specifier.local.span))
+                .filter(|symbol| graph.by_symbol.contains_key(*symbol))
+            {
+                fragment
+                    .owners
+                    .push((specifier.exported.to_string(), symbol.clone()));
+            }
             fragment
                 .syntax
                 .push((specifier.exported.to_string(), summary, true));
@@ -1651,11 +1700,15 @@ fn contract_export_fragment(
                     })
                     .unwrap_or_else(value_contract_export);
                 let summary = promote_callable_export(facts, file, name.span, summary);
-                fragment.syntax.push((
-                    file.source_text(name.span).unwrap_or_default().to_owned(),
-                    summary,
-                    false,
-                ));
+                let exported = file.source_text(name.span).unwrap_or_default().to_owned();
+                if let Some(symbol) = graph
+                    .entities
+                    .get(&location(file.path.shared(), name.span))
+                    .filter(|symbol| graph.by_symbol.contains_key(*symbol))
+                {
+                    fragment.owners.push((exported.clone(), symbol.clone()));
+                }
+                fragment.syntax.push((exported, summary, false));
             }
         }
     }
@@ -1888,7 +1941,107 @@ fn aggregate_contract_fragments(
             }
         }
     }
+    resolve_composed_reactive_reads(facts, fragments, &mut aggregate);
     aggregate
+}
+
+/// Resolve every row's unpublished `composed_owner` into a published
+/// `composed_from`, and clear the unpublished half.
+///
+/// This is the only place in the pipeline that knows both halves of the
+/// question: the per-node projection knows *which node* discovered a read but
+/// not the name it is exported under, and each file's fragment knows its own
+/// export bindings but not another file's. Aggregation has all of them.
+///
+/// Every step publishes nothing rather than approximating:
+///
+/// * an owner symbol no export of this project names — a private helper, a
+///   node reached only through an unnameable re-export — stays unresolved,
+///   because "some node in this package performs the read" is exactly the
+///   claim the scoping study forbids;
+/// * an owner exported under **more than one** name stays unresolved: the two
+///   names are two claims, and picking one would name a target a call site may
+///   not resolve to;
+/// * an owner whose own read list carries no row with this row's identity
+///   stays unresolved. The identity is `(kind, label)`, the same key the
+///   projection deduplicates by, so at most one row can match — the ordinal it
+///   is found at is what `normalize_export` names `read-<ordinal>`;
+/// * a row whose owner is the export publishing it is not a composition at
+///   all.
+///
+/// The resolution is a *nomination*, never authority. The certifier proves the
+/// composing call's callee resolves to the named export through the compiler's
+/// own authenticated export table, and proves the named export's own demand
+/// for the named operation separately, so a provenance this pass got wrong
+/// refuses rather than discharges.
+fn resolve_composed_reactive_reads(
+    facts: &ProjectFacts,
+    fragments: &HashMap<String, ContractExportFragment>,
+    aggregate: &mut BTreeMap<String, ContractExport>,
+) {
+    let mut names_by_owner = BTreeMap::<&str, BTreeSet<&str>>::new();
+    for file in &facts.files {
+        if let Some(fragment) = fragments.get(file.path.as_str()) {
+            for (name, symbol) in &fragment.owners {
+                names_by_owner
+                    .entry(symbol.as_str())
+                    .or_default()
+                    .insert(name.as_str());
+            }
+        }
+    }
+    // The read identities of every export, snapshotted before anything is
+    // rewritten: an ordinal has to be read off the list as published, and the
+    // rewrite below never reorders one.
+    let identities = aggregate
+        .iter()
+        .filter_map(|(name, summary)| {
+            summary.reactive_reads.known().map(|reads| {
+                (
+                    name.clone(),
+                    reads
+                        .iter()
+                        .map(|read| (read.kind.clone(), read.label.clone()))
+                        .collect::<Vec<_>>(),
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (name, summary) in aggregate.iter_mut() {
+        let ContractClaim::Known(reads) = &mut summary.reactive_reads else {
+            continue;
+        };
+        for read in reads.iter_mut() {
+            let Some(owner) = read.composed_owner.take() else {
+                continue;
+            };
+            let Some(exports) = names_by_owner.get(owner.as_str()) else {
+                continue;
+            };
+            let [export] = exports.iter().copied().collect::<Vec<_>>()[..] else {
+                continue;
+            };
+            if export == name.as_str() {
+                continue;
+            }
+            let Some(rows) = identities.get(export) else {
+                continue;
+            };
+            let matched = rows
+                .iter()
+                .enumerate()
+                .filter(|(_, (kind, label))| *kind == read.kind && *label == read.label)
+                .map(|(ordinal, _)| ordinal)
+                .collect::<Vec<_>>();
+            let [ordinal] = matched[..] else {
+                continue;
+            };
+            read.composed_from = Some(crate::ComposedReactiveRead {
+                export: export.to_owned(),
+                read: ordinal,
+            });
+        }
+    }
 }
 
 fn path_within_project(path: &Path, directory: &Path) -> bool {

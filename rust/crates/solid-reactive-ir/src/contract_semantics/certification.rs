@@ -2073,6 +2073,7 @@ mod tests {
             inputs: Vec::new(),
             output: None,
             resources: std::collections::BTreeSet::new(),
+            composed_from: None,
         };
         let call = CallSemantics::new(
             CallClaims::default(),

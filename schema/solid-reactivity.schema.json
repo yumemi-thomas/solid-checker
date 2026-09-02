@@ -287,7 +287,18 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/nonemptyString" }
-        }
+        },
+        "composedFrom": { "$ref": "#/$defs/composedFrom" }
+      }
+    },
+    "composedFrom": {
+      "description": "The export and operation of the SAME artifact case this operation was composed from: the behaviour this operation describes is that export's own operation, performed through this export's call to it. `operation` is the target's own local operation id (`read-0`), never a qualified one -- a document cannot name an operation outside the artifact case that carries it. Optional and additive: an operation that omits it makes no provenance claim, and a consumer then requires this export's own evidence for the row. Only a `read` operation may carry it. A consumer must not read it as authority: it names a target to prove against, and discharging it requires proving both that this export really calls that export (by resolved declaration, never by name) and that the target's own claim for the named operation holds.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["export", "operation"],
+      "properties": {
+        "export": { "$ref": "#/$defs/nonemptyString" },
+        "operation": { "$ref": "#/$defs/nonemptyString" }
       }
     },
     "event": {

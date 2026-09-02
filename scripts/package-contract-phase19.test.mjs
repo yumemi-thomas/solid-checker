@@ -87,8 +87,13 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // declaration surface pinned by torture-dts-disagreement. 171 adds the
       // destructured-return-slot generator fixture's main document, which pins
       // that a destructured name carries its slot rather than the value it
-      // destructures.
-      stableMainDocuments: 171,
+      // destructures. 173 adds the two composed-operation fixtures'
+      // main documents: composed-operation-provenance, which pins where a
+      // `composedFrom` is published and where it is withheld, and
+      // composed-operation-shadowed-target, which pins that the target is
+      // named by the discovering node's identity rather than by the name two
+      // declarations share.
+      stableMainDocuments: 173,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

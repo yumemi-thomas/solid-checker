@@ -87,16 +87,17 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
   // declaration-owner harness and array element-index split (2026-09-03) add exactly
   // @tanstack/solid-query-persist-client 5.102.5 and @solid-primitives/db-store 1.1.4;
   // the destructured-return-slot generator fix (2026-09-03) adds exactly
-  // @solid-primitives/spring 0.1.2.
+  // @solid-primitives/spring 0.1.2; callee provenance plus composed-operation
+  // provenance (2026-09-03) add exactly the two @solid-primitives/timer 1.4.5 Solid 2 rows.
   assert.deepEqual(ledger.summary.proposalStates, {
     complete: 348,
     "fully-refused": 37,
     partial: 33
   });
   assert.deepEqual(ledger.summary.certificationStates, {
-    "exact-refusal": 44,
+    "exact-refusal": 42,
     "not-attempted": 21,
-    verified: 353
+    verified: 355
   });
   assert.deepEqual(ledger.summary.failureLedgers, {
     dependencyContractObligation: 29,
@@ -104,7 +105,7 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
     geolocationExportKindConflict: 0
   });
   assert.equal(ledger.summary.classifierCorrections, 0);
-  assert.equal(ledger.summary.verifiedRows, 353);
+  assert.equal(ledger.summary.verifiedRows, 355);
   assert.deepEqual(
     ledger.rows.filter(row => row.certification.state === "verified").map(row => row.probeId),
     [
@@ -376,6 +377,8 @@ test("the checked-in 418-row report produces orthogonal live ledgers", () => {
       "@solid-primitives/styles@1.0.0-next.2|solid2|head",
       "@solid-primitives/throttle@1.2.0|solid1|only",
       "@solid-primitives/timer@1.4.4|solid1|only",
+      "@solid-primitives/timer@1.4.5-next.1|solid2|floor",
+      "@solid-primitives/timer@1.4.5-next.1|solid2|head",
       "@solid-primitives/transition-group@1.1.2|solid1|only",
       "@solid-primitives/transition-group@2.0.0-next.2|solid2|floor",
       "@solid-primitives/transition-group@2.0.0-next.2|solid2|head",

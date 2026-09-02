@@ -6,8 +6,43 @@ pub(super) fn semantic_digest(
     package: &PackageIdentity,
     artifact_cases: &[ArtifactCase],
 ) -> Digest {
+    // Two disjoint digest families, separated by their domain string.
+    //
+    // `composed_from` is written through `option`, which stamps a
+    // discriminator whether or not the field is set — so folding it into the
+    // one stream unconditionally would move the digest of every contract that
+    // carries any operation at all, and with it every already-issued policy-2
+    // receipt for such a contract, while `schemaVersion` and
+    // `semanticModelVersion` both stay 1. That is a receipt-compatibility
+    // break, which version 1 does not get to make.
+    //
+    // Omitting the `None` encoding inside a single family is not the
+    // alternative: a streaming hash carries no descriptor, so a field written
+    // only when present is self-delimiting merely by argument about how the
+    // neighbouring fields happen to encode. Domain separation gets both
+    // properties honestly. A contract with no composed operation emits the
+    // legacy stream **byte for byte** and keeps its digest and its receipts; a
+    // contract with at least one emits the provenance stream under a different
+    // domain. Each family is injective on its own, and the two cannot collide
+    // because the domain is the length-prefixed first thing written. The
+    // family is a function of the contract, so it is not a mode a caller can
+    // choose.
+    let composed = artifact_cases.iter().any(|case| {
+        case.exports.values().any(|export| {
+            export
+                .call
+                .operations
+                .iter()
+                .any(|operation| operation.composed_from.is_some())
+        })
+    });
     let mut writer = CanonicalWriter::new();
-    writer.text(SEMANTIC_DIGEST_DOMAIN);
+    writer.text(if composed {
+        SEMANTIC_DIGEST_DOMAIN_COMPOSED
+    } else {
+        SEMANTIC_DIGEST_DOMAIN
+    });
+    writer.composed_provenance = composed;
     writer.u16(SEMANTIC_MODEL_VERSION);
     writer.package(package);
     writer.sequence(artifact_cases, CanonicalWriter::artifact_case);
@@ -31,21 +66,33 @@ pub(super) fn semantic_claim_id(
     SemanticClaimId::from_sha256(writer.finish())
 }
 
-struct CanonicalWriter(Sha256);
+struct CanonicalWriter {
+    hash: Sha256,
+    /// Whether this stream belongs to the provenance digest family.
+    ///
+    /// Set once, from the contract, by [`semantic_digest`]; false for every
+    /// other entry point, all of which encode identities rather than
+    /// operations and so cannot reach the field it gates. When false the
+    /// operation encoding is the legacy one byte for byte.
+    composed_provenance: bool,
+}
 
 impl CanonicalWriter {
     fn new() -> Self {
-        Self(Sha256::new())
+        Self {
+            hash: Sha256::new(),
+            composed_provenance: false,
+        }
     }
 
     fn finish(self) -> [u8; 32] {
-        self.0.finalize().into()
+        self.hash.finalize().into()
     }
 
     fn bytes(&mut self, bytes: &[u8]) {
-        self.0
+        self.hash
             .update(u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_be_bytes());
-        self.0.update(bytes);
+        self.hash.update(bytes);
     }
 
     fn text(&mut self, value: &str) {
@@ -53,23 +100,23 @@ impl CanonicalWriter {
     }
 
     fn bool(&mut self, value: bool) {
-        self.0.update([u8::from(value)]);
+        self.hash.update([u8::from(value)]);
     }
 
     fn u8(&mut self, value: u8) {
-        self.0.update([value]);
+        self.hash.update([value]);
     }
 
     fn u16(&mut self, value: u16) {
-        self.0.update(value.to_be_bytes());
+        self.hash.update(value.to_be_bytes());
     }
 
     fn u32(&mut self, value: u32) {
-        self.0.update(value.to_be_bytes());
+        self.hash.update(value.to_be_bytes());
     }
 
     fn usize(&mut self, value: usize) {
-        self.0
+        self.hash
             .update(u64::try_from(value).unwrap_or(u64::MAX).to_be_bytes());
     }
 
@@ -369,6 +416,26 @@ impl CanonicalWriter {
         for resource in &operation.resources {
             self.resource_id(resource);
         }
+        // Provenance is part of the operation's claim, so it is part of the
+        // operation's identity: "this export reads that accessor" and "this
+        // export reads that accessor through its call to `createPolled`" are
+        // two different claims about the same row, and a digest that could not
+        // tell them apart would let a receipt for one authenticate the other.
+        //
+        // Written only in the provenance family, and there through `option`,
+        // which stamps its discriminator either way. In the legacy family this
+        // whole encoding is absent, so a contract with no composed operation
+        // hashes exactly the bytes it hashed before the field existed. See
+        // [`semantic_digest`] for why the families are separated rather than
+        // merged.
+        if self.composed_provenance {
+            self.option(operation.composed_from.as_ref(), Self::composed_from);
+        }
+    }
+
+    fn composed_from(&mut self, composed: &ComposedFrom) {
+        self.text(&composed.export);
+        self.operation_id(&composed.operation);
     }
 
     fn operation_kind(&mut self, kind: OperationKind) {

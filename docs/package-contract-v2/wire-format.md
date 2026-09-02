@@ -232,6 +232,47 @@ unknown. Owner `source` is `none`, `ambient-at-call`, `ambient-at-execution`,
 requirements, child capability, cleanup capability, and lifetime are separate
 keys and may be omitted independently when unknown.
 
+### `composedFrom`
+
+A `read` operation may additionally carry `composedFrom`, naming the export and
+operation *of the same artifact case* the row was composed from:
+
+```json
+{
+  "id": "read-0",
+  "kind": "read",
+  "at": { "event": "call", "schedule": "same-stack" },
+  "count": { "scope": "call", "min": 0, "max": "many" },
+  "tracking": "untracked",
+  "inputs": [{ "kind": "reactive", "role": "accessor" }],
+  "composedFrom": { "export": "createPolled", "operation": "read-0" }
+}
+```
+
+It means "the behaviour this operation describes is that export's own
+operation, performed through this export's call to it". Both keys are required
+when the object is present. `operation` is the target's own **local** operation
+id, the same spelling this export's ids use, so a document cannot name an
+operation outside the artifact case that carries it — the qualification is the
+reader's, not the document's. It is permitted only on `kind: "read"`, and only
+naming another export: an id the composing export also owns is a
+self-composition and is refused.
+
+Optional and additive to `schemaVersion: 1`. An operation that omits it makes
+no provenance claim, and a consumer then requires the composing export's own
+evidence for the row exactly as before the field existed.
+
+**It is a target to prove against, never authority.** Discharging a demand on
+an operation that carries it requires proving both halves: that this export
+really calls the named export — by the callee's resolved declaration identity,
+never by its name — through a reachable, uncaptured call, and that the named
+export's own claim for the named operation is itself discharged from its own
+implementation census, to a bounded depth. A provenance whose export is absent
+from the artifact case, whose composing call is captured or unreachable, whose
+target states a different claim, or whose target's own demand refuses, refuses
+the demand. Omitting it is therefore always the weaker document, never the
+looser one.
+
 `requires` constrains the current owner. `requiresChildren` and
 `requiresCleanup` independently constrain child-owner and cleanup capability.
 Owner production is a separate locally closed domain:

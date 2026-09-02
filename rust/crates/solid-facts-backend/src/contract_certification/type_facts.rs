@@ -153,6 +153,43 @@ struct ScheduledExportValue {
     proof_demands: Vec<ScheduledProofDemand>,
 }
 
+/// The export-value transcripts of *this* answer, addressable by the export
+/// they were scheduled for.
+///
+/// Composition needs a second export's census, and only this answer carries
+/// one: a transcript is scheduled per exported value, and the scheduled
+/// demands name which export each one is for. Nothing here reaches outside the
+/// answer — a composition premise that could not find the target's transcript
+/// refuses rather than looking anywhere else, so the evidence for a composed
+/// row is always the same session's, under the same producer identity, bound
+/// into the same evidence root.
+#[derive(Clone, Copy)]
+struct ExportTranscripts<'a> {
+    scheduled: &'a [ScheduledExportValue],
+    transcripts: &'a [ExportValueTranscript],
+}
+
+impl<'a> ExportTranscripts<'a> {
+    /// The transcript scheduled for exactly this artifact case and export.
+    ///
+    /// Resolved through the *scheduled demands*, which carry the subject
+    /// identity, rather than through the transcript's own query name: the
+    /// schedule is what the producer was asked, and the answer's shape was
+    /// already checked against it position by position before this is reached.
+    fn find(&self, artifact_case: &str, export: &str) -> Option<&'a ExportValueTranscript> {
+        self.scheduled
+            .iter()
+            .zip(self.transcripts)
+            .find_map(|(scheduled, transcript)| {
+                scheduled
+                    .proof_demands
+                    .iter()
+                    .any(|proof| proof_artifact_export(&proof.subject) == (artifact_case, export))
+                    .then_some(transcript)
+            })
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ScheduledProofDemand {
     id: String,
@@ -2521,7 +2558,15 @@ fn verify_live_export_value_answer_with_project_census(
         let transcript_root = format!("sha256:{:x}", Sha256::digest(&transcript_bytes));
         for proof in &scheduled.proof_demands {
             verify_export_value_subject(plan, proof, transcript, dependencies)?;
-            let mut sites = verify_export_value_family(plan, proof, transcript)?;
+            let mut sites = verify_export_value_family(
+                plan,
+                proof,
+                transcript,
+                ExportTranscripts {
+                    scheduled: &schedule.export_values,
+                    transcripts: &answer.transcripts,
+                },
+            )?;
             sites.extend(source_sites.iter().cloned());
             sites.sort();
             sites.dedup();
@@ -2781,6 +2826,7 @@ fn verify_export_value_family(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
     transcript: &ExportValueTranscript,
+    transcripts: ExportTranscripts<'_>,
 ) -> Result<Vec<String>, TypeFactsCertificationError> {
     let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
     let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
@@ -2819,7 +2865,14 @@ fn verify_export_value_family(
                 ..
             }) => require_export_recursive_subject(proof, transcript, &open, &mut sites)?,
             ProofDemandSubject::PositiveFact(PositiveFactSubject::RecursiveValue { .. }) => {
-                require_operation_recursive_subject(plan, proof, transcript, &open, &mut sites)?
+                require_operation_recursive_subject(
+                    plan,
+                    proof,
+                    transcript,
+                    transcripts,
+                    &open,
+                    &mut sites,
+                )?
             }
             ProofDemandSubject::PositiveFact(PositiveFactSubject::CallbackBinding { .. }) => {
                 let (export, implementation) =
@@ -2873,10 +2926,12 @@ fn verify_export_value_family(
                 require_export_implementation(plan, proof, transcript, &open)?;
             let operation = proof_operation(export, proof)?;
             require_operation_evidence(
+                plan,
                 export,
                 operation,
                 proof,
                 implementation,
+                transcripts,
                 &open,
                 &mut sites,
             )?;
@@ -2897,10 +2952,12 @@ fn verify_export_value_family(
                 });
             }
             require_operation_evidence(
+                plan,
                 export,
                 operation,
                 proof,
                 implementation,
+                transcripts,
                 &open,
                 &mut sites,
             )?;
@@ -2916,7 +2973,14 @@ fn verify_export_value_family(
             ) {
                 require_export_recursive_subject(proof, transcript, &open, &mut sites)?;
             } else {
-                require_operation_recursive_subject(plan, proof, transcript, &open, &mut sites)?;
+                require_operation_recursive_subject(
+                    plan,
+                    proof,
+                    transcript,
+                    transcripts,
+                    &open,
+                    &mut sites,
+                )?;
             }
         }
         ProofFamily::DomainExhaustiveness => {
@@ -3011,6 +3075,32 @@ fn require_export_implementation<'a>(
     TypeFactsCertificationError,
 > {
     let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
+    require_named_export_implementation(plan, proof, artifact_case, export_name, transcript, open)
+}
+
+/// The same closure and snapshot-binding checks for an export the demand does
+/// not name.
+///
+/// The demand still owns the refusal, because a composition premise that fails
+/// is a refusal of the *demand*, not of the export it was trying to compose
+/// from. Everything else is identical, deliberately: a composed row's target
+/// has to clear exactly the transcript completeness and the authenticated
+/// runtime binding that the demanded export cleared, or the composition would
+/// rest on a census this side never validated.
+fn require_named_export_implementation<'a>(
+    plan: &'a CertificationPlan,
+    proof: &ScheduledProofDemand,
+    artifact_case: &str,
+    export_name: &str,
+    transcript: &'a ExportValueTranscript,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+) -> Result<
+    (
+        &'a solid_reactive_ir::contract_semantics::ExportSemantics,
+        &'a typefacts::ExportImplementationTranscript,
+    ),
+    TypeFactsCertificationError,
+> {
     let export = plan
         .candidates
         .proposal()
@@ -3827,10 +3917,12 @@ fn require_signature_parameter_callable(
 
 #[allow(clippy::too_many_arguments)]
 fn require_operation_evidence(
+    plan: &CertificationPlan,
     export: &solid_reactive_ir::contract_semantics::ExportSemantics,
     operation: &solid_reactive_ir::contract_semantics::Operation,
     proof: &ScheduledProofDemand,
     implementation: &typefacts::ExportImplementationTranscript,
+    transcripts: ExportTranscripts<'_>,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
@@ -3850,6 +3942,40 @@ fn require_operation_evidence(
                 .inputs
                 .first()
                 .ok_or_else(|| open("read operation has no input"))?;
+            // The locally-created-accessor arm is answered *before* the
+            // parameter root is required, because this input is deliberately
+            // not parameter-rooted: the IR knows the value is a dialect
+            // accessor the export created itself, and the shape is all it has
+            // left to say so with. A parameter-rooted input still goes down the
+            // parameter path below, untouched.
+            // Provenance decides, when the row carries it. There is no
+            // fallback to the export's own census: the dedup key separates a
+            // read the export performs itself from one it performs through a
+            // call, so a row that carries provenance *is* the composed row,
+            // and answering it from this export's own body would be answering
+            // a different row.
+            if let Some(composed) = &operation.composed_from {
+                return require_composed_operation(
+                    plan,
+                    proof,
+                    operation,
+                    composed,
+                    implementation,
+                    transcripts,
+                    open,
+                    sites,
+                );
+            }
+            if let Some(role) = reactive_read_operation_input_role(operation, input) {
+                return require_reactive_read_operation_input(
+                    operation,
+                    role,
+                    implementation,
+                    floor,
+                    open,
+                    sites,
+                );
+            }
             let source =
                 operation_input_parameter_source(input, proof, operation.id.0.as_str(), 0)?;
             require_parameter_read_evidence(implementation, &source, floor, open, sites)
@@ -4207,6 +4333,486 @@ fn reactive_operation_input_role(
     }
 }
 
+/// The reactive role a `read` operation asserts of its own input, or `None`
+/// when the operation is not that one.
+///
+/// The companion of [`reactive_operation_input_role`] for the *other* half of
+/// the operation-input class. A `read` operation's input is not a parameter of
+/// anything: the IR discovered a call whose callee is a dialect accessor the
+/// export created itself, and `ValueShape::Reactive` is the only column the
+/// projection has left to state it in. Every other shape — `Parameter` above
+/// all — keeps its existing path, so a parameter-rooted read is still answered
+/// by [`require_parameter_read_evidence`] and never by this arm.
+///
+/// Unlike mechanism A there is no path or callability premise to check: a read
+/// operation carries exactly one input and the demands that reach here name it
+/// as a whole, either implicitly (the reachability and cardinality families,
+/// which have no path at all) or explicitly at the root (the recursive family,
+/// whose caller checks the path).
+fn reactive_read_operation_input_role(
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+    input: &ValueShape,
+) -> Option<ReactiveRole> {
+    if operation.kind != OperationKind::Read {
+        return None;
+    }
+    match input {
+        ValueShape::Reactive { role, .. } => Some(*role),
+        _ => None,
+    }
+}
+
+/// Implementation evidence that a `read` operation reads a dialect accessor of
+/// the demanded role that the export created itself.
+///
+/// **This rule is weaker than mechanism A, and deliberately so.** A `read`
+/// operation carries **no span**: `ContractReactiveRead` drops the read's
+/// origin location and `ValueShape::Reactive` carries nothing, so the operation
+/// cannot be matched to *a* census call the way an `invoke` operation's input is
+/// matched to the callback's own call sites. Universal quantification over the
+/// census is not available either — it would be vacuously false, because every
+/// ordinary `arr.push(x)` in the body has an empty `callee_sources` and would
+/// refuse the demand. So the strongest sound claim the demand as inventoried
+/// supports is **existential plus no counterexample**:
+///
+/// > there is at least one call, admitted by the floor and sitting in the
+/// > export's own body, whose callee traces to an unambiguous dialect result of
+/// > exactly this role.
+///
+/// Every call is examined and only a matching one witnesses. A call whose
+/// callee traces to nothing is silence, not a negative fact (see
+/// `ImplementationCall::callee_sources`), and a call whose callee traces to a
+/// dialect result of the *other* role — `setPolled(v)` against an accessor row
+/// — witnesses nothing either, because `traced_source_proves_role` is asked
+/// about the demanded role and answers no.
+///
+/// **A no-counterexample clause was implemented here and removed.** It refused
+/// the demand when any admitted call proved the *other* role, on the reasoning
+/// that a rule ignoring `setPolled(v)` would certify a setter write as an
+/// accessor read. That reasoning was wrong: the role is compared, so such a
+/// call can never be a witness in the first place, and the clause therefore
+/// added no soundness. What it did add was a false refusal, because writing a
+/// signal and reading it in one body is ordinary —
+/// `const [g, setG] = createSignal(3); setG(4); return g();` publishes an
+/// accessor read row that is honestly witnessed by `g()` and was refused by
+/// `setG(4)` sitting beside it.
+///
+/// What this cannot distinguish is *which* read. Two reads of the same
+/// `(kind, label)` collapse into one row in
+/// `contract_export_function`'s dedup, so a row that says "this export performs
+/// one reactive read of an accessor" is witnessed by a set rather than by a
+/// site. Every matching call is therefore recorded in the witness list, so the
+/// receipt states the set it was proved against. Recorded in
+/// `docs/precision-backlog.md`.
+///
+/// **`captured` stays a veto here, and that is the load-bearing difference from
+/// mechanism A.** These operations are stamped `at: call / schedule:
+/// same-stack` by `inferred_contract.rs`'s shared constructor, and
+/// `ContractReactiveRead` has no execution or schedule column in which a
+/// different schedule could ever be stated — so the row means unconditionally
+/// "this export reads that accessor when you call it", and the uncaptured gate
+/// is the *only* enforcement of it anywhere. A read inside a closure the export
+/// hands away or stores does not establish it. Mechanism A relaxes `captured`
+/// because its claim is about what a call *passes*, which does not depend on
+/// the closure running; this claim is about what the export *does*, which does.
+fn require_reactive_read_operation_input(
+    operation: &solid_reactive_ir::contract_semantics::Operation,
+    role: ReactiveRole,
+    implementation: &typefacts::ExportImplementationTranscript,
+    floor: ReachabilityFloor,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let mut witnesses = Vec::new();
+    for call in &implementation.calls {
+        // The kind gate is the same discipline as everywhere else in this
+        // module: `new Accessor()` is a different claim about the value than
+        // `accessor()`, and the producer's present habits are not what this
+        // side certifies against. The captured gate is the schedule premise
+        // documented above; the floor is the operation's own stated bound.
+        if !is_call_expression(call) || !floor.admits(call.reach) || call.captured {
+            continue;
+        }
+        let rooted = call
+            .callee_sources
+            .iter()
+            .filter(|source| source.path.is_empty())
+            .collect::<Vec<_>>();
+        if rooted.is_empty() {
+            continue;
+        }
+        for source in rooted {
+            if !traced_source_proves_role(source, role) {
+                continue;
+            }
+            witnesses.push(format!(
+                "reactive-read-operation-input:{}:{}:{}:{}:{}:{}",
+                call.location.path,
+                call.location.start_byte,
+                call.location.end_byte,
+                source.target_module,
+                source.target_name,
+                traced_result_slot_site(source)
+            ));
+        }
+    }
+    if witnesses.is_empty() {
+        return Err(open(&format!(
+            "read operation {} has no reachable uncaptured call whose callee traces to an unambiguous dialect {}",
+            operation.id.0,
+            reactive_role_name(role)
+        )));
+    }
+    sites.extend(witnesses);
+    Ok(())
+}
+
+/// Whether a composed row and the row it names state the *same* claim.
+///
+/// Every field of the operation except its id and its own provenance. A
+/// composed row publishes the target's behaviour as this export's, so a target
+/// whose schedule, execution point, cardinality, tracking, owner relation,
+/// guard, trigger, inputs or output differ is not the row being published, and
+/// composing it would put a promise into this export's contract that the
+/// target never made. The provenance is excluded because the recursion, not
+/// this comparison, is what follows it.
+///
+/// **Resources are not compared — the composing row is required to have
+/// none.** A resource id is qualified by the export that owns it, so two
+/// exports' resource sets can never be equal and comparing them would refuse
+/// every composition; but *ignoring* the composing row's would let it publish
+/// a resource relation of its own that this premise proves nothing about. The
+/// honest reading is the fail-closed one: a row that claims resources is not a
+/// row composition can discharge. The target's own resources stay its own
+/// claim, proved by its own demands.
+fn composed_operation_states_the_same_claim(
+    composing: &solid_reactive_ir::contract_semantics::Operation,
+    target: &solid_reactive_ir::contract_semantics::Operation,
+) -> bool {
+    composing.resources.is_empty()
+        && composing.kind == target.kind
+        && composing.inputs == target.inputs
+        && composing.output == target.output
+        && composing.at == target.at
+        && composing.schedule == target.schedule
+        && composing.cardinality == target.cardinality
+        && composing.tracking == target.tracking
+        && composing.owner == target.owner
+        && composing.guard == target.guard
+        && composing.trigger == target.trigger
+}
+
+/// Whether one census call is the composing call: a reachable, uncaptured
+/// *call* whose callee resolves to exactly the named export's own declaration.
+///
+/// Identity, on four facts at once — the declaration symbol, its source file,
+/// its exact byte range, and the export name the snapshot replay bound it to.
+/// The symbol alone would be enough for a producer that always states one, so
+/// an empty symbol is refused rather than treated as a wildcard; the rest are
+/// there because a premise this cheap should not depend on the producer's
+/// habits. What is deliberately *not* enough is the name: another module's
+/// `createPolled` carries the same `declaration.name`, and clearing a call to
+/// it is the scoping study's "some other export proves it" restated.
+///
+/// The kind, floor and captured gates are the same three this module applies
+/// everywhere. Uncaptured is the load-bearing one here: a direct call is the
+/// same stack, so the composed row's `schedule: same-stack` stamp survives the
+/// hop, and a call from inside a closure this export hands away does not.
+fn composing_call_resolves_to_declaration(
+    call: &typefacts::ImplementationCall,
+    target: &typefacts::ResolvedDeclaration,
+    target_runtime_export: &str,
+    floor: ReachabilityFloor,
+) -> bool {
+    if !is_call_expression(call) || !floor.admits(call.reach) || call.captured {
+        return false;
+    }
+    let Some(declaration) = &call.declaration else {
+        return false;
+    };
+    !declaration.symbol.is_empty()
+        && declaration.symbol == target.symbol
+        && declaration.source_file == target.source_file
+        && declaration.location.start_byte == target.location.start_byte
+        && declaration.location.end_byte == target.location.end_byte
+        && declaration.name.as_ref() == target_runtime_export
+}
+
+/// The furthest a composed operation's provenance chain may be followed.
+///
+/// Summary reads propagate transitively across call edges with no bound at the
+/// propagation site, so a published chain can be arbitrarily deep. Eight is
+/// the bound the execution premises already use
+/// ([`MAX_EXECUTION_PREMISE_DEPTH`]); reaching it refuses rather than
+/// approximating.
+///
+/// A cycle back through the *demanded* export is refused earlier and by name:
+/// the recursion keeps the original `proof`, so `composing_export` stays the
+/// export the demand is about, and a provenance that names it again takes the
+/// self-composition refusal. A cycle among other exports runs out of depth
+/// instead, which is the same verdict by a longer route.
+const MAX_COMPOSITION_DEPTH: usize = 8;
+
+/// One resolved composition target: the named export's semantics, its own
+/// implementation census, and the export name the snapshot replay bound it to.
+///
+/// Everything the composition premise needs about a target and nothing about
+/// how it was found, so the premise can be driven by a test resolver as well
+/// as by the certification plan.
+#[derive(Clone, Copy)]
+struct ComposedTarget<'a> {
+    export: &'a solid_reactive_ir::contract_semantics::ExportSemantics,
+    implementation: &'a typefacts::ExportImplementationTranscript,
+    runtime_export: &'a str,
+}
+
+/// Implementation evidence that a composed operation's claim holds: this
+/// export performs the named export's named operation, through its own call to
+/// it.
+///
+/// Two premises, both required, and neither is a search.
+///
+/// **(a) The composing call.** Some call in *this* export's census must be a
+/// `call` (never a construction), admitted by the operation's own floor,
+/// **uncaptured**, and resolve *by declaration identity* to the named export.
+/// Identity means the declaration symbol and source range of the call's callee
+/// equal those of the named export's own implementation declaration — the one
+/// the caller already matched against the snapshot-replayed runtime binding for
+/// that name. A name comparison would clear a call to a *different*
+/// `createPolled` in another module, which is the scoping study's warning
+/// restated as code: provenance names an exact target, and "some export of
+/// this artifact case proves it" is not a premise.
+///
+/// The uncaptured gate is what keeps the composed row's `at: call /
+/// schedule: same-stack` stamp honest across the hop. A direct call is the
+/// same stack; a call inside a closure this export hands to `createEffect` is
+/// not, and a read reached only that way must refuse rather than compose.
+/// `Unreachable` clears nothing for the same reason it clears nothing
+/// anywhere else.
+///
+/// **(b) The target's own claim.** The named operation must exist in the named
+/// export, must be the *same claim* — see
+/// [`composed_operation_states_the_same_claim`] — and must itself be
+/// discharged from the named export's own census: recursively, when the target
+/// is composed in turn, and by
+/// [`require_reactive_read_operation_input`] when it is not. A composed row
+/// therefore never states anything the target does not already state and
+/// prove, and a target whose own demand refuses refuses the composed row too.
+///
+/// **Cycles are refused by the visited set, not by running out of depth.**
+/// `visited` is seeded with the export the demand is about and grows by one
+/// export per hop, so a provenance naming an export already on the chain — its
+/// own included — refuses as a cycle. The depth bound is the separate,
+/// blunter limit for an *acyclic* chain: summary reads propagate transitively
+/// across call edges with no bound at the propagation site, so a document can
+/// state a chain of arbitrarily many distinct exports, and
+/// [`MAX_COMPOSITION_DEPTH`] refuses at the length the execution premises
+/// already use.
+///
+/// Everything fails closed. A provenance the resolver cannot answer, an
+/// operation absent from the target, a claim that differs in any field, a
+/// composing row that claims resources of its own, a captured or unreachable
+/// composing call, a cycle, and the depth bound each refuse with the target
+/// named. The refusal is a `String` rather than a
+/// `TypeFactsCertificationError` because the demand owns the error: a
+/// composition premise that fails is a refusal of the *demand*, not of the
+/// export it was trying to compose from.
+fn require_composed_operation_chain<'a>(
+    composing_export: &str,
+    composing_operation: &'a solid_reactive_ir::contract_semantics::Operation,
+    composed: &'a solid_reactive_ir::contract_semantics::ComposedFrom,
+    implementation: &'a typefacts::ExportImplementationTranscript,
+    resolve: &dyn Fn(&str) -> Result<ComposedTarget<'a>, String>,
+    visited: &mut Vec<String>,
+    depth: usize,
+) -> Result<Vec<String>, String> {
+    if depth >= MAX_COMPOSITION_DEPTH {
+        return Err(format!(
+            "composed operation chain exceeds {MAX_COMPOSITION_DEPTH} hops at {}:{}",
+            composed.export, composed.operation.0
+        ));
+    }
+    // A self-composition is a cycle, not a proof. The model refuses to publish
+    // one (`normalize_operation`), and this refuses to read one: the two
+    // checks are on opposite sides of the wire and a document this side did
+    // not generate reaches only the second.
+    if composed.export == composing_export {
+        return Err(format!(
+            "composed operation names its own export {composing_export}"
+        ));
+    }
+    if visited.contains(&composed.export) {
+        return Err(format!(
+            "composed operation chain revisits {} at {}",
+            composed.export, composed.operation.0
+        ));
+    }
+    let target = resolve(&composed.export)?;
+    let target_operation = target
+        .export
+        .operation(&composed.operation.0)
+        .ok_or_else(|| {
+            format!(
+                "composed operation {} is absent from {}",
+                composed.operation.0, composed.export
+            )
+        })?;
+    if !composed_operation_states_the_same_claim(composing_operation, target_operation) {
+        return Err(format!(
+            "composed operation {}:{} does not state the same claim as the composing row",
+            composed.export, composed.operation.0
+        ));
+    }
+    // (a) The composing call, by declaration identity.
+    let target_declaration = target
+        .implementation
+        .declaration
+        .as_ref()
+        .ok_or_else(|| "composed operation target states no declaration".to_owned())?;
+    let floor = operation_reachability_floor(composing_operation);
+    let mut composing = implementation
+        .calls
+        .iter()
+        .filter(|call| {
+            composing_call_resolves_to_declaration(
+                call,
+                target_declaration,
+                target.runtime_export,
+                floor,
+            )
+        })
+        .map(|call| {
+            format!(
+                "composed-operation-call:{}:{}:{}:{}:{}",
+                call.location.path,
+                call.location.start_byte,
+                call.location.end_byte,
+                composed.export,
+                composed.operation.0
+            )
+        })
+        .collect::<Vec<_>>();
+    if composing.is_empty() {
+        return Err(format!(
+            "composed operation {}:{} has no reachable uncaptured call of {} resolving to its own declaration",
+            composed.export, composed.operation.0, composed.export
+        ));
+    }
+    // (b) The target's own evidence, from the target's own census.
+    visited.push(composed.export.clone());
+    let mut target_sites = Vec::new();
+    if let Some(next) = &target_operation.composed_from {
+        target_sites = require_composed_operation_chain(
+            &composed.export,
+            target_operation,
+            next,
+            target.implementation,
+            resolve,
+            visited,
+            depth + 1,
+        )?;
+    } else {
+        let input = target_operation
+            .inputs
+            .first()
+            .ok_or_else(|| "composed operation target has no input".to_owned())?;
+        let role =
+            reactive_read_operation_input_role(target_operation, input).ok_or_else(|| {
+                format!(
+                    "composed operation {}:{} is not a read of a locally created accessor",
+                    composed.export, composed.operation.0
+                )
+            })?;
+        let refuse = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: String::new(),
+            reason: reason.to_owned(),
+        };
+        require_reactive_read_operation_input(
+            target_operation,
+            role,
+            target.implementation,
+            operation_reachability_floor(target_operation),
+            &refuse,
+            &mut target_sites,
+        )
+        .map_err(|error| match error {
+            TypeFactsCertificationError::FamilyOpen { reason, .. } => reason,
+            other => other.to_string(),
+        })?;
+    }
+    composing.extend(target_sites);
+    Ok(composing)
+}
+
+/// The plan-bound half of the composition premise: resolve each target out of
+/// this plan and this session's transcripts, and let
+/// [`require_composed_operation_chain`] decide.
+///
+/// Nothing here reaches outside the answer. A transcript is scheduled per
+/// exported value, so the evidence for a composed row is always the same
+/// session's, under the same producer identity, bound into the same evidence
+/// root; a target the schedule holds no transcript for refuses rather than
+/// being looked for anywhere else. Each target additionally clears the
+/// transcript completeness and the authenticated runtime binding that the
+/// demanded export cleared, through
+/// [`require_named_export_implementation`] — otherwise the composition would
+/// rest on a census this side never validated.
+#[allow(clippy::too_many_arguments)]
+fn require_composed_operation<'a>(
+    plan: &'a CertificationPlan,
+    proof: &ScheduledProofDemand,
+    operation: &'a solid_reactive_ir::contract_semantics::Operation,
+    composed: &'a solid_reactive_ir::contract_semantics::ComposedFrom,
+    implementation: &'a typefacts::ExportImplementationTranscript,
+    transcripts: ExportTranscripts<'a>,
+    open: &impl Fn(&str) -> TypeFactsCertificationError,
+    sites: &mut Vec<String>,
+) -> Result<(), TypeFactsCertificationError> {
+    let (artifact_case, composing_export) = proof_artifact_export(&proof.subject);
+    let resolve = |export_name: &str| -> Result<ComposedTarget<'a>, String> {
+        let transcript = transcripts.find(artifact_case, export_name).ok_or_else(|| {
+            format!(
+                "composed operation names {export_name}, for which this session scheduled no export-value transcript"
+            )
+        })?;
+        let (export, implementation) = require_named_export_implementation(
+            plan,
+            proof,
+            artifact_case,
+            export_name,
+            transcript,
+            open,
+        )
+        .map_err(|error| error.to_string())?;
+        let (_, runtime_export, _, _) = plan
+            .verified_exports
+            .runtime_binding(export_name)
+            .ok_or_else(|| {
+                format!(
+                    "composed operation names {export_name}, which has no exact identifier runtime binding"
+                )
+            })?;
+        Ok(ComposedTarget {
+            export,
+            implementation,
+            runtime_export,
+        })
+    };
+    let mut visited = vec![composing_export.to_owned()];
+    let witnesses = require_composed_operation_chain(
+        composing_export,
+        operation,
+        composed,
+        implementation,
+        &resolve,
+        &mut visited,
+        0,
+    )
+    .map_err(|reason| open(&reason))?;
+    sites.extend(witnesses);
+    Ok(())
+}
+
 /// The stable spelling of a reactive role, for refusal text.
 const fn reactive_role_name(role: ReactiveRole) -> &'static str {
     match role {
@@ -4529,6 +5135,7 @@ fn require_operation_recursive_subject(
     plan: &CertificationPlan,
     proof: &ScheduledProofDemand,
     transcript: &ExportValueTranscript,
+    transcripts: ExportTranscripts<'_>,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
     sites: &mut Vec<String>,
 ) -> Result<(), TypeFactsCertificationError> {
@@ -4577,6 +5184,43 @@ fn require_operation_recursive_subject(
                 sites,
             )?;
             return Ok(());
+        }
+        // The `read` half of the same class, at the root path only: the demand
+        // asks about the whole value, and the census traces the callee
+        // *expression* and says nothing about a property inside the value it
+        // traces. The floor is the operation's own stated lower bound, the same
+        // derivation `require_operation_evidence` uses for the two families
+        // that reach the read arm there — this family carries no bound of its
+        // own to read.
+        if path.0.is_empty() && *callable == DemandedCallability::Unknown {
+            if let Some(composed) = &operation.composed_from {
+                let (_, implementation) =
+                    require_export_implementation(plan, proof, transcript, open)?;
+                require_composed_operation(
+                    plan,
+                    proof,
+                    operation,
+                    composed,
+                    implementation,
+                    transcripts,
+                    open,
+                    sites,
+                )?;
+                return Ok(());
+            }
+            if let Some(role) = reactive_read_operation_input_role(operation, input) {
+                let (_, implementation) =
+                    require_export_implementation(plan, proof, transcript, open)?;
+                require_reactive_read_operation_input(
+                    operation,
+                    role,
+                    implementation,
+                    operation_reachability_floor(operation),
+                    open,
+                    sites,
+                )?;
+                return Ok(());
+            }
         }
         let (parameter, mut source_path) =
             operation_input_parameter_root(input, proof, operation.id.0.as_str(), index)?;
@@ -7139,6 +7783,7 @@ mod tests {
             cardinality,
             inputs: Vec::new(),
             output: None,
+            composed_from: None,
             resources: std::collections::BTreeSet::new(),
         }
     }
@@ -9054,6 +9699,7 @@ mod tests {
                 ..Default::default()
             },
             cardinality: solid_reactive_ir::contract_semantics::Cardinality::default(),
+            composed_from: None,
             inputs: Vec::new(),
             output: None,
             resources: std::collections::BTreeSet::new(),
@@ -11667,6 +12313,895 @@ mod tests {
                 ),
                 None,
                 "{shape:?} is not a reactive input this arm proves"
+            );
+        }
+    }
+
+    /// One census row whose callee carries `callee_sources`, and nothing else:
+    /// mechanism B reads the callee's provenance, never a parameter root.
+    fn callee_traced_call(
+        start: usize,
+        reach: &str,
+        captured: bool,
+        sources: serde_json::Value,
+    ) -> serde_json::Value {
+        let mut call = json!({
+            "location": {"path": "/pkg/dist/index.js", "startByte": start, "endByte": start + 12},
+            "reach": reach,
+            "kind": "call",
+            "target": "symbol:binding",
+            "targetName": "depSignal",
+            "declaration": {
+                "kind": "BindingElement",
+                "name": "depSignal",
+                "sourceFile": "/pkg/dist/index.js",
+                "location": {"path": "/pkg/dist/index.js", "startByte": 10, "endByte": 20},
+            },
+            "calleeSources": sources,
+        });
+        if captured {
+            call["captured"] = json!(true);
+            call["enclosingCallable"] =
+                json!({"path": "/pkg/dist/index.js", "startByte": 1, "endByte": 900});
+        }
+        call
+    }
+
+    fn read_input_result(
+        role: ReactiveRole,
+        calls: Vec<serde_json::Value>,
+    ) -> Result<Vec<String>, TypeFactsCertificationError> {
+        let operation = reactive_input_operation(OperationKind::Read, role);
+        let implementation = implementation_with(calls);
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "read".into(),
+            reason: reason.into(),
+        };
+        let mut sites = Vec::new();
+        require_reactive_read_operation_input(
+            &operation,
+            role,
+            &implementation,
+            operation_reachability_floor(&operation),
+            &open,
+            &mut sites,
+        )
+        .map(|()| sites)
+    }
+
+    // Mechanism B's positive case, and the shape it was built for:
+    // `@solid-primitives/timer`'s `createPolled` reads `depSignal()`, bound by
+    // `const [depSignal] = createSignal(...)`, in its own body.
+    #[test]
+    fn reactive_read_operation_input_is_proved_by_a_traced_dialect_callee() {
+        let sites = read_input_result(
+            ReactiveRole::Accessor,
+            vec![callee_traced_call(
+                4105,
+                "reachable",
+                false,
+                dialect_signal_source(0),
+            )],
+        )
+        .expect("a traced dialect accessor callee proves the read");
+        assert_eq!(
+            sites,
+            vec![
+                "reactive-read-operation-input:/pkg/dist/index.js:4105:4117:solid-js:createSignal:tuple:0"
+                    .to_owned()
+            ]
+        );
+
+        // The witness list carries *every* matching call, because the row is
+        // existential over the export's census: two reads of the same
+        // `(kind, label)` collapse into one operation, so the receipt has to
+        // record the set the row was proved against rather than one site.
+        let both = read_input_result(
+            ReactiveRole::Accessor,
+            vec![
+                callee_traced_call(4105, "reachable", false, dialect_signal_source(0)),
+                callee_traced_call(4200, "unknown", false, dialect_signal_source(0)),
+                // An ordinary call in the same body: an empty trace is the
+                // producer's silence, not a counterexample, so it neither
+                // witnesses nor refuses. Universal quantification here would
+                // be vacuously false for every real body.
+                callee_traced_call(4300, "reachable", false, json!([])),
+            ],
+        )
+        .expect("the arm is existential over the census");
+        assert_eq!(both.len(), 2, "{both:?}");
+
+        // Writing a signal and reading it in one body is ordinary, and the
+        // accessor row is honestly witnessed by the read. A
+        // no-counterexample clause was implemented here and removed for
+        // exactly this case: `setG(4)` proves the *setter* role, which
+        // `traced_source_proves_role` already declines to accept for an
+        // accessor demand, so refusing on it added a false refusal and no
+        // soundness.
+        let beside_a_setter = read_input_result(
+            ReactiveRole::Accessor,
+            vec![
+                callee_traced_call(100, "reachable", false, dialect_signal_source(1)),
+                callee_traced_call(200, "reachable", false, dialect_signal_source(0)),
+            ],
+        )
+        .expect("a setter call beside the read does not contradict the read");
+        assert_eq!(beside_a_setter.len(), 1, "{beside_a_setter:?}");
+        assert!(
+            beside_a_setter[0].ends_with("tuple:0"),
+            "{beside_a_setter:?}"
+        );
+
+        // A setter read is a different row, and the same census proves it
+        // through slot 1 rather than slot 0.
+        let setter = read_input_result(
+            ReactiveRole::Setter,
+            vec![callee_traced_call(
+                4105,
+                "reachable",
+                false,
+                dialect_signal_source(1),
+            )],
+        )
+        .expect("slot 1 is the setter");
+        assert!(setter[0].ends_with("tuple:1"), "{setter:?}");
+    }
+
+    // Every premise of mechanism B, one row each. These are the traps a rule
+    // that read "the callee traces to something" would clear.
+    #[test]
+    fn reactive_read_operation_input_refuses_every_unproven_callee() {
+        let non_dialect_helper = json!([{
+            "kind": "callResult",
+            "target": "symbol:myOwnAccessorFactory",
+            "targetName": "myOwnAccessorFactory",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+        let locally_declared_creator = json!([{
+            "kind": "callResult",
+            "target": "symbol:localCreateSignal",
+            "targetName": "createSignal",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+        let unresolved_callee = json!([{
+            "kind": "callResult",
+            "targetName": "createSignal",
+            "targetModule": "solid-js",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+        let direct_callable = json!([{
+            "kind": "directCallable",
+            "target": "symbol:createSignal",
+            "targetName": "createSignal",
+            "targetModule": "solid-js",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+        }]);
+        let nested_path = json!([{
+            "kind": "callResult",
+            "target": "symbol:createSignal",
+            "targetName": "createSignal",
+            "targetModule": "solid-js",
+            "targetPath": [{"kind": "tuple", "index": 0}],
+            "path": [{"kind": "property", "property": "inner"}],
+        }]);
+
+        for (why, calls) in [
+            // The reads that trace to nothing: a computed callee
+            // (`(options.storage || createSignal)(…)`), a reassigned `let`,
+            // and every ordinary member call in the body. All three reach the
+            // arm as an empty list, and an empty list is silence.
+            (
+                "nothing traced",
+                vec![callee_traced_call(100, "reachable", false, json!([]))],
+            ),
+            // A helper the dialect does not export the name from. The empty
+            // module is what refuses it, and a *locally declared* function
+            // named `createSignal` is the same refusal for the same reason.
+            (
+                "a non-dialect helper",
+                vec![callee_traced_call(
+                    100,
+                    "reachable",
+                    false,
+                    non_dialect_helper,
+                )],
+            ),
+            (
+                "a locally declared creator of the dialect's name",
+                vec![callee_traced_call(
+                    100,
+                    "reachable",
+                    false,
+                    locally_declared_creator,
+                )],
+            ),
+            // A trace with no callee symbol is not a resolved callee.
+            (
+                "an unresolved callee symbol",
+                vec![callee_traced_call(
+                    100,
+                    "reachable",
+                    false,
+                    unresolved_callee,
+                )],
+            ),
+            // A function literal is not a dialect call result.
+            (
+                "a direct callable",
+                vec![callee_traced_call(100, "reachable", false, direct_callable)],
+            ),
+            // A property *of* the traced value is not the traced value.
+            (
+                "a non-root source path",
+                vec![callee_traced_call(100, "reachable", false, nested_path)],
+            ),
+            // The `captured` veto, which is load-bearing rather than
+            // decorative: these operations publish `at: call / schedule:
+            // same-stack` and `ContractReactiveRead` has no schedule column,
+            // so a read inside a closure the export hands away does not
+            // witness the row. `createPolled`'s second `depSignal()` — inside
+            // `createEffect(() => depSignal(), …)` — is exactly this.
+            (
+                "only a captured call",
+                vec![callee_traced_call(
+                    100,
+                    "reachable",
+                    true,
+                    dialect_signal_source(0),
+                )],
+            ),
+            // Code after a `return` never runs.
+            (
+                "only an unreachable call",
+                vec![callee_traced_call(
+                    100,
+                    "unreachable",
+                    false,
+                    dialect_signal_source(0),
+                )],
+            ),
+            // A construction is a different claim about the value.
+            (
+                "only a construction",
+                vec![json!({
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 112},
+                    "reach": "reachable",
+                    "kind": "construct",
+                    "calleeSources": dialect_signal_source(0),
+                })],
+            ),
+            // An absent kind is never read as "call".
+            (
+                "only a call of unstated kind",
+                vec![json!({
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 100, "endByte": 112},
+                    "reach": "reachable",
+                    "calleeSources": dialect_signal_source(0),
+                })],
+            ),
+            // The wrong role: `setPolled(v)` traces to `createSignal` slot 1,
+            // and a rule proving "traced to createSignal slot n" without
+            // comparing roles would certify a setter write as an accessor
+            // read.
+            (
+                "the wrong role",
+                vec![callee_traced_call(
+                    100,
+                    "reachable",
+                    false,
+                    dialect_signal_source(1),
+                )],
+            ),
+            ("an empty census", Vec::new()),
+        ] {
+            assert!(
+                read_input_result(ReactiveRole::Accessor, calls).is_err(),
+                "{why} proved a reactive read"
+            );
+        }
+    }
+
+    /// The composing call, and every shape that must not be read as one.
+    ///
+    /// The premise is declaration *identity*, so the traps are the ones a
+    /// weaker relation would clear: a call to a same-named declaration in
+    /// another module, a call the export makes from inside a closure it hands
+    /// away, a call after a `return`, and a construction.
+    #[test]
+    fn composing_call_is_resolved_by_declaration_identity() {
+        let target: typefacts::ResolvedDeclaration = serde_json::from_value(json!({
+            "symbol": "symbol:createPolled",
+            "name": "createPolled",
+            "kind": "FunctionDeclaration",
+            "sourceFile": "/pkg/dist/index.js",
+            "location": {"path": "/pkg/dist/index.js", "startByte": 3810, "endByte": 3822},
+        }))
+        .expect("a valid declaration");
+        let call = |overrides: serde_json::Value| -> typefacts::ImplementationCall {
+            let mut value = json!({
+                "location": {"path": "/pkg/dist/index.js", "startByte": 4655, "endByte": 4709},
+                "reach": "reachable",
+                "kind": "call",
+                "target": "symbol:createPolled",
+                "targetName": "createPolled",
+                "declaration": {
+                    "symbol": "symbol:createPolled",
+                    "name": "createPolled",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/pkg/dist/index.js",
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 3810, "endByte": 3822},
+                },
+            });
+            let object = value.as_object_mut().expect("an object");
+            for (key, replacement) in overrides.as_object().expect("an object") {
+                if replacement.is_null() {
+                    object.remove(key);
+                } else {
+                    object.insert(key.clone(), replacement.clone());
+                }
+            }
+            serde_json::from_value(value).expect("a valid call")
+        };
+        let floor = ReachabilityFloor::MayExecute;
+        assert!(composing_call_resolves_to_declaration(
+            &call(json!({})),
+            &target,
+            "createPolled",
+            floor
+        ));
+
+        for (why, overrides, runtime_export) in [
+            // Another module's declaration of the same name. This is the
+            // must-not-clear the whole premise exists for.
+            (
+                "a same-named declaration elsewhere",
+                json!({"declaration": {
+                    "symbol": "symbol:otherCreatePolled",
+                    "name": "createPolled",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/pkg/dist/other.js",
+                    "location": {"path": "/pkg/dist/other.js", "startByte": 100, "endByte": 112},
+                }}),
+                "createPolled",
+            ),
+            // The same symbol at a different range is a producer this side
+            // does not understand, not a match to be salvaged.
+            (
+                "the same symbol at a different range",
+                json!({"declaration": {
+                    "symbol": "symbol:createPolled",
+                    "name": "createPolled",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/pkg/dist/index.js",
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 9000, "endByte": 9012},
+                }}),
+                "createPolled",
+            ),
+            // An empty symbol is refused rather than treated as a wildcard.
+            (
+                "an unstated declaration symbol",
+                json!({"declaration": {
+                    "name": "createPolled",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/pkg/dist/index.js",
+                    "location": {"path": "/pkg/dist/index.js", "startByte": 3810, "endByte": 3822},
+                }}),
+                "createPolled",
+            ),
+            // No declaration at all.
+            (
+                "no declaration",
+                json!({"declaration": null}),
+                "createPolled",
+            ),
+            // The snapshot-replayed export name disagrees, so the declaration
+            // this call resolves to is not the one bound to that name.
+            (
+                "a runtime export name that disagrees",
+                json!({}),
+                "createIntervalCounter",
+            ),
+            // Inside a closure the export hands away: not the same stack, so
+            // the composed row's `same-stack` stamp would not survive.
+            (
+                "a captured call",
+                json!({
+                    "captured": true,
+                    "enclosingCallable": {"path": "/pkg/dist/index.js", "startByte": 1, "endByte": 900},
+                }),
+                "createPolled",
+            ),
+            // Code after a `return` never runs.
+            (
+                "an unreachable call",
+                json!({"reach": "unreachable"}),
+                "createPolled",
+            ),
+            // A construction is a different claim about the value.
+            (
+                "a construction",
+                json!({"kind": "construct"}),
+                "createPolled",
+            ),
+            // An absent kind is never read as "call".
+            ("an unstated kind", json!({"kind": null}), "createPolled"),
+        ] {
+            assert!(
+                !composing_call_resolves_to_declaration(
+                    &call(overrides),
+                    &target,
+                    runtime_export,
+                    floor
+                ),
+                "{why} was read as the composing call"
+            );
+        }
+    }
+
+    /// The composition premise, end to end and plan-free.
+    ///
+    /// The chain is driven by a test resolver over an in-memory map of
+    /// exports, so every premise `require_composed_operation_chain` owns is
+    /// reachable: the composing call, the same-claim comparison, the
+    /// cycle refusals, and the depth bound. Each of the three guards a
+    /// mutation could delete has its own row below, and each row fails if the
+    /// guard is removed.
+    struct ComposedFixture {
+        exports: Vec<(
+            String,
+            solid_reactive_ir::contract_semantics::ExportSemantics,
+            typefacts::ExportImplementationTranscript,
+        )>,
+    }
+
+    impl ComposedFixture {
+        /// One export: a `read-0` operation, optionally composed from
+        /// `composed`, and a census that calls each named target directly and
+        /// reads its own accessor when it composes nothing.
+        fn push(
+            &mut self,
+            name: &str,
+            composed: Option<(&str, &str)>,
+            targets: &[&str],
+        ) -> &mut Self {
+            let mut operation =
+                reactive_input_operation(OperationKind::Read, ReactiveRole::Accessor);
+            operation.id = solid_reactive_ir::contract_semantics::OperationId("read-0".into());
+            operation.composed_from =
+                composed.map(
+                    |(export, id)| solid_reactive_ir::contract_semantics::ComposedFrom {
+                        export: export.into(),
+                        operation: solid_reactive_ir::contract_semantics::OperationId(id.into()),
+                    },
+                );
+            let mut calls = targets
+                .iter()
+                .map(|target| Self::call_of(target))
+                .collect::<Vec<_>>();
+            if composed.is_none() {
+                calls.push(callee_traced_call(
+                    9000,
+                    "reachable",
+                    false,
+                    dialect_signal_source(0),
+                ));
+            }
+            let mut export = export_semantics(Vec::new(), vec![operation]);
+            export.identity.public_name = name.into();
+            let mut implementation = implementation_with(calls);
+            implementation.declaration = Some(Self::declaration(name));
+            self.exports.push((name.to_owned(), export, implementation));
+            self
+        }
+
+        fn declaration(name: &str) -> typefacts::ResolvedDeclaration {
+            serde_json::from_value(json!({
+                "symbol": format!("symbol:{name}"),
+                "name": name,
+                "kind": "FunctionDeclaration",
+                "sourceFile": "/pkg/dist/index.js",
+                "location": {
+                    "path": "/pkg/dist/index.js",
+                    "startByte": 100 + name.len(),
+                    "endByte": 200 + name.len(),
+                },
+            }))
+            .expect("a valid declaration")
+        }
+
+        fn call_of(name: &str) -> serde_json::Value {
+            json!({
+                "location": {"path": "/pkg/dist/index.js", "startByte": 4000, "endByte": 4050},
+                "reach": "reachable",
+                "kind": "call",
+                "target": format!("symbol:{name}"),
+                "targetName": name,
+                "declaration": {
+                    "symbol": format!("symbol:{name}"),
+                    "name": name,
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/pkg/dist/index.js",
+                    "location": {
+                        "path": "/pkg/dist/index.js",
+                        "startByte": 100 + name.len(),
+                        "endByte": 200 + name.len(),
+                    },
+                },
+            })
+        }
+
+        fn get(
+            &self,
+            name: &str,
+        ) -> &(
+            String,
+            solid_reactive_ir::contract_semantics::ExportSemantics,
+            typefacts::ExportImplementationTranscript,
+        ) {
+            self.exports
+                .iter()
+                .find(|(candidate, ..)| candidate == name)
+                .expect("a fixture export")
+        }
+
+        fn resolve(&self, name: &str) -> Result<ComposedTarget<'_>, String> {
+            let (stored, export, implementation) = self
+                .exports
+                .iter()
+                .find(|(candidate, ..)| candidate == name)
+                .ok_or_else(|| format!("no transcript for {name}"))?;
+            Ok(ComposedTarget {
+                export,
+                implementation,
+                runtime_export: stored.as_str(),
+            })
+        }
+
+        /// Discharge `from`'s own composed `read-0` through the chain.
+        fn chain(&self, from: &str) -> Result<Vec<String>, String> {
+            let (_, export, implementation) = self.get(from);
+            let operation = export.operation("read-0").expect("the read operation");
+            let composed = operation
+                .composed_from
+                .as_ref()
+                .expect("a composed operation");
+            let resolve = |name: &str| self.resolve(name);
+            let mut visited = vec![from.to_owned()];
+            require_composed_operation_chain(
+                from,
+                operation,
+                composed,
+                implementation,
+                &resolve,
+                &mut visited,
+                0,
+            )
+        }
+    }
+
+    #[test]
+    fn composed_operation_chain_proves_one_hop_and_refuses_every_broken_premise() {
+        // One hop: `composes` calls `reads` directly, and `reads` reads its own
+        // accessor. Both witness kinds appear, so the receipt records the call
+        // that composed and the read that was composed.
+        let mut fixture = ComposedFixture {
+            exports: Vec::new(),
+        };
+        fixture
+            .push("composes", Some(("reads", "read-0")), &["reads"])
+            .push("reads", None, &[]);
+        let sites = fixture.chain("composes").expect("a one-hop composition");
+        assert_eq!(
+            sites,
+            vec![
+                "composed-operation-call:/pkg/dist/index.js:4000:4050:reads:read-0".to_owned(),
+                "reactive-read-operation-input:/pkg/dist/index.js:9000:9012:solid-js:createSignal:tuple:0"
+                    .to_owned(),
+            ]
+        );
+
+        // Two hops, and the chain records every one of them.
+        let mut chained = ComposedFixture {
+            exports: Vec::new(),
+        };
+        chained
+            .push("outer", Some(("middle", "read-0")), &["middle"])
+            .push("middle", Some(("inner", "read-0")), &["inner"])
+            .push("inner", None, &[]);
+        let two = chained.chain("outer").expect("a two-hop composition");
+        assert_eq!(two.len(), 3, "{two:?}");
+
+        // The target's own demand refuses, so the composed row refuses: this
+        // is the premise that makes provenance a proof obligation rather than
+        // an assertion.
+        let mut unproven = ComposedFixture {
+            exports: Vec::new(),
+        };
+        unproven
+            .push("composes", Some(("reads", "read-0")), &["reads"])
+            .push("reads", None, &[]);
+        unproven.exports[1].2 = implementation_with(Vec::new());
+        unproven.exports[1].2.declaration = Some(ComposedFixture::declaration("reads"));
+        let refusal = unproven.chain("composes").expect_err("an unproven target");
+        assert!(
+            refusal.contains("no reachable uncaptured call"),
+            "{refusal}"
+        );
+
+        // The composing export makes no call to the target at all.
+        let mut uncalled = ComposedFixture {
+            exports: Vec::new(),
+        };
+        uncalled
+            .push("composes", Some(("reads", "read-0")), &[])
+            .push("reads", None, &[]);
+        let refusal = uncalled.chain("composes").expect_err("no composing call");
+        assert!(
+            refusal.contains("has no reachable uncaptured call of reads"),
+            "{refusal}"
+        );
+
+        // A target the resolver cannot answer.
+        let mut absent = ComposedFixture {
+            exports: Vec::new(),
+        };
+        absent.push("composes", Some(("missing", "read-0")), &["missing"]);
+        let refusal = absent.chain("composes").expect_err("an absent target");
+        assert!(refusal.contains("no transcript for missing"), "{refusal}");
+
+        // An operation absent from a target that does exist.
+        let mut wrong_id = ComposedFixture {
+            exports: Vec::new(),
+        };
+        wrong_id
+            .push("composes", Some(("reads", "read-9")), &["reads"])
+            .push("reads", None, &[]);
+        let refusal = wrong_id
+            .chain("composes")
+            .expect_err("an out-of-range foreign ordinal");
+        assert!(refusal.contains("read-9 is absent from reads"), "{refusal}");
+    }
+
+    /// The same-claim guard, driven through the chain.
+    ///
+    /// Deleting `composed_operation_states_the_same_claim`'s call site makes
+    /// this pass a composition whose target promises something else.
+    #[test]
+    fn composed_operation_chain_refuses_a_target_with_a_different_claim() {
+        let mut fixture = ComposedFixture {
+            exports: Vec::new(),
+        };
+        fixture
+            .push("composes", Some(("reads", "read-0")), &["reads"])
+            .push("reads", None, &[]);
+        let target = fixture.exports[1]
+            .1
+            .call
+            .operations
+            .get_mut(0)
+            .expect("the target operation");
+        target.schedule = Some(solid_reactive_ir::contract_semantics::Schedule::Queued);
+        let refusal = fixture
+            .chain("composes")
+            .expect_err("a target with a different schedule");
+        assert!(
+            refusal.contains("does not state the same claim"),
+            "{refusal}"
+        );
+    }
+
+    /// A composing row that claims resources of its own is not a row
+    /// composition can discharge, because this premise proves nothing about
+    /// them.
+    #[test]
+    fn composed_operation_chain_refuses_a_composing_row_that_claims_resources() {
+        let mut fixture = ComposedFixture {
+            exports: Vec::new(),
+        };
+        fixture
+            .push("composes", Some(("reads", "read-0")), &["reads"])
+            .push("reads", None, &[]);
+        let composing = fixture.exports[0]
+            .1
+            .call
+            .operations
+            .get_mut(0)
+            .expect("the composing operation");
+        composing
+            .resources
+            .insert(solid_reactive_ir::contract_semantics::ResourceId(
+                "case:composes:resource:owner".into(),
+            ));
+        let refusal = fixture
+            .chain("composes")
+            .expect_err("a composing row claiming a resource");
+        assert!(
+            refusal.contains("does not state the same claim"),
+            "{refusal}"
+        );
+    }
+
+    /// The two cycle refusals and the depth bound, each on its own.
+    ///
+    /// Deleting the self-composition check makes the alias row pass; deleting
+    /// the visited set makes the two-export cycle spin until the depth bound
+    /// catches it with the wrong reason; deleting the depth bound makes the
+    /// nine-export chain pass.
+    #[test]
+    fn composed_operation_chain_refuses_cycles_and_bounds_its_depth() {
+        // A provenance naming its own export, by alias.
+        let mut itself = ComposedFixture {
+            exports: Vec::new(),
+        };
+        itself.push("composes", Some(("composes", "read-0")), &["composes"]);
+        let refusal = itself.chain("composes").expect_err("a self-composition");
+        assert_eq!(
+            refusal, "composed operation names its own export composes",
+            "{refusal}"
+        );
+
+        // A cycle through a second export: refused as a cycle, not by running
+        // out of depth.
+        let mut cycle = ComposedFixture {
+            exports: Vec::new(),
+        };
+        cycle
+            .push("composes", Some(("reads", "read-0")), &["reads"])
+            .push("reads", Some(("composes", "read-0")), &["composes"]);
+        let refusal = cycle.chain("composes").expect_err("a two-export cycle");
+        assert_eq!(
+            refusal, "composed operation chain revisits composes at read-0",
+            "{refusal}"
+        );
+
+        // An acyclic chain of distinct exports, longer than the bound. Eight
+        // hops is the last accepted length, so nine refuses.
+        let chain_of = |length: usize| {
+            let mut fixture = ComposedFixture {
+                exports: Vec::new(),
+            };
+            let names = (0..length)
+                .map(|index| format!("e{index}"))
+                .collect::<Vec<_>>();
+            for (index, name) in names.iter().enumerate() {
+                match names.get(index + 1) {
+                    Some(next) => {
+                        fixture.push(name, Some((next.as_str(), "read-0")), &[next.as_str()]);
+                    }
+                    None => {
+                        fixture.push(name, None, &[]);
+                    }
+                }
+            }
+            fixture.chain("e0")
+        };
+        assert!(
+            chain_of(MAX_COMPOSITION_DEPTH + 1).is_ok(),
+            "a chain of exactly the bound must still prove"
+        );
+        let refusal = chain_of(MAX_COMPOSITION_DEPTH + 2).expect_err("an over-long chain");
+        assert!(
+            refusal.contains(&format!("exceeds {MAX_COMPOSITION_DEPTH} hops")),
+            "{refusal}"
+        );
+    }
+
+    /// A composed row may only name a target that states the *same* claim.
+    ///
+    /// One field at a time, because each of them is a promise: a target with a
+    /// tighter cardinality or a different schedule is a different row, and
+    /// publishing this export's row against it would put a promise into this
+    /// contract that the target never made.
+    #[test]
+    fn composed_provenance_requires_the_target_to_state_the_same_claim() {
+        let base = reactive_input_operation(OperationKind::Read, ReactiveRole::Accessor);
+        let mut target = base.clone();
+        // The id and the provenance are deliberately not compared: the target
+        // is a different export's operation, and following its own provenance
+        // is the recursion's job.
+        target.id = solid_reactive_ir::contract_semantics::OperationId("read-0".into());
+        target.composed_from = Some(solid_reactive_ir::contract_semantics::ComposedFrom {
+            export: "deeper".into(),
+            operation: solid_reactive_ir::contract_semantics::OperationId("case:deeper".into()),
+        });
+        assert!(composed_operation_states_the_same_claim(&base, &target));
+
+        type Mutation = (
+            &'static str,
+            fn(&mut solid_reactive_ir::contract_semantics::Operation),
+        );
+        let mutate: [Mutation; 8] = [
+            ("kind", |operation| {
+                operation.kind = OperationKind::Write;
+            }),
+            ("inputs", |operation| {
+                operation.inputs = vec![ValueShape::Plain];
+            }),
+            ("output", |operation| {
+                operation.output = Some(ValueShape::Plain);
+            }),
+            ("execution point", |operation| {
+                operation.at = Some(solid_reactive_ir::contract_semantics::Event::Flush);
+            }),
+            ("schedule", |operation| {
+                operation.schedule = Some(solid_reactive_ir::contract_semantics::Schedule::Queued);
+            }),
+            ("cardinality", |operation| {
+                operation.cardinality.min = Some(1);
+            }),
+            ("tracking", |operation| {
+                operation.tracking = solid_reactive_ir::contract_semantics::Tracking::Tracked;
+            }),
+            ("trigger", |operation| {
+                operation.trigger = Some(solid_reactive_ir::contract_semantics::Trigger::Event(
+                    solid_reactive_ir::contract_semantics::Event::Render,
+                ));
+            }),
+        ];
+        for (field, apply) in mutate {
+            let mut divergent = target.clone();
+            apply(&mut divergent);
+            assert!(
+                !composed_operation_states_the_same_claim(&base, &divergent),
+                "a target differing in {field} was accepted as the same claim"
+            );
+        }
+    }
+
+    // The arm's own gate: only a `read` operation whose input is `Reactive`.
+    // A parameter-rooted read keeps going through the parameter path, which is
+    // a different witness (`require_parameter_read_evidence`) against a
+    // different fact.
+    #[test]
+    fn reactive_read_operation_input_arm_claims_only_reactive_read_inputs() {
+        let read = reactive_input_operation(OperationKind::Read, ReactiveRole::Accessor);
+        assert_eq!(
+            reactive_read_operation_input_role(&read, &read.inputs[0]),
+            Some(ReactiveRole::Accessor)
+        );
+
+        // An `invoke` operation's input is mechanism A's, quantified over the
+        // callback's own call sites; reading it here would drop that
+        // quantification for a weaker existential one.
+        let invoke = reactive_input_operation(OperationKind::Invoke, ReactiveRole::Accessor);
+        assert_eq!(
+            reactive_read_operation_input_role(&invoke, &invoke.inputs[0]),
+            None
+        );
+        for kind in [
+            OperationKind::Return,
+            OperationKind::Create,
+            OperationKind::Write,
+        ] {
+            let other = reactive_input_operation(kind, ReactiveRole::Accessor);
+            assert_eq!(
+                reactive_read_operation_input_role(&other, &other.inputs[0]),
+                None,
+                "{kind:?} is not a read"
+            );
+        }
+
+        // Every other input shape stays unsupported, `Parameter` above all:
+        // that one has a census witness of its own and must not be answered
+        // by a callee trace.
+        for shape in [
+            ValueShape::Parameter {
+                index: 0,
+                path: Vec::new(),
+            },
+            ValueShape::Plain,
+            ValueShape::Callable,
+            ValueShape::Unknown,
+            ValueShape::Object(solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown),
+            ValueShape::Store {
+                resource: None,
+                capabilities: solid_reactive_ir::contract_semantics::KnowledgeSet::Unknown,
+            },
+        ] {
+            assert_eq!(
+                reactive_read_operation_input_role(&read, &shape),
+                None,
+                "{shape:?} is not a reactive read input this arm proves"
             );
         }
     }

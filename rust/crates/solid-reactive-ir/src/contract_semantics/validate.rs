@@ -386,6 +386,36 @@ fn normalize_operation(
     if let Some(output) = &mut operation.output {
         normalize_value(output, resources, &format!("{op_path}.output"))?;
     }
+    if let Some(composed) = &operation.composed_from {
+        let composed_path = format!("{op_path}.composedFrom");
+        require_text(&composed.export, &format!("{composed_path}.export"))?;
+        require_text(&composed.operation.0, &format!("{composed_path}.operation"))?;
+        // Only a `read` operation may state provenance today. The premise a
+        // consumer discharges it with is a reachable, uncaptured *call* whose
+        // callee resolves to the named export, and that premise was reviewed
+        // for the read families alone: an `invoke` operation's provenance
+        // would additionally have to compose the callback binding, and a
+        // `create`'s would have to compose the owner relation. Publishing one
+        // without the premise that answers it is a fact carried with no
+        // witness, which is exactly what the demand inventory exists to
+        // prevent.
+        if operation.kind != OperationKind::Read {
+            return contradiction(
+                composed_path,
+                "only a read operation may state composed provenance",
+            );
+        }
+        // Provenance names *another* export's operation. Operation ids are
+        // qualified by export, so an id this export also owns means the
+        // generator named itself — a self-composition, which is a cycle
+        // rather than a proof.
+        if operations.contains(&composed.operation) {
+            return contradiction(
+                composed_path,
+                "composed provenance names an operation of the composing export itself",
+            );
+        }
+    }
     Ok(())
 }
 

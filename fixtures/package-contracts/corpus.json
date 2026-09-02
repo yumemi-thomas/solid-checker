@@ -16,6 +16,8 @@
     "callback-slot-props-forwarding",
     "callback-untracked-wrapper",
     "class-expression-kind",
+    "composed-operation-provenance",
+    "composed-operation-shadowed-target",
     "conditional-callback-conflict",
     "conditional-export-absence",
     "conditional-imports-side-effect",

@@ -57,6 +57,22 @@ pub(super) struct SummaryRead {
     pub(super) declaration: Location,
     pub(super) origin: Location,
     pub(super) origin_context: String,
+    /// The symbol of the summary node that *discovered* this read, kept as the
+    /// row travels across call edges.
+    ///
+    /// Identity, not a name. `origin_context` is `nodes[owner].name` and is
+    /// exactly what a provenance claim may not be built on: a read discovered
+    /// in a private helper names the helper, and two nodes may share a name.
+    /// `propagate_summary_deltas` copies a row verbatim, so a read that
+    /// reached a node through a call still names the node it was discovered
+    /// in, and `contract_export_function` compares this against the node it is
+    /// projecting to tell "this export performs the read" from "this export
+    /// performs it through its call to that one".
+    ///
+    /// `None` is "no provenance to state", never "the projecting node's own":
+    /// it is the row's fail-closed value, and the projection publishes nothing
+    /// for it.
+    pub(super) owner: Option<SymbolId>,
 }
 
 struct DirectReferenceContribution {
@@ -286,6 +302,7 @@ fn discover_typed_accessors(
                 declaration,
                 origin: call_location,
                 origin_context: nodes[owner].name.clone().unwrap_or_default(),
+                owner: nodes[owner].symbol.clone(),
             },
         });
     }
@@ -1069,6 +1086,7 @@ fn discover_interprocedural_graph(
                         declaration: declaration.clone(),
                         origin: location(file.path.shared(), call.span),
                         origin_context: nodes[owner].name.clone().unwrap_or_default(),
+                        owner: nodes[owner].symbol.clone(),
                     },
                 ));
             }
@@ -4677,6 +4695,7 @@ fn interprocedural_result_reads_for_file(
                                     .unwrap_or_else(|| argument_location.clone()),
                                 origin: location(file.path.shared(), call.span),
                                 origin_context: label.clone(),
+                                owner: None,
                             },
                         );
                     } else if !crate::local_access::argument_proves_non_reactive(
@@ -5032,6 +5051,7 @@ fn direct_reference_contributions(
                 declaration: source.declaration.clone(),
                 origin: location(file.path.shared(), call.span),
                 origin_context: nodes[owner].name.clone().unwrap_or_default(),
+                owner: nodes[owner].symbol.clone(),
             };
             let factory_return =
                 source_primitives
@@ -5092,6 +5112,7 @@ fn direct_reference_contributions(
                             declaration: source.declaration.clone(),
                             origin: location(file.path.shared(), member.span),
                             origin_context: nodes[owner].name.clone().unwrap_or_default(),
+                            owner: nodes[owner].symbol.clone(),
                         },
                         unique: false,
                     }),
@@ -5623,6 +5644,7 @@ fn interprocedural_reads(
                                 declaration: declaration.clone(),
                                 origin: returned_location,
                                 origin_context: node.name.clone().unwrap_or_default(),
+                                owner: None,
                             });
                         } else if let Some(target) = by_symbol.get(symbol).copied()
                             && target != index
@@ -5686,6 +5708,7 @@ fn interprocedural_reads(
                                     declaration,
                                     origin: location(file.path.shared(), call.span),
                                     origin_context: node.name.clone().unwrap_or_default(),
+                                    owner: None,
                                 });
                             }
                         }
@@ -6286,6 +6309,7 @@ mod tests {
             declaration: location(0),
             origin: location(origin),
             origin_context: "test".to_owned(),
+            owner: None,
         }
     }
 
