@@ -938,6 +938,22 @@ fn push_unresolved_callee_callback_obligations(
     }
 }
 
+/// One reference's resolution to the binding that declared it.
+///
+/// `whole` separates `const value = f()` -- where `value` *is* `f()`'s result
+/// -- from `const [value] = f()` and `const { value } = f()`, where the name
+/// is bound to one slot of that result. A consumer deriving a value's shape
+/// from the initializer must have the former; the latter needs the slot, which
+/// the AST facts cannot name exactly for a nested, defaulted, or rest element.
+struct BoundInitializer {
+    initializer: Span,
+    /// The compiler symbol of the pattern name this reference resolves to,
+    /// not of the binding's first name: for `const [value, setValue] = f()` a
+    /// reference to `setValue` must not inherit `value`'s discovered identity.
+    symbol: Option<SymbolId>,
+    whole: bool,
+}
+
 #[derive(Clone, Copy)]
 struct InterproceduralGraphSymbols<'a> {
     entities: &'a EntitySymbols,
@@ -3330,24 +3346,66 @@ impl StructuredReturnDiscovery<'_, '_> {
             .map(|read| self.contract_return_from_read(read, fallback_label))
     }
 
+    /// The initializer a reference is bound to *in its entirety*.
+    ///
+    /// A destructuring pattern is deliberately excluded. `const [value] =
+    /// createSpring(...)` binds `value` to the first *item* of the call's
+    /// result, never to the result, so answering with the initializer hands a
+    /// consumer the tuple where the item was asked for -- which is how
+    /// `createDerivedSpring`'s `return value` came to claim
+    /// `createSpring`'s whole `[Accessor<T>, SpringSetter<T>]`. Deriving the
+    /// slot's own shape needs the element index, and `array_slots` cannot
+    /// supply it exactly: a nested pattern, a defaulted element, or an object
+    /// pattern element all report their *first identifier* there, which names
+    /// a value inside the item rather than the item. So this answers nothing
+    /// for a destructured name rather than guessing, and the exact slot stays
+    /// available through an element access with a literal index, which
+    /// [`Self::projection`] reads from the tuple.
     fn binding_initializer(&self, file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
-        if let Some((binding_file, binding, _)) =
+        self.bound_initializer(file, span)
+            .filter(|bound| bound.whole)
+            .map(|bound| bound.initializer)
+    }
+
+    /// The binding a reference resolves to: the initializer it was declared
+    /// with, the compiler symbol of the pattern name this reference actually
+    /// names, and whether that name is bound to the whole initializer.
+    fn bound_initializer(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<BoundInitializer> {
+        if let Some((binding_file, binding, symbol)) =
             self.lookup.binding_at_reference(file.path.as_str(), span)
             && binding_file.path == file.path
             && let Some(initializer) = binding.initializer
         {
-            return Some(initializer);
+            return Some(BoundInitializer {
+                initializer,
+                symbol: Some(symbol),
+                whole: binding.shape == solid_facts::ast::BindingShape::Identifier,
+            });
         }
         if let Some(symbol) = self.entities.at(file.path.as_str(), span)
-            && let Some(initializer) = file.ast.bindings.iter().find_map(|binding| {
+            // One symbol can be declared by several bindings -- `var pair;`
+            // then `var pair = createPair(x)` are two `BindingFact`s for the
+            // same name, and only the second carries the value. The scan
+            // therefore keeps looking until it finds the matching name *with*
+            // an initializer instead of committing to the first name match and
+            // then failing the initializer test.
+            && let Some((bound, initializer)) = file.ast.bindings.iter().find_map(|binding| {
                 binding.names.iter().find_map(|name| {
                     (self.entities.at(file.path.as_str(), name.span) == Some(symbol))
-                        .then_some(binding.initializer)
-                        .flatten()
+                        .then_some(binding)
+                        .zip(binding.initializer)
                 })
             })
         {
-            return Some(initializer);
+            return Some(BoundInitializer {
+                initializer,
+                symbol: Some(symbol.clone()),
+                whole: bound.shape == solid_facts::ast::BindingShape::Identifier,
+            });
         }
         // TypeScript exposes a shorthand property's own property symbol at
         // `{ value }`, not the referenced value symbol, so neither lookup
@@ -3355,11 +3413,16 @@ impl StructuredReturnDiscovery<'_, '_> {
         // resolve that exact reference, so its declaration is the evidence
         // here -- exact, and block-scope aware.
         let declaration = self.shorthand_value_declaration(file, span)?;
-        file.ast
+        let bound = file
+            .ast
             .bindings
             .iter()
-            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
-            .and_then(|binding| binding.initializer)
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))?;
+        Some(BoundInitializer {
+            initializer: bound.initializer?,
+            symbol: self.entities.at(file.path.as_str(), declaration).cloned(),
+            whole: bound.shape == solid_facts::ast::BindingShape::Identifier,
+        })
     }
 
     /// The declaration a shorthand property's value refers to, when `span` is
@@ -3418,8 +3481,21 @@ impl StructuredReturnDiscovery<'_, '_> {
                 })
         }?;
         let property = file.source_text(member.property).unwrap_or_default();
+        // A computed member's property span is an *expression*, not a name, so
+        // its source text is not the property it reads: `createRecord(x)[key]`
+        // with `key: "value" | "other"` spells `key` and would match no
+        // property, but `createRecord(x)["value"]` spells `"value"` with the
+        // quotes and a same-spelled property would be a coincidence rather
+        // than a resolution. Only a static name resolves a property here. The
+        // tuple arm below is already safe: `parse::<usize>()` rejects every
+        // spelling that is not a literal index.
+        let computed = file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok();
         match base.kind.as_str() {
-            "object" => base.properties.get(property).cloned(),
+            "object" if !computed => base.properties.get(property).cloned(),
             "tuple" => property
                 .parse::<usize>()
                 .ok()
@@ -3871,6 +3947,29 @@ impl StructuredReturnDiscovery<'_, '_> {
                 });
             }
         }
+        // `createSpring(x)[0] as Accessor<T>` is an element access wearing a
+        // transparent TypeScript wrapper. The widened lookup below matches a
+        // *call* by its start byte, so it would answer with `createSpring`'s
+        // whole tuple and discard the `[0]`. Peel the sugar first, which puts
+        // the element access back where [`Self::projection`] can read the item
+        // the index names. Only syntax that preserves the runtime value is
+        // peeled, and every earlier branch has already declined this span.
+        let peeled = file.ast.peel_ts_sugar_span(span);
+        if peeled != span {
+            // A member access under a wrapper is *committed* to, exactly as
+            // the unwrapped exact-member branch above returns. Falling through
+            // on `None` would hand the widened call lookup the original span,
+            // whose start byte still matches the base call, and publish the
+            // base's whole shape for a projection that named nothing --
+            // `createPair(x)[at] as Accessor<T>` would answer with the tuple
+            // and `createRecord(x).other as number` with the whole object.
+            if file.ast.members.iter().any(|member| member.span == peeled) {
+                return self.projection(file, peeled, fallback_label, depth - 1);
+            }
+            if let Some(returned) = self.leaf_with_depth(file, peeled, fallback_label, depth - 1) {
+                return Some(returned);
+            }
+        }
         if let Some(call) = file
             .ast
             .calls
@@ -3922,25 +4021,19 @@ impl StructuredReturnDiscovery<'_, '_> {
                 });
             }
         }
-        if let Some(initializer) = self.binding_initializer(file, span)
-            && initializer != span
-        {
+        if let Some(bound) = self.bound_initializer(file, span) {
             // A shorthand property (`{ pathname }`) carries the property's own
             // symbol at this span, not the value binding's, so the lookup above
-            // cannot see that the value is a discovered source. The binding that
-            // owns the initializer we just followed can: match it by initializer
-            // span, then ask for that binding's own symbol. Without this the
-            // leaf falls through to the initializing call and inherits the
-            // primitive's generic label ("memo result") instead of the
-            // structural position the consumer actually reads.
-            if let Some(symbol) = file
-                .ast
-                .bindings
-                .iter()
-                .find(|binding| binding.initializer == Some(initializer))
-                .and_then(|binding| binding.names.first())
-                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
-                && self.accessors.contains_key(symbol)
+            // cannot see that the value is a discovered source. The binding
+            // this reference resolved to can: ask for the symbol of the
+            // pattern name it named. Without this the leaf falls through to
+            // the initializing call and inherits the primitive's generic label
+            // ("memo result") instead of the structural position the consumer
+            // actually reads.
+            if let Some(symbol) = bound
+                .symbol
+                .as_ref()
+                .filter(|symbol| self.accessors.contains_key(*symbol))
             {
                 return Some(ContractReturn {
                     kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
@@ -3952,8 +4045,12 @@ impl StructuredReturnDiscovery<'_, '_> {
                     ..ContractReturn::default()
                 });
             }
-            if let Some(returned) =
-                self.leaf_with_depth(file, initializer, fallback_label, depth - 1)
+            // Only a name bound to the *whole* initializer carries the
+            // initializer's shape -- see [`Self::binding_initializer`].
+            if bound.whole
+                && bound.initializer != span
+                && let Some(returned) =
+                    self.leaf_with_depth(file, bound.initializer, fallback_label, depth - 1)
             {
                 return Some(returned);
             }

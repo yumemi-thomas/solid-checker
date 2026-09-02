@@ -84,8 +84,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // fixtures of the invoking-position round: callback-slot-derived-store,
       // callback-slot-derived-store-server, callback-slot-props-forwarding,
       // and parameter-member-read-path. 168 adds the exact shared runtime and
-      // declaration surface pinned by torture-dts-disagreement.
-      stableMainDocuments: 170,
+      // declaration surface pinned by torture-dts-disagreement. 171 adds the
+      // destructured-return-slot generator fixture's main document, which pins
+      // that a destructured name carries its slot rather than the value it
+      // destructures.
+      stableMainDocuments: 171,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

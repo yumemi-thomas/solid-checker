@@ -1,5 +1,231 @@
 # Precision backlog
 
+## A destructured name carried the shape of the value it destructures (2026-09-03)
+
+`@solid-primitives/spring@0.1.2` `createDerivedSpring` refused
+recursive-value-shape demand
+`sha256:b7e8980d06a1a3988e863d51da1d6504dc0f51181cf9e3b5130688fd9c7e0f66`
+with "operation value path is absent from the signature census
+(alternative=0, path=[Tuple 0])". The census was right. The runtime is
+
+```js
+const [springValue, setSpringValue] = createSpring(target(), options);
+createEffect(() => setSpringValue(target()));
+return springValue;
+```
+
+and the declaration returns `Accessor<WidenSpringTarget<T>>`, which
+`solid-js` 1.9.14 declares as `() => T`: a tuple index on it does not exist and
+`tsc` rejects the access. The proposal nonetheless claimed the return output was
+`{"kind": "tuple", "items": [{"kind": "reactive", "role": "accessor"},
+"unknown"]}` — byte-identical to `createSpring`'s.
+
+**Root cause.** `leaf_with_depth` in
+`rust/crates/solid-reactive-ir/src/interproc.rs` resolved `springValue` to its
+binding, took `binding.initializer`, and derived *that call's* shape. A
+destructuring pattern binds one slot of the initializer to each name, so the
+initializer's shape is never the name's shape. The same block also asked the
+binding for `names.first()` when looking the name up in the discovered-accessor
+map, so a reference to `setSpringValue` inherited `springValue`'s identity and
+the setter was published as an accessor. Both are now exact:
+`bound_initializer` returns the initializer, the compiler symbol of the pattern
+name the reference actually resolved to, and whether that name is bound to the
+*whole* initializer; `binding_initializer` (the accessor used by `call_return`
+and `projection` as well) answers only for a whole binding.
+
+A second path dropped the same slot. `return createPair(x)[0] as Accessor<T>`
+is an element access wearing a transparent TypeScript wrapper, and the widened
+call lookup matched `createPair(x)` by its start byte, so it answered with the
+whole tuple. `leaf_with_depth` now peels transparent sugar
+(`AstFacts::peel_ts_sugar_span`) before that lookup, and **commits** to the
+projection's answer when the peeled span is an exact member access: absence
+stays absence. Trying the peeled span and falling through on `None` was the
+same bug wearing the fix's clothes — the widened lookup would still receive the
+original span, whose start byte matches the base call, so
+`createPair(x)[at] as Accessor<T>` published the tuple and
+`createRecord(x).other as number` the whole object.
+
+A third path is `projection`'s object arm, which matched a property by
+`file.source_text(member.property)` without asking whether the member was
+computed. A computed member's property span is an *expression*, so its text is
+not the property it reads: `createRecord(x)[value]` with `value: "value" |
+"setValue"` spelled `value`, matched the object's own `value` property, and
+published that accessor for a read that may just as well be `setValue`. The arm
+now consults `AstFacts::computed_members`; the tuple arm needed no change,
+because `parse::<usize>()` already rejects every spelling that is not a literal
+index.
+
+One narrowing was found and undone rather than kept: the rewritten binding scan
+committed to the first name match and *then* required an initializer, so
+`var pair; var pair = createPair(x); return pair` — one symbol, two
+`BindingFact`s, only the second carrying the value — lost its correct tuple
+claim. The scan keeps looking for the matching name with an initializer, as it
+did before.
+
+**Measured.** `@solid-primitives/spring@0.1.2|solid1|only` moves from that
+refusal to **certified**; `createDerivedSpring` now publishes no return
+operation and `createSpring` keeps its exact tuple. Controls held:
+`@solid-primitives/tween@1.4.1`, `@solid-primitives/scheduled@1.5.3` and
+`@solid-primitives/marker@0.2.2` stay certified, `@tanstack/solid-form@2.0.0-alpha.2`
+and `@tanstack/solid-store@0.11.1` stay refused on
+`sha256:34aa664d54584eeec44f17ca0b58a64722eb8a7ace7be65c8c0c45d6904118ed`, and
+`@tanstack/solid-db@0.2.40` stays refused on its own recorded demand (its
+published-graph digest moves, because the graph carries the dependency
+proposals this change corrected — see the row below). No findings snapshot and
+no existing generator snapshot moved: the whole 80-fixture generator corpus and
+all 94 coverage projects are unchanged.
+
+**Pinned** by `fixtures/package-contracts/destructured-return-slot`, whose
+seventeen exports separate the five claims that must be made (`literalIndex`,
+`wrappedLiteralIndex`, `wholeBinding`, `splitVarDeclaration`,
+`staticProperty`) from the two that must now be withheld (`arraySlot`,
+`arraySlotSetter`) and the ten forms in which no exact slot exists to name
+(`computedIndex`, `wrappedComputedIndex`, `computedProperty`,
+`wrappedQuotedMember`, `wrappedUnknownProperty`, `atZero`, `defaultedSlot`,
+`nestedSlot`, `restSlot`, `objectSlot`). `staticProperty` exists so the
+property negatives mean something: `createRecord` destructures the dialect
+primitive directly, which is what gives `projection`'s object arm a base at
+all. Every one of the four fixes was measured load-bearing by reverting it
+alone against this fixture.
+
+**Remaining approximations.**
+
+- The exact positive claim for `arraySlot` is available in principle — item 0
+  of the tuple *is* the accessor — and it is deliberately not made. Recovering
+  it needs one fact the AST tables do not carry: each array pattern element's
+  own span, so a consumer can tell `[value]` from `[value = fallback]`,
+  `[[value]]` and `[{ value }]`, all three of which report their *first
+  identifier* in `BindingFact::array_slots`.
+- **The same missing fact leaves four `names.first()` sites in the reactive
+  source registries unguarded**, and they are disclosed here rather than
+  changed, because nothing measured moves them and narrowing them blindly would
+  cost true claims. `source_discovery.rs:656` (a contracted `accessor` /
+  `store-path` return) and `:762` (a returned callable's call) register
+  `binding.names.first()` as the discovered source with no `BindingShape`
+  guard, so `const [a, b] = returnsAnAccessor()` would register `a`.
+  `source_discovery.rs:842` and `lib.rs:1782` do check the shape but then take
+  `array_slots.first()`, which is the nested/defaulted/rest approximation
+  above. The first pair is mitigated for valid code — destructuring a
+  non-iterable accessor is **TS2461** and destructuring an object-typed result
+  with an array pattern is **TS2488**, so the shape cannot arise in a project
+  that type-checks — and `source_discovery`'s tuple zip
+  (`array_slots` against a contracted return's elements, `:672`) carries the
+  element approximation identically. All four close with the element-span fact,
+  not before it.
+
+## A demand asked for a path only a narrowing guard reaches — honest (2026-09-03)
+
+`@tanstack/solid-db@0.2.40|solid1|only` refuses recursive-value-shape demand
+`sha256:69512bb464828723efe85639b0f8e38e587952b999b0cfd4f25926d1135f3983`
+on graph node `@tanstack/db@0.8.5`, export
+`compareLiveQueryWindowDependencies`, with "operation value path is locally
+open (complete=true, presence=Absent, callability=Unknown, reasons=[])".
+Diagnosed, not fixed, and the refusal is correct.
+
+The demanded input is `Parameter { index: 0, path: ["some"] }`, from the
+generator's `parameter-member` reactive-read row (`invoked_parameter_members`
+in `interproc.rs`, projected in `contracts.rs`). The declaration is
+
+```ts
+export declare function compareLiveQueryWindowDependencies(
+  previous: ReadonlyArray<unknown> | null | undefined,
+  current: ReadonlyArray<unknown>
+): { changed: boolean; structurallyEqual: boolean };
+```
+
+and the runtime reaches `.some` only through a short-circuit guard:
+
+```js
+const changed = previous === null || previous === void 0 ||
+  previous.length !== current.length ||
+  previous.some((dependency, index) => dependency !== current[index]);
+```
+
+`some` is absent from `ReadonlyArray<unknown> | null | undefined`, and the
+producer's census says exactly that, completely. Accepting the path anyway
+would certify an access TypeScript rejects — measured against the pinned
+producer's own compiler (`tsc` 7.0.2, `--strict`):
+
+```
+a.ts(6,10): error TS18049: 'previous' is possibly 'null' or 'undefined'.
+```
+
+where line 6 is the unguarded `previous.some(...)` and the guarded form above
+type-checks. That is the withdrawn union-enumeration mechanism (see "Type Facts
+census mechanisms" round) and it is not re-added.
+
+So the census is right and the *claim* is over-strong: the model states an
+exact path claim unconditionally about the parameter's **declared** value,
+while the runtime reaches that member on a **narrowed** one. Recovering the row
+needs one of three things, none of them a census change:
+
+- a conditional path claim in the semantic model (`parameter 0's some is
+  invoked when parameter 0 is non-nullish`), which `ContractReactiveRead` has
+  no shape for;
+- exact narrowing evidence in the demand owner, so the row is emitted with
+  `path: None` — the weaker "read through this parameter" claim the model
+  already supports — whenever the access is dominated by a nullish test of the
+  same parameter. The AST facts can express that dominance for the
+  logical-short-circuit form (`logical_expressions` plus the binary tests), but
+  not for `if (!previous) return`, `previous?.some()` or
+  `Array.isArray(previous) &&`, so it would be partial coverage of a rule whose
+  whole value is being exhaustive;
+- withholding the exact path whenever the parameter is *also* read at another
+  path or as a whole value, which is cheap but unsound as a justification and
+  would weaken rows that certify today.
+
+No code changed for this row. The refusal, its digest and its reason are the
+recorded boundary.
+
+## "Outside the resolved package" never said which dependency (2026-09-03)
+
+`motion-solidjs@0.6.0|solid1|only` refuses before demand planning, and the
+message it refused with —
+
+```
+Runtime target for export "addScaleCorrector" is outside the resolved package
+```
+
+— is true of every re-export whose target lives in a dependency and says
+nothing about why the dependency did not bind it. `bind_export_target` in
+`rust/crates/solid-facts-backend/src/artifact_resolution.rs` now names the
+owner and the module, and distinguishes the three reasons apart:
+
+```
+Runtime target for export "addScaleCorrector" is re-exported from dependency
+"motion-dom" (module "dist/es/projection/styles/scale-correction.mjs"), which
+no planned dependency binds; the planned dependencies contribute no target in
+that package
+```
+
+The owner comes from the last `node_modules/<package>` segment of the
+resolver's own path, because a hoisted install puts the dependency *beside* the
+resolved package rather than below it and the filesystem prefix therefore
+cannot name it. Absolute paths stay out of the message so a refusal signature
+does not carry the temporary install root. Diagnostics only — authentication
+stays with the planned dependency's own snapshot. Pinned by
+`an_unclaimed_export_target_names_the_installed_package_that_owns_it`
+(scoped names, the last `node_modules` winning, and the three shapes that name
+nothing).
+
+**What the message then established, and what is still open.** The refusal is
+not the M8 export-precedence defect and not a missing dependency binding
+mechanism: the graph lane already binds a dependency's export targets
+(`external_binding` in `export_bindings.rs`, and `external_targets` in
+`plan_certification_with_dependencies`). A one-off diagnostic build printed the
+installed packages the planned dependencies contribute targets in:
+`{"framer-motion", "motion-utils"}`. `motion-dom@12.43.0` `.` **is** a node of
+the generation-side dependency plan for this probe, its `.` entrypoint really
+does re-export `addScaleCorrector` from that exact module
+(`dist/es/index.mjs:173`), and it is nonetheless absent from the planned
+dependency set at the failing bind. The next step is on the acquisition side —
+why `motion-dom`'s graph node contributes no accepted contract while
+`framer-motion` and `motion-utils` do — not on the resolver, which is
+refusing correctly on the evidence it was given. The row stays an exact refusal
+with the message above; the generation lane's own first refusal for it is still
+`accepted dependency motion-utils has no exact runtime binding for export
+MotionGlobalConfig`.
+
 ## Reachability floors, and reading a parameter without calling it (2026-09-01)
 
 The certifier was refusing evidence it already had, and the fix for that turned
@@ -12554,3 +12780,17 @@ status or first refusal; `@solidjs/router@2.0.0-next.18` and
 `@solid-primitives/utils@7.0.0-next.4` floor+head stay refused on their
 `unresolvedGeneric` roots as recorded. Ledgers re-pinned: Phase 20 moved
 350 → 352 verified and 47 → 45 exact refusals. Wall time 72.5 s.
+
+### Re-measured: 353 verified / 44 exact refusals / 21 not attempted
+
+The complete 418-probe corpus was re-run after the three rows above and their
+fixer round (`make ecosystem-benchmark`; report SHA-256 recorded in the Phase 21
+ledger's `authority.currentReport`). Against the committed report, exactly one
+verdict moved: `@solid-primitives/spring@0.1.2|solid1|only` refused → verified,
+its `createDerivedSpring` return no longer claiming the inner `createSpring`
+tuple. `@tanstack/solid-db@0.2.40` keeps `69512bb4…` (the guarded `.some` read
+of a nullable parameter, an honest boundary), and `motion-solidjs@0.6.0` keeps
+its pre-planning refusal with the message now naming `motion-dom` as the
+re-export's owner instead of "outside the resolved package". No other row moved
+its status or first refusal. Ledgers re-pinned: Phase 20 moved 352 → 353
+verified and 45 → 44 exact refusals. Wall time 71.3 s.

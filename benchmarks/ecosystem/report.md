@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-02T16:58:37.533Z
-- Finished: 2026-09-02T16:59:49.996Z
-- Duration: 72463 ms
+- Started: 2026-09-02T18:10:43.618Z
+- Finished: 2026-09-02T18:11:54.886Z
+- Duration: 71268 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -853,7 +853,7 @@ None.
 - Probes with at least one inapplicable artifact case: 318
 - Probes with at least one closure note: 0
 - Exports proven: 0/8847 (0%) (with unknown: 8847, without a summary: 0)
-- Of those unknown exports: 31 unknown in every measured domain (the generator said nothing about them at all), 0 unknown only inside a conditional variant (the default resolution is fully claimed)
+- Of those unknown exports: 37 unknown in every measured domain (the generator said nothing about them at all), 0 unknown only inside a conditional variant (the default resolution is fully claimed)
 - Entrypoints: 1128 emitted, 0 refused; 282 artifact cases refused, 548 artifact cases inapplicable
 - Closure notes (block byte-attested verification): 0
 - Attested closure notes (record complete, runtime unbounded): 0
@@ -883,17 +883,17 @@ Proposal-plan bytes are construction obligations, not proof evidence and not acc
 | returns | 8847 |
 | cleanups | 8847 |
 | disposals | 8847 |
-| recursiveValue | 31 |
-| **total** | **79654** |
+| recursiveValue | 37 |
+| **total** | **79660** |
 
-Read the domain columns together, not separately: 31 of the 8847 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
+Read the domain columns together, not separately: 37 of the 8847 unknown exports are unknown in every measured domain at once, so the same export can contribute to several columns.
 
 ### Positive behavioral rows (what a probe step would have to drive)
 
 | Row kind | Count |
 | --- | --- |
 | invoke | 413 |
-| return | 291 |
+| return | 290 |
 | read | 389 |
 | write | 0 |
 | invalidate | 0 |
@@ -907,7 +907,7 @@ Read the domain columns together, not separately: 31 of the 8847 unknown exports
 | --- | --- | --- | --- | --- | --- | --- |
 | Official Solid | 19 | 0/19 (0%) | 19 | 7 | 0/1638 (0%) | 14761 |
 | Kobalte | 5 | 0/5 (0%) | 5 | 4 | 0/3558 (0%) | 32022 |
-| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17423 |
+| Solid Primitives | 282 | 0/282 (0%) | 282 | 8 | 0/1935 (0%) | 17429 |
 | Corvu | 22 | 0/22 (0%) | 22 | 0 | 0/292 (0%) | 2632 |
 | TanStack | 38 | 0/38 (0%) | 38 | 8 | 0/271 (0%) | 2439 |
 | Solid Devtools | 10 | 0/10 (0%) | 10 | 4 | 0/278 (0%) | 2502 |
@@ -940,8 +940,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 1050639 ms
-- Phases: install 80057 ms, generation 365791 ms, harness 604791 ms
+- Worker time: 1015308 ms
+- Phases: install 64065 ms, generation 378887 ms, harness 572356 ms
 
 ### Top failure signatures
 

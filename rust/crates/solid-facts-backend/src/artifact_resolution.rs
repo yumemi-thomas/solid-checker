@@ -936,9 +936,42 @@ fn bind_export_target(
         });
     }
     let path = package_relative_path(&target.module, resolved).ok_or_else(|| {
-        invalid_identity(format!(
-            "{role:?} target for export {public_name:?} is outside the resolved package"
-        ))
+        // "outside the resolved package" is true of every re-export whose
+        // target lives in a dependency, and says nothing about why the
+        // dependency did not bind it. A hoisted install puts that dependency
+        // beside the resolved package rather than below it, so the filesystem
+        // prefix cannot name the owner -- the installed layout can, exactly:
+        // the last `node_modules/<package>` segment of the resolver's own
+        // path. Absolute paths stay out of the message so a refusal signature
+        // does not carry the temporary install root.
+        invalid_identity(match installed_package_module(&target.module.path) {
+            Some((owner, module)) => format!(
+                "{role:?} target for export {public_name:?} is re-exported from dependency \
+                 {owner:?} (module {module:?}), which {}",
+                if external_targets.is_empty() {
+                    "no planned dependency binds because the resolved package has none".to_owned()
+                } else if let bound @ 1.. = external_targets
+                    .iter()
+                    .filter(|(path, _)| {
+                        installed_package_module(path)
+                            .is_some_and(|(candidate, _)| candidate == owner)
+                    })
+                    .count()
+                {
+                    format!(
+                        "is planned and binds {bound} other module target(s), none of them this one"
+                    )
+                } else {
+                    "no planned dependency binds; the planned dependencies contribute no target \
+                     in that package"
+                        .to_owned()
+                }
+            ),
+            None => format!(
+                "{role:?} target for export {public_name:?} is outside the resolved package \
+                 and lies in no installed package"
+            ),
+        })
     })?;
     let is_root = package_relative_path(root, resolved).as_deref() == Some(path.as_str())
         && normalize_digest(&root.digest).ok().as_deref() == Some(digest.as_str());
@@ -971,6 +1004,26 @@ fn artifact_matches(
     package_relative_path(actual, resolved)
         .is_some_and(|path| normalize_contract_path(&expected.path) == path)
         && normalize_digest(&actual.digest).is_ok_and(|digest| expected.digest.as_str() == digest)
+}
+
+/// The installed package a module path lies in, and that module's path within
+/// it, taken from the last `node_modules/<package>` segment of the path.
+///
+/// Diagnostics only: this names the owner of a target the resolved package
+/// could not claim, so a refusal says *which* dependency was re-exported from
+/// instead of only that the target was elsewhere. It is never an identity —
+/// authentication stays with the planned dependency's own snapshot.
+fn installed_package_module(path: &str) -> Option<(String, String)> {
+    let (_, tail) = path.rsplit_once("/node_modules/")?;
+    let mut segments = tail.split('/');
+    let first = segments.next()?;
+    let owner = if first.starts_with('@') {
+        format!("{first}/{}", segments.next()?)
+    } else {
+        first.to_owned()
+    };
+    let module = segments.collect::<Vec<_>>().join("/");
+    (!owner.is_empty() && !module.is_empty()).then_some((owner, module))
 }
 
 fn package_relative_path(file: &ResolvedFile, resolved: &ResolvedImport) -> Option<String> {
@@ -1229,6 +1282,44 @@ mod tests {
 
     fn repeated_digest(byte: char) -> String {
         format!("sha256:{}", byte.to_string().repeat(64))
+    }
+
+    #[test]
+    fn an_unclaimed_export_target_names_the_installed_package_that_owns_it() {
+        // The hoisted case the message exists for: `motion-solidjs`
+        // re-exports `addScaleCorrector`, whose runtime target lives beside
+        // it rather than below it, so the package root prefix cannot name the
+        // owner and the installed layout has to.
+        assert_eq!(
+            installed_package_module(
+                "/tmp/probe/node_modules/motion-dom/dist/es/projection/styles/scale-correction.mjs"
+            ),
+            Some((
+                "motion-dom".into(),
+                "dist/es/projection/styles/scale-correction.mjs".into()
+            ))
+        );
+        // A scoped name is two segments, and the *last* node_modules wins so a
+        // nested install is charged to the package it was installed under.
+        assert_eq!(
+            installed_package_module(
+                "/tmp/probe/node_modules/a/node_modules/@scope/name/dist/index.js"
+            ),
+            Some(("@scope/name".into(), "dist/index.js".into()))
+        );
+        // Nothing to name: no installed package, a bare package root with no
+        // module below it, and a scope with no name after it. Each answers
+        // absence rather than a guess, and the caller falls back to the
+        // location-free wording.
+        assert_eq!(installed_package_module("/tmp/probe/src/index.js"), None);
+        assert_eq!(
+            installed_package_module("/tmp/probe/node_modules/only"),
+            None
+        );
+        assert_eq!(
+            installed_package_module("/tmp/probe/node_modules/@scope"),
+            None
+        );
     }
 
     fn repeated_wire_digest(byte: char) -> String {
