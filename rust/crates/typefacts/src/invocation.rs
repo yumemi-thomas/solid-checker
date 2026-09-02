@@ -179,6 +179,20 @@ pub struct CallablePathFact {
     pub declaration: Option<Declaration>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub complete: bool,
+    /// True for a member the value carries only through the compiler's
+    /// apparent-type augmentation: the global `Function` interface's members on
+    /// a node with call or construct signatures. Such a member exists — the
+    /// compiler answers it and `tsc` type-checks the access — but it is
+    /// library-owned rather than declared by the package under analysis, it is
+    /// never caller-supplied, and the producer emits it as a leaf. Declared
+    /// members carry false.
+    ///
+    /// Declared-member census closure excludes these facts; exact path lookups
+    /// still find them. There is deliberately no `serde(default)`: a producer
+    /// that omits the field is rejected rather than defaulted, because
+    /// defaulting it to false would silently turn every apparent leaf into a
+    /// declared census member.
+    pub apparent: bool,
     pub subtree_enumerated: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub open_reasons: Vec<Arc<str>>,

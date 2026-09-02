@@ -36,18 +36,22 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84";
-/// 10 reports exact per-callable return-carry edges for an exported runtime
-/// implementation. A consumer can compose a callable returned by a callable
-/// the implementation returns without treating byte nesting, storage, or an
-/// unproven return site as execution.
+    "sha256:b9f4c20081ad2a9ac81502514d296ac229c3301ef960ea3b745d5eaad5b31d51";
+/// 11 splits the callable-path census into the members a value declares and
+/// the members it carries only through the compiler's apparent-type
+/// augmentation. Every path fact reports `apparent`; a nested union answers
+/// per-member presence rather than only the members every constituent
+/// declares; and a tuple carries its Array base's members beside its element
+/// slots.
 ///
-/// A protocol-9 client rejects the new field and a protocol-9 producer omits
-/// it, so this is a break
-/// rather than a compatible extension and the number is what says so. The
-/// digest and build id still move with it, and the handshake refuses a producer
-/// that differs on any one of the three.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 10;
+/// This is a change of meaning, not only of size. A protocol-10 consumer would
+/// count an apparent leaf as a declared census member and could read a
+/// library-owned `bind` or `prototype` as part of the package's own surface,
+/// and a protocol-10 producer omits the field this protocol requires. Both
+/// directions are a break and the number is what says so. The digest and build
+/// id still move with it, and the handshake refuses a producer that differs on
+/// any one of the three.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 11;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

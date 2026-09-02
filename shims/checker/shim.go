@@ -142,6 +142,21 @@ func Checker_isUntypedFunctionCall(recv *checker.Checker, funcType *checker.Type
 //go:linkname Checker_getReducedApparentType github.com/microsoft/typescript-go/internal/checker.(*Checker).getReducedApparentType
 func Checker_getReducedApparentType(recv *checker.Checker, t *checker.Type) *checker.Type
 
+// Checker_getGlobalType resolves a global type by name and type-parameter
+// arity, exactly as the compiler's own lib lookups do. It exists here for one
+// question: which members do the global `Function` and `Object` interfaces
+// declare? The compiler's getPropertyOfType augments any object type carrying
+// call or construct signatures with Function's members and every object type
+// with Object's (see getPropertyOfTypeEx's
+// globalCallableFunctionType/globalNewableFunctionType/globalObjectType
+// fallbacks), while GetPropertiesOfType never enumerates either, so the member
+// *names* have to come from the interfaces themselves. Call it with
+// reportErrors false: a project whose lib omits one must leave the fact open,
+// not emit a compiler diagnostic.
+//
+//go:linkname Checker_getGlobalType github.com/microsoft/typescript-go/internal/checker.(*Checker).getGlobalType
+func Checker_getGlobalType(recv *checker.Checker, name string, arity int, reportErrors bool) *checker.Type
+
 //go:linkname NewChecker github.com/microsoft/typescript-go/internal/checker.NewChecker
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
 

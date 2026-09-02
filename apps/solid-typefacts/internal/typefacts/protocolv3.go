@@ -4,19 +4,22 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 10 because an exported implementation now
-// carries exact per-callable return-carry edges. They let a consumer compose a
-// callable returned by a callable the export returns, while refusing lexical
-// nesting, stored closures, and return sites that are not reachable.
+// TypeFactsHandshakeProtocol is 11 because the callable-path census now
+// separates the members a value declares from the members it carries only
+// through the compiler's apparent-type augmentation. Every path fact reports
+// `apparent`, a nested union answers per-member presence instead of returning
+// only what every constituent declares, and a tuple carries its Array base's
+// members beside its element slots.
 //
-// A protocol-9 client rejects unknown transcript fields outright, and a
-// protocol-9 producer omits a field this protocol requires, so the addition
-// is a break rather than a compatible extension and the number is what says
-// so. The digest and build id still move with it, and the handshake refuses on
-// any mismatch.
+// The meaning of the census changed, not just its size: a protocol-10 consumer
+// would count an apparent leaf as a declared census member and could read a
+// library-owned `bind` or `prototype` as part of the package's own surface. A
+// protocol-10 producer also omits the field this protocol requires. Both
+// directions are a break, and the number is what says so. The digest and build
+// id still move with it, and the handshake refuses on any mismatch.
 const (
-	TypeFactsHandshakeProtocol uint64 = 10
-	TypeFactsSchemaSHA256             = "sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84"
+	TypeFactsHandshakeProtocol uint64 = 11
+	TypeFactsSchemaSHA256             = "sha256:b9f4c20081ad2a9ac81502514d296ac229c3301ef960ea3b745d5eaad5b31d51"
 )
 
 type ServiceHandshake struct {

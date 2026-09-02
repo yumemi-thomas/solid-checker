@@ -10943,3 +10943,243 @@ The String replacement recovery also remains blocked as recorded above. No
 composition recovery was attempted after the claim-blind dependency witness
 repair: parent-to-dependency semantic mapping is still absent and stays
 fail-closed.
+
+## 2026-09-02 — The callable-path census answers members TypeScript answers
+
+Eight ecosystem rows refused certification with "operation value path is absent
+from the signature census" for a path the compiler resolves and `tsc`
+type-checks. The census was not conservative there; it was blind to two member
+classes, and it was separately unsound in the permissive direction. Type Facts
+protocol 10 → 11 fixes both and splits the census into declared members and
+apparent leaves. The protocol-11 schema digest is
+`sha256:b9f4c20081ad2a9ac81502514d296ac229c3301ef960ea3b745d5eaad5b31d51`
+(protocol 10 was
+`sha256:aeb7900e0c359221ef14f0bd705358d516249d50a67db5063a33c00dcbac3c84`).
+The exact rules are in
+`docs/typefacts/adr/0023-v1-apparent-callable-path-members.md`; the summary is:
+
+- **A, apparent `Function` members.** `getPropertyOfType` falls back to the
+  global `Function` interface for any object type with call or construct
+  signatures, while `GetPropertiesOfType` never enumerates that fallback, so a
+  function-typed node censused as having *no members whatsoever*. Every callable
+  or constructable node now emits one leaf per global-`Function` member it does
+  not declare itself, marked with the new required wire boolean `apparent`, and
+  carrying the presence the compiler gives it (an augmented `maybe?(): void` is
+  optional, not required). The call/construct-signature gate is load-bearing:
+  `GetTypeOfPropertyOfType` resolves `toString` on any object through the
+  global-`Object` fallback, so an ungated walk would decorate plain records.
+- **C, tuple members.** The tuple branch enumerated only fixed element slots and
+  returned, so `slice` was answerable for `T[]` and absent for `[T, T]`. The
+  Array/ReadonlyArray base's declared members are now censused beside the
+  element slots, skipping the canonical numeric index names.
+- **No absence claim for an augmented name.** Cross-alternative reconciliation
+  no longer synthesizes `absent` when the template's last segment names a member
+  of the global **`Object`** interface, which `GetPropertiesOfType` never
+  enumerates, so a closed declared census is not evidence that such a name is
+  missing. It fails closed: if the global `Object` interface does not resolve,
+  no absence is synthesized for any template at all. The global `Function`
+  interface is deliberately not consulted — its fallback applies only to a type
+  with call or construct signatures, and every such alternative has already
+  emitted all nine apparent leaves at the same path length, so a
+  `Function`-only name is reconciled only where it is genuinely absent and
+  `tsc` agrees. Apparent facts are excluded from the template set (they still
+  serve as prefixes), because including them adds open declared facts that
+  refuse closure: `(() => void) | undefined` at depth 1 measured 20 facts with
+  9 open declared ones against 11 facts and none open.
+
+The permissive unsoundness A closes: a function-typed node has no own
+properties, so it claimed `subtreeEnumerated: true`, and
+`callablePathPrefixProvesAbsence` would let it prove a sibling alternative's
+`f.bind.x` *absent*. The apparent leaves are now the nearest prefix there, and
+their `subtreeEnumerated: false` proves nothing below themselves.
+
+### Nested-union member presence: investigated and withdrawn
+
+A third mechanism was implemented and removed after an adversarial review
+falsified it against the published typings. It answered per-member presence for
+a union reached below the root — `getPropertiesOfUnionOrIntersectionType`
+returns only the members common to every constituent and stops at the first
+constituent without an index signature, so `Set<T> | undefined | null | false`
+enumerated nothing at all — and it would have unlocked
+`@solid-primitives/keyed`'s `SetValues` in[0] `of.values`.
+
+It certified accesses TypeScript rejects:
+
+- `{ handle: { dispose: () => void } | undefined }` gave `handle.dispose` as
+  optional / callable / complete, while `tsc` reports
+  **TS18048: 'handle' is possibly 'undefined'**.
+- `{ of: { run: () => void } | { other: 1 } }` gave `of.run` as optional /
+  callable / complete, while `tsc` reports
+  **TS2339: Property 'run' does not exist on type '{ run: () => void; } | { other: 1; }'**.
+
+The `ReadPartial` filter in `getPropertyOfUnionOrIntersectionType` is
+TypeScript's answer that the member is not accessible on the union, not an
+enumeration gap. The asymmetry proves it: `{ run?: () => void }` censuses as
+optional / **mixed** and certifies nothing, because an optional member's type
+folds in `undefined`; the union spelling of the same value was reported
+optional / **callable** and accepted. A faithful model has to reach the same
+`mixed` answer and so unlocks no row anyway — and measurement agreed, because
+the `keyed` rows only advanced to an unrelated `operation-cardinality`
+frontier. Nested unions keep their pre-change behaviour and `of.values` remains
+an exact fail-closed refusal.
+
+### The eight rows, before and after
+
+Each row was reproduced one at a time with the debug checker and the local
+producer, before and after, and every "before" below matched
+`benchmarks/ecosystem/report.json` byte for byte.
+
+| row | export | before | after |
+| --- | --- | --- | --- |
+| `@solid-primitives/i18n@2.2.1\|solid1\|only` | `proxyTranslator` | refused, recursive-value-shape `sha256:7720be572bd173e2587fd873958c14aff5a42d90cc4f378c2d40a805c05d0d3c`, in[0] `bind` absent from the census | **certified** |
+| `@solidjs/router@2.0.0-next.18\|solid2\|only` | `action` | refused, recursive-value-shape `sha256:865fdf4ef53ddc61b14af6ee4f5ef345db1b656a9d8c413161728b209c97a960`, output `toString` absent | refused, recursive-value-shape `sha256:14d5fea34c151563efdf95fe1ed05e1c1c1fbc7148529008f45cbf644ef7b55d`, now on `defineRoutes`: root shape has no verifiable premise |
+| `@solid-primitives/utils@7.0.0-next.4\|solid2\|floor` | `wrapSetter` | refused, recursive-value-shape `sha256:b0b0d7541d9a9c0c4e3553de1785275dc6b7d503f455b41eaaf46815d6b21697`, in[0] `slice` absent | refused, recursive-value-shape `sha256:a681b563e342dcab290146ab84177e556843298e59036ef42e17a3b779972236`, now on `get`: root shape has no verifiable premise |
+| `@solid-primitives/utils@7.0.0-next.4\|solid2\|head` | `wrapSetter` | refused, same demand as floor | refused, same demand as floor |
+| `@solid-primitives/keyed@1.5.3\|solid1\|only` | `SetValues` | refused, recursive-value-shape `sha256:474ff89a1e9a0e5245eb54009fb66ab556e46eac2601dfc7698d7bd441cf62db`, in[0] `of.values` absent | **unchanged** — the withdrawn union mechanism was the only thing that moved it |
+| `@solid-primitives/keyed@3.0.0-next.2\|solid2\|floor` | `SetValues` | refused, recursive-value-shape `sha256:01b55dce4ba3d0ac455c22df2060a9b3ad742a5951e7654b3e8f18a28da7e424`, same path | **unchanged** |
+| `@solid-primitives/keyed@3.0.0-next.2\|solid2\|head` | `SetValues` | refused, same demand as floor | **unchanged** |
+| `@solid-primitives/spring@0.1.2\|solid1\|only` | `createDerivedSpring` | refused, recursive-value-shape `sha256:b7e8980d06a1a3988e863d51da1d6504dc0f51181cf9e3b5130688fd9c7e0f66`, tuple `[0]` absent | **unchanged**, byte for byte |
+
+Four of the eight refusals were census gaps and all four are gone: one
+certifies outright and three advanced to a later, unrelated frontier on a
+different export. No rule was widened to force any row green; the three `keyed`
+rows are deliberately left refused rather than cleared by a rule `tsc`
+contradicts.
+
+`@solid-primitives/spring` is **not** a census gap. Its declared
+`createDerivedSpring` returns `Accessor<WidenSpringTarget<T>>`, and `solid-js`
+1.9.14 declares `type Accessor<T> = () => T`, so a tuple index `[0]` on that
+value does not exist and `tsc` would reject the access. The demand exists
+because the *contract proposal* claims the return operation's output is
+`{"kind": "tuple", "items": [{"kind": "reactive", "role": "accessor"},
+"unknown"]}` — identical to `createSpring`'s summary, which really does return
+`[Accessor<T>, SpringSetter<T>]`. The runtime returns `createSpring(...)[0]`, so
+the generator appears to have carried the inner call's tuple shape out through
+the destructuring instead of the outer function's own return. The census is
+right, the proposal is wrong, and the refusal is the correct fail-closed
+outcome. The remaining work is on the contract generator's return-shape
+derivation, not on a Type Facts capability.
+
+### Controls
+
+All sixteen controls kept their status, before and after both rounds. The eight
+that had to stay certified (`@solid-primitives/scheduled@1.5.3|solid1|only`,
+`@solid-primitives/map@0.7.4|solid1|only`,
+`@solid-primitives/refs@1.1.4|solid1|only`,
+`@solid-primitives/event-listener@2.4.6|solid1|only`,
+`@solid-primitives/storage@4.4.0|solid1|only`,
+`@solid-primitives/reducer@0.0.101|solid1|only`,
+`@solid-primitives/cookies@1.0.0-next.2|solid2|head`,
+`@solid-primitives/websocket@2.0.0-next.3|solid2|head`) all certified. The
+eight that had to stay refused (`@solid-devtools/ui@0.10.3|solid1|only`,
+`solid-devtools@0.34.5|solid1|only`, `@solidjs/web@2.0.0-rc.3|solid2|only`,
+`@tanstack/solid-store@0.11.1|solid1|only`,
+`@solid-primitives/flux-store@1.0.0-next.2|solid2|head`,
+`@solid-primitives/i18n@3.0.0-next.4|solid2|head`,
+`@solid-primitives/db-store@1.1.4|solid1|only`,
+`@tanstack/solid-db@0.2.40|solid1|only`) all refused, each on its recorded
+demand digest and reason. The two `@tanstack` rows refuse on an identical inner
+demand digest and reason; only their published-graph digest moved, which
+carries the producer identity.
+
+### Cost
+
+The census grows sharply where mechanism C reaches: a tuple brings in roughly
+35 `Array` members and A decorates each function-typed one with nine leaves.
+Measured on `[Accessor<number>, Setter<number>]` as a first parameter, total
+facts by demand depth are 42 / 408 / 462 for depth 1 / 2 / 3 (360 and 414 of
+those apparent at depths 2 and 3), against 3 facts pre-change.
+
+Row timings are much milder — `solid-js@1.9.14|solid1|only` went 19149 ms →
+16377 ms wall and 6687 ms → 6056 ms certification, and
+`@solid-primitives/utils@7.0.0-next.4|solid2|head` 2707 ms → 2814 ms wall and
+1323 ms → 1444 ms certification, both measured same-session with warm caches —
+but those are **two rows, not a bound**. A demand's census depth is the maximum
+path length over all demands for the same export, so an export needing a
+depth-2 path pays the depth-2 figure above. The full-corpus re-measurement is
+what will give the real cost.
+
+### Exact remaining fail-closed cases
+
+- Nested-union member presence stays as the compiler answers it, so
+  `@solid-primitives/keyed` `SetValues` in[0] `of.values` remains refused on
+  demands `sha256:474ff89a…` (1.5.3) and `sha256:01b55dce…`
+  (3.0.0-next.2). Recovering it needs a premise that survives TS18048/TS2339 —
+  a narrowed access, not a census change.
+- The global `Object` interface's members are used to *suppress* an absence
+  claim but are never censused as leaves, so an exact-path demand for
+  `x.hasOwnProperty` still fails closed on a missing fact. Censusing them was
+  rejected on growth; no row needs it.
+- **Open: nested union nodes over-claim `subtreeEnumerated`.** A union reached
+  below the root reports its declared subtree as enumerated even when
+  `GetPropertiesOfType` dropped a constituent's members, so cross-alternative
+  reconciliation can synthesize an absence over a real callback. Reproduction,
+  confirmed against the local producer: for
+  `{ foo: { bar: () => void } } | { foo: { bar: () => void } | { baz: 1 } }`
+  demanded at depth 3, the second alternative's `foo` comes back
+  `required / complete / subtreeEnumerated: true` carrying no members, and
+  `foo.bar` is synthesized `presence: absent, complete: true,
+  subtreeEnumerated: true` — while that value may carry `bar`. A whole-census
+  closure can therefore succeed over a hidden callback, which is a false
+  certification route rather than a missing-precision one. This residue predates
+  this slice and is not introduced by it.
+
+  The sound fix is for a nested union node whose `GetPropertiesOfType` is empty,
+  or which drops a constituent's members, to report `subtreeEnumerated: false`
+  with an open reason. The measurement risk is that this refuses whole-census
+  closure for *every* `T | undefined` member — an extremely common shape — so it
+  needs its own slice with a full-corpus before/after, not a fix bolted onto
+  this one.
+- A package's own `declare global { interface Function { $x: any } }`
+  augmentation is emitted as an *apparent* leaf and is therefore skipped by
+  declared-census closure, although the package did write it down. Not a
+  regression — it was previously not censused at all — but a case where
+  "apparent" and "library-owned" come apart.
+- At the demand's depth cut a callable node reports `subtreeEnumerated: true`
+  while its apparent leaves are not emitted; apparent leaves appear only at
+  nodes with remaining depth ≥ 1. Correct under the declared-member reading of
+  `subtreeEnumerated`, and it cannot feed an absence proof, because a template
+  one segment deeper needs one more level of depth in every alternative.
+- `@solid-primitives/spring@0.1.2|solid1|only` stays refused on the
+  contract-generator return-shape defect described above.
+
+### Re-measured: 345 verified / 48 exact refusals / 25 not attempted
+
+The complete 418-probe corpus was re-run with the fresh release checker and the
+protocol-11 producer after the fixer rounds (`make ecosystem-benchmark`; report
+SHA-256 `4b39f691552519c0a754c42e6f65db2e2e07e08fe8370f7514f004939c0c3a98`).
+Against the committed protocol-10 report, exactly one verdict moved:
+`@solid-primitives/i18n@2.2.1|solid1|only` refused → verified. Proposal states
+are unchanged (344 complete / 37 partial / 37 fully refused). Every other
+refused row keeps its inner demand digest and reason, with these attributed
+exceptions:
+
+- `@solidjs/router@2.0.0-next.18` and `@solid-primitives/utils@7.0.0-next.4`
+  floor+head advanced from the census-absent demands to the later root-shape
+  frontiers recorded in the table above (`14d5fea3…`, `a681b563…`).
+- The published-graph rows changed only their outer graph digest, which carries
+  the producer identity; the inner demands are byte-identical.
+- `@tanstack/solid-query-persist-client@5.102.5` still refuses on the
+  live-session `implementation_location` mismatch, but the *expected* location
+  the schedule carries differs between runs of the same binaries —
+  `src/createPersister.ts:2313-2333` in the committed report and in one
+  intermediate run, `build/modern/createPersister.js:6160-6180` in the final run.
+  In an intermediate run `@tanstack/solid-query@5.102.5` likewise flipped from
+  `f06329123be3…` (`keepPreviousData`) to `1e5287b5f6ac…` (`defaultScheduler`,
+  `implementationUnavailable`) and back. Both are the build- and run-dependent
+  identity nondeterminism the artifact-mechanics diagnosis filed as M9; this
+  slice does not touch that path and does not close it.
+- `motion-solidjs@0.6.0` alternates between `.` and `./v1` as the entrypoint
+  named in its "first refusal" line across runs; the reason is identical and the
+  row stays refused. Reporting order, not a verdict movement.
+
+The Phase 21 ledger was regenerated (`--write`) and re-pinned to the report
+digest above; the Phase 20 test pins moved 344 → 345 verified and 49 → 48
+exact refusals, inserting the i18n row in ledger order.
+
+Wall time is **not** attributable to this change and is not recorded as its
+cost: the committed report ran in 71.3 s with 55.9 s of install time, while the
+three runs of this session took 136–149 s with 97–123 s of install time — a
+phase the callable-path census cannot touch — on a host reporting a load
+average of 19 on 14 cores from unrelated processes. A quiet-host measurement
+remains owed before the performance-budget test is re-pinned.

@@ -2404,6 +2404,21 @@ fn validate_callable_paths(
                 "absent callable path carries a positive or open fact".into(),
             ));
         }
+        // An apparent member is one the compiler's global-`Function`
+        // augmentation supplies. It is observed, so it is never an absence
+        // claim, and the producer emits it without descending, so it never
+        // claims its own subtree was enumerated. A fact violating either would
+        // let a library-owned leaf close a census or prove a path below itself
+        // absent, so it is refused rather than reinterpreted.
+        if fact.apparent
+            && (fact.presence == PathPresence::Absent
+                || fact.subtree_enumerated
+                || fact.path.is_empty())
+        {
+            return Err(SessionError::InvalidResponse(
+                "apparent callable path claims absence, an enumerated subtree, or the root".into(),
+            ));
+        }
     }
     Ok(())
 }
@@ -2836,12 +2851,50 @@ mod tests {
             constructability: crate::InvocationConstructability::Unknown,
             declaration: None,
             complete: true,
+            apparent: false,
             subtree_enumerated: false,
             open_reasons: Vec::new(),
         };
         assert!(validate_callable_paths(std::slice::from_ref(&fact), 1).is_err());
         fact.subtree_enumerated = true;
-        assert!(validate_callable_paths(&[fact], 1).is_ok());
+        assert!(validate_callable_paths(std::slice::from_ref(&fact), 1).is_ok());
+    }
+
+    /// An apparent member is an observation of a library-owned leaf. Letting it
+    /// claim absence, an enumerated subtree, or the root itself would let it
+    /// close a declared-member census or prove a path below itself absent, so
+    /// the client refuses the response instead of reinterpreting it.
+    #[test]
+    fn apparent_callable_path_may_not_close_a_census_or_claim_absence() {
+        let leaf = crate::CallablePathFact {
+            alternative: 0,
+            path: vec![crate::PathSegment {
+                kind: crate::PathSegmentKind::Property,
+                property: "bind".into(),
+                index: None,
+            }],
+            presence: crate::PathPresence::Required,
+            callability: crate::Callability::Callable,
+            constructability: crate::InvocationConstructability::NonConstructable,
+            declaration: None,
+            complete: true,
+            apparent: true,
+            subtree_enumerated: false,
+            open_reasons: Vec::new(),
+        };
+        assert!(validate_callable_paths(std::slice::from_ref(&leaf), 1).is_ok());
+        let mut enumerated = leaf.clone();
+        enumerated.subtree_enumerated = true;
+        assert!(validate_callable_paths(&[enumerated], 1).is_err());
+        let mut rooted = leaf.clone();
+        rooted.path = Vec::new();
+        assert!(validate_callable_paths(&[rooted], 1).is_err());
+        let mut absent = leaf;
+        absent.presence = crate::PathPresence::Absent;
+        absent.callability = crate::Callability::Unknown;
+        absent.constructability = crate::InvocationConstructability::Unknown;
+        absent.subtree_enumerated = true;
+        assert!(validate_callable_paths(&[absent], 1).is_err());
     }
 
     #[test]

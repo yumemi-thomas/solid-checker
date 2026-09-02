@@ -444,6 +444,27 @@ bounded by the demand; finite literal, callability, protocol, tuple, and genuine
 common-discriminant partitions are marked complete only when compiler relations
 prove them exhaustive.
 
+The callable-path census reports two kinds of member. A **declared member** is
+one some declaration in the program writes down; `subtreeEnumerated` and the
+whole-census closure a consumer asks for are claims about declared members
+only, and apparent leaves appear only at nodes with remaining demand depth, so
+a callable node at the depth cut reports an enumerated subtree while carrying
+un-emitted apparent members. An **apparent member**, marked `apparent: true`,
+is one a value carries solely through the compiler's apparent-type augmentation
+— the global `Function` interface's members on a node with call or construct
+signatures — and is emitted as a leaf the producer does not descend into, with
+the presence the compiler gives it. A tuple carries its Array or ReadonlyArray
+base's members beside its element slots, so the same member is answerable for
+`[T, T]` and for `T[]`. Cross-alternative reconciliation never proves a path
+`absent` when its last segment names a member of the global `Object` interface,
+because that augmentation is not enumerated and a closed declared census is not
+evidence about it; if the interface does not resolve, no absence is synthesized
+at all. Apparent members are excluded from the template set that reconciliation
+answers for, while still serving as prefixes there. A union reached below the root
+keeps the compiler's own answer — the members common to every constituent — for
+the reason recorded in the ADR. See
+[ADR 0023](adr/0023-v1-apparent-callable-path-members.md).
+
 An optional census classifies every formal-binding reference in the current
 implementation by symbol identity and separately enumerates return, throw, and
 branch sites. It deliberately does not assign Solid timing, tracking, or owner

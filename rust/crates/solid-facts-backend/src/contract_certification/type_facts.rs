@@ -4179,11 +4179,31 @@ fn callable_path_census_is_closed(path: &typefacts::CallablePathFact) -> bool {
     callable_path_has_closed_local_observation(path) && path.subtree_enumerated
 }
 
+/// Whether a path fact belongs to the declared-member census that closure is a
+/// claim about.
+///
+/// An apparent fact does not. It describes a member the value carries through
+/// the compiler's global-`Function` augmentation — `bind`, `call`, `prototype`
+/// — which is library-owned, never caller-supplied, and emitted as a leaf the
+/// producer does not descend into. Two of those members are declared `any`, so
+/// requiring them to be closed would refuse every callable value on the
+/// strength of a `Function.prototype` the package under analysis never wrote.
+/// Closure is therefore a claim about the members some declaration in the
+/// package's own surface writes down; an exact path lookup still reads the
+/// apparent facts, so nothing is hidden from a demand that names one.
+fn callable_path_is_declared_census_member(path: &typefacts::CallablePathFact) -> bool {
+    !path.apparent
+}
+
 fn require_export_callable_paths_closed(
     transcript: &ExportValueTranscript,
     open: &impl Fn(&str) -> TypeFactsCertificationError,
 ) -> Result<(), TypeFactsCertificationError> {
-    for path in &transcript.callable_paths {
+    for path in transcript
+        .callable_paths
+        .iter()
+        .filter(|path| callable_path_is_declared_census_member(path))
+    {
         if !callable_path_census_is_closed(path) {
             return Err(open("export value contains an open callable path"));
         }
@@ -4914,6 +4934,7 @@ fn require_all_callable_paths_closed(
         .iter()
         .flat_map(|parameter| &parameter.callable_paths)
         .chain(&signature.result_callable_paths)
+        .filter(|path| callable_path_is_declared_census_member(path))
     {
         if !callable_path_census_is_closed(path) {
             return Err(open("selected signature contains an open callable path"));
@@ -6364,6 +6385,7 @@ mod tests {
                         "callability": "callable",
                         "constructability": "nonConstructable",
                         "complete": true,
+                        "apparent": false,
                         "subtreeEnumerated": true
                     }]
                 }],
@@ -8637,6 +8659,7 @@ mod tests {
                 "callability": "callable",
                 "constructability": "nonConstructable",
                 "complete": true,
+                "apparent": false,
                 "subtreeEnumerated": true
             }],
             "complete": true
@@ -9410,6 +9433,76 @@ mod tests {
         assert!(require_all_callable_paths_closed(&signature, &open).is_ok());
     }
 
+    /// Declared-member census closure is a claim about what the package's own
+    /// surface writes down. An apparent leaf is a member the compiler's
+    /// global-`Function` augmentation supplies -- and two of those, `prototype`
+    /// and `arguments`, are declared `any` -- so requiring them to be closed
+    /// would refuse every callable value on the strength of a
+    /// `Function.prototype` no package wrote. A *declared* open leaf still
+    /// refuses, which is what keeps the skip from being a hole.
+    #[test]
+    fn census_closure_skips_apparent_leaves_and_still_refuses_declared_open_ones() {
+        let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
+            demand: "test".into(),
+            reason: reason.into(),
+        };
+        let open_leaf = |apparent: bool| typefacts::CallablePathFact {
+            alternative: 0,
+            path: vec![typefacts::PathSegment {
+                kind: PathSegmentKind::Property,
+                property: "prototype".into(),
+                index: None,
+            }],
+            presence: PathPresence::Required,
+            callability: Callability::Unknown,
+            constructability: typefacts::InvocationConstructability::Unknown,
+            declaration: None,
+            complete: false,
+            apparent,
+            subtree_enumerated: false,
+            open_reasons: vec!["openType".into()],
+        };
+
+        let base = export_value_transcript(json!({}));
+        assert!(
+            require_export_callable_paths_closed(&base, &open).is_ok(),
+            "the baseline export census is closed"
+        );
+        let mut with_apparent = base.clone();
+        with_apparent.callable_paths.push(open_leaf(true));
+        assert!(
+            require_export_callable_paths_closed(&with_apparent, &open).is_ok(),
+            "an apparent open leaf is outside the declared-member census"
+        );
+        let mut with_declared = base;
+        with_declared.callable_paths.push(open_leaf(false));
+        assert!(
+            require_export_callable_paths_closed(&with_declared, &open).is_err(),
+            "a declared open leaf must still refuse the census"
+        );
+
+        let mut signature = transcript()
+            .selected_signature
+            .expect("selected signature")
+            .clone();
+        assert!(
+            require_all_callable_paths_closed(&signature, &open).is_ok(),
+            "the baseline signature census is closed"
+        );
+        signature.result_callable_paths.push(open_leaf(true));
+        assert!(
+            require_all_callable_paths_closed(&signature, &open).is_ok(),
+            "an apparent open leaf on a result is outside the census too"
+        );
+        signature.parameters[0]
+            .callable_paths
+            .push(open_leaf(false));
+        assert!(
+            require_all_callable_paths_closed(&signature, &open).is_err(),
+            "a declared open leaf on a parameter must still refuse the census"
+        );
+    }
+
     #[test]
     fn recursive_open_sibling_does_not_contaminate_an_exact_path() {
         let mut exact = transcript();
@@ -9426,6 +9519,7 @@ mod tests {
             constructability: typefacts::InvocationConstructability::Unknown,
             declaration: None,
             complete: false,
+            apparent: false,
             subtree_enumerated: false,
             open_reasons: vec!["unresolvedGeneric".into()],
         });

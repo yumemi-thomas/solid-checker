@@ -118,6 +118,25 @@ type project struct {
 	// types. TypeToString is presentation work, not a semantic decision, and
 	// is disproportionately allocation-heavy when repeated per call.
 	typeDescriptors map[*checker.Type]*typefacts.TypeDescriptor
+	// apparentFunctionMembers is the global `Function` interface's member
+	// names for the accepted generation, sorted. The callable-path census asks
+	// for them once per callable node, and the answer is a property of the
+	// program's lib and augmentations, not of the node. The resolved flag
+	// distinguishes "not asked yet" from "asked, and this program declares no
+	// global Function".
+	apparentFunctionMembers         []string
+	apparentFunctionMembersResolved bool
+	// objectMemberNames is the global `Object` interface's member names.
+	// Cross-alternative census reconciliation asks whether a name could be
+	// answered by the `Object` fallback the declared census never enumerates,
+	// and must not synthesize an absence for one. The resolved flag separates
+	// "not asked yet" from "asked, and this program declares no global
+	// Object" — the latter suppresses every absence, because without the set
+	// an absence cannot be told from a fallback member. Dropped with
+	// apparentFunctionMembers; both are properties of the program's lib and
+	// augmentations.
+	objectMemberNames         map[string]struct{}
+	objectMemberNamesResolved bool
 	// declarationShapes caches diagnostic-free exported contracts for the
 	// accepted program generation. Incremental updates need only emit the
 	// candidate generation's shape; semantically affected files are evicted
@@ -281,6 +300,10 @@ func (p *project) ReleaseAnalysisState() {
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.nextSymbol = 0
 	p.referenceIndex.releaseAnalysisState()
 }
@@ -579,6 +602,10 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.nextSymbol = 0
 
 	stageStarted = time.Now()
@@ -1566,6 +1593,10 @@ func (p *project) Close() error {
 	p.callDiagnostics = nil
 	p.callDemandScratch = nil
 	p.typeDescriptors = nil
+	p.apparentFunctionMembers = nil
+	p.apparentFunctionMembersResolved = false
+	p.objectMemberNames = nil
+	p.objectMemberNamesResolved = false
 	p.declarationShapes = nil
 	p.exportedIdentities = nil
 	p.exportedIdentitiesByRef = nil

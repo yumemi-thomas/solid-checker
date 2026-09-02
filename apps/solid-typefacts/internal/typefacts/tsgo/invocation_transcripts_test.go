@@ -1924,3 +1924,790 @@ func hasFinitePartition(partitions []typefacts.FinitePartition, axis typefacts.F
 	}
 	return false
 }
+
+// findCallablePath returns the one fact at an exact alternative and property
+// path, or nil. Unlike hasCallablePath it does not filter on callability, so a
+// test can assert what the census actually says about a member rather than
+// only that some callable member matched.
+func findCallablePath(
+	paths []typefacts.CallablePathFact,
+	alternative int,
+	names ...string,
+) *typefacts.CallablePathFact {
+	for index := range paths {
+		fact := &paths[index]
+		if fact.Alternative != alternative || !pathNamesEqual(fact.Path, names...) {
+			continue
+		}
+		return fact
+	}
+	return nil
+}
+
+func findTupleIndexPath(
+	paths []typefacts.CallablePathFact,
+	alternative int,
+	index int,
+) *typefacts.CallablePathFact {
+	for factIndex := range paths {
+		fact := &paths[factIndex]
+		if fact.Alternative != alternative || len(fact.Path) != 1 ||
+			fact.Path[0].Kind != typefacts.PathSegmentTuple || fact.Path[0].Index == nil ||
+			*fact.Path[0].Index != index {
+			continue
+		}
+		return fact
+	}
+	return nil
+}
+
+func firstParameterCallablePaths(
+	t *testing.T,
+	analyzer typefacts.InvocationAnalyzer,
+	path, source, needle string,
+	depth int,
+) []typefacts.CallablePathFact {
+	t.Helper()
+	start := strings.LastIndex(source, needle)
+	if start < 0 {
+		t.Fatalf("needle %q is absent from the source", needle)
+	}
+	answer, err := analyzer.InvocationTranscripts(
+		context.Background(),
+		[]typefacts.InvocationDemand{{
+			Location:      typefacts.Location{Path: path, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: depth,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature := answer.Transcripts[0].SelectedSignature
+	if signature == nil || len(signature.Parameters) == 0 {
+		t.Fatalf("transcript for %q has no first parameter: %#v", needle, answer.Transcripts[0])
+	}
+	return signature.Parameters[0].CallablePaths
+}
+
+func resultCallablePaths(
+	t *testing.T,
+	analyzer typefacts.InvocationAnalyzer,
+	path, source, needle string,
+	depth int,
+) []typefacts.CallablePathFact {
+	t.Helper()
+	start := strings.LastIndex(source, needle)
+	if start < 0 {
+		t.Fatalf("needle %q is absent from the source", needle)
+	}
+	answer, err := analyzer.InvocationTranscripts(
+		context.Background(),
+		[]typefacts.InvocationDemand{{
+			Location:      typefacts.Location{Path: path, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: depth,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature := answer.Transcripts[0].SelectedSignature
+	if signature == nil {
+		t.Fatalf("transcript for %q has no selected signature", needle)
+	}
+	return signature.ResultCallablePaths
+}
+
+// A callable value's `bind`, `call`, `apply` and the rest are members the
+// compiler answers through its Function augmentation, and `tsc` type-checks
+// the access. The census used to report such a value as having no members at
+// all, so a consumer asking for one read absence where TypeScript answers a
+// type.
+func TestCallablePathCensusCarriesApparentFunctionMembersAsLeaves(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+type Translator = (key: string) => string;
+declare function callable(translate: Translator): void;
+callable(null as unknown as Translator);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	paths := firstParameterCallablePaths(
+		t, analyzer, filepath.Join(dir, "facts.ts"), source, "callable(null as unknown as Translator)", 1,
+	)
+	for _, name := range []string{"bind", "call", "apply", "toString"} {
+		fact := findCallablePath(paths, 0, name)
+		if fact == nil {
+			t.Fatalf("apparent member %q is absent from the census: %#v", name, paths)
+		}
+		if !fact.Apparent {
+			t.Fatalf("apparent member %q is not marked apparent: %#v", name, fact)
+		}
+		if fact.SubtreeEnumerated {
+			t.Fatalf("apparent member %q claims an enumerated subtree: %#v", name, fact)
+		}
+		if fact.Presence != typefacts.PathRequired || fact.Callability != typefacts.CallabilityCallable ||
+			!fact.Complete || len(fact.OpenReasons) != 0 {
+			t.Fatalf("apparent member %q is not a closed callable leaf: %#v", name, fact)
+		}
+	}
+	for _, name := range []string{"length", "name"} {
+		fact := findCallablePath(paths, 0, name)
+		if fact == nil || fact.Apparent != true || !fact.Complete ||
+			fact.Callability != typefacts.CallabilityNonCallable {
+			t.Fatalf("apparent member %q = %#v, want a closed non-callable leaf", name, fact)
+		}
+	}
+	// `prototype` and `arguments` are declared `any`, so the honest fact is
+	// open. Rounding them up to complete would let a caller read a closed
+	// answer out of a type the compiler refuses to describe.
+	for _, name := range []string{"prototype", "arguments"} {
+		fact := findCallablePath(paths, 0, name)
+		if fact == nil || !fact.Apparent || fact.Complete ||
+			!slices.Contains(fact.OpenReasons, "openType") {
+			t.Fatalf("apparent member %q = %#v, want an open leaf", name, fact)
+		}
+	}
+	// The leaves are leaves: nothing below them is censused, at any depth.
+	deeper := firstParameterCallablePaths(
+		t, analyzer, filepath.Join(dir, "facts.ts"), source, "callable(null as unknown as Translator)", 3,
+	)
+	if findCallablePath(deeper, 0, "bind", "bind") != nil ||
+		findCallablePath(deeper, 0, "bind", "call") != nil {
+		t.Fatalf("census recursed into an apparent leaf: %#v", deeper)
+	}
+	if findCallablePath(deeper, 0, "bind") == nil {
+		t.Fatal("apparent leaf disappeared at a deeper demand")
+	}
+}
+
+// A node that declares the member itself keeps its own fact: the compiler
+// consults resolved members before the Function fallback, so the declared type
+// is TypeScript's answer and there must be exactly one fact for the name.
+func TestCallablePathCensusPrefersADeclaredMemberOverItsApparentTwin(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+interface OwnBind {
+  (key: string): string;
+  bind: { tag: "own" };
+}
+declare function shadowed(value: OwnBind): void;
+shadowed(null as unknown as OwnBind);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	paths := firstParameterCallablePaths(
+		t, analyzer, filepath.Join(dir, "facts.ts"), source, "shadowed(null as unknown as OwnBind)", 1,
+	)
+	matches := 0
+	for index := range paths {
+		if pathNamesEqual(paths[index].Path, "bind") {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("declared and apparent `bind` both emitted (%d facts): %#v", matches, paths)
+	}
+	fact := findCallablePath(paths, 0, "bind")
+	if fact == nil || fact.Apparent || fact.Declaration == nil ||
+		fact.Callability != typefacts.CallabilityNonCallable {
+		t.Fatalf("shadowing `bind` = %#v, want the declared object member", fact)
+	}
+	if findCallablePath(paths, 0, "call") == nil {
+		t.Fatal("shadowing one Function member suppressed the rest")
+	}
+}
+
+// The augmentation is part of what the compiler resolves, so it is part of the
+// answer; a non-callable object gets no apparent members at all; and a class
+// constructor, whose only signatures are construct signatures, does get them
+// because getPropertyOfType falls back to NewableFunction for it.
+func TestCallablePathCensusFollowsTheCompilersFunctionFallback(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+interface Function { extra(): void }
+declare class Widget { constructor(value: number); render(): void }
+declare function shapes(
+  plain: { tag: number },
+  ctor: typeof Widget,
+  fn: () => void,
+): void;
+shapes(null as never, null as never, null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	sourcePath := filepath.Join(dir, "facts.ts")
+	needle := "shapes(null as never, null as never, null as never)"
+	start := strings.LastIndex(source, needle)
+	answer, err := analyzer.InvocationTranscripts(
+		context.Background(),
+		[]typefacts.InvocationDemand{{
+			Location:      typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(needle)},
+			CallableDepth: 1,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature := answer.Transcripts[0].SelectedSignature
+	if signature == nil || len(signature.Parameters) != 3 {
+		t.Fatalf("transcript has no three-parameter signature: %#v", answer.Transcripts[0])
+	}
+	plain := signature.Parameters[0].CallablePaths
+	for _, name := range []string{"bind", "call", "apply", "extra"} {
+		if fact := findCallablePath(plain, 0, name); fact != nil {
+			t.Fatalf("non-callable object carries apparent member %q: %#v", name, fact)
+		}
+	}
+	// The call/construct-signature gate is the whole rule, and this is what
+	// kills a mutation that drops it: GetTypeOfPropertyOfType resolves
+	// `toString` on *any* object through the global `Object` fallback, so an
+	// ungated walk would decorate a plain record with apparent members. The
+	// census carries `Function`'s augmentation only, and only where the
+	// compiler's own `Function` fallback applies.
+	if fact := findCallablePath(plain, 0, "toString"); fact != nil {
+		t.Fatalf("non-callable object carries an apparent `toString`: %#v", fact)
+	}
+	for index := range plain {
+		if plain[index].Apparent {
+			t.Fatalf("non-callable object carries an apparent fact at all: %#v", &plain[index])
+		}
+	}
+	if findCallablePath(plain, 0, "tag") == nil {
+		t.Fatalf("non-callable object lost its declared member: %#v", plain)
+	}
+	for parameter, label := range map[int]string{1: "class constructor", 2: "function"} {
+		paths := signature.Parameters[parameter].CallablePaths
+		for _, name := range []string{"bind", "call", "apply", "extra"} {
+			fact := findCallablePath(paths, 0, name)
+			if fact == nil || !fact.Apparent {
+				t.Fatalf("%s lost apparent member %q: %#v", label, name, paths)
+			}
+		}
+		if fact := findCallablePath(paths, 0, "extra"); fact.Callability != typefacts.CallabilityCallable {
+			t.Fatalf("%s augmented member is not callable: %#v", label, fact)
+		}
+	}
+	if findCallablePath(signature.Parameters[1].CallablePaths, 0, "prototype") == nil {
+		t.Fatal("class constructor lost `prototype`")
+	}
+}
+
+// A tuple's element slots are Tuple segments; its *members* are the ones its
+// Array or ReadonlyArray base declares. A plain array already censused them,
+// so leaving them out for a tuple made the same member answerable for `T[]`
+// and absent for `[T, T]`.
+func TestCallablePathCensusCarriesTupleArrayMembersBesideItsElements(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+type Accessor<T> = () => T;
+type Setter<T> = (value: T) => T;
+declare function mutable(signal: [Accessor<number>, Setter<number>]): void;
+declare function frozen(signal: readonly [Accessor<number>, Setter<number>]): void;
+declare function optional(signal: [Accessor<number>, Setter<number>?]): void;
+declare function rest(signal: [Accessor<number>, ...number[]]): void;
+mutable(null as never);
+frozen(null as never);
+optional(null as never);
+rest(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	sourcePath := filepath.Join(dir, "facts.ts")
+
+	for _, needle := range []string{"mutable(null as never)", "frozen(null as never)"} {
+		paths := firstParameterCallablePaths(t, analyzer, sourcePath, source, needle, 1)
+		for index := range []int{0, 1} {
+			if fact := findTupleIndexPath(paths, 0, index); fact == nil ||
+				fact.Callability != typefacts.CallabilityCallable {
+				t.Fatalf("%s lost tuple slot [%d]: %#v", needle, index, paths)
+			}
+		}
+		for _, name := range []string{"slice", "length"} {
+			fact := findCallablePath(paths, 0, name)
+			if fact == nil {
+				t.Fatalf("%s is missing array member %q: %#v", needle, name, paths)
+			}
+			if fact.Apparent {
+				t.Fatalf("%s array member %q is marked apparent: %#v", needle, name, fact)
+			}
+		}
+		for _, name := range []string{"0", "1"} {
+			if fact := findCallablePath(paths, 0, name); fact != nil {
+				t.Fatalf("%s named its element slot as a property too: %#v", needle, fact)
+			}
+		}
+		root := findCallablePath(paths, 0)
+		if root == nil || !root.Complete || slices.Contains(root.OpenReasons, "openIndex") {
+			t.Fatalf("%s exact tuple root = %#v, want closed", needle, root)
+		}
+	}
+
+	// An optional or rest tuple keeps the open index it already had: the
+	// member census says nothing about how many slots exist.
+	for _, needle := range []string{"optional(null as never)", "rest(null as never)"} {
+		paths := firstParameterCallablePaths(t, analyzer, sourcePath, source, needle, 1)
+		root := findCallablePath(paths, 0)
+		if root == nil || root.Complete || root.SubtreeEnumerated ||
+			!slices.Contains(root.OpenReasons, "openIndex") {
+			t.Fatalf("%s root = %#v, want its openIndex kept", needle, root)
+		}
+		if findCallablePath(paths, 0, "slice") == nil {
+			t.Fatalf("%s is missing array member `slice`: %#v", needle, paths)
+		}
+	}
+}
+
+// The absence proof and the cross-alternative reconciliation must not turn an
+// apparent member into a manufactured Absent, and must not read through an
+// apparent leaf.
+func TestCallablePathAbsenceStaysSoundAroundApparentMembers(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function siblings(value: (() => void) | { bind: { tag: 1 } }): void;
+declare function deeper(value: { f: () => void } | { f: { bind: { x: () => void } } }): void;
+declare function foreign(value: (() => void) | { nowhere: () => void }): void;
+siblings(null as never);
+deeper(null as never);
+foreign(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	sourcePath := filepath.Join(dir, "facts.ts")
+
+	siblings := firstParameterCallablePaths(t, analyzer, sourcePath, source, "siblings(null as never)", 1)
+	for alternative := range []int{0, 1} {
+		fact := findCallablePath(siblings, alternative, "bind")
+		if fact == nil {
+			t.Fatalf("alternative %d has no `bind` fact at all: %#v", alternative, siblings)
+		}
+		if fact.Presence == typefacts.PathAbsent {
+			t.Fatalf("alternative %d synthesized `bind` absent: %#v", alternative, fact)
+		}
+	}
+
+	deeper := firstParameterCallablePaths(t, analyzer, sourcePath, source, "deeper(null as never)", 3)
+	for alternative := range []int{0, 1} {
+		if findCallablePath(deeper, alternative, "f", "bind") == nil {
+			t.Fatalf("alternative %d has no `f.bind` fact: %#v", alternative, deeper)
+		}
+	}
+	callableSide := findCallablePath(deeper, 0, "f", "bind", "x")
+	declaredSide := findCallablePath(deeper, 1, "f", "bind", "x")
+	if declaredSide == nil || declaredSide.Presence != typefacts.PathRequired {
+		t.Fatalf("declared `f.bind.x` = %#v, want required", declaredSide)
+	}
+	if callableSide == nil || callableSide.Presence != typefacts.PathUnknown ||
+		!slices.Contains(callableSide.OpenReasons, "openAlternative") {
+		t.Fatalf("`f.bind.x` below an apparent leaf = %#v, want an explicit unknown", callableSide)
+	}
+
+	// A name the compiler does not answer for a callable value is still
+	// proved absent there — `tsc` agrees that `(() => void).nowhere` does not
+	// exist, so the census must keep saying so.
+	foreign := firstParameterCallablePaths(t, analyzer, sourcePath, source, "foreign(null as never)", 1)
+	absent := findCallablePath(foreign, 0, "nowhere")
+	if absent == nil || absent.Presence != typefacts.PathAbsent || !absent.Complete ||
+		!absent.SubtreeEnumerated {
+		t.Fatalf("`nowhere` on the callable alternative = %#v, want proved absent", absent)
+	}
+}
+
+// A returned callable carries the same apparent members as a parameter one:
+// nothing about the census's Function fallback depends on which side of the
+// signature the value is on.
+func TestResultCallablePathCensusCarriesApparentFunctionMembers(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function action<R>(fn: () => Promise<R>): (...args: unknown[]) => Promise<R>;
+action(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	paths := resultCallablePaths(
+		t, analyzer, filepath.Join(dir, "facts.ts"), source, "action(null as never)", 1,
+	)
+	fact := findCallablePath(paths, 0, "toString")
+	if fact == nil || !fact.Apparent || fact.Callability != typefacts.CallabilityCallable ||
+		!fact.Complete {
+		t.Fatalf("returned callable's `toString` = %#v, want a closed apparent callable leaf", fact)
+	}
+}
+
+// Cross-alternative reconciliation may not manufacture an absence for a name
+// the compiler answers through an apparent-type augmentation. A closed,
+// fully-enumerated declared census is evidence about *declared* members only:
+// GetPropertiesOfType enumerates neither the global `Object` fallback that
+// every object type carries nor the global `Function` fallback a callable one
+// carries, so `tsc` accepts `({ dispose(): void }).toString()` on a sibling
+// whose census names no `toString`.
+//
+// Deleting the Function/Object name rule in
+// templateNameIsCompilerAugmentedLocked fails every case below.
+func TestCallablePathReconciliationNeverProvesAnAugmentedNameAbsent(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+type Accessor<T> = () => T;
+type Setter<T> = (value: T) => T;
+declare function tupleOrObject(
+  value: [Accessor<number>, Setter<number>] | { dispose(): void },
+): void;
+declare function fnOrObject(
+  value: (() => void) | { hasOwnProperty(key: string): boolean; valueOf(): object },
+): void;
+declare function declaredToString(value: { toString(): string } | { q: number }): void;
+tupleOrObject(null as never);
+fnOrObject(null as never);
+declaredToString(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	sourcePath := filepath.Join(dir, "facts.ts")
+
+	openAlternative := func(t *testing.T, fact *typefacts.CallablePathFact, label string) {
+		t.Helper()
+		if fact == nil {
+			t.Fatalf("%s has no reconciled fact at all", label)
+		}
+		if fact.Presence != typefacts.PathUnknown || fact.Complete || fact.SubtreeEnumerated ||
+			!slices.Contains(fact.OpenReasons, "openAlternative") {
+			t.Fatalf("%s = %#v, want an explicit openAlternative unknown", label, fact)
+		}
+	}
+	// Union constituent order is the compiler's, so an alternative is located
+	// by a member only it declares rather than by a guessed index.
+	alternativeDeclaring := func(
+		t *testing.T,
+		paths []typefacts.CallablePathFact,
+		names ...string,
+	) int {
+		t.Helper()
+		for index := range paths {
+			fact := &paths[index]
+			if pathNamesEqual(fact.Path, names...) && fact.Presence == typefacts.PathRequired &&
+				fact.Declaration != nil {
+				return fact.Alternative
+			}
+		}
+		t.Fatalf("no alternative declares %v: %#v", names, paths)
+		return -1
+	}
+
+	// C's tuple members make `toString` and `toLocaleString` templates. The
+	// `{ dispose(): void }` sibling is closed and enumerated, and used to be
+	// proved absent for both.
+	tupleOrObject := firstParameterCallablePaths(
+		t, analyzer, sourcePath, source, "tupleOrObject(null as never)", 1,
+	)
+	objectSide := alternativeDeclaring(t, tupleOrObject, "dispose")
+	tupleSide := alternativeDeclaring(t, tupleOrObject, "slice")
+	if objectSide == tupleSide {
+		t.Fatalf("both probes landed on alternative %d: %#v", objectSide, tupleOrObject)
+	}
+	for _, name := range []string{"toString", "toLocaleString"} {
+		openAlternative(t, findCallablePath(tupleOrObject, objectSide, name), "object sibling's "+name)
+	}
+	// An Array member that no augmentation supplies is still proved absent:
+	// `tsc` agrees `({ dispose(): void }).slice` does not exist.
+	if absent := findCallablePath(tupleOrObject, objectSide, "slice"); absent == nil ||
+		absent.Presence != typefacts.PathAbsent || !absent.Complete {
+		t.Fatalf("object sibling's `slice` = %#v, want proved absent", absent)
+	}
+	// And the reverse direction: the tuple has no `dispose`, which no
+	// augmentation supplies either.
+	if absent := findCallablePath(tupleOrObject, tupleSide, "dispose"); absent == nil ||
+		absent.Presence != typefacts.PathAbsent || !absent.Complete {
+		t.Fatalf("tuple sibling's `dispose` = %#v, want proved absent", absent)
+	}
+
+	// `hasOwnProperty` and `valueOf` are `Object` members, not `Function`
+	// ones, so the callable alternative emits no apparent leaf for them --
+	// and it must not be proved absent for them either. `bind` is the mirror
+	// case, pinned in TestCallablePathReconciliationProvesAFunctionOnlyNameAbsent.
+	fnOrObject := firstParameterCallablePaths(
+		t, analyzer, sourcePath, source, "fnOrObject(null as never)", 1,
+	)
+	objectDeclarer := alternativeDeclaring(t, fnOrObject, "hasOwnProperty")
+	functionSide := 1 - objectDeclarer
+	for _, name := range []string{"hasOwnProperty", "valueOf"} {
+		openAlternative(t, findCallablePath(fnOrObject, functionSide, name), "function sibling's "+name)
+	}
+	if bind := findCallablePath(fnOrObject, functionSide, "bind"); bind == nil || !bind.Apparent {
+		t.Fatalf("function alternative lost its apparent `bind`: %#v", fnOrObject)
+	}
+
+	// The same hole for an ordinary declared template, which predates the
+	// tuple member census: `{ q: number }` is closed and enumerated, names no
+	// `toString`, and still has one.
+	declared := firstParameterCallablePaths(
+		t, analyzer, sourcePath, source, "declaredToString(null as never)", 1,
+	)
+	toStringSide := alternativeDeclaring(t, declared, "toString")
+	recordSide := alternativeDeclaring(t, declared, "q")
+	if toStringSide == recordSide {
+		t.Fatalf("both probes landed on alternative %d: %#v", toStringSide, declared)
+	}
+	openAlternative(t, findCallablePath(declared, recordSide, "toString"), "closed sibling's toString")
+	if absent := findCallablePath(declared, toStringSide, "q"); absent == nil ||
+		absent.Presence != typefacts.PathAbsent || !absent.Complete {
+		t.Fatalf("`q` on the toString alternative = %#v, want proved absent", absent)
+	}
+}
+
+// An apparent member's presence is the compiler's answer, not a constant. The
+// nine members `interface Function` declares today are required, but an
+// augmentation may add an optional one, and reporting it as required would
+// tell a consumer a member is always there when the type says it may not be.
+func TestApparentFunctionMemberCarriesItsDeclaredOptionality(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+interface Function { maybe?(): void; always(): void }
+declare function callable(fn: () => void): void;
+callable(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	paths := firstParameterCallablePaths(
+		t, analyzer, filepath.Join(dir, "facts.ts"), source, "callable(null as never)", 1,
+	)
+	maybe := findCallablePath(paths, 0, "maybe")
+	if maybe == nil || !maybe.Apparent || maybe.Presence != typefacts.PathOptional {
+		t.Fatalf("optional augmented member `maybe` = %#v, want an optional apparent leaf", maybe)
+	}
+	always := findCallablePath(paths, 0, "always")
+	if always == nil || !always.Apparent || always.Presence != typefacts.PathRequired {
+		t.Fatalf("required augmented member `always` = %#v, want a required apparent leaf", always)
+	}
+	if bind := findCallablePath(paths, 0, "bind"); bind == nil ||
+		bind.Presence != typefacts.PathRequired {
+		t.Fatalf("`bind` = %#v, want required", bind)
+	}
+}
+
+// A `Function`-interface name is *not* suppressed, and this is what says so.
+// The compiler's Function fallback applies only to a type with call or
+// construct signatures, and every such alternative emits all nine apparent
+// leaves at the same path length, so a declared `bind` template reaches only
+// the alternatives that genuinely lack it -- where `tsc` agrees it is absent.
+// Widening the suppression rule to `Function`'s names fails this test.
+func TestCallablePathReconciliationProvesAFunctionOnlyNameAbsent(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function mixed(value: { bind(): void } | (() => void) | { q: 1 }): void;
+mixed(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	paths := firstParameterCallablePaths(
+		t, analyzer, filepath.Join(dir, "facts.ts"), source, "mixed(null as never)", 1,
+	)
+	declared, callable, record := -1, -1, -1
+	for index := range paths {
+		fact := &paths[index]
+		switch {
+		case pathNamesEqual(fact.Path, "bind") && fact.Declaration != nil && !fact.Apparent:
+			declared = fact.Alternative
+		case pathNamesEqual(fact.Path, "bind") && fact.Apparent:
+			callable = fact.Alternative
+		case pathNamesEqual(fact.Path, "q"):
+			if fact.Presence == typefacts.PathRequired {
+				record = fact.Alternative
+			}
+		}
+	}
+	if declared < 0 || callable < 0 || record < 0 ||
+		declared == callable || declared == record || callable == record {
+		t.Fatalf("could not separate the three alternatives (%d/%d/%d): %#v",
+			declared, callable, record, paths)
+	}
+	// The callable alternative has `bind` apparently, so nothing is
+	// reconciled into it.
+	if fact := findCallablePath(paths, callable, "bind"); fact == nil || !fact.Apparent ||
+		fact.Presence != typefacts.PathRequired {
+		t.Fatalf("callable alternative's `bind` = %#v, want a required apparent leaf", fact)
+	}
+	// The plain record does not, and `tsc` rejects `({ q: 1 }).bind`, so the
+	// census must keep proving it absent.
+	absent := findCallablePath(paths, record, "bind")
+	if absent == nil || absent.Presence != typefacts.PathAbsent || !absent.Complete ||
+		!absent.SubtreeEnumerated {
+		t.Fatalf("record alternative's `bind` = %#v, want proved absent", absent)
+	}
+}
+
+// The apparent leaves are excluded from the reconciliation template set, and
+// this is what says so. Including them costs closure without buying precision:
+// the synthesized facts carry Apparent=false, so the consumer counts them as
+// declared census members, and every one of them is an explicit unknown.
+func TestApparentMembersAreNotReconciledIntoSiblingAlternatives(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function nullableCallback(value: (() => void) | undefined): void;
+nullableCallback(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	paths := firstParameterCallablePaths(
+		t, analyzer, filepath.Join(dir, "facts.ts"), source, "nullableCallback(null as never)", 1,
+	)
+	callable := -1
+	for index := range paths {
+		if fact := &paths[index]; pathNamesEqual(fact.Path, "bind") && fact.Apparent {
+			callable = fact.Alternative
+		}
+	}
+	if callable < 0 {
+		t.Fatalf("no alternative carries an apparent `bind`: %#v", paths)
+	}
+	for index := range paths {
+		fact := &paths[index]
+		if fact.Presence == typefacts.PathUnknown {
+			t.Fatalf("an apparent member was reconciled as an unknown: %#v", fact)
+		}
+		if slices.Contains(fact.OpenReasons, "openAlternative") {
+			t.Fatalf("an apparent member opened a sibling alternative: %#v", fact)
+		}
+	}
+	// The `undefined` alternative answers for its own root and nothing else.
+	other := 0
+	if callable == 0 {
+		other = 1
+	}
+	facts := 0
+	for index := range paths {
+		if paths[index].Alternative == other {
+			facts++
+		}
+	}
+	if facts != 1 {
+		t.Fatalf("the undefined alternative carries %d facts, want only its root: %#v", facts, paths)
+	}
+}
+
+// Only the template's LAST segment decides suppression, and a tuple segment
+// never suppresses. Reading path[0] instead of path[len-1] fails the first
+// case; dropping the segment-kind guard or the resolved-set guard fails the
+// second.
+func TestAugmentedNameSuppressionReadsOnlyTheLastPropertySegment(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+declare function nested(value: { foo: { toString(): string } } | { foo: { q: 1 } }): void;
+declare function tuples(value: [() => void, () => void] | [() => void]): void;
+nested(null as never);
+tuples(null as never);
+`
+	writeInvocationProject(t, dir, map[string]string{"facts.ts": source})
+	analyzer, closeProject := openInvocationAnalyzer(t, dir)
+	defer closeProject()
+	sourcePath := filepath.Join(dir, "facts.ts")
+
+	nested := firstParameterCallablePaths(t, analyzer, sourcePath, source, "nested(null as never)", 2)
+	toStringSide, recordSide := -1, -1
+	for index := range nested {
+		fact := &nested[index]
+		if fact.Presence != typefacts.PathRequired || fact.Declaration == nil {
+			continue
+		}
+		if pathNamesEqual(fact.Path, "foo", "toString") {
+			toStringSide = fact.Alternative
+		}
+		if pathNamesEqual(fact.Path, "foo", "q") {
+			recordSide = fact.Alternative
+		}
+	}
+	if toStringSide < 0 || recordSide < 0 || toStringSide == recordSide {
+		t.Fatalf("could not separate the nested alternatives (%d/%d): %#v",
+			toStringSide, recordSide, nested)
+	}
+	// `foo` is an ordinary declared member in both alternatives and stays so:
+	// the rule reads the last segment, not the first.
+	for _, alternative := range []int{toStringSide, recordSide} {
+		if owner := findCallablePath(nested, alternative, "foo"); owner == nil ||
+			owner.Presence != typefacts.PathRequired || !owner.Complete {
+			t.Fatalf("alternative %d's `foo` = %#v, want required", alternative, owner)
+		}
+	}
+	suppressed := findCallablePath(nested, recordSide, "foo", "toString")
+	if suppressed == nil || suppressed.Presence != typefacts.PathUnknown ||
+		!slices.Contains(suppressed.OpenReasons, "openAlternative") {
+		t.Fatalf("`foo.toString` on the record alternative = %#v, want an explicit unknown",
+			suppressed)
+	}
+	if absent := findCallablePath(nested, toStringSide, "foo", "q"); absent == nil ||
+		absent.Presence != typefacts.PathAbsent || !absent.Complete {
+		t.Fatalf("`foo.q` on the toString alternative = %#v, want proved absent", absent)
+	}
+
+	// A tuple element slot is decided by the tuple's own shape; no
+	// augmentation supplies it.
+	tuples := firstParameterCallablePaths(t, analyzer, sourcePath, source, "tuples(null as never)", 1)
+	pair, single := -1, -1
+	for index := range tuples {
+		fact := &tuples[index]
+		if len(fact.Path) != 1 || fact.Path[0].Kind != typefacts.PathSegmentTuple ||
+			fact.Path[0].Index == nil || *fact.Path[0].Index != 1 {
+			continue
+		}
+		if fact.Presence == typefacts.PathRequired {
+			pair = fact.Alternative
+		} else {
+			single = fact.Alternative
+		}
+	}
+	if pair < 0 || single < 0 || pair == single {
+		t.Fatalf("could not separate the tuple alternatives (%d/%d): %#v", pair, single, tuples)
+	}
+	absent := findTupleIndexPath(tuples, single, 1)
+	if absent == nil || absent.Presence != typefacts.PathAbsent || !absent.Complete ||
+		!absent.SubtreeEnumerated {
+		t.Fatalf("the 1-tuple's slot [1] = %#v, want proved absent", absent)
+	}
+}
+
+// Suppression fails closed on an unresolvable global. Without the `Object`
+// member set there is no way to tell a genuinely absent member from one the
+// compiler's `Object` fallback supplies, so no absence may be synthesized for
+// any template -- a tuple segment included.
+func TestAugmentedNameSuppressionFailsClosedWithoutTheObjectInterface(t *testing.T) {
+	property := func(name string) []typefacts.PathSegment {
+		return []typefacts.PathSegment{{Kind: typefacts.PathSegmentProperty, Property: name}}
+	}
+	index := 1
+	tuple := []typefacts.PathSegment{{Kind: typefacts.PathSegmentTuple, Index: &index}}
+	resolved := map[string]struct{}{"toString": {}, "hasOwnProperty": {}, "valueOf": {}}
+
+	cases := []struct {
+		name     string
+		members  map[string]struct{}
+		resolved bool
+		path     []typefacts.PathSegment
+		want     bool
+	}{
+		{"unresolved suppresses a property", nil, false, property("nowhere"), true},
+		{"unresolved suppresses a tuple slot", nil, false, tuple, true},
+		{"unresolved suppresses the root", nil, false, nil, true},
+		{"resolved object member suppresses", resolved, true, property("toString"), true},
+		{"resolved non-member does not", resolved, true, property("nowhere"), false},
+		{"resolved function-only name does not", resolved, true, property("bind"), false},
+		{"resolved tuple slot does not", resolved, true, tuple, false},
+		{"resolved root does not", resolved, true, nil, false},
+		{"empty resolved set suppresses nothing", map[string]struct{}{}, true, property("toString"), false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := templateNameMayBeAugmented(testCase.members, testCase.resolved, testCase.path)
+			if got != testCase.want {
+				t.Fatalf("templateNameMayBeAugmented = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}

@@ -133,15 +133,27 @@ type Discriminant struct {
 }
 
 type CallablePathFact struct {
-	Alternative       int                        `cbor:"alternative" json:"alternative"`
-	Path              []PathSegment              `cbor:"path,omitempty" json:"path,omitempty"`
-	Presence          PathPresence               `cbor:"presence" json:"presence"`
-	Callability       Callability                `cbor:"callability" json:"callability"`
-	Constructability  InvocationConstructability `cbor:"constructability" json:"constructability"`
-	Declaration       *Declaration               `cbor:"declaration,omitempty" json:"declaration,omitempty"`
-	Complete          bool                       `cbor:"complete,omitempty" json:"complete,omitempty"`
-	SubtreeEnumerated bool                       `cbor:"subtreeEnumerated" json:"subtreeEnumerated"`
-	OpenReasons       []string                   `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	Alternative      int                        `cbor:"alternative" json:"alternative"`
+	Path             []PathSegment              `cbor:"path,omitempty" json:"path,omitempty"`
+	Presence         PathPresence               `cbor:"presence" json:"presence"`
+	Callability      Callability                `cbor:"callability" json:"callability"`
+	Constructability InvocationConstructability `cbor:"constructability" json:"constructability"`
+	Declaration      *Declaration               `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Complete         bool                       `cbor:"complete,omitempty" json:"complete,omitempty"`
+	// Apparent marks a member the value carries only through the compiler's
+	// apparent-type augmentation — the global `Function` interface's members on
+	// a node with call or construct signatures. Such a member exists (the
+	// compiler's getPropertyOfType answers it, and `tsc` type-checks the
+	// access), but it is library-owned rather than declared by the package
+	// under analysis, it is never caller-supplied, and it is emitted as a leaf.
+	// The declared-member census closure therefore excludes it, while exact
+	// path lookups still find it. Every declared member carries false.
+	//
+	// Required on the wire in both directions: a producer that omits it would
+	// have its leaves read as census members.
+	Apparent          bool     `cbor:"apparent" json:"apparent"`
+	SubtreeEnumerated bool     `cbor:"subtreeEnumerated" json:"subtreeEnumerated"`
+	OpenReasons       []string `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 type FinitePartitionAxis string

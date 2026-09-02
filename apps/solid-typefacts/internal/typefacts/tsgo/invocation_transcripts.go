@@ -835,6 +835,18 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 	// index, or generic cut retains an explicit unknown instead. This prevents a
 	// union sibling from inheriting another sibling's callback without claiming
 	// a path absent below an unenumerated parent.
+	//
+	// A closed declared census is not evidence of absence for every name. The
+	// compiler augments every object type with the global `Object` interface's
+	// members, and GetPropertiesOfType never enumerates them, so `toString`,
+	// `hasOwnProperty` and `valueOf` are answered by the compiler — `tsc`
+	// accepts `({ dispose(): void }).toString()` — on a sibling whose declared
+	// census names none of them. The tuple member census makes exactly those
+	// names reachable as templates, and a template some alternative declares
+	// outright reaches them too. Such a name therefore retains the explicit
+	// unknown regardless of what the sibling's prefix proves, and if the global
+	// `Object` interface does not resolve at all, no absence is synthesized for
+	// any template.
 	type pathTemplate struct {
 		path []typefacts.PathSegment
 	}
@@ -845,11 +857,27 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 			continue
 		}
 		key := callablePathKey(fact)
-		templates[key] = pathTemplate{path: fact.Path}
 		if present[key] == nil {
 			present[key] = make(map[int]struct{})
 		}
 		present[key][fact.Alternative] = struct{}{}
+		// An apparent member does not oblige a sibling alternative to answer
+		// for it, and reconciling it would cost closure rather than buy
+		// precision. Every alternative to which the compiler's Function
+		// fallback applies emits the same nine leaves at the same path length,
+		// because the depth decrement is uniform — so the only alternatives a
+		// reconciled apparent template can reach are the ones that genuinely do
+		// not have the member. There the augmented-name rule below refuses to
+		// prove absence, and the synthesized fact is an explicit unknown that
+		// carries Apparent=false and therefore *counts* against declared-member
+		// census closure. `(() => void) | undefined` measured 20 facts with 9
+		// open declared ones that way, against 11 facts and none open with this
+		// exclusion. The templates that close F2/F3 come from declared
+		// siblings, so they are unaffected.
+		if fact.Apparent {
+			continue
+		}
+		templates[key] = pathTemplate{path: fact.Path}
 	}
 	for key, template := range templates {
 		for alternative := range constituents {
@@ -860,7 +888,8 @@ func (p *project) callablePathsLocked(value *checker.Type, depth int) []typefact
 			complete := false
 			var reasons []string
 			subtreeEnumerated := false
-			if callablePathPrefixProvesAbsence(paths, alternative, template.path) {
+			if !p.templateNameMayBeCompilerAugmentedLocked(template.path) &&
+				callablePathPrefixProvesAbsence(paths, alternative, template.path) {
 				presence = typefacts.PathAbsent
 				complete = true
 				subtreeEnumerated = true
@@ -973,6 +1002,7 @@ func (p *project) walkCallablePathsLocked(
 	}
 	seen[value] = struct{}{}
 	defer delete(seen, value)
+	emitted := make(map[string]struct{})
 	if checker.IsTupleType(value) {
 		target := value.TargetTupleType()
 		elements := checker.Checker_getTypeArguments(p.checker, value)
@@ -981,13 +1011,45 @@ func (p *project) walkCallablePathsLocked(
 			segment := typefacts.PathSegment{Kind: typefacts.PathSegmentTuple, Index: &tupleIndex}
 			p.walkCallablePathsLocked(elements[index], alternative, append(path, segment), remaining-1, seen, paths)
 		}
+		// A tuple's element slots are Tuple segments, above. Its *members* are
+		// the ones its Array or ReadonlyArray base declares — slice, length,
+		// map, and the rest — which GetPropertiesOfType returns and which this
+		// branch used to drop by returning after the elements. A plain array
+		// already censuses them, so dropping them for a tuple made the same
+		// member answerable for `T[]` and absent for `[T, T]`. The base's
+		// numeric element properties are skipped: those slots are already the
+		// Tuple segments, and emitting both would name one value twice.
+		p.walkDeclaredMembersLocked(value, alternative, path, remaining, seen, paths, emitted, true)
+		p.appendApparentFunctionMembersLocked(value, alternative, path, paths, emitted)
 		return
 	}
+	p.walkDeclaredMembersLocked(value, alternative, path, remaining, seen, paths, emitted, false)
+	p.appendApparentFunctionMembersLocked(value, alternative, path, paths, emitted)
+}
+
+// walkDeclaredMembersLocked emits and recurses into the members
+// GetPropertiesOfType returns for this node — the ones some declaration in the
+// program actually writes down. skipArrayIndexNames drops the canonical numeric
+// element properties of a tuple, whose slots the caller already emitted as
+// Tuple segments.
+func (p *project) walkDeclaredMembersLocked(
+	value *checker.Type,
+	alternative int,
+	path []typefacts.PathSegment,
+	remaining int,
+	seen map[*checker.Type]struct{},
+	paths *[]typefacts.CallablePathFact,
+	emitted map[string]struct{},
+	skipArrayIndexNames bool,
+) {
 	properties := append([]*ast.Symbol(nil), p.checker.GetPropertiesOfType(value)...)
 	sort.Slice(properties, func(i, j int) bool { return properties[i].Name < properties[j].Name })
 	for _, property := range properties {
 		name, ok := invocationPropertyName(property.Name)
 		if !ok {
+			continue
+		}
+		if skipArrayIndexNames && isCanonicalArrayIndexName(name) {
 			continue
 		}
 		propertyType := p.checker.GetTypeOfPropertyOfType(value, name)
@@ -1003,7 +1065,223 @@ func (p *project) walkCallablePathsLocked(
 				child.Declaration = &declarations[0]
 			}
 		}
+		emitted[name] = struct{}{}
 	}
+}
+
+// isCanonicalArrayIndexName is the compiler's own canonical numeric index
+// spelling: the decimal digits that round-trip through a number. "01", "1.0",
+// "-1" and "1e3" are ordinary string keys, not element slots.
+func isCanonicalArrayIndexName(name string) bool {
+	if name == "0" {
+		return true
+	}
+	if name == "" || name[0] < '1' || name[0] > '9' {
+		return false
+	}
+	for index := 1; index < len(name); index++ {
+		if name[index] < '0' || name[index] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// appendApparentFunctionMembersLocked emits the members a callable node carries
+// through the compiler's apparent-type augmentation rather than through any
+// declaration of its own.
+//
+// getPropertyOfType falls back to the global `Function` interface (via
+// CallableFunction or NewableFunction) for every object type with call or
+// construct signatures, so `fn.bind`, `fn.call`, `fn.toString` and the rest are
+// real members the compiler answers and `tsc` accepts. GetPropertiesOfType does
+// not enumerate them, so before this the census said such a value had *no*
+// members, and a consumer asking for one read absence where the compiler
+// answers a type.
+//
+// The facts are leaves, and deliberately so. Recursing would be unbounded in
+// the useless direction (bind.bind.bind…) while the values reached are
+// library-owned and never caller-supplied, so no proof about the package under
+// analysis can rest on them. They carry Apparent, which keeps them out of
+// declared-member census closure and out of the template set that
+// cross-alternative reconciliation answers for — though they still serve as
+// prefixes there, so nothing below one can be proved absent through it. An
+// exact path lookup finds them like any other fact.
+//
+// A member the node declares itself wins: the compiler's own lookup order
+// consults resolved members before the Function fallback, so the declared fact
+// already emitted is the answer. Each member's type comes from
+// GetTypeOfPropertyOfType on the node — TypeScript's answer for that node,
+// which is how an augmented `interface Function` or a strictBindCallApply
+// signature reaches the fact rather than a shape reconstructed here.
+func (p *project) appendApparentFunctionMembersLocked(
+	value *checker.Type,
+	alternative int,
+	path []typefacts.PathSegment,
+	paths *[]typefacts.CallablePathFact,
+	emitted map[string]struct{},
+) {
+	if value == nil ||
+		(len(p.checker.GetSignaturesOfType(value, checker.SignatureKindCall)) == 0 &&
+			len(p.checker.GetSignaturesOfType(value, checker.SignatureKindConstruct)) == 0) {
+		return
+	}
+	for _, name := range p.apparentFunctionMemberNamesLocked() {
+		if _, done := emitted[name]; done {
+			continue
+		}
+		memberType := p.checker.GetTypeOfPropertyOfType(value, name)
+		if memberType == nil {
+			continue
+		}
+		emitted[name] = struct{}{}
+		// Presence is the compiler's, not a constant. `interface Function`
+		// declares nine required members today, but an augmentation may add
+		// `maybe?(): void`, and reporting that as required would tell a
+		// consumer a member is always there when the type says it may not be.
+		// The declared walk reads the same flag off the same kind of symbol.
+		presence := typefacts.PathRequired
+		if symbol := p.checker.GetPropertyOfType(value, name); symbol != nil &&
+			symbol.Flags&ast.SymbolFlagsOptional != 0 {
+			presence = typefacts.PathOptional
+		}
+		callability := callabilityOfType(p.checker, memberType)
+		constructability := invocationConstructabilityOfType(p.checker, memberType)
+		fact := typefacts.CallablePathFact{
+			Alternative: alternative,
+			Path: append(
+				append([]typefacts.PathSegment(nil), path...),
+				typefacts.PathSegment{Kind: typefacts.PathSegmentProperty, Property: name},
+			),
+			Presence:         presence,
+			Callability:      callability,
+			Constructability: constructability,
+			Complete: memberType.Flags()&(checker.TypeFlagsAny|
+				checker.TypeFlagsUnknown|
+				checker.TypeFlagsIncludesError|
+				checker.TypeFlagsInstantiable) == 0 &&
+				callability != typefacts.CallabilityUnknown &&
+				constructability != typefacts.InvocationConstructUnknown,
+			Apparent: true,
+		}
+		if memberType.Flags()&checker.TypeFlagsInstantiable != 0 {
+			fact.OpenReasons = append(fact.OpenReasons, "unresolvedGeneric")
+		}
+		if !fact.Complete && len(fact.OpenReasons) == 0 {
+			fact.OpenReasons = append(fact.OpenReasons, "openType")
+		}
+		*paths = append(*paths, fact)
+	}
+}
+
+// templateNameMayBeCompilerAugmentedLocked reports whether a reconciliation
+// template ends in a property name the compiler can answer on *any* object type
+// through its apparent-type augmentation — that is, a member of the global
+// `Object` interface.
+//
+// It exists because a closed declared census is not evidence that such a name
+// is absent. GetPropertiesOfType never enumerates the `Object` fallback, so a
+// sibling alternative declaring `{ dispose(): void }` has a closed, fully
+// enumerated census that names no `toString` — while `tsc` accepts
+// `obj.toString()`.
+//
+// The global `Function` interface is deliberately *not* consulted. Its
+// fallback applies only to a type with call or construct signatures, and every
+// such alternative emits all nine apparent leaves at the same path length
+// (the depth decrement is uniform), so a Function-only name is reconciled into
+// an alternative only when that alternative genuinely lacks it — `tsc` agrees
+// that `({ q: 1 }).bind` does not exist. Suppressing there would give up a
+// correct absence for all nine names and buy nothing.
+func (p *project) templateNameMayBeCompilerAugmentedLocked(path []typefacts.PathSegment) bool {
+	names, resolved := p.objectMemberNamesLocked()
+	return templateNameMayBeAugmented(names, resolved, path)
+}
+
+// templateNameMayBeAugmented is the decision itself, separated from the checker
+// so the fail-closed branch is testable without a program.
+//
+// An unresolved name set suppresses *every* absence, including for a tuple
+// segment. Without the set there is no way to tell a genuinely absent member
+// from one the `Object` fallback supplies, and the census must not guess in the
+// permissive direction. Only the last segment is consulted: every earlier
+// segment had to be observed for the template to exist, and the prefix proof
+// already requires the nearest one to be closed and enumerated.
+func templateNameMayBeAugmented(
+	objectMembers map[string]struct{},
+	resolved bool,
+	path []typefacts.PathSegment,
+) bool {
+	if !resolved {
+		return true
+	}
+	if len(path) == 0 {
+		return false
+	}
+	last := path[len(path)-1]
+	if last.Kind != typefacts.PathSegmentProperty {
+		return false
+	}
+	_, augmented := objectMembers[last.Property]
+	return augmented
+}
+
+// objectMemberNamesLocked is the global `Object` interface's member names for
+// this program, and whether the interface resolved at all. getPropertyOfTypeEx
+// falls back to it for every object type, so a name in this set may exist on a
+// value whose declared census does not mention it.
+func (p *project) objectMemberNamesLocked() (map[string]struct{}, bool) {
+	if p.objectMemberNamesResolved {
+		return p.objectMemberNames, p.objectMemberNames != nil
+	}
+	p.objectMemberNamesResolved = true
+	declared := p.globalInterfaceMemberNamesLocked("Object")
+	if declared == nil {
+		return nil, false
+	}
+	names := make(map[string]struct{}, len(declared))
+	for _, name := range declared {
+		names[name] = struct{}{}
+	}
+	p.objectMemberNames = names
+	return p.objectMemberNames, true
+}
+
+// apparentFunctionMemberNamesLocked is the global `Function` interface's member
+// names for this program, in sorted order. A project whose lib declares no
+// `Function` (or declares it with type parameters) gets an empty set, and the
+// census then simply carries no apparent members — the compiler's own fallback
+// is equally absent there. A user augmentation of `interface Function` is part
+// of the answer, because it is part of what the compiler resolves.
+func (p *project) apparentFunctionMemberNamesLocked() []string {
+	if p.apparentFunctionMembersResolved {
+		return p.apparentFunctionMembers
+	}
+	p.apparentFunctionMembersResolved = true
+	p.apparentFunctionMembers = p.globalInterfaceMemberNamesLocked("Function")
+	return p.apparentFunctionMembers
+}
+
+// globalInterfaceMemberNamesLocked enumerates one zero-arity global
+// interface's member names, sorted, filtering symbol-named members. A project
+// whose lib omits the interface (or declares it with type parameters) yields
+// nothing, which is the honest answer: the compiler's own fallback is equally
+// absent there. A user augmentation is included, because it is part of what the
+// compiler resolves.
+func (p *project) globalInterfaceMemberNamesLocked(global string) []string {
+	declared := checker.Checker_getGlobalType(p.checker, global, 0, false)
+	if declared == nil {
+		return nil
+	}
+	names := make([]string, 0)
+	for _, property := range p.checker.GetPropertiesOfType(declared) {
+		name, ok := invocationPropertyName(property.Name)
+		if !ok {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func invocationPropertyName(name string) (string, bool) {
