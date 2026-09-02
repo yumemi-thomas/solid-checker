@@ -226,8 +226,9 @@ host with a warm registry cache, 418 probes and 393 certification attempts
 | --- | --- | --- |
 | checked-in before this change (registry fetched sequentially) | 236 s | — |
 | cache warm, 14 certification slots | 185-190 s | 1,530-1,590 s |
-| cache warm, 20 certification slots (new default) | 176-178 s | 1,580-1,650 s |
+| cache warm, 20 certification slots (new default) | 176-182 s | 1,580-1,650 s |
 | cache warm, 24 certification slots | 181 s | 1,610 s |
+| cache warm, 20 slots, loadable-only private projects (current) | 173-185 s | 1,560-1,610 s |
 
 Per-invocation accounting of the native binary for one 14-slot run:
 
@@ -241,20 +242,33 @@ The remaining ~660 CPU-seconds are the JavaScript processes: chiefly each
 certification's declaration-closure resolution over its compiler-source
 packages (dozens per wide root), then the runner and the generation children.
 A native certification holds its slot for 3.4 s on average but uses 0.5 s of
-CPU: the rest is waiting on filesystem metadata while it writes its private
-Type Facts project — every file of every source snapshot, about 5,000 files
-for `@tanstack/form-devtools` — and removes it again, contended across every
-concurrent child. That is why the drain now runs wider than the core count.
+CPU. In isolation, 60% of its time is writing its private Type Facts project
+and removing it again; under the run's load average of about fifteen on
+fourteen cores the rest is time waiting for a core. That is why the drain now
+runs wider than the core count.
 
-Two engine-side experiments were measured and not kept: writing the private
-project from eight threads raised system time from 3 s to 11 s per
+The private project now carries only files a TypeScript program can load
+(`type_facts_program_can_load` in
+rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs):
+TypeScript and JavaScript modules in every module-format spelling and JSON,
+plus any path a plan lists as a program root. Source maps, declaration maps,
+READMEs, stylesheets and assets — 26% of the archive files in the corpus — are
+no longer written or removed. Authority does not move: the producer's
+transcript still names every file it read with its digest and the source
+census verifies each against the in-memory snapshot. The corpus reproduced
+every outcome, class and refusal reason, and wall time moved from 176-182 s to
+173-185 s while system time did not move at all, which is what places the
+remaining wait on the scheduler rather than on filesystem metadata.
+
+Two other engine-side experiments were measured and not kept: writing the
+private project from eight threads raised system time from 3 s to 11 s per
 certification on APFS with no wall gain, and deferring its removal to a thread
-joined at process exit moved nothing off the slot. The candidates that remain
-are semantic-adjacent and are recorded rather than taken here: materializing
-only files a TypeScript program can load (26% of archive files are source
-maps, READMEs and assets), sharing declaration-closure parses between a
-certification's proposal generation and its source collection, and the
-per-batch `--project` cost itself.
+joined at process exit moved nothing off the slot. What remains is CPU:
+`--project` analysis (717 CPU-seconds, including each batch's own Type Facts
+program build), each certification's declaration-closure resolution in
+JavaScript, and the proposal that `contract certify` regenerates although the
+runner's generation phase just produced one. Each of those is a design
+decision, not a mechanical change, and is recorded here rather than taken.
 
 ## Per-probe timeout
 

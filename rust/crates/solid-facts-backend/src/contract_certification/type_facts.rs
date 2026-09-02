@@ -816,7 +816,7 @@ impl PrivateTypeFactsProject {
         set_directory_permissions(&requested)?;
         let root = fs::canonicalize(&requested)?;
         let package_root = root.join("node_modules").join(plan.snapshot.package_name());
-        materialize_snapshot(&plan.snapshot, &package_root)?;
+        materialize_snapshot(&plan.snapshot, &package_root, &program_root_paths(plan))?;
         let mut package_roots = std::collections::BTreeMap::from([(
             private_project_plan_key(plan),
             package_root.clone(),
@@ -830,7 +830,11 @@ impl PrivateTypeFactsProject {
                 Path::new(&dependency.resolved_import.package_root),
                 dependency.snapshot.package_name(),
             );
-            materialize_snapshot(&dependency.snapshot, &target)?;
+            materialize_snapshot(
+                &dependency.snapshot,
+                &target,
+                &program_root_paths(dependency),
+            )?;
             package_roots.insert(private_project_plan_key(dependency), target);
         }
         let mut source_roots = std::collections::BTreeMap::new();
@@ -842,7 +846,11 @@ impl PrivateTypeFactsProject {
                 Path::new(&source.installed_package_root),
                 source.snapshot.package_name(),
             );
-            materialize_snapshot(&source.snapshot, &target)?;
+            materialize_snapshot(
+                &source.snapshot,
+                &target,
+                &std::collections::BTreeSet::new(),
+            )?;
             source_roots.insert(source.identity.clone(), target);
         }
         let harness = root.join("solid-checker-export-values.ts");
@@ -1023,12 +1031,64 @@ fn private_project_package_target(
     project_root.join("node_modules").join(package_name)
 }
 
+/// The file extensions a TypeScript program opens: TypeScript and JavaScript
+/// modules in every module-format spelling (which covers `.d.ts`, `.d.mts` and
+/// `.d.cts`) and JSON, including every `package.json` module resolution reads.
+/// TypeScript resolves a specifier by probing these extensions and reads
+/// nothing else — not source maps, declaration maps, READMEs, stylesheets,
+/// assets, or extensionless files — so a private project that carries only
+/// these files gives the producer the same program the whole snapshot would.
+const TYPE_FACTS_PROGRAM_EXTENSIONS: [&str; 9] = [
+    ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json",
+];
+
+/// Whether a snapshot file is one a TypeScript program can load. Case-exact:
+/// TypeScript's extension probing is, too.
+pub(super) fn type_facts_program_can_load(relative_path: &str) -> bool {
+    TYPE_FACTS_PROGRAM_EXTENSIONS
+        .iter()
+        .any(|extension| relative_path.ends_with(extension))
+}
+
+/// The snapshot paths a plan names as program roots: its verified runtime
+/// entrypoints and the runtime modules of its replayed closure. These are
+/// materialized whatever their spelling, so the roots the project lists always
+/// exist on disk exactly as before this filter.
+fn program_root_paths(plan: &CertificationPlan) -> std::collections::BTreeSet<String> {
+    plan.verified_exports
+        .runtime_paths()
+        .map(|path| path.trim_start_matches("./").to_owned())
+        .chain(
+            closure_runtime_modules(plan)
+                .into_iter()
+                .map(|path| path.to_owned()),
+        )
+        .collect()
+}
+
+/// Writes the files of one authenticated snapshot the producer can read.
+///
+/// Every file of every source snapshot used to be written — for a wide root
+/// that is thousands of files per certification, a quarter of them source
+/// maps, READMEs and assets — and the private project's creation and removal
+/// then dominated the certification's wall time, contended across every
+/// concurrent child. Only files with `TYPE_FACTS_PROGRAM_EXTENSIONS` are written
+/// now, plus `program_roots` unconditionally. Nothing about authority moves:
+/// the producer's transcript still names every file it read with its digest,
+/// the source census still verifies each against the in-memory snapshot, and
+/// the closure's declaration entries it checks are all `.d.ts`-family files
+/// that are kept. A package that ships no loadable file still gets its root
+/// directory, so resolution failing into it fails the same way it did.
 fn materialize_snapshot(
     snapshot: &super::ArtifactSnapshot,
     package_root: &Path,
+    program_roots: &std::collections::BTreeSet<String>,
 ) -> Result<(), TypeFactsCertificationError> {
     fs::create_dir_all(package_root)?;
     for (relative, bytes) in snapshot.files.iter() {
+        if !type_facts_program_can_load(relative) && !program_roots.contains(relative.as_str()) {
+            continue;
+        }
         let target = package_root.join(relative);
         write_immutable_project_file(&target, bytes)?;
     }
@@ -5490,6 +5550,40 @@ mod tests {
             "dist/index.cjs"
         );
         assert_eq!(declaration_import_path("src/index.tsx"), "src/index.tsx");
+    }
+
+    #[test]
+    fn type_facts_program_can_load_names_exactly_typescripts_input_extensions() {
+        for loadable in [
+            "package.json",
+            "dist/index.js",
+            "dist/index.mjs",
+            "dist/index.cjs",
+            "dist/index.jsx",
+            "dist/index.d.ts",
+            "dist/index.d.mts",
+            "dist/index.d.cts",
+            "src/index.ts",
+            "src/index.tsx",
+            "src/index.mts",
+            "src/index.cts",
+            "data/schema.json",
+        ] {
+            assert!(type_facts_program_can_load(loadable), "{loadable}");
+        }
+        for unloadable in [
+            "dist/index.js.map",
+            "dist/index.d.ts.map",
+            "README.md",
+            "LICENSE",
+            "dist/styles.css",
+            "dist/logo.svg",
+            "dist/font.woff2",
+            "dist/index.JS",
+            "bin/cli",
+        ] {
+            assert!(!type_facts_program_can_load(unloadable), "{unloadable}");
+        }
     }
 
     #[test]

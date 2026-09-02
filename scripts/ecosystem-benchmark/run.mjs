@@ -84,13 +84,14 @@ const DEFAULT_CONCURRENCY = recommendedConcurrency();
 // outer pool; the child artifact-analysis width is derived separately below.
 //
 // The drain may run wider than the core count. Once registry bytes come from
-// the shared cache, a certification child spends most of its slot time waiting
-// on filesystem metadata — materializing and removing its private Type Facts
-// project — rather than on a core: on the 14-core authority host the 384
-// native certifications of one corpus run held 1,300 s of slot time for 199 s
-// of CPU. Six extra slots, the same number generation reserves, fill that
-// waiting time: 176-178 s against 185-190 s at a cores-bounded fourteen, with
-// identical outcomes, and 24 slots were no faster than 20.
+// the shared cache, a certification child spends most of its slot time
+// waiting — for a core under a load average above the core count, and while
+// it materializes and removes its private Type Facts project — rather than
+// computing: on the 14-core authority host the 384 native certifications of
+// one corpus run held 1,300 s of slot time for 199 s of CPU. Six extra slots,
+// the same number generation reserves, fill that waiting time: 176-178 s
+// against 185-190 s at a cores-bounded fourteen, with identical outcomes, and
+// 24 slots were no faster than 20.
 //
 // The width is bounded by memory as well as cores, because a heavy probe's
 // process tree is a real working set and enough of them in flight together can
