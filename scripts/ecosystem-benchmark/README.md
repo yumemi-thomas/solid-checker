@@ -66,6 +66,26 @@ shares state between requests (every call builds its own resolution session and
 scratch, as a fresh process would). The ~800 process starts a corpus run used to
 pay for cost more CPU than the work they carried.
 
+Certifications link their compiler-source packages from a shared materialized
+store (`rust/target/materialized-store`, `SOLID_CHECKER_MATERIALIZED_STORE`)
+instead of writing thousands of files into every private Type Facts project:
+one symlink per source package, with the producer running under
+`preserveSymlinks` so every path it reports stays inside the project. An entry
+holds exactly the loadable files of one authenticated snapshot under its
+content root; before it is linked every file is re-read and its digest compared
+with the in-memory snapshot, an entry that disagrees is rebuilt, and the source
+census afterwards still verifies every file the producer read against the
+snapshot bytes — a tampered or stale entry can cost a refusal, never a wrong
+receipt. The same store holds the verified execution images of the Type Facts
+producer and the checker (`images/<digest>/`), created once and launched by
+every certification afterwards instead of a fresh private copy each time —
+macOS assesses a newly created executable on its first launch, about half a
+second each and serialized system-wide, which under twenty concurrent
+certifications had made the producer launch cost ~5 s, the whole of witness
+acquisition. Each image is still hashed against its pin before every launch.
+`--no-materialized-store` writes every copy as before; the report records the
+choice under `checker.materializedStore`.
+
 Installs reuse a previous run's exact resolution: each probe's resolved
 `package.json` and `bun.lock` are kept under `rust/target/install-locks`,
 keyed by the exact spec set, and a later run places them in the project and

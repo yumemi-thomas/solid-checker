@@ -827,7 +827,10 @@ export function buildReport({
       durableWrites: checker?.durableWrites ?? true,
       // Where a previous run's exact install resolutions were reused from, or
       // null when every install resolved against the registry.
-      installLockfileCache: checker?.installLockfileCache ?? null
+      installLockfileCache: checker?.installLockfileCache ?? null,
+      // Where certifications linked their compiler-source packages from, or
+      // null when every private Type Facts project wrote its own copies.
+      materializedStore: checker?.materializedStore ?? null
     },
     manifest: {
       generatedAt: manifest?.generatedAt ?? null,
@@ -1283,6 +1286,9 @@ export function renderMarkdown(report) {
   );
   lines.push(
     `- Install lockfile cache: ${report.checker?.installLockfileCache ?? "none (every install resolved against the registry)"}`
+  );
+  lines.push(
+    `- Materialized source store: ${report.checker?.materializedStore ?? "none (every private project wrote its own copies)"}`
   );
   lines.push(
     `- Manifest generated at: ${report.manifest?.generatedAt ?? "unknown"} ` +

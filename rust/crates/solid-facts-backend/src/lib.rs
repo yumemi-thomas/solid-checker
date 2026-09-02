@@ -8,6 +8,7 @@ mod artifact_resolution;
 mod bounded_json;
 mod cache;
 mod contract_certification;
+pub use contract_certification::report_certification_timing;
 
 /// Whether published artifacts are flushed to stable storage before they are
 /// made visible. Atomic visibility never changes: every publication still

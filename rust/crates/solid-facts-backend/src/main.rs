@@ -970,6 +970,7 @@ fn execute_contract_case_set_certification(
     let mut entries = Vec::with_capacity(plans.len());
     let mut trust_bytes = None::<Vec<u8>>;
     let plan_refs = plans.iter().map(|(plan, ..)| plan).collect::<Vec<_>>();
+    let stage_started = Instant::now();
     let finalized = solid_facts_backend::certify_value_only_case_set(
         &plan_refs,
         &proposal,
@@ -978,6 +979,12 @@ fn execute_contract_case_set_certification(
         revocation_epoch,
     )
     .map_err(|error| format!("policy-2 case-set finalization failed: {error}"))?;
+    solid_facts_backend::report_certification_timing(
+        "case-set-finalization",
+        stage_started,
+        serde_json::json!({ "cases": plan_refs.len() }),
+    );
+    let stage_started = Instant::now();
     for ((plan, artifact_case_id, resolved_import_root, importer, specifier), finalized) in
         plans.into_iter().zip(finalized)
     {
@@ -1029,7 +1036,18 @@ fn execute_contract_case_set_certification(
             .ok_or("case-set finalization produced no trust configuration")?,
     )?;
 
+    solid_facts_backend::report_certification_timing(
+        "case-set-publication",
+        stage_started,
+        serde_json::json!({}),
+    );
+    let stage_started = Instant::now();
     verify_policy2_case_set_in_fresh_process(request_path, &stage_root, &staged_trust_path)?;
+    solid_facts_backend::report_certification_timing(
+        "fresh-process-verification",
+        stage_started,
+        serde_json::json!({ "root": "staged" }),
+    );
 
     let case_sets_root = catalog_root.join("case-sets");
     fs::create_dir_all(&case_sets_root)?;
@@ -1052,11 +1070,17 @@ fn execute_contract_case_set_certification(
     // directory already exists: its referenced catalogs could have been
     // altered after the original publication. Authenticate the committed
     // bytes again before moving either public pointer.
+    let stage_started = Instant::now();
     verify_policy2_case_set_in_fresh_process(
         request_path,
         &final_root,
         &final_root.join("policy2-trust.json"),
     )?;
+    solid_facts_backend::report_certification_timing(
+        "fresh-process-verification",
+        stage_started,
+        serde_json::json!({ "root": "final" }),
+    );
 
     write_atomic_file(
         Path::new(&request.trust_configuration_output),

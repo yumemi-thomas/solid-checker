@@ -68,6 +68,15 @@ an in-process generation. Generate under `--certification-importer` set to the
 path certification will use (its name derives from the package root and the
 catalog) for the hand-over to be admissible.
 
+`SOLID_CHECKER_MATERIALIZED_STORE` names a directory where certification keeps
+the loadable files of each compiler-source snapshot (content-addressed, linked
+into each private Type Facts project instead of written) and the verified
+execution images of the producer and checker (launched in place instead of
+copied per certification). Every entry is re-verified against the in-memory
+snapshot or the pin before use and the source census still verifies every file
+the producer reads, so the store is a cache, never an authority. Unset, every
+certification writes its own private copies.
+
 Published catalogs, receipts and trust configurations are written to a
 temporary path, flushed to stable storage, and renamed into place.
 `SOLID_CHECKER_DURABLE_WRITES=none` skips the flush (atomic visibility is

@@ -232,7 +232,9 @@ host with a warm registry cache, 418 probes and 393 certification attempts
 | + generated proposal handed to certification | 163 s | 1,312 s |
 | + hardware SHA-256 for the producer hash on aarch64 | 159 s | 1,157 s |
 | + generate and certify in a pool of CLI workers | 154 s | 812 s |
-| + no fsync for scratch catalogs, cloned execution images (current) | 146.5 s | 894 s |
+| + no fsync for scratch catalogs, cloned execution images | 146.5 s | 894 s |
+| + install lockfile cache | 147 s | ~800 s |
+| + shared materialized store: linked sources, one execution image (current) | 73 s | ~840 s |
 
 Per-invocation accounting of the native binary for one 14-slot run:
 
@@ -315,6 +317,22 @@ now APFS clones (copy-on-write private files, still hashed and verified as
 before, byte-copied where cloning is unavailable). Average witness acquisition
 fell from 5.0 s to 4.5-4.8 s under twenty-way concurrency and the corpus
 measured 146.5 s, with identical outcomes.
+
+With CPU no longer binding, per-stage wall-time instrumentation
+(`SOLID_CHECKER_TIMINGS`, `certificationStage` lines) showed where a
+certification's ~5 s of slot time went: launching the pinned producer took
+4.7 s on average with p50 5.6 s and p90 5.8 s — a near-constant cost — while
+materializing the private project, acquiring and verifying facts, and the two
+fresh-process verifications together took under 0.2 s. The constant was macOS
+assessing a newly created executable on its first launch: about half a second
+per fresh file, serialized system-wide, and every certification launched a fresh
+private copy of the 29 MB producer. The shared materialized store now also
+holds one verified execution image per producer digest, created once and
+launched by every certification (hashed against the pin before each launch,
+exactly as the private copy was); the producer launch fell to 0.15 s, witness
+acquisition from 4.85 s to 0.73 s, and the corpus from ~147 s to 73 s with
+identical outcomes. Linking compiler-source packages from the same store, the
+change that motivated it, turned out to save only I/O the machine had spare.
 
 Before the pool, what remained was CPU that is per-process by construction: about 420
 CPU-seconds of `--project` analysis across ~1,800 processes (median 0.19 s

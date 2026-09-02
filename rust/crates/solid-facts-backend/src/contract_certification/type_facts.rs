@@ -605,6 +605,28 @@ fn preflight_export_value_plans(
     Ok(())
 }
 
+/// Reports one certification stage's wall time under `SOLID_CHECKER_TIMINGS`,
+/// as a JSON line on stderr like the analyzer's own stage timings.
+pub fn report_certification_timing(
+    stage: &str,
+    started: std::time::Instant,
+    detail: serde_json::Value,
+) {
+    if std::env::var_os("SOLID_CHECKER_TIMINGS").is_none() {
+        return;
+    }
+    let mut line = serde_json::json!({
+        "certificationStage": stage,
+        "elapsedNs": started.elapsed().as_nanos(),
+    });
+    if let (Some(object), Some(extra)) = (line.as_object_mut(), detail.as_object()) {
+        for (key, value) in extra {
+            object.insert(key.clone(), value.clone());
+        }
+    }
+    eprintln!("{line}");
+}
+
 fn acquire_and_verify_export_values_batch_with_dependencies(
     plans: &[&CertificationPlan],
     dependencies: &[&CertificationPlan],
@@ -647,8 +669,14 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
     // demand before copying authenticated package bytes into a private project.
     preflight_export_value_plans(plans)
         .map_err(|error| error.at_stage("export-value schedule derivation"))?;
+    let started = std::time::Instant::now();
     let project = PrivateTypeFactsProject::materialize(first, dependencies, plans, sources)
         .map_err(|error| error.at_stage("private project materialization"))?;
+    report_certification_timing(
+        "private-project-materialization",
+        started,
+        serde_json::json!({ "sources": sources.len(), "dependencies": dependencies.len() }),
+    );
     let schedules = derive_export_value_schedules(plans, &project, false)
         .map_err(|error| error.at_stage("export-value schedule derivation"))?;
     let project_id = project.project_id().to_str().ok_or_else(|| {
@@ -656,9 +684,12 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
             "private Type Facts project path is not valid UTF-8".into(),
         )
     })?;
+    let started = std::time::Instant::now();
     let mut session = TypeFactsCertificationSession::open(pin, project_id)
         .map_err(|error| error.at_stage("pinned producer launch"))?;
-    plans
+    report_certification_timing("pinned-producer-launch", started, serde_json::json!({}));
+    let started = std::time::Instant::now();
+    let evidence = plans
         .iter()
         .zip(&schedules)
         .map(|(plan, schedule)| {
@@ -675,7 +706,17 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
             )
             .map_err(|error| error.at_stage("live export-value verification"))
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>();
+    report_certification_timing(
+        "live-export-value-acquisition-and-verification",
+        started,
+        serde_json::json!({ "plans": plans.len() }),
+    );
+    let started = std::time::Instant::now();
+    drop(session);
+    drop(project);
+    report_certification_timing("private-project-removal", started, serde_json::json!({}));
+    evidence
 }
 
 pub(super) struct GraphExportValueRequest<'a> {
@@ -736,6 +777,7 @@ pub(super) fn acquire_and_verify_graph_export_values(
         program_plans.push(request.plan);
         program_plans.extend(request.dependencies.iter().copied());
     }
+    let started = std::time::Instant::now();
     let project = PrivateTypeFactsProject::materialize_with_source_refs(
         project_root,
         &dependencies,
@@ -743,6 +785,11 @@ pub(super) fn acquire_and_verify_graph_export_values(
         &source_refs,
     )
     .map_err(|error| error.at_stage("private graph project materialization"))?;
+    report_certification_timing(
+        "private-project-materialization",
+        started,
+        serde_json::json!({ "sources": source_refs.len(), "dependencies": dependencies.len(), "graph": true }),
+    );
     let schedules = derive_export_value_schedules(&plans, &project, true)
         .map_err(|error| error.at_stage("graph export-value schedule derivation"))?;
     let project_id = project.project_id().to_str().ok_or_else(|| {
@@ -750,9 +797,16 @@ pub(super) fn acquire_and_verify_graph_export_values(
             "private Type Facts graph project path is not valid UTF-8".into(),
         )
     })?;
+    let started = std::time::Instant::now();
     let mut session = TypeFactsCertificationSession::open(pin, project_id)
         .map_err(|error| error.at_stage("pinned graph producer launch"))?;
-    requests
+    report_certification_timing(
+        "pinned-producer-launch",
+        started,
+        serde_json::json!({ "graph": true }),
+    );
+    let started = std::time::Instant::now();
+    let evidence = requests
         .iter()
         .zip(&schedules)
         .map(|(request, schedule)| {
@@ -774,7 +828,21 @@ pub(super) fn acquire_and_verify_graph_export_values(
                 error.at_graph_node(request.plan, "live graph export-value verification")
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>();
+    report_certification_timing(
+        "live-export-value-acquisition-and-verification",
+        started,
+        serde_json::json!({ "plans": requests.len(), "graph": true }),
+    );
+    let started = std::time::Instant::now();
+    drop(session);
+    drop(project);
+    report_certification_timing(
+        "private-project-removal",
+        started,
+        serde_json::json!({ "graph": true }),
+    );
+    evidence
 }
 
 struct PrivateTypeFactsProject {
@@ -838,19 +906,48 @@ impl PrivateTypeFactsProject {
             package_roots.insert(private_project_plan_key(dependency), target);
         }
         let mut source_roots = std::collections::BTreeMap::new();
-        for source in sources {
-            let target = private_project_package_target(
-                &root,
-                &package_root,
-                original_package_root,
-                Path::new(&source.installed_package_root),
-                source.snapshot.package_name(),
-            );
-            materialize_snapshot(
-                &source.snapshot,
-                &target,
-                &std::collections::BTreeSet::new(),
-            )?;
+        // Compiler sources may be linked from the shared materialized store
+        // instead of written, one symlink per package. A source whose package
+        // directory has another materialized package nested inside it must
+        // be written, since nothing may ever be created inside a store entry.
+        let source_targets = sources
+            .iter()
+            .map(|source| {
+                private_project_package_target(
+                    &root,
+                    &package_root,
+                    original_package_root,
+                    Path::new(&source.installed_package_root),
+                    source.snapshot.package_name(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let all_targets = package_roots
+            .values()
+            .cloned()
+            .chain(source_targets.iter().cloned())
+            .collect::<Vec<_>>();
+        let store = materialized_store_root();
+        let mut linked_any = false;
+        for (source, target) in sources.iter().zip(source_targets) {
+            let has_nested_target = all_targets
+                .iter()
+                .any(|other| other != &target && other.starts_with(&target));
+            let linked = match &store {
+                Some(store) if !has_nested_target => {
+                    link_snapshot_from_store(store, &source.snapshot, &target)?
+                }
+                _ => false,
+            };
+            if linked {
+                linked_any = true;
+            } else {
+                materialize_snapshot(
+                    &source.snapshot,
+                    &target,
+                    &std::collections::BTreeSet::new(),
+                )?;
+            }
             source_roots.insert(source.identity.clone(), target);
         }
         let harness = root.join("solid-checker-export-values.ts");
@@ -897,7 +994,13 @@ impl PrivateTypeFactsProject {
                 "maxNodeModuleJsDepth": 100,
                 "allowImportingTsExtensions": true,
                 "moduleDetection": "force",
-                "types": []
+                "types": [],
+                // A linked source package is reached through its symlink;
+                // without this the producer would realpath every module into
+                // the store and the census could not attribute it to its
+                // project root. Only set when a link exists, so an unlinked
+                // project's configuration is byte-identical to before.
+                "preserveSymlinks": linked_any
             },
             "files": files
         }))
@@ -1093,6 +1196,263 @@ fn materialize_snapshot(
         write_immutable_project_file(&target, bytes)?;
     }
     Ok(())
+}
+
+/// Root of the shared materialized store, or `None` when every private project
+/// writes its own copy of every source package (the default).
+///
+/// The store holds, per authenticated snapshot, exactly the files
+/// `materialize_snapshot` would write for a compiler source — the loadable
+/// files — under a directory named by the snapshot's content root, plus a
+/// manifest of their digests. A private project links a source package to its
+/// entry with one symlink instead of writing thousands of files, and the
+/// producer runs with `preserveSymlinks` so every path it reports stays inside
+/// the project. Authority does not depend on the store: before an entry is
+/// linked, every file it holds is re-read and its digest compared with the
+/// in-memory snapshot (and the manifest with the loadable set), an entry that
+/// disagrees is rebuilt from the snapshot, and the source census afterwards
+/// still verifies every file the producer reports reading against the snapshot
+/// bytes and refuses any it cannot attribute. A tampered or stale entry can
+/// therefore cost a refusal, never a wrong receipt.
+///
+/// The store also holds the verified execution images (`images/<digest>/`):
+/// see `PrivateExecutionImage::shared_from_pin` for why launching one
+/// long-lived image instead of a fresh copy per certification matters.
+pub(super) fn materialized_store_root() -> Option<PathBuf> {
+    static ROOT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    ROOT.get_or_init(|| {
+        std::env::var_os("SOLID_CHECKER_MATERIALIZED_STORE")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    })
+    .clone()
+}
+
+const MATERIALIZED_STORE_FORMAT: &str = "v1";
+const MATERIALIZED_STORE_MANIFEST: &str = ".solid-checker-materialized.json";
+
+#[derive(serde::Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MaterializedStoreManifest {
+    format: String,
+    snapshot_root: String,
+    files: Vec<MaterializedStoreFile>,
+}
+
+#[derive(serde::Serialize, Deserialize)]
+struct MaterializedStoreFile {
+    path: String,
+    sha256: String,
+}
+
+/// The loadable files of `snapshot` with their digests, in path order: what a
+/// store entry must hold, exactly.
+fn loadable_snapshot_files(snapshot: &super::ArtifactSnapshot) -> Vec<(&str, &[u8], String)> {
+    snapshot
+        .files
+        .iter()
+        .filter(|(path, _)| type_facts_program_can_load(path))
+        .map(|(path, bytes)| {
+            (
+                path.as_str(),
+                &bytes[..],
+                format!("sha256:{:x}", Sha256::digest(bytes)),
+            )
+        })
+        .collect()
+}
+
+fn materialized_store_entry(store: &Path, snapshot: &super::ArtifactSnapshot) -> PathBuf {
+    let mut hash = Sha256::new();
+    hash.update(b"solid-checker-materialized-store:");
+    hash.update(MATERIALIZED_STORE_FORMAT.as_bytes());
+    hash.update(b":loadable-v1\0");
+    hash.update(snapshot.root().as_bytes());
+    let key = format!("{:x}", hash.finalize());
+    store
+        .join(MATERIALIZED_STORE_FORMAT)
+        .join(&key[..2])
+        .join(key)
+}
+
+/// Whether `entry` holds exactly the loadable files of `snapshot`, byte for
+/// byte: the manifest must name the same paths with the same digests, and every
+/// file's bytes on disk must hash to its digest.
+fn materialized_store_entry_is_exact(
+    entry: &Path,
+    snapshot: &super::ArtifactSnapshot,
+    expected: &[(&str, &[u8], String)],
+) -> bool {
+    let Ok(manifest_bytes) = fs::read(entry.join(MATERIALIZED_STORE_MANIFEST)) else {
+        return false;
+    };
+    let Ok(manifest) = serde_json::from_slice::<MaterializedStoreManifest>(&manifest_bytes) else {
+        return false;
+    };
+    if manifest.format != MATERIALIZED_STORE_FORMAT
+        || manifest.snapshot_root != snapshot.root()
+        || manifest.files.len() != expected.len()
+    {
+        return false;
+    }
+    for (recorded, (path, _, digest)) in manifest.files.iter().zip(expected) {
+        if recorded.path != *path || recorded.sha256 != *digest {
+            return false;
+        }
+        match fs::read(entry.join(path)) {
+            Ok(bytes) if format!("sha256:{:x}", Sha256::digest(&bytes)) == *digest => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
+/// Writes a fresh entry for `snapshot` beside `entry` and moves it into place.
+/// A concurrent writer's entry winning the rename is left as it is (it is
+/// re-verified by the caller); an entry that failed verification is moved
+/// aside first, so a project already linked to its path keeps resolving to
+/// byte-identical content.
+fn build_materialized_store_entry(
+    entry: &Path,
+    snapshot: &super::ArtifactSnapshot,
+    expected: &[(&str, &[u8], String)],
+) -> Result<(), TypeFactsCertificationError> {
+    let parent = entry.parent().ok_or_else(|| {
+        TypeFactsCertificationError::ProducerProvenance(
+            "materialized store entry has no parent directory".into(),
+        )
+    })?;
+    fs::create_dir_all(parent)?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or(0);
+    let staging = parent.join(format!(
+        ".{}.staging-{}-{nonce}",
+        entry
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("entry"),
+        std::process::id()
+    ));
+    let result = (|| {
+        fs::create_dir(&staging)?;
+        set_directory_permissions(&staging)?;
+        for (path, bytes, _) in expected {
+            write_immutable_project_file(&staging.join(path), bytes)?;
+        }
+        let manifest = MaterializedStoreManifest {
+            format: MATERIALIZED_STORE_FORMAT.into(),
+            snapshot_root: snapshot.root().to_owned(),
+            files: expected
+                .iter()
+                .map(|(path, _, digest)| MaterializedStoreFile {
+                    path: (*path).to_owned(),
+                    sha256: digest.clone(),
+                })
+                .collect(),
+        };
+        write_new_private_project_file(
+            &staging.join(MATERIALIZED_STORE_MANIFEST),
+            &serde_json::to_vec(&manifest).map_err(|error| {
+                TypeFactsCertificationError::ProducerProvenance(format!(
+                    "could not encode materialized store manifest: {error}"
+                ))
+            })?,
+        )?;
+        if entry.exists() {
+            let retired = parent.join(format!(
+                ".{}.retired-{}-{nonce}",
+                entry
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("entry"),
+                std::process::id()
+            ));
+            fs::rename(entry, &retired)?;
+            let _ = fs::remove_dir_all(&retired);
+        }
+        match fs::rename(&staging, entry) {
+            Ok(()) => Ok(()),
+            // Another certification published the same content-addressed
+            // entry first; ours is redundant.
+            Err(error)
+                if entry.exists()
+                    && matches!(
+                        error.kind(),
+                        std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::DirectoryNotEmpty
+                    ) =>
+            {
+                Ok(())
+            }
+            Err(error) => Err(error.into()),
+        }
+    })();
+    let _ = fs::remove_dir_all(&staging);
+    result
+}
+
+/// Links `target` to the store entry for `snapshot`, creating or repairing the
+/// entry first. Returns `Ok(false)` when the snapshot cannot use the store (it
+/// carries a file at the manifest's reserved name) so the caller writes it.
+fn link_snapshot_from_store(
+    store: &Path,
+    snapshot: &super::ArtifactSnapshot,
+    target: &Path,
+) -> Result<bool, TypeFactsCertificationError> {
+    if snapshot.read(MATERIALIZED_STORE_MANIFEST).is_some() {
+        return Ok(false);
+    }
+    let expected = loadable_snapshot_files(snapshot);
+    let entry = materialized_store_entry(store, snapshot);
+    if !materialized_store_entry_is_exact(&entry, snapshot, &expected) {
+        build_materialized_store_entry(&entry, snapshot, &expected)?;
+        if !materialized_store_entry_is_exact(&entry, snapshot, &expected) {
+            return Err(TypeFactsCertificationError::SourceCensus(format!(
+                "materialized store entry for {} could not be established",
+                snapshot.package_name()
+            )));
+        }
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    match fs::symlink_metadata(target) {
+        Ok(existing) if existing.file_type().is_symlink() => {
+            let Ok(linked) = fs::read_link(target) else {
+                return Err(TypeFactsCertificationError::SourceCensus(format!(
+                    "distinct authenticated snapshots collide at {}",
+                    target.display()
+                )));
+            };
+            if linked == entry {
+                return Ok(true);
+            }
+            // Another snapshot's entry occupies this path. As with written
+            // copies, identical loadable bytes are one materialization and
+            // anything else is a collision; nothing is ever written through
+            // the existing link.
+            if materialized_store_entry_is_exact(&linked, snapshot, &expected) {
+                return Ok(true);
+            }
+            return Err(TypeFactsCertificationError::SourceCensus(format!(
+                "distinct authenticated snapshots collide at {}",
+                target.display()
+            )));
+        }
+        // A package already written here (a dependency plan, or a source that
+        // had to be written): `materialize_snapshot` keeps the byte-identical
+        // rule that has always governed two snapshots meeting at one path.
+        Ok(_) => return Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&entry, target)?;
+    #[cfg(not(unix))]
+    return Ok(false);
+    #[cfg(unix)]
+    Ok(true)
 }
 
 fn write_immutable_project_file(
@@ -4964,6 +5324,9 @@ fn witness_variant(family: ProofFamily) -> ProofWitnessVariant {
 struct PrivateExecutionImage {
     directory: PathBuf,
     path: PathBuf,
+    /// A content-addressed image under the shared store, kept for the next
+    /// certification rather than removed with this one.
+    shared: bool,
 }
 
 impl PrivateExecutionImage {
@@ -4980,9 +5343,19 @@ impl PrivateExecutionImage {
             ));
         }
 
+        if let Some(store) = materialized_store_root()
+            && let Some(image) = Self::shared_from_pin(&store, pin)?
+        {
+            return Ok(image);
+        }
+
         let directory = create_private_directory()?;
         let path = directory.join("solid-typefacts");
-        let image = Self { directory, path };
+        let image = Self {
+            directory,
+            path,
+            shared: false,
+        };
         let copied = copy_and_hash(&pin.path, image.path())?;
         if copied != pin.executable_sha256 {
             return Err(TypeFactsCertificationError::ProducerProvenance(
@@ -4999,6 +5372,103 @@ impl PrivateExecutionImage {
         Ok(image)
     }
 
+    /// The pinned image under the shared store, at a path named by its own
+    /// digest, created once and launched by every certification afterwards.
+    ///
+    /// Why this exists: macOS assesses a newly created executable the first
+    /// time it launches, taking about half a second and serializing those
+    /// assessments system-wide, so a private copy per certification made the
+    /// producer launch cost ~5 s under twenty concurrent certifications — the
+    /// whole of witness acquisition. Launching one long-lived inode is
+    /// assessed once. What is verified does not change: the file is hashed
+    /// against the pin before every launch here, again by the pinned producer
+    /// construction, and again immediately before the spawn, exactly as the
+    /// private copy was. Store failures fall back to the private copy; a pin
+    /// mismatch is refused.
+    fn shared_from_pin(
+        store: &Path,
+        pin: &TypeFactsProducerPin,
+    ) -> Result<Option<Self>, TypeFactsCertificationError> {
+        let Some(digest_hex) = pin.executable_sha256.as_str().strip_prefix("sha256:") else {
+            return Ok(None);
+        };
+        let directory = store.join("images").join(digest_hex);
+        let path = directory.join("solid-typefacts");
+        if path.is_file() && hash_file(&path)? == pin.executable_sha256 {
+            return Ok(Some(Self {
+                directory,
+                path,
+                shared: true,
+            }));
+        }
+        let Some(parent) = directory.parent() else {
+            return Ok(None);
+        };
+        if fs::create_dir_all(parent).is_err() {
+            return Ok(None);
+        }
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or(0);
+        let staging = parent.join(format!(
+            ".{digest_hex}.staging-{}-{nonce}",
+            std::process::id()
+        ));
+        if fs::create_dir(&staging).is_err() || set_directory_permissions(&staging).is_err() {
+            let _ = fs::remove_dir_all(&staging);
+            return Ok(None);
+        }
+        let staged = staging.join("solid-typefacts");
+        let copied = match copy_and_hash(&pin.path, &staged) {
+            Ok(copied) => copied,
+            Err(_) => {
+                let _ = fs::remove_dir_all(&staging);
+                return Ok(None);
+            }
+        };
+        if copied != pin.executable_sha256 {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(TypeFactsCertificationError::ProducerProvenance(
+                "pinned Type Facts bytes do not match the configured digest".into(),
+            ));
+        }
+        if set_execution_permissions(&staged).is_err() {
+            let _ = fs::remove_dir_all(&staging);
+            return Ok(None);
+        }
+        if directory.exists() {
+            let retired = parent.join(format!(
+                ".{digest_hex}.retired-{}-{nonce}",
+                std::process::id()
+            ));
+            if fs::rename(&directory, &retired).is_ok() {
+                let _ = fs::remove_dir_all(&retired);
+            }
+        }
+        match fs::rename(&staging, &directory) {
+            Ok(()) => {}
+            Err(_) if path.is_file() => {
+                // A concurrent certification published the same image first.
+                let _ = fs::remove_dir_all(&staging);
+            }
+            Err(_) => {
+                let _ = fs::remove_dir_all(&staging);
+                return Ok(None);
+            }
+        }
+        if hash_file(&path)? != pin.executable_sha256 {
+            return Err(TypeFactsCertificationError::ProducerProvenance(
+                "shared Type Facts image changed before launch".into(),
+            ));
+        }
+        Ok(Some(Self {
+            directory,
+            path,
+            shared: true,
+        }))
+    }
+
     fn path(&self) -> &Path {
         &self.path
     }
@@ -5006,6 +5476,9 @@ impl PrivateExecutionImage {
 
 impl Drop for PrivateExecutionImage {
     fn drop(&mut self) {
+        if self.shared {
+            return;
+        }
         let _ = fs::remove_file(&self.path);
         let _ = fs::remove_dir(&self.directory);
     }
@@ -5540,6 +6013,99 @@ mod tests {
             "dist/index.cjs"
         );
         assert_eq!(declaration_import_path("src/index.tsx"), "src/index.tsx");
+    }
+
+    #[test]
+    fn materialized_store_entries_hold_exactly_the_loadable_files_and_are_repaired_when_wrong() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-materialized-store-test-{}-{}",
+            std::process::id(),
+            PRIVATE_PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&root).unwrap();
+        let store = root.join("store");
+        let snapshot = source_snapshot(
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            &[
+                ("package.json", b"{\"name\":\"source-package\"}".as_slice()),
+                (
+                    "dist/index.d.ts",
+                    b"export declare const value: 1;".as_slice(),
+                ),
+                ("dist/index.js", b"export const value = 1;".as_slice()),
+                ("dist/index.js.map", b"{}".as_slice()),
+                ("README.md", b"# source".as_slice()),
+            ],
+        );
+        let project = root.join("project");
+        let target = project.join("node_modules/source-package");
+        assert!(link_snapshot_from_store(&store, &snapshot, &target).unwrap());
+        assert!(
+            fs::symlink_metadata(&target)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        let entry = fs::read_link(&target).unwrap();
+        assert!(entry.starts_with(&store));
+        assert_eq!(
+            fs::read(target.join("dist/index.d.ts")).unwrap(),
+            b"export declare const value: 1;"
+        );
+        assert!(
+            !entry.join("dist/index.js.map").exists(),
+            "source maps are not materialized"
+        );
+        assert!(
+            !entry.join("README.md").exists(),
+            "READMEs are not materialized"
+        );
+        let manifest: MaterializedStoreManifest =
+            serde_json::from_slice(&fs::read(entry.join(MATERIALIZED_STORE_MANIFEST)).unwrap())
+                .unwrap();
+        assert_eq!(
+            manifest
+                .files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["dist/index.d.ts", "dist/index.js", "package.json"]
+        );
+
+        // Linking the same snapshot to the same target again is idempotent.
+        assert!(link_snapshot_from_store(&store, &snapshot, &target).unwrap());
+
+        // A tampered entry is rebuilt from the snapshot before it is linked.
+        fs::remove_file(entry.join("dist/index.d.ts")).unwrap();
+        fs::write(
+            entry.join("dist/index.d.ts"),
+            b"export declare const value: 2;",
+        )
+        .unwrap();
+        let other = root.join("project-two/node_modules/source-package");
+        assert!(link_snapshot_from_store(&store, &snapshot, &other).unwrap());
+        assert_eq!(
+            fs::read_link(&other).unwrap(),
+            entry,
+            "the entry keeps its content address"
+        );
+        assert_eq!(
+            fs::read(other.join("dist/index.d.ts")).unwrap(),
+            b"export declare const value: 1;"
+        );
+
+        // A different snapshot at an occupied target is a collision, as before.
+        let different = source_snapshot(
+            "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            &[("package.json", b"{}".as_slice())],
+        );
+        assert!(matches!(
+            link_snapshot_from_store(&store, &different, &target),
+            Err(TypeFactsCertificationError::SourceCensus(_))
+        ));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

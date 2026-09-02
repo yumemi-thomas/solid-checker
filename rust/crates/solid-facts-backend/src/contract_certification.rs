@@ -37,6 +37,7 @@ mod module_closure;
 mod policy2_receipt;
 mod probe_gates;
 mod type_facts;
+pub use type_facts::report_certification_timing;
 mod witness_wire;
 
 #[cfg(feature = "dialect-v2")]

@@ -509,6 +509,10 @@ struct PrivateExecutionImage {
     root: PathBuf,
     path: PathBuf,
     executable_sha256: String,
+    /// A content-addressed image under the shared store, kept for the next
+    /// certification rather than removed with this one. See the Type Facts
+    /// image for why launching one long-lived inode matters on macOS.
+    shared: bool,
 }
 
 impl PrivateExecutionImage {
@@ -523,6 +527,11 @@ impl PrivateExecutionImage {
             let source = std::env::current_exe()
                 .map_err(|error| CompilerCertificationError::Process(error.to_string()))?;
             let source_digest = sha256_file(&source)?;
+            if let Some(store) = super::type_facts::materialized_store_root()
+                && let Some(image) = Self::shared_verifier(&store, &source, &source_digest)
+            {
+                return Ok(image);
+            }
             let root = std::env::temp_dir().join(format!(
                 "solid-checker-compiler-session-{}-{}",
                 std::process::id(),
@@ -555,13 +564,76 @@ impl PrivateExecutionImage {
                 root,
                 path,
                 executable_sha256: source_digest,
+                shared: false,
             })
         }
+    }
+
+    /// The current verifier under the shared store at a path named by its own
+    /// digest, created once and launched by every compiler session afterwards.
+    /// Hashed against `source_digest` before it is handed out; any failure to
+    /// establish it yields `None` and the private copy is used instead.
+    #[cfg(unix)]
+    fn shared_verifier(store: &Path, source: &Path, source_digest: &str) -> Option<Self> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let digest_hex = source_digest.strip_prefix("sha256:")?;
+        let root = store.join("images").join(digest_hex);
+        let path = root.join("solid-checker-compiler-session");
+        let image = |root: PathBuf, path: PathBuf| Self {
+            root,
+            path,
+            executable_sha256: source_digest.to_owned(),
+            shared: true,
+        };
+        if path.is_file() && sha256_file(&path).ok()? == source_digest {
+            return Some(image(root, path));
+        }
+        let parent = root.parent()?;
+        fs::create_dir_all(parent).ok()?;
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or(0);
+        let staging = parent.join(format!(
+            ".{digest_hex}.staging-{}-{nonce}",
+            std::process::id()
+        ));
+        let staged = staging.join("solid-checker-compiler-session");
+        let built = (|| {
+            fs::create_dir(&staging)?;
+            fs::set_permissions(&staging, fs::Permissions::from_mode(0o700))?;
+            crate::clone_or_copy_file(source, &staged)?;
+            fs::set_permissions(&staged, fs::Permissions::from_mode(0o500))?;
+            Ok::<(), std::io::Error>(())
+        })();
+        if built.is_err() || sha256_file(&staged).ok().as_deref() != Some(source_digest) {
+            let _ = fs::remove_dir_all(&staging);
+            return None;
+        }
+        if root.exists() {
+            let retired = parent.join(format!(
+                ".{digest_hex}.retired-{}-{nonce}",
+                std::process::id()
+            ));
+            if fs::rename(&root, &retired).is_ok() {
+                let _ = fs::remove_dir_all(&retired);
+            }
+        }
+        if fs::rename(&staging, &root).is_err() {
+            let _ = fs::remove_dir_all(&staging);
+            if !path.is_file() {
+                return None;
+            }
+        }
+        (sha256_file(&path).ok()? == source_digest).then(|| image(root, path))
     }
 }
 
 impl Drop for PrivateExecutionImage {
     fn drop(&mut self) {
+        if self.shared {
+            return;
+        }
         let _ = fs::remove_file(&self.path);
         let _ = fs::remove_dir(&self.root);
     }

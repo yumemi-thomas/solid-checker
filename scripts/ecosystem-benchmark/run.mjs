@@ -77,6 +77,11 @@ const DEFAULT_REGISTRY_CACHE = join(ROOT, "rust/target/registry-cache");
 // so a later run installs frozen (no registry manifest round trips) and with
 // the same transitive resolution. See lib/install.mjs.
 const DEFAULT_INSTALL_LOCKFILE_CACHE = join(ROOT, "rust/target/install-locks");
+// Materialized compiler-source packages shared by every certification, linked
+// into each private Type Facts project instead of written; see
+// rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs
+// (`materialized_store_root`) for what an entry is and how it is verified.
+const DEFAULT_MATERIALIZED_STORE = join(ROOT, "rust/target/materialized-store");
 const DEFAULT_TIMEOUT_SECONDS = 300;
 const PROGRESS_HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -1233,6 +1238,10 @@ function usage() {
                          resolve every install against the registry instead of
                          installing a previous run's exact resolution frozen
                          (default rust/target/install-locks)
+  --no-materialized-store
+                         write every compiler-source package into each private
+                         Type Facts project instead of linking it from the
+                         shared store (default rust/target/materialized-store)
   --attempt-certification
                          attempt policy-2 certification for every structurally
                          complete proposal and retain its exact first refusal
@@ -1269,6 +1278,7 @@ function parseArgs(argv) {
     noRegistryCache: false,
     durableWrites: false,
     installLockfileCache: true,
+    materializedStore: true,
     attemptCertification: false,
     keepTemp: false,
     includeSupplemental: false,
@@ -1336,6 +1346,9 @@ function parseArgs(argv) {
         break;
       case "--no-install-lockfile-cache":
         options.installLockfileCache = false;
+        break;
+      case "--no-materialized-store":
+        options.materializedStore = false;
         break;
       case "--attempt-certification":
         options.attemptCertification = true;
@@ -1481,7 +1494,8 @@ function buildRealHooks({
   registryCache = null,
   maxWorkers = 1,
   durableWrites = false,
-  installLockfileCache = null
+  installLockfileCache = null,
+  materializedStore = null
 }) {
   // Generation and certification run inside a pool of long-lived CLI workers
   // (lib/cli-worker.mjs) instead of one CLI process per probe and phase. The
@@ -1502,7 +1516,10 @@ function buildRealHooks({
       // run about ten F_FULLFSYNCs per certification. Atomic visibility is
       // unchanged; only crash durability is relaxed, and only when the run
       // asked for it. The product default flushes.
-      SOLID_CHECKER_DURABLE_WRITES: durableWrites ? "full" : "none"
+      SOLID_CHECKER_DURABLE_WRITES: durableWrites ? "full" : "none",
+      // Empty, not absent, when disabled, for the same reason as the
+      // registry cache.
+      SOLID_CHECKER_MATERIALIZED_STORE: materializedStore ?? ""
     },
     supervise: superviseChildMemory
   });
@@ -1767,7 +1784,8 @@ async function main(argv = process.argv.slice(2)) {
     // work than this, so the pool never queues.
     maxWorkers: Math.max(1, options.concurrency || 1, options.certificationConcurrency || 1),
     durableWrites: options.durableWrites,
-    installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null
+    installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null,
+    materializedStore: options.materializedStore ? DEFAULT_MATERIALIZED_STORE : null
   });
   const scheduleCosts = historicalScheduleCosts();
 
@@ -1817,7 +1835,8 @@ async function main(argv = process.argv.slice(2)) {
         typeFactsBin: binaries.typeFactsBin,
         registryCache,
         durableWrites: options.durableWrites,
-        installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null
+        installLockfileCache: options.installLockfileCache ? DEFAULT_INSTALL_LOCKFILE_CACHE : null,
+        materializedStore: options.materializedStore ? DEFAULT_MATERIALIZED_STORE : null
       },
       scope
     });
