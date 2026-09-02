@@ -229,7 +229,8 @@ host with a warm registry cache, 418 probes and 393 certification attempts
 | cache warm, 20 certification slots (new default) | 176-182 s | 1,580-1,650 s |
 | cache warm, 24 certification slots | 181 s | 1,610 s |
 | cache warm, 20 slots, loadable-only private projects | 173-185 s | 1,560-1,610 s |
-| + generated proposal handed to certification (current) | 163 s | 1,312 s |
+| + generated proposal handed to certification | 163 s | 1,312 s |
+| + hardware SHA-256 for the producer hash on aarch64 (current) | 159 s | 1,157 s |
 
 Per-invocation accounting of the native binary for one 14-slot run:
 
@@ -280,9 +281,29 @@ phase's own measurement is unchanged too. 334 of the 393 certification
 attempts reused their proposal (the rest had no emitted document to hand over);
 outcomes were identical and the run measured 163 s and 1,312 CPU-seconds.
 
-What remains is CPU: `--project` analysis (717 CPU-seconds, including each
-batch's own Type Facts program build) and each certification's
-declaration-closure resolution in JavaScript.
+Every producer spawn hashes the ~29 MB Type Facts executable to record and pin
+its identity — in each of the ~1,800 `--project` processes and again per
+certification — and the `sha2` crate only uses the aarch64 SHA-256 instructions
+behind its `asm` feature, which the workspace never enabled. Enabling it for
+aarch64 only (rust/crates/typefacts/Cargo.toml; x86_64 keeps its runtime SHA-NI
+backend and the MSVC build is untouched) takes the per-spawn sidecar setup from
+about 81 ms to 33 ms and the corpus from 1,312 to 1,157 CPU-seconds, with
+digests and outcomes unchanged.
+
+What remains is CPU that is per-process by construction: about 420
+CPU-seconds of `--project` analysis across ~1,800 processes (median 0.19 s
+each, one Type Facts program per exact source closure by design), ~390
+CPU-seconds in the 393 `contract certify` JavaScript processes (≈1 s each, of
+which the active work profiled at ~0.3 s — the rest is runtime, module graph
+and JIT overhead per process), ~200 CPU-seconds of native certification, and
+~120 CPU-seconds in the generation processes. Measured and rejected: a wider
+generation pool (12 and 14 workers were slower than 8), a narrower per-child
+analysis fan-out (no change), and skipping the runtime axis while collecting
+compiler sources (declaration files are ~70% of the parsed bytes, so the gain
+would be a few percent). Below this, wall time on the 14-core host is
+CPU ÷ (cores it actually gets): ~1,160 CPU-seconds reach 150 s only when the
+host lends the run about eight cores, which it did not do during any run in
+this series (load averages of 5-15 from other processes throughout).
 
 ## Per-probe timeout
 
