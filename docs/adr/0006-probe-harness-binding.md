@@ -811,6 +811,51 @@ resolved target able to perform the domain's operation. Until that exists,
 `require_census_decides_closure` refuses them by name, and no recipe can
 substitute. This is a proof-mode change and belongs to its own slice.
 
+Its first slice is done and it was a *semantic* one, because the domains did
+not yet mean one thing: the generator emitted a resourceless `create` per owner
+requirement while the hand audits used `creates` for exactly three operations,
+each of which registers a resource with an environment outside the call, and
+building a census over an unfixed meaning would have certified an unfixed
+claim. `creates` is now defined over the **published `create` operation** —
+registering a version-1 resource into a runtime outside this invocation, so it
+stays live there after the call returns
+(`render`'s `register-delegation` → `browser-root`,
+`createServerReference`'s `register-reference` / `transform-reference` →
+`server-reference`) — and explicitly *not* over the intuitive "brings something
+into existence", which the audits refute: `createSignal`, `createStore`,
+`createMemo`, `action`, `createEffect`, `createTrackedEffect` and `onSettled`
+all establish version-1 resources and all close `creates: []`. A summary's
+`resources` declaration is not a `creates` item. Owner production stays in the
+`owner.productions` domain, and owner requirement stays the per-operation
+`owner.requires` triple. The per-domain predicate for all nine closures is
+`docs/package-contract-v2/semantic-model.md` § "What a closed call domain
+denies"; the decision, the census predicate, the measured cost, and the
+ordered prerequisite chain — producer enumeration guarantee, integrity-bound
+dialect negative tables, then `creates`, then `reads` — are
+`docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`.
+
+That document also records why `complete` cannot be read as an enumeration
+guarantee today, why `throws` is a model question rather than a census one, and
+that version 1 has **no** domain in which a reactive-graph resource's coming
+into existence is a positive closable fact — a model gap the corrected
+predicate exposes rather than introduces, tracked in
+`docs/precision-backlog.md`.
+
+**One correction this ADR owes itself.** Under the settled predicate, the
+`closed-domain-probe-gate` reading is decided rather than open: neither `run`
+nor `runCreatingOwner` performs a `create` operation — an object literal in a
+private module variable is not a resource registered with any runtime, and the
+only call in either is a parameter-rooted callee — so both census as
+`creates: []` closed. The pinned behaviour in the "What this binds" bullet
+above (a `creates: []` proposal refuses as `UnsupportedDemand` at witness
+acquisition, before a probe is launched) is **unchanged and uncontradicted**,
+because the refusal is domain-by-name and independent of what the export does.
+Only that bullet's phrase "an export that really does create an owner" is
+inaccurate under the settled definition; correcting it, the fixture's own
+comments, and its README row belongs to the census slice, together with a
+sibling export that calls a real dialect primitive so the census has a genuine
+positive to refuse on.
+
 **A wider value-closure premise.** Object properties, tuple items, array
 bounds, capabilities, and non-root value paths need the producer's enumeration
 *at that path* to compare a proposal against. Only the exported value's root

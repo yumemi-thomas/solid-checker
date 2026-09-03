@@ -1,5 +1,264 @@
 # Precision backlog
 
+## `creates` meant two incompatible things; it now means the published `create` operation (2026-09-03)
+
+Documentation and decision only — no code, fixture, or snapshot moved. The
+predicate is written out in `docs/package-contract-v2/semantic-model.md`
+§ "What a closed call domain denies", one sentence per claim domain; the
+reasoning, the exact changes it implies, and the prerequisite chain are in
+`docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`.
+
+**The disagreement.** ADR 0006 defers the implementation-census premise for the
+behavioral call domains, and `require_census_decides_closure`
+(`contract_certification/type_facts.rs:6630-6637`) refuses each of them by
+name. Building that census first would have certified a claim whose meaning was
+unfixed, because its two producers disagreed:
+
+- The **generator** emits one `OperationKind::Create` per
+  `ContractOwnerRequirement` (`inferred_contract.rs:276-295`,
+  `apply_owner_requirement` `:505-517`, from `find_missing_owners`,
+  `owners.rs:667` with its call walk at `:771-880`), stamped
+  `requires: required`, `source: ambient-at-call`, `productions: []` closed,
+  **naming no resource**. A generated "create" registers nothing; it is an
+  owner requirement.
+- The **hand audits** use `creates` for exactly three operations in the whole
+  bundled corpus, and each names a resource it hands to an environment outside
+  the call: `solidjs-web.json` `render`'s `register-delegation` →
+  `browser-root`, and `createServerReference`'s `register-reference` /
+  `transform-reference` → `server-reference`. Everywhere *else* that an owner
+  comes into existence the audits publish no `create` — but **not** uniformly,
+  and the non-uniformity is the point. Three shapes occur: (1) an
+  `owner.source: "created"` plus `owner.productions` on an `invoke` that is a
+  `callbacks` item, beside `creates: []` closed — `createTrackedEffect`,
+  `For`/`Match`/`Repeat`/`Show`, `render`'s and `hydrate`'s own render
+  callbacks, and the generated `rootless` root family; (2) the owner declared
+  only as a `resources` entry with **no** operation carrying
+  `source: created` — `createEffect` (whose owner sources are `captured`,
+  `ambient-at-call`, `ambient-at-execution`, `none`) and `onSettled`, and
+  `@solidjs/signals` holds exactly one `source: created` operation in the whole
+  document, `createTrackedEffect`'s; (3) **nothing at all** — all fourteen
+  audited `solid-v1/solid-*.json` documents carry no `owner` field on any
+  operation and no `resources` entry, while `createRoot`, `createSignal`,
+  `onCleanup`, `createMemo`, and `createStore` all sit under `creates: []`
+  closed. No reactive-graph resource of any kind is a `create`.
+
+**The decision: `creates` is the published `create` operation.** A `create` is
+the export **registering a version-1 resource into a runtime outside this
+invocation** — a browser document or a server runtime — so the resource stays
+live there after the call returns, reachable by that runtime rather than only
+through a returned value; it names what it registered in the operation's own
+`resources`. Both qualifications matter: the thing must be a version-1 resource
+kind, and the registry must be a runtime that acts on it, so a private module
+variable is neither. It is *not* the
+intuitive "brings something into existence": the audited corpus refutes that
+predicate, since `createStore` (reactive-source), `createMemo`
+(async-computation), `action` (transition), `createTrackedEffect` and
+`onSettled` (owner), `createEffect` (owner + cleanup), and the 1.x
+`createRoot` / `createSignal` / `onCleanup` all establish version-1 resources
+and all close `creates: []`. **A summary's `resources` declaration is not a
+`creates` item** — declaring a resource is not an operation, so it can never
+contradict `creates: []`. Owner *production* stays in the `owner.productions`
+domain (`semantic-model.md` § Ownership: "Owner production, owner requirement,
+owner source, owner capability, and owner lifetime are distinct facts";
+`wire-format.md:277-288`; `contract_semantics.rs:788`), which already has its
+own closure candidates — 16 `operation-axis`/`owner-productions` candidates sit
+beside 216 `call`/`creates` ones in the fixture corpus. Owner *requirement* is
+not a domain: it is the per-operation `owner.requires` / `requiresChildren` /
+`requiresCleanup` triple the model already defines. **A `create` naming no
+resource is invalid** — that is the mechanical separator between the two
+readings.
+
+The audits win because they are the semantic model of record, because the
+alternative would have had to correct the majority of the audited corpus while
+leaving the three genuine registrations homeless, and because only this reading
+is decidable by a census: "does any resolved target publish an operation of
+`kind: create`" is a question about this archive's own implementation, whereas
+"does this export require an ambient owner" is a question about callers this
+archive cannot see — the inference ADR 0005 § "2026-09-03" (`:312-319`) and § 4
+(`:137-160`) already found wrong for `onSettled`, where a `getOwner()`-guarded
+arm was read as an unconditional consumer obligation.
+
+**Digests.** No receipt moves. Both bundle indexes have `"contracts": []` (the
+array `dialect.rs:538-554` checks) and `activePolicy2Receipts` is asserted 0,
+but the load-bearing reason is stronger: **no first-party bundle is issued at
+all.** `EMBEDDED_SOLID1_BUNDLES` is `&[]` (`first_party_bundles.rs:124`), and
+both bundle producers validate their inputs and then return an empty vector —
+`solid2_rc3_bundles_with_measurements` (`:198`, `Ok(Vec::new())` at `:289`) and
+`solid1_bundles_with_measurements` (`:303`, `Ok(Vec::new())` at `:369`). An
+empty index array can be refilled by a commit; an empty return from the only
+two producers means nothing downstream runs today. No field joins the canonical
+stream, so no other document's `semanticDigest` moves — unlike the
+`composedFrom` change below, which needed two domain-separated digest families.
+
+**The two generator-shaped documents cannot simply be "regenerated".**
+`debounce-root-default.json` (`createDebounce`, `default`) and
+`rootless-root-default.json` (`createRootPool`) each carry an
+`owner-requirement-0` and do change claim — but there is no live generation
+path: the bytes are frozen Phase 14 authority, `include_bytes!`d from
+`benchmarks/package-contract-v2/phase14/solid-v1-authority/`
+(`first_party_bundles.rs:84-122`), and the function that would rebuild them
+validates and returns `Ok(Vec::new())`. The correction is therefore either to
+the **Phase 14 authority capture** or to a **fresh generation against the real
+packages at the audited versions**, and the choice must be stated, because the
+provenance differs. **Six checked-in files**, three per document:
+`benchmarks/package-contract-v2/phase14/solid-v1-authority/{debounce,rootless}-root-default.json`,
+`pkg/contracts/bundled/solid-v1/{debounce,rootless}-root-default.json`, and
+`rust/crates/solid-dialect/contracts/solid-v1/{debounce,rootless}-root-default.json`.
+The `pkg/` and `solid-dialect/` copies are byte-identical and differ from the
+`benchmarks/` copy in exactly one field — they carry a `sidecars.proof.sha256`
+(`5eadb9af…08ed47` for debounce, `4ab8db26…9cab511` for rootless) where the
+authority has `sidecars: {}` — so those two proof digests move too, and a hand
+edit would desynchronize them silently. No script under `scripts/` and no
+`Makefile` target references the `benchmarks/` copies: they are the compiled-in
+authority and they are gated only through the Rust decode path, so forgetting
+them leaves the binary asserting the old claim with no gate to say so.
+
+**One live fixture input carries the same shape**, and the validation rule
+rejects it:
+`fixtures/reactive-ir/package-callback-consumer/node_modules/reactive-package/solid-reactivity.json`,
+whose `runOwnedEffect` publishes `owner-requirement-0` as a resourceless
+`create`. It must be corrected in the same commit as the rule, and
+`fixtures/findings-snapshots/reactive-ir__package-callback-consumer.json`
+re-derived by coverage rather than assumed unchanged. That fixture is *already*
+degraded relative to its README: its snapshot is five
+`SC9005 package-contract-incomplete` uncertifiables with no `SC4001` or
+`SC1001`, because its `.solid-checker/accepted-contracts.json` entry is
+`"status": "obsolete-policy1"` after the proof-policy-2 cut (`662dd7ba`) — so
+the README's "must produce `SC4001`" and "must produce its existing `SC1001`"
+are stale. Five generator fixtures' `expected.json` /
+`expected-proposal.json` snapshots travel with the generator change.
+
+**Three model gaps this exposed, none closed here.**
+
+- **Version 1 has no domain in which a reactive-graph resource's coming into
+  existence is a positive, closable fact.** This is the gap the corrected
+  `creates` predicate makes visible rather than creates. `createSignal`,
+  `createStore`, `createMemo`, `action`, `createEffect`, `createTrackedEffect`
+  and `onSettled` each declare a version-1 resource and each close
+  `creates: []`; where the owner's creation is recorded at all it is an
+  `owner.source: "created"` on an operation running *under* the owner (a
+  `callbacks` item, closed under `owner.productions`), and in `createEffect`,
+  `onSettled`, and the entire 14-document Solid 1.x audit it is recorded
+  **nowhere**. So "this call brought this signal / memo / owner into existence"
+  is expressible only as a resource *declaration*, which is not an operation
+  and therefore not closable. Do **not** repair this by widening `creates` —
+  that contradicts the majority of the audited corpus. A future repair needs
+  either a new operation kind (a version bump, not a version-1 addition) or an
+  explicit closable axis over `call.resources`.
+- **`throws` has no operation kind, and it is mostly `Unknown`, not closed.**
+  `validate_call_claims`
+  (`rust/crates/solid-reactive-ir/src/contract_semantics/validate.rs:1030-1128`)
+  passes `None` for `throws` alone (`:1082-1087`), so its items are operations
+  already published under their own kind and additionally labelled as able to
+  complete abruptly. Version 1 has no `throw` kind and no audited or generated
+  document carries a positive `throws` item — but of the 119 summaries in
+  `pkg/contracts/bundled/**`, only **19** name `throws` in `closed`; the other
+  **100** omit the field entirely, which is `Unknown` (all 89 solid-v1
+  summaries and 11 solid-v2 ones). A positive `throws` claim is expressible
+  only as that second label, and since every expression form can throw,
+  `throws` is a model question before it is a census question. Do not add a
+  ninth kind inside version 1, and do not read a missing field as closure or
+  the absence of positive items as evidence that nothing throws.
+- **`ExportImplementationTranscript.complete` does not mean what a census
+  needs.** `exportImplementationTranscriptLocked`
+  (`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go:191-251`)
+  reaches `Complete = true` (`:249`) only after seven gates, each of which
+  otherwise appends an `OpenReasons` entry and returns early: source file
+  available (`:199`), the node is an **exact identifier** (`:205`), the symbol
+  resolves (`:211`), `canonicalSymbol` resolves the alias chain (`:216`), the
+  type has **exactly one** call signature (`:223`), the implementation
+  declaration has a **body** (`:229`), and the declaration resolves (`:234`);
+  only then is `ControlFlow.Unsupported` consulted (`:246`). So `complete` is a
+  conjunction — exact identifier, resolved symbol, canonical target, unique
+  call signature, available body, resolved declaration, fully censused control
+  flow — which is more than "no unsupported branch" but still asserts
+  **nothing** about invoking forms: the call census
+  (`implementationCallCensusLocked`, `:346`) records only
+  `ast.IsCallExpression` and `ast.IsNewExpression` (filter at `:373-375`).
+  Tagged templates, getters, decorators, the iteration protocol (including
+  `for await…of` and `yield*`), `using`/`await using` reaching
+  `Symbol.dispose`/`Symbol.asyncDispose`, `instanceof` reaching
+  `Symbol.hasInstance`, JSX, `await` on a thenable, coercions, and `Proxy`
+  traps are all invisible while it stays true. Reading it as an enumeration
+  guarantee would be unsound — the producer step must relax it to an explicit
+  spelling and give the enumeration guarantee its own field. And that
+  guarantee's obligation is **to refuse on any form the classifier does not
+  cover**, because no enumeration of invoking forms is closed; a classifier
+  whose default is "ignore" fails it however long its list.
+
+**Suspected consumer-side defect, read but not executed — and latent today.**
+`project_owner_requirements` (`contracts.rs:333-364`), the analyzer's only
+consumer of `creates`, filters on `owner.requirements.owner == Required`
+(`:349`) without consulting `owner.source`. `@solidjs/web`'s audited `render`
+has `register-delegation` in `creates` with `requires: required` *and*
+`source: created` — an operation running under the owner it made, which needs
+no ambient owner — so on that reading a top-level `render(() => <App/>, el)`
+projects as an owner-less effect. `semantic-model.md` § Ownership is explicit
+that creating an owner does not prove the operation required one.
+
+**It cannot fire today**, because no bundle is issued (see Digests above), so
+the audited `render` summary never reaches this function; and the one fixture
+whose contract carries a `requires: required` create is cut to
+`obsolete-policy1`. **The originally drafted repair would have made it live**:
+had generated `Effect` requirements been restamped `source: created` — as a
+first draft of the producer step proposed, by copying `render`'s shape — every
+generated consumer obligation would have taken exactly the shape the filter
+mishandles, *and* the narrowed filter `source == AmbientAtCall` would then have
+matched nothing, silently deleting `SC4001` for contract-derived obligations.
+The producer step therefore keeps `source: ambient-at-call` on requirements,
+and the filter should be stated as intent rather than as an enum comparison: **a
+requirement projects when the operation requires an owner it does not itself
+supply**, i.e. `requires == Required && source != Created(_)` — not
+`source == AmbientAtCall`, which would also drop a future audited operation
+that legitimately requires an ambient owner while recording `captured` or
+`ambient-at-execution`. Reproduce both directions with fixtures before changing
+the filter.
+
+**Also latent, and scoped deliberately:** extending that function to read
+`cleanups` must not insert `ClaimDomain::Cleanups` into `open_claims`. All 89
+summaries in `pkg/contracts/bundled/solid-v1/` omit `cleanups` entirely
+(`Unknown`), and the generator hard-wires it `Unknown`
+(`inferred_contract.rs:299-309`). A bare insert produces no finding — the
+labeller `push_unknown_contract_claims` (`contracts.rs:602-630`) knows only
+`Reads`, `Returns`, `Creates`, and `Throws`, and returns early on an empty
+claim list (`:631-633`) — but it *would* break `contract_document.rs:3544`,
+which asserts a proven non-callable value export leaves no call-path domain
+open, since the clearing block (`contracts.rs:88-104`) clears only the four
+labelled domains. Adding a `"cleanups"` label instead would give every Solid
+1.x contract import a new `SC9005`, which is a precision regression needing its
+own decision. Read the domain's items for the requirement projection; do not
+open the claim.
+
+**Settled, not open: the probe-gate fixture's `runCreatingOwner`.**
+`fixtures/package-contracts/closed-domain-probe-gate`'s `runCreatingOwner`
+(`index.js:25-33`) assigns a fresh object literal to a module-level
+`currentOwner`, calls the caller's `callback`, and restores it — in a package
+with no Solid dependency. Under this decision an object literal is not a
+`create` operation and a private module variable is not a resource registered
+with any runtime, and the only call is a parameter-rooted callee, so **both
+`run` and `runCreatingOwner` census as `creates: []` closed**. There is no
+second reading. The fixture's premise is therefore wrong, not undecided:
+`index.js:13-18`, `index.d.ts:15-18`, and `README.md:28-29` assert the two
+exports have "opposite reactive-ownership behavior" and that this is why a
+`creates: []` claim is refused, when the refusal is
+`require_census_decides_closure` refusing the domain **by name**. The census
+slice owes the fixture two things — corrected comments, and a sibling export
+that calls a real dialect primitive (e.g. `render` from `@solidjs/web`) against
+a `solid-js` stub, so the census has a genuine positive to refuse on. ADR
+0006's pin — refusal as `UnsupportedDemand` at witness acquisition, before any
+probe (`docs/adr/0006-probe-harness-binding.md:776-779`) — is **unaffected**,
+because it is domain-by-name and independent of what the export does; only that
+bullet's characterisation ("an export that really does create an owner")
+becomes inaccurate and travels with the fixture correction.
+
+**Not added:** a row in
+`docs/package-contract-v2/phase19/proof-demand-authority-audit.json`. The gate
+does not tolerate an additive row —
+`scripts/package-contract-phase19.test.mjs:121` pins `demands: 43` and every
+status count, and `package-contract-v2-phase19-report.mjs:193` asserts the
+length agrees — so the row is recorded verbatim in the plan document for the
+producer slice to add together with that test edit.
+
 ## A closed claim domain can certify: the probe harness is bound (2026-09-03)
 
 Every one of the 357 certified corpus rows was a receipt over open claims only

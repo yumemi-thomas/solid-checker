@@ -68,7 +68,9 @@ The version-1 operation kinds are deliberately consumer-driven:
 - reactive read;
 - reactive write;
 - invalidation or refresh;
-- resource creation;
+- resource registration (`create` — see § "What a closed call domain denies"
+  § creates for what it does and does not cover; declaring a resource in
+  `call.resources` is not this operation);
 - cleanup production or registration;
 - disposal.
 
@@ -178,6 +180,321 @@ Resources correlate operations across time and branches:
 
 A resource ID is local to one normalized export summary. Summary expansion
 must alpha-rename IDs before composition when necessary.
+
+## What a closed call domain denies
+
+`call` carries nine set-valued claim domains: `callbacks`, `reads`, `writes`,
+`creates`, `invalidates`, `throws`, `returns`, `cleanups`, `disposals`. Naming
+one in `closed` beside an empty collection is a *complete negative* claim about
+one invocation of one export, in one artifact case, under one guard. This
+section states what each such claim denies.
+
+The scope is *one invocation*, so a resource established while a dependency's
+module initializes — the module-level `createSignal` a package runs on first
+import, or a root a dependency opens at load — is outside every domain here: it
+is not caused by this invocation, and closing a domain says nothing about it.
+
+It fixes meaning that was previously implicit in the audited documents and the
+generator, and the two disagreed — see
+`phase21/2026-09-03-implementation-census-plan.md` for the reconciliation and
+its consequences. Nothing here changes an encoding, a key, a canonical stream,
+or a digest: `semanticModelVersion` stays 1.
+
+Four rules hold for every domain and are stated once.
+
+**Kind.** Eight of the nine domains admit exactly one operation kind, and the
+mapping is enforced in both directions by `validate_call_claims`
+(`rust/crates/solid-reactive-ir/src/contract_semantics/validate.rs:1030-1128`):
+a domain accepts only its kind, and every published operation must appear in
+its kind's own domain or the document is a contradiction. `throws` is the
+exception — it constrains no kind — so an operation named there is *also* named
+in its kind's domain, and `throws` is a second label on an existing operation
+rather than a domain with operations of its own.
+
+**A caller-supplied callable's body is not this export's behavior.** An
+operation reachable only through a callable the export invokes belongs to this
+export's domains when the export itself supplies that callable, and does not
+belong when the callable is caller-supplied — reached from a parameter, or from
+a value the caller handed over. The export's own act, the invocation, is the
+`callbacks` item; what the caller's function does inside it is the caller's
+behavior. `createEffect` is the audited case: `reads: []` is closed while
+`initial-compute` is `tracking: tracked`, which is coherent only because the
+reads the caller's computation performs are not `createEffect`'s
+(`pkg/contracts/bundled/solid-v2/solid-js.json`). What does cross the boundary
+is *registration*: `onSettled`'s `returned-cleanup` and `createEffect`'s
+`replace-cleanup` are the export registering a cleanup the caller's function
+returned, and both are published in `cleanups`.
+
+**Later execution is an operation, not an absence.** An operation caused by
+this invocation belongs to its domain whenever it runs, recorded through the
+separate `trigger` and `at` fields, so a closed domain denies the
+later-scheduled operation exactly as it denies the same-stack one. Audited:
+`createEffect`'s `queued-apply` (`at: {event: flush, schedule: queued}`) and
+`repeated-compute` (`at: {event: external-event, schedule: same-stack}` — the
+event is later, the run is on that event's own stack) are `callbacks` items;
+`render`'s `delegated-event` (`at: {event: external-event, schedule:
+external}`) is the audited `schedule: external` case; and `render`'s
+`unregister-root` (`at: {event: cleanup, schedule: same-stack}`) is a
+`disposals` item (`pkg/contracts/bundled/solid-v2/solidjs-web.json`).
+
+**Every non-call form list below is open-ended, and closure is not a licence to
+read one as exhaustive.** Each list names the forms known to reach the domain
+today; nothing here asserts there is no other form. A census may therefore
+conclude closure only where the producer classified *every* invoking or
+observing form it walked, and must refuse **by name** on any form it does not
+classify — a form absent from both the producer's classifier and this document
+is a refusal, never a silent pass. See the census predicate in
+`phase21/2026-09-03-implementation-census-plan.md` § 3.
+
+A sentence marked **[Decision 2026-09-03]** settles a question the existing
+documents left silent; the rest cite the document that already fixed it.
+
+### callbacks
+
+`callbacks: [] closed` denies that one invocation of this export gives rise to
+any operation of kind X, where X is exactly *the export invoking a callable it
+did not itself define* — `kind: "invoke"`, named from the argument slot,
+operation output, or summary resource the callable arrived through — including
+an invocation the export performs from inside a callable it supplies itself and
+one this call schedules to a later `at` event, excluding everything the invoked
+callable's own body does, and arising from a call or `new` and additionally
+from these non-call forms — an open-ended list, per the fourth shared rule: a
+tagged template, a getter or setter reached by property access, an
+iteration-protocol member reached by `for…of`, `for await…of`, spread, array
+destructuring, or `yield*`, a decorator application, `then` on a supplied
+thenable reached by `await`, `Symbol.dispose` or `Symbol.asyncDispose` reached
+by `using` or `await using`, `Symbol.hasInstance` reached by `instanceof`, a
+coercion reaching `Symbol.toPrimitive`, `valueOf`, or `toString`, a `Proxy`
+trap, and a JSX element or `html` template whose compiler lowering invokes a
+component or accessor.
+
+Kind and source vocabulary: `validate.rs:1036-1056`. Trigger/`at` and the
+caller-supplied boundary: `solid-js.json`'s `createEffect`, and `render`'s
+`delegated-event`, whose `from` is a resource path rather than a parameter.
+**[Decision 2026-09-03]** the non-call list: the producer's census records
+`ast.IsCallExpression` and `ast.IsNewExpression` only
+(`implementationCallCensusLocked`,
+`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go:346`,
+kind filter at `:373-375`), so every form listed here — and every form the list
+has not yet named — must reach a census as an explicit marker that refuses,
+never as silence.
+
+### reads
+
+`reads: [] closed` denies that one invocation of this export gives rise to any
+operation of kind X, where X is exactly *an observation of a reactive source's
+current value* — `kind: "read"`, carrying its own `tracking` relation, so an
+`untracked` or `ambient-at-execution` read is still a read and only the
+dependency it registers differs — including a read this call schedules to a
+later `at` event, excluding a read a caller-supplied callable performs, and
+arising from non-call syntax: a property access on a store, props, or
+projection proxy, a whole-object observation (`$TRACK`, spread, `Object.keys`,
+`in`, iterating a store), and a JSX attribute or child expression whose
+lowering reads an accessor.
+
+`latest` publishes one `read` with `tracking: untracked` and closes every
+sibling domain; `createStore` publishes three; `Loading` and `isPending` leave
+`reads` *open* with one item, which is partial positive and not closure.
+**[Decision 2026-09-03]** the proxy property access is the load-bearing
+non-call form, and it is the reason a `reads` census can never be a census of
+calls alone.
+
+### writes
+
+`writes: [] closed` denies that one invocation of this export gives rise to any
+operation of kind X, where X is exactly *a mutation of a reactive source's
+value that other reactive readers can observe* — `kind: "write"` — including a
+write this call schedules to a later `at` event or performs under a transition,
+excluding a write a caller-supplied callable performs, and arising from
+non-call syntax: an assignment, compound assignment, `++`/`--`, or `delete` on
+a store or mutable proxy path.
+
+`createStore`, `createOptimistic`, `createOptimisticStore`, `reconcile`,
+`action`, and `flush` each publish exactly one closed `write`
+(`pkg/contracts/bundled/solid-v2/solidjs-signals.json`). **[Decision
+2026-09-03]** the assignment forms.
+
+### creates
+
+`creates: [] closed` denies that one invocation of this export gives rise to
+any operation of kind X, where X is exactly *this export performing a published
+`create` operation* — `kind: "create"`, whose own `resources` list names what
+was registered, drawn from the version-1 resource vocabulary. **[Decision
+2026-09-03]** `creates` is defined over the `create` **operation**, not over
+the intuitive notion of a thing beginning to exist, and the operation is the
+one the audits use for exactly one act: **registering a version-1 resource into
+a runtime outside this invocation** — a browser document or a server runtime —
+so that the resource remains live there after the call returns, reachable by
+that runtime rather than only through a value the call handed back. Two
+qualifications are load-bearing: the registered thing must be a *version-1
+resource kind*, and the registry must be a *runtime that acts on it*. A
+package's own private module variable is neither, so an export that parks an
+ad-hoc object in a module-level binding performs no `create` (see
+`fixtures/package-contracts/closed-domain-probe-gate`'s `runCreatingOwner`,
+and § 3.3 of the census plan). The audited instances are the whole extension in
+the corpus today: `render`'s `register-delegation` registers a `browser-root`
+on the document, and `createServerReference`'s `register-reference` and
+`transform-reference` register a `server-reference` with the server runtime
+(`pkg/contracts/bundled/solid-v2/solidjs-web.json` and its
+`--server-functions-*` siblings). The claim includes such a registration
+performed at a later `at` event because of this call, excludes anything a
+caller-supplied callable registers, and arises from these non-call forms —
+open-ended, per the fourth shared rule, and in every case known today a
+compiler lowering inserting the registering call: a JSX element or `html`
+template that registers a row or component owner with the runtime, and a
+`"use server"` function whose transform yields a server-function reference.
+
+Three things are **not** `creates` items, and each has its own home:
+
+- **A summary's `resources` declaration.** Declaring a resource in
+  `call.resources` names something the summary's operations correlate over; it
+  is not an operation at all, so it can never be a `creates` item and it never
+  contradicts `creates: []`. This is what the whole audited corpus does:
+  `createStore` declares a `reactive-source`, `createMemo` an
+  `async-computation`, `action` a `transition`, `createTrackedEffect` and
+  `onSettled` an `owner`, and `createEffect` both an `owner` and a `cleanup` —
+  and every one of them closes `creates: []`.
+- **Owner production**, which is the `owner.productions` domain of whichever
+  operation runs under the produced owner, with its own local closure.
+- **Owner requirement**, which is the `owner.requires` / `requiresChildren` /
+  `requiresCleanup` triple of whichever operation needs the owner.
+
+**[Decision 2026-09-03]** a `create` operation that names no resource is
+therefore invalid. That is the shape the generator emits for an owner
+requirement; it registers nothing, and it is the whole of the disagreement this
+section settles. Two bundled documents and one fixture contract carry one and
+are corrected by the producer slice, not by this section.
+
+Where the audits put a created owner is **not** uniform, and the model does not
+pretend otherwise. `render` is the single audited `create` that also names an
+owner — `register-delegation` is a `creates` item *and* carries
+`owner.source: "created"` with `productions: [browser-root]`. Elsewhere an
+`owner.source: "created"` with a nonempty `productions` sits on an `invoke`
+that is a `callbacks` item, beside `creates: []` closed: `createTrackedEffect`'s
+`callback`, `For`/`Match`/`Repeat`/`Show`'s `accessor-child` and `raw-child`,
+`render`'s and `hydrate`'s own render callbacks, and the generated
+`createSubRoot` family's `callback-0`. And in the remaining cases the owner's
+coming-into-existence is recorded **nowhere**: `createEffect` declares
+`effect-owner` but no operation of its summary carries `source: created` (only
+`captured`, `ambient-at-call`, `ambient-at-execution`, and `none`); `onSettled`
+declares `onSettled-leaf-owner` the same way; `@solidjs/signals` has exactly
+one `source: created` operation in the entire document, `createTrackedEffect`'s;
+and all fourteen audited `solid-v1/solid-*.json` documents carry no `owner`
+field on any operation and no `resources` entry at all, while closing
+`creates: []` for `createRoot`, `createSignal`, `onCleanup`, and every other
+1.x primitive. **That is a real model gap, not a defect of this predicate**:
+version 1 has no domain in which "this reactive-graph resource began to exist
+on this call" is a positive, closable fact, and it is recorded as such in
+`docs/precision-backlog.md`. Do not repair it by widening `creates`.
+
+### invalidates
+
+`invalidates: [] closed` denies that one invocation of this export gives rise
+to any operation of kind X, where X is exactly *marking a reactive source or
+async computation stale so its dependents recompute or refetch* —
+`kind: "invalidate"`, a fact distinct both from the write that may cause it and
+from the recomputation it schedules — including an invalidation this call
+schedules to a later `at` event, excluding one a caller-supplied callable
+performs, and arising from non-call syntax: the same store-proxy assignment
+forms `writes` names, because a store write invalidates the paths it touches.
+
+`refresh` and `affects` publish exactly one closed `invalidate` each, `action`
+one, and `flush` two. **[Decision 2026-09-03]** the store-assignment form, and
+that a `write` never implies its `invalidate`: the two domains are closed
+independently and `createStore` closes one positive `write` beside
+`invalidates: []`.
+
+### throws
+
+`throws: [] closed` denies that one invocation of this export gives rise to any
+operation of kind X, where X is exactly *none of the eight version-1 kinds* —
+`throws` is the one domain `validate_call_claims` constrains to no kind
+(`validate.rs:1082-1087`), so its items are operations already published under
+their own kind and additionally labelled as able to complete abruptly — and the
+claim denies that any operation of this invocation, same-stack or
+later-scheduled, including the export's own registration of a caller-supplied
+callable but not that callable's body, propagates an exception out of the
+export; no non-call syntax list bounds it, because every expression form can
+throw.
+
+**[Decision 2026-09-03]** version 1 has no `throw` operation kind, and no
+audited or generated document in this repository carries a positive `throws`
+item. Nor is closure the usual state: of the 119 summaries in
+`pkg/contracts/bundled/**`, exactly **19** name `throws` in `closed` beside an
+empty list, and the other **100** omit the field entirely, which is `Unknown` —
+every solid-v1 summary and eleven solid-v2 ones. A positive `throws` claim is
+therefore expressible only as a second label on an operation of another kind,
+and closure is the only state the domain has ever *held* where it is stated at
+all. That is a model gap
+recorded in `docs/precision-backlog.md`; do not invent a ninth kind inside
+version 1, and do not read the absence of positive items as evidence that
+nothing throws.
+
+### returns
+
+`returns: [] closed` denies that one invocation of this export gives rise to
+any operation of kind X, where X is exactly *the export yielding a value to its
+caller* — `kind: "return"`, carrying the returned value's `output` shape, one
+operation per distinct returned shape rather than one per completion, so a
+repeated emission is a single `return` with `count: {scope: "call", max:
+"many"}` — including a value delivered at a later `at` event, excluding a value
+a caller-supplied callable returns (which reaches `cleanups` when the export
+registers it, as `onSettled`'s `returned-cleanup` does), and arising from
+non-call syntax: a `return` statement carrying an expression, an arrow's
+expression body, a generator's `yield` and its completion value, and an `async`
+function's resolved value.
+
+**[Decision 2026-09-03]** a **valueless completion is not a `return`
+operation.** A bare `return;`, a function that falls off its end, and a `void`
+export all complete without yielding a value to the caller, and none of them
+publishes a `return`. This is what keeps the section self-consistent: a void
+export closes `returns: []` — `createEffect` and every Solid 2.0 primitive that
+returns nothing do — which is only coherent if the implicit `undefined` such an
+export completes with is not itself a returned value. It also fixes what a
+`returns` census must decide: not "does control leave this function", which is
+always true, but "does any completion carry a value", which is
+control-flow-decidable from the same transcript.
+
+`createMemo`'s `emission` is the audited repeated-return case (`count:
+{scope: "call", min: 0, max: "many"}`, `at: {event: async-emission}`);
+`createSubRoot`, `createSelector`, and `memo` are the ordinary ones.
+`clientOnly` publishes two `return` operations but leaves `returns` *open*,
+which is partial positive and not closure.
+
+### cleanups
+
+`cleanups: [] closed` denies that one invocation of this export gives rise to
+any operation of kind X, where X is exactly *the export producing or
+registering a cleanup* — `kind: "cleanup"`, binding a `cleanup` resource or a
+lifetime — including a registration that happens at a later `at` event
+(`createEffect`'s `replace-cleanup` is triggered by `queued-apply` and runs at
+`cleanup`) and including the registration of a function a caller-supplied
+callable returned, because the registration is the export's act even though the
+function is the caller's; excluding the running of that function's body; and
+arising from these non-call forms — open-ended, per the fourth shared rule: a
+compiler lowering that inserts a cleanup at a JSX boundary, and a `using` or
+`await using` declaration whose scope exit is the registration point. Every
+other audited cleanup is registered by a call or by the export reading a
+callable out of a value it was handed.
+
+`onSettled` and `applyRef` leave `cleanups` *open* with one item precisely
+because the caller's function decides whether one exists; `createEffect` and
+`createTrackedEffect` close it with one.
+
+### disposals
+
+`disposals: [] closed` denies that one invocation of this export gives rise to
+any operation of kind X, where X is exactly *the export ending a named
+resource's lifetime* — `kind: "dispose"`, whose own `resources` list names what
+is disposed — including a disposal that runs at a later `at` event
+(`render`'s `unregister-root` and `createEffect`'s `dispose-effect` both run at
+`cleanup`; `createMemo`'s `cancel` cancels its async computation), excluding a
+disposal a caller-supplied callable performs, and arising from these non-call
+forms — open-ended, per the fourth shared rule: a `using` or `await using`
+declaration going out of scope, which invokes `Symbol.dispose` or
+`Symbol.asyncDispose` on the declared value, and a compiler-inserted boundary
+teardown. Every other audited disposal is effected by a call or by the runtime
+draining an owner.
 
 ## Recursive value shapes
 
