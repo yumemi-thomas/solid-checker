@@ -119,17 +119,34 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
 
   test("classifies every policy-2 demand against an existing producer guarantee", () => {
     assert.deepEqual(auditPhase19DemandAuthority(), {
-      demands: 43,
+      // 44, and 5 producer extensions: the census slice added
+      // `domain-exhaustiveness/implementation-census`, whose producer half —
+      // `uncensusedInvokingForms` and the local-declaration demand — landed at
+      // handshake protocol 14 while no consumer reads either field. It joins an
+      // existing family, so `families` and `policyDigest` are unmoved: a new
+      // family would come from proof-policy-v2.json's applicability table and
+      // would re-label every receipt's policy binding, which is a separate cut.
+      demands: 44,
       families: 18,
       alreadyExact: 32,
-      producerExtensionRequired: 4,
+      producerExtensionRequired: 5,
       unsupported: 7,
-      // Still 7, and deliberately: the probe-consistency family also carries
-      // `nonobservation-as-negative-proof`, which stays unsupported because
-      // finite runtime silence can never prove absence or closure. Binding the
-      // harness made the family's *executable* demand exact; it did not and
-      // must not make the family certification-ready.
-      certificationReadyFamilies: 7
+      // 6, down from 7, and this is the point of adding the row rather than a
+      // cost of it. `domain-exhaustiveness` was counted ready while both its
+      // rows were "already exact" — invocation completeness and the package
+      // source census — even though closing a behavioral call domain needs an
+      // enumeration guarantee over invoking forms that no producer had. The
+      // producer has it now and no consumer reads it, so the family is a
+      // producer extension away from ready, which is exactly what
+      // require_census_decides_closure already says by refusing every
+      // behavioral call domain by name.
+      //
+      // The `probe-consistency` family stays unready for its own reason:
+      // `nonobservation-as-negative-proof` is unsupported because finite
+      // runtime silence can never prove absence or closure. Binding the harness
+      // made that family's *executable* demand exact; it did not and must not
+      // make the family certification-ready.
+      certificationReadyFamilies: 6
     });
   });
 });

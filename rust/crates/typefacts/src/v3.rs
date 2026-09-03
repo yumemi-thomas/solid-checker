@@ -36,8 +36,40 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V16: u64 = 16;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V17: u64 = 17;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V18: u64 = 18;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:1e85e91a37409d8c4d1527ac9778155e10f6ff400cfa2c7e5dbeab0f771866ec";
-/// 13 adds `calleeSources` to the implementation call census: the traced value
+    "sha256:0d246a6cf7682e3f756df3ce54569cfca2dfeb57006a3198dabad51e43f96fc4";
+/// 14 adds the two facts an implementation census needs and neither the call
+/// census nor `complete` could carry.
+///
+/// `uncensusedInvokingForms` on
+/// [`crate::ExportImplementationTranscript`] names, per form, every syntactic
+/// position that can invoke user code and that `calls` does not record —
+/// `calls` holds `CallExpression` and `NewExpression` only. Its classifier's
+/// default is refusal: a node kind that is neither classified nor on the
+/// producer's reviewed list of provably non-invoking kinds arrives as
+/// `unclassified-invoking-form`, so a form nobody has thought of refuses
+/// rather than passing in silence.
+///
+/// **This is the whole reason the number moves rather than the field merely
+/// being additive.** An absent list and a present empty one are different
+/// facts — no opinion versus "every form I walked was a call, a construction,
+/// or provably non-invoking" — and serde cannot tell them apart, because the
+/// field defaults to empty. A protocol-13 producer's silence would therefore
+/// read to a protocol-14 consumer as the positive claim, which is exactly the
+/// unsound direction. The handshake is the discriminator, so the handshake has
+/// to move. (In the other direction a protocol-13 consumer rejects a
+/// protocol-14 transcript outright: `ExportImplementationTranscript` denies
+/// unknown fields.)
+///
+/// `localDeclarationLocation` on [`crate::ExportValueDemand`], answered by
+/// `localDeclaration` on [`crate::ExportValueTranscript`], asks for an
+/// implementation transcript of the function-like declaration at an exact
+/// source range. A census recurses into module-local helpers, and
+/// `implementationLocation` cannot reach one: it starts from an identifier and
+/// resolves through the export's runtime binding. The demand is hashed into
+/// the export-value demand digest, so a protocol-13 producer would answer a
+/// protocol-14 demand under a digest it computes differently.
+///
+/// 13 added `calleeSources` to the implementation call census: the traced value
 /// provenance of the *callee expression*, from the same
 /// `returnValueSourcesLocked` walk and under the same gates that answer
 /// `argumentSources` for an argument. It answers "what created the value being
@@ -64,7 +96,7 @@ pub const TYPE_FACTS_SCHEMA_SHA256: &str =
 ///
 /// 11 split the callable-path census into the members a value declares and the
 /// members it carries only through the compiler's apparent-type augmentation.
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 13;
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 14;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",

@@ -1763,6 +1763,12 @@ fn derive_export_value_schedules(
                                 export,
                                 demand.id().as_str(),
                             )?,
+                            // No scheduled demand asks for a module-local
+                            // declaration yet. The implementation census that
+                            // will is not wired here, and a demand that named
+                            // a helper without a census to consume it would
+                            // pay for a transcript nothing reads.
+                            local_declaration_location: None,
                             callable_depth: *callable_depths
                                 .get(&(artifact_case.to_owned(), export.to_owned()))
                                 .expect("every scheduled export has an exact callable depth"),

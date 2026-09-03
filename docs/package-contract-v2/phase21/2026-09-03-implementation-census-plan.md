@@ -3,7 +3,10 @@
 Date: 2026-09-03
 Status: semantics settled; the producer re-kinding and consumer filter of § 2.2
 landed (its validation rule and the six authority files are blocked — see
-§ 2.2's status block); dialect and census work not started
+§ 2.2's status block); **§ 4.1's two producer facts landed** at handshake
+protocol 14, with the `complete` rename deliberately not taken (see § 4.1's
+status block and `docs/typefacts/adr/0026-…`); § 6's audit row added with its
+test pins; dialect (§ 4.2) and census (§ 4.3) work not started
 Scope of this document: the decision, its evidence, and the prerequisite chain.
 No code, fixture, or snapshot changed in the slice that wrote it.
 
@@ -744,6 +747,58 @@ Strictly ordered. Each step's output is the next step's premise.
 
 ### 4.1 Producer
 
+**Status after the producer slice (2026-09-03).** The two facts below **landed**
+at handshake protocol 14 (schema digest
+`sha256:0d246a6cf7682e3f756df3ce54569cfca2dfeb57006a3198dabad51e43f96fc4`), and
+the third bullet — the `complete` rename — was **deliberately not taken**.
+`docs/typefacts/adr/0026-v1-uncensused-invoking-forms-and-local-declaration-transcripts.md`
+carries the decision, the kind vocabulary, and the limits; the dated entry in
+`docs/precision-backlog.md` carries the precision status. Per bullet:
+
+1. **`complete`: measured and documented, not renamed.** The seven gates are
+   now written out in the Rust doc comment on
+   `ExportImplementationTranscript::complete` and in ADR 0026, together with
+   the sentence that matters — `complete` says nothing about the calls census
+   being total, and a consumer that read it as an enumeration guarantee would
+   be unsound. The field keeps its name: renaming a field every consumer reads
+   is a larger break than this slice takes, and the guarantee now has its own
+   field, so nothing depends on the name to be sound. **Partially discharged.**
+2. **Markers: done, with a refusing default.**
+   `ExportImplementationTranscript.uncensusedInvokingForms` carries one row per
+   invoking form the call census does not record, over twelve closed kinds. The
+   obligation this bullet actually states — "classify every form it walks and
+   emit a refusing marker for any form it cannot classify" — is met by the
+   classifier's *default*: a token invokes nothing, a named kind gets its kind,
+   a kind on the reviewed `nonInvokingNodeKinds` list gets no row, and
+   **everything else** is `unclassified-invoking-form` carrying the compiler's
+   node-kind name. Two forms are absent by decision rather than omission: a
+   `Proxy` trap is a property of the runtime value rather than of syntax and is
+   outside any producer census, and `f?.(x)` is already a `CallExpression`.
+   **Done.**
+3. **Transcripts for non-exported local declarations: done.**
+   `ExportValueDemand.localDeclarationLocation` names a function-like
+   declaration by exact source range and is answered by
+   `ExportValueTranscript.localDeclaration`. Identity is bound by the
+   **resolved** declaration lying inside the demanded span — the answer's own
+   location is the demand echoed back, and binds nothing on its own. **Done,
+   and not wired to any census.**
+
+A same-day review pass then corrected the slice, without moving the protocol:
+`await` was failing open on any type whose `then` the checker could not find
+(a union, an unconstrained type parameter, an index signature); destructuring
+*assignment* was recording nothing at all, because `[a, b] = src` and
+`({ a } = src)` are the same node kinds as the value forms and all of them sat
+on the non-invoking list; the accessor premise was reading `.d.ts` declarations
+as if they were runtime bytes; the identity binding above was a tautology; and
+a demand naming a declaration file was refused by span rather than by file. The
+schema digest moved with those edits and the reviewed list is now 123 entries.
+`docs/precision-backlog.md`'s "Review-fix pass" section is the record.
+
+What is **not** done, and blocks § 4.3: no consumer reads either field. The
+census predicate of § 3 remains unwritten, and
+`require_census_decides_closure` refuses every behavioral call domain by name,
+unchanged.
+
 - **`complete` does not mean what a census predicate needs it to mean.**
   `exportImplementationTranscriptLocked`
   (`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go:191-251`)
@@ -885,12 +940,35 @@ rather than accompanies `creates`.
 
 ---
 
-## 6. No row added to the Phase 19 demand-authority audit
+## 6. The row added to the Phase 19 demand-authority audit
 
-The brief allowed a row in
-`docs/package-contract-v2/phase19/proof-demand-authority-audit.json` only if
-the gate tolerates an additive row without moving pins. **It does not**, so
-the item is recorded here instead.
+**Added by the producer slice (2026-09-03), together with the test edit it
+requires.** The row below is now
+`domain-exhaustiveness/implementation-census` in
+`docs/package-contract-v2/phase19/proof-demand-authority-audit.json`, with its
+`producerField`, `completenessGuarantee`, and `policy2Gap` rewritten to
+describe what landed rather than what was missing. Three pins in
+`scripts/package-contract-phase19.test.mjs` moved with it, each with a comment:
+`demands` 43 → 44, `producerExtensionRequired` 4 → 5, and
+`certificationReadyFamilies` **7 → 6**.
+
+That third move was not anticipated by this section and is the interesting one.
+`domain-exhaustiveness` was counted certification-ready because both its rows
+were "already exact", even though closing a behavioral call domain had no
+enumeration guarantee over invoking forms anywhere in the system — which is
+precisely what `require_census_decides_closure` says by refusing every such
+domain by name. Adding an honest "producer extension required" row to the
+family corrects the count. It is a correction, not a regression.
+
+`families` and `policyDigest` are **unmoved**: the row joins an existing
+family, so `proof-policy-v2.json`'s applicability table is untouched and no
+receipt's policy binding is re-labelled. A *new family* would have moved the
+digest, which is a separate cut and was not taken.
+
+The original text of this section, for the record: the brief allowed a row
+only if the gate tolerated an additive row without moving pins. It does not —
+so the row was recorded here and deferred until a slice could take the
+accompanying JavaScript edit, which this one did.
 
 `scripts/package-contract-phase19.mjs`'s `auditPhase19DemandAuthority`
 (`:127-203`) validates each row structurally and requires every policy family
@@ -905,16 +983,21 @@ assert.deepEqual(auditPhase19DemandAuthority(), {
 });
 ```
 
+(that block is the *pre-slice* state; it now reads `demands: 44`,
+`producerExtensionRequired: 5`, `certificationReadyFamilies: 6`.)
+
 and `scripts/package-contract-v2-phase19-report.mjs:193` asserts
 `authority.demands === demandAuthority.demands.length`. An additive row moves
 `demands` from 43 to 44 and one status count, failing that test — a JavaScript
-change this slice may not make. A *new family* is worse: families come from
+change the *semantics* slice could not make, which is why the item waited for
+the producer slice. A *new family* is worse: families come from
 `proof-policy-v2.json`'s applicability table, whose `policyDigest`
 `sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278` is
 pinned in the same test, and changing it re-labels every receipt's policy
-binding.
+binding. The row added joins an existing family, so that digest did not move.
 
-The row to add, when the producer slice takes the accompanying test edit:
+The row as drafted here, before the producer slice rewrote its three prose
+fields to describe what landed:
 
 ```json
 {

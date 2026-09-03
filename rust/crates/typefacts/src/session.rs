@@ -1208,6 +1208,7 @@ impl Session {
                     "export-value transcript {index} location does not match its demand"
                 )));
             }
+            validate_local_declaration_binding(index, demand, transcript)?;
             validate_export_value_transcript(transcript)?;
         }
         validate_export_value_envelope(&envelope, &self.project_id, self.generation, demands)?;
@@ -2098,6 +2099,126 @@ fn validate_export_value_transcript(
             "complete export-value transcript lacks exact identity or remains open".into(),
         ));
     }
+    if let Some(implementation) = &transcript.implementation {
+        validate_implementation_transcript(implementation)?;
+    }
+    if let Some(local) = &transcript.local_declaration {
+        validate_implementation_transcript(local)?;
+    }
+    Ok(())
+}
+
+/// Binds a local-declaration answer to the demand that asked for it.
+///
+/// The producer echoes the demanded location into the answer's own `location`,
+/// so that field alone binds nothing: an answer about a different helper would
+/// carry the same echo. Three checks are therefore made, in increasing
+/// strength:
+///
+/// 1. **Presence agrees.** A `local_declaration` for a demand that asked for
+///    none, and its absence for a demand that asked for one, are both refused.
+/// 2. **The echo matches.** Cheap, and it does catch one real confusion — an
+///    answer built for a *different demand of the same batch*, whose location
+///    differs.
+/// 3. **The resolved declaration lies inside the demanded span.** This is the
+///    half the producer does not echo: it derives
+///    `declaration.location` from the located declaration's own symbol. A
+///    containment rather than an equality, because a named function resolves
+///    to its identifier while an anonymous `const helper = () => …` resolves
+///    to the arrow itself. Where `query_name` and the resolved declaration's
+///    `name` are both populated they must also agree.
+///
+/// What this does not do is make a fabricated transcript about some other
+/// declaration impossible: the producer is trusted for the contents of a body
+/// it censuses, here exactly as for an export's. It makes an answer whose two
+/// identity fields disagree, or which describes a declaration outside the
+/// bytes that were asked about, refusable without reading the source.
+fn validate_local_declaration_binding(
+    index: usize,
+    demand: &crate::ExportValueDemand,
+    transcript: &crate::ExportValueTranscript,
+) -> Result<(), SessionError> {
+    let (demanded, local) = match (
+        &demand.local_declaration_location,
+        &transcript.local_declaration,
+    ) {
+        (None, None) => return Ok(()),
+        (Some(_), None) => {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} carries no local-declaration transcript for a demand that asked for one"
+            )));
+        }
+        (None, Some(_)) => {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} carries a local-declaration transcript for a demand that asked for none"
+            )));
+        }
+        (Some(demanded), Some(local)) => (demanded, local),
+    };
+    if &local.location != demanded {
+        return Err(SessionError::InvalidResponse(format!(
+            "export-value transcript {index} local-declaration transcript describes {}:{}..{} rather than the demanded {}:{}..{}",
+            local.location.path,
+            local.location.start_byte,
+            local.location.end_byte,
+            demanded.path,
+            demanded.start_byte,
+            demanded.end_byte
+        )));
+    }
+    if let Some(declaration) = &local.declaration {
+        let resolved = &declaration.location;
+        if resolved.path != demanded.path
+            || resolved.start_byte < demanded.start_byte
+            || resolved.end_byte > demanded.end_byte
+        {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} local-declaration transcript resolves a declaration at {}:{}..{}, which is not inside the demanded {}:{}..{}",
+                resolved.path,
+                resolved.start_byte,
+                resolved.end_byte,
+                demanded.path,
+                demanded.start_byte,
+                demanded.end_byte
+            )));
+        }
+        if !local.query_name.is_empty()
+            && !declaration.name.is_empty()
+            && local.query_name != declaration.name
+        {
+            return Err(SessionError::InvalidResponse(format!(
+                "export-value transcript {index} local-declaration transcript queried {:?} but resolved a declaration named {:?}",
+                local.query_name, declaration.name
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Checks the per-row invariants of an implementation transcript's
+/// uncensused-invoking-form census.
+///
+/// Both are invariants a consumer reads without re-deriving: `captured` is the
+/// boolean form of `enclosing_callable`'s presence, and a row's `node_kind` is
+/// the only description of an unclassified form, so an empty one would turn
+/// the load-bearing refusal row into an anonymous one.
+fn validate_implementation_transcript(
+    transcript: &crate::ExportImplementationTranscript,
+) -> Result<(), SessionError> {
+    for form in &transcript.uncensused_invoking_forms {
+        if form.captured != form.enclosing_callable.is_some() {
+            return Err(SessionError::InvalidResponse(format!(
+                "uncensused invoking form at {}:{}..{} disagrees with its enclosing callable about capture",
+                form.location.path, form.location.start_byte, form.location.end_byte
+            )));
+        }
+        if form.node_kind.is_empty() {
+            return Err(SessionError::InvalidResponse(format!(
+                "uncensused invoking form at {}:{}..{} names no node kind",
+                form.location.path, form.location.start_byte, form.location.end_byte
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -2444,6 +2565,13 @@ fn export_value_demand_digest(demands: &[crate::ExportValueDemand]) -> String {
         hash_invocation_field(&mut hasher, &demand.location.start_byte.to_string());
         hash_invocation_field(&mut hasher, &demand.location.end_byte.to_string());
         if let Some(location) = &demand.implementation_location {
+            hash_invocation_field(&mut hasher, &location.path);
+            hash_invocation_field(&mut hasher, &location.start_byte.to_string());
+            hash_invocation_field(&mut hasher, &location.end_byte.to_string());
+        } else {
+            hash_invocation_field(&mut hasher, "");
+        }
+        if let Some(location) = &demand.local_declaration_location {
             hash_invocation_field(&mut hasher, &location.path);
             hash_invocation_field(&mut hasher, &location.start_byte.to_string());
             hash_invocation_field(&mut hasher, &location.end_byte.to_string());
@@ -3486,5 +3614,256 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{}: apply delta: {error}", step.label));
             assert_eq!(actual, expected, "{} produced the wrong table", step.label);
         }
+    }
+
+    fn span(path: &str, start: u64, end: u64) -> Location {
+        Location {
+            path: path.into(),
+            start_byte: start,
+            end_byte: end,
+        }
+    }
+
+    fn implementation_transcript(location: Location) -> crate::ExportImplementationTranscript {
+        crate::ExportImplementationTranscript {
+            location,
+            query_name: "".into(),
+            target: "".into(),
+            declaration: None,
+            signature: None,
+            parameter_uses: Vec::new(),
+            control_flow: None,
+            callable_returns: Vec::new(),
+            calls: Vec::new(),
+            uncensused_invoking_forms: Vec::new(),
+            complete: false,
+            open_reasons: Vec::new(),
+        }
+    }
+
+    fn resolved_declaration(name: &str, location: Location) -> crate::ResolvedDeclaration {
+        crate::ResolvedDeclaration {
+            symbol: "symbol-1".into(),
+            name: name.into(),
+            kind: "FunctionDeclaration".into(),
+            location,
+            owners: Vec::new().into(),
+            qualified_name: "".into(),
+            origin_module: "".into(),
+            source_file: "".into(),
+            standard_library: false,
+        }
+    }
+
+    fn export_value_transcript(location: Location) -> crate::ExportValueTranscript {
+        crate::ExportValueTranscript {
+            location,
+            query_name: "".into(),
+            target: "".into(),
+            declaration: None,
+            value: crate::InvocationValueFact {
+                type_descriptor: None,
+                callability: crate::Callability::Unknown,
+                constructability: crate::InvocationConstructability::Unknown,
+                primitive: crate::ValuePrimitiveDomain::default(),
+                alternatives: Vec::new(),
+                partitions: Vec::new(),
+                open_reasons: Vec::new(),
+            },
+            callable_paths: Vec::new(),
+            call_signature: None,
+            call_signatures: Vec::new(),
+            implementation: None,
+            local_declaration: None,
+            complete: false,
+            open_reasons: Vec::new(),
+        }
+    }
+
+    fn uncensused_form(location: Location) -> crate::UncensusedInvokingForm {
+        crate::UncensusedInvokingForm {
+            kind: crate::UncensusedInvokingFormKind::TaggedTemplate,
+            node_kind: "TaggedTemplateExpression".into(),
+            location,
+            reach: crate::Reachability::Reachable,
+            enclosing_callable: None,
+            captured: false,
+        }
+    }
+
+    fn export_value_demand(location: Location) -> crate::ExportValueDemand {
+        crate::ExportValueDemand {
+            location,
+            implementation_location: None,
+            local_declaration_location: None,
+            callable_depth: 0,
+        }
+    }
+
+    /// The two per-row invariants a consumer reads without re-deriving. Both
+    /// are cheap and both are load-bearing: `captured` is the boolean form of
+    /// `enclosing_callable`'s presence, so a row that disagrees with itself
+    /// would let a captured form read as an executed one; and `node_kind` is
+    /// the *only* description an `unclassified-invoking-form` row carries, so
+    /// an empty one turns the refusal row into an anonymous one.
+    #[test]
+    fn uncensused_form_rows_must_agree_with_themselves_and_name_their_node_kind() {
+        let mut transcript = implementation_transcript(span("/p/a.ts", 0, 40));
+        transcript
+            .uncensused_invoking_forms
+            .push(uncensused_form(span("/p/a.ts", 10, 20)));
+        validate_implementation_transcript(&transcript).expect("a well-formed row is accepted");
+
+        let mut claims_capture = transcript.clone();
+        claims_capture.uncensused_invoking_forms[0].captured = true;
+        assert!(validate_implementation_transcript(&claims_capture).is_err());
+
+        let mut carries_a_callable = transcript.clone();
+        carries_a_callable.uncensused_invoking_forms[0].enclosing_callable =
+            Some(span("/p/a.ts", 5, 30));
+        assert!(validate_implementation_transcript(&carries_a_callable).is_err());
+
+        let mut anonymous = transcript;
+        anonymous.uncensused_invoking_forms[0].node_kind = "".into();
+        assert!(validate_implementation_transcript(&anonymous).is_err());
+    }
+
+    /// Presence has to agree with the demand in both directions, and the
+    /// answer's own location has to be the demanded one.
+    #[test]
+    fn local_declaration_presence_and_location_follow_the_demand() {
+        let demanded = span("/p/a.ts", 10, 40);
+        let mut demand = export_value_demand(span("/p/a.ts", 0, 5));
+        let transcript = export_value_transcript(span("/p/a.ts", 0, 5));
+        validate_local_declaration_binding(0, &demand, &transcript)
+            .expect("neither side asked for a local declaration");
+
+        demand.local_declaration_location = Some(demanded.clone());
+        assert!(
+            validate_local_declaration_binding(0, &demand, &transcript).is_err(),
+            "a demand that asked for a local declaration and got none must refuse"
+        );
+
+        let mut unasked = transcript.clone();
+        unasked.local_declaration = Some(implementation_transcript(demanded.clone()));
+        assert!(
+            validate_local_declaration_binding(
+                0,
+                &export_value_demand(span("/p/a.ts", 0, 5)),
+                &unasked
+            )
+            .is_err(),
+            "a local declaration for a demand that asked for none must refuse"
+        );
+
+        let mut wrong_span = transcript.clone();
+        wrong_span.local_declaration = Some(implementation_transcript(span("/p/a.ts", 50, 80)));
+        assert!(validate_local_declaration_binding(0, &demand, &wrong_span).is_err());
+
+        let mut wrong_file = transcript.clone();
+        wrong_file.local_declaration = Some(implementation_transcript(span("/p/b.ts", 10, 40)));
+        assert!(validate_local_declaration_binding(0, &demand, &wrong_file).is_err());
+
+        let mut exact = transcript;
+        exact.local_declaration = Some(implementation_transcript(demanded));
+        validate_local_declaration_binding(0, &demand, &exact)
+            .expect("the demanded location, echoed back");
+    }
+
+    /// The echo above binds nothing on its own — the producer copies the
+    /// demand into it. This is the half it does not copy: the declaration the
+    /// checker resolved must sit inside the demanded bytes, and its name must
+    /// agree with the queried one.
+    #[test]
+    fn local_declaration_binds_through_the_resolved_declaration() {
+        let demanded = span("/p/a.ts", 10, 40);
+        let mut demand = export_value_demand(span("/p/a.ts", 0, 5));
+        demand.local_declaration_location = Some(demanded.clone());
+
+        // A named function resolves to its *identifier*, which is inside the
+        // declaration rather than equal to it, so containment is the check.
+        let mut inside = export_value_transcript(span("/p/a.ts", 0, 5));
+        let mut local = implementation_transcript(demanded.clone());
+        local.query_name = "helper".into();
+        local.declaration = Some(resolved_declaration("helper", span("/p/a.ts", 19, 25)));
+        inside.local_declaration = Some(local.clone());
+        validate_local_declaration_binding(0, &demand, &inside)
+            .expect("resolved inside the demand");
+
+        // An anonymous `const helper = () => …` resolves to the arrow itself,
+        // which is the demanded span exactly.
+        let mut equal = inside.clone();
+        equal.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("helper", demanded.clone()));
+        validate_local_declaration_binding(0, &demand, &equal).expect("resolved as the demand");
+
+        // The fabricated answer the echo cannot catch: span A is echoed while
+        // the resolved declaration names span B.
+        let mut elsewhere = inside.clone();
+        elsewhere.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("other", span("/p/a.ts", 60, 66)));
+        assert!(validate_local_declaration_binding(0, &demand, &elsewhere).is_err());
+
+        let mut other_file = inside.clone();
+        other_file.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("helper", span("/p/b.ts", 19, 25)));
+        assert!(validate_local_declaration_binding(0, &demand, &other_file).is_err());
+
+        let mut renamed = inside;
+        renamed.local_declaration.as_mut().unwrap().declaration =
+            Some(resolved_declaration("other", span("/p/a.ts", 19, 25)));
+        assert!(
+            validate_local_declaration_binding(0, &demand, &renamed).is_err(),
+            "queryName and the resolved declaration's name must agree"
+        );
+    }
+
+    /// The kind vocabulary is closed, and closed means the *whole transcript*
+    /// is rejected rather than the row degrading to an unknown one. A row of
+    /// unknown kind would keep every other field of that row in play, and a
+    /// census would have to decide what an unnamed form permits — which is
+    /// exactly the question the enum exists to refuse.
+    #[test]
+    fn an_unrecognized_invoking_form_kind_rejects_the_whole_transcript() {
+        use serde::Serialize;
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct WireForm<'a> {
+            kind: &'a str,
+            node_kind: &'a str,
+            location: Location,
+            reach: crate::Reachability,
+        }
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct WireTranscript<'a> {
+            location: Location,
+            uncensused_invoking_forms: Vec<WireForm<'a>>,
+        }
+
+        let encoded = |kind: &str| {
+            crate::encode(&WireTranscript {
+                location: span("/p/a.ts", 0, 40),
+                uncensused_invoking_forms: vec![WireForm {
+                    kind,
+                    node_kind: "TaggedTemplateExpression",
+                    location: span("/p/a.ts", 10, 20),
+                    reach: crate::Reachability::Reachable,
+                }],
+            })
+            .expect("encode the wire transcript")
+        };
+
+        let accepted: crate::ExportImplementationTranscript =
+            crate::decode(&encoded("tagged-template")).expect("a named kind decodes");
+        assert_eq!(
+            accepted.uncensused_invoking_forms[0].kind,
+            crate::UncensusedInvokingFormKind::TaggedTemplate
+        );
+        assert!(
+            crate::decode::<crate::ExportImplementationTranscript>(&encoded("not-a-kind")).is_err(),
+            "an unrecognized kind must fail the transcript, not the row"
+        );
     }
 }

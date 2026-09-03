@@ -166,6 +166,14 @@ func (p *project) exportValueTranscriptLocked(
 		)
 		transcript.Implementation = &implementation
 	}
+	if demand.LocalDeclarationLocation != nil {
+		local := p.localDeclarationImplementationTranscriptLocked(
+			ctx,
+			*demand.LocalDeclarationLocation,
+			demand.CallableDepth,
+		)
+		transcript.LocalDeclaration = &local
+	}
 	transcript.Complete = true
 	return transcript
 }
@@ -242,12 +250,192 @@ func (p *project) exportImplementationTranscriptLocked(
 	transcript.ControlFlow = p.controlFlowCensusLocked(implementation)
 	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
 	transcript.Calls = p.implementationCallCensusLocked(implementation)
+	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
 	if len(transcript.ControlFlow.Unsupported) != 0 {
 		transcript.OpenReasons = append(transcript.OpenReasons, "controlFlowUnsupported")
 		return transcript
 	}
 	transcript.Complete = true
 	return transcript
+}
+
+// localDeclarationImplementationTranscriptLocked answers a demand that names a
+// function-like declaration by its exact source range, rather than by an
+// identifier that resolves to it.
+//
+// It exists because a census must recurse into module-local helpers, and
+// exportImplementationTranscriptLocked cannot reach one: that path starts at an
+// identifier, resolves its symbol, and takes the implementation of its single
+// call signature — machinery that presupposes a binding some export names. A
+// helper nothing exports has no such binding.
+//
+// Everything it refuses, it refuses by open reason and never by answering a
+// transcript about some other declaration:
+//
+//   - The accepted program resolved no file at that path, or the byte range is
+//     outside it or off a UTF-8 boundary: `sourceUnavailable`. This is a
+//     statement about the *program*, and by itself it does not separate a file
+//     the snapshot carries as runtime source from a `lib.d.ts` or a
+//     dependency's declaration file, which the program also holds — hence the
+//     next reason.
+//   - The file is in the program but carries no runtime bytes, i.e. it is a
+//     declaration file: `declarationOutsideSnapshot`. A `.d.ts` has no body to
+//     census, and a census that recursed into one would be reading a
+//     description of code rather than the code.
+//   - No node in that file has exactly this span, or the node that does is not
+//     function-like: `declarationNotExact`. Containment is not enough; the
+//     span must match in both bytes.
+//   - More than one function-like node has exactly this span:
+//     `declarationAmbiguous`. Nothing in the grammar is known to produce that,
+//     and a demand that hits it is refused rather than resolved by picking.
+//   - The declaration has no body: `implementationUnavailable`.
+//   - The declaration the checker resolves from the located node's own symbol
+//     does not sit inside the demanded span: `declarationIdentityUnbound`. See
+//     below.
+//
+// **What binds the answer to the demand, and what does not.** The transcript's
+// Location is the requested location *verbatim*, so on its own it binds
+// nothing at all: a producer answering about a different helper would echo the
+// demand just the same. The binding is Declaration, whose location the checker
+// derives independently — from the located declaration's own name node, via
+// resolvedDeclaration — and which must name the demanded file and lie inside
+// the demanded span. It is a containment rather than an equality because a
+// named function's resolved location is its *identifier*, while an anonymous
+// `const helper = () => …` resolves to the arrow itself. The client repeats
+// this comparison, and additionally requires QueryName and the resolved
+// declaration's name to agree where both are populated.
+func (p *project) localDeclarationImplementationTranscriptLocked(
+	ctx context.Context,
+	location typefacts.Location,
+	callableDepth int,
+) typefacts.ExportImplementationTranscript {
+	transcript := typefacts.ExportImplementationTranscript{Location: location}
+	sourceFile, err := p.sourceFileFor(location)
+	if err != nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "sourceUnavailable")
+		return transcript
+	}
+	// sourceFileFor accepts any file of the accepted program, which includes
+	// every `lib.*.d.ts` and every dependency declaration file. Those are not
+	// the snapshot's runtime source — the set the producer publishes as
+	// Sources() is exactly the program's non-declaration files — and an
+	// implementation census over a declaration file would be a census of a
+	// description.
+	if sourceFile.IsDeclarationFile || !p.isCurrentSourceFile(sourceFile) {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationOutsideSnapshot")
+		return transcript
+	}
+	matches := exactFunctionLikeDeclarationsAt(sourceFile, location)
+	if len(matches) == 0 {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationNotExact")
+		return transcript
+	}
+	if len(matches) > 1 {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationAmbiguous")
+		return transcript
+	}
+	implementation := matches[0]
+	if implementation.Body() == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "implementationUnavailable")
+		return transcript
+	}
+	// The declared name, when there is one, is what names the symbol; a
+	// `const helper = () => …` carries its name on the enclosing variable
+	// declaration instead, which is the one indirection taken here. An
+	// anonymous callable resolves no symbol, and the transcript stays open on
+	// `symbolUnresolved` rather than describing a body it cannot identify.
+	name := implementation.Name()
+	if name == nil {
+		if parent := implementation.Parent; parent != nil && ast.IsVariableDeclaration(parent) {
+			name = parent.Name()
+		}
+	}
+	if name == nil || !ast.IsIdentifier(name) {
+		transcript.OpenReasons = append(transcript.OpenReasons, "symbolUnresolved")
+		return transcript
+	}
+	transcript.QueryName = name.Text()
+	target := p.canonicalSymbol(p.checker.GetSymbolAtLocation(name))
+	if target == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "symbolUnresolved")
+		return transcript
+	}
+	transcript.Target = p.idFor(target)
+	transcript.Declaration = p.resolvedDeclaration(nil, implementation, target)
+	if transcript.Declaration == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "declarationUnavailable")
+		return transcript
+	}
+	// The identity binding. Location is the demand echoed back, so it proves
+	// nothing by itself; this is the comparison that does, because the resolved
+	// declaration's own location comes from the checker rather than from the
+	// demand.
+	if !locationEncloses(location, transcript.Declaration.Location) {
+		transcript.OpenReasons = append(
+			transcript.OpenReasons, "declarationIdentityUnbound",
+		)
+		return transcript
+	}
+	signature := p.checker.GetSignatureFromDeclaration(implementation)
+	if signature == nil {
+		transcript.OpenReasons = append(transcript.OpenReasons, "callSignatureNotUnique")
+		return transcript
+	}
+	selected := p.selectedSignatureLocked(
+		signature, implementation, target, typefacts.CallKindCall, callableDepth,
+	)
+	transcript.Signature = &selected
+	transcript.ParameterUses = p.parameterUseCensusLocked(ctx, implementation)
+	transcript.ControlFlow = p.controlFlowCensusLocked(implementation)
+	transcript.CallableReturns = p.callableReturnCensusesLocked(implementation)
+	transcript.Calls = p.implementationCallCensusLocked(implementation)
+	transcript.UncensusedInvokingForms = p.uncensusedInvokingFormCensusLocked(implementation)
+	if len(transcript.ControlFlow.Unsupported) != 0 {
+		transcript.OpenReasons = append(transcript.OpenReasons, "controlFlowUnsupported")
+		return transcript
+	}
+	transcript.Complete = true
+	return transcript
+}
+
+// locationEncloses answers whether inner names the same file as outer and
+// falls inside its byte range, endpoints included.
+func locationEncloses(outer typefacts.Location, inner typefacts.Location) bool {
+	return inner.Path == outer.Path &&
+		outer.StartByte <= inner.StartByte && inner.EndByte <= outer.EndByte
+}
+
+// exactFunctionLikeDeclarationsAt collects every function-like declaration in
+// one file whose source range is exactly the demanded one. It returns all of
+// them rather than the first so that an ambiguous demand can be refused as
+// ambiguous instead of silently resolved.
+func exactFunctionLikeDeclarationsAt(
+	sourceFile *ast.SourceFile,
+	location typefacts.Location,
+) []*ast.Node {
+	var matches []*ast.Node
+	var visit func(*ast.Node)
+	visit = func(node *ast.Node) {
+		if node == nil {
+			return
+		}
+		nodeAt := nodeLocation(node)
+		if nodeAt.StartByte == location.StartByte && nodeAt.EndByte == location.EndByte &&
+			nodeAt.Path == location.Path && ast.IsFunctionLikeDeclaration(node) {
+			matches = append(matches, node)
+		}
+		// A node whose range cannot contain the demanded one holds no
+		// descendant that can either, so the walk prunes on containment.
+		node.ForEachChild(func(child *ast.Node) bool {
+			childAt := nodeLocation(child)
+			if childAt.StartByte <= location.StartByte && location.EndByte <= childAt.EndByte {
+				visit(child)
+			}
+			return false
+		})
+	}
+	visit(sourceFile.AsNode())
+	return matches
 }
 
 // callableReturnCensusesLocked records the return-carry edges owned by every
@@ -706,6 +894,13 @@ func exportValueDemandDigest(demands []typefacts.ExportValueDemand) string {
 			hashField(hash, demand.ImplementationLocation.Path)
 			hashField(hash, strconv.Itoa(demand.ImplementationLocation.StartByte))
 			hashField(hash, strconv.Itoa(demand.ImplementationLocation.EndByte))
+		}
+		if demand.LocalDeclarationLocation == nil {
+			hashField(hash, "")
+		} else {
+			hashField(hash, demand.LocalDeclarationLocation.Path)
+			hashField(hash, strconv.Itoa(demand.LocalDeclarationLocation.StartByte))
+			hashField(hash, strconv.Itoa(demand.LocalDeclarationLocation.EndByte))
 		}
 		hashField(hash, strconv.Itoa(demand.CallableDepth))
 	}

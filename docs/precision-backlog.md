@@ -1,5 +1,205 @@
 # Precision backlog
 
+## The producer names the invoking forms the call census does not record, and can reach a module-local declaration; no consumer reads either yet (2026-09-03)
+
+The producer half of the implementation census
+(`docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
+§ 4.1). Handshake protocol 13 → 14, schema digest
+`sha256:1e85e91a…866ec` → `sha256:0d246a6c…96fc4`. Full reasoning in
+`docs/typefacts/adr/0026-v1-uncensused-invoking-forms-and-local-declaration-transcripts.md`.
+
+**What changed.**
+
+- `ExportImplementationTranscript.uncensusedInvokingForms` names, per form,
+  every syntactic position in the walked body that can invoke user code and that
+  `calls` does not record — `calls` holds `CallExpression` and `NewExpression`
+  only. Twelve closed kinds: `tagged-template`, `get-accessor`, `set-accessor`,
+  `property-access-unknown-accessor`, `decorator`, `iteration-protocol`,
+  `using-dispose`, `instanceof`, `await-then`, `coercion`, `jsx-element`, and
+  the catch-all `unclassified-invoking-form`. The classifier's **default is the
+  catch-all**: a node below the compiler's own `KindFirstNode` is a token and
+  invokes nothing, a named kind gets its kind, a kind on the reviewed
+  `nonInvokingNodeKinds` list (123 entries; 166 token kinds sit below
+  `KindFirstNode`) gets no row, and everything else refuses by node
+  kind name. A kind a future compiler revision adds therefore refuses on arrival.
+  Position is part of the classification, not just kind: an array literal, a
+  property assignment, and a shorthand property assignment are values in one
+  position and destructuring patterns in another, so `[a, b] = src` records
+  `iteration-protocol` and `({ a } = src)` records the accessor its member
+  reads, while `const o = { a }` records nothing.
+- `ExportValueDemand.localDeclarationLocation`, answered by
+  `ExportValueTranscript.localDeclaration`, returns an implementation transcript
+  for the function-like declaration at an **exact** source range — the only way
+  to reach a declaration no export names, which is most of what a census
+  recurses into. Refusals are by open reason (`declarationNotExact`,
+  `declarationAmbiguous`, `implementationUnavailable`, `sourceUnavailable`,
+  `declarationOutsideSnapshot`, `symbolUnresolved`,
+  `declarationIdentityUnbound`). The client refuses an answer whose location
+  differs from the demand's, an answer for a demand that asked for none, an
+  absence for a demand that asked for one, and an answer whose *resolved*
+  declaration is not inside the demanded span or whose name disagrees with the
+  queried one.
+
+**Precision status: nothing moved, and that is the intended state.** No
+consumer reads either field. Coverage stayed at 94 projects / 546 findings and
+no existing contract-corpus snapshot moved (85 fixtures checked clean before
+the new one was registered; 86 after).
+`require_census_decides_closure` keeps refusing every behavioral call domain by
+name, unchanged.
+
+**Exact remaining fail-closed and uncertifiable cases.**
+
+- **A `Proxy` trap is outside any producer census, permanently.** A trap belongs
+  to the runtime object, not to syntax: `obj.x` on a proxy is the same
+  `PropertyAccessExpression` as `obj.x` on a plain object. No marker is emitted
+  for it — inventing one would claim a census the producer cannot perform — and
+  a consumer whose claim requires that no trap ran must obtain that premise
+  elsewhere. `for…in` is on the non-invoking list for the same reason: plain
+  object reaches nothing, proxy reaches `ownKeys`.
+- **The accessor census is exactly as good as the checker's symbol
+  resolution, and only over declarations that are the bytes that run.** A
+  resolved symbol with no accessor declaration invokes nothing and gets no row;
+  an *unresolved* member gets `property-access-unknown-accessor`, because
+  absence of a symbol is not evidence of a plain data property. So does a
+  member whose declarations are not snapshot runtime source: a `.d.ts`
+  `readonly value: number` may describe a `.js` getter, and reading "no
+  accessor declaration" off a description would certify a getter nobody
+  censused. The default library is the one exception — `lib.*.d.ts` describes
+  the engine, which is not user code — and without it every `arr.length` would
+  refuse. Object spread, JSX prop spread, and an object rest element are
+  recorded under the same kind: they read every own enumerable property of a
+  value whose shape is not statically known. **Still open:** the premise is
+  about *declarations*, so a subclass that redeclares a plain member as a getter
+  is invisible whenever the static type names the base declaration.
+- **An element access refuses unless its key is an exact literal.** The
+  compiler resolves the member from a string or numeric literal argument and
+  from nothing else, so `widget[key]` refuses even where `key`'s type is the
+  literal `"value"`. A literal type is not a literal key; over-refusal is the
+  safe direction.
+- **`await` records unless every constituent is provably engine-resolved.** A
+  primitive has no `then`; a default-library `Promise`'s `then` is the engine's.
+  Everything else records, including a union that carries `then` in one
+  constituent, an unconstrained type parameter, and an index-signature type such
+  as `Record<string, unknown>` that declares no `then` while permitting one at
+  runtime. "The checker found no member" must never read as "no member is
+  reached here".
+- **`complete` was not renamed.** § 4.1 of the plan asked for the field to be
+  relabelled (`resolved_with_control_flow_censused`) so it could not be misread
+  as an enumeration guarantee. It keeps its name and its exact seven-gate
+  meaning; the guarantee lives in the new field, and the distinction is stated
+  in both doc comments and in ADR 0026. Renaming a field every consumer reads is
+  a larger break than this slice takes.
+- **Absence of the marker field is not a guarantee, and no decoder can say so.**
+  `#[serde(default)]` and `omitempty` make an older producer's silence
+  indistinguishable from a present empty list. The **handshake protocol is the
+  only discriminator**, which is why the number moved rather than the field
+  being merely additive. A census must establish the protocol; it must never
+  read the guarantee off the list's emptiness.
+- **Four marker kinds have no checked-in fixture.** `decorator`,
+  `using-dispose`, and `jsx-element` cannot be expressed in a published ES
+  module, and `unclassified-invoking-form`'s only witness among node kinds that
+  can appear in a function body today is `with`, which is a strict-mode error —
+  putting it in a fixture would manufacture a TypeScript diagnostic there. All
+  four are pinned against the compiler in
+  `apps/solid-typefacts/internal/typefacts/tsgo/uncensused_invoking_forms_test.go`.
+- **The fixture's generated snapshots carry no marker rows.**
+  `fixtures/package-contracts/uncensused-invoking-forms`'s `expected.json` and
+  `expected-proposal.json` pin only that the classifier runs over these shapes
+  without changing the contract; `uncensusedInvokingForms` is a transcript
+  field, not a contract field. Twelve of its thirteen exports collapse to one
+  identical summary, which is itself the demonstration. Its README's marker
+  table is pinned separately, by a Go test that reads the fixture's `index.js`
+  off disk and asserts the kinds per export — without which the table would be
+  prose nothing verifies.
+- **The identity binding on a local-declaration answer is not proof about the
+  body.** The producer echoes the demanded location, so the check that matters
+  is the *resolved* declaration lying inside the demanded span, plus the
+  agreement of `queryName` with that declaration's name. Both are derived by
+  the checker rather than copied from the demand. Neither makes a well-formed
+  transcript about some other declaration impossible to construct: the producer
+  is trusted for the contents of a body it censuses, here exactly as for an
+  export's.
+- **`domain-exhaustiveness` is no longer counted certification-ready.** The new
+  `domain-exhaustiveness/implementation-census` row in
+  `docs/package-contract-v2/phase19/proof-demand-authority-audit.json` is
+  "producer extension required", so `certificationReadyFamilies` moves 7 → 6
+  in `scripts/package-contract-phase19.test.mjs`. That is a correction, not a
+  regression: the family was counted ready while closure of a behavioral call
+  domain had no enumeration guarantee anywhere. `families` and `policyDigest`
+  are unmoved — the row joins an existing family.
+
+### Re-measured: 357 verified / 40 exact refusals / 21 not attempted, no verdict moved
+
+The complete 418-probe corpus was re-run with the protocol-14 producer and the
+re-pinned checker (`make ecosystem-benchmark`; report SHA-256
+`8a2d2e7185c6147219dbb7b6e9f5bec8b532f96a63faf9a29a409681af0e66c8`). Every
+verdict and demand digest is identical to the committed report, and the split
+is unchanged at 306 verified-complete / 51 verified-partial. That is the
+expected result of a producer slice that adds fields no consumer reads yet:
+the marker list and the local-declaration transcript are on the wire and in
+every new transcript's identity, but `require_census_decides_closure` still
+refuses every behavioral call domain by name, so `exportsProven` remains 0 of
+3410 until the census slice consumes them.
+
+**That run predates the review-fix pass below, and was not repeated.** The
+review moved the schema digest again (protocol stays 14) and changed what the
+classifier records for destructuring assignments, `await`, element access, and
+accessors whose declarations are not runtime bytes. The report carries no
+producer identity — no schema digest, no handshake protocol, no build id — and
+none of the changed behavior is read by anything: every changed answer lands in
+`uncensusedInvokingForms`, which no consumer reads, or on a local-declaration
+demand, which nothing schedules (`local_declaration_location` is `None` at
+every scheduling site). The export-value demand digest is unchanged. So the
+committed report remains the measurement of record for these verdicts; a
+re-run would be re-measuring the same numbers at the cost of the full corpus.
+
+### Review-fix pass (same day): two soundness holes, one tautology, and the counts
+
+**The protocol stayed at 14, deliberately.** The number discriminates the
+*vocabulary and field presence* a producer speaks, and neither moved: the same
+twelve kinds, the same fields, the same meaning of a present empty list. What
+moved is how much the classifier records inside that vocabulary, always in the
+recording direction. The pairing the protocol would have to refuse — a pre-fix
+producer answering a post-fix consumer, whose silence would now be read as a
+positive claim — is already refused twice over: the certification identity
+check pins the producer's **source-manifest digest** (`verify_buildinfo`,
+`contract_certification/type_facts.rs`), which moves on every producer source
+change and is a strictly finer discriminator than the protocol, and the schema
+digest moved here as well. Bumping to 15 would add a third name for the same
+refusal.
+
+- **`awaitFormLocked` failed open.** It read `GetPropertyOfType(type, "then")
+  == nil` as proof that `await` invoked nothing, which silently cleared a union
+  missing `then` in one constituent, an unconstrained type parameter, and every
+  index-signature type. Now every constituent must be provably engine-resolved.
+- **Destructuring *assignment* was silent.** `[a, b] = src` and
+  `({ a } = src)` are the same node kinds as the value forms, and all four were
+  on the reviewed non-invoking list — so an export whose body drove
+  `Symbol.iterator` or ran a getter through an assignment pattern reported
+  nothing at all. `=` is not a coercing operator, so no other arm saw them
+  either.
+- **The accessor premise was unstated and unsound over a `.d.ts`**; see the
+  accessor bullet above.
+- **The identity binding was a tautology**: the producer echoed the demanded
+  location and the client compared only that. See the identity bullet above.
+- **A local-declaration demand naming a `lib.d.ts` or dependency `.d.ts`** was
+  answered `declarationNotExact` — a statement about the span — because
+  `sourceFileFor` accepts any program file. It now refuses
+  `declarationOutsideSnapshot`.
+- Counts corrected: the reviewed non-invoking list is **123** entries (it lost
+  five: three destructuring kinds now classified by position, `YieldExpression`
+  which the switch already decided, and `JsxText` which is a *token* kind the
+  boundary already cleared), and **166** token kinds sit below
+  `ast.KindFirstNode`. `nodeKind`'s schema keeps `minLength: 1` and no
+  `maxLength`, which is what every string field in
+  `schema/typefacts-v1.schema.json` does.
+- Also fixed while adjacent, and not asked for: an object **rest element**
+  resolved its own identifier as a property key, so `const { ...rest } = src`
+  on a source carrying a `rest` property would have answered about that
+  property and could have cleared the row; and an element access with a
+  **literal** key resolved nothing at all, because the producer queried the
+  access node instead of the literal argument the compiler resolves from.
+
 ## The generator stopped publishing an owner requirement as a resourceless `create`; the `Effect` and `Boundary` roles are withheld, and the validation rule that would forbid the old shape stays out of force (2026-09-03)
 
 The producer half of the `creates` decision below. The generator no longer

@@ -2169,3 +2169,171 @@ fn cancellation_cannot_strand_a_sent_update() {
     assert_eq!(facts.generation(), 2);
     session.close().unwrap();
 }
+
+fn uncensused_forms_project() -> PathBuf {
+    repository_root()
+        .join("apps/solid-typefacts/internal/typefacts/testdata/uncensused-invoking-forms/tsconfig.json")
+        .canonicalize()
+        .unwrap()
+}
+
+fn identifier_location(path: &std::path::Path, source: &str, needle: &str) -> Location {
+    let start = source.find(needle).unwrap();
+    Location {
+        path: path.to_string_lossy().into_owned().into(),
+        start_byte: start as u64,
+        end_byte: (start + needle.len()) as u64,
+    }
+}
+
+/// The uncensused-invoking-form census over the real wire.
+///
+/// The Go producer tests classify every kind in process; what they cannot show
+/// is that the rows survive CBOR, the closed kind enum, and the client's own
+/// validation. Both halves of the field's meaning are pinned here: a tagged
+/// template arrives as a `tagged-template` row, and an export whose body holds
+/// only a plain call arrives with the field *present and empty* — which is the
+/// producer's positive claim, and is only distinguishable from an older
+/// producer's silence by the handshake protocol the session already refuses on.
+#[test]
+fn export_value_transcripts_carry_the_uncensused_invoking_form_census() {
+    let project = uncensused_forms_project();
+    let source_path = project.parent().unwrap().join("forms.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let tagged = identifier_location(&source_path, &source, "taggedForm");
+    let plain = identifier_location(&source_path, &source, "plainCallForm");
+    let answer = session
+        .export_values(&[
+            typefacts::ExportValueDemand {
+                location: tagged.clone(),
+                implementation_location: Some(tagged),
+                local_declaration_location: None,
+                callable_depth: 0,
+            },
+            typefacts::ExportValueDemand {
+                location: plain.clone(),
+                implementation_location: Some(plain),
+                local_declaration_location: None,
+                callable_depth: 0,
+            },
+        ])
+        .unwrap();
+
+    let tagged_implementation = answer.transcripts[0].implementation.as_ref().unwrap();
+    assert_eq!(
+        tagged_implementation
+            .uncensused_invoking_forms
+            .iter()
+            .map(|form| form.kind)
+            .collect::<Vec<_>>(),
+        vec![typefacts::UncensusedInvokingFormKind::TaggedTemplate]
+    );
+    let form = &tagged_implementation.uncensused_invoking_forms[0];
+    assert_eq!(&*form.node_kind, "TaggedTemplateExpression");
+    assert!(!form.captured && form.enclosing_callable.is_none());
+    assert_eq!(form.reach, typefacts::Reachability::Reachable);
+    // The tagged template is not in `calls`, which is the whole reason the
+    // marker exists: a census reading `calls` alone would see an export that
+    // invokes nothing.
+    assert!(tagged_implementation.calls.is_empty());
+
+    let plain_implementation = answer.transcripts[1].implementation.as_ref().unwrap();
+    assert!(plain_implementation.uncensused_invoking_forms.is_empty());
+    assert_eq!(plain_implementation.calls.len(), 1);
+
+    session.close().unwrap();
+}
+
+/// A transcript for a module-local declaration, and the identity binding that
+/// stops one helper's transcript from answering a demand about another.
+///
+/// The client compares the answer's location against the demanded one, so the
+/// second half of this test — a demand for a location that is *not* a
+/// function-like declaration — must come back as a refusing transcript at the
+/// demanded location rather than as a transcript about something else.
+#[test]
+fn export_value_demand_reaches_a_module_local_declaration_by_exact_location() {
+    let project = uncensused_forms_project();
+    let source_path = project.parent().unwrap().join("forms.ts");
+    let source = fs::read_to_string(&source_path).unwrap();
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let entry = identifier_location(&source_path, &source, "export function entry");
+    let entry = Location {
+        path: entry.path.clone(),
+        start_byte: entry.start_byte + "export function ".len() as u64,
+        end_byte: entry.end_byte,
+    };
+    let helper_start = source.find("function localHelper").unwrap();
+    let helper_end = source[helper_start..].find("\n}\n").unwrap() + helper_start + 2;
+    let helper = Location {
+        path: source_path.to_string_lossy().into_owned().into(),
+        start_byte: helper_start as u64,
+        end_byte: helper_end as u64,
+    };
+
+    let answer = session
+        .export_values(&[typefacts::ExportValueDemand {
+            location: entry.clone(),
+            implementation_location: None,
+            local_declaration_location: Some(helper.clone()),
+            callable_depth: 0,
+        }])
+        .unwrap();
+    let local = answer.transcripts[0].local_declaration.as_ref().unwrap();
+    assert_eq!(local.location, helper);
+    assert_eq!(&*local.query_name, "localHelper");
+    assert!(local.complete, "local declaration transcript: {local:#?}");
+    assert!(local.open_reasons.is_empty());
+    assert_eq!(local.calls.len(), 1);
+    assert_eq!(
+        local.calls[0]
+            .callee_parameter
+            .as_ref()
+            .map(|source| source.parameter_index),
+        Some(0)
+    );
+    assert!(local.uncensused_invoking_forms.is_empty());
+
+    // The helper's *name*, which is inside the declaration but is not the
+    // declaration. Containment is not a match.
+    let name_start = source.find("localHelper").unwrap();
+    let name = Location {
+        path: source_path.to_string_lossy().into_owned().into(),
+        start_byte: name_start as u64,
+        end_byte: (name_start + "localHelper".len()) as u64,
+    };
+    let refused = session
+        .export_values(&[typefacts::ExportValueDemand {
+            location: entry,
+            implementation_location: None,
+            local_declaration_location: Some(name.clone()),
+            callable_depth: 0,
+        }])
+        .unwrap();
+    let refusal = refused.transcripts[0].local_declaration.as_ref().unwrap();
+    assert_eq!(refusal.location, name);
+    assert!(!refusal.complete);
+    assert!(
+        refusal
+            .open_reasons
+            .iter()
+            .any(|reason| &**reason == "declarationNotExact"),
+        "open reasons: {:?}",
+        refusal.open_reasons
+    );
+
+    session.close().unwrap();
+}

@@ -4,9 +4,41 @@ import "fmt"
 
 const TypeFactsSchemaVersionV1 uint64 = 1
 
-// TypeFactsHandshakeProtocol is 13 because the implementation call census now
-// carries calleeSources: the traced value provenance of the *callee
-// expression*, from the same returnValueSourcesLocked walk and under the same
+// TypeFactsHandshakeProtocol is 14 because the producer now carries the two
+// facts an implementation census needs and neither the call census nor
+// Complete could carry.
+//
+// UncensusedInvokingForms on ExportImplementationTranscript names, per form,
+// every syntactic position that can invoke user code and that Calls does not
+// record — Calls holds CallExpression and NewExpression only. Its classifier's
+// default is refusal: a node kind that is neither classified nor on the
+// reviewed list of provably non-invoking kinds arrives as
+// unclassified-invoking-form, so a form nobody has thought of refuses rather
+// than passing in silence.
+//
+// That is the whole reason the number moves rather than the field being merely
+// additive. An absent list and a present empty one are different facts — no
+// opinion versus "every form I walked was a call, a construction, or provably
+// non-invoking" — and no decoder can tell them apart, because the field's
+// absence decodes as empty. A protocol-13 producer's silence would therefore
+// read to a protocol-14 consumer as the positive claim, which is the unsound
+// direction. The handshake is the discriminator, so the handshake has to move.
+// In the other direction a protocol-13 consumer rejects a protocol-14
+// transcript outright: its ImplementationCall and transcript types deny
+// unknown fields.
+//
+// LocalDeclarationLocation on ExportValueDemand, answered by LocalDeclaration
+// on ExportValueTranscript, asks for an implementation transcript of the
+// function-like declaration at an exact source range. A census recurses into
+// module-local helpers, and ImplementationLocation cannot reach one: it starts
+// from an identifier and resolves through the export's runtime binding. The
+// field is hashed into the export-value demand digest, so a protocol-13
+// producer would answer a protocol-14 demand under a digest it computes
+// differently.
+//
+// Protocol 13 added calleeSources to the implementation call census: the
+// traced value provenance of the *callee expression*, from the same
+// returnValueSourcesLocked walk and under the same
 // gates that answer argumentSources for an argument. It answers "what created
 // the value being called", which no other field on ImplementationCall answers
 // — Target, TargetName, TargetModule, Declaration and CalleeParameter state the
@@ -30,8 +62,8 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 // Protocol 11 separated the members a value declares from the members it
 // carries only through the compiler's apparent-type augmentation.
 const (
-	TypeFactsHandshakeProtocol uint64 = 13
-	TypeFactsSchemaSHA256             = "sha256:1e85e91a37409d8c4d1527ac9778155e10f6ff400cfa2c7e5dbeab0f771866ec"
+	TypeFactsHandshakeProtocol uint64 = 14
+	TypeFactsSchemaSHA256             = "sha256:0d246a6cf7682e3f756df3ce54569cfca2dfeb57006a3198dabad51e43f96fc4"
 )
 
 type ServiceHandshake struct {

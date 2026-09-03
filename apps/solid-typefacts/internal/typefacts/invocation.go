@@ -44,7 +44,31 @@ type InvocationDemand struct {
 type ExportValueDemand struct {
 	Location               Location  `cbor:"location" json:"location"`
 	ImplementationLocation *Location `cbor:"implementationLocation,omitempty" json:"implementationLocation,omitempty"`
-	CallableDepth          int       `cbor:"callableDepth,omitempty" json:"callableDepth,omitempty"`
+	// LocalDeclarationLocation asks for an implementation transcript of the
+	// function-like declaration whose source range is *exactly* this location,
+	// inside the analyzed snapshot. It is the only way to reach a declaration
+	// that no export names: ImplementationLocation above starts from an
+	// identifier and resolves through the export's runtime binding, so a
+	// module-local helper is unreachable through it.
+	//
+	// The location names the *declaration node*, not an identifier, and the
+	// match is exact in both bytes: a location that merely contains a
+	// function-like declaration, or that names one whose span differs by a
+	// byte, refuses. So does a location in a file the program holds but the
+	// snapshot does not carry as runtime source — every `lib.*.d.ts` and every
+	// dependency `.d.ts` is a program file, and none of them has bytes to
+	// census.
+	//
+	// The answer's LocalDeclaration carries the requested location back as its
+	// own Location. That echo is *not* the identity binding: a producer
+	// answering about a different helper would copy the demand just the same.
+	// The binding is the answer's Declaration, whose location the checker
+	// derives from the located declaration's own symbol and which must name the
+	// demanded file and lie inside the demanded span, together with the
+	// agreement of QueryName and that declaration's name. See
+	// localDeclarationImplementationTranscriptLocked.
+	LocalDeclarationLocation *Location `cbor:"localDeclarationLocation,omitempty" json:"localDeclarationLocation,omitempty"`
+	CallableDepth            int       `cbor:"callableDepth,omitempty" json:"callableDepth,omitempty"`
 }
 
 type ArgumentBindingDisposition string
@@ -222,8 +246,14 @@ type ExportValueTranscript struct {
 	// every one of them could be described.
 	CallSignatures []SelectedSignature             `cbor:"callSignatures,omitempty" json:"callSignatures,omitempty"`
 	Implementation *ExportImplementationTranscript `cbor:"implementation,omitempty" json:"implementation,omitempty"`
-	Complete       bool                            `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons    []string                        `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	// LocalDeclaration answers ExportValueDemand.LocalDeclarationLocation. It
+	// is present exactly when that field was set, and its Location is the
+	// requested location verbatim — which is why the Location alone binds
+	// nothing, and why the client also requires the resolved Declaration to
+	// sit inside the demanded span. See LocalDeclarationLocation above.
+	LocalDeclaration *ExportImplementationTranscript `cbor:"localDeclaration,omitempty" json:"localDeclaration,omitempty"`
+	Complete         bool                            `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons      []string                        `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
 }
 
 type ExportImplementationTranscript struct {
@@ -241,8 +271,161 @@ type ExportImplementationTranscript struct {
 	// nesting as execution.
 	CallableReturns []CallableReturnCensus `cbor:"callableReturns,omitempty" json:"callableReturns,omitempty"`
 	Calls           []ImplementationCall   `cbor:"calls,omitempty" json:"calls,omitempty"`
-	Complete        bool                   `cbor:"complete,omitempty" json:"complete,omitempty"`
-	OpenReasons     []string               `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+	// UncensusedInvokingForms names, per form, every syntactic position in this
+	// implementation that can invoke user code and that Calls does *not*
+	// record. Calls holds CallExpression and NewExpression only; everything
+	// else that reaches a callable — a tagged template, an accessor behind a
+	// property access, the iteration protocol, a decorator, `Symbol.dispose`,
+	// `Symbol.hasInstance`, a thenable's `then`, a coercion, a JSX lowering —
+	// appears here instead, so a consumer that must enumerate every invoking
+	// form refuses by name rather than concluding from silence.
+	//
+	// Its classifier's default is refusal, not silence: a node kind that is
+	// neither classified into one of the named kinds nor on the reviewed
+	// list of kinds that provably cannot invoke user code is recorded as
+	// UncensusedUnclassifiedInvokingForm with its node kind name. A kind a
+	// future compiler revision adds therefore refuses on arrival.
+	//
+	// Complete says nothing about this field, and this field says nothing
+	// about Complete: the two are independent. An *empty* list on a transcript
+	// that carries the field is the positive claim "every form I walked was
+	// either a call, a construction, or provably non-invoking"; an *absent*
+	// field is a producer that has no opinion, which every consumer must
+	// refuse. The handshake protocol is what separates the two — see
+	// TypeFactsHandshakeProtocol.
+	UncensusedInvokingForms []UncensusedInvokingForm `cbor:"uncensusedInvokingForms,omitempty" json:"uncensusedInvokingForms,omitempty"`
+	Complete                bool                     `cbor:"complete,omitempty" json:"complete,omitempty"`
+	OpenReasons             []string                 `cbor:"openReasons,omitempty" json:"openReasons,omitempty"`
+}
+
+// UncensusedInvokingFormKind is a closed enumeration. A consumer that receives
+// a string outside it must reject the whole transcript rather than treat the
+// row as unknown: a producer that invented a kind is a producer this vocabulary
+// does not describe.
+type UncensusedInvokingFormKind string
+
+const (
+	// UncensusedTaggedTemplate is a TaggedTemplateExpression. The tag function
+	// is invoked with the strings array and the substitutions. An `html`
+	// template counts here and nowhere else.
+	UncensusedTaggedTemplate UncensusedInvokingFormKind = "tagged-template"
+	// UncensusedGetAccessor is a property access, element access, or
+	// destructured member the checker resolved to a symbol with a get-accessor
+	// declaration, in a position that reads it.
+	UncensusedGetAccessor UncensusedInvokingFormKind = "get-accessor"
+	// UncensusedSetAccessor is the same, with a set-accessor declaration, in an
+	// assignment target position.
+	UncensusedSetAccessor UncensusedInvokingFormKind = "set-accessor"
+	// UncensusedPropertyAccessUnknownAccessor is a member the producer cannot
+	// answer for. Three ways that happens: the checker resolved no symbol at
+	// all (an `any`-typed receiver, a computed key, an index signature, an
+	// element access whose key is not an exact literal); it resolved
+	// declarations that are not the snapshot's runtime bytes, such as a `.d.ts`
+	// `readonly value` that may perfectly well describe a `.js` getter (the
+	// default library excepted, since it describes the engine rather than user
+	// code); or the form reads every own enumerable property of a value whose
+	// shape is not statically known — object spread, JSX prop spread, and an
+	// object rest element.
+	//
+	// It is recorded rather than dropped because the producer genuinely cannot
+	// tell whether the member is an accessor: without a symbol there are no
+	// declarations to inspect, with only a declaration file there are no bytes,
+	// and neither absence is evidence that the property is a plain data
+	// property. Dropping it would make silence carry the claim, which is the
+	// one thing this field exists to prevent. A member the checker *does*
+	// resolve, to runtime declarations none of which is an accessor, is a plain
+	// data property and is recorded nowhere.
+	UncensusedPropertyAccessUnknownAccessor UncensusedInvokingFormKind = "property-access-unknown-accessor"
+	// UncensusedDecorator is a Decorator application. The decorator expression
+	// is invoked when the decorated declaration is evaluated.
+	UncensusedDecorator UncensusedInvokingFormKind = "decorator"
+	// UncensusedIterationProtocol is a position that reaches
+	// `Symbol.iterator`/`Symbol.asyncIterator` and the `next`/`return` of the
+	// iterator it answers: `for…of`, `for await…of`, a spread element, an
+	// array binding pattern, an array *assignment* pattern (`[a, b] = src`,
+	// which is an ArrayLiteralExpression the compiler reinterprets), and
+	// `yield*`.
+	UncensusedIterationProtocol UncensusedInvokingFormKind = "iteration-protocol"
+	// UncensusedUsingDispose is a `using` or `await using` declaration list.
+	// Scope exit reaches `Symbol.dispose` or `Symbol.asyncDispose` on every
+	// declared value.
+	UncensusedUsingDispose UncensusedInvokingFormKind = "using-dispose"
+	// UncensusedInstanceOf is an `instanceof` operator, which reaches
+	// `Symbol.hasInstance` on its right operand when that operand defines it.
+	UncensusedInstanceOf UncensusedInvokingFormKind = "instanceof"
+	// UncensusedAwaitThen is an `await` whose operand is not provably resolved
+	// by the engine alone. Awaiting a thenable invokes that object's own
+	// `then`, so the form is recorded unless *every* constituent of the
+	// operand's type is either a primitive — which has no `then` to call — or
+	// a default-library `Promise`, whose `then` is the engine's own. A
+	// `PromiseLike` is recorded, because its `then` is whatever object the
+	// value carries.
+	//
+	// "The type declares no `then`" is deliberately *not* a reason to stay
+	// silent: a union missing it in one constituent carries it in another, an
+	// unconstrained type parameter has no members the checker can enumerate,
+	// and an index-signature type declares none while permitting one at
+	// runtime.
+	UncensusedAwaitThen UncensusedInvokingFormKind = "await-then"
+	// UncensusedCoercion is a template expression or an operator application
+	// whose operand is not provably a non-object, so evaluating it may reach
+	// `Symbol.toPrimitive`, `valueOf`, or `toString`.
+	UncensusedCoercion UncensusedInvokingFormKind = "coercion"
+	// UncensusedJSXElement is a JSX element, self-closing element, or
+	// fragment. Its compiler lowering invokes a component or an accessor, and
+	// the producer records neither the lowering nor what it invokes.
+	UncensusedJSXElement UncensusedInvokingFormKind = "jsx-element"
+	// UncensusedUnclassifiedInvokingForm is the catch-all, and the row this
+	// whole field exists for: a node kind that is neither classified above nor
+	// on the reviewed list of kinds that provably cannot invoke user code.
+	// NodeKind carries the compiler's own name for it. A consumer refuses on
+	// this row unconditionally — there is nothing else it could soundly do
+	// with a form nobody has classified.
+	UncensusedUnclassifiedInvokingForm UncensusedInvokingFormKind = "unclassified-invoking-form"
+)
+
+// UncensusedInvokingForm is one syntactic position that can invoke user code
+// and that the implementation call census does not record.
+//
+// Two invoking forms are deliberately *not* in the enumeration:
+//
+//   - A `Proxy` trap. A trap is a property of the object a value happens to
+//     be at runtime, not of any syntax, so no walk of this implementation can
+//     see it: `obj.x` on a proxy is the same PropertyAccessExpression as
+//     `obj.x` on a plain object. It is out of the producer's reach entirely,
+//     and inventing a marker for it would claim a census the producer cannot
+//     perform. What the producer *can* say is that a property access it could
+//     not resolve is unresolved, which is
+//     UncensusedPropertyAccessUnknownAccessor — that is a statement about the
+//     checker's knowledge, not about proxies. A consumer whose claim requires
+//     that no proxy trap ran must obtain that premise elsewhere.
+//   - An optional call, `f?.(x)`. It is already a CallExpression in the AST,
+//     so the call census records it like any other call.
+type UncensusedInvokingForm struct {
+	Kind UncensusedInvokingFormKind `cbor:"kind" json:"kind"`
+	// NodeKind is the compiler's own name for the node's syntax kind, with the
+	// "Kind" prefix removed. Always populated, and load-bearing for
+	// UncensusedUnclassifiedInvokingForm, where it is the only description of
+	// the form the producer has.
+	NodeKind string   `cbor:"nodeKind" json:"nodeKind"`
+	Location Location `cbor:"location" json:"location"`
+	// Reach comes from the same walk, and therefore the same reachability
+	// notion, as ImplementationCall.Reach.
+	//
+	// Unlike the call census this census applies no jump withholding. A call
+	// inside a region a `break` makes non-universal is dropped there because
+	// its positive Reach would overstate execution; here a dropped row is
+	// silence, which is the failure mode the field exists to prevent, and an
+	// over-optimistic Reach can only cause a consumer to refuse a form that
+	// might not have run. Over-refusal is the safe direction; silence is not.
+	Reach Reachability `cbor:"reach" json:"reach"`
+	// EnclosingCallable is the exact source range of the innermost callable
+	// containing this form, absent when the form sits directly in the
+	// implementation's own body. Captured is true exactly when it is present.
+	// Same discipline as ImplementationCall's two fields, and for the same
+	// reason: lexical containment in a closure is not execution.
+	EnclosingCallable *Location `cbor:"enclosingCallable,omitempty" json:"enclosingCallable,omitempty"`
+	Captured          bool      `cbor:"captured,omitempty" json:"captured,omitempty"`
 }
 
 type ParameterValueSource struct {

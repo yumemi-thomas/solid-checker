@@ -229,6 +229,18 @@ const KindJsxSelfClosingElement = ast.KindJsxSelfClosingElement
 const KindMinusToken = ast.KindMinusToken
 const KindPlusToken = ast.KindPlusToken
 const KindPropertySignature = ast.KindPropertySignature
+
+// KindFirstNode is the compiler's own boundary between tokens — trivia,
+// literals, punctuation, identifiers, and keywords — and the node kinds above
+// them. Everything strictly below it is a token, which is the only way to say
+// "this is not a syntactic construct" without restating a 160-entry list that
+// a compiler bump could silently extend.
+const KindFirstNode = ast.KindFirstNode
+
+// NodeFlagsUsing is set on the declaration list of both `using x = …` and
+// `await using x = …`; the latter additionally sets NodeFlagsConst, which is
+// why testing this one bit covers both spellings.
+const NodeFlagsUsing = ast.NodeFlagsUsing
 const KindQuestionQuestionToken = ast.KindQuestionQuestionToken
 const KindTrueKeyword = ast.KindTrueKeyword
 const KindUndefinedKeyword = ast.KindUndefinedKeyword

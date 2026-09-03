@@ -78,6 +78,7 @@
     "torture-runtime-namespace",
     "typefacts-implementation-transcript",
     "uncaptured-source-return",
+    "uncensused-invoking-forms",
     "unknown-callback-claim",
     "unpublished-conditional-target",
     "unreached-private-obligation",

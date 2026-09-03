@@ -271,13 +271,25 @@ component or accessor.
 Kind and source vocabulary: `validate.rs:1036-1056`. Trigger/`at` and the
 caller-supplied boundary: `solid-js.json`'s `createEffect`, and `render`'s
 `delegated-event`, whose `from` is a resource path rather than a parameter.
-**[Decision 2026-09-03]** the non-call list: the producer's census records
-`ast.IsCallExpression` and `ast.IsNewExpression` only
+**[Decision 2026-09-03]** the non-call list: the producer's *call* census
+records `ast.IsCallExpression` and `ast.IsNewExpression` only
 (`implementationCallCensusLocked`,
-`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go:346`,
-kind filter at `:373-375`), so every form listed here — and every form the list
-has not yet named — must reach a census as an explicit marker that refuses,
-never as silence.
+`apps/solid-typefacts/internal/typefacts/tsgo/export_value_transcripts.go`), so
+every form listed here — and every form the list has not yet named — must reach
+a census as an explicit marker that refuses, never as silence.
+
+**[Landed 2026-09-03, producer half]** that marker exists:
+`ExportImplementationTranscript.uncensusedInvokingForms` (handshake protocol
+14) carries one row per invoking form the call census does not record, over
+twelve closed kinds whose **default is refusal** — a node kind that is neither
+classified nor on the producer's reviewed list of kinds that provably cannot
+invoke user code arrives as `unclassified-invoking-form` with the compiler's own
+node-kind name. Two forms are absent by decision: a `Proxy` trap is a property
+of the runtime value rather than of syntax and is outside any producer census,
+and `f?.(x)` is already a `CallExpression`. No consumer reads the field yet;
+`docs/typefacts/adr/0026-v1-uncensused-invoking-forms-and-local-declaration-transcripts.md`
+carries the vocabulary and the limits, including why an *absent* field is not
+the same fact as a present empty one.
 
 ### reads
 
