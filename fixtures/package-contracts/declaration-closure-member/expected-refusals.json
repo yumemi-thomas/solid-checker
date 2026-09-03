@@ -15,5 +15,6 @@
       "reason": "local runtime module ./phantom.js from ./src/phantom-consumer.ts resolves only to declaration file ./src/phantom.d.ts; the package ships no runtime module under that specifier"
     }
   ],
-  "inapplicable": []
+  "inapplicable": [],
+  "withheldClaims": []
 }

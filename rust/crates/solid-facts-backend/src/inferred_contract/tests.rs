@@ -118,12 +118,16 @@ fn inferred_normalization_keeps_unknowns_local_and_emits_only_open_proposals() {
         returns: ContractClaim::Open,
         ..ContractExport::default()
     };
-    let (proposal, candidates) = normalize_inferred_contract_with_candidates(
+    let normalized = normalize_inferred_contract_with_candidates(
         &inferred(summary),
         &resolution(["read".into()]),
     )
     .unwrap();
-    let export = proposal.artifact_cases()[0].exports.get("read").unwrap();
+    let candidates = normalized.closure_candidates;
+    let export = normalized.contract.artifact_cases()[0]
+        .exports
+        .get("read")
+        .unwrap();
 
     assert!(matches!(
         export.call.claims().returns,
@@ -143,9 +147,15 @@ fn inferred_normalization_keeps_unknowns_local_and_emits_only_open_proposals() {
 }
 
 /// One export carrying exactly the two domains the path bootstrap fabricates
-/// inside a dialect's own archive: a reactive read and an owner-requirement
-/// create.
+/// inside a dialect's own archive: a reactive read and an owner requirement.
 fn bootstrapped_reactive_summary() -> ContractExport {
+    owner_requirement_summary(solid_reactive_ir::OwnerRequirementOperation::Effect)
+}
+
+/// The same summary with the owner requirement's role chosen by the caller.
+fn owner_requirement_summary(
+    operation: solid_reactive_ir::OwnerRequirementOperation,
+) -> ContractExport {
     ContractExport {
         kind: "function".into(),
         reactive_reads: ContractClaim::Known(vec![ContractReactiveRead {
@@ -157,12 +167,22 @@ fn bootstrapped_reactive_summary() -> ContractExport {
             composed_from: None,
         }]),
         owner_requirements: ContractClaim::Known(vec![
-            solid_reactive_ir::ContractOwnerRequirement {
-                operation: solid_reactive_ir::OwnerRequirementOperation::Effect,
-            },
+            solid_reactive_ir::ContractOwnerRequirement { operation },
         ]),
         ..ContractExport::default()
     }
+}
+
+/// One normalization of `owner_requirement_summary(role)` for an ordinary
+/// consuming package, which is the only scope that publishes the domain at all.
+fn normalized_owner_requirement(
+    operation: solid_reactive_ir::OwnerRequirementOperation,
+) -> super::NormalizedInference {
+    normalize_inferred_contract_with_candidates(
+        &inferred(owner_requirement_summary(operation)),
+        &resolution(["read".into()]),
+    )
+    .unwrap()
 }
 
 // The generator's scope decision, both directions, at the demand owner. The
@@ -187,17 +207,25 @@ fn a_dialects_own_archive_publishes_neither_bootstrapped_reads_nor_owner_creates
             "{package_name} must leave creates open, never closed-empty"
         );
         assert!(
+            matches!(export.call.claims().cleanups, KnowledgeSet::Unknown),
+            "{package_name} must leave cleanups open, never closed-empty"
+        );
+        assert!(
             export.call.operations.iter().all(|operation| !matches!(
                 operation.kind,
-                OperationKind::Read | OperationKind::Create
+                OperationKind::Read | OperationKind::Create | OperationKind::Cleanup
             )),
             "{package_name} must emit no read or owner-requirement operation"
         );
     }
 }
 
+/// An ordinary consuming package publishes what it derived. The *cleanup* role
+/// is the only owner-requirement role that has a home in schema version 1, so
+/// this pair is a read operation and a `kind: cleanup` operation -- never a
+/// `create`.
 #[test]
-fn an_ordinary_consuming_package_still_publishes_reads_and_owner_creates() {
+fn an_ordinary_consuming_package_still_publishes_reads_and_owner_cleanups() {
     for package_name in [
         "package",
         "solid-js-signals",
@@ -205,7 +233,9 @@ fn an_ordinary_consuming_package_still_publishes_reads_and_owner_creates() {
         "@solid-primitives/utils",
     ] {
         let proposal = normalize_inferred_contract(
-            &inferred(bootstrapped_reactive_summary()),
+            &inferred(owner_requirement_summary(
+                solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+            )),
             &resolution_for_package(package_name, ["read".into()]),
         )
         .unwrap();
@@ -221,12 +251,160 @@ fn an_ordinary_consuming_package_still_publishes_reads_and_owner_creates() {
                 .iter()
                 .filter(|operation| matches!(
                     operation.kind,
-                    OperationKind::Read | OperationKind::Create
+                    OperationKind::Read | OperationKind::Cleanup
                 ))
                 .count(),
             2,
             "{package_name} must emit both operations"
         );
+        assert!(
+            export
+                .call
+                .operations
+                .iter()
+                .all(|operation| operation.kind != OperationKind::Create),
+            "{package_name} must emit no create for an owner requirement"
+        );
+    }
+}
+
+/// The published cleanup shape, field by field: `kind: cleanup` in the
+/// `cleanups` domain, `source: ambient-at-call` (the caller's owner, not one
+/// this operation made), `requires: required`, `requiresCleanup: required`,
+/// no owner production, and **no resource** -- a resource declaration is a
+/// positive fact (`PositiveFactSubject::Resource`) with no witness on any
+/// axis today, so declaring one would assert what nothing can prove.
+#[test]
+fn a_cleanup_owner_requirement_publishes_a_resourceless_cleanup_operation() {
+    for role in [
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup,
+    ] {
+        let normalized = normalized_owner_requirement(role);
+        assert!(
+            normalized.withheld.is_empty(),
+            "{role:?} is published, so nothing is withheld: {:?}",
+            normalized.withheld
+        );
+        let export = normalized.contract.artifact_cases()[0]
+            .exports
+            .get("read")
+            .unwrap();
+        let cleanups = export.call.claims().cleanups.items().to_vec();
+        assert_eq!(cleanups.len(), 1, "{role:?} must publish one cleanup item");
+        let operation = export.operation(&cleanups[0].0).unwrap();
+        assert_eq!(operation.kind, OperationKind::Cleanup);
+        assert_eq!(
+            operation.owner.source,
+            solid_reactive_ir::contract_semantics::OwnerSource::AmbientAtCall
+        );
+        assert_eq!(
+            operation.owner.requirements.owner,
+            solid_reactive_ir::contract_semantics::Requirement::Required
+        );
+        assert_eq!(
+            operation.owner.requirements.cleanup,
+            solid_reactive_ir::contract_semantics::Requirement::Required
+        );
+        assert!(
+            operation.resources.is_empty(),
+            "{role:?} must name no resource: {:?}",
+            operation.resources
+        );
+        assert!(
+            export.call.resources.is_empty(),
+            "{role:?} must declare no summary resource: {:?}",
+            export.call.resources
+        );
+    }
+}
+
+/// The two roles this generation refuses. Each leaves no operation, no
+/// `Creates` closure candidate, and a *named* withholding record carrying the
+/// export, the role, and the reason -- which is what makes the refusal
+/// distinguishable from a census that found nothing.
+#[test]
+fn a_withheld_owner_requirement_publishes_nothing_and_is_named() {
+    for (role, name) in [
+        (
+            solid_reactive_ir::OwnerRequirementOperation::Effect,
+            "effect",
+        ),
+        (
+            solid_reactive_ir::OwnerRequirementOperation::Boundary,
+            "boundary",
+        ),
+    ] {
+        let normalized = normalized_owner_requirement(role);
+        let export = normalized.contract.artifact_cases()[0]
+            .exports
+            .get("read")
+            .unwrap();
+        assert!(
+            export.call.operations.iter().all(|operation| !matches!(
+                operation.kind,
+                OperationKind::Create | OperationKind::Cleanup
+            )),
+            "{role:?} must publish no owner-requirement operation"
+        );
+        assert!(
+            matches!(export.call.claims().creates, KnowledgeSet::Unknown),
+            "{role:?} must leave creates open"
+        );
+        assert!(
+            matches!(export.call.claims().cleanups, KnowledgeSet::Unknown),
+            "{role:?} must leave cleanups open"
+        );
+        assert!(
+            !normalized
+                .closure_candidates
+                .iter()
+                .any(|candidate| matches!(
+                    candidate.path,
+                    SemanticClaimPath::Domain(
+                        solid_reactive_ir::contract_semantics::ClaimPath::Call(
+                            ClaimDomain::Creates | ClaimDomain::Cleanups
+                        )
+                    )
+                )),
+            "{role:?} must propose no owner-requirement closure: {:?}",
+            normalized.closure_candidates
+        );
+        assert_eq!(normalized.withheld.len(), 1, "{role:?} must be named once");
+        assert_eq!(normalized.withheld[0].export, "read");
+        assert_eq!(normalized.withheld[0].role.role(), name);
+        assert!(
+            !normalized.withheld[0].role.reason().is_empty(),
+            "{role:?} must carry a reason"
+        );
+    }
+}
+
+/// `semantic-model.md` § creates' mechanical separator, asserted over the
+/// generator's own output rather than trusted: a `create` operation names what
+/// it registered. The generator now emits no `create` at all, which is the
+/// strongest form of the same guarantee, so the assertion is written over
+/// every operation of every role.
+#[test]
+fn the_generator_emits_no_resourceless_create() {
+    for role in [
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup,
+        solid_reactive_ir::OwnerRequirementOperation::Effect,
+        solid_reactive_ir::OwnerRequirementOperation::Boundary,
+    ] {
+        let normalized = normalized_owner_requirement(role);
+        for artifact_case in normalized.contract.artifact_cases() {
+            for (name, export) in &artifact_case.exports {
+                for operation in &export.call.operations {
+                    assert!(
+                        operation.kind != OperationKind::Create || !operation.resources.is_empty(),
+                        "{role:?}: {name}'s create {} names no resource",
+                        operation.id.0
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -237,18 +415,18 @@ fn an_ordinary_consuming_package_still_publishes_reads_and_owner_creates() {
 fn proposed_closure_domains(
     package_name: &str,
 ) -> Vec<solid_reactive_ir::contract_semantics::ClaimPath> {
-    let (_, candidates) = normalize_inferred_contract_with_candidates(
+    normalize_inferred_contract_with_candidates(
         &inferred(bootstrapped_reactive_summary()),
         &resolution_for_package(package_name, ["read".into()]),
     )
-    .unwrap();
-    candidates
-        .into_iter()
-        .map(|candidate| match candidate.path {
-            SemanticClaimPath::Domain(path) => path,
-            other => panic!("unexpected claim path {other:?}"),
-        })
-        .collect()
+    .unwrap()
+    .closure_candidates
+    .into_iter()
+    .map(|candidate| match candidate.path {
+        SemanticClaimPath::Domain(path) => path,
+        other => panic!("unexpected claim path {other:?}"),
+    })
+    .collect()
 }
 
 #[test]
@@ -272,16 +450,19 @@ fn a_dialects_own_archive_proposes_no_read_or_create_closure_candidate() {
         "@solidjs/signals must propose no owner-requirement closure: {withheld:?}"
     );
 
-    // The same bytes under any other name: both domains are described, so both
-    // are proposed for closure.
+    // The same bytes under any other name: the *read* census is published, so
+    // its closure is proposed. `Creates` is not, and no longer can be for any
+    // package -- the generator derives no `create` at all, and an owner census
+    // that found no owner requirement is not a census of registrations into an
+    // outside runtime (`semantic-model.md` § creates).
     let published = proposed_closure_domains("package");
     assert!(
         carries(&published, ClaimDomain::Reads),
         "a consuming package must propose its read closure: {published:?}"
     );
     assert!(
-        carries(&published, ClaimDomain::Creates),
-        "a consuming package must propose its owner-requirement closure: {published:?}"
+        !carries(&published, ClaimDomain::Creates),
+        "no package may propose a create closure the generator cannot derive: {published:?}"
     );
 }
 

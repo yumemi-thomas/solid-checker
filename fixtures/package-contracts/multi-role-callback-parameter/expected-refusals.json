@@ -1,0 +1,52 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "multi-role-callback-parameter",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "contradictOnZeroOnly",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "inlineAndTracked",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "oneTrackedSite",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "twoParameters",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "twoTrackedSites",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    }
+  ]
+}

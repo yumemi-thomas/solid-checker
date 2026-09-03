@@ -1,5 +1,300 @@
 # Precision backlog
 
+## The generator stopped publishing an owner requirement as a resourceless `create`; the `Effect` and `Boundary` roles are withheld, and the validation rule that would forbid the old shape stays out of force (2026-09-03)
+
+The producer half of the `creates` decision below. The generator no longer
+publishes any `create` operation at all: the one role that has a home in schema
+version 1 — a cleanup obligation — is published in `cleanups`, and the other two
+are **withheld by name**. The analyzer's only consumer of the domain stops
+reading `render`'s shape as a caller obligation. The *validation* rule the
+decision implies, and the two frozen authority documents it rejects, are both
+still open — with the measurements that say why.
+
+**What changed.**
+
+- `rust/crates/solid-facts-backend/src/inferred_contract.rs`'s owner-requirement
+  loop and its new `owner_requirement_operation` (replacing
+  `apply_owner_requirement`) publish per role:
+  - **`Cleanup` / `SettledCleanup`** → a `kind: cleanup` operation in
+    **`cleanups`**, with `owner.source: ambient-at-call`,
+    `requires: required`, `requiresCleanup: required`, and **no resource**. The
+    `cleanups` domain is published `Partial`, never `Complete`: the owner census
+    establishes the obligations it walked, not that no other cleanup exists.
+  - **`Effect`** → **withheld**, named. It registers a computation on the
+    *caller's* owner, which is exactly what the audits publish beside
+    `creates: []` **closed**, so it is not a `create`; `semantic-model.md`
+    § creates defines `create` as registering a version-1 resource into a
+    runtime *outside* the invocation and says "Do not repair it by widening
+    `creates`". Naming a child-owner resource on such a `create` would also
+    defeat the census plan's item-3 separator ("a `create` naming no resource is
+    a contradiction") by manufacturing the resource that makes the rule pass.
+  - **`Boundary`** → **withheld**, named, for a second and independent reason:
+    it is a compiler *lowering* fact and the producer's census records neither
+    JSX elements nor their lowering.
+  - `creates` is therefore always `Unknown` from this generator. Not
+    `Complete(vec![])`: the only census feeding it was the owner-requirement
+    census, and an owner census that found no owner requirement is not a census
+    of registrations into an outside runtime. Closing it would manufacture a
+    negative claim from a derivation that never covered the domain.
+- **`Boundary` is reachable, contrary to an earlier draft of this entry.** Its
+  live origin is the JSX loop at
+  `rust/crates/solid-reactive-ir/src/owners.rs:1213-1231`, whose candidates
+  reach `program.missing_owners` and are consumed by `main.rs`'s
+  generated-owner-requirement indexing (`:6332`). An archive that ships an
+  async-boundary JSX element outside an owner-providing region *does* reach the
+  arm. The earlier "unreachable" claim rested on
+  `solid-facts-backend/src/dialect.rs:660` emitting `Cleanup` — but that line is
+  inside `mod tests`, a sample fixture, and says nothing about the live engine.
+- **The withholding is named, not silent.** Each withheld role travels out of
+  normalization as a `WithheldOwnerRequirementRecord` (export + role), through
+  `ProposalArtifacts::withheld`, onto the emitter's stable machine-readable
+  record `solid-checker:withheld-owner-requirement=<document>\t<export>\t<role>\t<reason>`
+  (`main.rs`'s `WITHHELD_OWNER_REQUIREMENT_MARKER`, the same discipline as
+  `UNRESOLVED_DEPENDENCY_MODULE_MARKER`), and into the generator's existing
+  proposal refusal sidecar as a third additive array, `withheldClaims`
+  (`packages/cli/scripts/generate-package-contract.mjs`'s
+  `writeProposalRefusalAudit`). It is its own array for the reason `inapplicable`
+  is: a withheld *claim* is not an artifact-case refusal — the case still
+  certifies — so putting it in `refusals` would change every consumer's refusal
+  total. `scripts/contract-corpus.mjs` validates the array and pins the sidecar
+  whenever any of the three carries a row.
+- `rust/crates/solid-reactive-ir/src/contracts.rs`
+  (`project_owner_requirements`) now projects a requirement only when the
+  operation **requires an owner it does not itself supply**:
+  `requires == Required && !matches!(source, Created(_))`. Audited
+  `@solidjs/web` `render`'s `register-delegation` is `requires: required` *and*
+  `source: created`, so the previous filter would have reported an owner-less
+  effect for a top-level `render(() => <App/>, el)`. It also reads the
+  `cleanups` domain for its *items only* and deliberately does **not** insert
+  `ClaimDomain::Cleanups` into `open_claims`: every one of the 89 solid-v1
+  summaries omits `cleanups` entirely, and `contract_document.rs:3544` asserts
+  that a proven non-callable value export leaves no call-path domain open.
+- `rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs`'s
+  `require_operation_evidence` dispatches `OperationKind::Cleanup` to
+  `require_owner_operation_call` beside `OperationKind::Create`. That function
+  keys off the operation's own `Requirement` triple rather than its kind, so a
+  cleanup-role requirement is the same demand it has always answered; without
+  the arm the re-kinding fell through to the `_` `UnsupportedDemand` arm and
+  refused every affected row at witness acquisition.
+
+**The generated cleanup shape has no audited precedent, and says so.** Every
+`kind: cleanup` operation in the bundled corpus — `solid-js`'s
+`replace-cleanup`, `@solidjs/signals`'s `returned-cleanup`, `@solidjs/web`'s
+`ref-cleanup`, `--web-node-server`'s `retract-declaration` — is
+`requires: forbidden`, `source: none`, because each describes a cleanup the
+*runtime* runs rather than one the export installs on its caller's owner. An
+earlier draft of the census plan and of this entry called the generated shape
+"`createEffect`'s audited `replace-cleanup` shape"; that was false. The shape is
+chosen for the fact: the requirement is a `Requirement` triple on the operation
+that needs the owner (§ creates' third "not a `creates` item"), the installing
+act is a cleanup, and `require_owner_operation_call` witnesses it from the
+archive's own `onCleanup` call. It names **no resource**, as `returned-cleanup`
+and `ref-cleanup` also do not, and that is load-bearing rather than tidy: a
+resource declaration is a positive fact of its own
+(`PositiveFactSubject::Resource`, demanded as
+`ProofFamily::RecursiveValueShape`), no witness exists for any resource axis
+today, and declaring one refuses the row at witness acquisition with "recursive
+operation family has no recursive subject".
+
+**A user-visible fix rides along.** A cleanup-role owner requirement now
+round-trips through a generated contract as
+`OwnerRequirementOperation::Cleanup` instead of `Effect`, because
+`project_owner_requirements` reads the operation kind that carries it. `SC4001`
+for such a requirement therefore names `onCleanup` rather than an owner for an
+effect. Pinned by
+`contracts.rs`'s `owner_requirement_projection_tests::a_cleanup_requirement_projects_from_the_cleanups_domain_without_opening_it`,
+which asserts the projected role.
+
+**The model gap this exposes, recorded rather than repaired.** A *free-standing*
+owner requirement — an export that must be called under an ambient owner
+because it registers a computation on it, the fact behind `SC4001` — has no
+operation kind that can carry it in schema version 1, and the audits record no
+consumer-level owner requirement anywhere. The three "not a `creates` item"
+homes do not carry it either: the `requires`/`requiresChildren`/`requiresCleanup`
+triple is a *field of whichever operation needs the owner*, so a requirement
+with no operation to hang it on has nowhere to go. The repair is a new domain —
+option (c) of `docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
+§ 2.1, reopened there for exactly this case — which needs a new `ClaimDomain`
+variant, a canonical-stream position, and a semantic-digest move for every
+contract.
+
+**What the withholding costs, exactly.** A *generated* proposal no longer
+carries the `Effect` owner-requirement positive fact, so a consumer `SC4001`
+derived from a **generated** dependency contract is unavailable until the new
+domain exists. Nothing live changes today: no generated contract is accepted
+anywhere, and the hand-audited path is untouched — the two frozen Solid 1.x
+authority documents still carry their `ambient-at-call` `create` and
+`project_owner_requirements` still reads it, which is what
+`owner_requirement_projection_tests::an_ambient_at_call_requirement_projects_as_a_consumer_obligation`
+now pins.
+
+**Measured moves.** Contract corpus: **66 fixtures**, in exactly three
+mechanical categories and nothing else (checked by comparing every plan claim
+set against `HEAD`):
+
+- **56 fixtures** move one claim from `closureCandidates` to
+  `unresolvedClaims`, both `call:creates`. That is `creates` becoming `Unknown`
+  instead of `Complete(vec![])`; the emitted *document* does not change for
+  these, because `ContractProposal::normalize` already weakened the closure
+  away.
+- **5 fixtures** lose the resourceless `create` itself:
+  `callback-deferred-untracked-chain`, `callback-untracked-wrapper`,
+  `dialect-defining-archive/@solidjs/router-shaped`, `dialect-detection`,
+  `multi-role-callback-parameter`. Each drops the `owner-requirement-*`
+  operation, its owner-axis positive and unresolved claims and its
+  `owner-productions` closure candidate, and re-keys the affected summary
+  digests; two of them (`callback-deferred-untracked-chain`,
+  `callback-untracked-wrapper`) gain a `cleanups` item in the new shape.
+- **21 refusal sidecars**: 16 gain the additive `withheldClaims: []`, and 5 are
+  new files recording **14 withheld claims**, every one role `effect`, named by
+  export.
+
+Coverage: **94 projects, 546 findings, nothing moved.** Ownership gate: 289
+cases, unchanged. `ir-lib` (223) and `solid-facts-backend --lib` (315) green, so
+the frozen golden semantic vector did not move. One cross-fixture pin moved with
+the change and says so:
+`packages/cli/test/contract-workflow.test.mjs`'s bundler-suffix control, 3 -> 2
+candidates and 7 -> 8 unresolved claims — the control still produces its `reads`
+and `returns` candidates, which is what that pin exists to protect.
+
+Ecosystem: the 29 rows the re-kinding had regressed from certified to refused —
+`@kobalte/utils`, `@solid-primitives/{async,broadcast-channel,cookies,date-difference,debounce,lifecycle,marker,resource,scheduled,script-loader,spring,timer,tween}`
+across their solid1/solid2 probes — are **all certified again**, verified with a
+targeted run against the fresh debug binary. Three rows that were refused
+*before* the re-kinding remain refused, and now say something more honest:
+`@kobalte/core@2.0.0-alpha.0|solid2|only` and
+`@solid-primitives/utils@7.0.0-next.4|solid2|{floor,head}` moved from
+`UnsupportedDemand` to a locally-open family, which is a missing witness rather
+than an unimplemented demand kind.
+
+**Withheld: "a `create` operation naming no resource is a contradiction."** The
+rule belongs in `validate_call_claims`
+(`rust/crates/solid-reactive-ir/src/contract_semantics/validate.rs`, where the
+`NOT YET` comment holds its place) and it cannot land before the two
+compiled-in Solid 1.x authority documents that carry the shape are corrected:
+with the rule in place, `cargo test -p solid-facts-backend --lib` fails **14**
+tests with `create operation names no registered resource` for
+`artifact-case:58598090…:createDebounce:operation:owner-requirement-0` —
+12 `contract_certification::policy2_receipt::tests::*`,
+`first_party_bundles::tests::policy1_checked_corpora_have_no_active_receipt_issued_bundles`,
+and
+`phase16_benchmark::tests::ordinary_queries_are_closed_over_normalized_semantics_after_raw_inputs_are_dropped`.
+Nothing new can arrive at the rule while it waits: the generator emits no
+`create` at all (pinned by
+`inferred_contract::tests::the_generator_emits_no_resourceless_create`), and the
+one remaining live fixture input that carries the shape
+(`fixtures/reactive-ir/package-callback-consumer/node_modules/reactive-package/solid-reactivity.json`)
+is refused before decode because its catalog entry is `obsolete-policy1`.
+
+**Why the six authority files were left untouched — the sidecar digests cannot
+be regenerated soundly.**
+
+1. **No live issuer.** `solid1_bundles_with_measurements`
+   (`rust/crates/solid-facts-backend/src/first_party_bundles.rs:303`) decodes and
+   cross-checks the twenty authority documents and then returns
+   `Ok(Vec::new())` (`:369`); `EMBEDDED_SOLID1_BUNDLES` is `&[]` (`:124`). So
+   `solid-contract-bundles` writes and `--check`s only `bundle-index.json`
+   (`rust/crates/solid-facts-backend/src/bin/solid-contract-bundles.rs:77-100`,
+   over an empty bundle list), and `bun scripts/check-bundled-contracts.mjs`
+   reports "checked 0 receipt-issued stable-v1 bundle cases / 0 active policy-2
+   bundle documents". The nineteen documents under
+   `pkg/contracts/bundled/solid-v1/` are written, checked, and receipt-bound by
+   nothing.
+2. **The sidecar bytes do not exist anywhere in the repository.** The only
+   occurrences of `5eadb9af…08ed47` and `4ab8db26…9cab511` are the two
+   `pkg/` documents, their two byte-identical `rust/crates/solid-dialect/`
+   copies, and prose. There is no `*.receipt.json` and no proof sidecar in
+   either directory, so the digests cannot be recomputed from anything checked
+   in, and the only code that could re-emit one
+   (`evidence_sidecars.rs:399` `emit_proof_document`) is reached from the
+   workflow that now returns before issuing.
+3. **A fresh generation cannot reproduce the claims either — by design, this
+   slice's own decision.** Both documents close `callbacks`, `reads`, `creates`
+   and `returns`, and every closed call domain now refuses at witness
+   acquisition: `require_census_decides_closure`
+   (`rust/crates/solid-facts-backend/src/contract_certification/type_facts.rs:6630-6637`)
+   answers any `ClaimPath::Call(domain)` closure demand with
+   "implementation-census premise required". A `contract certify` run against
+   the real `@solid-primitives/debounce@1.3.0` and
+   `@solid-primitives/rootless@1.5.4` would therefore publish *open* domains, not
+   the corrected version of these documents.
+4. **The capture is not reproducible from the coordinates.**
+   `benchmarks/package-contract-v2/phase14/solid-v1-authority/authority-index.json`
+   pins each case's closure digest, and inside it `solid-js@1.9.14` carries the
+   same `integrity` (`sha512-sAEXC0Kk…`) with **two different**
+   `filesManifestDigest` values across the two cases (`sha256:53190caa…` for
+   debounce, `sha256:02fa59f1…` for rootless). A fresh install therefore cannot
+   be assumed to reproduce either closure digest, and the index's own provenance
+   for rootless is `/tmp/solid1-rootless-legacy/solid-primitives-rootless.json`.
+
+Consequently the correction of these six files is an authority **re-capture**,
+not a regeneration, and it is blocked on the implementation census that makes a
+closed call domain certifiable at all — the same prerequisite chain in
+`docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md` § 4.
+Until then the compiled-in authority keeps asserting the old claim, and no gate
+says so. When it is re-captured, each `owner-requirement-0` becomes a `cleanups`
+item with **no** resource, not the "with a `cleanup` resource" shape the plan's
+item 4 first described.
+
+**The fixture pair the plan asked for cannot be built yet.** A findings fixture
+that proves "an ambient-at-call requirement fires `SC4001` while a
+`source: created` create does not" needs a fixture that *consumes* a contract.
+Every contract-consumer fixture under `fixtures/reactive-ir/` — all sixteen
+`.solid-checker/accepted-contracts.json` catalogs — is `"status":
+"obsolete-policy1"` after the proof-policy-2 cut, and each one's snapshot is
+`SC9005 package-contract-incomplete` only; audited `render` reaches no analyzer
+either, per the empty bundle producers above. Both arms of the filter would
+therefore produce the same `SC9005` and prove nothing. The filter is pinned
+instead by
+`rust/crates/solid-reactive-ir/src/contracts.rs`'s
+`owner_requirement_projection_tests` — the frozen authority's ambient-at-call
+create projects `Effect`, `render`'s `source: created` create projects nothing,
+and a `cleanups` item projects `Cleanup` without opening its domain. The fixture
+becomes constructible when a fixture can hold an accepted contract again.
+
+**Still open, beyond the two blockers above.**
+
+- The **`Effect`/`Boundary` roles have no domain**, so a generated contract
+  cannot carry a consumer owner requirement at all. Option (c) is the repair.
+- **No resource axis has a witness.** `PositiveFactSubject::Resource` is
+  demanded as `ProofFamily::RecursiveValueShape`, and
+  `verify_export_value_family` routes a non-`RecursiveValue` subject to
+  `require_operation_recursive_subject`, which refuses it as
+  "recursive operation family has no recursive subject". Any generator change
+  that declares a resource therefore refuses every affected row until that
+  family answers a resource subject. The generator's pre-existing
+  callback-owner resource declaration
+  (`inferred_contract.rs`'s `callback_operation`, for a callback whose owner is
+  `created`) is on the same footing and is *not* new to this slice.
+- The withheld-claim record reaches the generator's sidecar but **no gate reads
+  it as an obligation**: `contract-corpus.mjs` pins the array byte-for-byte, and
+  nothing yet fails when a withholding appears where none is expected.
+
+### Re-measured: 357 verified / 40 exact refusals / 21 not attempted, no verdict moved
+
+The complete 418-probe corpus was re-run twice for this slice. The first run,
+with the Effect owner requirement re-kinded as a `create` naming an owner
+resource and the cleanup role as a resource-declaring `cleanups` item, fell to
+328 verified: 29 rows refused at witness acquisition because a declared
+resource becomes a `RecursiveValueShape` demand no witness answers, and a
+`kind: cleanup` operation had no witness arm at all. That run was not kept.
+After the review -- Effect and Boundary withheld and named, the cleanup item
+declaring no resource, the Cleanup witness arm added, `creates` published
+`Unknown` because an owner census is not a census of registrations into an
+outside runtime -- the second run (`make ecosystem-benchmark`; report SHA-256
+`1d0ddb5ed517e0376bc773863c90ce6eff80f157ee56667569f026a596ad494c`) is back
+at 357 / 40 / 21 with 306 verified-complete / 51 verified-partial and every
+verdict identical to the committed report. Four refused rows advanced their
+frontier digest because the withdrawn Effect demand was the frontier:
+`@kobalte/core@2.0.0-alpha.0` (still `operation-reachability`),
+`@solid-primitives/gestures@1.2.1` (`callable-path` -> `operation-reachability`),
+and `@solid-primitives/keyed@3.0.0-next.2` floor and head
+(`recursive-value-shape` -> `operation-cardinality`). `exportsProven` remains
+0 of 3410: the 216 `creates` closure candidates the generator used to
+manufacture from an owner census are gone from the fixture proposals and will
+return only when the census slice derives them from the implementation
+transcript.
+
 ## `creates` meant two incompatible things; it now means the published `create` operation (2026-09-03)
 
 Documentation and decision only — no code, fixture, or snapshot moved. The

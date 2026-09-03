@@ -1,8 +1,8 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-09-03T07:49:06.965Z
-- Finished: 2026-09-03T07:50:20.065Z
-- Duration: 73100 ms
+- Started: 2026-09-03T10:37:47.582Z
+- Finished: 2026-09-03T10:39:48.147Z
+- Duration: 120565 ms
 - Checker native binary: /Users/thomas/Documents/Github/solid-checker/rust/target/release/solid-checker-rust
 - Type Facts binary: /Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts
 - Registry cache for certification: /Users/thomas/Documents/Github/solid-checker/rust/target/registry-cache
@@ -938,11 +938,11 @@ None.
 
 | Artifact | Samples | p50 bytes | p95 bytes | max bytes |
 | --- | ---: | ---: | ---: | ---: |
-| Pretty main | 381 | 2186 | 12864 | 682417 |
-| Canonical minified main | 381 | 1632 | 9629 | 506494 |
-| Proposal plan (not evidence) | 381 | 49252 | 540062 | 20370858 |
-| Canonical bytes per export | 381 | 356 | 1085 | 1696 |
-| Canonical bytes per operation | 91 | 848 | 2633 | 13328.79 |
+| Pretty main | 381 | 2149 | 12864 | 679506 |
+| Canonical minified main | 381 | 1626 | 9629 | 505082 |
+| Proposal plan (not evidence) | 381 | 49252 | 540062 | 20327179 |
+| Canonical bytes per export | 381 | 353.67 | 1081 | 1567 |
+| Canonical bytes per operation | 90 | 902.5 | 2633 | 16836.07 |
 
 Proposal-plan bytes are construction obligations, not proof evidence and not acceptance authority. Proof-transcript and receipt bytes are measured separately by the Phase 16 accepted-corpus gate.
 
@@ -973,8 +973,8 @@ Read the domain columns together, not separately: 37 of the 8847 unknown exports
 | read | 168 |
 | write | 0 |
 | invalidate | 0 |
-| create | 60 |
-| cleanup | 0 |
+| create | 0 |
+| cleanup | 33 |
 | dispose | 0 |
 
 ### Contract content by family
@@ -1016,8 +1016,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 1033192 ms
-- Phases: install 68387 ms, generation 398762 ms, harness 566043 ms
+- Worker time: 1738606 ms
+- Phases: install 84735 ms, generation 673385 ms, harness 980486 ms
 
 ### Top failure signatures
 

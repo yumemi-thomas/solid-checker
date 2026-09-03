@@ -5,25 +5,6 @@
   "semanticDigest": "sha256:6723b6042068c8c6716cfa3765fc7bce8b5f462724b877d4301d743d5395d801",
   "closureCandidates": [
     {
-      "claimId": "claim:v1:sha256:0cae61c2d20129b70d7f91be51ca4f5426ad5512f76e04bdbe8df5d520b1befc",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:e506055189e947ecb064ae2a0c573ce613566467ff666fa4ba0b285a95b975e2",
-        "declarationsPath": "./index.js",
-        "declarationsDigest": "sha256:e506055189e947ecb064ae2a0c573ce613566467ff666fa4ba0b285a95b975e2",
-        "closureDigest": "sha256:99ab441a997fc690e60ca456a5c9a2a52d1ca77408fc545a49416b7505da5471"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:3d7924580af64b0134ec0ae2b55ec3363b2ea849bd7d31265e377801e6b7e1a8",
-        "export": "thing",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:87d757113b9eef25c21e69966eafdb8a8a1358edb90eb93b1d7d40cdacce5af0",
       "artifact": {
         "entrypoint": ".",
@@ -82,6 +63,25 @@
     }
   ],
   "unresolvedClaims": [
+    {
+      "claimId": "claim:v1:sha256:0cae61c2d20129b70d7f91be51ca4f5426ad5512f76e04bdbe8df5d520b1befc",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:e506055189e947ecb064ae2a0c573ce613566467ff666fa4ba0b285a95b975e2",
+        "declarationsPath": "./index.js",
+        "declarationsDigest": "sha256:e506055189e947ecb064ae2a0c573ce613566467ff666fa4ba0b285a95b975e2",
+        "closureDigest": "sha256:99ab441a997fc690e60ca456a5c9a2a52d1ca77408fc545a49416b7505da5471"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:3d7924580af64b0134ec0ae2b55ec3363b2ea849bd7d31265e377801e6b7e1a8",
+        "export": "thing",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
     {
       "claimId": "claim:v1:sha256:6e9e904c1fe8585d53fd60b95b6adad168b529d56c586336548a34f559c7df5d",
       "artifact": {

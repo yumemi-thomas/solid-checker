@@ -5177,8 +5177,33 @@ fn emit_package_contract(
     )?;
     fs::write(output, proposal.document)?;
     fs::write(&request.emit_proposal_plan, proposal.plan)?;
+    for withheld in &proposal.withheld {
+        // Stdout, one tab-separated line per withheld claim, keyed by the
+        // document path so a batch of targets sharing this process's streams
+        // stays unambiguous. Same discipline as
+        // `UNRESOLVED_DEPENDENCY_MODULE_MARKER`: parsing a withholding back
+        // out of prose would couple automation to wording. An export name and
+        // a role carry no tab or newline, and the reason is a fixed constant.
+        println!(
+            "{WITHHELD_OWNER_REQUIREMENT_MARKER}{}\t{}\t{}\t{}",
+            output.display(),
+            withheld.export,
+            withheld.role.role(),
+            withheld.role.reason()
+        );
+    }
     Ok(())
 }
+
+/// The machine-readable half of a *claim* refusal, as
+/// [`UNRESOLVED_DEPENDENCY_MODULE_MARKER`] is for an artifact-case one.
+///
+/// Contract generation refuses by name. A claim it cannot publish leaves only
+/// an open domain behind, which is indistinguishable from a census that found
+/// nothing to claim — so the emitter states each withholding on this stable
+/// line, and the generator's refusal audit records it beside the artifact-case
+/// refusals it already keeps.
+const WITHHELD_OWNER_REQUIREMENT_MARKER: &str = "solid-checker:withheld-owner-requirement=";
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

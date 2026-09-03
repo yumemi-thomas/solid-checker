@@ -110,11 +110,16 @@ async function generate(directory) {
           1
         )
       : null;
-    if (audit && (!Array.isArray(audit.refusals) || !Array.isArray(audit.inapplicable))) {
+    if (
+      audit &&
+      (!Array.isArray(audit.refusals) ||
+        !Array.isArray(audit.inapplicable) ||
+        !Array.isArray(audit.withheldClaims))
+    ) {
       throw new Error(`${name} produced an invalid artifact-case refusal sidecar`);
     }
     const auditedCases = audit
-      ? audit.refusals.length + audit.inapplicable.length
+      ? audit.refusals.length + audit.inapplicable.length + audit.withheldClaims.length
       : 0;
     if (update) {
       writeFileSync(expectedRefusal, rendered);
@@ -144,6 +149,7 @@ async function generate(directory) {
       refused: true,
       refusedArtifactCases: audit?.refusals.length ?? 0,
       inapplicableArtifactCases: audit?.inapplicable.length ?? 0,
+      withheldClaims: audit?.withheldClaims.length ?? 0,
       cases: 0,
       closureCandidates: 0,
       unresolvedClaims: 0,
@@ -170,14 +176,19 @@ async function generate(directory) {
     refusals.package?.name !== contract.package.name ||
     refusals.package?.version !== contract.package.version ||
     !Array.isArray(refusals.refusals) ||
-    !Array.isArray(refusals.inapplicable)
+    !Array.isArray(refusals.inapplicable) ||
+    !Array.isArray(refusals.withheldClaims)
   ) {
     throw new Error(`${name} produced an invalid artifact-case refusal sidecar`);
   }
-  // An inapplicable disposition is not a refusal, but it is still a recorded
-  // census decision: pin the sidecar whenever either array carries a row, so a
-  // disposition cannot appear, change class, or vanish unreviewed.
-  const auditedCases = refusals.refusals.length + refusals.inapplicable.length;
+  // Neither an inapplicable disposition nor a withheld claim is a refusal, but
+  // both are recorded census decisions: pin the sidecar whenever any array
+  // carries a row, so a disposition, or a claim the generator refused to
+  // publish, cannot appear, change class or role, or vanish unreviewed.
+  const auditedCases =
+    refusals.refusals.length +
+    refusals.inapplicable.length +
+    refusals.withheldClaims.length;
   if (update) {
     copyFileSync(output, expected);
     copyFileSync(plan, expectedPlan);
@@ -210,6 +221,7 @@ async function generate(directory) {
     refused: false,
     refusedArtifactCases: refusals.refusals.length,
     inapplicableArtifactCases: refusals.inapplicable.length,
+    withheldClaims: refusals.withheldClaims.length,
     cases: Object.values(contract.entrypoints).reduce((count, entrypoint) => count + entrypoint.cases.length, 0),
     closureCandidates: planned.closureCandidates.length,
     unresolvedClaims: planned.unresolvedClaims.length,
@@ -224,6 +236,7 @@ try {
       result.cases += row.cases;
       result.refusedArtifactCases += row.refusedArtifactCases;
       result.inapplicableArtifactCases += row.inapplicableArtifactCases;
+      result.withheldClaims += row.withheldClaims;
       result.closureCandidates += row.closureCandidates;
       result.unresolvedClaims += row.unresolvedClaims;
       result.positiveOperations += row.positiveOperations;
@@ -232,6 +245,7 @@ try {
     {
       refusedArtifactCases: 0,
       inapplicableArtifactCases: 0,
+      withheldClaims: 0,
       cases: 0,
       closureCandidates: 0,
       unresolvedClaims: 0,
@@ -243,6 +257,7 @@ try {
       `${rows.filter(row => row.refused).length} exact fail-closed refusals, ` +
       `${aggregate.refusedArtifactCases} local artifact-case refusals, ` +
       `${aggregate.inapplicableArtifactCases} inapplicable artifact cases, ` +
+      `${aggregate.withheldClaims} withheld claims, ` +
       `${aggregate.cases} artifact cases, ${aggregate.positiveOperations} possible operations, ` +
       `${aggregate.closureCandidates} proof candidates, ${aggregate.unresolvedClaims} local open claims`
   );

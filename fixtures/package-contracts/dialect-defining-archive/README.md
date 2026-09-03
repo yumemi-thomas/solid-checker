@@ -11,17 +11,25 @@ consumer — TypeScript resolved the symbol into the package, so the path *is* t
 import edge — and wrong inside a dialect's own archive, where the package's own
 `createSignal` / `createTrackedEffect` / `onCleanup` become "primitive calls".
 `find_missing_owners` then pushes an owner requirement for a call in the
-primitive's *own implementation*, and `apply_owner_requirement`
-(`inferred_contract.rs`) publishes it as a consumer obligation.
+primitive's *own implementation*, and `owner_requirement_operation`
+(`inferred_contract.rs`) decides what, if anything, is published for it.
 
-| fixture | `package.json` name | `creates` |
-| --- | --- | --- |
-| `@solidjs/signals` | `@solidjs/signals` | **absent (open)** — no `owner-requirement-0` operation |
-| `@solidjs/router-shaped` | `@solidjs/router` | `["owner-requirement-0"]`, `requiresChildren: required` |
+**[2026-09-03] Where the difference now shows.** Both fixtures publish no
+`creates` operation, because the `effect` role has no home in schema version 1
+and is withheld for *every* package (`semantic-model.md` § creates). The pair's
+claim is intact — the two answers are still different — but the distinguishing
+artifact moved from the document to the generator's refusal sidecar, which
+names each withholding:
+
+| fixture | `package.json` name | `creates` | `withheldClaims` |
+| --- | --- | --- | --- |
+| `@solidjs/signals` | `@solidjs/signals` | **absent (open)** | **empty** — the scope decision refuses the whole derivation, so there is no role to withhold |
+| `@solidjs/router-shaped` | `@solidjs/router` | **absent (open)** | `onSettled`, role `effect` — the derivation ran and its one role has no domain |
 
 `@solidjs/router` is the control: it lives under the same `@solidjs` scope and
 receives the same path bootstrap, but it is a *consumer* of the dialect's
-packages, not one of them, so nothing about its published claim changes.
+packages, not one of them, so the derivation runs for it and its result is
+recorded by name.
 
 ## Why the positive case is `open` and not `creates: []`
 
@@ -37,7 +45,10 @@ guard-sensitive.
 
 So the fix withholds, never asserts. Contract generation opens the
 owner-requirement and reactive-read domains for these archives, which is the
-weakest thing the model can say.
+weakest thing the model can say. Since 2026-09-03 the *consumer* side withholds
+too, for an unrelated reason — a free-standing owner requirement has no domain
+in schema version 1 — so read this fixture pair's answer off `withheldClaims`
+rather than off `creates`.
 
 ## The predicate is a name, and that is on purpose
 

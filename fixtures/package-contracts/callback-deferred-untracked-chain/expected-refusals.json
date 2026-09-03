@@ -1,0 +1,60 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "callback-deferred-untracked-chain",
+    "version": "1.0.0"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "mountShape",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "mountShapeArrow",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "mountThroughLocalUntrack",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "renderEffectShape",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "trackedShape",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    },
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "trackedThroughLocalHelper",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "format": "solid-checker-contract-proposal-refusals",
+  "refusalVersion": 1,
+  "package": {
+    "name": "@solidjs/router",
+    "version": "0.0.0-fixture"
+  },
+  "refusals": [],
+  "inapplicable": [],
+  "withheldClaims": [
+    {
+      "entrypoint": ".",
+      "conditions": [],
+      "stage": "export-claim",
+      "export": "onSettled",
+      "role": "effect",
+      "reason": "a free-standing owner requirement -- an export that must be called under an owner because it registers a computation on it -- has no operation kind that can carry it in schema version 1"
+    }
+  ]
+}

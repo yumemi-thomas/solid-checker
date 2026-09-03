@@ -39,5 +39,6 @@
       "applicability": "verifier-proved-type-only",
       "reason": "runtime target emits no JavaScript (declaration-file): 2 module-level statement(s)"
     }
-  ]
+  ],
+  "withheldClaims": []
 }

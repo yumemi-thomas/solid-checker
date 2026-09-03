@@ -67,8 +67,29 @@ import {
   partitionArtifactAnalysisBatches,
   recommendedArtifactAnalysisBatchConcurrency,
   retainIndependentlyMergeableProposalBatches,
-  retainIndependentlyMergeableProposals
+  retainIndependentlyMergeableProposals,
+  withheldClaimsFromEmitterOutput
 } from "../scripts/generate-package-contract.mjs";
+
+test("a withheld-claim record is read only for its own target, and only when whole", () => {
+  const marker = "solid-checker:withheld-owner-requirement=";
+  const stdout = [
+    `${marker}/scratch/a-proposal.json\tmountShape\teffect\tno domain carries it`,
+    `${marker}/scratch/b-proposal.json\tother\tboundary\ta lowering fact`,
+    // Another target of the same batch, a truncated line, and ordinary output
+    // all have to be ignored: the marker is a contract, not a prose scan.
+    `${marker}/scratch/a-proposal.json\tincomplete`,
+    "generated unaccepted stable contract proposal for x@1.0.0"
+  ].join("\n");
+  assert.deepEqual(withheldClaimsFromEmitterOutput(stdout, "/scratch/a-proposal.json"), [
+    { export: "mountShape", role: "effect", reason: "no domain carries it" }
+  ]);
+  assert.deepEqual(withheldClaimsFromEmitterOutput(stdout, "/scratch/b-proposal.json"), [
+    { export: "other", role: "boundary", reason: "a lowering fact" }
+  ]);
+  assert.deepEqual(withheldClaimsFromEmitterOutput("", "/scratch/a-proposal.json"), []);
+  assert.deepEqual(withheldClaimsFromEmitterOutput(undefined, "/scratch/a-proposal.json"), []);
+});
 
 test("artifact analysis batches only compatible demands under a bounded target count", () => {
   const candidates = Array.from({ length: 35 }, (_, index) => ({
@@ -314,9 +335,16 @@ test("the bundler-suffix fixture keeps a real control, pinned by both snapshots"
   const plan = name =>
     JSON.parse(readFileSync(join(fixtures, name, "expected-proposal.json"), "utf8"));
 
+  // 2 candidates, not 3, since 2026-09-03: the generator no longer proposes a
+  // `creates` closure, because the domain it derived that from was the owner
+  // requirement census and `semantic-model.md` § creates says an owner
+  // requirement is not a `create`. The claim moved to `unresolvedClaims`
+  // (7 -> 8), so the control still proves the plain module import resolves and
+  // still produces candidates -- `reads` and `returns` -- which is what this
+  // pin exists to protect.
   const control = plan("asset-query-import-control");
-  assert.equal(control.closureCandidates.length, 3);
-  assert.equal(control.unresolvedClaims.length, 7);
+  assert.equal(control.closureCandidates.length, 2);
+  assert.equal(control.unresolvedClaims.length, 8);
 
   const suffixed = plan("asset-query-import");
   assert.equal(suffixed.closureCandidates.length, 0);

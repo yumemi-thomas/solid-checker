@@ -1125,6 +1125,17 @@ fn validate_call_claims(
                 "operation node lacks its corresponding positive call claim",
             );
         }
+        // NOT YET: "a `create` operation naming no resource is a
+        // contradiction" (`semantic-model.md` § creates, decision 2026-09-03,
+        // and the census plan's § 2.2 item 3) belongs exactly here. It cannot
+        // land before the two compiled-in Solid 1.x authority documents that
+        // carry that shape are corrected, and they cannot be corrected soundly
+        // today -- see `docs/precision-backlog.md`'s 2026-09-03 entry, which
+        // records the blocker with the code that proves it. The generator no
+        // longer produces the shape -- it emits no `create` operation at all
+        // (`inferred_contract.rs`'s `owner_requirement_operation`, pinned by
+        // `the_generator_emits_no_resourceless_create`) -- so nothing new can
+        // arrive here while the rule waits.
     }
     Ok(())
 }

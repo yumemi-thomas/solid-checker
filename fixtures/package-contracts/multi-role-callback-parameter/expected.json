@@ -13,13 +13,13 @@
             "sha256": "ab730c4fc65a7fc4137cd28037f5e9c6b3f9dd249f4155d57d00ce6df378e1f9"
           },
           "exports": {
-            "contradictOnZeroOnly": "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b",
+            "contradictOnZeroOnly": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "inlineAndReturned": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
-            "inlineAndTracked": "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b",
+            "inlineAndTracked": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "oneInlineSite": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018",
-            "oneTrackedSite": "summary-02b8ad26348d6d48a7ba21c5276e9da50e32898ee72b92ff2d731dd243913e74",
-            "twoParameters": "summary-b4397a14c6c77351822f84416113d58eec44f24bba4aef57c2d039d31237ed89",
-            "twoTrackedSites": "summary-02b8ad26348d6d48a7ba21c5276e9da50e32898ee72b92ff2d731dd243913e74"
+            "oneTrackedSite": "summary-cfced3f71ce5f2892cc88942048f065091f80d751291d7eb8aa646585710d3c9",
+            "twoParameters": "summary-6091aea4f4d3000ce9cfc546061964ba918c35ff266f0d254f56c72c3c5c6139",
+            "twoTrackedSites": "summary-cfced3f71ce5f2892cc88942048f065091f80d751291d7eb8aa646585710d3c9"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -43,64 +43,6 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-02b8ad26348d6d48a7ba21c5276e9da50e32898ee72b92ff2d731dd243913e74": {
-      "call": {
-        "callbacks": [
-          {
-            "from": {
-              "arg": 0,
-              "path": []
-            },
-            "operation": "callback-0"
-          }
-        ],
-        "creates": [
-          "owner-requirement-0"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "queued"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "callback-0",
-            "kind": "invoke",
-            "tracking": "tracked",
-            "trigger": {
-              "event": "call"
-            }
-          },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "create",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ]
-      },
-      "shape": "callable"
-    },
     "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
       "call": {
         "callbacks": [
@@ -134,39 +76,7 @@
       },
       "shape": "callable"
     },
-    "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b": {
-      "call": {
-        "creates": [
-          "owner-requirement-0"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "create",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-b4397a14c6c77351822f84416113d58eec44f24bba4aef57c2d039d31237ed89": {
+    "summary-6091aea4f4d3000ce9cfc546061964ba918c35ff266f0d254f56c72c3c5c6139": {
       "call": {
         "callbacks": [
           {
@@ -183,9 +93,6 @@
             },
             "operation": "callback-1"
           }
-        ],
-        "creates": [
-          "owner-requirement-0"
         ],
         "operations": [
           {
@@ -221,25 +128,36 @@
             "trigger": {
               "event": "call"
             }
-          },
+          }
+        ]
+      },
+      "shape": "callable"
+    },
+    "summary-cfced3f71ce5f2892cc88942048f065091f80d751291d7eb8aa646585710d3c9": {
+      "call": {
+        "callbacks": [
+          {
+            "from": {
+              "arg": 0,
+              "path": []
+            },
+            "operation": "callback-0"
+          }
+        ],
+        "operations": [
           {
             "at": {
               "event": "call",
-              "schedule": "same-stack"
+              "schedule": "queued"
             },
             "count": {
               "max": "many",
               "min": 0,
               "scope": "call"
             },
-            "id": "owner-requirement-0",
-            "kind": "create",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
+            "id": "callback-0",
+            "kind": "invoke",
+            "tracking": "tracked",
             "trigger": {
               "event": "call"
             }

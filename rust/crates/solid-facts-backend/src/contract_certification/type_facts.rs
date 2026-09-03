@@ -4025,7 +4025,17 @@ fn require_operation_evidence(
             }));
             Ok(())
         }
-        OperationKind::Create => {
+        // Both kinds arrive here for exactly one fact: an owner requirement
+        // this archive imposes on its caller, witnessed by the archive's own
+        // reachable call of the dialect primitive that installs it.
+        // `require_owner_operation_call` keys off the operation's own
+        // `Requirement` triple, not off the kind, so the `cleanup`-role
+        // requirement -- published as `kind: cleanup` in the `cleanups` domain
+        // (`inferred_contract.rs`'s `owner_requirement_operation`), witnessed
+        // by an `onCleanup` call -- is the same demand it has always answered.
+        // Without this arm the re-kinding silently made every such row
+        // unsupported at witness acquisition.
+        OperationKind::Create | OperationKind::Cleanup => {
             require_owner_operation_call(operation, proof, implementation, floor, open, sites)
         }
         _ => Err(TypeFactsCertificationError::UnsupportedDemand {
@@ -4175,7 +4185,7 @@ fn require_owner_operation_call(
     } else {
         return Err(TypeFactsCertificationError::UnsupportedDemand {
             demand: proof.id.clone(),
-            reason: "create operation has no supported owner requirement".into(),
+            reason: "operation has no supported owner requirement".into(),
         });
     };
     let mut found = false;

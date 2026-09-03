@@ -45,5 +45,6 @@
       "class": "non-module-target",
       "reason": "runtime target extension \".map\" is not an executable module"
     }
-  ]
+  ],
+  "withheldClaims": []
 }

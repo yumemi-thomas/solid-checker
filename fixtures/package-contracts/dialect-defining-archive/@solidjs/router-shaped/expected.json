@@ -13,7 +13,7 @@
             "sha256": "05b3d1ab22b4e2d50d652e11f6c2dc35253ab37e19ddb680666e1386c1935901"
           },
           "exports": {
-            "onSettled": "summary-01c93bde66365531cd4e5d5211ba04ac1bb5de5a7b0d3583422a120b737175b8"
+            "onSettled": "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018"
           },
           "resolution": {
             "runtimeBranch": "/exports/.",
@@ -37,7 +37,7 @@
   "semanticModelVersion": 1,
   "sidecars": {},
   "summaries": {
-    "summary-01c93bde66365531cd4e5d5211ba04ac1bb5de5a7b0d3583422a120b737175b8": {
+    "summary-46289250d2e3885b64e9b58b57be5eda23d43c6b2f215bf1ba2c0801f91a5018": {
       "call": {
         "callbacks": [
           {
@@ -47,9 +47,6 @@
             },
             "operation": "callback-0"
           }
-        ],
-        "creates": [
-          "owner-requirement-0"
         ],
         "operations": [
           {
@@ -64,28 +61,6 @@
             },
             "id": "callback-0",
             "kind": "invoke",
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          },
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "create",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
             "tracking": "untracked",
             "trigger": {
               "event": "call"

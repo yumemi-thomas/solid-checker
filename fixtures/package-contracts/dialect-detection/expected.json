@@ -19,7 +19,7 @@
             "constructionCandidates": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "contextLocation": "summary-edec704f8e259266e00ac00731f83b98771059690b6214cf89f0ed83e3383ee7",
             "contextParams": "summary-537157b5d7a4701b9dd08baa083b8a1e9c7ec2a21464203815850693b87d72e6",
-            "effectThroughMaybeAccessor": "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b",
+            "effectThroughMaybeAccessor": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "guardedIdentity": "summary-ee9d83c3e1d5c3193749e139525d7cc17b44b7b263b49f6e4b97e20ee8b67a6b",
             "identityResult": "summary-cd5c9bcb7a3509a32c7cc616e6df3edf011c299c0f2fdf61f0a26079e45adb61",
             "indirect": "summary-6052da31d7ca3d9482bb7c1929f354b1ab0a27a4ffbc812298afbaac89dd5d5a",
@@ -278,38 +278,6 @@
         ],
         "returns": [
           "return"
-        ]
-      },
-      "shape": "callable"
-    },
-    "summary-893e59eb60c2e09008d7dba2ce84dad7cdd61c4ec9c8ba5d09e246b5155bf76b": {
-      "call": {
-        "creates": [
-          "owner-requirement-0"
-        ],
-        "operations": [
-          {
-            "at": {
-              "event": "call",
-              "schedule": "same-stack"
-            },
-            "count": {
-              "max": "many",
-              "min": 0,
-              "scope": "call"
-            },
-            "id": "owner-requirement-0",
-            "kind": "create",
-            "owner": {
-              "requires": "required",
-              "requiresChildren": "required",
-              "source": "ambient-at-call"
-            },
-            "tracking": "untracked",
-            "trigger": {
-              "event": "call"
-            }
-          }
         ]
       },
       "shape": "callable"

@@ -17,5 +17,6 @@
       "reason": "resolved target <package-root>/unbuilt-solid.jsx is not a file"
     }
   ],
-  "inapplicable": []
+  "inapplicable": [],
+  "withheldClaims": []
 }

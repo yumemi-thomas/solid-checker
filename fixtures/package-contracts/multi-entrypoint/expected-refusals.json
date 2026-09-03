@@ -15,5 +15,6 @@
       "reason": "solid-checker-rust: emit package contract: entry file <package-root>/empty.ts has no runtime ESM exports"
     }
   ],
-  "inapplicable": []
+  "inapplicable": [],
+  "withheldClaims": []
 }

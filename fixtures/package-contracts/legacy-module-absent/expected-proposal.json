@@ -24,25 +24,6 @@
       }
     },
     {
-      "claimId": "claim:v1:sha256:4c436161f232c2c8bd45238801441b960ffee6bae6239eed9025976a8745d0ca",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./dist/index.js",
-        "runtimeDigest": "sha256:27c16c331a478677ed6bf6f57fe47ddc3a972016d688ee61405408ef0090135b",
-        "declarationsPath": "./dist/index.d.ts",
-        "declarationsDigest": "sha256:8c158374f6e577dd153bfde1a4dbab49d475cca83badfa7753c9cf7a0c1222e2",
-        "closureDigest": "sha256:5b1ac7a95aa9313a98417c49c077b86fe8b2b33714cd73d3b7af62061dbfae81"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:615062262d288e4be99cb0d1cf0fc67c40314cb8125985ad276aa70884c84c1c",
-        "export": "observe",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
-        }
-      }
-    },
-    {
       "claimId": "claim:v1:sha256:623afad7816e51da33bf71f301aade82dd81b93c52fe583fa6e24a254cbc3ac8",
       "artifact": {
         "entrypoint": ".",
@@ -157,6 +138,25 @@
           "kind": "operation-axis",
           "operation": "artifact-case:615062262d288e4be99cb0d1cf0fc67c40314cb8125985ad276aa70884c84c1c:observe:operation:callback-0",
           "domain": "owner-source"
+        }
+      }
+    },
+    {
+      "claimId": "claim:v1:sha256:4c436161f232c2c8bd45238801441b960ffee6bae6239eed9025976a8745d0ca",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./dist/index.js",
+        "runtimeDigest": "sha256:27c16c331a478677ed6bf6f57fe47ddc3a972016d688ee61405408ef0090135b",
+        "declarationsPath": "./dist/index.d.ts",
+        "declarationsDigest": "sha256:8c158374f6e577dd153bfde1a4dbab49d475cca83badfa7753c9cf7a0c1222e2",
+        "closureDigest": "sha256:5b1ac7a95aa9313a98417c49c077b86fe8b2b33714cd73d3b7af62061dbfae81"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:615062262d288e4be99cb0d1cf0fc67c40314cb8125985ad276aa70884c84c1c",
+        "export": "observe",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
         }
       }
     },

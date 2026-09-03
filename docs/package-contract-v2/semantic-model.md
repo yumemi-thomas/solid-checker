@@ -360,10 +360,62 @@ Three things are **not** `creates` items, and each has its own home:
   `requiresCleanup` triple of whichever operation needs the owner.
 
 **[Decision 2026-09-03]** a `create` operation that names no resource is
-therefore invalid. That is the shape the generator emits for an owner
+therefore invalid. That is the shape the generator *used to* emit for an owner
 requirement; it registers nothing, and it is the whole of the disagreement this
-section settles. Two bundled documents and one fixture contract carry one and
-are corrected by the producer slice, not by this section.
+section settles. The generator no longer emits any `create` at all — see the
+model gap below — but the *validation* rule that would reject one is **not yet
+in force**, because two bundled documents and one fixture contract still carry
+one: the fixture's is refused before decode by its catalog status, and the two
+bundled documents are frozen Phase 14 authority whose correction is an
+authority re-capture blocked on the census itself. The rule and those
+corrections land together; the blocker is recorded with its evidence in
+`docs/precision-backlog.md` (2026-09-03, "The generator stopped publishing an
+owner requirement as a resourceless `create`"). Until then a document carrying
+the shape decodes, and this section states what it means: nothing that
+`creates` can express.
+
+**[Decision 2026-09-03] The model gap this exposes: a free-standing owner
+requirement has no domain.** An export that must be called under an ambient
+owner *because it registers a computation on that owner* — the analyzer's
+`OwnerRequirementOperation::Effect`, the fact behind `SC4001` — is not a
+`create`: it registers nothing into a runtime outside the invocation, and it is
+exactly what the audits publish beside `creates: []` **closed**
+(`createTrackedEffect`, `For`/`Show`'s children, `createSubRoot`'s callback).
+The three "not a `creates` item" homes above do not carry it either: the
+`requires`/`requiresChildren`/`requiresCleanup` triple is a *field of whichever
+operation needs the owner*, so a requirement with no operation to hang it on
+has nowhere to go, and no audited document records a consumer-level owner
+requirement anywhere. Version 1 therefore has no domain for it, and the
+generator **withholds** it by name rather than widening `creates` — the
+withholding is recorded per export, with its role and reason, in the
+generator's proposal refusal sidecar (`writeProposalRefusalAudit`'s
+`withheldClaims`, fed by the emitter's
+`solid-checker:withheld-owner-requirement=` record). The repair is a new domain
+(option (c) of the census plan's § 2.2 item 1), not a wider `creates`.
+
+What that costs, exactly: a *generated* proposal no longer carries the
+`Effect` owner-requirement positive fact, so a consumer `SC4001` derived from a
+**generated** dependency contract is unavailable until the new domain exists.
+Nothing live changes today — no generated contract is accepted anywhere — and
+the hand-audited path is untouched: the two frozen Solid 1.x authority
+documents still carry their `ambient-at-call` `create`, and
+`project_owner_requirements` still reads it.
+
+A **cleanup**-role requirement does have a home, and it is the `cleanups`
+domain: the export installs a cleanup on the caller's owner, so it publishes
+`kind: cleanup` with `source: ambient-at-call`, `requires: required`,
+`requiresCleanup: required`. **There is no audited precedent for that shape.**
+Every `kind: cleanup` operation in the bundled corpus — `solid-js`'s
+`replace-cleanup`, `@solidjs/signals`'s `returned-cleanup`, `@solidjs/web`'s
+`ref-cleanup`, `--web-node-server`'s `retract-declaration` — is
+`requires: forbidden`, `source: none`, because each describes a cleanup the
+*runtime* runs rather than one the export installs on its caller's owner. The
+shape is chosen for the fact, not copied from an audit: the requirement is a
+`Requirement` triple on the operation that needs the owner, the installing act
+is a cleanup, and the archive's own `onCleanup` call is the witness. It names
+**no resource**, as `returned-cleanup` and `ref-cleanup` also do not: a
+resource declaration is a positive fact of its own with no witness on any axis
+today.
 
 Where the audits put a created owner is **not** uniform, and the model does not
 pretend otherwise. `render` is the single audited `create` that also names an

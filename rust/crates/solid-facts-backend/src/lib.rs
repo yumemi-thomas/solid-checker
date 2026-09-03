@@ -231,9 +231,14 @@ pub fn encode_inferred_contract_workflow(
     resolved: &ResolvedImport,
     pretty: bool,
 ) -> Result<ProposalArtifacts, ContractWorkflowError> {
-    let (proposal, candidates) =
+    let normalized =
         inferred_contract::normalize_inferred_contract_with_candidates(inferred, resolved)?;
-    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
+    contract_workflow::encode_proposal_artifacts(
+        &normalized.contract,
+        normalized.closure_candidates,
+        normalized.withheld,
+        pretty,
+    )
 }
 
 /// Emits one exact entrypoint's analyzer inference while keeping the resolved
@@ -296,13 +301,18 @@ pub fn encode_inferred_entrypoint_workflow_with_external_targets(
     inferred
         .validate()
         .map_err(|reason| ContractFailure::InvalidSemanticModel { reason })?;
-    let (proposal, candidates) =
+    let normalized =
         inferred_contract::normalize_inferred_contract_with_candidates_and_external_targets(
             &inferred,
             resolved,
             external_targets,
         )?;
-    contract_workflow::encode_proposal_artifacts(&proposal, candidates, pretty)
+    contract_workflow::encode_proposal_artifacts(
+        &normalized.contract,
+        normalized.closure_candidates,
+        normalized.withheld,
+        pretty,
+    )
 }
 
 /// Merges independently analyzed exact artifact cases without exposing compact

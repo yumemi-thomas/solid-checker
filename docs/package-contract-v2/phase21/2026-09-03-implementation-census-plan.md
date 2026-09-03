@@ -1,7 +1,9 @@
 # Implementation census for behavioral call domains — semantics first
 
 Date: 2026-09-03
-Status: semantics settled; producer, dialect, and census work not started
+Status: semantics settled; the producer re-kinding and consumer filter of § 2.2
+landed (its validation rule and the six authority files are blocked — see
+§ 2.2's status block); dialect and census work not started
 Scope of this document: the decision, its evidence, and the prerequisite chain.
 No code, fixture, or snapshot changed in the slice that wrote it.
 
@@ -46,11 +48,14 @@ one, that is not inside an owner-providing region; the generator reads the
 result as `program.missing_owners`
 (`generated_owner_requirements_by_symbol`, `main.rs:6285-6333`).
 
-So a generated `create` operation is an **owner requirement**. It registers
-nothing: it names no resource, and its `productions` is closed empty. The
-generator emits only four kinds at all — `Read`, `Return`, `Create`, `Invoke`
-— and hard-wires `writes`, `invalidates`, `throws`, `cleanups`, and `disposals`
-to `Unknown` (`inferred_contract.rs:299-309`).
+So a generated `create` operation was an **owner requirement**. It registered
+nothing: it named no resource, and its `productions` was closed empty. The
+generator emitted only four kinds at all — `Read`, `Return`, `Create`,
+`Invoke` — and hard-wired `writes`, `invalidates`, `throws`, `cleanups`, and
+`disposals` to `Unknown`. (Both sentences are past tense as of the producer
+slice: § 2.2 item 1 landed, so the four kinds are now `Read`, `Return`,
+`Invoke`, `Cleanup`, `creates` is always `Unknown`, and `cleanups` is
+`Partial` when it carries an item.)
 
 Two bundled documents carry that shape:
 
@@ -239,6 +244,18 @@ document uses and that `validate_call_claims` already accepts; adding a
 need a new `ClaimDomain` variant and a new canonical-stream position, and would
 move the semantic digest of every contract. There is nothing to buy.
 
+**[Correction 2026-09-03] (c) is reopened for exactly one case.** That
+rejection holds wherever there *is* an operation to hang the triple on, which
+covers every audited document. It does not cover a **free-standing** owner
+requirement: an export that must be called under an ambient owner because it
+registers a computation on it has no operation of its own to carry the field —
+the registration is not a `create` (§ creates), and inventing one so the field
+has a host is what item 1's first draft did and what this slice reverted. That
+case is now withheld by name and has no representation at all, so (c) is the
+repair for it. What it needs is unchanged from the rejection: a new
+`ClaimDomain` variant, a canonical-stream position, and a semantic-digest move
+for every contract — which is why it is a separate slice and not this one.
+
 **(b) is also the only one an implementation census can decide.** Under (a) the
 census question is "does this export require an ambient owner", which is a
 question about the *callers* this archive cannot see — it is exactly the
@@ -253,47 +270,100 @@ archive's own implementation*, which is what a census is.
 
 ### 2.2 What changes, exactly
 
-Nothing in this slice. The changes (b) implies, for the producer slice:
+**Status after the producer slice (2026-09-03, corrected).** Items 1, 2, and 5
+are **done**; items 3 and 4 are **blocked together**, and item 4's
+fixture-snapshot obligation is discharged as "did not move". Item 1 landed as
+**withholding both non-cleanup roles**, not as the re-kinding its first draft
+described — see the rewritten item below for why the `Effect` `create` was
+wrong. Item 1's cleanup publication and item 5's filter are in
+`inferred_contract.rs`'s `owner_requirement_operation` and
+`contracts.rs`'s `project_owner_requirements`, item 5 taking the first of the
+two options it names (read `cleanups` for its items, insert no
+`ClaimDomain::Cleanups`). Item 3's validation rule is written as a `NOT YET`
+comment in `contract_semantics/validate.rs` rather than as code, because with
+it in place 14 `solid-facts-backend --lib` tests fail on the two item-4
+documents — and item 4 cannot be discharged either: the correction is an
+authority **re-capture** rather than a regeneration (no live issuer, sidecar
+bytes absent from the repository, and `require_census_decides_closure` refuses
+every closed call domain a fresh certification would have to re-close), so all
+six files are left untouched. The measurements, the failing test names, and the
+file:line evidence are in `docs/precision-backlog.md`'s
+2026-09-03 entry "The generator stopped publishing an owner requirement as a
+resourceless `create`". Item 4's fixture contract
+(`reactive-ir/package-callback-consumer`) still carries the shape and is still
+refused before decode by its `obsolete-policy1` catalog entry; coverage
+confirmed its snapshot did not move. The fixture pair item 5 asks for is not
+constructible while every consumer fixture's contract is cut, and is pinned by
+`owner_requirement_projection_tests` instead.
 
-1. **`inferred_contract.rs:276-295` and `apply_owner_requirement` (`:505-517`)
-   stop emitting a resourceless `create`.** An `Effect`/`Boundary` requirement
-   becomes a `create` in the audits' own shape — `resources: [<child owner
-   resource>]`, `owner: {source: ambient-at-call, requires: required,
-   requiresChildren: required, productions: [<that owner>]}`, with that owner
-   also declared in the summary's `resources`. A `Cleanup`/`SettledCleanup`
-   requirement becomes a `kind: "cleanup"` operation in **`cleanups`**,
-   referencing a `cleanup` resource, with `owner: {source: ambient-at-call,
-   requires: required, requiresCleanup: required}` — the shape `createEffect`'s
-   `replace-cleanup` already has.
+The changes (b) implies, for the producer slice:
 
-   **`source` must stay `ambient-at-call`, not `render`'s `created`.** An
-   earlier draft of this item copied `register-delegation`'s shape wholesale,
-   including `source: created`. That silently deletes the rule: item 5 below
-   narrows the consumer filter so that a requirement projects only from an
-   operation whose owner is *ambient at the call*, and an operation stamped
-   `source: created` satisfies no such filter — every requirement would stop
-   projecting, and `SC4001` would stop firing for every contract-derived
-   consumer obligation. The two facts are genuinely different, exactly as
-   `semantic-model.md` § Ownership says: registering a computation on the
-   *caller's* owner both needs that ambient owner (`requires: required`,
-   `source: ambient-at-call`) and produces a child owner under it
-   (`productions: [<child>]`). `render` is the other case — it makes the root
-   it runs under and needs no ambient one.
+1. **`inferred_contract.rs`'s owner-requirement loop and
+   `apply_owner_requirement` stop emitting a resourceless `create`.** A
+   `Cleanup`/`SettledCleanup` requirement becomes a `kind: "cleanup"` operation
+   in **`cleanups`**, with `owner: {source: ambient-at-call,
+   requires: required, requiresCleanup: required}` and **no resource**. An
+   `Effect` or `Boundary` requirement is **withheld by name**: no operation, no
+   closure candidate, `creates` left open, and a record naming the export, the
+   role, and the reason in the generator's refusal sidecar.
 
-   **The `Boundary` arm rests on a fact the producer cannot census.**
-   `OwnerRequirementOperation::Boundary` has exactly one origin in the engine:
+   **An `Effect` requirement is not a `create`, and the first draft of this
+   item was wrong to make it one.** That draft had it become a `create` in
+   "the audits' own shape" — `resources: [<child owner>]`,
+   `owner: {source: ambient-at-call, requires: required,
+   requiresChildren: required, productions: [<that owner>]}`. There is no such
+   audited shape. § creates defines `create` as registering a version-1
+   resource into a runtime **outside** the invocation, says the three audited
+   registrations (`render`'s `register-delegation`,
+   `createServerReference`'s two) are the whole extension in the corpus, and
+   says "Do not repair it by widening `creates`". Registering a computation on
+   the *caller's* owner is precisely what the audits publish beside
+   `creates: []` **closed**. Attaching a child-owner resource also defeats item
+   3's separator: the mechanical rule is "a `create` naming no resource is a
+   contradiction", and manufacturing a resource so the rule passes turns the
+   separator into a formality.
+
+   So the requirement is withheld, and the **model gap** is recorded instead:
+   a free-standing owner requirement — an export that must be called under an
+   owner because it registers a computation on it — has no operation kind that
+   can carry it in schema version 1, and the audits record no consumer-level
+   owner requirement anywhere. Option (c) below is the repair. `semantic-model.md`
+   § creates carries the decision and states what is lost: a *generated*
+   proposal no longer carries the `Effect` positive fact, so a consumer
+   `SC4001` derived from a **generated** dependency contract is unavailable
+   until the new domain exists. Nothing live changes — no generated contract is
+   accepted anywhere today — and the hand-audited path is untouched.
+
+   **The published cleanup shape has no audited precedent either, and says so.**
+   Every `kind: cleanup` operation in the bundled corpus — `solid-js`'s
+   `replace-cleanup`, `@solidjs/signals`'s `returned-cleanup`,
+   `@solidjs/web`'s `ref-cleanup`, `--web-node-server`'s
+   `retract-declaration` — is `requires: forbidden`, `source: none`, because
+   each describes a cleanup the *runtime* runs rather than one the export
+   installs on its caller's owner. The generated shape is chosen for the fact:
+   the requirement is a `Requirement` triple on the operation that needs the
+   owner, the installing act is a cleanup, and `require_owner_operation_call`
+   witnesses it from the archive's own `onCleanup` call. It names **no
+   resource**, as `returned-cleanup` and `ref-cleanup` also do not — a resource
+   declaration is a positive fact of its own (`PositiveFactSubject::Resource`,
+   demanded as `ProofFamily::RecursiveValueShape`) and no witness exists for a
+   resource axis, so declaring one refuses the row at witness acquisition.
+
+   **`Boundary` is reachable, and is withheld for a second, independent
+   reason.** `OwnerRequirementOperation::Boundary` has exactly one live origin:
    the JSX loop at `rust/crates/solid-reactive-ir/src/owners.rs:1213-1231`,
    which pushes the internal string `"boundary"` for a `jsx_elements` entry
    whose tag `dialect.is_async_boundary` accepts and which is not inside an
-   owner-providing region; `OwnerRequirementOperation::from_internal`
-   (`owners.rs:1595`, `lib.rs:825-833`) is the only conversion. No contract
-   projection ever yields it — `project_owner_requirements` emits `Effect` or
-   `Cleanup` only (`contracts.rs:350-355`), and `dialect.rs:660` emits
-   `Cleanup`. So the requirement is a *JSX lowering* fact, and the producer's
-   census records neither JSX elements nor their lowering. Write the arm, and
-   record that it is unreachable from a census until the producer marks JSX;
-   until then a `Boundary` requirement reaching a proposal is a refusal, not a
-   claim.
+   owner-providing region. Those candidates reach `program.missing_owners`, and
+   `main.rs`'s generated-owner-requirement indexing (`:6332`) consumes them, so
+   **an archive that ships an async-boundary JSX element does reach this arm**.
+   (An earlier draft called it unreachable on the strength of
+   `project_owner_requirements` emitting `Effect`/`Cleanup` only and
+   `solid-facts-backend/src/dialect.rs:660` emitting `Cleanup` — but that line
+   is inside `mod tests`, a sample fixture, and is no evidence about the live
+   engine.) It stays withheld because it is a *compiler lowering* fact and the
+   producer's census records neither JSX elements nor their lowering, so
+   nothing could discharge it.
 2. **Schema.** No change. Both target shapes are already expressible in
    `schemaVersion: 1`: `resources` on an operation, `owner.productions`,
    `owner.requires*`, and `kind: "cleanup"` are all existing fields with
@@ -382,9 +452,11 @@ Nothing in this slice. The changes (b) implies, for the producer slice:
    when `creates` is not closed (`:340-342`). Extending it to `cleanups` the
    same way would insert `ClaimDomain::Cleanups` for **every** Solid 1.x
    contract: all 89 summaries across the 19 `pkg/contracts/bundled/solid-v1/`
-   documents omit `cleanups` entirely, which is `Unknown`, and the generator
-   hard-wires `cleanups: KnowledgeSet::Unknown` for everything it emits
-   (`inferred_contract.rs:299-309`).
+   documents omit `cleanups` entirely, which is `Unknown`. (The generator no
+   longer hard-wires `cleanups: KnowledgeSet::Unknown`: it publishes the domain
+   `Partial` when it has a cleanup requirement to put in it and `Unknown`
+   otherwise. The measured consequence below is unchanged, because a `Partial`
+   domain is still not closed.)
 
    Measured consequence, which is *not* a new `SC9005`:
    `push_unknown_contract_claims` (`contracts.rs:602-630`) labels only four

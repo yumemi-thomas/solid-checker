@@ -15,5 +15,6 @@
       "reason": "accepted dependency solid-js has no exact runtime binding for export createMemo"
     }
   ],
-  "inapplicable": []
+  "inapplicable": [],
+  "withheldClaims": []
 }

@@ -1056,7 +1056,7 @@ mod tests {
         .unwrap()
         .normalize()
         .unwrap();
-        let proposal = encode_proposal_artifacts(&contract, Vec::new(), false).unwrap();
+        let proposal = encode_proposal_artifacts(&contract, Vec::new(), Vec::new(), false).unwrap();
         let plan: serde_json::Value = serde_json::from_slice(&proposal.plan).unwrap();
         let positive = &plan["positiveOperations"][0];
         let claim_id = positive["claimId"].as_str().unwrap();

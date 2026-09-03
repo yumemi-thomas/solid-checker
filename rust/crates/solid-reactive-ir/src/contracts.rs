@@ -340,13 +340,41 @@ fn project_owner_requirements(
     if !knowledge.is_closed() {
         open.insert(ClaimDomain::Creates);
     }
+    // `cleanups` is read for its *items* only, deliberately: a cleanup owner
+    // requirement is published as a `kind: cleanup` operation in that domain
+    // (`inferred_contract.rs`'s `owner_requirement_operation`), so the
+    // projection has to look there. That shape has **no audited precedent** --
+    // every `kind: cleanup` operation in the bundled corpus is
+    // `requires: forbidden`, `source: none`, because each describes a cleanup
+    // the runtime runs rather than one the export installs on its caller's
+    // owner -- so the filter below decides membership from the operation's own
+    // `Requirement` triple and never from its kind.
+    //
+    // Inserting `ClaimDomain::Cleanups` into `open` would open the domain for
+    // every Solid 1.x contract -- all of them omit `cleanups` entirely -- and
+    // `contract_document`'s proven-non-callable assertion expects no call-path
+    // domain left open. See
+    // `docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
+    // § 2.2 item 5, which forbids taking the other option incidentally.
+    let cleanups = export
+        .operation_claim(ClaimDomain::Cleanups)
+        .expect("cleanups is an operation domain");
     let mut requirements = Vec::new();
     for operation in knowledge
         .items()
         .iter()
+        .chain(cleanups.items())
         .filter_map(|id| export.operation(&id.0))
     {
-        if operation.owner.requirements.owner == Requirement::Required {
+        // A requirement projects when the operation requires an owner it does
+        // not itself supply. An operation whose owner is `created` made the
+        // owner it runs under -- audited `render`'s `register-delegation` is
+        // exactly that, `requires: required` *and* `source: created` -- and
+        // imposes no obligation on its caller, so reading `requires` alone
+        // would report an owner-less effect for a top-level `render(...)`.
+        if operation.owner.requirements.owner == Requirement::Required
+            && !matches!(operation.owner.source, OwnerSource::Created(_))
+        {
             let operation = match operation.kind {
                 OperationKind::Cleanup | OperationKind::Dispose => {
                     OwnerRequirementOperation::Cleanup
@@ -361,6 +389,252 @@ fn project_owner_requirements(
     match knowledge {
         KnowledgeSet::Unknown if requirements.is_empty() => ContractClaim::Open,
         _ => ContractClaim::Known(requirements),
+    }
+}
+
+/// Which published operation imposes an owner obligation on the *caller*.
+///
+/// The three shapes here are the ones a consumer can actually meet today: the
+/// `ambient-at-call` `create` the two frozen Solid 1.x authority documents
+/// still carry (`debounce-root-default.json` and `rootless-root-default.json`,
+/// each one `owner-requirement-0`), audited `render`'s `source: created`
+/// `create`, and the `kind: cleanup` requirement the generator publishes. The
+/// distinction between the first two is the whole content of the filter: both
+/// say `requires: required`, and only one of them is the caller's problem. The
+/// third one proves the filter reads the `Requirement` triple rather than the
+/// operation's kind.
+///
+/// A findings fixture cannot pin this today. Every contract-consumer fixture
+/// under `fixtures/reactive-ir/` has its catalog entry cut to
+/// `"status": "obsolete-policy1"` by the proof-policy-2 cut, so each one
+/// produces `SC9005 package-contract-incomplete` instead of consuming a
+/// contract at all, and `@solidjs/web`'s audited `render` reaches no analyzer
+/// either — `EMBEDDED_SOLID1_BUNDLES` is `&[]` and both first-party bundle
+/// producers validate their inputs and return an empty vector. Recorded in
+/// `docs/precision-backlog.md`; the fixture pair the census plan asks for
+/// becomes constructible when a fixture can hold an accepted contract again.
+#[cfg(test)]
+mod owner_requirement_projection_tests {
+    use std::collections::BTreeSet;
+
+    use super::project_owner_requirements;
+    use crate::contract_semantics::{
+        ArtifactIdentity, CallClaims, CallSemantics, Cardinality, CardinalityScope, Digest, Event,
+        ExportIdentity, ExportSemantics, ExportTargetIdentity, GuardPartition, KnowledgeSet,
+        Lifetime, Operation, OperationId, OperationKind, OwnerCapabilities, OwnerProduction,
+        OwnerRelation, OwnerRequirements, OwnerSource, Requirement, Resource, ResourceId,
+        ResourceKind, ResourceState, Schedule, StabilityKnowledge, Tracking, Trigger, UpperBound,
+        ValueShape,
+    };
+    use crate::{ContractClaim, ContractOwnerRequirement, OwnerRequirementOperation};
+
+    fn digest() -> Digest {
+        Digest::parse(format!("sha256:{}", "a".repeat(64))).unwrap()
+    }
+
+    fn owner_resource(id: &str) -> Resource {
+        Resource {
+            id: ResourceId(id.into()),
+            kind: ResourceKind::Owner,
+            states: KnowledgeSet::Complete(vec![
+                ResourceState::OwnerActive,
+                ResourceState::OwnerDisposed,
+            ]),
+            capabilities: KnowledgeSet::Complete(Vec::new()),
+            lifetime: Some(Lifetime::Owner(ResourceId(id.into()))),
+        }
+    }
+
+    fn operation(id: &str, kind: OperationKind, resources: &[&str]) -> Operation {
+        Operation {
+            id: OperationId(id.into()),
+            kind,
+            guard: None,
+            trigger: Some(Trigger::Event(Event::Call)),
+            at: Some(Event::Call),
+            schedule: Some(Schedule::SameStack),
+            tracking: Tracking::Untracked,
+            owner: OwnerRelation::default(),
+            cardinality: Cardinality {
+                scope: Some(CardinalityScope::Call),
+                min: Some(0),
+                max: Some(UpperBound::Many),
+            },
+            inputs: Vec::new(),
+            output: None,
+            resources: resources
+                .iter()
+                .map(|resource| ResourceId((*resource).into()))
+                .collect(),
+            composed_from: None,
+        }
+    }
+
+    fn export(
+        claims: CallClaims,
+        operations: Vec<Operation>,
+        resources: Vec<Resource>,
+    ) -> ExportSemantics {
+        let module = ArtifactIdentity {
+            path: "./index.js".into(),
+            digest: digest(),
+        };
+        let target = ExportTargetIdentity {
+            module,
+            export_name: "subject".into(),
+        };
+        ExportSemantics {
+            identity: ExportIdentity {
+                entrypoint: ".".into(),
+                public_name: "subject".into(),
+                runtime: target.clone(),
+                declarations: target,
+            },
+            shape: ValueShape::Callable,
+            stability: StabilityKnowledge::Unknown,
+            call: CallSemantics::new(
+                claims,
+                operations,
+                Vec::new(),
+                resources,
+                GuardPartition::default(),
+            ),
+        }
+    }
+
+    fn claims() -> CallClaims {
+        CallClaims {
+            callbacks: KnowledgeSet::Complete(Vec::new()),
+            reads: KnowledgeSet::Complete(Vec::new()),
+            writes: KnowledgeSet::Unknown,
+            creates: KnowledgeSet::Complete(Vec::new()),
+            invalidates: KnowledgeSet::Unknown,
+            throws: KnowledgeSet::Unknown,
+            returns: KnowledgeSet::Complete(Vec::new()),
+            cleanups: KnowledgeSet::Unknown,
+            disposals: KnowledgeSet::Unknown,
+        }
+    }
+
+    /// The shape the two frozen Solid 1.x authority documents still carry, and
+    /// the only `ambient-at-call` `create` a consumer can meet: it needs an
+    /// ambient owner it did not make. This is the obligation `SC4001` reports
+    /// at an unowned call.
+    ///
+    /// The generator no longer produces it. A `create` naming a child owner
+    /// resource would contradict `semantic-model.md` § creates -- a `create`
+    /// registers a resource into a runtime *outside* the invocation -- so an
+    /// `Effect` owner requirement is now withheld by name instead. This test
+    /// pins how a consumer reads the frozen documents until their re-capture
+    /// lands.
+    #[test]
+    fn an_ambient_at_call_requirement_projects_as_a_consumer_obligation() {
+        let mut created = operation("register-effect", OperationKind::Create, &["child-owner"]);
+        created.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Required,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Complete(vec![OwnerProduction {
+                resource: ResourceId("child-owner".into()),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: Some(Lifetime::Owner(ResourceId("child-owner".into()))),
+            }]),
+        };
+        let mut claims = claims();
+        claims.creates = KnowledgeSet::Complete(vec![created.id.clone()]);
+        let export = export(claims, vec![created], vec![owner_resource("child-owner")]);
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Effect
+            }])
+        );
+        assert!(open.is_empty());
+    }
+
+    /// Audited `@solidjs/web` `render`'s `register-delegation`: `requires:
+    /// required` *and* `source: created`. It runs under the root it made, so a
+    /// top-level `render(() => <App/>, el)` owes its caller nothing.
+    #[test]
+    fn an_operation_that_created_its_own_owner_imposes_nothing_on_the_caller() {
+        let mut created = operation(
+            "register-delegation",
+            OperationKind::Create,
+            &["browser-root"],
+        );
+        created.owner = OwnerRelation {
+            source: OwnerSource::Created(ResourceId("browser-root".into())),
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Unconstrained,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: Some(Lifetime::Owner(ResourceId("browser-root".into()))),
+            productions: KnowledgeSet::Complete(vec![OwnerProduction {
+                resource: ResourceId("browser-root".into()),
+                capabilities: OwnerCapabilities::default(),
+                lifetime: Some(Lifetime::Owner(ResourceId("browser-root".into()))),
+            }]),
+        };
+        let mut claims = claims();
+        claims.creates = KnowledgeSet::Complete(vec![created.id.clone()]);
+        let export = export(claims, vec![created], vec![owner_resource("browser-root")]);
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(Vec::new())
+        );
+        assert!(open.is_empty());
+    }
+
+    /// The generated cleanup shape: `kind: cleanup` in the `cleanups` domain,
+    /// `source: ambient-at-call`, `requires: required`,
+    /// `requiresCleanup: required`, and **no resource**. No audited document
+    /// carries it -- every bundled `kind: cleanup` operation is
+    /// `requires: forbidden`, `source: none` -- so the projection has to read
+    /// the domain for its items while leaving it out of `open`, because every
+    /// 1.x contract omits `cleanups` entirely.
+    ///
+    /// The role in the result is the user-visible half: this requirement now
+    /// round-trips as `OwnerRequirementOperation::Cleanup`, so `SC4001`'s
+    /// remedy names `onCleanup` rather than an owner for an effect.
+    #[test]
+    fn a_cleanup_requirement_projects_from_the_cleanups_domain_without_opening_it() {
+        let mut cleanup = operation("replace-cleanup", OperationKind::Cleanup, &[]);
+        cleanup.owner = OwnerRelation {
+            source: OwnerSource::AmbientAtCall,
+            requirements: OwnerRequirements {
+                owner: Requirement::Required,
+                child_owners: Requirement::Unconstrained,
+                cleanup: Requirement::Required,
+            },
+            capabilities: OwnerCapabilities::default(),
+            lifetime: None,
+            productions: KnowledgeSet::Complete(Vec::new()),
+        };
+        let mut claims = claims();
+        claims.cleanups = KnowledgeSet::Partial(vec![cleanup.id.clone()]);
+        let export = export(claims, vec![cleanup], Vec::new());
+
+        let mut open = BTreeSet::new();
+        assert_eq!(
+            project_owner_requirements(&export, &mut open),
+            ContractClaim::Known(vec![ContractOwnerRequirement {
+                operation: OwnerRequirementOperation::Cleanup
+            }])
+        );
+        // `creates` is closed and empty here, and the *cleanups* read must not
+        // add a domain of its own.
+        assert!(open.is_empty());
     }
 }
 

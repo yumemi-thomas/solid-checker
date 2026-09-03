@@ -198,6 +198,33 @@ export function declaredApplicabilityClaims(inapplicable) {
 /// sentence, is what the class below is decided from.
 const UNRESOLVED_DEPENDENCY_MODULE_MARKER = "solid-checker:unresolved-dependency-module=";
 
+/// The one line the native emitter writes for each claim it refused to publish
+/// (`WITHHELD_OWNER_REQUIREMENT_MARKER` in
+/// rust/crates/solid-facts-backend/src/main.rs), tab-separated as
+/// `<document path>\t<export>\t<role>\t<reason>`.
+///
+/// A withheld claim leaves only an open domain behind, which says the same
+/// thing as a census that found nothing to claim — so the withholding has to be
+/// stated rather than inferred. The document path keys the line because one
+/// batched emitter process writes for several artifact-case targets.
+const WITHHELD_OWNER_REQUIREMENT_MARKER = "solid-checker:withheld-owner-requirement=";
+
+/// Every withheld-claim line the emitter wrote for `documentPath`, as
+/// `{ export, role, reason }`. Lines for other targets of the same batch, and
+/// any other emitter output, are ignored.
+export function withheldClaimsFromEmitterOutput(stdout, documentPath) {
+  const claims = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    if (!line.startsWith(WITHHELD_OWNER_REQUIREMENT_MARKER)) continue;
+    const [document, exportName, role, ...reason] = line
+      .slice(WITHHELD_OWNER_REQUIREMENT_MARKER.length)
+      .split("\t");
+    if (document !== documentPath || !exportName || !role || reason.length === 0) continue;
+    claims.push({ export: exportName, role, reason: reason.join("\t").trim() });
+  }
+  return claims;
+}
+
 /// The refusal classes a census row can carry, named after what would change
 /// the answer.
 export const REFUSAL_CLASSES = Object.freeze({
@@ -764,7 +791,18 @@ function writeCertificationInputs(output, plan, {
   );
 }
 
-function writeProposalRefusalAudit(output, manifest, refusals, inapplicable = []) {
+// Additive under the same envelope version, for the same reason `inapplicable`
+// is: a withheld *claim* is not an artifact-case refusal — the case still
+// certifies — so putting it in `refusals` would change every consumer's refusal
+// total. Its own array keeps "never counted as an artifact-case refusal" true
+// by construction.
+function writeProposalRefusalAudit(
+  output,
+  manifest,
+  refusals,
+  inapplicable = [],
+  withheldClaims = []
+) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(
     `${output}.refusals.json`,
@@ -774,7 +812,8 @@ function writeProposalRefusalAudit(output, manifest, refusals, inapplicable = []
         refusalVersion: 1,
         package: { name: manifest.name, version: manifest.version },
         refusals,
-        inapplicable
+        inapplicable,
+        withheldClaims
       },
       null,
       2
@@ -934,7 +973,7 @@ async function analyzeArtifact({
   if (proposalDependencyCatalog) {
     analyzerArguments.push("--proposal-dependencies", proposalDependencyCatalog);
   }
-  await checked(
+  const emitted = await checked(
     analyzerArguments,
     packageRoot
   );
@@ -945,6 +984,7 @@ async function analyzeArtifact({
     conditions,
     resolution,
     identity,
+    withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, output),
     analysisDurationMs: performance.now() - startedAt
   };
 }
@@ -1036,8 +1076,9 @@ async function analyzeArtifactsBatch({
       if (proposalDependencyCatalog) {
         analyzerArguments.push("--proposal-dependencies", proposalDependencyCatalog);
       }
+      let emitted;
       try {
-        await checked(analyzerArguments, packageRoot);
+        emitted = await checked(analyzerArguments, packageRoot);
       } catch (error) {
         return batch.map(candidate => ({
           index: candidate.index,
@@ -1067,6 +1108,7 @@ async function analyzeArtifactsBatch({
             conditions: candidate.prepared.conditions,
             resolution: candidate.prepared.resolution,
             identity: candidate.prepared.identity,
+            withheldClaims: withheldClaimsFromEmitterOutput(emitted.stdout, target.output),
             analysisDurationMs: Number.isFinite(result.durationNs)
               ? result.durationNs / 1_000_000
               : duration
@@ -1184,6 +1226,10 @@ export async function generatePackageContract(
   let emittedArtifactCases = 0;
   let certificationProposals = [];
   const inapplicable = [];
+  // Every claim the native emitter refused to publish, by name. Recorded for
+  // an artifact case that certified: the case is not refused, one claim of it
+  // is withheld, and the two are different census answers.
+  const withheldClaims = [];
   const refusals = wildcardRefusals.map(entrypoint => ({
     entrypoint,
     conditions: null,
@@ -1344,6 +1390,16 @@ export async function generatePackageContract(
     for (const outcome of outcomes) {
       if (outcome.proposal) {
         proposals.push(outcome.proposal);
+        for (const claim of outcome.proposal.withheldClaims ?? []) {
+          withheldClaims.push({
+            entrypoint: outcome.proposal.entrypoint,
+            conditions: outcome.proposal.conditions,
+            stage: "export-claim",
+            export: claim.export,
+            role: claim.role,
+            reason: claim.reason
+          });
+        }
         if (timing) {
           timing.analyzedTargets += 1;
           timing.targets.push({
@@ -1371,7 +1427,7 @@ export async function generatePackageContract(
       // The benchmark and row ledger need the complete artifact-case census,
       // not only the first refusal repeated in the thrown message. Persist the
       // structured audit before taking the full-refusal exit.
-      writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
+      writeProposalRefusalAudit(output, manifest, refusals, inapplicable, withheldClaims);
       const first = refusals[0];
       // When nothing refused, the refusal clause names no cause at all and the
       // signature is unclassifiable. Name the first inapplicable class and
@@ -1449,7 +1505,7 @@ export async function generatePackageContract(
           });
         }
         if (!fallback.merged) {
-          writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
+          writeProposalRefusalAudit(output, manifest, refusals, inapplicable, withheldClaims);
           throw new Error("no independently mergeable artifact case remains");
         }
         emittedArtifactCases = fallback.acceptedCount;
@@ -1465,7 +1521,7 @@ export async function generatePackageContract(
       await checked(["--validate-contract", output], packageRoot);
     }
     if (timing) timing.validationMs = performance.now() - validationStartedAt;
-    writeProposalRefusalAudit(output, manifest, refusals, inapplicable);
+    writeProposalRefusalAudit(output, manifest, refusals, inapplicable, withheldClaims);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -1479,6 +1535,7 @@ export async function generatePackageContract(
     artifactCases: emittedArtifactCases,
     refusedArtifactCases: refusals.length,
     inapplicableArtifactCases: inapplicable.length,
+    withheldClaims: withheldClaims.length,
     // The subset of the inapplicable census whose premise is file content.
     // Certification carries these to Rust and refuses the whole proposal if the
     // authenticated archive refutes one; see `VERIFIER_PROVED_DISPOSITIONS`.
