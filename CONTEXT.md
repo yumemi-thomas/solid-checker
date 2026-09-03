@@ -113,6 +113,14 @@ _Avoid_: Package directory, temporary extraction, artifact case, generation
 A verifier-derived mandatory contradiction veto for one proposed closed claim. A contradiction blocks closure; success or finite non-observation never proves absence, completeness, or safety.
 _Avoid_: Runtime proof, passing probe, negative observation
 
+**Implementation census**:
+The proof mode that decides a closed behavioral call domain from the demanded export's own runtime implementation transcript rather than from its declaration: every transcript is complete with no control-flow marker and its declaration node (bound from the authenticated bytes) contains no jump, every invoking form the producer walked is enumerated, every call at the `MayExecute` floor is assigned exactly one **census disposition** (`unreachable`, `parameter-rooted`, `standard-library`, `dialect-axiom`, `local-recursion`), and the first premise that fails refuses the domain by name. Today it decides `creates` only.
+_Avoid_: Call scan, callee check, behavioral census, implementation walk (that is the generator's proposal walk)
+
+**Withheld closure candidate**:
+A proposed closed claim domain the certifier declined to plan, by name, before any demand or probe gate was derived from it — today a `creates` candidate whose semantic claim has no recipe in the supplied corpus. The domain is opened in the certified contract and the withholding is recorded in the certification audit. It is neither a refusal nor a certification of the closure.
+_Avoid_: Skipped claim, dropped gate, waived probe, refused closure
+
 **Recipe corpus**:
 A directory of hand-authored, claim-addressed probe modules plus its manifest, supplied to one certification transaction and keyed by exact semantic claim id. It is an **input**, never a root of trust: omitting a scheduled gate refuses that gate, a vacuous recipe only fails to veto, and the verifier derives every module's construction digest from the bytes it copied. A corpus inside the analyzed package is refused outright.
 _Avoid_: Probe suite, test corpus, trusted recipes, probe fixtures

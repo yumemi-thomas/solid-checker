@@ -162,6 +162,25 @@ pub struct AstFacts {
     pub assignments: Vec<AssignmentFact>,
     #[serde(default)]
     pub if_regions: Vec<IfRegionFact>,
+    /// Every `break` and `continue` statement, by span, sorted.
+    ///
+    /// A jump makes the positive execution rows of its target region
+    /// non-universal, and a producer that withholds such rows rather than
+    /// over-claiming leaves a *silence* behind. A consumer proving a zero upper
+    /// bound over a span (the `creates` implementation census) reads this table
+    /// to refuse a span that contains one, because the absence of a row inside
+    /// it is not the absence of a call.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jump_statements: Vec<Span>,
+    /// The left side of every `for (target in …)` / `for (target of …)` whose
+    /// target is an *assignment* to an existing binding rather than a
+    /// declaration, by span, sorted. Each iteration writes the target, so it
+    /// is a write of every binding it names, exactly as an
+    /// [`AssignmentFact`] is; it lives apart from [`AstFacts::assignments`]
+    /// because that table's consumers read a value provenance a loop head does
+    /// not have.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub iteration_targets: Vec<Span>,
     /// Module-level string directives (`"use server"`, `"use strict"`, …):
     /// the statements the parser classifies as the module's directive
     /// prologue, in source order, carrying the cooked directive text. A
@@ -1078,6 +1097,8 @@ impl AstFacts {
             coercive_operands: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
+            jump_statements: Vec::new(),
+            iteration_targets: Vec::new(),
             module_directives: Vec::new(),
         }
     }
@@ -1207,6 +1228,8 @@ struct Collector<'s, 'semantic> {
     coercive_operands: Vec<CoerciveOperandFact>,
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
+    jump_statements: Vec<Span>,
+    iteration_targets: Vec<Span>,
     module_directives: Vec<DirectiveFact>,
     conditional_control_stack: Vec<Span>,
     method_names: Vec<Option<NamedSpan>>,
@@ -1323,6 +1346,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercive_operands: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
+            jump_statements: Vec::new(),
+            iteration_targets: Vec::new(),
             module_directives: Vec::new(),
             conditional_control_stack: Vec::new(),
             method_names: Vec::new(),
@@ -1364,6 +1389,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.coercive_operands.sort_by_key(|fact| fact.span);
         self.assignments.sort_by_key(|fact| fact.target);
         self.if_regions.sort_by_key(|fact| fact.consequent);
+        self.jump_statements.sort_unstable();
+        self.iteration_targets.sort_unstable();
         self.module_directives.sort_by_key(|fact| fact.span);
         AstFacts {
             schema: AST_FACTS_SCHEMA,
@@ -1400,6 +1427,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercive_operands: self.coercive_operands,
             assignments: self.assignments,
             if_regions: self.if_regions,
+            jump_statements: self.jump_statements,
+            iteration_targets: self.iteration_targets,
             module_directives: self.module_directives,
         }
     }
@@ -2535,15 +2564,27 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_for_statement_left(&mut self, left: &oxc_ast::ast::ForStatementLeft<'a>) {
-        if let Some(target) = left.as_assignment_target()
-            && self.assignment_target_has_unresolved(target)
-        {
-            self.module_hazards.push(ModuleHazardFact {
-                span: span(left.span()),
-                kind: ModuleHazardKind::MutableUnboundGlobal,
-            });
+        if let Some(target) = left.as_assignment_target() {
+            // Not a declaration: every iteration writes an existing binding.
+            self.iteration_targets.push(span(left.span()));
+            if self.assignment_target_has_unresolved(target) {
+                self.module_hazards.push(ModuleHazardFact {
+                    span: span(left.span()),
+                    kind: ModuleHazardKind::MutableUnboundGlobal,
+                });
+            }
         }
         walk::walk_for_statement_left(self, left);
+    }
+
+    fn visit_break_statement(&mut self, statement: &oxc_ast::ast::BreakStatement<'a>) {
+        self.jump_statements.push(span(statement.span));
+        walk::walk_break_statement(self, statement);
+    }
+
+    fn visit_continue_statement(&mut self, statement: &oxc_ast::ast::ContinueStatement<'a>) {
+        self.jump_statements.push(span(statement.span));
+        walk::walk_continue_statement(self, statement);
     }
 
     fn visit_formal_parameter(&mut self, parameter: &FormalParameter<'a>) {

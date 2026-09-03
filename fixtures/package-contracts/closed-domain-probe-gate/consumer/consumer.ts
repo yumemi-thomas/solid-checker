@@ -12,12 +12,18 @@
 //     the probe veto has something to catch.
 //   * `run` and `runCreatingOwner` are indistinguishable here, which is why a
 //     `creates: []` claim about either is not TypeScript's to refuse and not
-//     this checker's to certify from a declaration census.
+//     this checker's to certify from a declaration census; the implementation
+//     census decides it, from `index.js`.
+//   * `runAfterSettle` (from the sibling `primitive-consumer/` package) takes
+//     the callback `onSettled` takes; the stub's signature is byte-faithful to
+//     the audited one, so this line compiles exactly as it would against the
+//     real `solid-js@2.0.0-rc.3`.
 //
 // Run it with:
 //   packages/cli/node_modules/.bin/tsc --noEmit --project \
 //     fixtures/package-contracts/closed-domain-probe-gate/consumer/tsconfig.json
 import { driftedEntry, entry, run, runCreatingOwner } from "closed-domain-probe-gate-package";
+import { runAfterSettle } from "closed-domain-probe-gate-primitive-consumer";
 
 type Entry = (() => void) | undefined;
 
@@ -28,6 +34,9 @@ run(() => {
   entered += 1;
 });
 runCreatingOwner(() => {
+  entered += 1;
+});
+runAfterSettle(() => {
   entered += 1;
 });
 for (const candidate of declared) {

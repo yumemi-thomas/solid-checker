@@ -81,6 +81,25 @@
       }
     },
     {
+      "claimId": "claim:v1:sha256:8e053f79e723d05c657feb422af2a7c5365c5468a947503be7f243c25ab9f5b8",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./index.js",
+        "runtimeDigest": "sha256:b8a4ca8c61d895a74865ca30be94af837b3d3eeabcbb247dcc9b43d83e59611d",
+        "declarationsPath": "./index.d.ts",
+        "declarationsDigest": "sha256:7ef9e694a262b5b6893a789f7b51ed68642396130217353d24a9a054864c3ec7",
+        "closureDigest": "sha256:268aabbe2b00a896dd1f12e6c9f75ccadd2951e12dc3feb1f13babf5256fe44e"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:f85f8bb9070054c92acab1b26b258ca1a643944fc830c6b3decdb21dab553b34",
+        "export": "inert",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
       "claimId": "claim:v1:sha256:f08219a9ca73302b549473a65926b036c610f901ba84e554ee852061094f5bc0",
       "artifact": {
         "entrypoint": ".",
@@ -698,25 +717,6 @@
           "kind": "operation-axis",
           "operation": "artifact-case:f85f8bb9070054c92acab1b26b258ca1a643944fc830c6b3decdb21dab553b34:Helper:operation:callback-0",
           "domain": "owner-cleanup-capability"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:8e053f79e723d05c657feb422af2a7c5365c5468a947503be7f243c25ab9f5b8",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./index.js",
-        "runtimeDigest": "sha256:b8a4ca8c61d895a74865ca30be94af837b3d3eeabcbb247dcc9b43d83e59611d",
-        "declarationsPath": "./index.d.ts",
-        "declarationsDigest": "sha256:7ef9e694a262b5b6893a789f7b51ed68642396130217353d24a9a054864c3ec7",
-        "closureDigest": "sha256:268aabbe2b00a896dd1f12e6c9f75ccadd2951e12dc3feb1f13babf5256fe44e"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:f85f8bb9070054c92acab1b26b258ca1a643944fc830c6b3decdb21dab553b34",
-        "export": "inert",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

@@ -293,7 +293,9 @@ test("complete proposals retain an exact policy-2 certification refusal when att
       demandCountsByFamily: { "package-identity": 1, "selected-signature": 1 },
       artifactSatisfiedDemandsByFamily: { "package-identity": 1 },
       refusalCountsByFamily: {},
-      refusalCountsByOwner: {}
+      refusalCountsByOwner: {},
+      // The audit fixture names no withheld closure candidate.
+      withheldClosures: 0
     });
   } finally {
     rmSync(temporary, { recursive: true, force: true });

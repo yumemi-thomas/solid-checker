@@ -12,10 +12,11 @@
 // declaration excludes — and that is a publisher defect the type system cannot
 // see and a mandatory probe veto can.
 //
-// `run` and `runCreatingOwner` also have byte-identical declared types, and
-// opposite reactive-ownership behavior. Nothing here says which creates an
-// owner, which is exactly why a `creates: []` claim about either of them is
-// refused for want of an implementation census rather than settled by a probe.
+// `run` and `runCreatingOwner` also have byte-identical declared types. Nothing
+// here says what either does with its callback, which is exactly why a
+// `creates: []` claim about either is decided by a census of `index.js` — the
+// implementation census, which finds one parameter-rooted call in each and
+// closes the domain for both — and never by this file or by a probe.
 export declare const entry: (() => void) | undefined;
 export declare const driftedEntry: (() => void) | undefined;
 export declare function run(callback: () => void): void;

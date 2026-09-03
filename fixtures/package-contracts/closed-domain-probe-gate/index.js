@@ -10,12 +10,24 @@
 export const entry = () => {};
 export const driftedEntry = 42;
 
-// Two exports TypeScript cannot tell apart, with opposite reactive-ownership
-// behavior. `run` creates no reactive owner; `runCreatingOwner` does. That
-// difference is real and completely absent from `index.d.ts`, which is why a
-// `creates: []` proposal about either is refused: the declaration census that
-// discharges `DomainExhaustiveness` is identical for the two, so admitting it
-// would leave a probe's finite non-observation as the only discriminator.
+// Two exports TypeScript cannot tell apart — and, to a `creates` census,
+// indistinguishable in what they *do*, because neither performs a `create`
+// operation. `runCreatingOwner` parks an object literal in a module-level
+// variable; under `semantic-model.md` § creates that is neither a version-1
+// resource nor a registration into a runtime that acts on it (nothing in Solid
+// consults `currentOwner`), so it is not a `create`. The only call in either
+// body is `callback()`, a callee rooted at a parameter, whose body is the
+// caller's behavior. `run` therefore certifies `creates: []` through the
+// implementation census (`docs/adr/0008-implementation-census-for-creates.md`).
+// `runCreatingOwner` does not — and not for what it does: its `try … finally`
+// puts a `tryReachability` marker in the producer's control-flow census, and
+// the census refuses every transcript carrying such a marker, because the
+// producer withholds call rows inside regions a `break`/`continue` makes
+// non-universal and the marker is the only trace a withheld row leaves. A
+// `try` withholds nothing itself; that over-refusal is recorded in ADR 0008 and
+// lifts with the producer-side fix. The declaration census alone could never
+// have decided either export, which is why the domain was refused by name
+// before the implementation census existed.
 let currentOwner = null;
 
 export function run(callback) {

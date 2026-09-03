@@ -8,7 +8,9 @@
     "baseUrl": ".",
     "paths": {
       "closed-domain-probe-gate-package": ["../index.d.ts"],
-      "closed-domain-probe-gate-tampering-package": ["../tampering-package/index.d.ts"]
+      "closed-domain-probe-gate-tampering-package": ["../tampering-package/index.d.ts"],
+      "closed-domain-probe-gate-primitive-consumer": ["../primitive-consumer/index.d.ts"],
+      "solid-js": ["../primitive-consumer/node_modules/solid-js/index.d.ts"]
     }
   },
   "files": ["consumer.ts"]

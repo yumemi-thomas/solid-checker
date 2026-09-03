@@ -23,12 +23,27 @@ pub struct FinalizedPolicy2Contract {
     bindings: Policy2ReceiptBindings,
     authenticated: AuthenticatedPolicy2Receipt,
     trust_configuration: Policy2TrustConfiguration,
+    /// The closure candidates recipe-gated planning withheld before this
+    /// contract was planned (`CertificationPlan::recipe_gated`). Audit
+    /// material: the canonical main already says those domains are open, and
+    /// the receipt binds nothing about them.
+    withheld_closures: Vec<super::WithheldClosure>,
 }
 
 impl FinalizedPolicy2Contract {
     #[must_use]
     pub fn canonical_main(&self) -> &[u8] {
         &self.canonical_main
+    }
+
+    #[must_use]
+    pub fn withheld_closures(&self) -> &[super::WithheldClosure] {
+        &self.withheld_closures
+    }
+
+    pub(super) fn with_withheld_closures(mut self, withheld: Vec<super::WithheldClosure>) -> Self {
+        self.withheld_closures = withheld;
+        self
     }
 
     #[must_use]
@@ -335,7 +350,14 @@ pub(super) fn finalize_value_only_with_dependencies(
         bindings,
         authenticated,
         trust_configuration,
+        withheld_closures: Vec::new(),
     })
+}
+
+impl From<super::RecipeGatingError> for Policy2FinalizationError {
+    fn from(error: super::RecipeGatingError) -> Self {
+        Self::RecipeGating(Box::new(error))
+    }
 }
 
 /// The canonical empty authority root for one adapter's schedule: domain-
@@ -405,6 +427,11 @@ pub enum Policy2FinalizationError {
     Probe(#[from] super::ProbeGateError),
     #[error(transparent)]
     ProbeHarness(#[from] ProbeHarnessError),
+    /// Boxed: the gating error carries a whole planning error, and unboxed it
+    /// would grow this enum — and every graph-lane `Result` that wraps it —
+    /// past the size Clippy's `result_large_err` accepts.
+    #[error(transparent)]
+    RecipeGating(Box<super::RecipeGatingError>),
     #[error(transparent)]
     DependencyComposition(#[from] DependencyReceiptCompositionError),
     #[error(transparent)]

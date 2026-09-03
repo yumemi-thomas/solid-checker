@@ -99,18 +99,19 @@ declaration decides:
 | --- | --- |
 | `Value{root: Export, path: [], domain: ChoiceAlternatives}` | the producer's own alternative enumeration, every alternative observed exhaustively, every declared callable path closed with its subtree enumerated — *and* the proposal's enumeration required to equal the producer's, alternative count and per-index kind alike |
 | `Domain(GuardPartition)` (invocation census only) | a complete finite partition in a control-flow census with no unsupported branch, alongside closed parameter and result values |
+| `Domain(Call(Creates))` (implementation census only, `ClosureCensus::Implementation`) | the export's own `ExportImplementationTranscript` at the `MayExecute` floor with every invoking form enumerated (handshake protocol 14), every call dispositioned by its callee — `unreachable`, `parameter-rooted`, `standard-library`, `dialect-axiom`, `local-recursion` — and every local declaration recursed into through the same pinned session; the proposal's item set required to be empty. `docs/adr/0008-implementation-census-for-creates.md` |
 
 Everything else is an `UnsupportedDemand` naming the premise it lacks. Two
 groups matter:
 
-* **Behavioral call domains** — `creates`, `reads`, `writes`, `callbacks`,
+* **The other behavioral call domains** — `reads`, `writes`, `callbacks`,
   `cleanups`, `disposals`, `invalidates`, and equally `throws` and `returns`.
-  These are the closures the Solid packages actually want, and they are
-  **blocked**, not deferred by preference. What they need is an
-  *implementation-census premise*: a complete `ExportImplementationTranscript`,
-  every `calls` target resolved, and no resolved target able to perform the
-  domain's operation. Acquiring and verifying that is a proof-mode change, not
-  a harness one.
+  These are closures the Solid packages want, and they are **blocked**, not
+  deferred by preference. Each needs its own census of every invoking form that
+  reaches it (`reads` additionally the proxy property-access forms; `throws` is
+  not a census target under version 1 at all), and only `creates` has one
+  today. Acquiring and verifying such a census is a proof-mode change, not a
+  harness one — `creates` was that change (ADR 0008).
 * **The other value domains** — object properties, tuple items, array bounds,
   capabilities, and any non-root path. A declaration decides these too, but
   this census hands over no enumeration of them to compare a proposal against,
@@ -773,10 +774,15 @@ its own proposed closure. Corpus provenance beyond that is Stage 3.
   type, so an identical closure witness, but a runtime that ships a value the
   declaration excludes — is refused by the veto, which is the publisher defect
   a veto exists for.
-* The same fixture pins what a veto may *not* rescue: a `creates: []` proposal
-  for an export that really does create an owner, with a recipe that observes
-  nothing to the contrary, refuses as `UnsupportedDemand` at witness
-  acquisition, before a probe is launched.
+* The same fixture pinned, at this ADR's cut, what a veto may *not* rescue: a
+  `creates: []` proposal with a recipe that observes nothing to the contrary
+  refused as `UnsupportedDemand` at witness acquisition, before a probe was
+  launched, because no census decided the domain. Since ADR 0008 the
+  implementation census decides it — `run` closes `creates: []` (its one call is
+  parameter-rooted) and the veto then runs; `runCreatingOwner` refuses on the
+  `tryReachability` marker its `try … finally` leaves, an over-refusal ADR 0008
+  records — and the property this bullet protects is unchanged: the probe still
+  decides nothing, and a candidate no census proves never reaches it.
 * Its `consumer/` keeps the `tsc` claim verified rather than asserted: every
   probed export is used under `strict` with `moduleResolution: nodenext`, and
   `tsc --noEmit` reports nothing.
@@ -841,20 +847,23 @@ into existence is a positive closable fact — a model gap the corrected
 predicate exposes rather than introduces, tracked in
 `docs/precision-backlog.md`.
 
-**One correction this ADR owes itself.** Under the settled predicate, the
-`closed-domain-probe-gate` reading is decided rather than open: neither `run`
-nor `runCreatingOwner` performs a `create` operation — an object literal in a
-private module variable is not a resource registered with any runtime, and the
-only call in either is a parameter-rooted callee — so both census as
-`creates: []` closed. The pinned behaviour in the "What this binds" bullet
-above (a `creates: []` proposal refuses as `UnsupportedDemand` at witness
-acquisition, before a probe is launched) is **unchanged and uncontradicted**,
-because the refusal is domain-by-name and independent of what the export does.
-Only that bullet's phrase "an export that really does create an owner" is
-inaccurate under the settled definition; correcting it, the fixture's own
-comments, and its README row belongs to the census slice, together with a
-sibling export that calls a real dialect primitive so the census has a genuine
-positive to refuse on.
+**The correction this ADR owed itself is taken** (ADR 0008). Under the settled
+predicate the `closed-domain-probe-gate` reading is decided rather than open:
+neither `run` nor `runCreatingOwner` performs a `create` operation — an object
+literal in a private module variable is not a resource registered with any
+runtime, and the only call in either is a parameter-rooted callee. `run` now
+**certifies** `creates: []` through the implementation census, with the veto
+running afterwards; `runCreatingOwner` refuses, not for what it does but because
+its `try … finally` puts a control-flow marker on a transcript the census may
+take no relaxation on (ADR 0008 item 0). The fixture's comments and README row
+say so, and the
+sibling that calls a real dialect primitive is `primitive-consumer/`'s
+`runAfterSettle`, which the census refuses by name. The `creates` census is
+also **recipe-gated**: a candidate whose claim has no recipe in the supplied
+corpus is withheld by name before any demand or gate is derived, so returning
+`creates` candidates to every consumer proposal refused no row. The remaining
+behavioral call domains are still deferred exactly as the preceding paragraph
+says.
 
 **A wider value-closure premise.** Object properties, tuple items, array
 bounds, capabilities, and non-root value paths need the producer's enumeration

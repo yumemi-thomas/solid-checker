@@ -8,7 +8,8 @@ protocol 14, with the `complete` rename deliberately not taken (see § 4.1's
 status block and `docs/typefacts/adr/0026-…`); § 6's audit row added with its
 test pins; **§ 4.2's dialect table landed** for the `creates` domain and the
 Solid 2.0 archives only, unwired (see § 4.2's status block and
-`docs/adr/0007-census-dialect-axiom-tier.md`); census (§ 4.3) work not started
+`docs/adr/0007-census-dialect-axiom-tier.md`); **§ 4.3's `creates` census landed**
+(`docs/adr/0008-implementation-census-for-creates.md`; see § 4.3's status block)
 Scope of this document: the decision, its evidence, and the prerequisite chain.
 No code, fixture, or snapshot changed in the slice that wrote it.
 
@@ -958,6 +959,66 @@ dialect's own primitive-defining archive
 remains a one-directional withholding, not identity.
 
 ### 4.3 Census for `creates`, `GenerationScope::ConsumingPackage`
+
+**Status after the census slice (2026-09-04): landed.**
+`docs/adr/0008-implementation-census-for-creates.md` is the decision. What
+exists, against § 3:
+
+- `census_creates_domain` (`contract_certification/type_facts.rs`), reached
+  from `require_census_decides_closure`'s new `ClosureCensus::Implementation`
+  arm for `ClaimPath::Call(ClaimDomain::Creates)` **only**; every other call
+  domain keeps refusing by name (§ 4.4-4.5).
+- § 3 item 1: the demanded export's `ExportImplementationTranscript`, complete
+  with an **empty control-flow `unsupported` list at every depth** and no
+  `break`/`continue` inside the bound declaration node — no
+  `controlFlowUnsupported` relaxation, because the producer withholds call rows
+  a jump makes non-universal and the marker is their only trace (ADR 0008 item
+  0; over-refuses loop/switch/try frames until the producer emits withheld
+  rows) — at handshake protocol 14 so a present-and-empty
+  `uncensusedInvokingForms` is the producer's positive claim;
+  item 4: any uncensused form the `MayExecute` floor admits refuses by kind and
+  location; item 2: every `calls` row at the floor (Unknown reach in) gets
+  exactly one of the five § 3.1 terminators — `unreachable`,
+  `parameter-rooted` (§ 3.2, `callee_parameter` only), `standard-library`
+  (admitted only when the member transfers control to no callable the census
+  cannot see: reviewed invoking slots and callable-carrying slots must be
+  parameter-rooted or literals inside the frame; `Function.*`,
+  `CallableFunction.*`, `NewableFunction.*`, `Reflect.apply`/`construct`,
+  `eval`, `Function` refuse by name), `dialect-axiom` (§ 4.2's tier),
+  `local-recursion` (a named declaration whose binding nothing writes or
+  redeclares; an arrow a `const` holds refuses) — or the domain refuses on the
+  first call with none; item 5: a candidate whose `creates` item set is
+  non-empty refuses. The "dependency export with a receipt-closed claim"
+  terminator is **not** implemented: § 4.5's accepted-dependency disposition
+  has not been taken, so a resolved dependency export without an audited
+  negative row refuses by name.
+- Local recursion mirrors `require_composed_operation_chain`: identity by
+  symbol + source file + exact span, a visited set seeded with the demanded
+  export, cycle refusal, `MAX_COMPOSITION_DEPTH` (8) hops. The helper's
+  transcript is acquired through `ExportValueDemand.localDeclarationLocation`
+  in the same pinned session, one batch per depth; the verifier binds a named
+  declaration to its node span by its own Oxc parse of the authenticated bytes,
+  and the producer refuses an answer whose resolved declaration lies outside
+  the demanded node.
+- Witness: one `census-call:` site per call, one `census-local-declaration:`
+  site (with the transcript's SHA-256) per recursed helper,
+  `census-uncensused-forms:0`, `census-total:{calls}:{depth}`; same
+  `DomainExhaustiveness` evidence-root envelope, `POLICY_DIGEST` unmoved.
+- The generator proposes the candidate again — `creates: Complete([])` for a
+  consuming package's function export whose own IR walk finds no call that a
+  closed `creates` would contradict (`CreatesProposalWalk`) — and **recipe-gated
+  planning** (`CertificationPlan::recipe_gated`) withholds a candidate whose
+  claim has no recipe in the supplied corpus before any demand or gate exists,
+  so § 5's "every newly reachable candidate needs a probe recipe or refuses by
+  name" is met without a refused row: the domain stays open and the withholding
+  is named in the certification audit.
+- § 3.3's two debts: the fixture's comments and README row are corrected
+  (`run` certifies; `runCreatingOwner` refuses on its `try` marker, an
+  over-refusal ADR 0008 records), and the sibling positive is
+  `closed-domain-probe-gate/primitive-consumer/` (`runAfterSettle` →
+  `onSettled`), which the census refuses by name.
+
+The section as originally written:
 
 § 3 above. Reuses `require_composed_operation_chain`'s visited-set, depth-8,
 declaration-identity discipline; derives its own enumeration and refuses when

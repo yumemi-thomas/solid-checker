@@ -407,6 +407,13 @@ impl ProbeHarnessConfiguration {
         Ok(configuration)
     }
 
+    /// The directory holding `recipes.json` and its modules — the corpus
+    /// recipe-gated planning consults before any demand is derived.
+    #[must_use]
+    pub fn recipe_corpus(&self) -> &Path {
+        &self.recipe_corpus
+    }
+
     /// The pin this transaction verifies against: the build's, unless an
     /// in-crate test supplied its own.
     fn pin(&self) -> Result<ProbeHarnessPin, ProbeHarnessError> {
@@ -1402,7 +1409,10 @@ pub(crate) struct RecipeCorpus {
 }
 
 impl RecipeCorpus {
-    fn load(directory: &Path, plan: &CertificationPlan) -> Result<Self, ProbeHarnessError> {
+    pub(crate) fn load(
+        directory: &Path,
+        plan: &CertificationPlan,
+    ) -> Result<Self, ProbeHarnessError> {
         if !directory.is_dir() {
             return Err(ProbeHarnessError::CorpusInvalid(
                 "the probe recipe corpus path is not a directory".into(),

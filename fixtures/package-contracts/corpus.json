@@ -42,6 +42,7 @@
     "exported-class",
     "external-reexport",
     "function-supertype-kind",
+    "implementation-census-creates",
     "json-import",
     "legacy-cjs-entrypoint",
     "legacy-dual-root",

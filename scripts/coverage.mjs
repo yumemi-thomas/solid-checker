@@ -93,34 +93,54 @@ function checkDialectStubs() {
   );
   const problems = [];
   const groups = ["reactive-ir", "engine", "package-contracts", "ownership-cases", "partial-audit"];
+  /**
+   * Every `node_modules/solid-js` stub at any depth below `directory`, skipping
+   * the inside of `node_modules` trees themselves. A fixture may hold a nested
+   * package (`closed-domain-probe-gate/primitive-consumer/`) with a stub of its
+   * own, and a stub one level down is exactly as load-bearing for dialect
+   * selection -- and exactly as silently absent in CI without its `.gitignore`
+   * exception -- as one at the fixture root.
+   */
+  function* stubDirectories(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = join(directory, entry.name);
+      if (entry.name === "node_modules") {
+        const stub = join(path, "solid-js");
+        if (existsSync(stub)) yield { stub, fixture: directory };
+        continue;
+      }
+      yield* stubDirectories(path);
+    }
+  }
   for (const group of groups) {
     const base = join(root, "fixtures", group);
     if (!existsSync(base)) continue;
     for (const entry of readdirSync(base, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      const stubDirectory = join(base, entry.name, "node_modules", "solid-js");
-      if (!existsSync(stubDirectory)) continue;
-      const manifest = join(stubDirectory, "package.json");
-      const id = relative(root, manifest);
-      if (!existsSync(manifest)) {
-        problems.push(`${id}: missing -- the fixture falls back to the 2.0 default dialect`);
-        continue;
-      }
-      let version;
-      try {
-        version = JSON.parse(readFileSync(manifest, "utf8")).version;
-      } catch (error) {
-        problems.push(`${id}: unparseable (${error.message})`);
-        continue;
-      }
-      if (typeof version !== "string" || version === "") {
-        problems.push(`${id}: no "version" -- dialect selection cannot resolve it`);
-      }
-      if (!tracked.has(id)) {
-        problems.push(
-          `${id}: not tracked by git -- add '!${relative(root, join(base, entry.name))}/node_modules/'` +
-            ` and its '/**' twin to .gitignore, or the stub is absent in CI`
-        );
+      for (const { stub: stubDirectory, fixture } of stubDirectories(join(base, entry.name))) {
+        const manifest = join(stubDirectory, "package.json");
+        const id = relative(root, manifest);
+        if (!existsSync(manifest)) {
+          problems.push(`${id}: missing -- the fixture falls back to the 2.0 default dialect`);
+          continue;
+        }
+        let version;
+        try {
+          version = JSON.parse(readFileSync(manifest, "utf8")).version;
+        } catch (error) {
+          problems.push(`${id}: unparseable (${error.message})`);
+          continue;
+        }
+        if (typeof version !== "string" || version === "") {
+          problems.push(`${id}: no "version" -- dialect selection cannot resolve it`);
+        }
+        if (!tracked.has(id)) {
+          problems.push(
+            `${id}: not tracked by git -- add '!${relative(root, fixture)}/node_modules/'` +
+              ` and its '/**' twin to .gitignore, or the stub is absent in CI`
+          );
+        }
       }
     }
   }

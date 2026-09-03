@@ -389,6 +389,22 @@ of 3410. When the census slice wires it, the table's reach is bounded by what
 this slice found: negative authority exists for 24 Solid 2.0.0-rc.3 primitives
 and the `creates` domain only, and for no Solid 1.x primitive at all.
 
+### Re-measured: 357 verified / 40 exact refusals / 21 not attempted, no verdict moved, no closure withheld
+
+The complete 418-probe corpus was re-run with the census compiled in and the
+generator proposing `creates` candidates again (`make ecosystem-benchmark`;
+report SHA-256 `387614a029ac8b831224c1a3a6e753505910c2d983dddd067bfaafcef6b85917`). Every verdict and demand
+digest is identical to the committed report, the split is unchanged at 306
+verified-complete / 51 verified-partial, `exportsProven` remains 0 of 3410,
+and `certificationAttempt.withheldClosures` sums to 0 across all 418 rows. The
+last number is the finding of this slice: the generator proposes a `creates`
+candidate only where every canonical-primitive callee has a denial row, and the
+2.0.0-rc.3 audits carry no summary for `createSignal`, `createRoot`,
+`onCleanup` or `untrack`, so no real export's walk is clean. The census is
+proven end to end on the fixture and reaches no corpus row until those
+primitives are audited, the private workspace copies the dependency closure,
+and recipes exist.
+
 ## The producer names the invoking forms the call census does not record, and can reach a module-local declaration; no consumer reads either yet (2026-09-03)
 
 The producer half of the implementation census
@@ -15767,3 +15783,273 @@ certification status, its first demand digest and its refused and inapplicable
 case counts; the closure replay's new reading of the `type` modifier produced no
 closure mismatch anywhere in the corpus. The Phase 21 ledger is re-pinned to the
 new report digest; Phase 20 counts are unchanged. Wall time 70.6 s.
+
+## 2026-09-04 — The `creates` implementation census, recipe-gated
+
+`docs/adr/0008-implementation-census-for-creates.md` is the decision; this entry
+is the precision record. Slice 5 of the census arc consumes what slices 1-4
+built — the settled `creates` predicate, the producer's uncensused-form
+enumeration and local-declaration transcript (protocol 14), and the Solid 2.0
+negative table — and closes the loop three ways.
+
+### What certifies now that did not
+
+`require_census_decides_closure` admits exactly one behavioral call domain,
+`ClaimPath::Call(ClaimDomain::Creates)`, and only under the new
+`ClosureCensus::Implementation`. `census_creates_domain`
+(`contract_certification/type_facts.rs`) reads the demanded export's own
+implementation transcript at the `MayExecute` floor (Unknown reach **in**),
+requires handshake protocol 14 so a present-and-empty
+`uncensusedInvokingForms` is a claim rather than an absence, refuses by kind and
+location on any uncensused form the floor admits, and assigns every `calls` row
+exactly one disposition — refusing by name on the first row with none:
+
+```rust
+enum CensusDisposition { Unreachable, ParameterRooted, StandardLibrary, DialectAxiom, LocalRecursion }
+```
+
+Local recursion transcribes module-local helpers through
+`ExportValueDemand.localDeclarationLocation` in the same pinned session, one
+batch per depth (`acquire_census_local_transcripts`), with the composed-chain
+discipline: identity by symbol + source file + exact span, a visited set seeded
+with the demanded export, cycle refusal, `MAX_COMPOSITION_DEPTH` (8) hops. One
+mechanism the plan did not anticipate: the producer resolves a named function
+to its **identifier**, and answers a local-declaration demand only for the
+exact declaration **node**, so the verifier binds identifier to node by its own
+Oxc parse of the authenticated runtime bytes (`census_local_declaration_node`),
+refusing on no node or two; the producer's `declarationIdentityUnbound` binds
+the answer back. Witness sites: `census-call:` per call (the dialect disposition
+carries the tier's own `census-dialect-axiom:` site), `census-local-declaration:`
+with the transcript's SHA-256 per recursed helper, `census-uncensused-forms:0`,
+`census-total:{calls}:{depth}`. The evidence-root envelope is unchanged and
+`POLICY_DIGEST`
+(`sha256:f0dfd235055d1aba95f1de513eeee8109178a186fb2be3901d1f3092a42bb278`)
+did not move; the phase-19 authority row
+`domain-exhaustiveness/implementation-census` is `already exact`
+(`alreadyExact` 32 → 33, `producerExtensionRequired` 5 → 4,
+`certificationReadyFamilies` 6 → 7, `stableMainDocuments` 177 → 178).
+
+### What the generator proposes again, and how honestly
+
+`normalize_export` emits `creates: Complete([])` — weakened by
+`normalize_knowledge` into a closure **candidate** — for a
+`GenerationScope::ConsumingPackage` function export whose implementation the
+generator's own IR walk cleared (`solid_reactive_ir::CreatesProposalWalk`,
+`rust/crates/solid-reactive-ir/src/creates_walk.rs`). The walk refuses to
+propose on any callee it cannot resolve to a symbol, any canonical dialect
+primitive with no `creates` denial in any dialect's audited negative table
+(`solid_dialect::some_audit_denies_primitive`, a name-level read that can only
+gate a proposal), and any accepted-contract callee whose `creates` is not
+closed empty. A dialect-defining archive keeps `Unknown`.
+
+Corpus consequence, reviewed fixture by fixture before `--update`: **47
+existing consumer fixtures' `expected-proposal.json` moved and nothing else in
+them did** — every move is `{kind: "call", domain: "creates"}` candidates
+returning for function exports with clean walks (`doc=same`, `plan=changed` for
+all 47; e.g. `runtime-semantics` +34 across its artifact cases,
+`uncensused-invoking-forms` +13, `escaping-private-helper` +22 across seven
+cases). `dialect-defining-archive/@solidjs/signals` did **not** move;
+`@solidjs/router-shaped` did, correctly, because `@solidjs/router` is not a
+primitive-defining package. The stable-v1 main documents did not move
+(closure is withdrawn into the plan). After the review corrections below the
+corpus is 87 fixtures, 812 proof candidates, 4147 local open claims: the
+census fixture's five new exports add 20 candidates and 30 open claims, and
+the generator's local-edge fixpoint withdraws 11 `creates` candidates across
+nine fixtures (listed below). The `asset-query-import-control` pin in
+`packages/cli/test/contract-workflow.test.mjs` is 3 candidates / 7 open claims
+again (it was 2 / 8 after slice 2).
+
+### Recipe-gated planning — why 357 stays 357
+
+A candidate the census proves spawns a mandatory veto, and a veto with no
+recipe refuses the row (`MissingGate`). `CertificationPlan::recipe_gated`
+therefore runs before Type Facts acquisition in every lane (`certify_value_only`,
+`certify_value_only_case_set`, both published-graph lanes, and the CLI's
+planning output): a `creates` candidate whose semantic claim id the supplied
+corpus names no recipe for — or any candidate when no harness is configured —
+is **withheld by name**: the domain is opened in the selected proposal, the
+plan is re-derived by the policy from the weakened proposal (candidates, demand
+graph, artifact witnesses, semantic digest), and a `WithheldClosure {
+artifact_case, export, domain, semantic_claim_id, reason: "no recipe in corpus" }`
+travels on the finalized contract, out of `main.rs` as a
+`solid-checker:withheld-closure=` line, into the certification audit's
+`withheldClosures`, and into the ecosystem report's additive
+`certificationAttempt.withheldClosures` count. Nothing edits a demand graph in
+place, and nothing that could certify closed before is lost.
+
+Targeted re-measurement against the fresh debug binary, all six rows keeping
+the committed report's verdict: `@solid-primitives/marker@0.2.2|solid1|only`
+certified, `@solid-primitives/marker@2.0.0-next.2|solid2|floor` certified,
+`@solid-primitives/intersection-observer@3.0.0-next.3|solid2|floor` certified
+(dependency-contract-obligation class, graph lane), `solid-js@2.0.0-rc.3|solid2|only`
+certified, `@solid-primitives/timer@1.4.5-next.1|solid2|head` certified,
+`@solid-primitives/scheduled@1.5.3|solid1|only` certified. **Withheld `creates`
+candidates: 0 on every row**, and the closure-candidate counts match the
+committed report exactly (1, 1, null, 0, 0, 2). That is the generator's
+dialect-silence gate at work, not the gating: every function export of these
+packages calls a Solid primitive with no `creates` denial row — the whole 1.x
+table is empty, and on 2.x `createSignal`, `onCleanup`, `untrack`, `getOwner`
+and `createRoot` carry none — so no candidate is proposed and none reaches
+`recipe_gated`. The withholding path is therefore exercised end to end only by
+the fixture (`noRecipe`: certifies with `creates` open, the gated plan's empty
+gate root, one named record) and by the recipe-gating unit test; the CLI's
+record parser is pinned by a unit test of its own. The full 418-probe corpus
+was not re-run in this slice.
+
+### Fixtures and tests
+
+`fixtures/package-contracts/implementation-census-creates` (corpus-registered):
+`plain` certifies with a nonempty gate root and every call witnessed
+(parameter-rooted, two standard-library, local-recursion, and `never()` after
+the `return` proven **unreachable** — `census-total:5:1`); `viaHelperChain`
+certifies (`census-total:4:3`, three local-declaration sites); `cycle`,
+`deep` (nine hops), `unresolved`, `taggedTemplate`, and `spreadArgs` refuse by
+name; `noRecipe` is withheld. Two deviations from the brief, both forced by the
+settled producer semantics: **`spreadArgs` refuses** rather than closing,
+because a `SpreadElement` is an `iteration-protocol` invoking form (ADR 0026)
+and a form is not an argument; and **`unresolved` is an undeclared global**
+rather than an import from an unaudited dependency, because a bare import that
+resolves to no accepted dependency is an `UnacceptedExternalDependency` closure
+hazard that opens every domain at closure replay, before any candidate exists.
+
+`closed-domain-probe-gate`: `run` now **certifies** `creates: []` through the
+census (its one call is parameter-rooted), correcting the fixture's premise as
+the plan's § 3.3 owed; `runCreatingOwner`, the same call inside `try … finally`,
+**refuses** on the `tryReachability` marker (see "Corrections taken at review"
+below — an over-refusal, recorded as such); the sibling positive
+is the separate `primitive-consumer/` package (`runAfterSettle` → `onSettled`),
+planned with its byte-faithful `solid-js` stub as an accepted dependency edge
+so the candidate survives closure replay, and refused by the census by name as
+an unresolved callee because the private project materializes the consumer
+alone. It is separate because every recipe imports the main package inside the
+private probe directory, where `solid-js` does not exist.
+
+### What stays open
+
+- Every behavioral call domain other than `creates` still refuses by name;
+  `reads` is next (§ 4.4) and needs the proxy property-access forms.
+- The "dependency export with a receipt-closed claim" terminator is not
+  implemented (§ 4.5's accepted-dependency disposition); such a callee refuses.
+- **Consumer probes cannot import the dependency in the private workspace**, so
+  no recipe can be written for a real consumer row and every real `creates`
+  candidate that ever appears will be withheld until recipe synthesis and
+  authenticated dependency copying exist (ADR 0006 Stage 3). Today none
+  appears on the six measured rows for the dialect-silence reason above.
+- The Solid 1.x negative table is empty; a 1.x consumer's census terminates on
+  no Solid callee. `solid-js`, `@solidjs/signals` and `@solidjs/web` cannot
+  close `creates` through this census under their own certification.
+- The dialect tier's `createSignal`, `onCleanup`, `untrack`, `getOwner`,
+  `createRoot` (and the four re-export-dead rows) carry no `creates` denial, so
+  the generator proposes nothing for the many consumers that call them; that
+  is a silence the audits have to fill, not a census defect.
+- The verifier's identifier-to-node binding is its own Oxc parse; a source Oxc
+  cannot parse, or one where two function-like nodes carry the same name span,
+  refuses by name.
+
+### Corrections taken at review (2026-09-04), and what each leaves open
+
+Eight review findings against the slice above, applied fail-closed. Every
+census unit test and tracer passes (backend lib 348, `make test-probe-harness`
+86), coverage stays at 94 projects / 546 findings, the ownership gate passes,
+and `@solid-primitives/marker@0.2.2|solid1|only` and `solid-js@2.0.0-rc.3|solid2|only`
+keep their committed verdicts (certified, 0 withheld) against the fresh debug
+binary.
+
+1. **Withheld call rows (soundness, high).** The producer drops every `calls`
+   row inside a region a `break`/`continue` makes non-universal
+   (`export_value_transcripts.go`, `unsafeJumpRegionsLocked`); the dropped call
+   is a `CallExpression`, so the uncensused-form census is silent, and the only
+   trace is a control-flow marker — which `census_transcript_is_censusable`
+   *relaxed*. `switch (kind) { case "mount": render(App, el); break; }` therefore
+   produced zero rows and a false `creates: []`. Fixed verifier-side: the census
+   now requires `complete` with an empty `control_flow.unsupported` at every
+   depth, and `census_transcript_frame` binds each transcript to its declaration
+   node in the verifier's own Oxc parse and refuses any node containing a
+   `break`/`continue` — nested callables included, because the producer's
+   control-flow census never enters one (a jump there withholds rows and leaves
+   no marker). `solid-facts` gained `AstFacts::jump_statements` for this. The
+   marker is reported before incompleteness, because the producer leaves such a
+   transcript `complete: false` with `controlFlowUnsupported` as its only open
+   reason. **Over-refuses** every export whose frame has a loop, `switch`, or
+   `try` even where nothing was withheld — `runCreatingOwner` is the pinned
+   example. Producer-side fix owed: emit a withheld row with `reach: unknown`,
+   or as an uncensused form. Fixture: `switchBreak`, `whileBreak` refuse.
+2. **Standard-library callees that transfer control to a reference (soundness,
+   medium).** The disposition admitted any default-library member regardless of
+   `default_library_invoker` / `invoked_arguments` / `argument_callables`, so
+   `queue.forEach(render)`, `setTimeout(render, 0)`, `promise.then(render)`,
+   `new Promise(render)`, `Reflect.apply(render, …)`, `render.call(…)`,
+   `eval(...)` certified while the reference ran. `census_standard_library_admits`
+   now (a) refuses `Function` / `FunctionConstructor`, `Function.*`,
+   `CallableFunction.*`, `NewableFunction.*`, `Reflect.apply`,
+   `Reflect.construct`, `eval` by qualified name and (b) requires every slot the
+   reviewed invoker table says the member invokes, and every slot the producer
+   saw a callable in, to be parameter-rooted or a callable literal inside the
+   transcript's frame; an unrecognized invoker string refuses. Approach: the
+   reviewed allowlist (`invoking_positions.go` via
+   `DefaultLibraryInvoker::from_wire`) proves *slots*; a denylist covers the
+   members that run a receiver or text, for which a slot table has no row
+   shape, and a full allowlist of non-invoking members would be an unreviewed
+   review of all of `lib.*.d.ts`. ADR 0008's premise now reads "…and it
+   transfers no control to a non-censused callable". **Open:** the
+   protocol-method reach on a non-callable argument (`JSON.stringify(o)` →
+   `toJSON`, `Array.from(iterable)` → `Symbol.iterator`, `arr.sort()` → element
+   `toString`, `Promise.resolve(thenable)` → `then`) is not refused; the
+   producer classifies the operator/template spellings (`coercion`,
+   `iteration-protocol`) but not the call spellings, and this side has no
+   argument-shape fact to refuse on. Producer-side. Fixture: `stdlibRefInvoker`,
+   `reflectApply` refuse; `plain`'s `values.map(callback)` still closes.
+3. **Reassigned module-local binding (soundness, low-medium).** `function
+   helper(){}; helper = (el) => render(App, el); helper()` recursed into the
+   original body. `census_local_binding_is_stable` refuses, from the verifier's
+   own facts, any write to the binding (assignment / update targets via
+   `assignments` + `reference_declarations`, and `for…in`/`for…of` heads via the
+   new `AstFacts::iteration_targets`), any redeclaration of the name, and any
+   declaration without a binding identifier (`const helper = () => …`, which
+   the producer resolves to the arrow node and which ADR 0008 now documents as
+   *not recursed into*). Fixture: `reassignedHelper` refuses.
+4. **Graph lanes (correctness, medium).** Node identity kept the ungated
+   `candidate_semantic_digest` while the receipt bound the gated digest, so
+   every graph with a withheld dependency candidate failed `ReceiptMismatch`.
+   Choice **(b)**: identities and the graph root stay; composition accepts a
+   receipt exactly when it certifies the accepted proposal weakened by the
+   node's withheld records, re-derived independently (`withheld_weakening`, the
+   one definition the gate also uses) and compared against both the receipt's
+   digest and its binding digest, with the accepted digest still bound to the
+   parent's edge. (a) was rejected because the accepted digest is hashed into
+   the parent's demand graph and lives in its authenticated closure manifest.
+   Pinned without a producer and end to end with the pinned producer.
+5. **Lexical generator gate (correctness, low).** `CreatesProposalWalk` now
+   follows the IR's resolved local call edges to a fixpoint, so a delegating
+   export no longer proposes. Eleven candidates withdrawn across nine corpus
+   fixtures, each an export delegating to a helper whose own walk refuses:
+   `arrow-export-attribution` (`Declared`), `callback-execution-boundary`
+   (`Escaping`), `deferred-returned-callback` (`nestedThroughCallable`),
+   `entry-reexport-identity` (`forwarded`), `escaping-private-helper`
+   (`Direct`; 22 → 21), `export-identity-join` (`UseChannel`),
+   `parameter-member-forwarded` (`forwarded`), `unresolved-dispatch-attribution`
+   (`Arrow`, `Direct`, `Helper`), `unresolved-dispatch-reachability`
+   (`Reaches`). Measured by regenerating the whole corpus once with the
+   fixpoint disabled and once with it; `runtime-semantics` (34),
+   `uncensused-invoking-forms` (13) and `asset-query-import-control` (1) did
+   not move.
+6. **Documentation.** ADR 0008 no longer says every real row's candidates are
+   withheld (none were proposed — 0 candidates, not 0-withheld-of-many); names
+   the missing Solid 2.0 negative rows (`createSignal`, `onCleanup`, `untrack`,
+   `getOwner`, `createRoot`) as the actual next blocker; documents the arrow
+   helper and the written binding; and corrects the standard-library premise.
+   The census fixture's README and `index.js` no longer say `unresolved`
+   proposes.
+7. **Tests.** `plain`'s `never()` is pinned as `unreachable:unreachable` with
+   `census-total:5:1` (the producer proves it); a `Construct` disposition is
+   pinned; the tracers fail loudly under `SOLID_CHECKER_EXPECT_PROBE_PINS=1`
+   when `SOLID_TYPEFACTS_BIN` is unset; `scripts/coverage.mjs`'s
+   `checkDialectStubs` scans nested fixture directories (the
+   `primitive-consumer` stub is now in reach; the gate passes).
+8. **Byte-order mark.** The verifier strips a leading UTF-8 BOM **before** the
+   Oxc parse, because typescript-go's decoder removes it before the source
+   text exists, so producer offsets already count from the byte after the
+   mark; identity stays exact and no span is offset. The `primitive-consumer`
+   stub's `onSettled(callback: () => void | (() => void))` matches the audited
+   `@solidjs/signals@2.0.0-rc.3` declaration's parameter name and type (the
+   audited signature is recorded in this file's stub-looseness table).

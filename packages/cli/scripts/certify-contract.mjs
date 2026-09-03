@@ -608,7 +608,7 @@ async function acquirePublishedArtifact({
   });
 }
 
-function certificationPlannings(generated, artifactSnapshot) {
+function certificationPlannings(generated, artifactSnapshot, options = null) {
   return generated.certificationInputs.map(input => ({
     schemaVersion: 1,
     proposal: generated.output,
@@ -621,13 +621,55 @@ function certificationPlannings(generated, artifactSnapshot) {
     // share of it: each one is an independent native transaction, and a case
     // the proposal omitted must be re-proved by whichever transaction accepts
     // that proposal.
-    inapplicableCases: generated.inapplicableCases ?? []
+    inapplicableCases: generated.inapplicableCases ?? [],
+    // The recipe corpus the execution will be handed, so the reviewed plan is
+    // the recipe-gated plan the execution certifies against: a `creates`
+    // closure candidate with no recipe is withheld by name at planning, and
+    // the plan names neither its demand nor its gate.
+    ...(options?.probeRecipeCorpus
+      ? { probeRecipeCorpus: resolve(options.probeRecipeCorpus) }
+      : {})
   }));
+}
+
+/// The closure candidates the native transaction withheld by name, read off
+/// its stdout. One `solid-checker:withheld-closure=<json>` line per candidate
+/// (`main.rs`'s `report_withheld_closures`); anything else on stdout is not a
+/// record and is left alone. Audit material only: the accepted contract itself
+/// already says the withheld domains are open.
+export const WITHHELD_CLOSURE_MARKER = "solid-checker:withheld-closure=";
+
+export function withheldClosuresFromNativeOutput(stdout) {
+  const records = [];
+  for (const line of String(stdout ?? "").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(WITHHELD_CLOSURE_MARKER)) continue;
+    try {
+      const record = JSON.parse(trimmed.slice(WITHHELD_CLOSURE_MARKER.length));
+      if (
+        record &&
+        typeof record === "object" &&
+        typeof record.export === "string" &&
+        typeof record.domain === "string" &&
+        typeof record.reason === "string"
+      ) {
+        records.push(record);
+      }
+    } catch {
+      // A malformed line is not a record; the honest answer is to omit it
+      // rather than to invent fields for it.
+    }
+  }
+  return records;
 }
 
 async function planDemands({ options, generated, artifactSnapshot, scratch }) {
   const plans = [];
-  for (const [index, planning] of certificationPlannings(generated, artifactSnapshot).entries()) {
+  for (const [index, planning] of certificationPlannings(
+    generated,
+    artifactSnapshot,
+    options
+  ).entries()) {
     const requestPath = join(scratch, `certification-request-${index}.json`);
     const outputPath = join(scratch, `certification-plan-${index}.json`);
     writeFileSync(requestPath, `${JSON.stringify(planning, null, 2)}\n`);
@@ -1465,7 +1507,11 @@ async function executePreparedPublishedGraphs({
       ...nativeRefusalAttribution(reason)
     });
   }
-  return { authority: "native-certification-complete", catalogRoot };
+  return {
+    authority: "native-certification-complete",
+    catalogRoot,
+    withheldClosures: withheldClosuresFromNativeOutput(child.stdout)
+  };
 }
 
 function reachableGraphStates(root, byKey) {
@@ -2237,7 +2283,11 @@ async function executeNativeCertification({
       ...nativeRefusalAttribution(reason)
     });
   }
-  return { authority: "native-certification-complete", catalogRoot };
+  return {
+    authority: "native-certification-complete",
+    catalogRoot,
+    withheldClosures: withheldClosuresFromNativeOutput(child.stdout)
+  };
 }
 
 async function executeNativeOrGraphCertification({
@@ -2275,7 +2325,8 @@ function writeAudit(
   refusal,
   demandPlans,
   stageDurationsMs,
-  graphPreparation = null
+  graphPreparation = null,
+  withheldClosures = []
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -2300,6 +2351,7 @@ function writeAudit(
         stageDurationsMs,
         graphPreparation,
         refusals: refusal.refusals ?? [],
+        withheldClosures,
         demandPlans: demandPlans.map(plan => ({
           policyDigest: plan.policyDigest,
           candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -2320,7 +2372,8 @@ function writeSuccessAudit(
   manifest,
   demandPlans,
   stageDurationsMs,
-  graphPreparation = null
+  graphPreparation = null,
+  withheldClosures = []
 ) {
   if (!path) return;
   const output = resolve(path);
@@ -2337,6 +2390,11 @@ function writeSuccessAudit(
     stageDurationsMs,
     graphPreparation,
     refusals: [],
+    // Closure candidates recipe-gated planning withheld by name: each names
+    // the export, the domain, the exact semantic claim id a recipe would have
+    // had to carry, and the reason. The certified contract leaves those
+    // domains open; this is the record of why.
+    withheldClosures,
     demandPlans: demandPlans.map(plan => ({
       policyDigest: plan.policyDigest,
       candidateSemanticDigest: plan.candidateSemanticDigest,
@@ -2447,6 +2505,7 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
   const demandPlans = [];
   let graphPreparation = null;
   let reusedProposal = false;
+  let withheldClosures = [];
   const stageDurationsMs = {};
   let certified = false;
   const measure = async (stage, operation) => {
@@ -2598,6 +2657,9 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
         }),
         certify: async ({ witnesses }) => measure("certification", async () => {
           requireProduct(witnesses, "certification", "native-certification-complete");
+          withheldClosures = Array.isArray(witnesses?.withheldClosures)
+            ? witnesses.withheldClosures
+            : [];
           return { authority: "rust", witnesses };
         })
       },
@@ -2627,7 +2689,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       manifest,
       demandPlans,
       stageDurationsMs,
-      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation
+      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation,
+      withheldClosures
     );
     certified = true;
   } catch (error) {
@@ -2648,7 +2711,8 @@ export async function certifyContract(arguments_, { fetch_ = fetch } = {}) {
       // Same merge as the success audit: which lane produced the proposal is a
       // fact about the attempt, and a refused attempt needs it attributed just
       // as much as a certified one.
-      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation
+      reusedProposal ? { ...(graphPreparation ?? {}), reusedProposal: true } : graphPreparation,
+      withheldClosures
     );
     throw refusal;
   } finally {

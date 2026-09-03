@@ -25,8 +25,9 @@ Two pairs of exports, each pair indistinguishable to TypeScript.
 | --- | --- | --- | --- |
 | `entry` | `(() => void) \| undefined` | a callable | root `ChoiceAlternatives` closed — **certifies** |
 | `driftedEntry` | `(() => void) \| undefined` | `42` | the same claim — **vetoed** |
-| `run` | `(callback: () => void) => void` | creates no owner | `creates: []` — refused, no premise |
-| `runCreatingOwner` | `(callback: () => void) => void` | creates an owner | `creates: []` — refused, no premise |
+| `run` | `(callback: () => void) => void` | calls its callback | `creates: []` — **certifies**, by the implementation census |
+| `runCreatingOwner` | `(callback: () => void) => void` | parks an object literal in a module variable, calls its callback inside `try … finally` | `creates: []` — refused by name: the `try` puts a `tryReachability` marker in the control-flow census, which the census takes no relaxation on |
+| `primitive-consumer/`'s `runAfterSettle` | `(callback: () => void \| (() => void)) => void` | calls Solid's `onSettled` | `creates: []` — refused by name: the callee resolves into no authenticated archive |
 
 ### The pair that certifies
 
@@ -83,20 +84,64 @@ and a render-time owner that this census never observed. It refuses with
 `alternative-kind premise required` like every other structural kind, and
 `the_alternative_kind_premise_admits_only_what_callability_decides` pins that.
 
-### The pair that cannot certify, and must not
+### The pair the implementation census decides
 
-`run` and `runCreatingOwner` also have byte-identical declarations, and
-opposite reactive-ownership behavior. Nothing in `index.d.ts` says which
-creates an owner — that is precisely the point. A `creates: []` proposal for
-either of them is refused as `UnsupportedDemand` at *witness acquisition*,
-before any probe runs, because the census that discharges
-`DomainExhaustiveness` is a census of the declaration and the declaration is
-silent.
+`run` and `runCreatingOwner` also have byte-identical declarations, and to a
+`creates` census they are indistinguishable for a second reason: **neither
+performs a `create` operation**. Under `semantic-model.md` § creates a `create`
+is the export registering a version-1 resource into a runtime outside the
+invocation — a browser document, a server runtime. `runCreatingOwner` sets a
+module-level `currentOwner` to a fresh object literal and restores it in a
+`finally`; an object literal is not a version-1 resource, a private module
+variable is not a runtime that acts on it, and nothing in Solid consults it.
+The only call in either body is `callback()`, a callee rooted at a parameter,
+which § 3.2 of the census plan excludes: the export's act is the invocation (a
+`callbacks` item), and what the caller's function does is the caller's behavior.
 
-`probe-recipes/calls-only.mjs` exists to prove no recipe can rescue that:
-pointed at `runCreatingOwner`, which really does create an owner, it observes
-nothing to the contrary. A clean pass there would have been closure decided by
-finite non-observation. The row never reaches the gate.
+So a `creates: []` proposal for `run` is **proved** — by the implementation
+census of `docs/adr/0008-implementation-census-for-creates.md`, which
+dispositions that one call `parameter-rooted` and witnesses it — and then
+vetoed by `probe-recipes/calls-only.mjs`, which observes nothing to the
+contrary. `the_probe_gate_tracer_certifies_a_parameter_rooted_creates_census`
+drives that row.
+
+`runCreatingOwner` **refuses**, and the reason is worth stating exactly because
+it is not behavioral. Its `try … finally` puts a `tryReachability` marker in the
+producer's control-flow census. The census requires every transcript it reads to
+carry an empty `unsupported` list — it takes no `controlFlowUnsupported`
+relaxation at any depth — because the producer *withholds* every call row inside
+a region a `break` or `continue` makes non-universal, and such a marker is the
+only trace a withheld row leaves; a census that relaxed it would close a domain
+over a call the transcript never mentioned. A `try` withholds nothing itself, so
+this is an over-refusal, recorded in ADR 0008 with its producer-side fix (emit
+the withheld row with `reach: unknown`, or as an uncensused form).
+`the_probe_gate_tracer_census_refuses_an_export_with_unsupported_control_flow`
+pins the refusal and the marker it names. Before the census existed both rows
+refused as `UnsupportedDemand` at witness acquisition; that refusal was
+domain-by-name for want of a premise, and never a behavioral difference between
+the two exports.
+
+### The sibling the census refuses
+
+`primitive-consumer/` is a second, separate package: one export,
+`runAfterSettle`, which calls a real Solid 2.0 primitive — `onSettled` from
+`solid-js`. It is separate because every recipe of this fixture imports the main
+package inside the private probe directory, where `solid-js` does not exist, and
+a top-level import of it there would fail the module load of every recipe.
+
+`onSettled` is audited in `@solidjs/signals@2.0.0-rc.3` with `creates: []`
+closed, and the dialect's negative table carries the row (ADR 0007). Against
+the audited archive the census would disposition the call `dialect-axiom`. It
+never gets to: the `node_modules/solid-js` beside the package is a stub whose
+tuple is not the audited one, so the tier refuses to answer for it, and inside
+the certifier's private project — which materializes the package snapshot alone
+— the import resolves to nothing, so the call arrives with no declaration at
+all. The census refuses the domain by name as an unresolved callee, naming
+`onSettled`. Nothing certifies closed on a stub's word, and the same import as
+an *unaccepted dependency edge* would have opened the domain even earlier, at
+closure replay, as an `UnacceptedExternalDependency` hazard — which is why the
+tracer supplies the stub as a planned dependency and pins the census's refusal
+rather than the hazard's.
 
 ## What the probe does and does not decide
 
@@ -147,7 +192,7 @@ disposition table.
 | --- | --- | --- |
 | `declared-alternatives.mjs` | faithful, `entry` | no contradiction; the veto passes and the row certifies |
 | `drifted-alternative.mjs` | faithful, `driftedEntry` | contradiction; the veto refuses the row |
-| `calls-only.mjs` | faithful, `runCreatingOwner` | never reached: the demand is unsupported |
+| `calls-only.mjs` | faithful, `run` and `runCreatingOwner` | no contradiction; the census proved the claim, the veto passes and the row certifies |
 | `patched-primordials.mjs` | `tampering-package` | contradiction, despite the package patching the worker's realm |
 | `frozen-intrinsics.mjs` | faithful, `entry` | no contradiction — *provided* the worker froze the intrinsic prototypes before importing it |
 
@@ -286,7 +331,11 @@ constant.
   `Object.isFrozen` reads inside `runProbeSession` would still notice a thawed
   prototype, but no longer attribute it to the recipe-*import* boundary, which
   is the property the worker actually promises.
-* **`run` must create no owner and `runCreatingOwner` must create one.** The
-  refusal under test is about a premise that is missing, not about the
-  behavior; but a fixture whose "behavioral difference" was not real would
-  stop demonstrating why the premise is needed.
+* **Neither `run` nor `runCreatingOwner` may perform a `create` operation, and
+  `runCreatingOwner` must keep parking its object literal.** The pair exists to
+  show that a module-private variable is not a registration into a runtime;
+  give either export a `render` call and it becomes the sibling's case instead.
+* **`primitive-consumer/`'s stub must stay a stub.** Its `onSettled` signature
+  is byte-faithful to the audited declaration so `tsc` sees what a consumer
+  sees; its tuple must not be the audited one, or the fixture would be
+  certifying a Solid primitive on a fixture's word.

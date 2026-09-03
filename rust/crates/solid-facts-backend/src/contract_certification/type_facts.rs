@@ -515,6 +515,120 @@ impl TypeFactsCertificationSession {
             .session
             .certification_export_values(context, &schedule.export_value_demands())?)
     }
+
+    /// Asks the same pinned live process for the implementation transcripts of
+    /// module-local declarations the `creates` census reached.
+    ///
+    /// These are not certification evidence in their own right, which is why
+    /// they carry no session identity envelope: the receipt binds each one
+    /// through the census witness site that names the declaration's exact span
+    /// and the SHA-256 of its canonical transcript
+    /// (`census-local-declaration:…`), and the census refuses the domain when a
+    /// declaration it needs is missing. The producer's own binding still holds
+    /// — [`typefacts::Session::export_values`] refuses an answer whose resolved
+    /// declaration does not lie inside the demanded span.
+    pub(crate) fn acquire_local_declarations(
+        &mut self,
+        demands: &[ExportValueDemand],
+    ) -> Result<typefacts::ExportValueAnswer, TypeFactsCertificationError> {
+        Ok(self.session.export_values(demands)?)
+    }
+}
+
+/// Acquires, through the still-open session, every module-local declaration
+/// transcript the `creates` implementation census of this plan's demands
+/// needs, one batch per recursion depth.
+///
+/// The census is run in its acquisition mode against the transcripts already
+/// in hand: a pass that reaches a local declaration nobody has transcribed yet
+/// records the declaration and stops short of a verdict
+/// ([`CensusOutcome::NeedsTranscripts`]), and this loop demands exactly those
+/// declarations and runs the pass again. A pass that decides — or refuses —
+/// asks for nothing more; verification then states the verdict. The loop is
+/// bounded by [`MAX_COMPOSITION_DEPTH`] rounds because each round resolves one
+/// more hop, and the census itself refuses a chain longer than that.
+fn acquire_census_local_transcripts(
+    session: &mut TypeFactsCertificationSession,
+    plan: &CertificationPlan,
+    schedule: &TypeFactsCertificationSchedule,
+    live: &LiveExportValueAnswer,
+    roots: &[SnapshotSourceRoot<'_>],
+) -> Result<Vec<LocalDeclarationTranscript>, TypeFactsCertificationError> {
+    let mut locals = Vec::<LocalDeclarationTranscript>::new();
+    for _round in 0..=MAX_COMPOSITION_DEPTH {
+        // (anchor expression the producer evaluates, declaration span asked for)
+        let mut requested = Vec::<(typefacts::Location, typefacts::Location)>::new();
+        for (index, scheduled) in schedule.export_values.iter().enumerate() {
+            let Some(transcript) = live.answer().transcripts.get(index) else {
+                continue;
+            };
+            let Some(implementation) = transcript.implementation.as_ref() else {
+                continue;
+            };
+            for proof in &scheduled.proof_demands {
+                let ProofDemandSubject::DomainClosure { subject, .. } = &proof.subject else {
+                    continue;
+                };
+                if proof.family != ProofFamily::DomainExhaustiveness
+                    || !matches!(
+                        &subject.path,
+                        SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates))
+                    )
+                {
+                    continue;
+                }
+                let Some(export) = plan
+                    .candidates
+                    .proposal()
+                    .artifact_case(&subject.artifact_case)
+                    .and_then(|case| case.exports.get(&subject.export))
+                else {
+                    continue;
+                };
+                let evidence = CensusEvidence {
+                    roots,
+                    locals: &locals,
+                };
+                if let Ok((CensusOutcome::NeedsTranscripts, _, wanted)) =
+                    census_creates_domain(plan, proof, export, implementation, evidence)
+                {
+                    for location in wanted {
+                        let known = locals.iter().any(|local| local.location == location)
+                            || requested.iter().any(|(_, pending)| *pending == location);
+                        if !known {
+                            requested.push((scheduled.demand.location.clone(), location));
+                        }
+                    }
+                }
+            }
+        }
+        if requested.is_empty() {
+            break;
+        }
+        let demands = requested
+            .iter()
+            .map(|(anchor, location)| ExportValueDemand {
+                location: anchor.clone(),
+                implementation_location: None,
+                local_declaration_location: Some(location.clone()),
+                callable_depth: 0,
+            })
+            .collect::<Vec<_>>();
+        let answer = session.acquire_local_declarations(&demands)?;
+        for ((_, location), transcript) in requested.into_iter().zip(answer.transcripts) {
+            // `Session::export_values` already refused an answer that omitted
+            // the local declaration or bound it to another span; an absent one
+            // here is therefore unreachable, and is simply not recorded, so the
+            // census refuses the demand by name rather than this loop guessing.
+            if let Some(local) = transcript.local_declaration {
+                locals.push(LocalDeclarationTranscript {
+                    location,
+                    transcript: local,
+                });
+            }
+        }
+    }
+    Ok(locals)
 }
 
 /// Performs the export-value acquisition as one opaque native transaction:
@@ -741,6 +855,13 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
             let live = session
                 .acquire_export_values(plan, schedule)
                 .map_err(|error| error.at_stage("live export-value acquisition"))?;
+            let package_marker = snapshot_package_marker(plan);
+            let roots =
+                snapshot_source_roots(plan, dependencies, sources, Some(&project), &package_marker)
+                    .map_err(|error| error.at_stage("census source-root derivation"))?;
+            let locals =
+                acquire_census_local_transcripts(&mut session, plan, schedule, &live, &roots)
+                    .map_err(|error| error.at_stage("census local-declaration acquisition"))?;
             verify_live_export_value_answer_with_dependencies(
                 plan,
                 schedule,
@@ -748,6 +869,7 @@ fn acquire_and_verify_export_values_batch_with_dependencies(
                 dependencies,
                 sources,
                 &project,
+                &locals,
             )
             .map_err(|error| error.at_stage("live export-value verification"))
         })
@@ -860,6 +982,27 @@ pub(super) fn acquire_and_verify_graph_export_values(
                 .map_err(|error| {
                     error.at_graph_node(request.plan, "live graph export-value acquisition")
                 })?;
+            let package_marker = snapshot_package_marker(request.plan);
+            let roots = snapshot_source_roots(
+                request.plan,
+                &census_dependencies,
+                &sources,
+                Some(&project),
+                &package_marker,
+            )
+            .map_err(|error| {
+                error.at_graph_node(request.plan, "graph census source-root derivation")
+            })?;
+            let locals = acquire_census_local_transcripts(
+                &mut session,
+                request.plan,
+                schedule,
+                &live,
+                &roots,
+            )
+            .map_err(|error| {
+                error.at_graph_node(request.plan, "graph census local-declaration acquisition")
+            })?;
             verify_live_export_value_answer_with_project_census(
                 request.plan,
                 schedule,
@@ -868,6 +1011,7 @@ pub(super) fn acquire_and_verify_graph_export_values(
                 &census_dependencies,
                 &sources,
                 Some(&project),
+                &locals,
             )
             .map_err(|error| {
                 error.at_graph_node(request.plan, "live graph export-value verification")
@@ -2409,7 +2553,20 @@ pub(super) fn verify_live_export_value_answer(
     schedule: &TypeFactsCertificationSchedule,
     live: &LiveExportValueAnswer,
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
-    verify_live_export_value_answer_with_project_census(plan, schedule, live, &[], &[], &[], None)
+    // No local-declaration transcripts: a `creates` census that has to recurse
+    // into a module-local helper refuses here, because this entry point has no
+    // session to ask. The opaque acquisition transactions below are the only
+    // callers that can supply them.
+    verify_live_export_value_answer_with_project_census(
+        plan,
+        schedule,
+        live,
+        &[],
+        &[],
+        &[],
+        None,
+        &[],
+    )
 }
 
 fn verify_live_export_value_answer_with_dependencies(
@@ -2419,6 +2576,7 @@ fn verify_live_export_value_answer_with_dependencies(
     dependencies: &[&CertificationPlan],
     sources: &[super::dependencies::VerifiedGraphSourcePackage],
     project: &PrivateTypeFactsProject,
+    locals: &[LocalDeclarationTranscript],
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
     verify_live_export_value_answer_with_project_census(
         plan,
@@ -2428,9 +2586,14 @@ fn verify_live_export_value_answer_with_dependencies(
         dependencies,
         sources,
         Some(project),
+        locals,
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one authenticated evidence set per fact domain, each already bound to this plan"
+)]
 fn verify_live_export_value_answer_with_project_census(
     plan: &CertificationPlan,
     schedule: &TypeFactsCertificationSchedule,
@@ -2439,6 +2602,7 @@ fn verify_live_export_value_answer_with_project_census(
     census_dependencies: &[&CertificationPlan],
     census_sources: &[super::dependencies::VerifiedGraphSourcePackage],
     project: Option<&PrivateTypeFactsProject>,
+    locals: &[LocalDeclarationTranscript],
 ) -> Result<VerifiedTypeFactsEvidence, TypeFactsCertificationError> {
     verify_schedule_identity(
         "export-value verification",
@@ -2548,6 +2712,22 @@ fn verify_live_export_value_answer_with_project_census(
         &answer.envelope.sources,
         &schedule.verifier_sources,
     )?;
+    // The same authenticated roots the source census just checked every
+    // consulted file against, now read the other way round: given a resolved
+    // callee's declaration, which archive is it a member of. Derived once, by
+    // the one function that derives them, so the two censuses cannot disagree.
+    let package_marker = snapshot_package_marker(plan);
+    let source_roots = snapshot_source_roots(
+        plan,
+        census_dependencies,
+        census_sources,
+        project,
+        &package_marker,
+    )?;
+    let census = CensusEvidence {
+        roots: &source_roots,
+        locals,
+    };
     let certification_sources_root = plan.certification_sources_root();
     let mut bindings = Vec::with_capacity(expected_ids.len());
     for (index, scheduled) in schedule.export_values.iter().enumerate() {
@@ -2580,6 +2760,7 @@ fn verify_live_export_value_answer_with_project_census(
                     scheduled: &schedule.export_values,
                     transcripts: &answer.transcripts,
                 },
+                census,
             )?;
             sites.extend(source_sites.iter().cloned());
             sites.sort();
@@ -2841,6 +3022,7 @@ fn verify_export_value_family(
     proof: &ScheduledProofDemand,
     transcript: &ExportValueTranscript,
     transcripts: ExportTranscripts<'_>,
+    census: CensusEvidence<'_>,
 ) -> Result<Vec<String>, TypeFactsCertificationError> {
     let (artifact_case, export_name) = proof_artifact_export(&proof.subject);
     let open = |reason: &str| TypeFactsCertificationError::FamilyOpen {
@@ -3004,17 +3186,63 @@ fn verify_export_value_family(
                     reason: "domain-exhaustiveness demand has no closure subject".into(),
                 });
             };
-            // This census is the exported value's own observation and nothing
-            // else: no control-flow branch census, so no guard partition, and
-            // no implementation census, so no behavioral call domain.
-            require_census_decides_closure(proof, &subject.path, ClosureCensus::ExportedValue)?;
-            require_closed_value(&transcript.value, &open)?;
-            require_export_callable_paths_closed(transcript, &open)?;
-            let alternatives =
-                require_export_value_enumeration_matches_census(plan, proof, transcript, &open)?;
-            sites.push(format!(
-                "typefacts-export-value-domain:choice-alternatives:{alternatives}"
-            ));
+            if matches!(
+                &subject.path,
+                SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates))
+            ) {
+                // The implementation census. The demanded export's own
+                // runtime implementation transcript has to clear the same
+                // completeness and authenticated runtime binding every other
+                // implementation-reading family clears, and then every call it
+                // reaches — transitively, through the local declarations this
+                // session transcribed — is dispositioned by its callee.
+                let (export, implementation) =
+                    require_export_implementation(plan, proof, transcript, &open)?;
+                require_census_decides_closure(
+                    proof,
+                    &subject.path,
+                    ClosureCensus::Implementation,
+                )?;
+                let (outcome, census_sites, requested) =
+                    census_creates_domain(plan, proof, export, implementation, census)?;
+                if outcome == CensusOutcome::NeedsTranscripts {
+                    // Verification has no session left to ask. Acquisition
+                    // batches every local declaration the census names; one
+                    // still missing here is a declaration that acquisition
+                    // could not transcribe, and the census refuses rather
+                    // than reading its absence as harmless.
+                    return Err(TypeFactsCertificationError::UnsupportedDemand {
+                        demand: proof.id.clone(),
+                        reason: format!(
+                            "implementation-census premise required: no implementation \
+                             transcript was acquired for the local declaration(s) {}",
+                            requested
+                                .iter()
+                                .map(|location| format!(
+                                    "{}:{}..{}",
+                                    location.path, location.start_byte, location.end_byte
+                                ))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    });
+                }
+                sites.extend(census_sites);
+            } else {
+                // This census is the exported value's own observation and
+                // nothing else: no control-flow branch census, so no guard
+                // partition, and no implementation census, so no other
+                // behavioral call domain.
+                require_census_decides_closure(proof, &subject.path, ClosureCensus::ExportedValue)?;
+                require_closed_value(&transcript.value, &open)?;
+                require_export_callable_paths_closed(transcript, &open)?;
+                let alternatives = require_export_value_enumeration_matches_census(
+                    plan, proof, transcript, &open,
+                )?;
+                sites.push(format!(
+                    "typefacts-export-value-domain:choice-alternatives:{alternatives}"
+                ));
+            }
         }
         _ => {
             return Err(TypeFactsCertificationError::UnsupportedDemand {
@@ -4017,13 +4245,14 @@ fn sri_prefix(integrity: &str) -> &str {
 /// 9. The dialects' negative table denies the domain for `(archive, export)`,
 ///    with cross-dialect agreement, and silence is never "no".
 ///
-/// # Not wired into the census
+/// # Where it is consumed
 ///
-/// `require_census_decides_closure` still refuses every behavioral call domain
-/// by name. This function supplies the terminator that refusal is waiting on;
-/// consuming it is the census slice's work
-/// (`phase21/2026-09-03-implementation-census-plan.md` § 4.3).
-#[allow(dead_code)]
+/// [`census_call_disposition`] consults it as the `DialectAxiom` disposition of
+/// the `creates` implementation census, after the parameter-rooted and
+/// standard-library dispositions and before local recursion
+/// (`docs/adr/0008-implementation-census-for-creates.md`). Every other
+/// behavioral call domain still refuses by name in
+/// `require_census_decides_closure`.
 fn census_dialect_axiom_for_callee(
     call: &typefacts::ImplementationCall,
     domain: solid_dialect::CallClaimDomain,
@@ -5886,10 +6115,7 @@ fn verify_snapshot_source_census(
 ) -> Result<Vec<String>, TypeFactsCertificationError> {
     use crate::contract_interface::ClosureFileRole;
 
-    let package_marker = format!(
-        "/node_modules/{}/",
-        plan.snapshot.package_name().replace('\\', "/")
-    );
+    let package_marker = snapshot_package_marker(plan);
     // Every site below names its file by the path it occupies *inside the
     // private project*, never by the absolute path the producer reported. The
     // absolute path is a temporary directory keyed on this process's pid and a
@@ -5949,73 +6175,8 @@ fn verify_snapshot_source_census(
         sites.push(format!("typefacts-source:{suffix}:{}", matches[0].sha256));
     }
 
-    let owner_roots = match project {
-        Some(project) => vec![project.package_root(plan)?.to_path_buf()],
-        None => authenticated_source_root_paths(
-            &plan.resolved_import.package_root,
-            plan.resolved_import.package_real_root.as_deref(),
-        ),
-    };
-    let mut source_roots = Vec::new();
-    for root in owner_roots {
-        source_roots.push(SnapshotSourceRoot {
-            path: normalized_source_root(&root),
-            evidence_prefix: materialized_source_evidence_prefix(project, &root, &package_marker)?,
-            snapshot: &plan.snapshot,
-            dependency: false,
-        });
-    }
-    for dependency in dependencies {
-        let roots = match project {
-            Some(project) => vec![project.package_root(dependency)?.to_path_buf()],
-            None => authenticated_source_root_paths(
-                &dependency.resolved_import.package_root,
-                dependency.resolved_import.package_real_root.as_deref(),
-            ),
-        };
-        let fallback_prefix = private_project_package_marker(
-            plan,
-            &dependency.resolved_import.package_root,
-            dependency.snapshot.package_name(),
-        );
-        for root in roots {
-            source_roots.push(SnapshotSourceRoot {
-                path: normalized_source_root(&root),
-                evidence_prefix: materialized_source_evidence_prefix(
-                    project,
-                    &root,
-                    &fallback_prefix,
-                )?,
-                snapshot: &dependency.snapshot,
-                dependency: true,
-            });
-        }
-    }
-    for source in graph_sources {
-        let root = project.map_or_else(
-            || Ok(PathBuf::from(&source.installed_package_root)),
-            |project| project.source_root(source).map(Path::to_path_buf),
-        )?;
-        let fallback_prefix = private_project_package_marker(
-            plan,
-            &source.installed_package_root,
-            source.snapshot.package_name(),
-        );
-        source_roots.push(SnapshotSourceRoot {
-            path: normalized_source_root(&root),
-            evidence_prefix: materialized_source_evidence_prefix(project, &root, &fallback_prefix)?,
-            snapshot: &source.snapshot,
-            dependency: true,
-        });
-    }
-    deduplicate_snapshot_source_roots(&mut source_roots)?;
-    source_roots.sort_by(|left, right| {
-        right
-            .path
-            .len()
-            .cmp(&left.path.len())
-            .then_with(|| left.path.cmp(&right.path))
-    });
+    let source_roots =
+        snapshot_source_roots(plan, dependencies, graph_sources, project, &package_marker)?;
     let source_root_paths = source_roots
         .iter()
         .map(|root| root.path.clone())
@@ -6139,6 +6300,107 @@ fn strip_materialized_source_root<'a>(
         .iter()
         .enumerate()
         .find_map(|(index, root)| source.strip_prefix(root).map(|relative| (index, relative)))
+}
+
+/// Every authenticated snapshot root the producer may have read source from,
+/// longest path first, each carrying the snapshot it belongs to and whether it
+/// is a dependency rather than the artifact under certification.
+///
+/// Extracted from [`verify_snapshot_source_census`] because two independent
+/// consumers need the same list: that census, which checks every reported
+/// source against it, and the `creates` implementation census, which asks it
+/// which archive a resolved callee's declaration belongs to. Deriving it twice
+/// would be two chances to derive it differently.
+///
+/// `dependency` is `false` only for the artifact under certification's own
+/// roots. `deduplicate_snapshot_source_roots` refuses two distinct
+/// authenticated snapshots claiming one materialized root, and narrows the flag
+/// with `&=` where the same root is claimed twice, so the answer stays the
+/// conservative one.
+/// The path prefix a source of the artifact under certification occupies
+/// inside the private project, and the fallback evidence prefix for it.
+fn snapshot_package_marker(plan: &CertificationPlan) -> String {
+    format!(
+        "/node_modules/{}/",
+        plan.snapshot.package_name().replace('\\', "/")
+    )
+}
+
+fn snapshot_source_roots<'a>(
+    plan: &'a CertificationPlan,
+    dependencies: &[&'a CertificationPlan],
+    graph_sources: &'a [super::dependencies::VerifiedGraphSourcePackage],
+    project: Option<&PrivateTypeFactsProject>,
+    package_marker: &str,
+) -> Result<Vec<SnapshotSourceRoot<'a>>, TypeFactsCertificationError> {
+    let owner_roots = match project {
+        Some(project) => vec![project.package_root(plan)?.to_path_buf()],
+        None => authenticated_source_root_paths(
+            &plan.resolved_import.package_root,
+            plan.resolved_import.package_real_root.as_deref(),
+        ),
+    };
+    let mut source_roots = Vec::new();
+    for root in owner_roots {
+        source_roots.push(SnapshotSourceRoot {
+            path: normalized_source_root(&root),
+            evidence_prefix: materialized_source_evidence_prefix(project, &root, package_marker)?,
+            snapshot: &plan.snapshot,
+            dependency: false,
+        });
+    }
+    for dependency in dependencies {
+        let roots = match project {
+            Some(project) => vec![project.package_root(dependency)?.to_path_buf()],
+            None => authenticated_source_root_paths(
+                &dependency.resolved_import.package_root,
+                dependency.resolved_import.package_real_root.as_deref(),
+            ),
+        };
+        let fallback_prefix = private_project_package_marker(
+            plan,
+            &dependency.resolved_import.package_root,
+            dependency.snapshot.package_name(),
+        );
+        for root in roots {
+            source_roots.push(SnapshotSourceRoot {
+                path: normalized_source_root(&root),
+                evidence_prefix: materialized_source_evidence_prefix(
+                    project,
+                    &root,
+                    &fallback_prefix,
+                )?,
+                snapshot: &dependency.snapshot,
+                dependency: true,
+            });
+        }
+    }
+    for source in graph_sources {
+        let root = project.map_or_else(
+            || Ok(PathBuf::from(&source.installed_package_root)),
+            |project| project.source_root(source).map(Path::to_path_buf),
+        )?;
+        let fallback_prefix = private_project_package_marker(
+            plan,
+            &source.installed_package_root,
+            source.snapshot.package_name(),
+        );
+        source_roots.push(SnapshotSourceRoot {
+            path: normalized_source_root(&root),
+            evidence_prefix: materialized_source_evidence_prefix(project, &root, &fallback_prefix)?,
+            snapshot: &source.snapshot,
+            dependency: true,
+        });
+    }
+    deduplicate_snapshot_source_roots(&mut source_roots)?;
+    source_roots.sort_by(|left, right| {
+        right
+            .path
+            .len()
+            .cmp(&left.path.len())
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    Ok(source_roots)
 }
 
 fn verify_snapshot_source_digest(
@@ -6792,6 +7054,12 @@ enum ClosureCensus {
     /// One selected call signature's parameter and result values plus the
     /// implementation's control-flow branch census.
     Invocation,
+    /// The demanded export's own `ExportImplementationTranscript`, its
+    /// uncensused-invoking-form census, and the transcripts of every local
+    /// declaration it reaches: the census of the **implementation**, which is
+    /// the only census that decides a behavioral call domain
+    /// (`docs/adr/0008-implementation-census-for-creates.md`).
+    Implementation,
 }
 
 /// Refuses a domain-closure demand whose claim the census in hand does not
@@ -6812,20 +7080,27 @@ enum ClosureCensus {
 ///   control-flow census with no unsupported branch, alongside closed parameter
 ///   and result values. Only the invocation census carries branches.
 ///
+/// * The **`creates` call domain**, and only when the census in hand is the
+///   [`ClosureCensus::Implementation`] one. Its premise is the implementation
+///   census of [`census_creates_domain`]: the export's own transcript at the
+///   `MayExecute` floor with every invoking form enumerated, every call
+///   dispositioned by its callee, and every local declaration recursed into
+///   (`docs/adr/0008-implementation-census-for-creates.md`). The declaration
+///   censuses still refuse it, because two exports with identical declarations
+///   have identical declaration censuses.
+///
 /// Everything else refuses. Two cases are worth naming because they look close:
 ///
-/// * A **behavioral call domain** — `creates`, `reads`, `writes`, `callbacks`,
+/// * The **other behavioral call domains** — `reads`, `writes`, `callbacks`,
 ///   `cleanups`, `disposals`, `invalidates`, and equally `throws` and `returns`
-///   — is decided by the implementation, and no declaration says anything about
-///   it. `fixtures/package-contracts/closed-domain-probe-gate` pins the
-///   consequence: `run` and `runCreatingOwner` have byte-identical declarations
-///   and opposite ownership behavior, so their censuses are identical.
-///   Admitting the family for `creates: []` would leave the probe gate's finite
+///   — are decided by the implementation too, but no census of them exists
+///   yet: `reads` additionally needs the proxy property-access forms, and
+///   `throws` is not a census target under version 1 at all
+///   (`phase21/2026-09-03-implementation-census-plan.md` § 4.4-4.5). Admitting
+///   one for the declaration census would leave the probe gate's finite
 ///   non-observation as the only thing separating a certified row from a
 ///   refused one — closure decided by non-observation, which a veto may never
-///   do. The premise it needs is an implementation census: a complete
-///   `ExportImplementationTranscript`, every `calls` target resolved, and no
-///   resolved target able to perform the domain's operation.
+///   do.
 /// * The **other value domains** — object properties, tuple items, array
 ///   bounds, capabilities, and any non-root path — are decided by a declaration
 ///   too, but this census hands over no enumeration of them to compare a
@@ -6852,6 +7127,14 @@ fn require_census_decides_closure(
             }),
         ) if value_path.0.is_empty() => Ok(()),
         (ClosureCensus::Invocation, SemanticClaimPath::Domain(ClaimPath::GuardPartition)) => Ok(()),
+        // The one behavioral call domain with a census: `creates`, decided by
+        // the implementation census and nothing else. Every other call domain
+        // keeps refusing by name below, including under this census, because
+        // no census of *it* exists yet.
+        (
+            ClosureCensus::Implementation,
+            SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates)),
+        ) => Ok(()),
         (_, SemanticClaimPath::Domain(ClaimPath::Value { root, domain, .. })) => {
             Err(unsupported(format!(
                 "value-enumeration premise required: closing the {} domain of a {} value needs a \
@@ -6866,6 +7149,14 @@ fn require_census_decides_closure(
              census, which an export-value transcript does not carry"
                 .into(),
         )),
+        (ClosureCensus::Implementation, SemanticClaimPath::Domain(ClaimPath::Call(domain))) => {
+            Err(unsupported(format!(
+                "implementation-census premise required: the implementation census decides the \
+                 creates call domain only; closing the {} call domain needs its own census of \
+                 every invoking form that reaches it, which does not exist yet",
+                call_claim_domain_name(*domain)
+            )))
+        }
         (_, SemanticClaimPath::Domain(ClaimPath::Call(domain))) => Err(unsupported(format!(
             "implementation-census premise required: closing the {} call domain needs a \
              complete ExportImplementationTranscript, every `calls` target resolved, and no \
@@ -6885,6 +7176,1305 @@ fn require_census_decides_closure(
         (_, SemanticClaimPath::Operation(_)) => Err(unsupported(
             "a domain-closure demand must name a claim domain, not one operation".into(),
         )),
+    }
+}
+
+/// The one reason a censused call cannot perform a `create`.
+///
+/// Exactly one is assigned per call admitted by the `MayExecute` floor, in the
+/// order the census tries them, and a call none of them fits refuses the domain
+/// **by name**. The set is closed on purpose: adding a disposition is adding a
+/// premise, and each of these five is a premise with an owner.
+///
+/// * `Unreachable` — the producer's control-flow census proves the call never
+///   runs. `MayExecute` admits `Reachable` *and* `Unknown`, so an
+///   uncertain-reach call is **in** the census and must be dispositioned like
+///   any other; only `Unreachable` is excused
+///   (`phase21/2026-09-03-implementation-census-plan.md` § 3 item 2).
+/// * `ParameterRooted` — the callee is proven to be a caller-supplied callable
+///   ([`typefacts::ImplementationCall::callee_parameter`]). What that callable
+///   does is the caller's behavior, in the caller's artifact, under the
+///   caller's own contract; this export's act is the *invocation*, which is a
+///   `callbacks` item (§ 3.2). An **empty `callee_sources` is not this**: it
+///   means the producer traced nothing, and an untraced callee is unresolved.
+/// * `StandardLibrary` — the callee resolved, by default-library symbol
+///   identity rather than by spelling, to a declaration the producer marks
+///   [`typefacts::ResolvedDeclaration::standard_library`]. **The premise is
+///   that a default-library member cannot register a version-1 resource into a
+///   Solid runtime.** The reviewed set is the engine's own description of
+///   itself (`lib.*.d.ts`); a `create` is the export registering a version-1
+///   resource — an owner, a reactive source, an async computation, a
+///   transition, a browser root, a server reference — into a runtime outside
+///   the invocation (`semantic-model.md` § creates); and the engine has no such
+///   kind to register, nor any Solid runtime to register it with.
+///   `Array.prototype.map` invoking its callback is not a counterexample: the
+///   callback's body is code written elsewhere, dispositioned where it is
+///   written and not here.
+/// * `DialectAxiom` — [`census_dialect_axiom_for_callee`] answered, which is
+///   the identity-bound negative table of ADR 0007. It carries its own witness
+///   site, so this disposition emits the tier's site instead of a generic one.
+/// * `LocalRecursion` — the callee's declaration resolves inside the certified
+///   artifact's **own runtime source set**, so the census recurses into that
+///   declaration's own transcript. Identity is symbol + source file + exact
+///   span, never name; a revisit refuses as a cycle, and depth
+///   [`MAX_COMPOSITION_DEPTH`] refuses rather than approximating.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CensusDisposition {
+    Unreachable,
+    ParameterRooted,
+    StandardLibrary,
+    DialectAxiom,
+    LocalRecursion,
+}
+
+impl CensusDisposition {
+    const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Unreachable => "unreachable",
+            Self::ParameterRooted => "parameter-rooted",
+            Self::StandardLibrary => "standard-library",
+            Self::DialectAxiom => "dialect-axiom",
+            Self::LocalRecursion => "local-recursion",
+        }
+    }
+}
+
+/// The handshake protocol at which
+/// [`typefacts::ExportImplementationTranscript::uncensused_invoking_forms`]
+/// became a positive claim rather than an absence.
+///
+/// Serde cannot separate an absent list from a present empty one — the field
+/// defaults to empty — so the discriminator is the **protocol**, exactly as
+/// that field's own documentation says. Verification already refuses an answer
+/// whose `handshake_protocol` is not
+/// [`typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL`], so this constant is the
+/// census naming the dependency it rests on: against a producer predating the
+/// field every empty list would read as "no uncensused form", which is exactly
+/// the conclusion-from-silence this census exists to prevent.
+const CENSUS_UNCENSUSED_FORMS_PROTOCOL: u64 = 14;
+
+/// One local declaration's own implementation transcript, keyed by the exact
+/// span it was demanded at.
+#[derive(Clone, Debug)]
+struct LocalDeclarationTranscript {
+    location: typefacts::Location,
+    transcript: typefacts::ExportImplementationTranscript,
+}
+
+/// A function-like declaration inside the certified artifact's own runtime
+/// source, by the identity the census matches on.
+///
+/// Symbol, source file and exact byte range — never the name. Another module's
+/// `helper` carries the same `declaration.name`, and treating the two as one
+/// declaration is the "some other export proves it" shortcut
+/// [`composing_call_resolves_to_declaration`] already refuses. An empty symbol
+/// is refused rather than treated as a wildcard.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct CensusDeclarationIdentity {
+    symbol: String,
+    path: String,
+    start: u64,
+    end: u64,
+}
+
+impl CensusDeclarationIdentity {
+    fn of(declaration: &typefacts::ResolvedDeclaration) -> Option<Self> {
+        (!declaration.symbol.is_empty() && !declaration.location.path.is_empty()).then(|| Self {
+            symbol: declaration.symbol.to_string(),
+            path: declaration.location.path.replace('\\', "/"),
+            start: declaration.location.start_byte,
+            end: declaration.location.end_byte,
+        })
+    }
+}
+
+/// Everything the `creates` implementation census needs that the demanded
+/// export's own transcript does not carry.
+///
+/// `roots` is [`snapshot_source_roots`]' answer, which is how a resolved
+/// callee's declaration is attributed to an archive at all. `locals` carries
+/// the local-declaration transcripts this same session answered for; an empty
+/// slice can decide nothing recursive, and refuses rather than passing.
+#[derive(Clone, Copy)]
+struct CensusEvidence<'a> {
+    roots: &'a [SnapshotSourceRoot<'a>],
+    locals: &'a [LocalDeclarationTranscript],
+}
+
+impl CensusEvidence<'_> {
+    fn local(
+        &self,
+        location: &typefacts::Location,
+    ) -> Option<&typefacts::ExportImplementationTranscript> {
+        self.locals
+            .iter()
+            .find(|local| {
+                local.location.path == location.path
+                    && local.location.start_byte == location.start_byte
+                    && local.location.end_byte == location.end_byte
+            })
+            .map(|local| &local.transcript)
+    }
+}
+
+/// Whether one census pass reached a verdict.
+///
+/// `NeedsTranscripts` is the acquisition phase's signal, never a verdict: the
+/// walk reached a local declaration whose transcript this session has not asked
+/// for, recorded it, and stopped short of deciding. The acquisition loop
+/// demands the recorded declarations and runs the pass again; verification,
+/// which has no session left to ask, refuses.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CensusStep {
+    Decided,
+    NeedsTranscripts,
+}
+
+/// What a whole census concluded, with the totals its witness records.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CensusOutcome {
+    Decided { calls: usize, depth: usize },
+    NeedsTranscripts,
+}
+
+/// One `creates` census in progress.
+struct CensusRun<'a> {
+    /// The artifact under certification, which is what a local-recursion
+    /// disposition binds a callee's declaration to and what the dialect tier
+    /// refuses to answer *about*. A snapshot rather than the whole plan so the
+    /// dispositions are testable against a synthesized archive.
+    certified: &'a super::ArtifactSnapshot,
+    evidence: CensusEvidence<'a>,
+    runtime_sources: std::collections::BTreeSet<String>,
+    visited: Vec<CensusDeclarationIdentity>,
+    requested: Vec<typefacts::Location>,
+    sites: Vec<String>,
+    calls: usize,
+    deepest: usize,
+    /// Each runtime source this census has had to read, keyed by
+    /// snapshot-relative path. Parsed once per file from the authenticated
+    /// bytes; `None` records a file that did not parse.
+    sources: std::collections::BTreeMap<String, Option<CensusSourceFacts>>,
+    /// The declaration node the transcript being walked belongs to, as a
+    /// producer-side location: the file the producer names and the node's
+    /// exact span. A callable literal handed to a standard-library invoker is
+    /// admissible only when it lies inside this frame, because that is the
+    /// span whose calls are rows of the transcript under the walk.
+    frame: Option<typefacts::Location>,
+}
+
+/// One runtime source as the certifier reads it from the authenticated
+/// snapshot bytes: the text a leading UTF-8 byte-order mark removed from, and
+/// its own Oxc facts over that text.
+///
+/// The byte-order mark is stripped **before** the parse, and every offset this
+/// census compares against the producer's is taken over the stripped text.
+/// That is the producer's own convention: typescript-go's file decoder
+/// (`internal/vfs/internal/internal.go`, `decodeBytes`) removes a UTF-8 BOM
+/// before the source text exists, so every `Location` it emits counts bytes
+/// from the first byte after the mark. Parsing the raw bytes instead would
+/// leave the verifier's spans three bytes behind the producer's on a BOM'd
+/// file, and the identifier-to-node binding below would then bind — or refuse
+/// — the wrong bytes.
+struct CensusSourceFacts {
+    text: String,
+    facts: solid_facts::ast::AstFacts,
+}
+
+/// One function-like declaration node of a runtime source, as the certifier
+/// reads it from the authenticated snapshot bytes: its whole span, its body,
+/// and the span of its name when it has one.
+#[derive(Clone, Copy, Debug)]
+struct CensusFunctionNode {
+    span: solid_facts::core::Span,
+    body: solid_facts::core::Span,
+    name: Option<solid_facts::core::Span>,
+}
+
+impl CensusSourceFacts {
+    fn function_nodes(&self) -> impl Iterator<Item = CensusFunctionNode> + '_ {
+        self.facts
+            .functions
+            .iter()
+            .map(|function| CensusFunctionNode {
+                span: function.span,
+                body: function.body,
+                name: function.name.as_ref().map(|name| name.span),
+            })
+    }
+
+    fn text_at(&self, span: solid_facts::core::Span) -> Option<&str> {
+        self.text.get(span.start as usize..span.end as usize)
+    }
+}
+
+/// The text of an authenticated runtime source as the producer read it: UTF-8,
+/// a leading byte-order mark removed. `None` when the bytes are not UTF-8.
+fn census_source_text(bytes: &[u8]) -> Option<&str> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    Some(text.strip_prefix('\u{feff}').unwrap_or(text))
+}
+
+/// Whether `(start, end)` lies inside `span`, inclusive of its bounds.
+fn census_span_contains(span: solid_facts::core::Span, start: u64, end: u64) -> bool {
+    u64::from(span.start) <= start && end <= u64::from(span.end)
+}
+
+/// The implementation census that decides a `creates: []` closure for one
+/// export of a consuming package.
+///
+/// The predicate, stated as the negation it establishes
+/// (`phase21/2026-09-03-implementation-census-plan.md` § 3):
+///
+/// > `creates: []` certifies only if every invoking form in the export's
+/// > transitive census, taken at the `MayExecute` reachability floor, is
+/// > enumerated and resolved, and no resolved target performs a `create`
+/// > operation.
+///
+/// Both halves are load-bearing. **Enumerated** is what
+/// [`typefacts::ExportImplementationTranscript::uncensused_invoking_forms`]
+/// answers: the calls census records `CallExpression` and `NewExpression` only,
+/// so a tagged template, an accessor behind a property access, the iteration
+/// protocol, a JSX lowering — everything else that reaches a callable — arrives
+/// as a marker, and one marker at the floor refuses the domain by name. Silence
+/// is never enumeration. **Performs a `create` operation** is the decidable
+/// question — does any resolved target publish an operation of `kind: create`,
+/// per `semantic-model.md` § creates — and deliberately *not* "brings a
+/// version-1 resource into existence", which the audited corpus refutes as a
+/// predicate: `createSignal`, `createStore`, `createMemo`, `action`,
+/// `createEffect`, `createTrackedEffect` and `onSettled` all establish version-1
+/// resources and all close `creates: []`. So a consumer that calls
+/// `createSignal` certifies; a consumer that calls `@solidjs/web`'s `render`
+/// does not, because `render` publishes `register-delegation`.
+///
+/// This family is **universal, not existential**: every call gets a disposition
+/// and a witness site, and the first call with none refuses. A passing probe
+/// gate, a finite non-observation, and an empty list are not evidence here and
+/// never reach this function.
+///
+/// See `docs/adr/0008-implementation-census-for-creates.md` for the decision
+/// and for what still refuses.
+fn census_creates_domain(
+    plan: &CertificationPlan,
+    proof: &ScheduledProofDemand,
+    export: &solid_reactive_ir::contract_semantics::ExportSemantics,
+    implementation: &typefacts::ExportImplementationTranscript,
+    evidence: CensusEvidence<'_>,
+) -> Result<(CensusOutcome, Vec<String>, Vec<typefacts::Location>), TypeFactsCertificationError> {
+    let refuse = |reason: String| TypeFactsCertificationError::UnsupportedDemand {
+        demand: proof.id.clone(),
+        reason,
+    };
+    if typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL < CENSUS_UNCENSUSED_FORMS_PROTOCOL {
+        return Err(refuse(format!(
+            "implementation-census premise required: the uncensused-invoking-form census arrived \
+             at handshake protocol {CENSUS_UNCENSUSED_FORMS_PROTOCOL} and this build speaks {}, \
+             so an empty form list would be an absence read as an enumeration",
+            typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL
+        )));
+    }
+    // The census derives its own enumeration of this export's `create`
+    // operations and requires the proposal's to *be* it, exactly as
+    // `require_export_value_enumeration_matches_census` does for root choice
+    // alternatives. A candidate's set is empty by construction — the generator
+    // proposes `Complete(vec![])` and `normalize_knowledge` weakens it into the
+    // candidate — so a nonempty one is a proposal claiming a closure over
+    // operations this walk never enumerated, and admitting it would certify the
+    // proposal's own word (objection 5 of ADR 0006).
+    let proposed = export
+        .operation_claim(ClaimDomain::Creates)
+        .ok_or_else(|| refuse("creates is not an operation domain of this export".into()))?;
+    if !proposed.items().is_empty() {
+        return Err(refuse(format!(
+            "a creates closure candidate must enumerate no operation, but the proposal names {}",
+            proposed.items().len()
+        )));
+    }
+    let mut run = CensusRun {
+        certified: &plan.snapshot,
+        evidence,
+        runtime_sources: certified_runtime_sources(plan),
+        visited: Vec::new(),
+        requested: Vec::new(),
+        sites: Vec::new(),
+        calls: 0,
+        deepest: 0,
+        sources: std::collections::BTreeMap::new(),
+        frame: None,
+    };
+    // Seeded with the demanded export, so a helper calling back into it refuses
+    // as a cycle rather than running out of depth.
+    if let Some(identity) = implementation
+        .declaration
+        .as_ref()
+        .and_then(CensusDeclarationIdentity::of)
+    {
+        run.visited.push(identity);
+    }
+    let step = census_transcript(&mut run, implementation, 0).map_err(refuse)?;
+    let mut sites = std::mem::take(&mut run.sites);
+    let outcome = match step {
+        CensusStep::Decided => {
+            // One line for the whole census, and it is a *claim*: the producer
+            // classified every invoking form it walked in every transcript this
+            // census read, and none of them was a form the calls census does
+            // not record. A census that refused would never reach here.
+            sites.push("census-uncensused-forms:0".into());
+            sites.push(format!("census-total:{}:{}", run.calls, run.deepest));
+            CensusOutcome::Decided {
+                calls: run.calls,
+                depth: run.deepest,
+            }
+        }
+        CensusStep::NeedsTranscripts => CensusOutcome::NeedsTranscripts,
+    };
+    sites.sort();
+    sites.dedup();
+    Ok((outcome, sites, run.requested))
+}
+
+/// Every path the verified closure manifest calls **runtime** source of the
+/// artifact under certification, normalized the way a producer path strips.
+///
+/// The local-recursion disposition rests on this set rather than on "the file
+/// is under the certified root": a declaration file the archive also ships is
+/// under the same root and is a description of code, not code, and recursing
+/// into one would census a description.
+fn certified_runtime_sources(plan: &CertificationPlan) -> std::collections::BTreeSet<String> {
+    plan.verified_closure
+        .manifest()
+        .entries
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.role,
+                crate::contract_interface::ClosureFileRole::Runtime
+                    | crate::contract_interface::ClosureFileRole::LiteralDynamicChunk
+            )
+        })
+        .map(|entry| entry.path.trim_start_matches("./").replace('\\', "/"))
+        .collect()
+}
+
+/// One transcript's own calls and uncensused forms, and the recursion its
+/// local-recursion dispositions require.
+///
+/// Refusals are `String` because the *demand* owns the error: a census premise
+/// that fails is a refusal of the closure demand, not of the helper it was
+/// walking.
+fn census_transcript(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    depth: usize,
+) -> Result<CensusStep, String> {
+    run.deepest = run.deepest.max(depth);
+    census_transcript_is_censusable(implementation, depth)?;
+    // The declaration node this transcript describes, bound from the
+    // authenticated bytes, and the two premises the producer's own transcript
+    // cannot state about it: that the bytes are this artifact's runtime source
+    // at all, and that no `break`/`continue` inside the node — its nested
+    // callables included, whose control flow the producer's census never
+    // enters — made the producer withhold a call row.
+    let frame = census_transcript_frame(run, implementation, depth)?;
+    let previous_frame = run.frame.replace(frame);
+    let step = census_transcript_calls(run, implementation, depth);
+    run.frame = previous_frame;
+    step
+}
+
+/// The per-call half of [`census_transcript`], run with `run.frame` set to the
+/// transcript's own declaration node.
+fn census_transcript_calls(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    depth: usize,
+) -> Result<CensusStep, String> {
+    // Every uncensused invoking form the floor admits refuses, by kind and
+    // location. This is the enumeration guarantee: the calls census records
+    // `CallExpression` and `NewExpression` only, and a form it does not record
+    // reaches a callable the walk below can say nothing about.
+    if let Some(form) = implementation
+        .uncensused_invoking_forms
+        .iter()
+        .find(|form| form.reach != Reachability::Unreachable)
+    {
+        return Err(format!(
+            "creates census refuses an uncensused invoking form: {} ({}) at {}:{}..{}, reach {}",
+            uncensused_invoking_form_kind_name(form.kind),
+            form.node_kind,
+            form.location.path,
+            form.location.start_byte,
+            form.location.end_byte,
+            reachability_name(form.reach)
+        ));
+    }
+    let mut step = CensusStep::Decided;
+    for call in &implementation.calls {
+        run.calls += 1;
+        match census_call_disposition(run, call, depth)? {
+            Some((disposition, site)) => {
+                run.sites.push(site);
+                if disposition == CensusDisposition::LocalRecursion
+                    && census_local_recursion(run, call, depth)? == CensusStep::NeedsTranscripts
+                {
+                    step = CensusStep::NeedsTranscripts;
+                }
+            }
+            None => step = CensusStep::NeedsTranscripts,
+        }
+    }
+    Ok(step)
+}
+
+/// The transcript-level premise, **without** the `controlFlowUnsupported`
+/// relaxation the demanded export gets from
+/// [`require_named_export_implementation`] for the positive families.
+///
+/// Applied to every transcript the census reads, the export's own included: a
+/// local declaration arrives through a second acquisition that no scheduled
+/// demand checked, so its completeness is this function's obligation.
+///
+/// # Why this census cannot take the relaxation
+///
+/// The producer's call census drops every `calls` row that lies in a region a
+/// `break` or `continue` makes non-universal — the whole target subtree of a
+/// `break` in a loop or `switch`, the body of a loop a `continue` sits in
+/// (`unsafeJumpRegionsLocked`, `locationWithheldByJump`). For the positive
+/// families that withholding is the safe direction: a row that is not there
+/// cannot lend an over-optimistic reach to anything. For a census proving a
+/// **zero upper bound** it is the exact failure mode: `switch (kind) { case
+/// "mount": render(App, el); break; }` produces no row for `render`, the
+/// dropped call is a `CallExpression` so the uncensused-form census records
+/// nothing either, and the only trace left is the `switchReachability` marker
+/// in the control-flow census. So the marker is load-bearing here, and a
+/// transcript carrying any unsupported control-flow marker — loop, switch,
+/// try, or jump — refuses at every depth of the recursion. This over-refuses
+/// every export with a loop, a `switch` or a `try` whose rows were *not*
+/// withheld; the proper fix is producer-side (a withheld row emitted with
+/// `reach: unknown`, or as an uncensused form) and is recorded in
+/// `docs/adr/0008-implementation-census-for-creates.md`. The marker is also
+/// only as wide as the frame the producer's control-flow census walks — it
+/// never enters a nested callable — which is why [`census_transcript_frame`]
+/// additionally refuses a node containing a jump anywhere inside it.
+fn census_transcript_is_censusable(
+    implementation: &typefacts::ExportImplementationTranscript,
+    depth: usize,
+) -> Result<(), String> {
+    let at = || {
+        format!(
+            "{}:{}..{}",
+            implementation.location.path,
+            implementation.location.start_byte,
+            implementation.location.end_byte
+        )
+    };
+    // The marker first, so a transcript the producer left open for that one
+    // reason (`controlFlowUnsupported` is its seventh completeness gate) is
+    // refused by the marker it carries rather than by a bare "incomplete".
+    if let Some(control_flow) = implementation.control_flow.as_ref()
+        && !control_flow.unsupported.is_empty()
+    {
+        return Err(format!(
+            "creates census refuses an implementation transcript whose control-flow census is \
+             unsupported ({}) at depth {depth} for {}: the producer withholds every call row \
+             inside a region a `break` or `continue` makes non-universal, so a row's absence \
+             there is not a call's absence",
+            control_flow
+                .unsupported
+                .iter()
+                .map(AsRef::as_ref)
+                .collect::<Vec<_>>()
+                .join(", "),
+            at()
+        ));
+    }
+    if !implementation.complete
+        || !implementation.open_reasons.is_empty()
+        || implementation.declaration.is_none()
+    {
+        return Err(format!(
+            "creates census refuses an incomplete implementation transcript at depth {depth} for \
+             {} (reasons={:?})",
+            at(),
+            implementation.open_reasons
+        ));
+    }
+    if implementation.control_flow.is_none() {
+        return Err(format!(
+            "creates census refuses an implementation transcript with no control-flow census at \
+             depth {depth} for {}",
+            at()
+        ));
+    }
+    Ok(())
+}
+
+/// The declaration node a transcript describes, as a producer-side location,
+/// bound from the authenticated runtime bytes — and refused when those bytes
+/// contain a `break` or `continue` anywhere inside the node.
+///
+/// The node, not the identifier: the producer resolves a named function to its
+/// identifier and a `const helper = () => …` to the arrow itself, and the jump
+/// premise is about the whole body including every nested callable, whose
+/// control flow the producer's census never enters. A jump inside a nested
+/// callable therefore leaves no `unsupported` marker on this transcript while
+/// still withholding the rows of the region it targets.
+fn census_transcript_frame(
+    run: &mut CensusRun<'_>,
+    implementation: &typefacts::ExportImplementationTranscript,
+    depth: usize,
+) -> Result<typefacts::Location, String> {
+    let declaration = implementation
+        .declaration
+        .as_ref()
+        .expect("census_transcript_is_censusable required a declaration");
+    let Some((_, relative)) = census_local_declaration_identity(run, declaration) else {
+        return Err(format!(
+            "creates census refuses a transcript at depth {depth} whose declaration {:?} at \
+             {}:{}..{} is not in this artifact's own runtime source: the census walks \
+             authenticated runtime bytes and nothing else",
+            declaration.name,
+            declaration.location.path,
+            declaration.location.start_byte,
+            declaration.location.end_byte
+        ));
+    };
+    let node = census_local_declaration_node(run, &relative, declaration)?;
+    let source = census_source(run, &relative)?;
+    if let Some(jump) = source
+        .facts
+        .jump_statements
+        .iter()
+        .find(|jump| census_span_contains_span(node.start_byte, node.end_byte, **jump))
+    {
+        return Err(format!(
+            "creates census refuses the declaration {:?} at {}:{}..{}: it contains a `break` or \
+             `continue` at {}..{}, and the producer withholds every call row inside the region \
+             such a jump makes non-universal, so a row's absence there is not a call's absence",
+            declaration.name, node.path, node.start_byte, node.end_byte, jump.start, jump.end
+        ));
+    }
+    Ok(node)
+}
+
+/// Whether `inner` lies inside `start..end`, inclusive of its bounds.
+fn census_span_contains_span(start: u64, end: u64, inner: solid_facts::core::Span) -> bool {
+    start <= u64::from(inner.start) && u64::from(inner.end) <= end
+}
+
+/// The parsed facts of one runtime source of the artifact under certification,
+/// parsed once from the authenticated bytes and cached on the run.
+fn census_source<'r>(
+    run: &'r mut CensusRun<'_>,
+    relative: &str,
+) -> Result<&'r CensusSourceFacts, String> {
+    if !run.sources.contains_key(relative) {
+        let parsed = run
+            .certified
+            .read(relative)
+            .and_then(census_source_text)
+            .and_then(|text| {
+                solid_facts::ast::extract(relative, text)
+                    .ok()
+                    .map(|facts| CensusSourceFacts {
+                        text: text.to_owned(),
+                        facts,
+                    })
+            });
+        run.sources.insert(relative.to_owned(), parsed);
+    }
+    match run.sources.get(relative) {
+        Some(Some(source)) => Ok(source),
+        _ => Err(format!(
+            "creates census cannot parse the runtime source {relative} of this artifact"
+        )),
+    }
+}
+
+/// The one disposition this call carries, and its witness site.
+///
+/// `Ok(None)` is "a local declaration this session has not transcribed yet",
+/// which the caller turns into [`CensusStep::NeedsTranscripts`]; the demand has
+/// already been recorded in `run.requested`.
+fn census_call_disposition(
+    run: &mut CensusRun<'_>,
+    call: &typefacts::ImplementationCall,
+    depth: usize,
+) -> Result<Option<(CensusDisposition, String)>, String> {
+    let at = || {
+        format!(
+            "{}:{}..{}",
+            call.location.path, call.location.start_byte, call.location.end_byte
+        )
+    };
+    let floor = ReachabilityFloor::MayExecute;
+    if !floor.admits(call.reach) {
+        // `MayExecute` admits `Reachable` and `Unknown`, so this is exactly
+        // `Unreachable`: a call the implementation provably never reaches
+        // performs nothing.
+        return Ok(Some((
+            CensusDisposition::Unreachable,
+            census_call_site(call, CensusDisposition::Unreachable),
+        )));
+    }
+    // A construction runs its callee too — `new F(x)` evaluates `F`'s body — so
+    // both kinds are dispositioned the same way. An *absent* kind deserializes
+    // to `CallKind::Unknown` and refuses: absence is never read as "call".
+    if !matches!(call.kind, CallKind::Call | CallKind::Construct) {
+        return Err(format!(
+            "creates census refuses a call of unknown kind at {}",
+            at()
+        ));
+    }
+    // Arguments do not matter for `creates`. A call is dispositioned by its
+    // *callee*: what a spread carries, what a slot proves, and whether a
+    // callable was handed over are questions the `callbacks` domain asks. This
+    // is why a spread-carrying call whose slots trace nothing still certifies
+    // here — and why a callee rooted at a parameter is excused while the
+    // arguments beside it are simply not consulted.
+    if call.callee_parameter.is_some() {
+        return Ok(Some((
+            CensusDisposition::ParameterRooted,
+            census_call_site(call, CensusDisposition::ParameterRooted),
+        )));
+    }
+    if let Some(declaration) = call
+        .declaration
+        .as_ref()
+        .filter(|declaration| declaration.standard_library)
+    {
+        census_standard_library_admits(run, call, declaration)
+            .map_err(|reason| format!("{reason}, called at {}", at()))?;
+        return Ok(Some((
+            CensusDisposition::StandardLibrary,
+            census_call_site(call, CensusDisposition::StandardLibrary),
+        )));
+    }
+    if let Some(terminator) = census_dialect_axiom_for_callee(
+        call,
+        solid_dialect::CallClaimDomain::Creates,
+        floor,
+        run.certified,
+        run.evidence.roots,
+    ) {
+        // The tier's own site, not a generic one: it names the archive tuple,
+        // the SRI prefix, the export and the domain, which is the whole premise.
+        return Ok(Some((
+            CensusDisposition::DialectAxiom,
+            terminator.witness_site,
+        )));
+    }
+    let Some(declaration) = call.declaration.as_ref() else {
+        // The producer names nothing for an unbound identifier — `targetName`
+        // is empty — so the call is named by its own authenticated bytes.
+        return Err(format!(
+            "creates census refuses an unresolved callee at {} ({})",
+            at(),
+            census_call_source_text(run, call).map_or_else(
+                || format!("target={:?}", call.target_name),
+                |text| format!("`{text}`")
+            )
+        ));
+    };
+    let Some((identity, relative)) = census_local_declaration_identity(run, declaration) else {
+        return Err(format!(
+            "creates census refuses a resolved callee that is neither a default-library member, a \
+             dialect primitive under the negative authority, nor a declaration in this artifact's \
+             own runtime source: {:?} declared at {}:{}..{}, called at {}",
+            declaration.name,
+            declaration.location.path,
+            declaration.location.start_byte,
+            declaration.location.end_byte,
+            at()
+        ));
+    };
+    if run.visited.contains(&identity) {
+        return Err(format!(
+            "creates census refuses a cycle: the call at {} re-enters {}:{}..{}",
+            at(),
+            identity.path,
+            identity.start,
+            identity.end
+        ));
+    }
+    // The demanded export sits at depth 0, so a helper at depth `d` is `d`
+    // hops away; the bound is the one the composed-operation chain uses, and
+    // reaching it refuses rather than approximating.
+    if depth + 1 > MAX_COMPOSITION_DEPTH {
+        return Err(format!(
+            "creates census exceeds {MAX_COMPOSITION_DEPTH} local-recursion hops at {}",
+            at()
+        ));
+    }
+    // The producer resolves a named function to its *identifier*, and answers
+    // a local-declaration demand only for the exact span of the declaration
+    // node. The node is bound from the authenticated bytes the identifier sits
+    // in; the answer is then bound back by the producer, which refuses one
+    // whose resolved declaration does not lie inside the demanded node.
+    let node = census_local_declaration_node(run, &relative, declaration)
+        .map_err(|reason| format!("{reason}, called at {}", at()))?;
+    // The producer resolved the *identifier* to this declaration, which is what
+    // the binding named when the file was bound; the bytes that run are what
+    // the binding holds when the call executes. The two agree only when
+    // nothing writes the binding, so any write — an assignment, an update, a
+    // destructuring target, a `for…in`/`for…of` head — or a second
+    // declaration of the same name refuses, and so does a declaration with no
+    // binding identifier of its own.
+    census_local_binding_is_stable(run, &relative, &node, declaration)
+        .map_err(|reason| format!("{reason}, called at {}", at()))?;
+    if run.evidence.local(&node).is_none() {
+        if !run.requested.contains(&node) {
+            run.requested.push(node);
+        }
+        return Ok(None);
+    }
+    Ok(Some((
+        CensusDisposition::LocalRecursion,
+        census_call_site(call, CensusDisposition::LocalRecursion),
+    )))
+}
+
+/// The source text of a call the census refuses, read from the authenticated
+/// snapshot bytes at the call's own location, or `None` when the location is
+/// not inside the artifact under certification. Diagnostic only: it lets a
+/// refusal name a callee the producer could resolve to nothing.
+fn census_call_source_text(
+    run: &CensusRun<'_>,
+    call: &typefacts::ImplementationCall,
+) -> Option<String> {
+    let (_, relative) = census_certified_relative_path(run, &call.location.path)?;
+    // The same text the producer counted offsets over: a leading byte-order
+    // mark removed (see `CensusSourceFacts`).
+    let source = census_source_text(run.certified.read(&relative)?)?;
+    let start = usize::try_from(call.location.start_byte).ok()?;
+    let end = usize::try_from(call.location.end_byte).ok()?;
+    let text = source.get(start..end)?;
+    const LIMIT: usize = 80;
+    Some(if text.chars().count() > LIMIT {
+        format!("{}…", text.chars().take(LIMIT).collect::<String>())
+    } else {
+        text.to_owned()
+    })
+}
+
+/// The snapshot-relative path of `path` when it strips to one of the
+/// artifact under certification's own roots, with that root's index.
+fn census_certified_relative_path(run: &CensusRun<'_>, path: &str) -> Option<(usize, String)> {
+    let normalized = path.replace('\\', "/");
+    let root_paths = run
+        .evidence
+        .roots
+        .iter()
+        .map(|root| root.path.clone())
+        .collect::<Vec<_>>();
+    let (root_index, relative) = strip_materialized_source_root(&normalized, &root_paths)?;
+    let root = run.evidence.roots.get(root_index)?;
+    if root.dependency || root.snapshot.root() != run.certified.root() {
+        return None;
+    }
+    Some((root_index, relative.to_owned()))
+}
+
+/// The exact span of the function-like declaration node a resolved local
+/// declaration names, as a location the producer's `localDeclarationLocation`
+/// demand accepts.
+///
+/// A named function resolves to its identifier while an anonymous
+/// `const helper = () => …` resolves to the arrow itself, so two readings are
+/// tried against the certifier's own parse of the authenticated runtime bytes:
+/// a node whose span *is* the resolved span, else the one node whose **name**
+/// span is the resolved span. Anything else — no node, two nodes, a source that
+/// does not parse — refuses by name. This only chooses what to *ask*; the
+/// producer binds its answer by refusing one whose resolved declaration does not
+/// lie inside the demanded span (`declarationIdentityUnbound`), and the census
+/// keys every lookup by the node it demanded.
+fn census_local_declaration_node(
+    run: &mut CensusRun<'_>,
+    relative: &str,
+    declaration: &typefacts::ResolvedDeclaration,
+) -> Result<typefacts::Location, String> {
+    let describe = || {
+        format!(
+            "{:?} declared at {}:{}..{}",
+            declaration.name,
+            declaration.location.path,
+            declaration.location.start_byte,
+            declaration.location.end_byte
+        )
+    };
+    let nodes = census_source(run, relative)
+        .map_err(|_| {
+            format!(
+                "creates census cannot parse the runtime source declaring {}",
+                describe()
+            )
+        })?
+        .function_nodes()
+        .collect::<Vec<_>>();
+    let resolved = (
+        u32::try_from(declaration.location.start_byte).map_err(|_| "declaration span overflows")?,
+        u32::try_from(declaration.location.end_byte).map_err(|_| "declaration span overflows")?,
+    );
+    let mut matches = nodes
+        .iter()
+        .filter(|node| (node.span.start, node.span.end) == resolved)
+        .collect::<Vec<_>>();
+    if matches.is_empty() {
+        matches = nodes
+            .iter()
+            .filter(|node| {
+                node.name
+                    .is_some_and(|name| (name.start, name.end) == resolved)
+                    && node.span.start <= resolved.0
+                    && resolved.1 <= node.span.end
+                    && !(node.body.start <= resolved.0 && resolved.1 <= node.body.end)
+            })
+            .collect();
+    }
+    match matches.as_slice() {
+        [node] => Ok(typefacts::Location {
+            path: declaration.location.path.clone(),
+            start_byte: u64::from(node.span.start),
+            end_byte: u64::from(node.span.end),
+        }),
+        [] => Err(format!(
+            "creates census finds no function-like declaration node for {}",
+            describe()
+        )),
+        _ => Err(format!(
+            "creates census finds more than one function-like declaration node for {}",
+            describe()
+        )),
+    }
+}
+
+/// Recurses into the local declaration a `LocalRecursion` call named, adding
+/// that declaration's own transcript identity to the witness.
+fn census_local_recursion(
+    run: &mut CensusRun<'_>,
+    call: &typefacts::ImplementationCall,
+    depth: usize,
+) -> Result<CensusStep, String> {
+    let declaration = call
+        .declaration
+        .as_ref()
+        .expect("a local-recursion disposition resolved a declaration");
+    let (identity, relative) = census_local_declaration_identity(run, declaration)
+        .expect("a local-recursion disposition bound a declaration identity");
+    let node = census_local_declaration_node(run, &relative, declaration)
+        .expect("a local-recursion disposition bound the declaration node");
+    let transcript = run
+        .evidence
+        .local(&node)
+        .expect("a local-recursion disposition found the declaration's transcript")
+        .clone();
+    // The transcript's own bytes, so the receipt names the evidence the census
+    // read rather than only the call that reached it. It travels as a witness
+    // *site*: the evidence-root envelope is deliberately unchanged, because a
+    // new envelope field would move every receipt's witness root.
+    let transcript_bytes = typefacts::encode(&transcript).map_err(|error| {
+        format!("creates census could not canonicalize a local transcript: {error}")
+    })?;
+    run.sites.push(format!(
+        "census-local-declaration:{}:{}:{}:{}:sha256:{:x}",
+        identity.path,
+        identity.start,
+        identity.end,
+        identity.symbol,
+        Sha256::digest(&transcript_bytes)
+    ));
+    run.visited.push(identity);
+    let step = census_transcript(run, &transcript, depth + 1);
+    run.visited.pop();
+    step
+}
+
+/// Standard-library members that transfer control to a callable **reference**
+/// they are handed, or evaluate source text as code. A call to one of these is
+/// a call to something the census never dispositioned, whatever the arguments
+/// prove, so the member itself refuses, by qualified name.
+///
+/// This is a **denylist beside a reviewed allowlist**, and the split is
+/// deliberate. The allowlist is the producer's own reviewed invoker table
+/// (`invoking_positions.go`, read back through
+/// [`typefacts::DefaultLibraryInvoker::from_wire`]): it answers *which slot* a
+/// reviewed member invokes, so the census can demand a proof for exactly that
+/// slot. It cannot be the whole answer, because the members below invoke
+/// something that is not an argument slot at all — `fn.call(…)` runs its
+/// *receiver*, `Reflect.apply(target, …)` runs whatever value sits in slot 0
+/// however it got there, and `eval`/`Function` run text — and a per-slot table
+/// has no row shape for "the receiver" or "the text". A full allowlist of every
+/// default-library member that transfers control to *nothing* would be a
+/// review of the whole of `lib.*.d.ts`, which nobody has done, and pretending
+/// otherwise would certify on an unreviewed row. So: reviewed invoker rows
+/// prove slots, these names refuse outright, and every other standard-library
+/// member is admitted only when no argument slot is proven or suspected to
+/// carry a callable (see [`census_standard_library_admits`]).
+const CENSUS_CONTROL_TRANSFER_MEMBERS: &[&str] = &[
+    "eval",
+    "Function",
+    "FunctionConstructor",
+    "Reflect.apply",
+    "Reflect.construct",
+];
+
+/// Owners every one of whose members transfers control by reference:
+/// `Function.prototype.{call,apply,bind}` under each of the interface names the
+/// default library declares them on.
+const CENSUS_CONTROL_TRANSFER_OWNERS: &[&str] = &[
+    "Function.",
+    "FunctionConstructor.",
+    "CallableFunction.",
+    "NewableFunction.",
+];
+
+/// Whether a standard-library callee may take the `standard-library`
+/// disposition: it transfers control to no callable the census cannot see.
+///
+/// The disposition's premise — a default-library member registers no version-1
+/// resource into a Solid runtime — is about the member's *own* body. It says
+/// nothing about user code the member runs on the census's behalf, and three
+/// ways a member can do that are refused here:
+///
+/// 1. **By reference or by text.** The member is one of
+///    [`CENSUS_CONTROL_TRANSFER_MEMBERS`] or belongs to one of
+///    [`CENSUS_CONTROL_TRANSFER_OWNERS`]: `render.call(null, App, el)`,
+///    `Reflect.apply(render, …)`, `eval(source)`, `new Function(source)`.
+/// 2. **Through a reviewed invoking slot.** The producer named the member in
+///    its reviewed invoker table (`default_library_invoker`), so every slot
+///    that table says the member invokes — `queue.forEach(render)`,
+///    `setTimeout(render, 0)`, `promise.then(render)`, `new Promise(render)` —
+///    must be proven: either rooted at a parameter of this implementation
+///    (`argument_parameters[slot]`, the caller's code under § 3.2) or a
+///    callable literal whose every location lies inside the transcript's own
+///    frame, where its calls are rows of this very walk. A slot the producer
+///    traced to nothing — an imported `render`, a module-local `function
+///    helper` (the tracer follows a `const` binding only), a member read — is
+///    not proven and refuses. An unrecognized invoker string refuses too: it
+///    names a row this side never reviewed.
+/// 3. **Through any slot the producer saw a callable in.** `argument_callables`
+///    lists the callables a slot provably carries, and a standard-library
+///    member handed one — `Array.from(items, mapFn)`, `JSON.parse(text,
+///    reviver)`, `text.replace(pattern, fn)` — invokes it or stores it, and
+///    the census can prove neither. The same two proofs admit the slot; nothing
+///    else does.
+///
+/// What this does **not** close, and says so: a standard-library member may
+/// reach user code through a *protocol method* on a value it is handed or
+/// receives — `JSON.stringify(o)` calls `o.toJSON`, `Array.from(iterable)`
+/// drives `iterable[Symbol.iterator]`, `arr.sort()` calls `toString` on its
+/// elements, `Promise.resolve(thenable)` calls `then`. The producer records the
+/// operator and template spellings of that reach as `coercion` and
+/// `iteration-protocol` forms, but not the call spellings, and this side has
+/// no fact about a non-callable argument's shape to refuse on. That is a
+/// producer-side gap recorded in `docs/precision-backlog.md`, not a premise
+/// this function claims.
+fn census_standard_library_admits(
+    run: &CensusRun<'_>,
+    call: &typefacts::ImplementationCall,
+    declaration: &typefacts::ResolvedDeclaration,
+) -> Result<(), String> {
+    let qualified: &str = if declaration.qualified_name.is_empty() {
+        &declaration.name
+    } else {
+        &declaration.qualified_name
+    };
+    if qualified.is_empty() {
+        return Err(
+            "creates census refuses a standard-library callee with no name to review".into(),
+        );
+    }
+    let last_segment = qualified.rsplit('.').next().unwrap_or(qualified);
+    if CENSUS_CONTROL_TRANSFER_MEMBERS.contains(&qualified)
+        || CENSUS_CONTROL_TRANSFER_OWNERS
+            .iter()
+            .any(|owner| qualified.starts_with(owner))
+        || last_segment == "eval"
+    {
+        return Err(format!(
+            "creates census refuses the standard-library member `{qualified}`: it transfers \
+             control to a callable by reference (or evaluates text as code), which the census \
+             cannot disposition"
+        ));
+    }
+    let invoker = if call.default_library_invoker.is_empty() {
+        None
+    } else {
+        Some(
+            typefacts::DefaultLibraryInvoker::from_wire(&call.default_library_invoker).ok_or_else(
+                || {
+                    format!(
+                        "creates census refuses the standard-library member `{qualified}`: the \
+                     producer names it a default-library invoker {:?}, which is not a member \
+                     of the reviewed table",
+                        call.default_library_invoker
+                    )
+                },
+            )?,
+        )
+    };
+    let frame = run
+        .frame
+        .as_ref()
+        .ok_or("creates census has no transcript frame to admit a callable literal against")?;
+    let slots = call
+        .argument_parameters
+        .len()
+        .max(
+            call.argument_callables
+                .iter()
+                .map(|carried| carried.argument + 1)
+                .max()
+                .unwrap_or(0),
+        )
+        .max(
+            call.invoked_arguments
+                .iter()
+                .map(|slot| slot + 1)
+                .max()
+                .unwrap_or(0),
+        );
+    for slot in 0..slots {
+        let invoked = invoker.is_some_and(|invoker| invoker.invokes(slot))
+            || call.invoked_arguments.contains(&slot);
+        let carried = call
+            .argument_callables
+            .iter()
+            .find(|carried| carried.argument == slot);
+        if !invoked && carried.is_none() {
+            continue;
+        }
+        if call
+            .argument_parameters
+            .get(slot)
+            .is_some_and(Option::is_some)
+        {
+            // Rooted at a parameter of this implementation: the caller's code,
+            // under the caller's own contract (census plan § 3.2).
+            continue;
+        }
+        if carried.is_some_and(|carried| {
+            !carried.locations.is_empty()
+                && carried.locations.iter().all(|location| {
+                    location.path == frame.path
+                        && frame.start_byte <= location.start_byte
+                        && location.end_byte <= frame.end_byte
+                })
+        }) {
+            // A callable literal inside the frame under the walk: its calls are
+            // rows of this transcript, dispositioned like every other.
+            continue;
+        }
+        return Err(format!(
+            "creates census refuses the standard-library member `{qualified}`: argument {slot} \
+             is {} and is neither rooted at a parameter of this implementation nor a callable \
+             literal inside the transcript being censused, so control reaches a callable the \
+             census cannot see",
+            if invoked {
+                "a slot the reviewed invoker table says the member invokes"
+            } else {
+                "a slot the producer saw a callable in"
+            }
+        ));
+    }
+    Ok(())
+}
+
+/// Whether the binding a local-recursion callee resolved through holds, at
+/// every point of the implementation, the declaration the producer resolved.
+///
+/// The producer answers "which declaration does this identifier's symbol
+/// have", which is a fact about the file as bound. The census then reads that
+/// declaration's body as *the code the call runs*, which is a fact about the
+/// binding's value when the call executes. `function helper() {} … helper =
+/// (el) => render(App, el); … helper()` separates the two: the symbol still
+/// resolves to the declaration, and the declaration is not what runs. Four
+/// things therefore refuse, each by name and location, all read from the
+/// verifier's own Oxc facts over the authenticated bytes:
+///
+/// * a declaration with **no binding identifier** — an arrow or function
+///   expression a `const` holds (`const helper = () => …`), which the producer
+///   resolves to the expression node itself. What runs is whatever the
+///   variable holds, and this census does not trace variables;
+/// * any **write** to the binding: an assignment or update expression whose
+///   target contains a reference to it, or a `for…in`/`for…of` head that
+///   assigns it;
+/// * a **second declaration** of the same name in the file — another function
+///   declaration, a variable declarator, or a class — which the binder merges
+///   into one symbol whose declaration list this census does not see.
+fn census_local_binding_is_stable(
+    run: &mut CensusRun<'_>,
+    relative: &str,
+    node: &typefacts::Location,
+    declaration: &typefacts::ResolvedDeclaration,
+) -> Result<(), String> {
+    let describe = || {
+        format!(
+            "{:?} declared at {}:{}..{}",
+            declaration.name, node.path, node.start_byte, node.end_byte
+        )
+    };
+    let source = census_source(run, relative)?;
+    let function = source
+        .function_nodes()
+        .find(|candidate| {
+            (
+                u64::from(candidate.span.start),
+                u64::from(candidate.span.end),
+            ) == (node.start_byte, node.end_byte)
+        })
+        .ok_or_else(|| {
+            format!(
+                "creates census lost the declaration node it bound for {}",
+                describe()
+            )
+        })?;
+    let Some(name_span) = function.name else {
+        return Err(format!(
+            "creates census refuses a local declaration with no binding identifier of its own \
+             ({}): a callable expression runs through whatever variable holds it, and the \
+             census does not trace variables",
+            describe()
+        ));
+    };
+    let name = source.text_at(name_span).ok_or_else(|| {
+        format!(
+            "creates census cannot read the binding name of {} from the authenticated bytes",
+            describe()
+        )
+    })?;
+    let facts = &source.facts;
+    for (reference, resolved) in &facts.reference_declarations {
+        if *resolved != name_span {
+            continue;
+        }
+        let start = u64::from(reference.start);
+        let end = u64::from(reference.end);
+        let write = facts
+            .assignments
+            .iter()
+            .map(|assignment| assignment.target)
+            .chain(facts.iteration_targets.iter().copied())
+            .find(|target| census_span_contains(*target, start, end));
+        if let Some(write) = write {
+            return Err(format!(
+                "creates census refuses the local declaration `{name}` ({}): its binding is \
+                 written at {}:{}..{}, so the declaration the producer resolved is not proven \
+                 to be the code the call runs",
+                describe(),
+                node.path,
+                write.start,
+                write.end
+            ));
+        }
+    }
+    let redeclared = facts
+        .function_declarations
+        .iter()
+        .map(|function| function.name.span)
+        .chain(
+            facts
+                .bindings
+                .iter()
+                .flat_map(|binding| binding.names.iter().map(|named| named.span)),
+        )
+        .chain(
+            facts
+                .classes
+                .iter()
+                .filter_map(|class| class.name.as_ref().map(|named| named.span)),
+        )
+        .find(|span| *span != name_span && source.text_at(*span) == Some(name));
+    if let Some(other) = redeclared {
+        return Err(format!(
+            "creates census refuses the local declaration `{name}` ({}): the same name is \
+             declared again at {}:{}..{}, and the binder merges the two into one symbol whose \
+             running declaration the census cannot choose",
+            describe(),
+            node.path,
+            other.start,
+            other.end
+        ));
+    }
+    Ok(())
+}
+
+/// The declaration identity of a callee that resolves inside the certified
+/// artifact's own runtime source set, or `None` when it does not.
+///
+/// Three premises, all required. The declaration's source file must strip to an
+/// authenticated snapshot root that is **not** a dependency and **is** this
+/// plan's own snapshot; the remainder must be a path the verified closure
+/// manifest calls runtime source, so a declaration file the archive ships is
+/// excluded; and the remainder must be a member of the snapshot, re-asked here
+/// rather than inherited from the source census.
+fn census_local_declaration_identity(
+    run: &CensusRun<'_>,
+    declaration: &typefacts::ResolvedDeclaration,
+) -> Option<(CensusDeclarationIdentity, String)> {
+    if declaration.source_file.is_empty() {
+        return None;
+    }
+    let (_, relative) = census_certified_relative_path(run, &declaration.source_file)?;
+    if !run.runtime_sources.contains(&relative) {
+        return None;
+    }
+    run.certified.read(&relative)?;
+    Some((CensusDeclarationIdentity::of(declaration)?, relative))
+}
+
+/// One call's witness line. Universal, not existential: every censused call
+/// contributes one, so a receipt records the whole census rather than the
+/// subset that happened to be interesting.
+fn census_call_site(
+    call: &typefacts::ImplementationCall,
+    disposition: CensusDisposition,
+) -> String {
+    format!(
+        "census-call:{}:{}:{}:{}:{}:{}",
+        call.location.path,
+        call.location.start_byte,
+        call.location.end_byte,
+        call_kind_name(call.kind),
+        reachability_name(call.reach),
+        disposition.wire_name()
+    )
+}
+
+const fn call_kind_name(kind: CallKind) -> &'static str {
+    match kind {
+        CallKind::Call => "call",
+        CallKind::Construct => "construct",
+        CallKind::Unknown => "unknown",
+    }
+}
+
+const fn reachability_name(reach: Reachability) -> &'static str {
+    match reach {
+        Reachability::Reachable => "reachable",
+        Reachability::Unknown => "unknown",
+        Reachability::Unreachable => "unreachable",
+    }
+}
+
+const fn uncensused_invoking_form_kind_name(
+    kind: typefacts::UncensusedInvokingFormKind,
+) -> &'static str {
+    use typefacts::UncensusedInvokingFormKind as Kind;
+
+    match kind {
+        Kind::TaggedTemplate => "tagged-template",
+        Kind::GetAccessor => "get-accessor",
+        Kind::SetAccessor => "set-accessor",
+        Kind::PropertyAccessUnknownAccessor => "property-access-unknown-accessor",
+        Kind::Decorator => "decorator",
+        Kind::IterationProtocol => "iteration-protocol",
+        Kind::UsingDispose => "using-dispose",
+        Kind::InstanceOf => "instanceof",
+        Kind::AwaitThen => "await-then",
+        Kind::Coercion => "coercion",
+        Kind::JsxElement => "jsx-element",
+        Kind::UnclassifiedInvokingForm => "unclassified-invoking-form",
     }
 }
 
@@ -14700,5 +16290,1029 @@ mod tests {
         assert!(answer(json!({"kind": null}), ReachabilityFloor::MayExecute).is_none());
         // A construction runs the callee too.
         assert!(answer(json!({"kind": "construct"}), ReachabilityFloor::MayExecute).is_some());
+    }
+
+    // ----------------------------------------------------------------------
+    // The `creates` implementation census: one disposition per call
+    // ----------------------------------------------------------------------
+
+    /// An implementation transcript the census can walk: complete, with a
+    /// resolved declaration inside the consumer's own runtime and the calls
+    /// supplied, and every other field at its default.
+    fn census_transcript_with(
+        calls: Vec<typefacts::ImplementationCall>,
+        uncensused_invoking_forms: serde_json::Value,
+    ) -> typefacts::ExportImplementationTranscript {
+        let source = "/project/node_modules/consumer/dist/index.js";
+        let mut value = json!({
+            "location": {"path": source, "startByte": 0, "endByte": 400},
+            "queryName": "useThing",
+            "target": "symbol:useThing",
+            "declaration": {
+                "symbol": "symbol:useThing",
+                "name": "useThing",
+                "kind": "FunctionDeclaration",
+                "sourceFile": source,
+                "location": {"path": source, "startByte": 16, "endByte": 24},
+            },
+            "controlFlow": {},
+            "uncensusedInvokingForms": uncensused_invoking_forms,
+            "complete": true,
+        });
+        let mut transcript: typefacts::ExportImplementationTranscript =
+            serde_json::from_value(value.take()).expect("a valid transcript");
+        transcript.calls = calls;
+        transcript
+    }
+
+    fn census_run<'a>(
+        certified: &'a super::super::ArtifactSnapshot,
+        roots: &'a [SnapshotSourceRoot<'a>],
+    ) -> CensusRun<'a> {
+        CensusRun {
+            certified,
+            evidence: CensusEvidence { roots, locals: &[] },
+            // The consumer's runtime module, which is where every synthesized
+            // transcript below declares itself; a test that wants the
+            // declaration-file refusal clears this.
+            runtime_sources: std::iter::once("dist/index.js".to_owned()).collect(),
+            visited: Vec::new(),
+            requested: Vec::new(),
+            sites: Vec::new(),
+            calls: 0,
+            deepest: 0,
+            sources: std::collections::BTreeMap::new(),
+            frame: None,
+        }
+    }
+
+    /// The consumer's runtime module every synthesized transcript declares
+    /// itself in: `useThing` sits at bytes 16..24, which is the declaration
+    /// [`census_transcript_with`] names, and the body contains no jump.
+    const CONSUMER_SOURCE: &str =
+        "export function useThing(items, callback) {\n  return callback(items);\n}\n";
+
+    fn consumer_snapshot() -> super::super::ArtifactSnapshot {
+        consumer_snapshot_with(CONSUMER_SOURCE)
+    }
+
+    /// A consumer archive whose `dist/index.js` is `source`, so the census can
+    /// bind declarations and read jumps and writes from authenticated bytes.
+    fn consumer_snapshot_with(source: &str) -> super::super::ArtifactSnapshot {
+        super::super::ArtifactSnapshot {
+            package_name: "consumer".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512-consumer".into(),
+            files: std::sync::Arc::new(
+                [
+                    (
+                        "package.json".to_owned(),
+                        std::sync::Arc::<[u8]>::from(&b"{\"name\":\"consumer\"}"[..]),
+                    ),
+                    (
+                        "dist/index.js".to_owned(),
+                        std::sync::Arc::<[u8]>::from(source.as_bytes()),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/consumer".into(),
+            provenance_root: "/snapshot/consumer".into(),
+        }
+    }
+
+    /// The consumer's own (non-dependency) source root, which is what lets the
+    /// census attribute a transcript's declaration to the artifact under
+    /// certification.
+    fn consumer_root<'a>(certified: &'a super::super::ArtifactSnapshot) -> SnapshotSourceRoot<'a> {
+        SnapshotSourceRoot {
+            path: "/project/node_modules/consumer/".to_owned(),
+            evidence_prefix: "/node_modules/consumer/".to_owned(),
+            snapshot: certified,
+            dependency: false,
+        }
+    }
+
+    fn signals_root<'a>(dependency: &'a super::super::ArtifactSnapshot) -> SnapshotSourceRoot<'a> {
+        SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: dependency,
+            dependency: true,
+        }
+    }
+
+    /// Every call the `MayExecute` floor admits gets exactly one disposition
+    /// and one witness site, in the order the census tries them; the dialect
+    /// disposition carries the tier's own site. A synthesized root matching the
+    /// audited `@solidjs/signals@2.0.0-rc.3` tuple is what lets the tier
+    /// answer, exactly as the tier's own tests bind it.
+    #[test]
+    fn creates_census_dispositions_every_admitted_call_by_its_callee() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified), signals_root(&dependency)];
+        let lib = "/toolchain/lib/lib.es5.d.ts";
+        let implementation = census_transcript_with(
+            vec![
+                // dialect-axiom, at an *unknown* reach: admitted by the floor and
+                // dispositioned like any other.
+                signals_call("createTrackedEffect", json!({"reach": "unknown"})),
+                // parameter-rooted: the callee is proven to be parameter 0.
+                signals_call(
+                    "callback",
+                    json!({
+                        "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 150, "endByte": 160},
+                        "target": "",
+                        "targetModule": "",
+                        "declaration": null,
+                        "calleeParameter": {"parameterIndex": 0},
+                    }),
+                ),
+                // standard-library: resolved by default-library symbol identity.
+                signals_call(
+                    "map",
+                    json!({
+                        "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 170, "endByte": 190},
+                        "targetModule": "",
+                        "declaration": {
+                            "symbol": "symbol:Array.map",
+                            "name": "map",
+                            "kind": "MethodSignature",
+                            "sourceFile": lib,
+                            "location": {"path": lib, "startByte": 10, "endByte": 20},
+                            "standardLibrary": true,
+                        },
+                    }),
+                ),
+                // unreachable: excused by the floor, and still recorded.
+                signals_call(
+                    "never",
+                    json!({
+                        "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 200, "endByte": 210},
+                        "reach": "unreachable",
+                        "target": "",
+                        "targetModule": "",
+                        "declaration": null,
+                    }),
+                ),
+            ],
+            json!([]),
+        );
+        let mut run = census_run(&certified, &roots);
+        assert_eq!(
+            census_transcript(&mut run, &implementation, 0),
+            Ok(CensusStep::Decided)
+        );
+        assert_eq!(run.calls, 4);
+        run.sites.sort();
+        assert_eq!(
+            run.sites,
+            vec![
+                "census-call:/project/node_modules/consumer/dist/index.js:150:160:call:reachable:parameter-rooted",
+                "census-call:/project/node_modules/consumer/dist/index.js:170:190:call:reachable:standard-library",
+                "census-call:/project/node_modules/consumer/dist/index.js:200:210:call:unreachable:unreachable",
+                "census-dialect-axiom:@solidjs/signals@2.0.0-rc.3#sha512-/yPhTf3xS1FRR4MX:createTrackedEffect:creates",
+            ]
+        );
+    }
+
+    /// What has no disposition refuses the domain by name, and the tier does
+    /// not answer about an audited archive's own certification.
+    #[test]
+    fn creates_census_refuses_by_name_what_no_disposition_covers() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = consumer_snapshot();
+        let roots = vec![consumer_root(&certified), signals_root(&dependency)];
+
+        // An untraced callee is not a parameter-rooted one: an empty
+        // `calleeSources` and no `calleeParameter` is unresolved.
+        let unresolved = census_transcript_with(
+            vec![signals_call(
+                "callback",
+                json!({"target": "", "targetModule": "", "declaration": null}),
+            )],
+            json!([]),
+        );
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &unresolved, 0)
+            .expect_err("an unresolved callee refuses");
+        assert!(
+            refusal.contains("refuses an unresolved callee") && refusal.contains("callback"),
+            "{refusal}"
+        );
+
+        // A dependency export with no audited negative row, in a root that is
+        // not this artifact's own runtime, is neither local nor excused.
+        let unaudited = census_transcript_with(vec![signals_call("render", json!({}))], json!([]));
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &unaudited, 0)
+            .expect_err("an unaudited dependency callee refuses");
+        assert!(
+            refusal.contains("neither a default-library member") && refusal.contains("\"render\""),
+            "{refusal}"
+        );
+
+        // The artifact under certification being some other archive than the
+        // one the transcript declares itself in refuses before any call is
+        // dispositioned: the census walks this artifact's authenticated runtime
+        // bytes and nothing else. (That the tier refuses to answer about the
+        // audited archive's own certification is pinned by the tier's tests.)
+        let refusal = census_transcript(
+            &mut census_run(&dependency, &roots),
+            &census_transcript_with(
+                vec![signals_call("createTrackedEffect", json!({}))],
+                json!([]),
+            ),
+            0,
+        )
+        .expect_err("a transcript outside the certified artifact's runtime source refuses");
+        assert!(
+            refusal.contains("not in this artifact's own runtime source"),
+            "{refusal}"
+        );
+
+        // An uncensused invoking form at the floor refuses before any call is
+        // dispositioned, by kind and location; an unreachable one is excused.
+        let forms = |reach: &str| {
+            json!([{
+                "kind": "tagged-template",
+                "nodeKind": "TaggedTemplateExpression",
+                "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 300, "endByte": 320},
+                "reach": reach,
+            }])
+        };
+        let refusal = census_transcript(
+            &mut census_run(&certified, &roots),
+            &census_transcript_with(vec![], forms("unknown")),
+            0,
+        )
+        .expect_err("an uncensused form at the floor refuses");
+        assert!(
+            refusal.contains("uncensused invoking form: tagged-template")
+                && refusal.contains(":300..320"),
+            "{refusal}"
+        );
+        assert_eq!(
+            census_transcript(
+                &mut census_run(&certified, &roots),
+                &census_transcript_with(vec![], forms("unreachable")),
+                0,
+            ),
+            Ok(CensusStep::Decided)
+        );
+
+        // A call of unknown kind — an absent `kind` on the wire — refuses.
+        let refusal = census_transcript(
+            &mut census_run(&certified, &roots),
+            &census_transcript_with(
+                vec![signals_call("createTrackedEffect", json!({"kind": null}))],
+                json!([]),
+            ),
+            0,
+        )
+        .expect_err("an absent call kind is never read as a call");
+        assert!(refusal.contains("call of unknown kind"), "{refusal}");
+    }
+
+    /// A callee declared in this artifact's own runtime source is a local
+    /// recursion: without its transcript the census asks for it and decides
+    /// nothing; with it the census recurses, and a revisit refuses as a cycle.
+    #[test]
+    fn creates_census_recurses_into_local_declarations_and_refuses_a_cycle() {
+        let source_path = "/project/node_modules/consumer/dist/index.js";
+        // Real runtime bytes, because the census binds a local declaration to
+        // its *node* by parsing them: the producer resolves `helper` to its
+        // identifier, and only the exact node span is a demand it answers.
+        let source = "export function useThing(callback) {\n  return helper(callback);\n}\n\
+                      function helper(callback) {\n  callback();\n}";
+        let offset = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+        let export_name = (offset("useThing"), offset("useThing") + 8);
+        let helper_node = (
+            offset("function helper"),
+            u64::try_from(source.len()).unwrap(),
+        );
+        let helper_name = (
+            offset("function helper") + 9,
+            offset("function helper") + 15,
+        );
+        let call_helper_at = (offset("helper(callback)"), offset("helper(callback)") + 16);
+        let call_back_at = (offset("  callback();") + 2, offset("  callback();") + 12);
+        let certified = super::super::ArtifactSnapshot {
+            package_name: "consumer".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512-consumer".into(),
+            files: std::sync::Arc::new(
+                [
+                    (
+                        "package.json".to_owned(),
+                        std::sync::Arc::<[u8]>::from(&b"{\"name\":\"consumer\"}"[..]),
+                    ),
+                    (
+                        "dist/index.js".to_owned(),
+                        std::sync::Arc::<[u8]>::from(source.as_bytes()),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/consumer".into(),
+            provenance_root: "/snapshot/consumer".into(),
+        };
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/consumer/".to_owned(),
+            evidence_prefix: "/node_modules/consumer/".to_owned(),
+            snapshot: &certified,
+            dependency: false,
+        }];
+        let helper_location = typefacts::Location {
+            path: source_path.into(),
+            start_byte: helper_node.0,
+            end_byte: helper_node.1,
+        };
+        let call_helper = signals_call(
+            "helper",
+            json!({
+                "location": {"path": source_path, "startByte": call_helper_at.0, "endByte": call_helper_at.1},
+                "targetModule": "",
+                "declaration": {
+                    "symbol": "symbol:helper",
+                    "name": "helper",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": source_path,
+                    "location": {"path": source_path, "startByte": helper_name.0, "endByte": helper_name.1},
+                },
+            }),
+        );
+        let mut export = census_transcript_with(vec![call_helper.clone()], json!([]));
+        export.declaration = Some(
+            serde_json::from_value(json!({
+                "symbol": "symbol:useThing",
+                "name": "useThing",
+                "kind": "FunctionDeclaration",
+                "sourceFile": source_path,
+                "location": {"path": source_path, "startByte": export_name.0, "endByte": export_name.1},
+            }))
+            .expect("a valid declaration"),
+        );
+
+        // Without the helper's transcript: no verdict, and exactly one request,
+        // for the helper's whole declaration node rather than its identifier.
+        let mut run = census_run(&certified, &roots);
+        run.runtime_sources.insert("dist/index.js".into());
+        assert_eq!(
+            census_transcript(&mut run, &export, 0),
+            Ok(CensusStep::NeedsTranscripts)
+        );
+        assert_eq!(run.requested, vec![helper_location.clone()]);
+
+        // A file the verified closure manifest does not call runtime source is
+        // not walked at all, the export's own declaration included: a
+        // declaration file the archive also ships is a description of code.
+        let mut run = census_run(&certified, &roots);
+        run.runtime_sources.clear();
+        let refusal = census_transcript(&mut run, &export, 0)
+            .expect_err("a declaration outside the runtime source set is not walked");
+        assert!(
+            refusal.contains("not in this artifact's own runtime source"),
+            "{refusal}"
+        );
+
+        // A name span the parse binds to no node refuses by name rather than
+        // asking the producer about bytes the census never read.
+        let mut unbound = export.clone();
+        unbound.calls[0]
+            .declaration
+            .as_mut()
+            .unwrap()
+            .location
+            .end_byte += 1;
+        let mut run = census_run(&certified, &roots);
+        run.runtime_sources.insert("dist/index.js".into());
+        let refusal = census_transcript(&mut run, &unbound, 0)
+            .expect_err("an identifier no node owns is refused");
+        assert!(
+            refusal.contains("finds no function-like declaration node"),
+            "{refusal}"
+        );
+
+        // With the helper's transcript, whose one call is back into the export:
+        // a cycle, refused by declaration identity.
+        let mut helper = census_transcript_with(
+            vec![signals_call(
+                "useThing",
+                json!({
+                    "location": {"path": source_path, "startByte": call_back_at.0, "endByte": call_back_at.1},
+                    "targetModule": "",
+                    "declaration": {
+                        "symbol": "symbol:useThing",
+                        "name": "useThing",
+                        "kind": "FunctionDeclaration",
+                        "sourceFile": source_path,
+                        "location": {"path": source_path, "startByte": export_name.0, "endByte": export_name.1},
+                    },
+                }),
+            )],
+            json!([]),
+        );
+        helper.location = helper_location.clone();
+        helper.query_name = "helper".into();
+        helper.declaration = Some(
+            serde_json::from_value(json!({
+                "symbol": "symbol:helper",
+                "name": "helper",
+                "kind": "FunctionDeclaration",
+                "sourceFile": source_path,
+                "location": {"path": source_path, "startByte": helper_name.0, "endByte": helper_name.1},
+            }))
+            .expect("a valid declaration"),
+        );
+        let locals = vec![LocalDeclarationTranscript {
+            location: helper_location.clone(),
+            transcript: helper.clone(),
+        }];
+        let mut run = census_run(&certified, &roots);
+        run.runtime_sources.insert("dist/index.js".into());
+        run.evidence = CensusEvidence {
+            roots: &roots,
+            locals: &locals,
+        };
+        // Seeded with the demanded export, as `census_creates_domain` does.
+        run.visited
+            .push(CensusDeclarationIdentity::of(export.declaration.as_ref().unwrap()).unwrap());
+        let refusal = census_transcript(&mut run, &export, 0)
+            .expect_err("a helper calling back into the export is a cycle");
+        assert!(
+            refusal.contains("refuses a cycle")
+                && refusal.contains(&format!(":{}..{}", export_name.0, export_name.1)),
+            "{refusal}"
+        );
+
+        // The same helper with a parameter-rooted body decides, and the witness
+        // names both the call and the helper transcript it read.
+        helper.calls = vec![signals_call(
+            "callback",
+            json!({
+                "location": {"path": source_path, "startByte": call_back_at.0, "endByte": call_back_at.1},
+                "target": "",
+                "targetModule": "",
+                "declaration": null,
+                "calleeParameter": {"parameterIndex": 0},
+            }),
+        )];
+        let locals = vec![LocalDeclarationTranscript {
+            location: helper_location,
+            transcript: helper,
+        }];
+        let mut run = census_run(&certified, &roots);
+        run.runtime_sources.insert("dist/index.js".into());
+        run.evidence = CensusEvidence {
+            roots: &roots,
+            locals: &locals,
+        };
+        assert_eq!(
+            census_transcript(&mut run, &export, 0),
+            Ok(CensusStep::Decided)
+        );
+        assert_eq!((run.calls, run.deepest), (2, 1));
+        assert!(run.sites.contains(&format!(
+            "census-call:{source_path}:{}:{}:call:reachable:local-recursion",
+            call_helper_at.0, call_helper_at.1
+        )));
+        assert!(run.sites.contains(&format!(
+            "census-call:{source_path}:{}:{}:call:reachable:parameter-rooted",
+            call_back_at.0, call_back_at.1
+        )));
+        assert!(run.sites.iter().any(|site| site.starts_with(&format!(
+            "census-local-declaration:{source_path}:{}:{}:symbol:helper:sha256:",
+            helper_name.0, helper_name.1
+        ))));
+    }
+
+    /// The consumer source `source`, a transcript for `export_name` declared in
+    /// it, and the roots that attribute the transcript to the consumer.
+    fn census_source_case(
+        source: &str,
+        export_name: &str,
+        calls: Vec<typefacts::ImplementationCall>,
+    ) -> (
+        super::super::ArtifactSnapshot,
+        typefacts::ExportImplementationTranscript,
+    ) {
+        let source_path = "/project/node_modules/consumer/dist/index.js";
+        let needle = format!("function {export_name}");
+        let name_start =
+            u64::try_from(source.find(&needle).expect("the export is declared") + 9).unwrap();
+        let name_end = name_start + u64::try_from(export_name.len()).unwrap();
+        let mut transcript = census_transcript_with(calls, json!([]));
+        transcript.query_name = export_name.into();
+        transcript.declaration = Some(
+            serde_json::from_value(json!({
+                "symbol": format!("symbol:{export_name}"),
+                "name": export_name,
+                "kind": "FunctionDeclaration",
+                "sourceFile": source_path,
+                "location": {"path": source_path, "startByte": name_start, "endByte": name_end},
+            }))
+            .expect("a valid declaration"),
+        );
+        (consumer_snapshot_with(source), transcript)
+    }
+
+    /// A call whose callee resolved, by default-library symbol identity, to the
+    /// member `qualified`, with `overrides` applied on top.
+    fn library_call(
+        qualified: &str,
+        overrides: serde_json::Value,
+    ) -> typefacts::ImplementationCall {
+        let lib = "/toolchain/lib/lib.es5.d.ts";
+        let name = qualified.rsplit('.').next().unwrap_or(qualified);
+        let mut base = json!({
+            "targetModule": "",
+            "declaration": {
+                "symbol": format!("symbol:{qualified}"),
+                "name": name,
+                "qualifiedName": qualified,
+                "kind": "MethodSignature",
+                "sourceFile": lib,
+                "location": {"path": lib, "startByte": 10, "endByte": 20},
+                "standardLibrary": true,
+            },
+        });
+        for (key, value) in overrides.as_object().expect("an object") {
+            base.as_object_mut()
+                .unwrap()
+                .insert(key.clone(), value.clone());
+        }
+        signals_call(name, base)
+    }
+
+    /// The `controlFlowUnsupported` relaxation the positive families take is
+    /// not available here, at any depth: the producer withholds every call row
+    /// a jump makes non-universal, and the marker is the only trace left.
+    #[test]
+    fn creates_census_refuses_unsupported_control_flow_at_every_depth() {
+        let source = "export function useThing(kind, el) {\n  switch (kind) {\n    case \"mount\":\n      mount(el);\n      break;\n  }\n}\nfunction mount(el) {\n  return el;\n}\n";
+        let (certified, mut export) = census_source_case(source, "useThing", vec![]);
+        let roots = vec![consumer_root(&certified)];
+        // The producer's own shape: complete, with the switch named as
+        // unsupported and the `mount(el)` row withheld.
+        export.control_flow = Some(
+            serde_json::from_value(json!({"unsupported": ["switchReachability"]}))
+                .expect("a control-flow census"),
+        );
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
+            .expect_err("an unsupported control-flow census refuses");
+        assert!(
+            refusal.contains("control-flow census is unsupported (switchReachability)")
+                && refusal.contains("withholds every call row"),
+            "{refusal}"
+        );
+
+        // The former relaxation — `complete: false` with `controlFlowUnsupported`
+        // as the only open reason — refuses too.
+        export.control_flow = Some(serde_json::from_value(json!({})).unwrap());
+        export.complete = false;
+        export.open_reasons = vec!["controlFlowUnsupported".into()];
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
+            .expect_err("a control-flow-only open transcript refuses");
+        assert!(
+            refusal.contains("incomplete implementation transcript at depth 0"),
+            "{refusal}"
+        );
+
+        // A local declaration's transcript is held to the same premise, at its
+        // own depth: the export is clean and recurses into `mount`, whose
+        // transcript carries a loop marker.
+        let source = "export function useThing(el) {\n  return mount(el);\n}\nfunction mount(el) {\n  for (const item of el) {\n    item();\n  }\n}\n";
+        let source_path = "/project/node_modules/consumer/dist/index.js";
+        let at = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+        let mount_name = (at("function mount") + 9, at("function mount") + 14);
+        let mount_node = (
+            at("function mount"),
+            u64::try_from(source.trim_end().len()).unwrap(),
+        );
+        let call = signals_call(
+            "mount",
+            json!({
+                "location": {"path": source_path, "startByte": at("mount(el)"), "endByte": at("mount(el)") + 9},
+                "targetModule": "",
+                "declaration": {
+                    "symbol": "symbol:mount",
+                    "name": "mount",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": source_path,
+                    "location": {"path": source_path, "startByte": mount_name.0, "endByte": mount_name.1},
+                },
+            }),
+        );
+        let (certified, export) = census_source_case(source, "useThing", vec![call]);
+        let roots = vec![consumer_root(&certified)];
+        let mut mount = census_transcript_with(vec![], json!([]));
+        mount.location = typefacts::Location {
+            path: source_path.into(),
+            start_byte: mount_node.0,
+            end_byte: mount_node.1,
+        };
+        mount.query_name = "mount".into();
+        mount.declaration = Some(
+            serde_json::from_value(json!({
+                "symbol": "symbol:mount",
+                "name": "mount",
+                "kind": "FunctionDeclaration",
+                "sourceFile": source_path,
+                "location": {"path": source_path, "startByte": mount_name.0, "endByte": mount_name.1},
+            }))
+            .unwrap(),
+        );
+        mount.control_flow = Some(
+            serde_json::from_value(json!({"unsupported": ["iterationReachability"]})).unwrap(),
+        );
+        let locals = vec![LocalDeclarationTranscript {
+            location: mount.location.clone(),
+            transcript: mount,
+        }];
+        let mut run = census_run(&certified, &roots);
+        run.evidence = CensusEvidence {
+            roots: &roots,
+            locals: &locals,
+        };
+        let refusal = census_transcript(&mut run, &export, 0)
+            .expect_err("a local declaration with unsupported control flow refuses");
+        assert!(
+            refusal.contains("iterationReachability") && refusal.contains("at depth 1"),
+            "{refusal}"
+        );
+    }
+
+    /// The producer's control-flow census never enters a nested callable, so a
+    /// jump inside one leaves no `unsupported` marker on the transcript while
+    /// still withholding the rows of the region it targets. The verifier's own
+    /// parse of the authenticated bytes refuses the node instead.
+    #[test]
+    fn creates_census_refuses_a_frame_containing_a_jump_in_a_nested_callable() {
+        let source = "export function useThing(kind, el) {\n  return () => {\n    while (el) {\n      mount(el);\n      break;\n    }\n  };\n}\nfunction mount(el) {\n  return el;\n}\n";
+        // The producer's honest transcript: complete, no unsupported marker (the
+        // `while` is inside the arrow), and no row for `mount(el)`.
+        let (certified, export) = census_source_case(source, "useThing", vec![]);
+        let roots = vec![consumer_root(&certified)];
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
+            .expect_err("a jump inside the frame refuses");
+        let jump = source.find("break;").unwrap();
+        assert!(
+            refusal.contains("contains a `break` or `continue`")
+                && refusal.contains(&format!("{jump}..{}", jump + 6)),
+            "{refusal}"
+        );
+
+        // The same body with the jump gone is walked.
+        let source = "export function useThing(kind, el) {\n  return () => {\n    mount(el);\n  };\n}\nfunction mount(el) {\n  return el;\n}\n";
+        let (certified, export) = census_source_case(source, "useThing", vec![]);
+        let roots = vec![consumer_root(&certified)];
+        assert_eq!(
+            census_transcript(&mut census_run(&certified, &roots), &export, 0),
+            Ok(CensusStep::Decided)
+        );
+    }
+
+    /// A standard-library callee is admitted only when it transfers control to
+    /// no callable the census cannot see: every reviewed invoking slot and every
+    /// slot the producer saw a callable in must be parameter-rooted or a literal
+    /// inside the frame; the by-reference members refuse outright; a
+    /// construction is dispositioned like a call.
+    #[test]
+    fn creates_census_admits_a_standard_library_callee_only_without_an_unseen_callable() {
+        let source = "export function useThing(items, callback) {\n  items.forEach(callback);\n  items.forEach(function inline() {});\n  items.forEach(work);\n  return new Map();\n}\nfunction work() {}\n";
+        let source_path = "/project/node_modules/consumer/dist/index.js";
+        let at = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+        let inline = (at("function inline"), at("function inline") + 21);
+        let (certified, export) = census_source_case(source, "useThing", vec![]);
+        let roots = vec![consumer_root(&certified)];
+        let mut run = census_run(&certified, &roots);
+        // Establish the frame exactly as `census_transcript` does.
+        run.frame = Some(census_transcript_frame(&mut run, &export, 0).unwrap());
+        let admitted = |run: &mut CensusRun<'_>, call: &typefacts::ImplementationCall| {
+            census_call_disposition(run, call, 0).map(|verdict| verdict.map(|(kind, _)| kind))
+        };
+        let for_each = |overrides: serde_json::Value| {
+            let mut base = json!({
+                "defaultLibraryInvoker": "arrayIteration",
+                "invokedArguments": [0],
+            });
+            for (key, value) in overrides.as_object().unwrap() {
+                base.as_object_mut()
+                    .unwrap()
+                    .insert(key.clone(), value.clone());
+            }
+            library_call("Array.forEach", base)
+        };
+
+        // Parameter-rooted slot: the caller's code.
+        assert_eq!(
+            admitted(
+                &mut run,
+                &for_each(json!({"argumentParameters": [{"parameterIndex": 1}]}))
+            ),
+            Ok(Some(CensusDisposition::StandardLibrary))
+        );
+        // A callable literal inside the frame: its calls are rows of this walk.
+        assert_eq!(
+            admitted(
+                &mut run,
+                &for_each(json!({
+                    "argumentParameters": [null],
+                    "argumentCallables": [{"argument": 0, "locations": [
+                        {"path": source_path, "startByte": inline.0, "endByte": inline.1}
+                    ]}],
+                }))
+            ),
+            Ok(Some(CensusDisposition::StandardLibrary))
+        );
+        // A reference the producer traced to nothing: refused.
+        let refusal = admitted(&mut run, &for_each(json!({"argumentParameters": [null]})))
+            .expect_err("an invoked slot with no proof refuses");
+        assert!(
+            refusal.contains("`Array.forEach`")
+                && refusal.contains("argument 0")
+                && refusal.contains("reviewed invoker table"),
+            "{refusal}"
+        );
+        // A callable the producer saw outside the frame — the module-local
+        // `work` — is not a literal of this transcript.
+        let work = (
+            at("function work"),
+            u64::try_from(source.len()).unwrap() - 1,
+        );
+        let refusal = admitted(
+            &mut run,
+            &for_each(json!({
+                "argumentParameters": [null],
+                "argumentCallables": [{"argument": 0, "locations": [
+                    {"path": source_path, "startByte": work.0, "endByte": work.1}
+                ]}],
+            })),
+        )
+        .expect_err("a callable outside the frame refuses");
+        assert!(refusal.contains("argument 0"), "{refusal}");
+        // A callable in a slot no invoker row names still refuses: the census
+        // cannot say what the member does with it.
+        let refusal = admitted(
+            &mut run,
+            &library_call(
+                "ArrayConstructor.from",
+                json!({
+                    "argumentParameters": [{"parameterIndex": 0}, null],
+                    "argumentCallables": [{"argument": 1, "locations": [
+                        {"path": source_path, "startByte": work.0, "endByte": work.1}
+                    ]}],
+                }),
+            ),
+        )
+        .expect_err("a carried callable in an unreviewed slot refuses");
+        assert!(
+            refusal.contains("argument 1") && refusal.contains("saw a callable in"),
+            "{refusal}"
+        );
+        // An invoker string outside the reviewed table refuses.
+        let refusal = admitted(
+            &mut run,
+            &for_each(json!({
+                "defaultLibraryInvoker": "arrayIterationLater",
+                "argumentParameters": [{"parameterIndex": 1}],
+            })),
+        )
+        .expect_err("an unrecognized invoker refuses");
+        assert!(
+            refusal.contains("not a member of the reviewed table"),
+            "{refusal}"
+        );
+        // By-reference and by-text members refuse whatever the slots prove.
+        for qualified in [
+            "Reflect.apply",
+            "Reflect.construct",
+            "CallableFunction.call",
+            "Function.apply",
+            "NewableFunction.bind",
+            "eval",
+            "FunctionConstructor",
+        ] {
+            let refusal = admitted(
+                &mut run,
+                &library_call(
+                    qualified,
+                    json!({"argumentParameters": [{"parameterIndex": 1}, {"parameterIndex": 0}]}),
+                ),
+            )
+            .expect_err("a control-transfer member refuses whatever its slots prove");
+            assert!(refusal.contains("by reference"), "{qualified}: {refusal}");
+        }
+        for qualified in ["Reflect.apply", "CallableFunction.call", "eval"] {
+            let refusal = admitted(&mut run, &library_call(qualified, json!({})))
+                .expect_err("a control-transfer member refuses");
+            assert!(
+                refusal.contains(&format!("`{qualified}`")) && refusal.contains("by reference"),
+                "{refusal}"
+            );
+        }
+        // A construction of a default-library value is dispositioned like a
+        // call, and a construction that runs its executor needs the same proof.
+        assert_eq!(
+            admitted(
+                &mut run,
+                &library_call("MapConstructor", json!({"kind": "construct"}))
+            ),
+            Ok(Some(CensusDisposition::StandardLibrary))
+        );
+        let refusal = admitted(
+            &mut run,
+            &library_call(
+                "PromiseConstructor",
+                json!({
+                    "kind": "construct",
+                    "defaultLibraryInvoker": "promiseConstructor",
+                    "invokedArguments": [0],
+                    "argumentParameters": [null],
+                }),
+            ),
+        )
+        .expect_err("a constructed executor the census cannot see refuses");
+        assert!(
+            refusal.contains("`PromiseConstructor`") && refusal.contains("argument 0"),
+            "{refusal}"
+        );
+        assert_eq!(
+            admitted(
+                &mut run,
+                &library_call(
+                    "PromiseConstructor",
+                    json!({
+                        "kind": "construct",
+                        "defaultLibraryInvoker": "promiseConstructor",
+                        "invokedArguments": [0],
+                        "argumentParameters": [{"parameterIndex": 1}],
+                    })
+                )
+            ),
+            Ok(Some(CensusDisposition::StandardLibrary))
+        );
+        // The witness site names the construction as one.
+        let (_, site) = census_call_disposition(
+            &mut run,
+            &library_call("MapConstructor", json!({"kind": "construct"})),
+            0,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(
+            site.ends_with(":construct:reachable:standard-library"),
+            "{site}"
+        );
+    }
+
+    /// A local-recursion callee is walked only when the binding the producer
+    /// resolved through is proven to hold that declaration: a written binding, a
+    /// redeclared name, and an anonymous callable each refuse by name.
+    #[test]
+    fn creates_census_refuses_a_local_binding_that_is_written_redeclared_or_anonymous() {
+        let source_path = "/project/node_modules/consumer/dist/index.js";
+        let local_call = |source: &str, callee: &str, name_offset: u64| {
+            let at = |needle: &str| u64::try_from(source.find(needle).unwrap()).unwrap();
+            let call_at = at(&format!("{callee}(el)"));
+            signals_call(
+                callee,
+                json!({
+                    "location": {"path": source_path, "startByte": call_at, "endByte": call_at + u64::try_from(callee.len()).unwrap() + 4},
+                    "targetModule": "",
+                    "declaration": {
+                        "symbol": format!("symbol:{callee}"),
+                        "name": callee,
+                        "kind": "FunctionDeclaration",
+                        "sourceFile": source_path,
+                        "location": {"path": source_path, "startByte": name_offset, "endByte": name_offset + u64::try_from(callee.len()).unwrap()},
+                    },
+                }),
+            )
+        };
+        let refusal_for = |source: &str, callee: &str, name_offset: u64| {
+            let (certified, export) = census_source_case(
+                source,
+                "useThing",
+                vec![local_call(source, callee, name_offset)],
+            );
+            let roots = vec![consumer_root(&certified)];
+            let mut run = census_run(&certified, &roots);
+            census_transcript(&mut run, &export, 0)
+        };
+        let name_at = |source: &str, needle: &str| {
+            u64::try_from(source.find(needle).unwrap() + needle.len() - "helper".len()).unwrap()
+        };
+
+        // Plain reassignment.
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nfunction helper(el) {\n  return el;\n}\nhelper = (el) => mount(el);\n";
+        let refusal = refusal_for(source, "helper", name_at(source, "function helper"))
+            .expect_err("a reassigned binding refuses");
+        let write = source.find("helper = (el)").unwrap();
+        assert!(
+            refusal.contains("local declaration `helper`")
+                && refusal.contains("written at")
+                && refusal.contains(&format!(":{write}..")),
+            "{refusal}"
+        );
+        // A destructuring assignment target and an update expression are writes.
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nfunction helper(el) {\n  return el;\n}\n[helper] = el;\n";
+        let refusal = refusal_for(source, "helper", name_at(source, "function helper"))
+            .expect_err("a destructuring write refuses");
+        assert!(refusal.contains("written at"), "{refusal}");
+        // A `for…of` head that assigns the binding is a write on every
+        // iteration.
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nfunction helper(el) {\n  return el;\n}\nfor (helper of el) {}\n";
+        let refusal = refusal_for(source, "helper", name_at(source, "function helper"))
+            .expect_err("an iteration head write refuses");
+        assert!(refusal.contains("written at"), "{refusal}");
+        // A second declaration of the same name.
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nfunction helper(el) {\n  return el;\n}\nvar helper = 1;\n";
+        let refusal = refusal_for(source, "helper", name_at(source, "function helper"))
+            .expect_err("a redeclared binding refuses");
+        assert!(refusal.contains("declared again at"), "{refusal}");
+        // An arrow a `const` holds resolves to the arrow node itself and has no
+        // binding identifier of its own.
+        let source =
+            "export function useThing(el) {\n  return helper(el);\n}\nconst helper = (el) => el;\n";
+        let arrow = u64::try_from(source.find("(el) => el").unwrap()).unwrap();
+        let (certified, export) = census_source_case(
+            source,
+            "useThing",
+            vec![signals_call(
+                "helper",
+                json!({
+                    "location": {"path": source_path, "startByte": source.find("helper(el)").unwrap(), "endByte": source.find("helper(el)").unwrap() + 10},
+                    "targetModule": "",
+                    "declaration": {
+                        "symbol": "symbol:helper",
+                        "name": "helper",
+                        "kind": "ArrowFunction",
+                        "sourceFile": source_path,
+                        "location": {"path": source_path, "startByte": arrow, "endByte": arrow + 10},
+                    },
+                }),
+            )],
+        );
+        let roots = vec![consumer_root(&certified)];
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &export, 0)
+            .expect_err("an anonymous callable refuses");
+        assert!(
+            refusal.contains("no binding identifier of its own"),
+            "{refusal}"
+        );
+        // The unwritten, once-declared helper is asked for.
+        let source = "export function useThing(el) {\n  return helper(el);\n}\nfunction helper(el) {\n  return el;\n}\n";
+        assert_eq!(
+            refusal_for(source, "helper", name_at(source, "function helper")),
+            Ok(CensusStep::NeedsTranscripts)
+        );
+    }
+
+    /// The producer counts bytes from the first byte after a UTF-8 byte-order
+    /// mark, so the verifier parses the same text: a BOM'd runtime source binds
+    /// the declaration the producer's offsets name, and does not refuse.
+    #[test]
+    fn creates_census_reads_a_runtime_source_past_its_byte_order_mark() {
+        let body = "export function useThing(items, callback) {\n  return callback(items);\n}\n";
+        let source = format!("\u{feff}{body}");
+        // Offsets are the producer's: over `body`, not over `source`.
+        let (_, export) = census_source_case(body, "useThing", vec![]);
+        let certified = consumer_snapshot_with(&source);
+        let roots = vec![consumer_root(&certified)];
+        assert_eq!(
+            census_transcript(&mut census_run(&certified, &roots), &export, 0),
+            Ok(CensusStep::Decided)
+        );
+        // Without the mark removed, the same offsets would name bytes three
+        // positions off: the identifier span would bind to no node.
+        let mut shifted = export.clone();
+        let declaration = shifted.declaration.as_mut().unwrap();
+        declaration.location.start_byte += 3;
+        declaration.location.end_byte += 3;
+        let refusal = census_transcript(&mut census_run(&certified, &roots), &shifted, 0)
+            .expect_err("offsets counted over the mark bind nothing");
+        assert!(
+            refusal.contains("finds no function-like declaration node"),
+            "{refusal}"
+        );
     }
 }

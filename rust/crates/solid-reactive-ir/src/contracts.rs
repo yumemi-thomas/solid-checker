@@ -104,6 +104,17 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         }
     }
 
+    // Read from the accepted document itself rather than from the projection:
+    // `project_owner_requirements` keeps only the operations that impose an
+    // owner obligation, so a `create` this export publishes need not survive
+    // it. The generator's `creates` proposal walk needs the domain's own
+    // closure — closed *and* empty, which is the only shape that is not a
+    // counterexample to a caller proposing `creates: []`.
+    let creates = export
+        .operation_claim(ClaimDomain::Creates)
+        .expect("creates is an operation domain");
+    let creates_closed_empty = creates.is_closed() && creates.items().is_empty();
+
     ContractExport {
         kind: kind.into(),
         reactive_reads,
@@ -112,6 +123,8 @@ pub fn project_accepted_export(accepted: &AcceptedContractUse<'_>) -> ContractEx
         owner_requirements,
         async_behavior,
         open_claims,
+        creates_closed_empty,
+        creates_walk_clean: false,
     }
 }
 
@@ -1599,6 +1612,12 @@ fn contract_export_function(
             String::new().into()
         },
         open_claims: BTreeSet::new(),
+        // Neither field is decided here. `creates_closed_empty` describes an
+        // *accepted dependency's* domain and only `project_accepted_export`
+        // sets it; `creates_walk_clean` is attached at the emit boundary from
+        // `Program::creates_proposal_walk`. Both defaults refuse.
+        creates_closed_empty: false,
+        creates_walk_clean: false,
     }
 }
 

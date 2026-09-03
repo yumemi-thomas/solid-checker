@@ -9,7 +9,7 @@ use serde::{
 use serde_json::Value;
 use sha2::{Digest as _, Sha256, Sha512};
 use solid_reactive_ir::contract_semantics::{
-    NormalizedContract,
+    ClaimDomain, ClaimPath, ContractProposal, NormalizedContract, SemanticClaimPath,
     certification::{
         CertificationCandidates, DemandPlanningError, DependencyDemandInput, ProofDemandGraph,
         ProofFamily, ProofWitnessVariant, WitnessBinding, WitnessCoverage, proof_policy_2,
@@ -324,6 +324,12 @@ impl CertificationRequest {
 /// Opaque output of policy-owned planning. Keeping the snapshot and candidate
 /// inventory private prevents issuance from swapping in a caller-supplied plan
 /// or rereading mutable acquisition paths.
+///
+/// `Clone` does not weaken that: a clone is the same opaque plan, and the one
+/// thing that derives a *different* plan from it — [`Self::recipe_gated`] —
+/// re-runs the policy's own candidate inventory and demand derivation over a
+/// weakened proposal rather than editing the demand graph.
+#[derive(Clone)]
 pub struct CertificationPlan {
     snapshot: ArtifactSnapshot,
     verified_resolution: SnapshotVerifiedResolution,
@@ -516,7 +522,10 @@ impl CertificationPlan {
     /// domain: the mandatory veto for such a claim has to be executed, and a
     /// transaction without a harness configuration refuses with
     /// [`Policy2FinalizationError::ProbeAuthorityRequired`] rather than
-    /// certifying an unvetoed closure.
+    /// certifying an unvetoed closure. The one exception is a `creates`
+    /// candidate the supplied corpus names no recipe for, which
+    /// [`Self::recipe_gated`] withholds by name before anything is demanded of
+    /// it; the finalized contract carries the record.
     pub fn certify_value_only(
         &self,
         canonical_proposal: &[u8],
@@ -525,10 +534,12 @@ impl CertificationPlan {
         revocation_epoch: u64,
         probes: Option<&ProbeHarnessConfiguration>,
     ) -> Result<FinalizedPolicy2Contract, Policy2FinalizationError> {
-        let evidence = type_facts::acquire_and_verify_export_values(self, pin)?;
-        let probe_gates = finalization::authenticate_probe_gates(self, probes, pin)?;
+        let gated = self.recipe_gated(probes.map(ProbeHarnessConfiguration::recipe_corpus))?;
+        let plan = gated.plan();
+        let evidence = type_facts::acquire_and_verify_export_values(plan, pin)?;
+        let probe_gates = finalization::authenticate_probe_gates(plan, probes, pin)?;
         finalization::finalize_value_only(
-            self,
+            plan,
             canonical_proposal,
             &evidence,
             &probe_gates,
@@ -536,6 +547,7 @@ impl CertificationPlan {
             issuer,
             revocation_epoch,
         )
+        .map(|finalized| finalized.with_withheld_closures(gated.withheld().to_vec()))
     }
 
     /// Atomically publishes a final result against the exact resolved import
@@ -589,11 +601,18 @@ pub fn certify_value_only_case_set(
     revocation_epoch: u64,
     probes: Option<&ProbeHarnessConfiguration>,
 ) -> Result<Vec<FinalizedPolicy2Contract>, Policy2FinalizationError> {
-    let evidence = type_facts::acquire_and_verify_export_values_batch(plans, pin)?;
-    plans
+    let recipe_corpus = probes.map(ProbeHarnessConfiguration::recipe_corpus);
+    let gated = plans
+        .iter()
+        .map(|plan| plan.recipe_gated(recipe_corpus))
+        .collect::<Result<Vec<_>, _>>()?;
+    let gated_plans = gated.iter().map(RecipeGatedPlan::plan).collect::<Vec<_>>();
+    let evidence = type_facts::acquire_and_verify_export_values_batch(&gated_plans, pin)?;
+    gated
         .iter()
         .zip(evidence)
-        .map(|(plan, evidence)| {
+        .map(|(gated, evidence)| {
+            let plan = gated.plan();
             // Each alternative artifact case derives, runs, and authenticates
             // its own veto set; a batch never shares one plan's probe
             // authority with another.
@@ -607,6 +626,7 @@ pub fn certify_value_only_case_set(
                 issuer,
                 revocation_epoch,
             )
+            .map(|finalized| finalized.with_withheld_closures(gated.withheld().to_vec()))
         })
         .collect()
 }
@@ -692,16 +712,7 @@ fn plan_certification_with_dependencies(
         &candidates,
         snapshot.root(),
         snapshot.provenance_root(),
-        verified_closure
-            .manifest()
-            .dependencies
-            .iter()
-            .map(|dependency| DependencyDemandInput {
-                specifier: dependency.specifier.clone(),
-                package: dependency.package_name.clone(),
-                artifact_case: dependency.artifact_case.clone(),
-                accepted_contract_digest: dependency.accepted_contract_digest.clone(),
-            }),
+        closure_dependency_inputs(&verified_closure),
     )?;
     let artifact_witnesses = artifact_witness_bindings(
         &snapshot,
@@ -723,6 +734,262 @@ fn plan_certification_with_dependencies(
         resolved_import: request.resolved_import,
         certification_sources: Vec::new(),
     })
+}
+
+/// The dependency-composition inputs the verified module closure's accepted
+/// edges contribute to demand derivation. One place, so the plan derived at
+/// planning and the plan re-derived by [`CertificationPlan::recipe_gated`]
+/// cannot disagree about them.
+fn closure_dependency_inputs(
+    closure: &SnapshotVerifiedClosure,
+) -> impl Iterator<Item = DependencyDemandInput> + '_ {
+    closure
+        .manifest()
+        .dependencies
+        .iter()
+        .map(|dependency| DependencyDemandInput {
+            specifier: dependency.specifier.clone(),
+            package: dependency.package_name.clone(),
+            artifact_case: dependency.artifact_case.clone(),
+            accepted_contract_digest: dependency.accepted_contract_digest.clone(),
+        })
+}
+
+/// A closure candidate the certifier declined to plan, named.
+///
+/// Recipe-gated planning (`docs/adr/0008-implementation-census-for-creates.md`)
+/// withholds a `creates` closure candidate whose semantic claim has no recipe in
+/// the supplied probe corpus **before** any demand or gate is derived from it:
+/// the domain is opened in the proposal, no `DomainExhaustiveness` demand asks
+/// the census to prove it, no mandatory veto is scheduled for it, and the row
+/// certifies with that domain open — exactly as a proposal that never closed
+/// it would. This record is the audit trail of that choice, one per candidate,
+/// so a certified contract whose `creates` is open can be told apart from one
+/// the census refused.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithheldClosure {
+    pub artifact_case: String,
+    pub export: String,
+    /// The claim domain's wire name (`creates`).
+    pub domain: String,
+    /// The exact semantic claim id the recipe corpus would have had to carry.
+    pub semantic_claim_id: String,
+    pub reason: String,
+}
+
+/// The one reason recipe-gated planning withholds a candidate today.
+pub const WITHHELD_CLOSURE_NO_RECIPE: &str = "no recipe in corpus";
+
+/// A plan re-derived under a recipe corpus, with the candidates it withheld.
+pub struct RecipeGatedPlan {
+    plan: CertificationPlan,
+    withheld: Vec<WithheldClosure>,
+}
+
+impl RecipeGatedPlan {
+    #[must_use]
+    pub const fn plan(&self) -> &CertificationPlan {
+        &self.plan
+    }
+
+    #[must_use]
+    pub fn withheld(&self) -> &[WithheldClosure] {
+        &self.withheld
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (CertificationPlan, Vec<WithheldClosure>) {
+        (self.plan, self.withheld)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum RecipeGatingError {
+    #[error(transparent)]
+    Corpus(#[from] ProbeHarnessError),
+    #[error("recipe-gated re-planning failed: {0}")]
+    Replanning(#[from] CertificationPlanningError),
+    #[error("closure candidate {artifact_case}:{export} has no semantic claim identity: {reason}")]
+    ClaimIdentity {
+        artifact_case: String,
+        export: String,
+        reason: String,
+    },
+    #[error(
+        "closure candidate {artifact_case}:{export} names an export the selected candidate does not carry"
+    )]
+    MissingExport {
+        artifact_case: String,
+        export: String,
+    },
+    #[error(
+        "withheld closure {artifact_case}:{export} names the domain {domain:?}, which recipe gating never withholds"
+    )]
+    UnknownDomain {
+        artifact_case: String,
+        export: String,
+        domain: String,
+    },
+}
+
+/// The accepted proposal with every withheld closure's domain opened, normalized
+/// again: the document a recipe-gated plan is derived from, and the document a
+/// gated node's receipt must certify.
+///
+/// This is the one definition of "the weakening". `CertificationPlan::recipe_gated`
+/// derives the gated plan from it, and graph composition
+/// (`dependencies::authenticate_dependency_receipt`) re-derives it from the
+/// accepted proposal and the withheld records to prove that what a dependency's
+/// receipt certifies is exactly this and nothing else. Only `creates` is a
+/// domain recipe gating withholds; a record naming any other domain is refused
+/// rather than applied.
+pub(crate) fn withheld_weakening(
+    candidate: &NormalizedContract,
+    withheld: &[WithheldClosure],
+) -> Result<NormalizedContract, RecipeGatingError> {
+    let mut artifact_cases = candidate.artifact_cases().to_vec();
+    for closure in withheld {
+        let domain = match closure.domain.as_str() {
+            "creates" => ClaimDomain::Creates,
+            _ => {
+                return Err(RecipeGatingError::UnknownDomain {
+                    artifact_case: closure.artifact_case.clone(),
+                    export: closure.export.clone(),
+                    domain: closure.domain.clone(),
+                });
+            }
+        };
+        let export = artifact_cases
+            .iter_mut()
+            .find(|case| case.id == closure.artifact_case)
+            .and_then(|case| case.exports.get_mut(&closure.export))
+            .ok_or_else(|| RecipeGatingError::MissingExport {
+                artifact_case: closure.artifact_case.clone(),
+                export: closure.export.clone(),
+            })?;
+        export.open_call_domains([domain]);
+    }
+    ContractProposal::new(candidate.package().clone(), artifact_cases)
+        .normalize()
+        .map_err(|error| {
+            RecipeGatingError::Replanning(CertificationPlanningError::InvalidCandidate(
+                error.to_string(),
+            ))
+        })
+}
+
+impl CertificationPlan {
+    /// Withholds every `creates` closure candidate the supplied recipe corpus
+    /// names no recipe for, and re-derives the plan without them.
+    ///
+    /// `recipe_corpus` is the directory the probe harness would read; `None`
+    /// is a transaction configured with no harness at all, under which every
+    /// `creates` candidate is withheld — the same outcome a corpus with no
+    /// matching recipe produces, and for the same reason.
+    ///
+    /// # Why this is not a weakening
+    ///
+    /// A closure candidate the Type Facts census *proves* spawns a mandatory
+    /// probe veto, one per candidate, and a scheduled veto with no recipe
+    /// refuses the gate and therefore the row (`MissingGate`). Withholding the
+    /// candidate first therefore changes nothing about what can be certified
+    /// *closed*: a candidate with a recipe is planned, censused, vetoed and
+    /// certified exactly as before, and a candidate without one was never going
+    /// to close — it could only have refused a row whose every other claim was
+    /// proven. What it changes is where the missing recipe shows up: in the
+    /// certification audit as a named withheld candidate with the domain left
+    /// **open** in the certified contract, instead of as a refused row.
+    ///
+    /// The domain really is opened. The candidate's `creates` is weakened to
+    /// unknown in the selected proposal, and the plan — candidate inventory,
+    /// demand graph, artifact witnesses, semantic digest — is derived again by
+    /// the policy from that weakened proposal, so the canonical main the receipt
+    /// eventually binds says `creates` is open and no demand ever claimed
+    /// otherwise. Nothing edits a demand graph in place.
+    ///
+    /// Only `creates` is gated. It is the one behavioral call domain with a
+    /// census, so it is the only one whose candidate can be proven and reach a
+    /// gate; every other call domain still refuses by name at witness
+    /// acquisition, before any gate is consulted, exactly as before.
+    pub fn recipe_gated(
+        &self,
+        recipe_corpus: Option<&Path>,
+    ) -> Result<RecipeGatedPlan, RecipeGatingError> {
+        let corpus = recipe_corpus
+            .map(|directory| probe_harness::RecipeCorpus::load(directory, self))
+            .transpose()?;
+        let mut withheld = Vec::new();
+        for closure in self.candidates.closure_candidates() {
+            if closure.path != SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates)) {
+                continue;
+            }
+            let claim_id = self
+                .candidates
+                .proposal()
+                .claim_id(closure)
+                .map_err(|error| RecipeGatingError::ClaimIdentity {
+                    artifact_case: closure.artifact_case.clone(),
+                    export: closure.export.clone(),
+                    reason: error.to_string(),
+                })?;
+            if corpus
+                .as_ref()
+                .is_some_and(|corpus| corpus.recipe_for(claim_id.as_str()).is_some())
+            {
+                continue;
+            }
+            withheld.push(WithheldClosure {
+                artifact_case: closure.artifact_case.clone(),
+                export: closure.export.clone(),
+                domain: "creates".to_owned(),
+                semantic_claim_id: claim_id.as_str().to_owned(),
+                reason: WITHHELD_CLOSURE_NO_RECIPE.to_owned(),
+            });
+        }
+        if withheld.is_empty() {
+            return Ok(RecipeGatedPlan {
+                plan: self.clone(),
+                withheld,
+            });
+        }
+        let selected = withheld_weakening(&self.selected_candidate, &withheld)?;
+        let policy = proof_policy_2();
+        let candidates = policy
+            .inspect_candidates(&selected)
+            .map_err(|error| CertificationPlanningError::InvalidCandidate(error.to_string()))?;
+        let demand_graph = policy
+            .derive_demand_graph_with_dependencies(
+                &candidates,
+                self.snapshot.root(),
+                self.snapshot.provenance_root(),
+                closure_dependency_inputs(&self.verified_closure),
+            )
+            .map_err(CertificationPlanningError::from)?;
+        let artifact_witnesses = artifact_witness_bindings(
+            &self.snapshot,
+            &self.verified_resolution,
+            &self.verified_closure,
+            &self.verified_exports,
+            &demand_graph,
+        );
+        Ok(RecipeGatedPlan {
+            plan: Self {
+                snapshot: self.snapshot.clone(),
+                verified_resolution: self.verified_resolution.clone(),
+                verified_closure: self.verified_closure.clone(),
+                verified_exports: self.verified_exports.clone(),
+                selected_candidate: selected,
+                candidates,
+                demand_graph,
+                artifact_witnesses,
+                import_request: self.import_request.clone(),
+                resolved_import: self.resolved_import.clone(),
+                certification_sources: self.certification_sources.clone(),
+            },
+            withheld,
+        })
+    }
 }
 
 #[derive(Debug, Error)]
@@ -6207,6 +6474,34 @@ export const value = phantom;
         declarations: &[u8],
         dependencies: Vec<AcceptedDependencyEdge>,
     ) -> (CertificationRequest, PublishedArchive, String) {
+        synthetic_graph_certification_request_shaped(
+            name,
+            version,
+            package_root,
+            importer,
+            runtime,
+            declarations,
+            dependencies,
+            ValueShape::Plain,
+            CallClaims::default(),
+        )
+    }
+
+    /// [`synthetic_graph_certification_request`] with the one export `value`
+    /// proposed at `shape` and carrying `claims`, so a graph test can give a
+    /// node a closed call domain.
+    #[allow(clippy::too_many_arguments)]
+    fn synthetic_graph_certification_request_shaped(
+        name: &str,
+        version: &str,
+        package_root: &str,
+        importer: &str,
+        runtime: &[u8],
+        declarations: &[u8],
+        dependencies: Vec<AcceptedDependencyEdge>,
+        shape: ValueShape,
+        claims: CallClaims,
+    ) -> (CertificationRequest, PublishedArchive, String) {
         let manifest = format!(
             r#"{{"name":"{name}","version":"{version}","exports":{{".":{{"types":"./types/index.d.ts","import":"./dist/index.js"}}}}}}"#
         );
@@ -6334,10 +6629,10 @@ export const value = phantom;
                         export_name: "value".into(),
                     },
                 },
-                shape: ValueShape::Plain,
+                shape,
                 stability: StabilityKnowledge::Unknown,
                 call: CallSemantics::new(
-                    CallClaims::default(),
+                    claims,
                     vec![],
                     vec![],
                     vec![],
@@ -6355,6 +6650,158 @@ export const value = phantom;
             archive,
             snapshot.package_integrity().into(),
         )
+    }
+
+    /// A two-node graph whose leaf export `value` is a **function** proposing
+    /// `creates: []` — a closure candidate recipe gating withholds when no
+    /// corpus names its claim — and whose root re-exports it.
+    fn two_node_published_graph_with_function_leaf()
+    -> (PublishedGraphNodeRequest, PublishedGraphNodeRequest) {
+        let root_runtime_path = "/project/node_modules/root-package/dist/index.js";
+        let (leaf_request, leaf_archive, leaf_integrity) =
+            synthetic_graph_certification_request_shaped(
+                "leaf-package",
+                "2.0.0",
+                "/project/node_modules/root-package/node_modules/leaf-package",
+                root_runtime_path,
+                b"export function value() {}",
+                b"export declare function value(): void;",
+                Vec::new(),
+                ValueShape::Callable,
+                CallClaims {
+                    creates: KnowledgeSet::complete(vec![]),
+                    ..CallClaims::default()
+                },
+            );
+        let leaf_plan = plan_certification(
+            leaf_request.clone(),
+            UntrustedArtifactEnvelope::Published(leaf_archive.clone()),
+        )
+        .unwrap();
+        let edge = AcceptedDependencyEdge {
+            specifier: "leaf-package".into(),
+            package_name: "leaf-package".into(),
+            artifact_case: leaf_plan.selected_artifact_case_id().into(),
+            accepted_contract_digest: leaf_plan
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str()
+                .into(),
+        };
+        let (root_request, root_archive, root_integrity) =
+            synthetic_graph_certification_request_shaped(
+                "root-package",
+                "1.0.0",
+                "/project/node_modules/root-package",
+                "/project/src/app.ts",
+                b"import { value as leafValue } from 'leaf-package'; export const value = leafValue;",
+                b"import { value as leafValue } from 'leaf-package'; export declare const value: typeof leafValue;",
+                vec![edge],
+                ValueShape::Callable,
+                CallClaims::default(),
+            );
+        (
+            PublishedGraphNodeRequest::new(
+                root_request,
+                root_archive,
+                graph_lock("root-package", "1.0.0", &root_integrity),
+            ),
+            PublishedGraphNodeRequest::new(
+                leaf_request,
+                leaf_archive,
+                graph_lock("leaf-package", "2.0.0", &leaf_integrity),
+            ),
+        )
+    }
+
+    /// Recipe gating a graph keeps every node identity and the graph root, and
+    /// composition then accepts a dependency receipt exactly when it certifies
+    /// the accepted proposal weakened by the node's withheld records — not the
+    /// accepted proposal itself, and not the weakening against the ungated
+    /// graph.
+    #[test]
+    fn a_gated_dependency_receipt_composes_as_the_exact_weakening_of_the_accepted_contract() {
+        let (root, leaf) = two_node_published_graph_with_function_leaf();
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let root_identity = graph.root_identity().clone();
+        let leaf_identity = graph
+            .dependency_first_identities()
+            .into_iter()
+            .find(|identity| identity.package_name == "leaf-package")
+            .unwrap()
+            .clone();
+        let ungated_leaf = graph.plan(&leaf_identity).unwrap().clone();
+        assert_eq!(
+            ungated_leaf.probe_gate_schedule().unwrap().gates().len(),
+            1,
+            "the leaf proposes one creates closure candidate"
+        );
+
+        // No harness: the candidate is withheld, the plan re-derived, and the
+        // identities untouched.
+        let gated = graph.recipe_gated(None).unwrap();
+        assert_eq!(gated.graph_root(), graph.graph_root());
+        assert_eq!(
+            gated.dependency_first_identities(),
+            graph.dependency_first_identities()
+        );
+        let gated_leaf = gated.plan(&leaf_identity).unwrap();
+        assert_ne!(
+            gated_leaf.demand_graph().candidate_semantic_digest(),
+            ungated_leaf.demand_graph().candidate_semantic_digest(),
+            "the gated plan is over a weaker proposal"
+        );
+        assert_eq!(
+            leaf_identity.semantic_digest,
+            ungated_leaf
+                .demand_graph()
+                .candidate_semantic_digest()
+                .as_str(),
+            "the identity keeps naming the accepted proposal"
+        );
+
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [29; 32]).unwrap();
+        // The receipt a gated leaf actually issues composes.
+        let gated_receipt =
+            authenticated_graph_test_receipt(gated_leaf, &leaf_identity.importer, &issuer, 7);
+        gated
+            .authenticate_dependency_receipts(
+                &root_identity,
+                &[(&leaf_identity, &gated_receipt)],
+                &issuer,
+                7,
+            )
+            .expect("the exact weakening composes");
+        // A receipt for the accepted proposal no longer does: gating happened,
+        // and the leaf did not certify that document.
+        let ungated_receipt =
+            authenticated_graph_test_receipt(&ungated_leaf, &leaf_identity.importer, &issuer, 7);
+        assert!(matches!(
+            gated.authenticate_dependency_receipts(
+                &root_identity,
+                &[(&leaf_identity, &ungated_receipt)],
+                &issuer,
+                7,
+            ),
+            Err(DependencyReceiptCompositionError::ReceiptMismatch {
+                field: "semantic digest",
+                ..
+            })
+        ));
+        // Nor does the weakening compose against the ungated graph, whose leaf
+        // withheld nothing.
+        assert!(matches!(
+            graph.authenticate_dependency_receipts(
+                &root_identity,
+                &[(&leaf_identity, &gated_receipt)],
+                &issuer,
+                7,
+            ),
+            Err(DependencyReceiptCompositionError::ReceiptMismatch {
+                field: "semantic digest",
+                ..
+            })
+        ));
     }
 
     /// Builds a published root package whose *entry* module imports only a
@@ -7256,6 +7703,7 @@ export const value = phantom;
             root_plan,
             requirement,
             &leaf_identity,
+            leaf_plan,
             &receipt,
             &issuer,
             7,
@@ -7267,6 +7715,7 @@ export const value = phantom;
                 root_plan,
                 requirement,
                 &leaf_identity,
+                leaf_plan,
                 &receipt,
                 &issuer,
                 7,
@@ -7276,9 +7725,36 @@ export const value = phantom;
         ));
     }
 
+    /// The pinned Type Facts producer this build's tracers run against, by
+    /// `SOLID_TYPEFACTS_BIN`. `None` when it is unset, which is the only reason
+    /// a producer-driven tracer does not run.
+    ///
+    /// Under `SOLID_CHECKER_EXPECT_PROBE_PINS=1` — which `make test-probe-harness`
+    /// and `scripts/verify.sh` set — that absence is a loud failure instead,
+    /// mirroring [`tracer_node`]: every census and graph tracer below returns
+    /// early without a producer, and a run that skipped all of them would
+    /// otherwise report green having asserted nothing about the census.
     fn pinned_producer_for_test() -> Option<super::TypeFactsProducerPin> {
-        let typefacts_path =
-            std::fs::canonicalize(std::env::var_os("SOLID_TYPEFACTS_BIN")?).ok()?;
+        let expected = std::env::var("SOLID_CHECKER_EXPECT_PROBE_PINS").as_deref() == Ok("1");
+        let Some(configured) = std::env::var_os("SOLID_TYPEFACTS_BIN") else {
+            assert!(
+                !expected,
+                "SOLID_CHECKER_EXPECT_PROBE_PINS=1, but SOLID_TYPEFACTS_BIN is unset: every \
+                 producer-driven tracer would skip and the census would leave the gate silently"
+            );
+            return None;
+        };
+        let typefacts_path = match std::fs::canonicalize(&configured) {
+            Ok(path) => path,
+            Err(error) => {
+                assert!(
+                    !expected,
+                    "SOLID_CHECKER_EXPECT_PROBE_PINS=1, but SOLID_TYPEFACTS_BIN={configured:?} \
+                     does not resolve: {error}"
+                );
+                return None;
+            }
+        };
         let executable = std::fs::read(&typefacts_path).unwrap();
         let buildinfo: serde_json::Value = serde_json::from_slice(
             &std::fs::read(format!("{}.buildinfo", typefacts_path.display())).unwrap(),
@@ -7900,7 +8376,16 @@ export const value = phantom;
         label: &str,
         entries: &[(&str, &str)],
     ) -> std::path::PathBuf {
-        let fixture = tracer_fixture();
+        tracer_corpus_from(&tracer_fixture(), scratch, label, entries)
+    }
+
+    /// As [`tracer_corpus`], for the recipe modules of any fixture directory.
+    fn tracer_corpus_from(
+        fixture: &std::path::Path,
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, &str)],
+    ) -> std::path::PathBuf {
         let corpus = scratch.join(format!("corpus-{label}"));
         std::fs::create_dir_all(&corpus).expect("corpus directory");
         let recipes = entries
@@ -8225,9 +8710,18 @@ export const value = phantom;
         label: &str,
         entries: &[(&str, &str)],
     ) -> Option<super::ProbeHarnessConfiguration> {
+        tracer_configuration_from(&tracer_fixture(), scratch, label, entries)
+    }
+
+    fn tracer_configuration_from(
+        fixture: &std::path::Path,
+        scratch: &std::path::Path,
+        label: &str,
+        entries: &[(&str, &str)],
+    ) -> Option<super::ProbeHarnessConfiguration> {
         let (node, node_digest) = tracer_node()?;
         let (harness_root, harness_digest) = tracer_harness_root(scratch);
-        let corpus = tracer_corpus(scratch, label, entries);
+        let corpus = tracer_corpus_from(fixture, scratch, label, entries);
         Some(
             super::ProbeHarnessConfiguration::with_test_pin(
                 harness_root,
@@ -8442,47 +8936,729 @@ export const value = phantom;
         );
     }
 
-    /// A behavioral call domain refuses at *witness acquisition*, before any
-    /// probe runs, and no recipe can change that.
+    /// `run` and `runCreatingOwner` both certify `creates: []` — through the
+    /// implementation census, not through the probe.
     ///
-    /// `runCreatingOwner` really does create a reactive owner, so `creates: []`
-    /// is false of it — and the recipe supplied here observes nothing to the
-    /// contrary, which is exactly the trap. The declaration census that
-    /// discharges `DomainExhaustiveness` says nothing about ownership, so the
-    /// demand is unsupported and the row never reaches the gate whose finite
-    /// silence would otherwise have been the only discriminator.
+    /// Under the settled definition (`semantic-model.md` § creates) neither
+    /// performs a `create` operation: an object literal parked in a module
+    /// variable is not a version-1 resource registered with any runtime, and
+    /// the only call in either body is `callback()`, a callee rooted at a
+    /// parameter — whose body is the caller's behavior, not this export's. The
+    /// census dispositions that one call `parameter-rooted`, the veto declines
+    /// to contradict, and the receipt binds a nonempty gate root. Before the
+    /// census existed this pair refused by name for want of a premise; the
+    /// refusal was never about a behavioral difference between the two.
     #[test]
-    fn the_probe_gate_tracer_refuses_a_behavioral_call_domain_at_witness_acquisition() {
+    fn the_probe_gate_tracer_certifies_a_parameter_rooted_creates_census() {
         let Some(pin) = pinned_producer_for_test() else {
             return;
         };
-        let scratch = TracerScratch::new("creates");
-        let plan = tracer_creates_closure_plan("runCreatingOwner");
-        let schedule = plan.probe_gate_schedule().unwrap();
-        assert_eq!(
-            schedule.gates().len(),
-            1,
-            "a proposed closed call domain still schedules its mandatory veto"
-        );
-        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        // `run` alone: `runCreatingOwner` shares the call but refuses on its
+        // `try` marker, pinned by the test below.
+        let export = "run";
+        {
+            let scratch = TracerScratch::new(&format!("creates-{export}"));
+            let plan = tracer_creates_closure_plan(export);
+            let schedule = plan.probe_gate_schedule().unwrap();
+            assert_eq!(
+                schedule.gates().len(),
+                1,
+                "a proposed closed call domain schedules its mandatory veto"
+            );
+            let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+            let Some(configuration) = tracer_configuration(
+                scratch.path(),
+                &format!("creates-{export}"),
+                &[(claim_id.as_str(), "calls-only.mjs")],
+            ) else {
+                return;
+            };
+            let finalized = tracer_certify(&plan, &pin, &configuration).unwrap_or_else(|error| {
+                panic!("{export}: a parameter-rooted creates census must certify: {error}")
+            });
+            assert!(finalized.withheld_closures().is_empty());
+            assert_ne!(
+                finalized.bindings().probe_gate_root,
+                super::finalization::empty_probe_gate_root(&plan),
+                "{export}: the veto ran, so the gate root is not the empty one"
+            );
+            assert!(
+                creates_is_closed_in(finalized.canonical_main(), export),
+                "{export}: the certified contract closes creates"
+            );
+        }
+    }
+
+    /// `runCreatingOwner` has the same one parameter-rooted call as `run`, and
+    /// refuses anyway: its `try … finally` puts a `tryReachability` marker in
+    /// the producer's control-flow census, and the census takes no
+    /// `controlFlowUnsupported` relaxation at any depth, because the producer
+    /// withholds every call row a `break`/`continue` makes non-universal and
+    /// the marker is the only trace such a withheld row leaves. A `try` withholds
+    /// nothing itself; this is the over-refusal ADR 0008 records, and the
+    /// producer-side fix is what lifts it.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_an_export_with_unsupported_control_flow() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let export = "runCreatingOwner";
+        let scratch = TracerScratch::new(&format!("creates-{export}"));
+        let plan = tracer_creates_closure_plan(export);
+        let claim_id = plan.probe_gate_schedule().unwrap().gates()[0]
+            .semantic_claim_id()
+            .to_owned();
         let Some(configuration) = tracer_configuration(
             scratch.path(),
-            "creates",
+            &format!("creates-{export}"),
             &[(claim_id.as_str(), "calls-only.mjs")],
         ) else {
             return;
         };
         let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
-            panic!("a behavioral call domain has no declaration-census premise");
+            panic!("{export}: a try statement puts a marker the census refuses on");
         };
         let rendered = error.to_string();
         assert!(
             matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
                 && rendered.contains("is unsupported")
-                && rendered.contains("implementation-census premise required")
-                && rendered.contains("creates call domain"),
-            "the refusal must be an unsupported Type Facts demand naming the missing \
-             implementation-census premise: {rendered}"
+                && rendered.contains("control-flow census is unsupported")
+                && rendered.contains("tryReachability"),
+            "{export}: the refusal must name the marker: {rendered}"
+        );
+    }
+
+    /// Whether the canonical main a receipt binds closes `creates` for
+    /// `export` in its one artifact case.
+    fn creates_is_closed_in(canonical_main: &[u8], export: &str) -> bool {
+        let normalized = crate::contract_document::decode(canonical_main)
+            .expect("a canonical main decodes")
+            .normalize()
+            .expect("a canonical main normalizes");
+        let case = &normalized.artifact_cases()[0];
+        case.exports[export]
+            .operation_claim(ClaimDomain::Creates)
+            .expect("creates is an operation domain")
+            .is_closed()
+    }
+
+    // ---------------------------------------------------------------------
+    // Creates-census tracer: fixtures/package-contracts/implementation-census-creates
+    // ---------------------------------------------------------------------
+
+    fn census_fixture() -> std::path::PathBuf {
+        repository_root().join("fixtures/package-contracts/implementation-census-creates")
+    }
+
+    const CENSUS_FIXTURE_EXPORTS: [&str; 13] = [
+        "cycle",
+        "deep",
+        "noRecipe",
+        "plain",
+        "reassignedHelper",
+        "reflectApply",
+        "spreadArgs",
+        "stdlibRefInvoker",
+        "switchBreak",
+        "taggedTemplate",
+        "unresolved",
+        "viaHelperChain",
+        "whileBreak",
+    ];
+
+    /// The census fixture as one published artifact, proposing `creates: []`
+    /// for exactly `closed_export`. Every export is a function, and the
+    /// proposal says so.
+    fn census_fixture_plan(closed_export: &str) -> CertificationPlan {
+        let fixture = census_fixture();
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let name = "implementation-census-creates-package";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/implementation-census-creates-package";
+        let bindings = CENSUS_FIXTURE_EXPORTS.map(|export| {
+            (
+                export,
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )
+        });
+        plan_for_test_package_closing(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &bindings,
+            &[(closed_export, ClaimDomain::Creates)],
+            &|_| ValueShape::Callable,
+        )
+    }
+
+    /// The id of the one `creates` closure demand a census plan carries.
+    fn creates_demand_ids(plan: &CertificationPlan, export: &str) -> Vec<String> {
+        use solid_reactive_ir::contract_semantics::{
+            SemanticClaimPath, certification::ProofDemandSubject,
+        };
+        plan.demand_graph()
+            .demands()
+            .iter()
+            .filter(|demand| {
+                demand.family()
+                    == solid_reactive_ir::contract_semantics::certification::ProofFamily::DomainExhaustiveness
+                    && matches!(
+                        demand.subject(),
+                        ProofDemandSubject::DomainClosure { subject, .. }
+                            if subject.export == export
+                                && subject.path
+                                    == SemanticClaimPath::Domain(ClaimPath::Call(ClaimDomain::Creates))
+                    )
+            })
+            .map(|demand| demand.id().as_str().to_owned())
+            .collect()
+    }
+
+    /// One whole census transaction for `export`, with `recipe` (a module of
+    /// the census fixture's `probe-recipes/`) supplied for its claim or no
+    /// recipe at all. `None` when this build has no pinned producer or no
+    /// probe Node.
+    fn census_certify(
+        export: &str,
+        recipe: Option<&str>,
+    ) -> Option<(
+        CertificationPlan,
+        Result<super::FinalizedPolicy2Contract, super::Policy2FinalizationError>,
+    )> {
+        let pin = pinned_producer_for_test()?;
+        let label = format!("census-{export}");
+        let scratch = TracerScratch::new(&label);
+        let plan = census_fixture_plan(export);
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "{export}: one creates candidate, one veto"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let entries = recipe
+            .map(|module| vec![(claim_id.as_str(), module)])
+            .unwrap_or_default();
+        let configuration =
+            tracer_configuration_from(&census_fixture(), scratch.path(), &label, &entries)?;
+        let outcome = tracer_certify(&plan, &pin, &configuration);
+        Some((plan, outcome))
+    }
+
+    /// The census refusal for `export`, which must be an unsupported Type Facts
+    /// demand whose reason contains every `needle`.
+    fn assert_census_refuses(export: &str, needles: &[&str]) {
+        let Some((_, outcome)) = census_certify(export, Some("refused-export.mjs")) else {
+            return;
+        };
+        let Err(error) = outcome else {
+            panic!("{export}: the census must refuse this export by name");
+        };
+        let rendered = error.to_string();
+        assert!(
+            matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
+                && rendered.contains("is unsupported"),
+            "{export}: the refusal must be an unsupported Type Facts demand: {rendered}"
+        );
+        for needle in needles {
+            assert!(
+                rendered.contains(needle),
+                "{export}: the refusal must name {needle:?}: {rendered}"
+            );
+        }
+    }
+
+    /// The sibling package `primitive-consumer/`, whose one export calls a real
+    /// Solid 2.0 primitive, planned with its `solid-js` stub as an *accepted*
+    /// dependency edge. Without that edge the bare import is an
+    /// `UnacceptedExternalDependency` closure hazard that opens every domain of
+    /// the artifact case at replay, and no `creates` candidate would exist for
+    /// a census to refuse.
+    fn tracer_primitive_consumer_plan() -> CertificationPlan {
+        let fixture = tracer_fixture().join("primitive-consumer");
+        let stub = fixture.join("node_modules/solid-js");
+        let stub_manifest = std::fs::read(stub.join("package.json")).expect("stub manifest");
+        let stub_runtime = std::fs::read(stub.join("index.js")).expect("stub runtime");
+        let stub_declarations = std::fs::read(stub.join("index.d.ts")).expect("stub declarations");
+        let stub_archive = published_archive_for(
+            "solid-js",
+            "2.0.0-rc.3",
+            &[
+                ("package/package.json", stub_manifest.as_slice()),
+                ("package/index.js", stub_runtime.as_slice()),
+                ("package/index.d.ts", stub_declarations.as_slice()),
+            ],
+        );
+        let stub_root = "/project/node_modules/solid-js";
+        let stub_plan = plan_for_test_package_from_importer(
+            &stub_archive,
+            "solid-js",
+            "2.0.0-rc.3",
+            stub_root,
+            &stub_manifest,
+            &["import"],
+            &[(
+                "onSettled",
+                ("index.js", stub_runtime.as_slice()),
+                ("index.d.ts", stub_declarations.as_slice()),
+                stub_root,
+            )],
+            &[],
+            "/project/node_modules/closed-domain-probe-gate-primitive-consumer/index.js",
+        );
+
+        let manifest = std::fs::read(fixture.join("package.json")).expect("fixture manifest");
+        let runtime = std::fs::read(fixture.join("index.js")).expect("fixture runtime");
+        let declarations = std::fs::read(fixture.join("index.d.ts")).expect("fixture declarations");
+        let name = "closed-domain-probe-gate-primitive-consumer";
+        let archive = published_archive_for(
+            name,
+            "1.0.0",
+            &[
+                ("package/package.json", manifest.as_slice()),
+                ("package/index.js", runtime.as_slice()),
+                ("package/index.d.ts", declarations.as_slice()),
+            ],
+        );
+        let root = "/project/node_modules/closed-domain-probe-gate-primitive-consumer";
+        try_plan_closing_for_test_package_from_importer(
+            &archive,
+            name,
+            "1.0.0",
+            root,
+            &manifest,
+            &["import"],
+            &[(
+                "runAfterSettle",
+                ("index.js", runtime.as_slice()),
+                ("index.d.ts", declarations.as_slice()),
+                root,
+            )],
+            &[&stub_plan],
+            "/project/src/app.ts",
+            &[("runAfterSettle", ClaimDomain::Creates)],
+            &|_| ValueShape::Callable,
+        )
+        .expect("the primitive consumer plans against its accepted stub edge")
+    }
+
+    /// A consumer calling a real Solid primitive refuses `creates` by name when
+    /// the callee resolves into no authenticated archive. The stub keeps the
+    /// candidate alive at planning (an accepted edge, not a hazard); the
+    /// private project materializes the consumer alone, so the call arrives
+    /// with no declaration and the census refuses it as unresolved. The
+    /// dialect tier — which would disposition this call against the audited
+    /// `@solidjs/signals@2.0.0-rc.3` — is pinned against a synthesized root in
+    /// `type_facts::tests`, and a stub's tuple could never satisfy it.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_primitive_callee_the_project_cannot_resolve() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let scratch = TracerScratch::new("primitive-consumer");
+        let plan = tracer_primitive_consumer_plan();
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(
+            schedule.gates().len(),
+            1,
+            "the accepted dependency edge keeps the creates candidate: no hazard opened it"
+        );
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        let Some(configuration) = tracer_configuration(
+            scratch.path(),
+            "primitive-consumer",
+            &[(claim_id.as_str(), "calls-only.mjs")],
+        ) else {
+            return;
+        };
+        let Err(error) = tracer_certify(&plan, &pin, &configuration) else {
+            panic!("a primitive the project cannot resolve refuses the census");
+        };
+        let rendered = error.to_string();
+        assert!(
+            matches!(&error, super::Policy2FinalizationError::TypeFacts(_))
+                && rendered.contains("is unsupported")
+                && rendered.contains("refuses an unresolved callee")
+                && rendered.contains("onSettled"),
+            "the refusal must name the unresolved primitive: {rendered}"
+        );
+    }
+
+    /// Recipe-gated planning, without a producer: a `creates` candidate with no
+    /// recipe is planned into neither a demand nor a gate and is withheld by
+    /// name; the same candidate with a recipe is planned as before.
+    #[test]
+    fn the_probe_gate_schedule_withholds_a_creates_candidate_with_no_recipe() {
+        let plan = census_fixture_plan("plain");
+        let schedule = plan.probe_gate_schedule().unwrap();
+        assert_eq!(schedule.gates().len(), 1);
+        let claim_id = schedule.gates()[0].semantic_claim_id().to_owned();
+        assert_eq!(creates_demand_ids(&plan, "plain").len(), 1);
+
+        // No corpus at all.
+        let gated = plan.recipe_gated(None).expect("gating without a corpus");
+        assert!(creates_demand_ids(gated.plan(), "plain").is_empty());
+        assert!(
+            gated
+                .plan()
+                .probe_gate_schedule()
+                .unwrap()
+                .gates()
+                .is_empty()
+        );
+        assert_eq!(
+            gated.withheld(),
+            &[super::WithheldClosure {
+                artifact_case: plan.selected_artifact_case_id().to_owned(),
+                export: "plain".into(),
+                domain: "creates".into(),
+                semantic_claim_id: claim_id.clone(),
+                reason: super::WITHHELD_CLOSURE_NO_RECIPE.into(),
+            }]
+        );
+        // The domain is opened in the plan's own selected candidate, so the
+        // canonical main a receipt would bind says so too.
+        let case = &gated.plan().selected_candidate.artifact_cases()[0];
+        assert!(
+            !case.exports["plain"]
+                .operation_claim(ClaimDomain::Creates)
+                .unwrap()
+                .is_closed()
+        );
+        assert_ne!(
+            gated.plan().demand_graph().root(),
+            plan.demand_graph().root(),
+            "a different demand set is a different demand graph"
+        );
+        // Every other demand survives: only the withheld candidate moved.
+        let other = |plan: &CertificationPlan| {
+            plan.demand_graph()
+                .demands()
+                .iter()
+                .filter(|demand| {
+                    !creates_demand_ids(plan, "plain").contains(&demand.id().as_str().to_owned())
+                })
+                .count()
+        };
+        assert_eq!(other(gated.plan()), other(&plan));
+
+        // A corpus naming some other claim withholds too.
+        let scratch = TracerScratch::new("recipe-gating");
+        let other_claim = census_fixture_plan("noRecipe")
+            .probe_gate_schedule()
+            .unwrap()
+            .gates()[0]
+            .semantic_claim_id()
+            .to_owned();
+        let corpus = tracer_corpus_from(
+            &census_fixture(),
+            scratch.path(),
+            "other-claim",
+            &[(other_claim.as_str(), "plain.mjs")],
+        );
+        let gated = plan
+            .recipe_gated(Some(&corpus))
+            .expect("gating against a corpus");
+        assert_eq!(gated.withheld().len(), 1);
+
+        // A corpus carrying the recipe plans the candidate exactly as before.
+        let corpus = tracer_corpus_from(
+            &census_fixture(),
+            scratch.path(),
+            "with-recipe",
+            &[(claim_id.as_str(), "plain.mjs")],
+        );
+        let gated = plan
+            .recipe_gated(Some(&corpus))
+            .expect("gating against a corpus");
+        assert!(gated.withheld().is_empty());
+        assert_eq!(creates_demand_ids(gated.plan(), "plain").len(), 1);
+        assert_eq!(gated.plan().probe_gate_schedule().unwrap().gates().len(), 1);
+        assert_eq!(
+            gated.plan().demand_graph().root(),
+            plan.demand_graph().root()
+        );
+    }
+
+    /// (a) `plain`: parameter-rooted, standard-library, local-recursion and
+    /// unreachable dispositions, every one witnessed, and a nonempty gate root.
+    #[test]
+    fn the_probe_gate_tracer_census_certifies_plain_with_every_call_witnessed() {
+        let Some((plan, outcome)) = census_certify("plain", Some("plain.mjs")) else {
+            return;
+        };
+        let finalized = outcome.expect("plain's creates census must certify");
+        assert!(finalized.withheld_closures().is_empty());
+        assert_ne!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(&plan)
+        );
+        assert!(creates_is_closed_in(finalized.canonical_main(), "plain"));
+
+        // The witness: every call carries a site, and the totals close the
+        // census. Re-acquired from the pinned producer, because the finalized
+        // receipt binds the sites' root rather than the sites.
+        let pin = pinned_producer_for_test().expect("checked above");
+        let evidence = plan
+            .acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the same evidence the transaction acquired");
+        let demands = creates_demand_ids(&plan, "plain");
+        let [demand] = demands.as_slice() else {
+            panic!("one creates demand");
+        };
+        let sites = evidence
+            .witness_bindings()
+            .iter()
+            .find(|binding| binding.demand_id() == demand)
+            .expect("the creates demand has a witness")
+            .site_ids()
+            .to_vec();
+        let census_calls = sites
+            .iter()
+            .filter(|site| site.starts_with("census-call:"))
+            .collect::<Vec<_>>();
+        assert!(
+            sites.contains(&"census-uncensused-forms:0".to_owned()),
+            "{sites:?}"
+        );
+        assert!(
+            sites.iter().any(|site| site.starts_with("census-total:")),
+            "{sites:?}"
+        );
+        // The one helper `plain` recurses into, `mapAll`, named by its symbol
+        // and exact span and bound to the digest of the transcript that was
+        // censused.
+        assert_eq!(
+            sites
+                .iter()
+                .filter(|site| site.starts_with("census-local-declaration:")
+                    && site.contains(":sha256:")
+                    && site
+                        .rsplit(':')
+                        .next()
+                        .is_some_and(|digest| digest.len() == 64))
+                .count(),
+            1,
+            "{sites:?}"
+        );
+        for disposition in ["parameter-rooted", "standard-library", "local-recursion"] {
+            assert!(
+                census_calls
+                    .iter()
+                    .any(|site| site.ends_with(&format!(":{disposition}"))),
+                "{disposition} must be witnessed: {sites:?}"
+            );
+        }
+        // `never()` sits after an unconditional return, and the producer's
+        // control-flow census proves it unreachable: the floor excuses it, and
+        // the site records that it did. Pinned to that one reading, so a
+        // producer that stopped proving it would move this test rather than
+        // slide into the local-recursion disposition unnoticed.
+        assert!(
+            census_calls
+                .iter()
+                .any(|site| site.ends_with(":unreachable:unreachable")),
+            "{sites:?}"
+        );
+        // Universal: `plain` reaches five call sites — callback, mapAll,
+        // never, Array.from, values.map — one hop deep.
+        assert_eq!(census_calls.len(), 5, "{sites:?}");
+        assert!(sites.contains(&"census-total:5:1".to_owned()), "{sites:?}");
+    }
+
+    /// (b) `viaHelperChain`: three local-recursion hops, the innermost
+    /// parameter-rooted.
+    #[test]
+    fn the_probe_gate_tracer_census_certifies_a_three_hop_helper_chain() {
+        let Some((plan, outcome)) = census_certify("viaHelperChain", Some("via-helper-chain.mjs"))
+        else {
+            return;
+        };
+        let finalized = outcome.expect("a three-hop local recursion must certify");
+        assert!(creates_is_closed_in(
+            finalized.canonical_main(),
+            "viaHelperChain"
+        ));
+        let pin = pinned_producer_for_test().expect("checked above");
+        let evidence = plan
+            .acquire_and_verify_export_value_type_facts(&pin)
+            .expect("the same evidence the transaction acquired");
+        let demands = creates_demand_ids(&plan, "viaHelperChain");
+        let [demand] = demands.as_slice() else {
+            panic!("one creates demand");
+        };
+        let sites = evidence
+            .witness_bindings()
+            .iter()
+            .find(|binding| binding.demand_id() == demand)
+            .expect("the creates demand has a witness")
+            .site_ids()
+            .to_vec();
+        assert!(sites.contains(&"census-total:4:3".to_owned()), "{sites:?}");
+        assert_eq!(
+            sites
+                .iter()
+                .filter(|site| site.starts_with("census-local-declaration:"))
+                .count(),
+            3,
+            "{sites:?}"
+        );
+    }
+
+    /// (c) `cycle`: refused by declaration identity.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_cycle() {
+        assert_census_refuses("cycle", &["refuses a cycle"]);
+    }
+
+    /// (d) `deep`: nine hops, one past the bound.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_chain_past_the_depth_bound() {
+        assert_census_refuses("deep", &["exceeds 8 local-recursion hops"]);
+    }
+
+    /// (e) `unresolved`: an identifier no declaration binds.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_an_unresolved_callee_by_name() {
+        assert_census_refuses(
+            "unresolved",
+            &["refuses an unresolved callee", "externalGlobal"],
+        );
+    }
+
+    /// (f) `taggedTemplate`: an invoking form the call census does not record.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_tagged_template_by_name() {
+        assert_census_refuses(
+            "taggedTemplate",
+            &["uncensused invoking form: tagged-template"],
+        );
+    }
+
+    /// (g) `spreadArgs`: a spread argument drives the iteration protocol, and
+    /// the producer records it as an invoking form (ADR 0026). Arguments do not
+    /// otherwise matter for `creates`; a spread is not an argument but a form.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_spread_argument_as_an_iteration_form() {
+        assert_census_refuses(
+            "spreadArgs",
+            &["uncensused invoking form: iteration-protocol"],
+        );
+    }
+
+    /// (i) `switchBreak`: `mount(el); break;` inside a `switch` case. The
+    /// producer withholds the `mount(el)` row — it lies in the region the
+    /// `break` makes non-universal — and leaves only the `switchReachability`
+    /// marker, which the census refuses on. Without that refusal the transcript
+    /// would carry zero rows and the domain would close over a call that runs.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_switch_whose_break_withholds_a_call() {
+        assert_census_refuses(
+            "switchBreak",
+            &[
+                "control-flow census is unsupported",
+                "switchReachability",
+                "withholds every call row",
+            ],
+        );
+    }
+
+    /// (j) `whileBreak`: the same withholding inside a loop, and the same
+    /// refusal by marker.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_loop_whose_break_withholds_a_call() {
+        assert_census_refuses(
+            "whileBreak",
+            &[
+                "control-flow census is unsupported",
+                "iterationReachability",
+            ],
+        );
+    }
+
+    /// (k) `stdlibRefInvoker`: `Array.from(items).forEach(work)`. `forEach` is
+    /// a reviewed default-library invoker of its slot 0, and `work` is a
+    /// module-local function reference the producer traces to nothing — not a
+    /// parameter, not a literal inside the frame — so the standard-library
+    /// disposition refuses the call by name rather than letting `work` run
+    /// uncensused.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_standard_library_invoker_handed_a_reference() {
+        assert_census_refuses(
+            "stdlibRefInvoker",
+            &["`Array.forEach`", "argument 0", "reviewed invoker table"],
+        );
+    }
+
+    /// (l) `reflectApply`: `Reflect.apply(work, undefined, args)` transfers
+    /// control to whatever sits in its first slot; the member refuses by
+    /// qualified name whatever the slots prove.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_reflect_apply_by_name() {
+        assert_census_refuses("reflectApply", &["`Reflect.apply`", "by reference"]);
+    }
+
+    /// (m) `reassignedHelper`: `function helper` is reassigned at module level
+    /// after its declaration. The producer resolves the call to the
+    /// declaration; the verifier's own parse finds the write and refuses to
+    /// walk a declaration that is not proven to be the code that runs.
+    #[test]
+    fn the_probe_gate_tracer_census_refuses_a_reassigned_local_binding() {
+        assert_census_refuses(
+            "reassignedHelper",
+            &["local declaration `helper`", "written at"],
+        );
+    }
+
+    /// (h) `noRecipe`: byte-for-byte `plain`'s body, and no recipe for its
+    /// claim. Withheld by name before any demand exists; the row certifies
+    /// with `creates` open and the empty gate root.
+    #[test]
+    fn the_probe_gate_tracer_withholds_a_creates_candidate_with_no_recipe_and_certifies_open() {
+        let Some((plan, outcome)) = census_certify("noRecipe", None) else {
+            return;
+        };
+        let finalized = outcome.expect("a withheld candidate leaves a certifiable row");
+        assert_eq!(finalized.withheld_closures().len(), 1);
+        let withheld = &finalized.withheld_closures()[0];
+        assert_eq!(
+            (withheld.export.as_str(), withheld.domain.as_str()),
+            ("noRecipe", "creates")
+        );
+        assert_eq!(withheld.reason, super::WITHHELD_CLOSURE_NO_RECIPE);
+        assert_eq!(
+            withheld.semantic_claim_id,
+            plan.probe_gate_schedule().unwrap().gates()[0].semantic_claim_id()
+        );
+        assert!(
+            !creates_is_closed_in(finalized.canonical_main(), "noRecipe"),
+            "the certified contract leaves creates open"
+        );
+        // No gate ran: the receipt binds the canonical empty root of the
+        // *gated* plan, whose demand graph is the one the receipt names.
+        let gated = plan.recipe_gated(None).unwrap();
+        assert_eq!(
+            finalized.bindings().probe_gate_root,
+            super::finalization::empty_probe_gate_root(gated.plan())
+        );
+        assert_eq!(
+            finalized.bindings().demand_graph_root,
+            gated.plan().demand_graph().root().as_str()
         );
     }
 
@@ -8689,5 +9865,42 @@ export const value = phantom;
                 .bindings()
                 .dependency_receipts_root
         );
+    }
+
+    /// A graph whose dependency node carried a `creates` closure candidate, run
+    /// with no harness: the candidate is withheld by name, the leaf certifies
+    /// with `creates` open, and the root composes against that receipt — end to
+    /// end, through the pinned producer.
+    #[test]
+    fn published_graph_with_a_withheld_dependency_candidate_certifies_end_to_end() {
+        let Some(pin) = pinned_producer_for_test() else {
+            return;
+        };
+        let (root, leaf) = two_node_published_graph_with_function_leaf();
+        let graph = plan_published_contract_graph(root, [leaf]).unwrap();
+        let issuer = ConfiguredReceiptIssuer::persistent_local("phase21-graph", [31; 32]).unwrap();
+        let finalized = graph
+            .certify_value_only(&pin, &issuer, 9, None)
+            .expect("a graph with a withheld dependency candidate certifies");
+        assert_eq!(finalized.nodes().len(), 2);
+        assert_eq!(finalized.graph_root(), graph.graph_root());
+        let leaf = finalized
+            .nodes()
+            .iter()
+            .find(|node| node.identity().package_name == "leaf-package")
+            .expect("the leaf node is finalized");
+        assert_eq!(leaf.finalized().withheld_closures().len(), 1);
+        assert_eq!(
+            (
+                leaf.finalized().withheld_closures()[0].export.as_str(),
+                leaf.finalized().withheld_closures()[0].domain.as_str(),
+            ),
+            ("value", "creates")
+        );
+        assert!(
+            !creates_is_closed_in(leaf.finalized().canonical_main(), "value"),
+            "the leaf's certified contract leaves creates open"
+        );
+        assert!(finalized.root().withheld_closures().is_empty());
     }
 }

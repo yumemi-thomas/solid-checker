@@ -315,15 +315,42 @@ fn normalize_export(
             }),
         }
     }
-    // `creates` carries no owner requirement any more, and the generator
-    // derives nothing else that is a `create`: registering a computation on
-    // the caller's owner is not a registration into a runtime outside the
-    // invocation (`semantic-model.md` § creates), so this generation has
-    // *nothing* to say about the domain. Open, never closed-empty -- an owner
-    // census that walked this body proves which obligations it found, never
-    // that no `create` exists, and `Complete(vec![])` is the negative claim
-    // only the hand audits may assert.
-    let creates = KnowledgeSet::Unknown;
+    // `creates` carries no owner requirement any more: registering a
+    // computation on the caller's owner is not a registration into a runtime
+    // outside the invocation (`semantic-model.md` § creates). What the domain
+    // may carry is a **proposal of absence**, and only that.
+    //
+    // `Complete(vec![])` here is *not* the generator asserting the negative
+    // claim the hand audits assert. `normalize_knowledge` weakens an empty
+    // `Complete` into a closure *candidate*: the proposal states the claim, the
+    // verifier schedules a `DomainExhaustiveness` demand for it, and
+    // `require_census_decides_closure`'s implementation census either proves it
+    // against the authenticated archive's own transcripts or refuses the row by
+    // name (`docs/adr/0008-implementation-census-for-creates.md`). Proposing is
+    // therefore admissible where deriving is not — a proposal cannot certify
+    // anything, and this one is refused unless a census decides it.
+    //
+    // Three gates, each fail-closed:
+    //
+    // * `GenerationScope::ConsumingPackage` only. Inside a dialect's own
+    //   primitive-defining archive the primitive recognition this walk reads is
+    //   granted by declaration *path*, which is the circularity ADR 0005
+    //   objection 5 names; the existing withholding stays.
+    // * A function export only. A `value` export's `creates` is decided by
+    //   `validate_export`'s function-effect rule, not by an implementation the
+    //   census could walk.
+    // * `creates_walk_clean`, which is `false` unless
+    //   [`solid_reactive_ir::CreatesProposalWalk`] actually walked this export's
+    //   implementation and found no call that a `creates: []` claim would
+    //   contradict. Silence is "do not propose".
+    let creates = if scope.publishes_bootstrapped_reactive_domains()
+        && summary.kind == "function"
+        && summary.creates_walk_clean
+    {
+        KnowledgeSet::Complete(Vec::new())
+    } else {
+        KnowledgeSet::Unknown
+    };
     // `cleanups` is never *closed* here either, for the same reason: the owner
     // census establishes the cleanup obligations it walked, not that no other
     // cleanup exists. `partial` collapses an empty list back to `Unknown`.

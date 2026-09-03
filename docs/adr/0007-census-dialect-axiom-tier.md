@@ -145,10 +145,11 @@ no such mode is wired to this tier.
   and is never consulted. `primitive_defining_package` — the generation-scope
   predicate that compares a bare name — stays one-directional withholding, as
   ADR 0005's later section records.
-- **Not wired into certification.** `require_census_decides_closure` still
-  refuses every behavioral call domain by name. This tier supplies the
-  terminator that refusal waits on; consuming it is the census slice's work
-  (census plan § 4.3).
+- **Wired into exactly one census.** Since ADR 0008 the `creates`
+  implementation census consults this tier as its `dialect-axiom` disposition,
+  after the parameter-rooted and standard-library dispositions and before local
+  recursion; `require_census_decides_closure` still refuses every other
+  behavioral call domain by name.
 
 ## Preconditions from ADR 0005, and how each is met
 
@@ -206,8 +207,11 @@ audits rather than gaps in the table:
 
 ## Consequences
 
-- A `creates` census can terminate on 24 Solid 2.0 primitive callees, once the
-  census slice consumes the terminator.
+- A `creates` census terminates on 24 Solid 2.0 primitive callees (ADR 0008
+  consumed the terminator). The primitives with no row — `createSignal`,
+  `onCleanup`, `untrack`, `getOwner`, `createRoot` among them — are where the
+  generator's proposal walk now falls silent, so most real consumers propose no
+  `creates` closure at all until those audits carry a row.
 - A 1.x consumer's `creates` census cannot terminate on any Solid callee at all
   until a real 1.x `creates` audit exists. That is a refusal, not a defect.
 - Three audit-review items are now open against the audited documents rather

@@ -45,7 +45,9 @@ import {
   registryCacheRoot,
   reusableProposalInputs,
   runContractCertificationPipeline,
-  validatedReusableDependencyRefusalAuditBytes
+  validatedReusableDependencyRefusalAuditBytes,
+  WITHHELD_CLOSURE_MARKER,
+  withheldClosuresFromNativeOutput
 } from "../scripts/certify-contract.mjs";
 import { parseProbeArguments } from "../scripts/probe-contract.mjs";
 import { parseReviewArguments } from "../scripts/review-contract.mjs";
@@ -70,6 +72,33 @@ import {
   retainIndependentlyMergeableProposals,
   withheldClaimsFromEmitterOutput
 } from "../scripts/generate-package-contract.mjs";
+
+test("a withheld-closure record is read off the native transaction's stdout, and only when whole", () => {
+  const record = {
+    artifactCase: "artifact-case:abc",
+    export: "noRecipe",
+    domain: "creates",
+    semanticClaimId: `claim:v1:sha256:${"0".repeat(64)}`,
+    reason: "no recipe in corpus"
+  };
+  const stdout = [
+    "policy-2 certification planning",
+    `${WITHHELD_CLOSURE_MARKER}${JSON.stringify(record)}`,
+    // A graph node carries its identity beside the record; it is kept as is.
+    `${WITHHELD_CLOSURE_MARKER}${JSON.stringify({ ...record, export: "other", node: { package: "p", version: "1.0.0", digest: "sha256:1" } })}`,
+    // Malformed or shapeless lines are not records, and neither is prose that
+    // happens to mention the marker mid-line.
+    `${WITHHELD_CLOSURE_MARKER}{not json`,
+    `${WITHHELD_CLOSURE_MARKER}${JSON.stringify({ export: 1, domain: "creates", reason: "x" })}`,
+    `note: ${WITHHELD_CLOSURE_MARKER}${JSON.stringify(record)}`
+  ].join("\n");
+  assert.deepEqual(withheldClosuresFromNativeOutput(stdout), [
+    record,
+    { ...record, export: "other", node: { package: "p", version: "1.0.0", digest: "sha256:1" } }
+  ]);
+  assert.deepEqual(withheldClosuresFromNativeOutput(""), []);
+  assert.deepEqual(withheldClosuresFromNativeOutput(undefined), []);
+});
 
 test("a withheld-claim record is read only for its own target, and only when whole", () => {
   const marker = "solid-checker:withheld-owner-requirement=";
@@ -335,16 +364,19 @@ test("the bundler-suffix fixture keeps a real control, pinned by both snapshots"
   const plan = name =>
     JSON.parse(readFileSync(join(fixtures, name, "expected-proposal.json"), "utf8"));
 
-  // 2 candidates, not 3, since 2026-09-03: the generator no longer proposes a
-  // `creates` closure, because the domain it derived that from was the owner
-  // requirement census and `semantic-model.md` § creates says an owner
-  // requirement is not a `create`. The claim moved to `unresolvedClaims`
-  // (7 -> 8), so the control still proves the plain module import resolves and
-  // still produces candidates -- `reads` and `returns` -- which is what this
-  // pin exists to protect.
+  // 3 candidates and 7 open claims, since 2026-09-04: the generator proposes a
+  // `creates` closure again, this time derived from its own walk of the
+  // export's implementation rather than from the owner-requirement census
+  // (docs/adr/0008-implementation-census-for-creates.md) -- a proposal the
+  // certifier's implementation census then proves or refuses. Between
+  // 2026-09-03 and then the count was 2 / 8: the owner-requirement-derived
+  // `creates` had been withdrawn because an owner requirement is not a
+  // `create`. The control still proves the plain module import resolves and
+  // still produces candidates -- `reads`, `returns`, and now `creates` --
+  // which is what this pin exists to protect.
   const control = plan("asset-query-import-control");
-  assert.equal(control.closureCandidates.length, 2);
-  assert.equal(control.unresolvedClaims.length, 8);
+  assert.equal(control.closureCandidates.length, 3);
+  assert.equal(control.unresolvedClaims.length, 7);
 
   const suffixed = plan("asset-query-import");
   assert.equal(suffixed.closureCandidates.length, 0);

@@ -47,6 +47,7 @@ pub(crate) struct ProgramDraft {
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
+    pub(crate) creates_proposal_walk: crate::CreatesProposalWalk,
     pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
     pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
@@ -158,6 +159,7 @@ impl ProgramDraft {
                 factory_instances,
             },
             contract_binding: self.contract_binding,
+            creates_proposal_walk: self.creates_proposal_walk,
         }
     }
 }
@@ -541,6 +543,12 @@ fn build_with_accepted_contract_inputs_measured_incremental(
         &mut build_timings,
     );
     clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
+    // The generator's own `creates` proposal walk. It reads the same callee
+    // resolution, primitive vocabulary, and accepted-contract bindings every
+    // stage above reads, and it decides only whether a `creates: []` *proposal*
+    // may be made; the claim is proved or refused by the certifier's
+    // implementation census. See `crate::CreatesProposalWalk`.
+    draft.creates_proposal_walk = crate::creates_walk::collect_project(&analysis);
     // Static and compatibility passes deliberately operate on source facts.
     // Apply the compiler's stronger "this code was not emitted" fact once,
     // after every producer has run and before unresolved obligations are

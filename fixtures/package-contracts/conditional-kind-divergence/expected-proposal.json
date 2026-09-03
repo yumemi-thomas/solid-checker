@@ -43,6 +43,25 @@
       }
     },
     {
+      "claimId": "claim:v1:sha256:622f031ff4a46ccaf94a55e8fc91fff688d6a608fb05a79476922cf152cfc2f0",
+      "artifact": {
+        "entrypoint": ".",
+        "runtimePath": "./development.js",
+        "runtimeDigest": "sha256:331ea4c8a084e455f21c5928b521703234ca536acb154d7bcc3a912c8fddb881",
+        "declarationsPath": "./development.js",
+        "declarationsDigest": "sha256:331ea4c8a084e455f21c5928b521703234ca536acb154d7bcc3a912c8fddb881",
+        "closureDigest": "sha256:6ae223fa563d06df3def24c95b2be36c7ce0950b8d9c515a5767d604009a2279"
+      },
+      "subject": {
+        "artifactCase": "artifact-case:2454b5e9895a6d7006907f2e5b818577fbc9d6900b6a835304b80978958c837c",
+        "export": "conditionalShape",
+        "path": {
+          "kind": "call",
+          "domain": "creates"
+        }
+      }
+    },
+    {
       "claimId": "claim:v1:sha256:b499c2bed8f9c2a1c42f94c7e82690b3f35eeee26f9bb64aeb7bb86e636d440f",
       "artifact": {
         "entrypoint": ".",
@@ -289,25 +308,6 @@
           "kind": "operation-axis",
           "operation": "artifact-case:2454b5e9895a6d7006907f2e5b818577fbc9d6900b6a835304b80978958c837c:conditionalShape:operation:callback-0",
           "domain": "owner-lifetime"
-        }
-      }
-    },
-    {
-      "claimId": "claim:v1:sha256:622f031ff4a46ccaf94a55e8fc91fff688d6a608fb05a79476922cf152cfc2f0",
-      "artifact": {
-        "entrypoint": ".",
-        "runtimePath": "./development.js",
-        "runtimeDigest": "sha256:331ea4c8a084e455f21c5928b521703234ca536acb154d7bcc3a912c8fddb881",
-        "declarationsPath": "./development.js",
-        "declarationsDigest": "sha256:331ea4c8a084e455f21c5928b521703234ca536acb154d7bcc3a912c8fddb881",
-        "closureDigest": "sha256:6ae223fa563d06df3def24c95b2be36c7ce0950b8d9c515a5767d604009a2279"
-      },
-      "subject": {
-        "artifactCase": "artifact-case:2454b5e9895a6d7006907f2e5b818577fbc9d6900b6a835304b80978958c837c",
-        "export": "conditionalShape",
-        "path": {
-          "kind": "call",
-          "domain": "creates"
         }
       }
     },

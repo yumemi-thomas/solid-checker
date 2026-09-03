@@ -102,7 +102,12 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // tracked by the producer slice (484d50df): it pins that the invoking-
       // form classifier runs over every marker kind a published module can
       // express without moving the contract.
-      stableMainDocuments: 177,
+      // 178 adds the implementation-census-creates fixture's main document
+      // (docs/adr/0008-implementation-census-for-creates.md): every function
+      // export of that consuming package proposes `creates: []`, and the
+      // certifier's implementation census proves, refuses, or withholds each
+      // candidate by name.
+      stableMainDocuments: 178,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,
@@ -123,34 +128,33 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
 
   test("classifies every policy-2 demand against an existing producer guarantee", () => {
     assert.deepEqual(auditPhase19DemandAuthority(), {
-      // 44, and 5 producer extensions: the census slice added
-      // `domain-exhaustiveness/implementation-census`, whose producer half —
-      // `uncensusedInvokingForms` and the local-declaration demand — landed at
-      // handshake protocol 14 while no consumer reads either field. It joins an
-      // existing family, so `families` and `policyDigest` are unmoved: a new
-      // family would come from proof-policy-v2.json's applicability table and
-      // would re-label every receipt's policy binding, which is a separate cut.
+      // 44 rows. `domain-exhaustiveness/implementation-census` joined the
+      // existing family at the producer slice (handshake protocol 14), so
+      // `families` and `policyDigest` are unmoved: a new family would come from
+      // proof-policy-v2.json's applicability table and would re-label every
+      // receipt's policy binding, which is a separate cut.
       demands: 44,
       families: 18,
-      alreadyExact: 32,
-      producerExtensionRequired: 5,
+      // 33 and 4, from 32 and 5: the census slice
+      // (docs/adr/0008-implementation-census-for-creates.md) consumes both
+      // producer facts — `uncensusedInvokingForms` and the local-declaration
+      // demand — in `census_creates_domain`, so the row is exact for the
+      // `creates` call domain of a consuming package. The other behavioral call
+      // domains still refuse by name; that is a narrowing of the row's exact
+      // scope, not a producer extension the row is still waiting on.
+      alreadyExact: 33,
+      producerExtensionRequired: 4,
       unsupported: 7,
-      // 6, down from 7, and this is the point of adding the row rather than a
-      // cost of it. `domain-exhaustiveness` was counted ready while both its
-      // rows were "already exact" — invocation completeness and the package
-      // source census — even though closing a behavioral call domain needs an
-      // enumeration guarantee over invoking forms that no producer had. The
-      // producer has it now and no consumer reads it, so the family is a
-      // producer extension away from ready, which is exactly what
-      // require_census_decides_closure already says by refusing every
-      // behavioral call domain by name.
+      // 7, back from 6: every `domain-exhaustiveness` row is exact again, now
+      // with the enumeration guarantee over invoking forms that made the family
+      // unready actually read by a consumer.
       //
       // The `probe-consistency` family stays unready for its own reason:
       // `nonobservation-as-negative-proof` is unsupported because finite
       // runtime silence can never prove absence or closure. Binding the harness
       // made that family's *executable* demand exact; it did not and must not
       // make the family certification-ready.
-      certificationReadyFamilies: 6
+      certificationReadyFamilies: 7
     });
   });
 });

@@ -87,6 +87,8 @@ fn inferred_entrypoint_workflow_refuses_a_same_named_export_from_the_wrong_subpa
             owner_requirements: ContractClaim::Known(Vec::new()),
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
+            creates_closed_empty: false,
+            creates_walk_clean: false,
         },
     )]);
 
@@ -135,6 +137,8 @@ fn merged_plan_rebinds_closure_subjects_from_each_normalized_source_document() {
             owner_requirements: ContractClaim::Known(Vec::new()),
             async_behavior: ContractClaim::Known(String::new()),
             open_claims: Default::default(),
+            creates_closed_empty: false,
+            creates_walk_clean: false,
         },
     )]);
     let mut primary = resolved();

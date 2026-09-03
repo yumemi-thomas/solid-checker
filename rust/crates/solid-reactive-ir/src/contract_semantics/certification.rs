@@ -38,6 +38,7 @@ pub struct ArtifactSnapshotLimits {
 /// is constructed only by walking the normalized candidate, so a proof
 /// document cannot omit a proposed closure or positive operation from the
 /// planner's universe.
+#[derive(Clone)]
 pub struct CertificationCandidates {
     candidate_semantic_digest: Digest,
     proposal: NormalizedContract,
@@ -1422,6 +1423,14 @@ impl WitnessBinding {
     #[must_use]
     pub fn demand_id(&self) -> &str {
         &self.demand_id
+    }
+
+    /// The witness sites this binding names, in the adapter's own order. Audit
+    /// and test material: coverage validation folds them into the evidence
+    /// root and authenticates none of them.
+    #[must_use]
+    pub fn site_ids(&self) -> &[String] {
+        &self.site_ids
     }
 }
 

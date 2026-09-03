@@ -484,6 +484,22 @@ impl<'a> SemanticLookup<'a> {
             })
     }
 
+    /// Whether the accepted contract bound to `symbol` closes `creates` with
+    /// no item, or `None` when no contract is bound to it at all.
+    ///
+    /// `Some(false)` is the counterexample the generator's `creates` proposal
+    /// walk refuses on: an open domain and a domain carrying a `create` item
+    /// are both reasons not to propose that the calling export publishes none.
+    /// `None` means this callee is not a contracted dependency export, which is
+    /// not a counterexample this walk can name — see
+    /// [`crate::CreatesProposalWalk`].
+    pub(super) fn contract_creates_closed_empty(&self, symbol: &str) -> Option<bool> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.creates_closed_empty)
+    }
+
     pub(super) fn contract_owner_requirements(
         &self,
         symbol: &str,

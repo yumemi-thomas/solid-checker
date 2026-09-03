@@ -657,6 +657,11 @@ function readCertificationAttempt(
       artifactSatisfiedDemandsByFamily: {},
       refusalCountsByFamily: {},
       refusalCountsByOwner: {},
+      // How many closure candidates recipe-gated planning withheld by name --
+      // a `creates` candidate with no recipe in the corpus is planned into
+      // neither a demand nor a gate, and the row certifies with that domain
+      // open. Read off the audit's `withheldClosures`; an older audit has none.
+      withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0,
       ordinaryAnalysis: audit?.ordinaryAnalysis ?? null
     };
   }
@@ -697,7 +702,8 @@ function readCertificationAttempt(
     demandCountsByFamily: countBy(demands, "family"),
     artifactSatisfiedDemandsByFamily: countBy(artifactSatisfied, "family"),
     refusalCountsByFamily: countBy(refusals, "family"),
-    refusalCountsByOwner: countBy(refusals, "owner")
+    refusalCountsByOwner: countBy(refusals, "owner"),
+    withheldClosures: Array.isArray(audit?.withheldClosures) ? audit.withheldClosures.length : 0
   };
 }
 

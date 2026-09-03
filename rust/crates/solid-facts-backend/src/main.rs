@@ -200,6 +200,14 @@ struct ContractCertificationPlanningRequest {
     /// archive before planning proceeds.
     #[serde(default)]
     inapplicable_cases: Vec<ContractCertificationInapplicableCase>,
+    /// The probe recipe corpus the execution will be handed, so the plan
+    /// written for review is the recipe-gated plan the execution certifies
+    /// against (`CertificationPlan::recipe_gated`) rather than a plan naming a
+    /// `creates` demand that the transaction then withholds. Read only by
+    /// `--plan-contract-certification`; the execution request carries its own
+    /// harness triple.
+    #[serde(default)]
+    probe_recipe_corpus: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -879,7 +887,14 @@ fn write_contract_certification_plan(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request: ContractCertificationPlanningRequest =
         serde_json::from_slice(&fs::read(request_path)?)?;
+    let recipe_corpus = request.probe_recipe_corpus.clone();
     let (plan, _) = certification_plan_from_request(request)?;
+    // The same gating the execution applies, so the plan an operator reviews
+    // names exactly the demands the transaction will make.
+    let gated = plan
+        .recipe_gated((!recipe_corpus.is_empty()).then(|| Path::new(recipe_corpus.as_str())))
+        .map_err(|error| format!("recipe-gated certification planning failed: {error}"))?;
+    let plan = gated.plan();
     let graph = plan.demand_graph();
     let snapshot_witnesses = plan
         .artifact_witness_bindings()
@@ -901,6 +916,7 @@ fn write_contract_certification_plan(
             "owner": certification_demand_owner(demand.family()),
             "satisfiedByArtifactSnapshot": snapshot_witnesses.contains(demand.id().as_str()),
         })).collect::<Vec<_>>(),
+        "withheldClosures": gated.withheld(),
     });
     let mut bytes = serde_json::to_vec_pretty(&output)?;
     bytes.push(b'\n');
@@ -1054,6 +1070,7 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             probes,
         )
         .map_err(|error| format!("policy-2 proof finalization failed: {error}"))?;
+    report_withheld_closures(None, &finalized)?;
     let trust_bytes =
         solid_facts_backend::encode_policy2_trust_configuration(finalized.trust_configuration())
             .map_err(|error| format!("policy-2 trust encoding failed: {error}"))?;
@@ -1091,6 +1108,33 @@ fn execute_contract_certification(request_path: &Path) -> Result<(), Box<dyn std
             "fresh analyzer process did not discover and authenticate {specifier:?} from {importer:?}"
         )
         .into());
+    }
+    Ok(())
+}
+
+/// One stdout line per closure candidate the transaction withheld by name,
+/// keyed by this marker. The CLI driver (`certify-contract.mjs`) collects them
+/// into the certification audit's `withheldClosures`; the accepted contract
+/// itself already says the domain is open, so nothing here is authority.
+const WITHHELD_CLOSURE_MARKER: &str = "solid-checker:withheld-closure=";
+
+fn report_withheld_closures(
+    node: Option<&solid_facts_backend::CanonicalDependencyNodeIdentity>,
+    finalized: &solid_facts_backend::FinalizedPolicy2Contract,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for withheld in finalized.withheld_closures() {
+        let mut record = serde_json::to_value(withheld)?;
+        if let (Some(object), Some(node)) = (record.as_object_mut(), node) {
+            object.insert(
+                "node".into(),
+                serde_json::json!({
+                    "package": node.package_name,
+                    "version": node.package_version,
+                    "digest": node.digest(),
+                }),
+            );
+        }
+        println!("{WITHHELD_CLOSURE_MARKER}{record}");
     }
     Ok(())
 }
@@ -1240,6 +1284,7 @@ fn execute_contract_case_set_certification(
     for ((plan, artifact_case_id, resolved_import_root, importer, specifier), finalized) in
         plans.into_iter().zip(finalized)
     {
+        report_withheld_closures(None, &finalized)?;
         let current_trust = solid_facts_backend::encode_policy2_trust_configuration(
             finalized.trust_configuration(),
         )
@@ -1381,6 +1426,7 @@ fn execute_contract_graph_certification(
     )
     .map_err(|error| format!("policy-2 graph trust encoding failed: {error}"))?;
     for node in finalized.nodes() {
+        report_withheld_closures(Some(node.identity()), node.finalized())?;
         let current = solid_facts_backend::encode_policy2_trust_configuration(
             node.finalized().trust_configuration(),
         )?;
@@ -1610,6 +1656,7 @@ fn execute_contract_graph_case_set_certification(
         fs::create_dir(&hidden_nodes)?;
         let mut published_root = None;
         for node in finalized.nodes() {
+            report_withheld_closures(Some(node.identity()), node.finalized())?;
             let node_plan = graph
                 .plan(node.identity())
                 .ok_or("finalized graph case node has no retained opaque plan")?;
@@ -6268,6 +6315,11 @@ type FunctionKey = (String, u32, u32);
 struct GeneratedOwnerRequirements {
     by_symbol: HashMap<String, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
     by_function: HashMap<FunctionKey, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
+    /// Functions whose implementation the `creates` proposal walk cleared, by
+    /// the same two identities the requirement maps use. Membership is the
+    /// *positive* answer, so an export neither map reaches proposes nothing.
+    clean_creates_walk_by_symbol: HashSet<String>,
+    clean_creates_walk_by_function: HashSet<FunctionKey>,
 }
 
 fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
@@ -6356,6 +6408,29 @@ fn generated_owner_requirements_by_symbol(
     }
 
     let mut indexed = GeneratedOwnerRequirements::default();
+    // The `creates` proposal walk's verdict, indexed by the same two
+    // identities. Every function is considered, not only those carrying an
+    // owner requirement: the two questions are independent, and a clean walk
+    // is exactly what a `creates: []` proposal needs.
+    for file in &facts.files {
+        for function in &file.ast.functions {
+            if !program.creates_proposal_walk.proposes(
+                file.path.as_str(),
+                (u64::from(function.span.start), u64::from(function.span.end)),
+            ) {
+                continue;
+            }
+            let key = (
+                file.path.to_string(),
+                function.span.start,
+                function.span.end,
+            );
+            if let Some(Some(symbol)) = function_symbols.get(&key) {
+                indexed.clean_creates_walk_by_symbol.insert(symbol.clone());
+            }
+            indexed.clean_creates_walk_by_function.insert(key);
+        }
+    }
     for requirement in program.missing_owners.iter().filter(|requirement| {
         !requirement.runtime_uncertain
             && !requirement.conditional_owner
@@ -6398,6 +6473,40 @@ fn generated_owner_requirements_by_symbol(
     indexed
 }
 
+/// The function identity a `default` export's declaration sits in, which is the
+/// fail-closed fallback for an anonymous default with no name symbol.
+fn default_export_function_key(
+    facts: &solid_facts::ProjectFacts,
+    entry_file: &Path,
+) -> Option<FunctionKey> {
+    let file = facts
+        .files
+        .iter()
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))?;
+    let default_span = file
+        .ast
+        .exports
+        .iter()
+        .filter(|export| !export.type_only && export.kind == solid_facts::ast::ExportKind::Default)
+        .flat_map(|export| export.declarations.iter())
+        .find(|specifier| !specifier.type_only && specifier.exported == "default")?
+        .local
+        .span;
+    let function = file
+        .ast
+        .functions
+        .iter()
+        .filter(|function| {
+            function.span.contains(default_span) && !function.body.contains(default_span)
+        })
+        .min_by_key(|function| function.span.end - function.span.start)?;
+    Some((
+        file.path.to_string(),
+        function.span.start,
+        function.span.end,
+    ))
+}
+
 /// Adds exact owner requirements observed inside the exact exported function
 /// to the generated package summary. The source project may report the
 /// function as open-world/uncertain because its callers are not enumerable;
@@ -6411,42 +6520,32 @@ fn attach_generated_owner_requirements(
     export_entity: Option<&typefacts::EntityFact>,
     mut summary: solid_reactive_ir::ContractExport,
 ) -> solid_reactive_ir::ContractExport {
-    let operations = export_entity
+    // Resolved once, because two independent verdicts are keyed by it: the
+    // owner requirements below, and the `creates` proposal walk. Reading the
+    // key out of the requirement map's own hit would conflate "this export's
+    // function was identified" with "it carries a requirement".
+    let symbol = export_entity
         .map(|entity| canonical_symbol(&entity.symbol, aliases))
-        .filter(|symbol| !symbol.is_empty())
-        .and_then(|symbol| generated.by_symbol.get(&symbol))
+        .filter(|symbol| !symbol.is_empty());
+    let default_function =
+        (export_name == "default").then(|| default_export_function_key(facts, entry_file));
+    let default_function = default_function.flatten();
+    // A proposal input, and only that: see `inferred_contract`'s `creates`
+    // decision and `solid_reactive_ir::CreatesProposalWalk`. `false` stays
+    // `false` when neither identity resolves.
+    summary.creates_walk_clean = symbol
+        .as_ref()
+        .is_some_and(|symbol| generated.clean_creates_walk_by_symbol.contains(symbol))
+        || default_function
+            .as_ref()
+            .is_some_and(|key| generated.clean_creates_walk_by_function.contains(key));
+    let operations = symbol
+        .as_ref()
+        .and_then(|symbol| generated.by_symbol.get(symbol))
         .or_else(|| {
-            (export_name == "default").then(|| {
-                let file = facts
-                    .files
-                    .iter()
-                    .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))?;
-                let default_span = file
-                    .ast
-                    .exports
-                    .iter()
-                    .filter(|export| {
-                        !export.type_only && export.kind == solid_facts::ast::ExportKind::Default
-                    })
-                    .flat_map(|export| export.declarations.iter())
-                    .find(|specifier| !specifier.type_only && specifier.exported == "default")?
-                    .local
-                    .span;
-                let function = file
-                    .ast
-                    .functions
-                    .iter()
-                    .filter(|function| {
-                        function.span.contains(default_span)
-                            && !function.body.contains(default_span)
-                    })
-                    .min_by_key(|function| function.span.end - function.span.start)?;
-                generated.by_function.get(&(
-                    file.path.to_string(),
-                    function.span.start,
-                    function.span.end,
-                ))
-            })?
+            default_function
+                .as_ref()
+                .and_then(|key| generated.by_function.get(key))
         });
     let Some(operations) = operations else {
         return summary;

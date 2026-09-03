@@ -6,6 +6,7 @@
 //! authority.
 
 use sha2::{Digest as _, Sha256};
+use solid_reactive_ir::contract_semantics::NormalizedContract;
 use solid_reactive_ir::contract_semantics::certification::{
     DependencyDemandInput, ProofDemandSubject, ProofFamily,
 };
@@ -330,11 +331,32 @@ impl CanonicalDependencyNodeIdentity {
     }
 }
 
+#[derive(Clone)]
 struct PlannedGraphNode {
     identity: CanonicalDependencyNodeIdentity,
     plan: CertificationPlan,
     dependencies: Vec<CanonicalDependencyNodeIdentity>,
     source_dependencies: Vec<VerifiedGraphSourcePackage>,
+    /// What recipe-gated planning withheld from this node's plan; empty until
+    /// [`PublishedContractGraphPlan::recipe_gated`] derives the gated graph.
+    withheld: Vec<super::WithheldClosure>,
+    /// The proposal this node was **planned** with — the one its identity's
+    /// `semantic_digest` names and every parent's closure edge accepted.
+    /// Recipe gating replaces `plan` with a plan over a weakened proposal; this
+    /// stays, so composition can re-derive that weakening from the accepted
+    /// proposal and the withheld records and compare it against what the
+    /// dependency's receipt actually certified (see
+    /// [`authenticate_dependency_receipt`]).
+    accepted_candidate: NormalizedContract,
+}
+
+/// What recipe gating did to one dependency node, as composition needs it:
+/// the proposal every parent accepted, the proposal the node's receipt
+/// certifies, and the records that separate them.
+struct DependencyGating<'a> {
+    accepted_candidate: &'a NormalizedContract,
+    certified_candidate: &'a NormalizedContract,
+    withheld: &'a [super::WithheldClosure],
 }
 
 /// Opaque native graph plan. Plans are retained in canonical dependency-first
@@ -416,10 +438,34 @@ impl PublishedContractGraphPlan {
             .iter()
             .find(|node| &node.identity == parent)
             .ok_or(DependencyReceiptCompositionError::ParentOutsideGraph)?;
+        let gating = node
+            .dependencies
+            .iter()
+            .map(|dependency| {
+                let planned = self
+                    .nodes
+                    .iter()
+                    .find(|candidate| &candidate.identity == dependency)
+                    .ok_or_else(
+                        || DependencyReceiptCompositionError::DependencyOutsideGraph {
+                            dependency: dependency.digest().into(),
+                        },
+                    )?;
+                Ok((
+                    dependency.digest().to_owned(),
+                    DependencyGating {
+                        accepted_candidate: &planned.accepted_candidate,
+                        certified_candidate: &planned.plan.selected_candidate,
+                        withheld: &planned.withheld,
+                    },
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, DependencyReceiptCompositionError>>()?;
         VerifiedDependencyComposition::authenticate(
             &node.plan,
             &node.dependencies,
             &node.source_dependencies,
+            &gating,
             self.graph_root(),
             receipts,
             issuer,
@@ -431,6 +477,77 @@ impl PublishedContractGraphPlan {
     /// child authority only as opaque receipts and exposing no partially
     /// finalized root if any node fails.
     pub fn certify_value_only(
+        &self,
+        pin: &TypeFactsProducerPin,
+        issuer: &ConfiguredReceiptIssuer,
+        revocation_epoch: u64,
+        probes: Option<&super::ProbeHarnessConfiguration>,
+    ) -> Result<FinalizedPolicy2Graph, PublishedGraphCertificationError> {
+        self.recipe_gated(probes.map(super::ProbeHarnessConfiguration::recipe_corpus))?
+            .certify_gated_value_only(pin, issuer, revocation_epoch, probes)
+    }
+
+    /// The graph with every node's plan recipe-gated
+    /// (`CertificationPlan::recipe_gated`), node identities and graph root
+    /// unchanged.
+    ///
+    /// Node identity binds the snapshot, the resolution and the proposal's
+    /// semantic digest as *planned*; the graph root is derived from those
+    /// identities alone. Gating re-derives a node's demand graph from a
+    /// weakened proposal, which the receipt then binds through its own
+    /// `semantic_digest` and `demand_graph_root` fields — so the graph root a
+    /// case set is keyed by is the same before and after, and the receipt is
+    /// the one telling the truth about what was certified.
+    ///
+    /// Identities are kept rather than rebound to the gated digest on purpose.
+    /// A parent's closure edge names the dependency proposal it was generated
+    /// against (`accepted_contract_digest`), that digest is hashed into every
+    /// dependency demand of the parent's demand graph, and the edge lives in
+    /// the parent's authenticated closure manifest — none of which a gate on
+    /// the *dependency* may rewrite. So the accepted digest stays the identity,
+    /// and composition instead proves that what the dependency's receipt
+    /// certifies is exactly the accepted proposal with the withheld domains
+    /// opened ([`authenticate_dependency_receipt`]).
+    pub(super) fn recipe_gated(
+        &self,
+        recipe_corpus: Option<&Path>,
+    ) -> Result<Self, PublishedGraphCertificationError> {
+        let nodes = self
+            .nodes
+            .iter()
+            .map(|node| {
+                let (plan, withheld) = node
+                    .plan
+                    .recipe_gated(recipe_corpus)
+                    .map_err(
+                        |source| PublishedGraphCertificationError::RecipeGatingAtNode {
+                            node: node.identity.digest().into(),
+                            package: format!(
+                                "{}@{}",
+                                node.identity.package_name, node.identity.package_version
+                            ),
+                            source: Box::new(source),
+                        },
+                    )?
+                    .into_parts();
+                Ok(PlannedGraphNode {
+                    identity: node.identity.clone(),
+                    plan,
+                    dependencies: node.dependencies.clone(),
+                    source_dependencies: node.source_dependencies.clone(),
+                    withheld,
+                    accepted_candidate: node.accepted_candidate.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>, PublishedGraphCertificationError>>()?;
+        Ok(Self {
+            nodes,
+            root: self.root.clone(),
+            graph_root: self.graph_root.clone(),
+        })
+    }
+
+    fn certify_gated_value_only(
         &self,
         pin: &TypeFactsProducerPin,
         issuer: &ConfiguredReceiptIssuer,
@@ -581,7 +698,7 @@ impl PublishedContractGraphPlan {
             })?;
             finalized.push(FinalizedGraphNode {
                 identity: node.identity.clone(),
-                finalized: contract,
+                finalized: contract.with_withheld_closures(node.withheld.clone()),
             });
         }
         Ok(FinalizedPolicy2Graph {
@@ -597,6 +714,25 @@ impl PublishedContractGraphPlan {
 /// acquired once for evidence; receipt composition remains graph-root-local,
 /// so no child receipt is transplanted between root graphs.
 pub fn certify_published_contract_graph_case_set(
+    graphs: &[PublishedContractGraphPlan],
+    pin: &TypeFactsProducerPin,
+    issuer: &ConfiguredReceiptIssuer,
+    revocation_epoch: u64,
+    probes: Option<&super::ProbeHarnessConfiguration>,
+) -> Result<Vec<FinalizedPolicy2Graph>, PublishedGraphCertificationError> {
+    // Recipe-gated before anything is acquired, for the same reason and with
+    // the same consequence as the single-graph lane: a node's `creates`
+    // candidate with no recipe is withheld by name rather than planned into a
+    // gate that would refuse the whole case set.
+    let recipe_corpus = probes.map(super::ProbeHarnessConfiguration::recipe_corpus);
+    let gated = graphs
+        .iter()
+        .map(|graph| graph.recipe_gated(recipe_corpus))
+        .collect::<Result<Vec<_>, _>>()?;
+    certify_gated_graph_case_set(&gated, pin, issuer, revocation_epoch, probes)
+}
+
+fn certify_gated_graph_case_set(
     graphs: &[PublishedContractGraphPlan],
     pin: &TypeFactsProducerPin,
     issuer: &ConfiguredReceiptIssuer,
@@ -836,6 +972,16 @@ pub enum PublishedGraphCertificationError {
         package: String,
         #[source]
         source: super::Policy2FinalizationError,
+    },
+    #[error("recipe-gated planning failed for graph node {node} ({package}): {source}")]
+    RecipeGatingAtNode {
+        node: String,
+        package: String,
+        // Boxed: the gating error carries a whole planning error, and an
+        // unboxed one would grow every `Result` in this module past the size
+        // Clippy's `result_large_err` accepts.
+        #[source]
+        source: Box<super::RecipeGatingError>,
     },
     #[error(transparent)]
     Contract(#[from] crate::contract_interface::ContractFailure),
@@ -1316,11 +1462,14 @@ fn plan_graph_node(
         digest: String::new(),
     };
     identity.digest = node_identity_digest(&identity);
+    let accepted_candidate = plan.selected_candidate.clone();
     Ok(PlannedGraphNode {
         identity,
         plan,
         dependencies: Vec::new(),
         source_dependencies,
+        withheld: Vec::new(),
+        accepted_candidate,
     })
 }
 
@@ -1880,10 +2029,12 @@ pub struct VerifiedDependencyComposition {
 }
 
 impl VerifiedDependencyComposition {
+    #[allow(clippy::too_many_arguments)]
     fn authenticate(
         parent: &CertificationPlan,
         expected_dependencies: &[CanonicalDependencyNodeIdentity],
         source_dependencies: &[VerifiedGraphSourcePackage],
+        gating: &BTreeMap<String, DependencyGating<'_>>,
         graph_root: &str,
         receipts: &[(
             &CanonicalDependencyNodeIdentity,
@@ -1927,10 +2078,16 @@ impl VerifiedDependencyComposition {
                     dependency: dependency.digest().into(),
                 }
             })?;
+            let dependency_gating = gating.get(dependency.digest()).ok_or_else(|| {
+                DependencyReceiptCompositionError::DependencyOutsideGraph {
+                    dependency: dependency.digest().into(),
+                }
+            })?;
             authenticate_dependency_receipt(
                 parent,
                 requirement,
                 dependency,
+                dependency_gating,
                 receipt,
                 issuer,
                 revocation_epoch,
@@ -2042,25 +2199,85 @@ impl VerifiedDependencyComposition {
     }
 }
 
+/// Authenticates one dependency receipt against the edge the parent accepted.
+///
+/// # The gated dependency
+///
+/// The parent accepted the dependency's proposal as *planned* — the edge's
+/// `accepted_contract_digest`, which is also the node identity's
+/// `semantic_digest`. Recipe gating may then have withheld `creates` closure
+/// candidates from that node, so the contract its receipt certifies is a
+/// **weakening** of the accepted proposal: the same document with those domains
+/// opened. Requiring the receipt's digest to equal the accepted digest would
+/// refuse every such graph; accepting any digest would let a receipt for some
+/// other document compose. What is required instead is that the certified
+/// document be *exactly* that weakening, established three ways:
+///
+/// 1. the accepted proposal's digest is the edge's digest (the parent accepted
+///    what this node was planned with);
+/// 2. the weakening is re-derived here, independently of gating, from the
+///    accepted proposal and the node's withheld records
+///    (`super::withheld_weakening`), and its digest is what the receipt — and
+///    the receipt's own bindings — carry;
+/// 3. the plan that was actually certified is that same document, so nothing
+///    between gating and issuance substituted another.
+///
+/// A parent demand that *relied* on a withheld closure still refuses on its
+/// own: a `DependencyClosure` requirement names the semantic claim id, and the
+/// receipt's contract no longer contains it (`MissingClosedClaim`).
 fn authenticate_dependency_receipt(
     parent: &CertificationPlan,
     requirement: &DependencyCompositionRequirement,
     dependency: &CanonicalDependencyNodeIdentity,
+    gating: &DependencyGating<'_>,
     receipt: &AuthenticatedPolicy2Receipt,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
 ) -> Result<(), DependencyReceiptCompositionError> {
     let bindings = receipt.bindings();
+    if dependency.semantic_digest != requirement.dependency().accepted_contract_digest {
+        return Err(DependencyReceiptCompositionError::ReceiptMismatch {
+            field: "accepted contract digest",
+            actual: dependency.semantic_digest.clone(),
+            expected: requirement.dependency().accepted_contract_digest.clone(),
+        });
+    }
+    if gating.accepted_candidate.semantic_digest().as_str() != dependency.semantic_digest {
+        return Err(DependencyReceiptCompositionError::ReceiptMismatch {
+            field: "accepted candidate digest",
+            actual: gating.accepted_candidate.semantic_digest().as_str().into(),
+            expected: dependency.semantic_digest.clone(),
+        });
+    }
+    let certified_digest = if gating.withheld.is_empty() {
+        dependency.semantic_digest.clone()
+    } else {
+        let weakened = super::withheld_weakening(gating.accepted_candidate, gating.withheld)
+            .map_err(
+                |error| DependencyReceiptCompositionError::WithheldWeakening {
+                    dependency: dependency.digest().into(),
+                    reason: error.to_string(),
+                },
+            )?;
+        if weakened.semantic_digest() != gating.certified_candidate.semantic_digest() {
+            return Err(DependencyReceiptCompositionError::ReceiptMismatch {
+                field: "gated candidate digest",
+                actual: gating.certified_candidate.semantic_digest().as_str().into(),
+                expected: weakened.semantic_digest().as_str().into(),
+            });
+        }
+        weakened.semantic_digest().as_str().to_owned()
+    };
     let checks = [
         (
             "semantic digest",
             receipt.semantic_digest().as_str(),
-            requirement.dependency().accepted_contract_digest.as_str(),
+            certified_digest.as_str(),
         ),
         (
             "binding semantic digest",
             bindings.semantic_digest.as_str(),
-            dependency.semantic_digest.as_str(),
+            certified_digest.as_str(),
         ),
         (
             "importer",
@@ -2120,10 +2337,12 @@ fn authenticate_dependency_receipt(
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn authenticate_dependency_claim_for_test(
     parent: &CertificationPlan,
     requirement: &DependencyCompositionRequirement,
     dependency: &CanonicalDependencyNodeIdentity,
+    dependency_plan: &CertificationPlan,
     receipt: &AuthenticatedPolicy2Receipt,
     issuer: &ConfiguredReceiptIssuer,
     revocation_epoch: u64,
@@ -2136,6 +2355,11 @@ pub(super) fn authenticate_dependency_claim_for_test(
         parent,
         &requirement,
         dependency,
+        &DependencyGating {
+            accepted_candidate: &dependency_plan.selected_candidate,
+            certified_candidate: &dependency_plan.selected_candidate,
+            withheld: &[],
+        },
         receipt,
         issuer,
         revocation_epoch,
@@ -2213,6 +2437,12 @@ pub enum DependencyReceiptCompositionError {
     VerifierBuildDisagreement,
     #[error("dependency composition evidence was transplanted to another parent plan")]
     ParentTransplant,
+    #[error("canonical dependency node {dependency} is outside the planned graph")]
+    DependencyOutsideGraph { dependency: String },
+    #[error(
+        "the withheld closures of dependency node {dependency} do not re-derive a weakening of its accepted proposal: {reason}"
+    )]
+    WithheldWeakening { dependency: String, reason: String },
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]

@@ -99,6 +99,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/callback-slot-derived-store/node_modules/**
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/
 !fixtures/package-contracts/callback-slot-derived-store-server/node_modules/**
+!fixtures/package-contracts/implementation-census-creates/node_modules/
+!fixtures/package-contracts/implementation-census-creates/node_modules/**
+!fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/
+!fixtures/package-contracts/closed-domain-probe-gate/primitive-consumer/node_modules/**
 # The dependency contract in this stub is the whole point of the fixture: it
 # advertises host conditions, so it only resolves when the generator passes the
 # analyzed target's export-map conditions through. Without this exception the

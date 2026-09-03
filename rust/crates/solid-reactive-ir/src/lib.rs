@@ -3,6 +3,7 @@ mod cache;
 mod cleanup;
 pub mod contract_semantics;
 mod contracts;
+mod creates_walk;
 mod directives;
 mod effect_api;
 mod execution_role;
@@ -26,6 +27,7 @@ mod timings;
 mod upstream_compat;
 
 pub use attribution::ObligationReach;
+pub use creates_walk::CreatesProposalWalk;
 pub use owners::function_binding_name;
 pub use pipeline::{build, build_with_accepted_contracts_measured};
 
@@ -1016,6 +1018,23 @@ pub struct ContractExport {
     /// knowledge is projected into the existing analysis indexes. This field
     /// is never decoded from or encoded into a package-contract document.
     pub open_claims: BTreeSet<contract_semantics::ClaimDomain>,
+    /// Whether the *accepted* contract this summary was projected from closes
+    /// `creates` with no item.
+    ///
+    /// Only [`crate::project_accepted_export`] sets it, and only from a
+    /// normalized accepted document. `false` is the fail-closed default a
+    /// locally generated summary keeps: a summary nothing projected states
+    /// nothing about a dependency's `creates`, and the generator's proposal
+    /// walk reads it that way.
+    pub creates_closed_empty: bool,
+    /// Whether the generator's own [`crate::CreatesProposalWalk`] found no call
+    /// inside this export's implementation that a `creates: []` proposal would
+    /// contradict.
+    ///
+    /// `false` is the default and the fail-closed answer: a summary no walk
+    /// reached proposes nothing. This is a *proposal* input — the claim itself
+    /// is proved, or refused, by the certifier's implementation census.
+    pub creates_walk_clean: bool,
 }
 
 impl ContractExport {
@@ -1376,6 +1395,13 @@ pub struct Program {
     /// the attested resolution then bound or refused.
     #[serde(default)]
     pub contract_binding: ContractBindingCounts,
+    /// Which call sites forbid *proposing* a closed `creates` domain.
+    ///
+    /// Deliberately not on the wire: it is generation-time input, and its
+    /// [`Default`] refuses every span, so a deserialized `Program` proposes
+    /// nothing rather than proposing everything.
+    #[serde(skip)]
+    pub creates_proposal_walk: CreatesProposalWalk,
 }
 
 /// How contract binding answered across the program's declarations.

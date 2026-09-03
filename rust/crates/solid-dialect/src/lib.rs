@@ -598,6 +598,40 @@ pub fn canonical_primitive_name(name: &str) -> bool {
     })
 }
 
+/// Whether **some** dialect's negative authority carries a row denying
+/// `domain` for a primitive spelled `export`, with no archive identity bound.
+///
+/// # This answers a proposal question, never a proof one
+///
+/// [`primitive_performs_no_operation`] is the proof-bearing form: it takes an
+/// [`AuditedArchive`] tuple the caller has already bound field by field against
+/// an authenticated snapshot, and it is the only form a census terminator may
+/// consult. This one takes a bare **name**, so it establishes nothing about
+/// which bytes a call actually reached — a hoisted sibling installation, a
+/// user's own `createSignal`, and the audited archive all answer the same here.
+///
+/// It exists for exactly one caller: the generator deciding whether to *propose*
+/// a closed `creates` domain for a consuming package's export. A proposal is an
+/// unaccepted claim that the certifier's implementation census then has to prove
+/// against authenticated bytes (`docs/adr/0008-implementation-census-for-creates.md`),
+/// so a name-level read here can only make the generator propose something the
+/// census may refuse — it can never certify anything. The generator's use is
+/// also polarity-correct: silence means *do not propose*, so an unaudited or
+/// withheld primitive keeps the domain open rather than closing it.
+#[must_use]
+pub fn some_audit_denies_primitive(export: &str, domain: CallClaimDomain) -> bool {
+    if export.is_empty() || !canonical_primitive_name(export) {
+        return false;
+    }
+    [Version::V1, Version::V2].into_iter().any(|version| {
+        let authority = version.dialect().negative_claim_authority();
+        authority
+            .rows
+            .iter()
+            .any(|row| row.export == export && row.domain == domain)
+    })
+}
+
 /// Whether the audited contract for `archive` publishes **no** operation of
 /// `domain`'s kind for `export`.
 ///
