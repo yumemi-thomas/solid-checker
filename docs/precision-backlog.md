@@ -1,5 +1,394 @@
 # Precision backlog
 
+## A negative dialect authority about a *callee*: the census's dialect terminator exists, for `creates` and Solid 2.0 only (2026-09-03)
+
+The dialect half of the implementation census
+(`docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
+§ 4.2). `docs/adr/0007-census-dialect-axiom-tier.md` is the decision;
+`docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md` gains a dated
+section recording why objection 5 does not apply to a callee and why that ADR
+nevertheless stays `deferred`.
+
+**What changed.** `solid-dialect` gains `CallClaimDomain`, `AuditedArchive`,
+`AuditedCitation`, `NegativeClaimRow`, `DialectNegativeAuthority`, the trait
+method `Dialect::negative_claim_authority`, and three shared free functions —
+`audited_archives`, `canonical_primitive_name`, and
+`primitive_performs_no_operation`. `contract_certification/type_facts.rs` gains
+`CensusTerminator`, `AuditedArchiveDisagreement`,
+`audited_archive_for_snapshot`, `sri_prefix`, and
+`census_dialect_axiom_for_callee`. Nothing is wired:
+`require_census_decides_closure` still refuses every behavioral call domain by
+name, no fixture moved (94 coverage projects, 546 findings), and no contract
+snapshot moved (86 stable-v1 generator fixtures).
+
+### The audited tuples
+
+All four fields verbatim from the audited document's own `package` block. The
+fourth is re-derived by the verifier from the authenticated snapshot's own
+`package.json` and never read from a resolver's report; all three were confirmed
+against the installed rc.3 trees and against the audited bytes checked in under
+`benchmarks/package-contract-v2/phase0/rc3/`.
+
+| name | version | integrity | `package.json` sha256 |
+| --- | --- | --- | --- |
+| `@solidjs/signals` | `2.0.0-rc.3` | `sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==` | `22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76` |
+| `@solidjs/web` | `2.0.0-rc.3` | `sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==` | `ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e` |
+| `solid-js` | `2.0.0-rc.3` | `sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==` | `e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b` |
+
+Solid 1.x lists **no** archive at all, which is deliberately a different answer
+from "listed with no rows": the census must be able to tell "read these bytes
+and found nothing to deny" from "never looked".
+
+### The 24 rows
+
+Each citation is `<document> <summary id> <byte range of the summary object>`,
+relative to `pkg/contracts/bundled/solid-v2/`. A test re-reads each range,
+parses that slice as the summary object, asserts the document maps the export to
+that summary id, and re-derives the closure — so a row cannot drift from the
+bytes it cites. A second test derives the whole table from the documents and
+requires the shipped set to equal the derivable set minus the named
+withholding.
+
+| package | export | domain | citation(s) |
+| --- | --- | --- | --- |
+| `@solidjs/signals` | `action` | creates | `solidjs-signals.json` `summary-c094d35a…` 33507..38878 |
+| `@solidjs/signals` | `createMemo` | creates | `solidjs-signals.json` `summary-6970e6d0…` 12806..17314 |
+| `@solidjs/signals` | `createOptimistic` | creates | `solidjs-signals.json` `summary-92071bb7…` 25043..27967 |
+| `@solidjs/signals` | `createOptimisticStore` | creates | `solidjs-signals.json` `summary-034586f3…` 6985..10025 |
+| `@solidjs/signals` | `createProjection` | creates | `solidjs-signals.json` `summary-dc0413a1…` 38960..44103 |
+| `@solidjs/signals` | `createStore` | creates | `solidjs-signals.json` `summary-7080e21f…` 17396..23217 |
+| `@solidjs/signals` | `createTrackedEffect` | creates | `solidjs-signals.json` `summary-aab0640d…` 29857..33425 |
+| `@solidjs/signals` | `flush` | creates | `solidjs-signals.json` `summary-00fc668b…` 2598..6903 |
+| `@solidjs/signals` | `onSettled` | creates | `solidjs-signals.json` `summary-5a08fc89…` 10107..12724 |
+| `@solidjs/signals` | `reconcile` | creates | `solidjs-signals.json` `summary-97b25908…` 28049..29775 |
+| `@solidjs/signals` | `snapshot` | creates | `solidjs-signals.json` `summary-8911cd9f…` 23299..24961 |
+| `@solidjs/web` | `clientOnly` | creates | `solidjs-web.json` `summary-33b1f252…` 1987..9470; `solidjs-web--web-node-server.json` `summary-483140ac…` 8958..10326 |
+| `@solidjs/web` | `httpHeader` | creates | `solidjs-web.json` `summary-f9d972ed…` 22024..22535; `solidjs-web--web-node-server.json` `summary-0ffbf4d4…` 1875..4783 |
+| `@solidjs/web` | `httpStatus` | creates | `solidjs-web.json` `summary-f9d972ed…` 22024..22535; `solidjs-web--web-node-server.json` `summary-0ffbf4d4…` 1875..4783 |
+| `solid-js` | `For` | creates | `solid-js.json` `summary-78206163…` 6598..12189 |
+| `solid-js` | `Loading` | creates | `solid-js.json` `summary-7e8eaca8…` 12271..14398 |
+| `solid-js` | `Match` | creates | `solid-js.json` `summary-78206163…` 6598..12189 |
+| `solid-js` | `Repeat` | creates | `solid-js.json` `summary-78206163…` 6598..12189 |
+| `solid-js` | `Show` | creates | `solid-js.json` `summary-78206163…` 6598..12189 |
+| `solid-js` | `affects` | creates | `solid-js.json` `summary-92efacc1…` 22614..24478 |
+| `solid-js` | `createEffect` | creates | `solid-js.json` `summary-8ea1870d…` 14480..22532 |
+| `solid-js` | `isPending` | creates | `solid-js.json` `summary-d41bc9d7…` 24560..26351 |
+| `solid-js` | `latest` | creates | `solid-js.json` `summary-13d78920…` 2366..4224 |
+| `solid-js` | `refresh` | creates | `solid-js.json` `summary-49a501fb…` 4306..6516 |
+
+`For`, `Match`, `Repeat` and `Show` share one summary id, and so do `httpHeader`
+and `httpStatus` in each of their two documents: the audits key summaries by
+content digest, so byte-identical summaries are one entry.
+
+### Deliberately silent, with the reason
+
+**Whole domains.** Only `creates` ships.
+
+- **`throws`** has no variant in `CallClaimDomain` at all. It is the one call
+  claim domain `validate_call_claims` constrains to no operation kind, so
+  "publishes no operation of kind X" has no X for it, and the census plan § 4.5
+  already records that it is not a census target under version 1.
+- **`returns`** is withheld on a systematic conflict with `semantic-model.md`
+  § returns, which defines a `return` operation as "the export yielding a value
+  to its caller" and settles, **[Decision 2026-09-03]**, that only a *valueless*
+  completion is not a `return`. `@solidjs/signals`' `snapshot` is `shape:
+  "plain"` — it hands its caller a value — and closes `returns: []`; `flush`
+  and `latest` do the same. The audits are using `returns` for emission-like
+  operations (`createMemo`'s `emission`) and recording the ordinary synchronous
+  return in `shape` instead. Until that is reconciled the domain's closures
+  deny nothing this table can restate. **Open item against the audit:**
+  `flush`, `latest`, and `snapshot` should not close `returns: []` against the
+  settled decision — each hands a value to its caller, which is a `return`
+  operation by that decision's own terms, not by this table's reading of
+  `shape`. Correcting it is a re-audit with its own review, and until then the
+  domain stays withheld wholesale rather than row by row.
+- **`callbacks`** is withheld on a demonstrated counter-example. `solid-js`'s
+  `latest` closes `callbacks: []`, and `latest(fn)` calls `fn()` directly —
+  which `Solid2::callback_owners`' own cited reading of the runtime states, and
+  which § callbacks makes an `invoke` in `callbacks`. This crate already records
+  the divergence as intentional on the audit's side, in
+  `contract_schema_exemptions`: "the normalized contract models it as a read
+  operation rather than invocation of a caller-supplied callback". That is
+  exactly why the closure cannot be read as "invokes nothing". **Open item
+  against the audit:** `latest`'s `callbacks: []` closure should publish an
+  `invoke` for its direct call of its callback argument, per § callbacks;
+  recording it as a read instead is the audit's own choice, stated but not
+  reconciled with the domain's definition. Correcting it is a re-audit with its
+  own review, and until then the domain stays withheld wholesale rather than
+  row by row.
+- **`reads`, `writes`, `invalidates`, `cleanups`, `disposals`** are withheld
+  because nothing has audited them for this purpose. No counter-example was
+  found and no positive review was performed; silence is the only honest
+  default. `reads` is the next one the census needs (plan § 4.4).
+
+**A whole dialect.** The Solid 1.x table is empty, and this is the finding worth
+carrying forward.
+
+The nineteen `pkg/contracts/bundled/solid-v1/*.json` documents *do* close
+`creates: []` — for all 129 exports of `solid-js@1.9.14`, across every artifact
+case — and turning that into rows would have been one mechanical extraction.
+**That closure is not an audit.** The hand-audited 1.9.14 contract before commit
+`474c101f` ("migrate package contracts to normalized v2", 2026-08-28) was
+schema 1, and schema 1 had **no claim domains at all**: each summary carried
+`kind`, an optional `returns` shape, and `callbacks`. `dce2ffc5` ("Complete
+Solid 1.x contract audit", 2026-08-25) audited that surface. So the
+`creates: []` **closed** in today's documents was introduced *by the migration*,
+over a domain the audit never examined — the negative claim manufactured from
+missing knowledge that ADR 0005 names as inadmissible ("Closing it because no
+requirement was derived manufactures a negative claim from missing knowledge.
+Only a hand audit can assert that closure").
+
+Two structural tells confirm it, either alone sufficient:
+
+- Every solid-v1 summary closes a subset of `["callbacks", "reads", "creates",
+  "returns"]` — 83 close all four, and six (`mergeProps`'s and
+  `createResource`'s summaries) close only `["creates", "reads", "returns"]` —
+  and **no** solid-v1 summary ever closes `writes`, `invalidates`, `throws`,
+  `cleanups` or `disposals`: precisely the four kinds the generator emitted and
+  the five it hard-wired to `Unknown` (census plan § 1.1). "Exactly" overstated
+  the first half in an earlier version of this note; the argument itself rests
+  on the second.
+- `createSignal`'s summary carries `shape: "callable"`, and `createSignal<T>()`
+  returns `Signal<T>`, a two-element tuple. A hand audit of the returned shape
+  does not make that mistake.
+
+**Open item, against the audit rather than the verifier.** A 1.x `creates` audit
+does not exist, and the migrated closure should not be read as one elsewhere
+either. `phase21/2026-09-03-solid-js-self-certification-diagnosis.md` leans on
+`solid-root-browser-production.json`'s `reads: []` and `creates: []` closures as
+authority for calling the *generated* proposal's read and owner-requirement
+claims false. Its conclusion — that `solid-js@1.9.14` must not certify as
+generated — is unaffected, because it rests independently on the path-bootstrap
+provenance of those generated claims and on 110 demands terminating in
+non-exported helpers. But the sentence "the audited authority for those exact
+bytes closes as absent" is stronger than the provenance supports for `reads` and
+`creates` specifically, and a slice that wants to *use* those closures needs the
+audit first.
+
+**Individual exports, for `creates`.**
+
+- **`@solidjs/web`'s `render`** publishes `register-delegation`, a `create`
+  naming `browser-root`. A published operation is the opposite of a negative
+  row.
+- **`@solidjs/web`'s `hydrate`** *is* closed `creates: []` in
+  `solidjs-web.json`, and the row is **withheld anyway** — the one place this
+  table departs from the bytes, and it departs by refusing rather than by
+  asserting. rc.3's `hydrate` (`@solidjs/web/dist/dev.js:1171`) reaches `render`
+  on every path: the fast `globalThis._$HY.done` return (`:1174`), both arms of
+  the module-preload continuation (`:1233`, `:1241`), and the ordinary
+  `try`/`finally` return (`:1248`). And `render` calls
+  `registerDelegatedRoot(element)` (`:355`) before it opens its root or invokes
+  the caller's `code`, unconditionally — the exact act the sibling `render`
+  summary in the same document models as `register-delegation`. The audit therefore contradicts itself about two
+  functions in one document, and the published bytes side with `render`.
+  Granting the row would prove a false claim. **Open item against the audit:**
+  `@solidjs/web@2.0.0-rc.3`'s `hydrate` summary should publish the
+  registration, as `render`'s does; correcting it is a re-audit with its own
+  review, and until then the row stays withheld and pinned by a test in both
+  crates.
+- **`@solidjs/web`'s `createServerReference`** publishes `register-reference`
+  in the `node-server` condition only and `transform-reference` in both
+  server-function conditions (`solidjs-web--server-functions-node-server.json`
+  closes `creates: ["register-reference", "transform-reference"]`;
+  `solidjs-web--server-functions-browser-client.json` closes `creates:
+  ["transform-reference"]`). It is also not a canonical primitive of this
+  dialect, so it could not be a row either way.
+- **Every audited-archive export outside its audited document's summaries.**
+  `solid-v2/solid-js.json` covers ten exports and `solidjs-signals.json`
+  twelve, so `createSignal`, `createRoot`, `untrack`, `onCleanup`,
+  `createContext`, `runWithOwner`, `resolve`, `lazy`, `children`, `merge`,
+  `omit`, `deep`, `dynamic`, `mapArray`, `repeat`, `Switch`, `Errored`,
+  `createOwner`, `createReaction`, `createRenderEffect`, `createRevealOrder`,
+  `createErrorBoundary`, `createLoadingBoundary`, `getOwner`, `useContext` and
+  `useHead` — 26 exports, not 25 — have no row. The archive is audited; those
+  exports are not, and a census that resolves a callee to one of them refuses.
+- **`isEqual`, `applyRef`, `renderToString`, `renderToStream`.** All four close
+  `creates: []` in the audits and none is a canonical primitive of the 2.0
+  vocabulary, so the table has nothing to key a row on.
+
+### Stated approximations
+
+- **Conditions.** The audits captured `@solidjs/web`'s `browser/development`
+  and `node/server` conditions, not `browser/production`. A consumer resolving
+  to an uncaptured condition of the *same* tarball receives the row on the
+  strength of the captured ones: the identity gate binds the archive, not the
+  condition. Closing that gap needs a per-condition audit.
+- **Entrypoints and artifact cases.** The same gap, one level up: the identity
+  gate binds the archive tuple, and nothing in it distinguishes which of the
+  package's own subpath entrypoints the callee's declaration came through.
+  `@solidjs/web@2.0.0-rc.3`'s `package.json` `exports` names 13 real subpaths
+  (`.`, `./jsx-runtime`, `./jsx-dev-runtime`, `./storage`, `./serialization`,
+  `./serialization/decode`, `./server-functions`, `./server-functions/server`,
+  `./server-functions/client`, `./server-functions/rich-args`, `./frames`,
+  `./frames/server`, `./frames/client`, plus the typed-only `./types/*`
+  glob) and the audited documents capture artifact cases for four of them;
+  `solid-js@2.0.0-rc.3` has `./refresh` besides `.`, uncaptured. A callee whose
+  declaration resolves through an uncaptured entrypoint of an otherwise audited
+  archive still receives the row, on the strength of a different entrypoint's
+  audit, for the same reason the condition approximation above does.
+- **Export identity.** The tier binds the export key by requiring the resolved
+  declaration's own `name` to equal the resolved `target_name` and to be a
+  canonical primitive spelling, then admits any file under the archive's root
+  that carries a matching declaration — `snapshot.read(relative)?` checks
+  archive membership, nothing entrypoint-specific. **This is not the tightest
+  binding available**, contrary to what an earlier version of this note
+  claimed: `resolve_snapshot_export` (`contract_certification.rs:1789`) and
+  `export_bindings.rs`'s `verify_binding`/`verify_binding_names` already bind a
+  specific entrypoint to its declaration elsewhere in this crate. This tier
+  does not consult that binding, so the real behavior is an **unstated
+  approximation**: any same-named canonical-primitive declaration anywhere in
+  the archive receives the row, whichever entrypoint the compiler actually
+  resolved through. No live hazard in today's set — every extra entrypoint of
+  the three audited archives was checked, and none redeclares a same-named
+  canonical primitive over different bytes. Closing the approximation for real
+  needs the tier to consult the entrypoint binding, which this pass does not
+  attempt.
+
+  A re-export chain does not "rename along the way and refuse", the earlier
+  wording here. What it does is **re-key to a different archive entirely** when
+  the chain crosses a package boundary: gate 5 strips the declaration's own
+  `source_file` to *whichever* authenticated root contains it, so the lookup
+  simply asks a different archive's table — see "Four rows dead via
+  cross-archive re-export" below, which is exactly that case and is not
+  hypothetical.
+- **Four rows dead via cross-archive re-export.** `solid-js@2.0.0-rc.3`'s
+  `types/index.d.ts:1` is `export { …, affects, …, isPending, …, latest, …,
+  refresh, … } from "@solidjs/signals";` — a pure re-export, not a
+  re-declaration. A consumer that writes `import { latest } from "solid-js"`
+  therefore has its declaration resolve into `@solidjs/signals`' own tree, not
+  `solid-js`'s: gate 5 strips `declaration.source_file` to the
+  `@solidjs/signals` root, and gate 8 asks *that* archive's table for a
+  `latest` row. `solidjs-signals.json` audits twelve exports — `action`,
+  `createMemo`, `createOptimistic`, `createOptimisticStore`,
+  `createProjection`, `createStore`, `createTrackedEffect`, `flush`, `isEqual`,
+  `onSettled`, `reconcile`, `snapshot` — and none of them is `affects`,
+  `isPending`, `latest` or `refresh`. So the rows `solid-js.json` carries for
+  those four names (`### The audited citations` above) are real, correctly
+  audited, and **structurally unreachable through the natural import path**:
+  the only way to reach them would be an import that resolves its declaration
+  inside `solid-js`'s own `types/index.d.ts` rather than following the
+  re-export, which TypeScript's declaration resolution does not do. This stays
+  open until either `@solidjs/signals` is audited for these four names
+  directly (the archive the declaration actually resolves into), or the tier
+  is changed to consult the *written* entrypoint's own binding rather than the
+  resolved declaration's archive — the latter is the tighter binding named
+  above, and this pass does not attempt it.
+
+### The tier's signature and its refusal conditions
+
+```rust
+fn census_dialect_axiom_for_callee(
+    call: &typefacts::ImplementationCall,
+    domain: solid_dialect::CallClaimDomain,
+    floor: ReachabilityFloor,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Option<CensusTerminator>
+```
+
+`certified` is the caller's `plan.snapshot`, taken as a snapshot rather than as
+a `CertificationPlan` so the identity gate is reachable from a unit test — ADR
+0005 precondition 4 records that nothing in this repository builds a
+`CertificationPlan`. `Some` requires all nine of the following, each a separate
+`None` and each pinned by a test:
+
+1. `floor == ReachabilityFloor::MayExecute`, and `floor.admits(call.reach)`. A
+   closed domain asserts a zero *upper* bound; a `Reachable` floor asserts a
+   lower bound above zero, which no negative authority can answer (ADR 0005
+   precondition 3). Refusing here is correct polarity, not conservatism: a
+   negative table can never discharge a min-≥-1 claim.
+2. `call.kind` is `Call` or `Construct`. An absent kind deserializes to
+   `Unknown` and refuses: absence is never read as "call".
+3. `call.target` and `call.target_name` are non-empty, and `call.declaration` is
+   present with a non-empty `source_file` and a `name` equal to `target_name`.
+4. `target_name` is a canonical primitive spelling of some dialect.
+5. `declaration.source_file` strips to an authenticated **dependency** snapshot
+   source root, through the same `strip_materialized_source_root` the source
+   census uses, *and* the remainder is a member of that archive
+   (`snapshot.read(relative)?`), so a file placed under the root that
+   the archive does not contain refuses. `target_module` — the *written import
+   specifier* — is never consulted, and a test asserts it says `solid-js` on
+   every refusing case.
+6. That root's archive is not the archive under certification (neither
+   `snapshot.root()` nor `provenance_root()` equal). A callee inside the
+   artifact being certified is the self axiom ADR 0005 defers.
+7. The artifact under certification is not itself an audited archive of any
+   dialect — `audited_archive_for_snapshot(certified).is_ok()` refuses,
+   independently of gate 6 and of which archive the callee resolves into. Gate
+   6 alone would admit `solid-js@2.0.0-rc.3` certifying against a callee in
+   `@solidjs/signals@2.0.0-rc.3`: different snapshots, different roots, both
+   audited — the live phase-21 self-certification configuration. See ADR 0007,
+   "Why an audited archive may not answer about another audited archive".
+8. That root's snapshot equals an audited tuple in **all four** fields.
+   `audited_archive_for_snapshot` names the disagreement —
+   `AuditedArchiveDisagreement::{Name, Version, Integrity, Manifest}` — so a
+   coordinate match over other bytes refuses and says which field disagreed
+   (ADR 0005 precondition 1).
+9. `primitive_performs_no_operation(archive, export, domain)`, which requires
+   cross-dialect agreement over the *exact archive tuple* (not merely a shared
+   package name — see "Cross-dialect agreement is keyed by the archive, not its
+   name" below) and treats silence as "not modelled".
+
+Witness: `census-dialect-axiom:<pkg>@<ver>#<sri-prefix>:<export>:<domain>`,
+where the prefix is the SRI's first 23 characters (`sha512-` plus sixteen base64
+digits) — a label that makes two witnesses over different bytes visibly
+different, not a re-verification, since gate 8 already bound the full integrity.
+
+### Cross-dialect agreement is keyed by the archive, not its name
+
+`solid_dialect::primitive_performs_no_operation` took a bare package name
+through this slice's first pass, and the union over dialects filtered by
+`archives_named(name).next()` — "does this authority list an archive of this
+NAME" — before consulting `denies()`. That is weaker than the identity gate
+above it: gate 8 has already bound the caller to the *exact* archive tuple, so
+the function receiving only a name re-opened a name-keyed hole one call later.
+Concretely: `solid-js` is a name both dialects could audit, at different
+versions. Had 1.x ever listed *any* archive named `solid-js` — even one
+neither integrity- nor version-matched to the 2.0.0-rc.3 tuple the caller had
+already bound — the old union would have pulled that unrelated authority into
+the `AND`, and its silence (or an unrelated `denies` answer) about its own
+different bytes would have vetoed every valid 2.0 row about `solid-js`,
+purely because the names matched.
+
+Fixed by changing the function to take the bound `&AuditedArchive` itself:
+an authority now participates only when its own `archives` list contains this
+*exact* tuple (`authority.archives.contains(archive)`), never a same-named
+one at another version or integrity. The union's meaning is now "which
+dialects audited *this archive*", not "which dialects audited *this name*".
+`solid-dialect/src/lib.rs`'s
+`one_dialect_answers_for_a_shared_archive_name_only_while_the_other_is_absent`
+test pins the corrected rule against a hand-built pair of same-named,
+different-tuple archives.
+
+### What is still refused, and by what
+
+`require_census_decides_closure` is untouched, so every behavioral call domain
+still refuses by name and no row's verdict moved. Beyond that, once the census
+slice consumes this terminator:
+
+- a Solid 1.x callee terminates nothing, for the provenance reason above;
+- a callee in any of the seven withheld domains terminates nothing;
+- `render`, `hydrate`, and every unaudited export of an audited archive
+  terminate nothing;
+- a callee whose declaration does not strip to an authenticated dependency root
+  terminates nothing, however its import was spelled;
+- a corpus fixture exercising `from_plan` is owed at that point, because only
+  then can a row's verdict move; the identity gate itself is already
+  unit-tested against the audited `package.json` bytes.
+
+### Re-measured: 357 verified / 40 exact refusals / 21 not attempted, no verdict moved
+
+The complete 418-probe corpus was re-run with the dialect tables and the
+callee tier compiled in (`make ecosystem-benchmark`; report SHA-256
+`219838b8c7a82dfbac7a8e8b7b706be84857e6f44304f53d0d9e6cf427ce7442`). Every
+verdict and demand digest is identical to the committed report and the split
+is unchanged at 306 verified-complete / 51 verified-partial. That is the
+expected result: `census_dialect_axiom_for_callee` has no caller in the
+certifier yet, so no demand consults the tables, and `exportsProven` remains 0
+of 3410. When the census slice wires it, the table's reach is bounded by what
+this slice found: negative authority exists for 24 Solid 2.0.0-rc.3 primitives
+and the `creates` domain only, and for no Solid 1.x primitive at all.
+
 ## The producer names the invoking forms the call census does not record, and can reach a module-local declaration; no consumer reads either yet (2026-09-03)
 
 The producer half of the implementation census

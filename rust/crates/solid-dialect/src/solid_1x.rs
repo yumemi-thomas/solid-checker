@@ -12,13 +12,60 @@
 //! export with nothing to say about reactivity, and it is not here.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, ReactiveRole, ResultSlot,
-    TrackedCallbackTiming, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, Dialect, DialectNegativeAuthority, Execution, Primitive,
+    ReactiveRole, ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 /// Solid 1.x.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Solid1x;
+
+/// **No rows, and no audited archive.** This dialect denies nothing about
+/// `solid-js@1.9.14`, deliberately, and the reason is provenance rather than
+/// effort.
+///
+/// The nineteen `pkg/contracts/bundled/solid-v1/*.json` documents *do* close
+/// `creates: []` — for all 129 exports, across every artifact case — and it
+/// would be one mechanical extraction to turn that into rows. That closure is
+/// not an audit.
+///
+/// What the audit actually said is checked in as history. The hand-audited
+/// `solid-js@1.9.14` contract before commit `474c101f` ("migrate package
+/// contracts to normalized v2", 2026-08-28) was schema 1, and schema 1 had
+/// **no claim domains at all**: each summary carried `kind`, an optional
+/// `returns` shape, and `callbacks`, and nothing else. `dce2ffc5` ("Complete
+/// Solid 1.x contract audit", 2026-08-25) audited that surface. So the
+/// `creates: []` **closed** in today's documents was introduced *by the
+/// migration*, over a domain the audit never examined — which is the negative
+/// claim manufactured from missing knowledge that
+/// `docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md` names as
+/// inadmissible ("Closing it because no requirement was derived manufactures a
+/// negative claim from missing knowledge. Only a hand audit can assert that
+/// closure").
+///
+/// Two structural tells confirm it, either alone sufficient:
+///
+/// - Every solid-v1 summary closes a subset of `["callbacks", "reads",
+///   "creates", "returns"]` — 83 close all four, and six (`mergeProps`'s and
+///   `createResource`'s summaries) close only `["creates", "reads",
+///   "returns"]` — and *no* solid-v1 summary ever closes `writes`,
+///   `invalidates`, `throws`, `cleanups`, or `disposals`. That is precisely
+///   the four kinds the generator emitted and the five it hard-wired to
+///   `Unknown`
+///   (`phase21/2026-09-03-implementation-census-plan.md` § 1.1); "exactly"
+///   overstated the first half, but the argument itself survives on the
+///   second.
+/// - `createSignal`'s summary carries `shape: "callable"`, and
+///   `createSignal<T>()` returns `Signal<T>`, a two-element tuple. A hand
+///   audit of the returned shape does not make that mistake.
+///
+/// Reviving this table therefore needs a 1.x `creates` audit, not a table
+/// edit. Until then the census refuses every 1.x callee by name, which is the
+/// honest answer; the finding is recorded in `docs/precision-backlog.md`.
+static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
+    archives: &[],
+    rows: &[],
+};
 
 /// Source: `docs/solid-1x-api-surface.md`, sections `solid-js`,
 /// `solid-js/store` and the control-flow components. Names the checker does
@@ -125,6 +172,12 @@ impl Dialect for Solid1x {
     /// no diagnostic reads at runtime.
     fn bundled_contract_label(&self) -> &'static str {
         "solid-v1/solid-js.json"
+    }
+
+    /// Empty — see [`NEGATIVE_AUTHORITY`] for why the solid-v1 documents'
+    /// `creates: []` closures are not an audit.
+    fn negative_claim_authority(&self) -> &'static DialectNegativeAuthority {
+        &NEGATIVE_AUTHORITY
     }
 
     fn primitive(&self, name: &str) -> Option<Primitive> {

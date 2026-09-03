@@ -98,7 +98,11 @@ describe("Phase 19 authenticated proof-policy baseline", () => {
       // package, and @solidjs/router-shaped, the same bytes under a name the
       // dialect does not own, which pins that the decision is by package name
       // and not by path.
-      stableMainDocuments: 176,
+      // 177 adds the uncensused-invoking-forms fixture's main document,
+      // tracked by the producer slice (484d50df): it pins that the invoking-
+      // form classifier runs over every marker kind a published module can
+      // express without moving the contract.
+      stableMainDocuments: 177,
       activePolicy2Receipts: 0,
       activePolicy1Receipts: 0,
       baselineReceipts: 73,

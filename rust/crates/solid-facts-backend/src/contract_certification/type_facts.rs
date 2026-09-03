@@ -3879,6 +3879,229 @@ fn argument_slot_is_proven_invoking(call: &typefacts::ImplementationCall, argume
         || callee_pending_invocation_holds(call, argument, false)
 }
 
+/// A terminator for an implementation census of one call claim domain: an
+/// audited dialect authority answers, for this exact callee, that it publishes
+/// no operation of the domain's kind.
+///
+/// Carries only its witness site, because that is the whole of what it
+/// contributes: the census's own refusal-by-name is what happens without one,
+/// and a terminator is never a positive fact about anything.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CensusTerminator {
+    /// `census-dialect-axiom:<pkg>@<ver>#<sri-prefix>:<export>:<domain>`.
+    witness_site: String,
+}
+
+/// Which identity field disagreed when an authenticated snapshot matched an
+/// audited archive's *name* but not the rest of its tuple.
+///
+/// Precondition 1 of `docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md`
+/// requires the gate to say which field disagreed, mirroring the lock replay in
+/// `contract_certification/dependencies.rs`. The terminator itself answers
+/// `Option`, because a disagreement makes the census refuse the domain by name
+/// rather than report a certification error of its own; this is where the
+/// information exists, so this is where it is named.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AuditedArchiveDisagreement {
+    /// No dialect audited an archive under this name at all.
+    Name,
+    Version,
+    Integrity,
+    /// The archive's own `package.json` digest, re-derived from the
+    /// authenticated snapshot rather than read from a resolver's report.
+    Manifest,
+}
+
+/// The audited archive tuple this authenticated snapshot *is*, or the field
+/// that disagreed.
+///
+/// Every field is compared, and the manifest digest is computed from the
+/// snapshot's own bytes. A snapshot that matches the coordinate but not the
+/// integrity refuses here, which is the failure mode ADR 0005 objection 1
+/// records: a registry serving a self-consistent `name@version` would otherwise
+/// receive the answer on bytes nobody in this repository ever read.
+fn audited_archive_for_snapshot(
+    snapshot: &super::ArtifactSnapshot,
+) -> Result<&'static solid_dialect::AuditedArchive, AuditedArchiveDisagreement> {
+    let candidates = solid_dialect::audited_archives(snapshot.package_name());
+    if candidates.is_empty() {
+        return Err(AuditedArchiveDisagreement::Name);
+    }
+    let manifest_sha256 = snapshot
+        .read("package.json")
+        .map(|bytes| format!("{:x}", Sha256::digest(bytes)));
+    let mut disagreement = AuditedArchiveDisagreement::Version;
+    for archive in candidates {
+        if archive.version != snapshot.package_version() {
+            continue;
+        }
+        disagreement = AuditedArchiveDisagreement::Integrity;
+        if archive.integrity != snapshot.package_integrity() {
+            continue;
+        }
+        disagreement = AuditedArchiveDisagreement::Manifest;
+        if manifest_sha256.as_deref() != Some(archive.manifest_sha256) {
+            continue;
+        }
+        return Ok(archive);
+    }
+    Err(disagreement)
+}
+
+/// The first 23 characters of an SRI — `sha512-` plus sixteen base64 digits.
+///
+/// A witness site is compared and stored, not re-verified, so it carries a
+/// prefix rather than the whole 95-character digest. The identity gate already
+/// bound the full integrity; this is a label that makes two witnesses over
+/// different bytes visibly different.
+fn sri_prefix(integrity: &str) -> &str {
+    integrity
+        .char_indices()
+        .nth(23)
+        .map_or(integrity, |(index, _)| &integrity[..index])
+}
+
+/// A peer of [`argument_slot_is_proven_invoking`]'s Tier A: same position in
+/// the tier list, same membership-reviewed discipline, same refusal of anything
+/// unlisted — applied to a **callee** and to a **negative** question.
+///
+/// Answers `Some` only when an audited dialect authority denies, for exactly
+/// these published bytes, that this callee publishes any operation of
+/// `domain`'s kind. Every one of the following must hold, and each is a
+/// separate `None`:
+///
+/// 1. `floor == MayExecute`, and the call's own reachability is admitted by it.
+///    A closed domain asserts a zero *upper* bound, so anything that may
+///    execute bears on it; a `Reachable` floor asserts a lower bound above
+///    zero, which no negative authority can answer
+///    (`phase21/2026-09-03-implementation-census-plan.md` § 3 item 2, and ADR
+///    0005 precondition 3). Refusing a `Reachable` floor is correct polarity,
+///    not conservatism: a negative table can never discharge a min-≥-1 claim,
+///    whatever the archive or the domain.
+/// 2. The site is a call or a construction. An absent kind deserializes to
+///    `CallKind::Unknown` and is refused: absence is never read as "call".
+/// 3. The callee is resolved — a symbol, a name, and a `declaration` with a
+///    source file — and the declaration's own name is the resolved name, so the
+///    export key the table is asked about is the declaration's identity rather
+///    than an import spelling.
+/// 4. The resolved name is a canonical primitive spelling of some dialect.
+/// 5. The declaration's source file strips to an authenticated **dependency**
+///    snapshot source root, and the remainder is a member of that archive. This
+///    is the half that makes the premise an identity claim: `target_module` is
+///    the *written import specifier* and is never consulted here, so
+///    `import { render } from "solid-js"` resolving to a hoisted sibling
+///    installation cannot reach the table, and neither can a file placed under
+///    the root that the archive does not contain.
+/// 6. That root's archive is not the archive under certification — `certified`
+///    is the caller's `plan.snapshot`, taken as a snapshot rather than as a
+///    plan so this gate is reachable from a unit test; ADR 0005 precondition 4
+///    records that nothing in this repository builds a `CertificationPlan`. A
+///    callee
+///    inside the artifact being certified is the *self* axiom ADR 0005 defers,
+///    whose objection 5 — the demand and the discharge deriving from the same
+///    dialect rows — is fatal. Answering about a callee raises no such
+///    circularity: the axiom discharges nothing about the export under
+///    certification.
+/// 7. The artifact under certification is not *itself* an audited archive of
+///    any dialect, whatever the callee resolves into. Gate 6 alone lets
+///    `solid-js@2.0.0-rc.3` certify with a callee resolving into
+///    `@solidjs/signals@2.0.0-rc.3` through: the two are different snapshots
+///    with different roots, both audited by this dialect, and that is exactly
+///    the live phase-21 self-certification configuration ADR 0005 objection 5
+///    is about. This gate is a consumer-side restriction: inside the
+///    dialect-defining archives the runtime *is* the definition, and only the
+///    tracking-state proof mode may decide there.
+/// 8. That root's snapshot equals an audited archive tuple in **all four**
+///    fields — name, version, integrity, and the archive's own `package.json`
+///    digest re-derived from the snapshot.
+/// 9. The dialects' negative table denies the domain for `(archive, export)`,
+///    with cross-dialect agreement, and silence is never "no".
+///
+/// # Not wired into the census
+///
+/// `require_census_decides_closure` still refuses every behavioral call domain
+/// by name. This function supplies the terminator that refusal is waiting on;
+/// consuming it is the census slice's work
+/// (`phase21/2026-09-03-implementation-census-plan.md` § 4.3).
+#[allow(dead_code)]
+fn census_dialect_axiom_for_callee(
+    call: &typefacts::ImplementationCall,
+    domain: solid_dialect::CallClaimDomain,
+    floor: ReachabilityFloor,
+    certified: &super::ArtifactSnapshot,
+    roots_longest_first: &[SnapshotSourceRoot<'_>],
+) -> Option<CensusTerminator> {
+    if floor != ReachabilityFloor::MayExecute || !floor.admits(call.reach) {
+        return None;
+    }
+    if !matches!(call.kind, CallKind::Call | CallKind::Construct) {
+        return None;
+    }
+    if call.target.is_empty() || call.target_name.is_empty() {
+        return None;
+    }
+    let declaration = call.declaration.as_ref()?;
+    if declaration.source_file.is_empty()
+        || declaration.name.as_ref() != call.target_name.as_ref()
+        || !solid_dialect::canonical_primitive_name(&call.target_name)
+    {
+        return None;
+    }
+
+    let source_file = declaration.source_file.replace('\\', "/");
+    // Clones every root's path on every call, because
+    // `strip_materialized_source_root` takes `&[String]` rather than
+    // `&[&str]`. This tier runs once per resolved callee per domain, so a
+    // future allocation concern if the census turns out hot; not addressed
+    // here since it changes a shared helper's signature.
+    let root_paths = roots_longest_first
+        .iter()
+        .map(|root| root.path.clone())
+        .collect::<Vec<_>>();
+    let (root_index, relative) = strip_materialized_source_root(&source_file, &root_paths)?;
+    let root = roots_longest_first.get(root_index)?;
+    if !root.dependency {
+        return None;
+    }
+    let snapshot = root.snapshot;
+    // The declaration has to be a member of the authenticated archive, not
+    // merely a path under its root. The source census already refuses a
+    // producer-consulted file that is not in the snapshot; re-asking here keeps
+    // this tier's own premise complete rather than inherited.
+    snapshot.read(relative)?;
+    if snapshot.root() == certified.root()
+        || snapshot.provenance_root() == certified.provenance_root()
+    {
+        return None;
+    }
+    // The certified artifact itself may not be answered *about* by this axiom,
+    // even from a different archive's rows. Certifying `solid-js@2.0.0-rc.3`
+    // with a callee resolving into `@solidjs/signals@2.0.0-rc.3` — both audited
+    // by this dialect, but different snapshots and different roots — passes
+    // the root-equality gate above and is exactly the live phase-21
+    // self-certification configuration ADR 0005 objection 5 is about. Inside
+    // the dialect-defining archives the runtime IS the definition; only the
+    // tracking-state proof mode may decide there, never this negative table.
+    if audited_archive_for_snapshot(certified).is_ok() {
+        return None;
+    }
+
+    let archive = audited_archive_for_snapshot(snapshot).ok()?;
+    if !solid_dialect::primitive_performs_no_operation(archive, &call.target_name, domain) {
+        return None;
+    }
+    Some(CensusTerminator {
+        witness_site: format!(
+            "census-dialect-axiom:{}@{}#{}:{}:{}",
+            archive.name,
+            archive.version,
+            sri_prefix(archive.integrity),
+            call.target_name,
+            domain.wire_name()
+        ),
+    })
+}
+
 fn require_signature_parameter_callable(
     signature: &typefacts::SelectedSignature,
     source: &ValueSource,
@@ -13807,5 +14030,675 @@ mod tests {
         )
         .expect("a parameter-rooted input has a root");
         assert_eq!((index, path), (1, vec!["of".to_owned()]));
+    }
+
+    /// The exact audited `package.json` bytes of one rc.3 archive.
+    ///
+    /// Checked in under `benchmarks/package-contract-v2/phase0/rc3/`, and
+    /// digest-equal to the `package.manifest.sha256` the bundled contract for
+    /// the same archive carries. Reading them is what makes the four-field
+    /// identity gate reachable from a unit test at all: the fourth field is a
+    /// digest of these bytes, and no synthesised payload can produce it.
+    fn audited_rc3_manifest(directory: &str) -> Vec<u8> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("benchmarks/package-contract-v2/phase0/rc3")
+            .join(directory)
+            .join("package.json");
+        std::fs::read(&path).unwrap_or_else(|error| {
+            panic!(
+                "the audited rc.3 manifest {} is not readable: {error}",
+                path.display()
+            )
+        })
+    }
+
+    /// A snapshot carrying the archive's `package.json` and the two
+    /// declaration files these tests resolve callees into. Both declaration
+    /// members are present because the tier requires the stripped declaration
+    /// path to be a member of the authenticated archive.
+    fn archive_snapshot(
+        name: &str,
+        version: &str,
+        integrity: &str,
+        manifest: &[u8],
+        root: &str,
+    ) -> super::super::ArtifactSnapshot {
+        super::super::ArtifactSnapshot {
+            package_name: name.into(),
+            package_version: version.into(),
+            package_integrity: integrity.into(),
+            files: std::sync::Arc::new(
+                [
+                    (
+                        "package.json".to_owned(),
+                        std::sync::Arc::<[u8]>::from(manifest),
+                    ),
+                    (
+                        "dist/types/signals.d.ts".to_owned(),
+                        std::sync::Arc::<[u8]>::from(
+                            &b"export declare function createTrackedEffect(): void;"[..],
+                        ),
+                    ),
+                    (
+                        "types/index.d.ts".to_owned(),
+                        std::sync::Arc::<[u8]>::from(
+                            &b"export declare function render(): void;"[..],
+                        ),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: root.into(),
+            provenance_root: format!("{root}-archive"),
+        }
+    }
+
+    const SIGNALS_INTEGRITY: &str = "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==";
+    const WEB_INTEGRITY: &str = "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==";
+    const SOLID_JS_INTEGRITY: &str = "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==";
+
+    /// A call whose callee resolves into `@solidjs/signals`' installed tree.
+    fn signals_call(export: &str, overrides: serde_json::Value) -> typefacts::ImplementationCall {
+        let source_file = "/project/node_modules/@solidjs/signals/dist/types/signals.d.ts";
+        let mut value = json!({
+            "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 100, "endByte": 140},
+            "reach": "reachable",
+            "kind": "call",
+            "target": format!("symbol:{export}"),
+            "targetName": export,
+            "targetModule": "solid-js",
+            "declaration": {
+                "symbol": format!("symbol:{export}"),
+                "name": export,
+                "kind": "FunctionDeclaration",
+                "sourceFile": source_file,
+                "location": {"path": source_file, "startByte": 10, "endByte": 20},
+            },
+        });
+        let object = value.as_object_mut().expect("an object");
+        for (key, replacement) in overrides.as_object().expect("an object") {
+            if replacement.is_null() {
+                object.remove(key);
+            } else {
+                object.insert(key.clone(), replacement.clone());
+            }
+        }
+        serde_json::from_value(value).expect("a valid call")
+    }
+
+    /// The audited-tuple gate compares every field and names the one that
+    /// disagreed, mirroring the lock replay's discipline.
+    #[test]
+    fn audited_archive_lookup_names_the_disagreeing_identity_field() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let exact = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        assert_eq!(
+            audited_archive_for_snapshot(&exact).map(|archive| archive.name),
+            Ok("@solidjs/signals")
+        );
+
+        for (why, snapshot, expected) in [
+            (
+                "an unaudited package name",
+                archive_snapshot(
+                    "@solidjs/router",
+                    "2.0.0-rc.3",
+                    SIGNALS_INTEGRITY,
+                    &manifest,
+                    "/snapshot/router",
+                ),
+                AuditedArchiveDisagreement::Name,
+            ),
+            (
+                "another prerelease of the audited archive",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.5",
+                    SIGNALS_INTEGRITY,
+                    &manifest,
+                    "/snapshot/rc5",
+                ),
+                AuditedArchiveDisagreement::Version,
+            ),
+            (
+                "the audited coordinate over other bytes",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.3",
+                    "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+                    &manifest,
+                    "/snapshot/mirror",
+                ),
+                AuditedArchiveDisagreement::Integrity,
+            ),
+            (
+                "a rewritten package manifest",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.3",
+                    SIGNALS_INTEGRITY,
+                    b"{\"name\":\"@solidjs/signals\"}",
+                    "/snapshot/rewritten",
+                ),
+                AuditedArchiveDisagreement::Manifest,
+            ),
+        ] {
+            assert_eq!(
+                audited_archive_for_snapshot(&snapshot).map(|archive| archive.name),
+                Err(expected),
+                "{why} must refuse and name its field"
+            );
+        }
+    }
+
+    /// The terminator, and every gate that must refuse it.
+    ///
+    /// The one that matters most is the last: `targetModule` says `solid-js`
+    /// for every case here, and it is never what the gate consults. A callee
+    /// whose declaration does not lie under an authenticated dependency root
+    /// gets nothing, however the import was spelled.
+    #[test]
+    fn census_dialect_axiom_answers_only_for_an_exact_audited_dependency_archive() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        fn root<'a>(
+            snapshot: &'a super::super::ArtifactSnapshot,
+            dependency: bool,
+        ) -> SnapshotSourceRoot<'a> {
+            SnapshotSourceRoot {
+                path: "/project/node_modules/@solidjs/signals/".to_owned(),
+                evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+                snapshot,
+                dependency,
+            }
+        }
+        let roots = vec![root(&dependency, true)];
+        let terminator = census_dialect_axiom_for_callee(
+            &signals_call("createTrackedEffect", json!({})),
+            solid_dialect::CallClaimDomain::Creates,
+            ReachabilityFloor::MayExecute,
+            &certified,
+            &roots,
+        )
+        .expect("the audited archive denies createTrackedEffect's creates");
+        assert_eq!(
+            terminator.witness_site,
+            "census-dialect-axiom:@solidjs/signals@2.0.0-rc.3#sha512-/yPhTf3xS1FRR4MX:createTrackedEffect:creates"
+        );
+
+        // Identity: the coordinate alone is never enough.
+        for (why, snapshot) in [
+            (
+                "a mirror serving the coordinate over other bytes",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.3",
+                    "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+                    &manifest,
+                    "/snapshot/mirror",
+                ),
+            ),
+            (
+                "another prerelease",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.5",
+                    SIGNALS_INTEGRITY,
+                    &manifest,
+                    "/snapshot/rc5",
+                ),
+            ),
+            (
+                "a rewritten manifest under the audited coordinate",
+                archive_snapshot(
+                    "@solidjs/signals",
+                    "2.0.0-rc.3",
+                    SIGNALS_INTEGRITY,
+                    b"{\"name\":\"@solidjs/signals\"}",
+                    "/snapshot/rewritten",
+                ),
+            ),
+        ] {
+            let roots = vec![root(&snapshot, true)];
+            assert!(
+                census_dialect_axiom_for_callee(
+                    &signals_call("createTrackedEffect", json!({})),
+                    solid_dialect::CallClaimDomain::Creates,
+                    ReachabilityFloor::MayExecute,
+                    &certified,
+                    &roots,
+                )
+                .is_none(),
+                "{why} must not receive the terminator"
+            );
+        }
+
+        // The root has to be a dependency, and it has to be another archive.
+        let owner = vec![root(&dependency, false)];
+        assert!(
+            census_dialect_axiom_for_callee(
+                &signals_call("createTrackedEffect", json!({})),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &owner,
+            )
+            .is_none(),
+            "the artifact's own source root is not a callee root"
+        );
+        assert!(
+            census_dialect_axiom_for_callee(
+                &signals_call("createTrackedEffect", json!({})),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &dependency,
+                &roots,
+            )
+            .is_none(),
+            "the archive under certification may not answer about itself"
+        );
+
+        // `targetModule` is `solid-js` on every one of these, and it never
+        // reaches the table: the declaration is what is stripped.
+        for (why, overrides) in [
+            (
+                "a declaration outside every authenticated root",
+                json!({"declaration": {
+                    "symbol": "symbol:createTrackedEffect",
+                    "name": "createTrackedEffect",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/project/vendor/@solidjs/signals/dist/types/signals.d.ts",
+                    "location": {"path": "/project/vendor/@solidjs/signals/dist/types/signals.d.ts", "startByte": 10, "endByte": 20},
+                }}),
+            ),
+            (
+                "a hoisted sibling installation",
+                json!({"declaration": {
+                    "symbol": "symbol:createTrackedEffect",
+                    "name": "createTrackedEffect",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/other/node_modules/@solidjs/signals/dist/types/signals.d.ts",
+                    "location": {"path": "/other/node_modules/@solidjs/signals/dist/types/signals.d.ts", "startByte": 10, "endByte": 20},
+                }}),
+            ),
+            (
+                "a declaration path under the root that the archive does not contain",
+                json!({"declaration": {
+                    "symbol": "symbol:createTrackedEffect",
+                    "name": "createTrackedEffect",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/project/node_modules/@solidjs/signals/dist/types/injected.d.ts",
+                    "location": {"path": "/project/node_modules/@solidjs/signals/dist/types/injected.d.ts", "startByte": 10, "endByte": 20},
+                }}),
+            ),
+            ("no declaration at all", json!({"declaration": null})),
+            ("no resolved symbol", json!({"target": ""})),
+            ("an empty target name", json!({"targetName": ""})),
+            (
+                "an empty declaration source file",
+                json!({"declaration": {
+                    "symbol": "symbol:createTrackedEffect",
+                    "name": "createTrackedEffect",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "",
+                    "location": {"path": "/project/node_modules/@solidjs/signals/dist/types/signals.d.ts", "startByte": 10, "endByte": 20},
+                }}),
+            ),
+            (
+                "a declaration naming another export",
+                json!({"declaration": {
+                    "symbol": "symbol:createTrackedEffect",
+                    "name": "createEffect",
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": "/project/node_modules/@solidjs/signals/dist/types/signals.d.ts",
+                    "location": {"path": "/project/node_modules/@solidjs/signals/dist/types/signals.d.ts", "startByte": 10, "endByte": 20},
+                }}),
+            ),
+        ] {
+            let call = signals_call("createTrackedEffect", overrides);
+            assert_eq!(call.target_module.as_ref(), "solid-js");
+            assert!(
+                census_dialect_axiom_for_callee(
+                    &call,
+                    solid_dialect::CallClaimDomain::Creates,
+                    ReachabilityFloor::MayExecute,
+                    &certified,
+                    &roots,
+                )
+                .is_none(),
+                "{why} must not receive the terminator"
+            );
+        }
+    }
+
+    /// Gate 7: the artifact under certification may not itself be an audited
+    /// archive of *any* dialect, even when the callee resolves into a
+    /// *different* audited archive. Certifying `solid-js@2.0.0-rc.3` with a
+    /// callee resolving into `@solidjs/signals@2.0.0-rc.3` is the live
+    /// phase-21 self-certification configuration ADR 0005 objection 5 is
+    /// about — both audited, but different snapshots and different roots, so
+    /// gate 6 (root equality) alone does not refuse it.
+    #[test]
+    fn census_dialect_axiom_refuses_when_the_certified_artifact_is_itself_audited() {
+        let signals_manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &signals_manifest,
+            "/snapshot/signals",
+        );
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: &dependency,
+            dependency: true,
+        }];
+
+        // `certified` equals the audited `solid-js@2.0.0-rc.3` tuple exactly
+        // — a different snapshot and a different root than `dependency`.
+        let solid_js_manifest = audited_rc3_manifest("solid-js");
+        let certified_audited = archive_snapshot(
+            "solid-js",
+            "2.0.0-rc.3",
+            SOLID_JS_INTEGRITY,
+            &solid_js_manifest,
+            "/snapshot/solid-js",
+        );
+        assert!(
+            census_dialect_axiom_for_callee(
+                &signals_call("createTrackedEffect", json!({})),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified_audited,
+                &roots,
+            )
+            .is_none(),
+            "certifying one audited archive must not borrow another audited archive's negative rows"
+        );
+
+        // An ordinary consumer snapshot sits beside it, unaffected — the same
+        // case `census_dialect_axiom_answers_only_for_an_exact_audited_dependency_archive`
+        // pins as a positive.
+        let certified_consumer = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        assert!(
+            census_dialect_axiom_for_callee(
+                &signals_call("createTrackedEffect", json!({})),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified_consumer,
+                &roots,
+            )
+            .is_some(),
+            "a consumer snapshot must still receive the terminator"
+        );
+    }
+
+    /// Gate 6's two arms are independent: a callee root can share the
+    /// certified artifact's `provenance_root` without sharing its `root` —
+    /// two different published coordinates materialized from one shared
+    /// provenance origin — and either arm alone must refuse.
+    #[test]
+    fn census_dialect_axiom_refuses_on_the_provenance_root_arm_alone() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = super::super::ArtifactSnapshot {
+            package_name: "@solidjs/signals".into(),
+            package_version: "2.0.0-rc.3".into(),
+            package_integrity: SIGNALS_INTEGRITY.into(),
+            files: std::sync::Arc::new(
+                [
+                    (
+                        "package.json".to_owned(),
+                        std::sync::Arc::<[u8]>::from(manifest.as_slice()),
+                    ),
+                    (
+                        "dist/types/signals.d.ts".to_owned(),
+                        std::sync::Arc::<[u8]>::from(
+                            &b"export declare function createTrackedEffect(): void;"[..],
+                        ),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/signals".into(),
+            provenance_root: "/shared-provenance-origin".into(),
+        };
+        let certified = super::super::ArtifactSnapshot {
+            package_name: "consumer".into(),
+            package_version: "1.0.0".into(),
+            package_integrity: "sha512-consumer".into(),
+            files: std::sync::Arc::new(std::collections::BTreeMap::new()),
+            directories: std::sync::Arc::new(std::collections::BTreeSet::new()),
+            root: "/snapshot/consumer".into(),
+            provenance_root: "/shared-provenance-origin".into(),
+        };
+        assert_ne!(dependency.root(), certified.root());
+        assert_eq!(dependency.provenance_root(), certified.provenance_root());
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: &dependency,
+            dependency: true,
+        }];
+        assert!(
+            census_dialect_axiom_for_callee(
+                &signals_call("createTrackedEffect", json!({})),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+            )
+            .is_none(),
+            "a shared provenance root alone must refuse even though root() differs"
+        );
+    }
+
+    /// The export has to be a canonical primitive the audited document
+    /// actually covers.
+    #[test]
+    fn census_dialect_axiom_refuses_a_non_canonical_or_unaudited_export() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: &dependency,
+            dependency: true,
+        }];
+        for (why, export) in [
+            // A real export of the audited archive whose audited summary
+            // closes `creates: []` — but no dialect models the name, so the
+            // census has no primitive identity to terminate on.
+            ("a non-canonical export the audit closes", "isEqual"),
+            // A canonical primitive of the archive with no audited summary.
+            ("an export outside the audited document", "createSignal"),
+            ("an export of no dialect at all", "notAPrimitive"),
+        ] {
+            assert!(
+                census_dialect_axiom_for_callee(
+                    &signals_call(export, json!({})),
+                    solid_dialect::CallClaimDomain::Creates,
+                    ReachabilityFloor::MayExecute,
+                    &certified,
+                    &roots,
+                )
+                .is_none(),
+                "{why} must not receive the terminator"
+            );
+        }
+    }
+
+    /// `render` publishes a `create`, so its `creates` question has no
+    /// negative answer; its audited sibling `clientOnly` does.
+    ///
+    /// The per-domain half of this — the same export answering `None` for
+    /// `creates` and `Some` for a domain it does close — is not writable yet:
+    /// the table ships only `CallClaimDomain::Creates`, and the seven other
+    /// kinded domains are withheld with their reasons in
+    /// `solid-dialect`'s `NEGATIVE_ROWS`. `render`'s closed domains are
+    /// `reads`, `writes`, `invalidates`, `returns` and `cleanups`, all of them
+    /// in that withheld set, so there is no domain it both closes and this
+    /// table admits.
+    #[test]
+    fn census_dialect_axiom_refuses_an_export_that_publishes_the_domains_operation() {
+        let manifest = audited_rc3_manifest("solidjs-web");
+        let dependency = archive_snapshot(
+            "@solidjs/web",
+            "2.0.0-rc.3",
+            WEB_INTEGRITY,
+            &manifest,
+            "/snapshot/web",
+        );
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/web/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/web/".to_owned(),
+            snapshot: &dependency,
+            dependency: true,
+        }];
+        let call = |export: &str| -> typefacts::ImplementationCall {
+            let source_file = "/project/node_modules/@solidjs/web/types/index.d.ts";
+            serde_json::from_value(json!({
+                "location": {"path": "/project/node_modules/consumer/dist/index.js", "startByte": 1, "endByte": 9},
+                "reach": "unknown",
+                "kind": "call",
+                "target": format!("symbol:{export}"),
+                "targetName": export,
+                "targetModule": "@solidjs/web",
+                "declaration": {
+                    "symbol": format!("symbol:{export}"),
+                    "name": export,
+                    "kind": "FunctionDeclaration",
+                    "sourceFile": source_file,
+                    "location": {"path": source_file, "startByte": 10, "endByte": 20},
+                },
+            }))
+            .expect("a valid call")
+        };
+        let terminator = |export: &str| {
+            census_dialect_axiom_for_callee(
+                &call(export),
+                solid_dialect::CallClaimDomain::Creates,
+                ReachabilityFloor::MayExecute,
+                &certified,
+                &roots,
+            )
+        };
+        assert!(terminator("render").is_none());
+        // Withheld because rc.3's `hydrate` reaches `render`, whose first
+        // statement is `registerDelegatedRoot`; the audit's own `creates: []`
+        // for it is not followed.
+        assert!(terminator("hydrate").is_none());
+        assert_eq!(
+            terminator("clientOnly")
+                .expect("clientOnly's creates is denied in both audited conditions")
+                .witness_site,
+            "census-dialect-axiom:@solidjs/web@2.0.0-rc.3#sha512-5ckKgOjem1pN5ADy:clientOnly:creates"
+        );
+    }
+
+    /// A closed domain asserts a zero upper bound, so the premise is the
+    /// `MayExecute` floor and nothing stronger — and an absent call kind is
+    /// never read as a call.
+    #[test]
+    fn census_dialect_axiom_holds_only_at_the_may_execute_floor() {
+        let manifest = audited_rc3_manifest("solidjs-signals");
+        let dependency = archive_snapshot(
+            "@solidjs/signals",
+            "2.0.0-rc.3",
+            SIGNALS_INTEGRITY,
+            &manifest,
+            "/snapshot/signals",
+        );
+        let certified = archive_snapshot(
+            "consumer",
+            "1.0.0",
+            "sha512-consumer",
+            b"{\"name\":\"consumer\"}",
+            "/snapshot/consumer",
+        );
+        let roots = vec![SnapshotSourceRoot {
+            path: "/project/node_modules/@solidjs/signals/".to_owned(),
+            evidence_prefix: "/node_modules/@solidjs/signals/".to_owned(),
+            snapshot: &dependency,
+            dependency: true,
+        }];
+        let answer = |overrides: serde_json::Value, floor: ReachabilityFloor| {
+            census_dialect_axiom_for_callee(
+                &signals_call("createTrackedEffect", overrides),
+                solid_dialect::CallClaimDomain::Creates,
+                floor,
+                &certified,
+                &roots,
+            )
+        };
+        assert!(answer(json!({}), ReachabilityFloor::MayExecute).is_some());
+        // An `unknown`-reach call is in the census at this floor.
+        assert!(answer(json!({"reach": "unknown"}), ReachabilityFloor::MayExecute).is_some());
+        assert!(
+            answer(json!({}), ReachabilityFloor::Reachable).is_none(),
+            "a lower bound above zero is not something a negative table can answer"
+        );
+        assert!(
+            answer(
+                json!({"reach": "unreachable"}),
+                ReachabilityFloor::MayExecute
+            )
+            .is_none()
+        );
+        assert!(answer(json!({"kind": null}), ReachabilityFloor::MayExecute).is_none());
+        // A construction runs the callee too.
+        assert!(answer(json!({"kind": "construct"}), ReachabilityFloor::MayExecute).is_some());
     }
 }

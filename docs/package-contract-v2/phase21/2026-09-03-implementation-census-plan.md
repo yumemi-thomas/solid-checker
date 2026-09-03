@@ -6,7 +6,9 @@ landed (its validation rule and the six authority files are blocked — see
 § 2.2's status block); **§ 4.1's two producer facts landed** at handshake
 protocol 14, with the `complete` rename deliberately not taken (see § 4.1's
 status block and `docs/typefacts/adr/0026-…`); § 6's audit row added with its
-test pins; dialect (§ 4.2) and census (§ 4.3) work not started
+test pins; **§ 4.2's dialect table landed** for the `creates` domain and the
+Solid 2.0 archives only, unwired (see § 4.2's status block and
+`docs/adr/0007-census-dialect-axiom-tier.md`); census (§ 4.3) work not started
 Scope of this document: the decision, its evidence, and the prerequisite chain.
 No code, fixture, or snapshot changed in the slice that wrote it.
 
@@ -641,7 +643,11 @@ refuses:
   `2026-09-01-dependency-composition-scoping.md` § 4: a claim is never assumed
   transitively. A dependency whose `creates` is *open* terminates nothing and
   refuses.
-- **A dialect primitive under an integrity-bound negative table.** See § 4.3.
+- **A dialect primitive under an integrity-bound negative table.** See § 4.2,
+  which now exists: `census_dialect_axiom_for_callee` answers this terminator
+  for the `creates` domain and the audited Solid 2.0 archives, and refuses
+  everything else. A 1.x Solid callee, and any domain other than `creates`,
+  still falls through to the refusal below.
 - **A reviewed default-library member.** `DefaultLibraryInvoker::from_wire`
   resolved the callee by default-library symbol identity, and the verifier's
   own table says the member performs no `create`. An unrecognized invoker
@@ -852,6 +858,71 @@ unchanged.
   current transcript surface only reaches through an export.
 
 ### 4.2 Dialect
+
+**Status after the dialect slice (2026-09-03): landed, narrower than this
+section asked for, and unwired.** `docs/adr/0007-census-dialect-axiom-tier.md`
+is the decision and carries the reasoning; the dated entry in
+`docs/precision-backlog.md` carries every row, every citation, and every
+deliberate silence. What exists:
+
+- `solid-dialect`'s `DialectNegativeAuthority` — per dialect, the audited
+  archive tuples (name, version, SRI, and the archive's own `package.json`
+  digest, all four taken verbatim from the audited document's `package` block)
+  and the rows those audits deny, each row citing the document and the byte
+  range of the summary object it was read from. A test re-reads the range and
+  re-derives the closure, and a second test derives the whole table from the
+  documents and requires the shipped set to equal the derivable set minus a
+  named withholding list.
+- `solid_dialect::primitive_performs_no_operation(archive, export, domain)` —
+  the shared free function, taking the caller's already-bound `&AuditedArchive`
+  tuple (not a bare name) and unioned across the dialects that audited *that
+  exact archive*, with cross-dialect agreement and silence never "no".
+  Documented as a **negative** authority admissible only as a census
+  terminator.
+- `census_dialect_axiom_for_callee`
+  (`contract_certification/type_facts.rs`) — the tier, a peer of
+  `argument_slot_is_proven_invoking`'s Tier A, with the witness spelling below
+  and eight separate refusal conditions. **Not wired into
+  `require_census_decides_closure`**, which still refuses every behavioral call
+  domain by name.
+
+Three narrowings, each a decision with its evidence in ADR 0007:
+
+1. **`creates` only.** The other seven kinded domains are withheld wholesale.
+   `returns` has a systematic conflict with § returns (`snapshot` is
+   `shape: "plain"` and closes `returns: []`), `callbacks` has a demonstrated
+   counter-example (`latest` closes it while calling its argument, which this
+   repository already records as an intentional audit divergence), and the
+   remaining five are simply unaudited for this purpose. `throws` has no
+   variant at all: it constrains no operation kind, so "publishes no operation
+   of kind X" has no X for it.
+2. **Solid 2.0 only.** The Solid 1.x table is empty. The nineteen
+   `pkg/contracts/bundled/solid-v1/*.json` documents close `creates: []` for
+   all 129 exports, and that closure was introduced by the `474c101f`
+   migration over a domain the preceding schema-1 hand audit had **no field
+   for** — schema 1 carried `kind`, an optional `returns` shape, and
+   `callbacks`, and nothing else. Two structural tells confirm it: every
+   solid-v1 summary closes exactly the generator's four domains and omits the
+   five it hard-wired to `Unknown` (§ 1.1), and `createSignal`'s summary
+   carries `shape: "callable"` for a tuple-returning function.
+3. **`hydrate` withheld though the audit closes it.** rc.3's `hydrate` reaches
+   `render` on every path, and `render` calls `registerDelegatedRoot(element)`
+   unconditionally before it opens its root — preceded only by a throw guard,
+   `resetErrorHalt()`, `enforceLoadingBoundary(true)`, and a `let disposer;` —
+   the act the sibling summary models as the `create` operation
+   `register-delegation`. The audit contradicts itself within one document; the
+   bytes side with `render`.
+
+Item 4 below (the corpus fixture) is **not** taken and is re-scoped: it existed
+because the *positive* axiom's identity derivation was unreachable from a unit
+test, `CertificationPlan` being unconstructible here. This tier takes the
+archive under certification as an `ArtifactSnapshot`, so the whole four-field
+identity gate is unit-tested against the audited `package.json` bytes checked
+in under `benchmarks/package-contract-v2/phase0/rc3/`. A corpus fixture is owed
+once the census *consumes* the terminator, because only then can a row's
+verdict move.
+
+The section as originally written:
 
 A **negative** table per audited dialect package: for an exact
 `name@version` bound by the audited SRI, per canonical export, per claim

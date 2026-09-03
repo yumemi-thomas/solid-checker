@@ -388,3 +388,62 @@ This ADR therefore stays `deferred`: the axiom itself is still refused on
 objections 1-3, and objection 5's disagreement between the generated proposal
 and the audited bundled contract is now resolved on the generator's side, in
 the audit's favour.
+
+## 2026-09-03, later still: the sound form shipped, applied to a *callee*
+
+The premise of "The sound form of the premise" above — a dialect may state a
+premise about itself, and every gate on it must be an identity gate over the
+authenticated snapshot — **shipped**, with the subject changed from the export
+under certification to a **callee** of some other package's implementation.
+`docs/adr/0007-census-dialect-axiom-tier.md` is the decision; this section
+records what it means for this one.
+
+What shipped: `solid-dialect`'s `DialectNegativeAuthority` (a per-dialect table
+of audited archive tuples and the rows those audits *deny*, each row citing the
+document and byte range it was read from), the shared
+`primitive_performs_no_operation`, and
+`census_dialect_axiom_for_callee` in
+`contract_certification/type_facts.rs` — a peer of
+`argument_slot_is_proven_invoking`'s Tier A, gated on an authenticated
+dependency snapshot source root whose archive equals an audited tuple in name,
+version, SRI **and** the archive's own `package.json` digest.
+
+**Objection 5 does not apply to a callee, and that is the whole of why this
+form is admissible.** The circularity above is closed by identity of *subject*:
+the `onSettled` demand was derived from `solid_2.rs`'s name vocabulary through
+`declaration_path_is_solid_package`, and the axiom would have answered it from
+`solid_2.rs`'s rows about the same names. A census terminator's subject is
+another package's export. The claim under certification is the consumer's, its
+closure candidate comes from `inventory_value_shape` over the consumer's own
+proposal, and the dialect contributes nothing to the demand it answers — it
+says only that one resolved callee is not a counterexample. The axiom
+discharges nothing about the export under certification.
+
+The second disqualifying finding does not transfer either. There, the axiom
+would have discharged a demand the audited contract for byte-identical bytes
+closes as absent. Here the audit's closure *is* the answer, restated about
+exactly the bytes it was read from.
+
+**It remains a NEGATIVE authority only.** No row can establish that an
+operation exists; a refusal is silence, which makes the census refuse the
+domain by name. `census_dialect_axiom_for_callee` refuses outright when the
+callee's archive is the archive under certification — equal snapshot root or
+provenance root — **and separately** when the artifact under certification is
+itself an audited archive of any dialect, whatever archive the callee resolves
+into (root equality alone would admit `solid-js@2.0.0-rc.3` certifying against
+a callee in `@solidjs/signals@2.0.0-rc.3`, both audited but different
+snapshots — see `docs/adr/0007-census-dialect-axiom-tier.md`, "Why an audited
+archive may not answer about another audited archive") — so nothing here
+reopens the self axiom. Preconditions 1, 2
+and 3 are met (integrity-bound tuple naming the disagreeing field, rows keyed to
+the documents whose `package` block is the tuple, `MayExecute` floor with a
+pinned `Reachable` refusal). Precondition 4's corpus fixture is not taken: the
+tier takes the archive under certification as an `ArtifactSnapshot` rather than
+a `CertificationPlan`, so its identity gate is unit-testable against the
+checked-in audited `package.json` bytes; a corpus fixture is owed once the
+census *consumes* the terminator and a row's verdict can move. Precondition 5
+is not applicable, because this tier discharges no owner requirement.
+
+**This ADR stays `deferred.`** The positive axiom — a dialect discharging a
+demand about its own package's export — is still refused, on objections 1-3 for
+its identity gate and on objection 5 for its premise.

@@ -11,8 +11,9 @@
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, ReactiveRole, ResultSlot,
-    TrackedCallbackTiming, Version, lookup, reverse,
+    AuditedArchive, AuditedCitation, Boundary, CallClaimDomain, CallbackOwner, CleanupRule,
+    Dialect, DialectNegativeAuthority, Execution, NegativeClaimRow, Primitive, ReactiveRole,
+    ResultSlot, TrackedCallbackTiming, Version, lookup, reverse,
 };
 
 /// Solid 2.0.
@@ -95,6 +96,414 @@ pub(crate) fn names() -> Vec<&'static str> {
     TABLE.iter().map(|(name, _)| *name).collect()
 }
 
+/// The exact published archives this dialect's negative rows were read
+/// against, with every field taken verbatim from the audited document's own
+/// `package` block. Byte-checked against those documents by a test, so a
+/// re-audit of different bytes cannot leave a stale tuple behind.
+///
+/// `manifest_sha256` is the digest of the archive's own `package.json`, which
+/// a caller re-derives from the authenticated snapshot (`sha256` of
+/// `snapshot.read("package.json")`) rather than reading from a manifest a
+/// resolver reported. All three were confirmed against the installed rc.3
+/// trees.
+///
+/// `solid-js@2.0.0-rc.3` is listed even though its audited document covers
+/// only ten exports: the archive was read, and "read and found nothing to
+/// deny about `createSignal`" has to be distinguishable from "never looked".
+const AUDITED_ARCHIVES: &[AuditedArchive] = &[
+    AuditedArchive {
+        name: "@solidjs/signals",
+        version: "2.0.0-rc.3",
+        integrity: "sha512-/yPhTf3xS1FRR4MX8kTYCd4MjsFxzwkO+KyOTfbu35lTEiaJ4Fxy+JL91XonDzt31GV1mYaZ9CGD2TQIzvXuNA==",
+        manifest_sha256: "22d27a9ebdc7b4fbfc65b9857bbea96ea60d3617697fd628b42b6e1253ffdb76",
+    },
+    AuditedArchive {
+        name: "@solidjs/web",
+        version: "2.0.0-rc.3",
+        integrity: "sha512-5ckKgOjem1pN5ADycOk6TjHmTtjbbN2fukqxo6RW3Oe3H7z0gaXWAdt8dLISto5/O4Nn8VxprFXFWpfy31+DUg==",
+        manifest_sha256: "ee9b514b90b06b679d2376c5b5a993c0391aa66ec744e453ec3e534babd30e8e",
+    },
+    AuditedArchive {
+        name: "solid-js",
+        version: "2.0.0-rc.3",
+        integrity: "sha512-pmW6bRoTvfp/rN4jN7JmLvSaoIpFt7wm0Hi3j508S/smuJqUbRg3dQEjOPTkAwHW+McYnXrMG7cJ4AMNpLevtQ==",
+        manifest_sha256: "e703e7986516ac05ee91fdd64897c2d150aea948cb5bf77eae8673da5008ee4b",
+    },
+];
+
+/// What the audited 2.0 documents **deny**, per archive, per canonical export,
+/// per call claim domain.
+///
+/// # Only `creates`, and only for now
+///
+/// Every row here is [`CallClaimDomain::Creates`]. The other seven kinded
+/// domains are withheld wholesale, because the audited documents' closures in
+/// them are not yet admissible as negative authority and each counter-example
+/// below is a defect against the *audit*, not against this table:
+///
+/// - **`returns`.** `snapshot`'s summary is `shape: "plain"` — it hands the
+///   caller a value — and closes `returns: []`. `flush` and `latest` do the
+///   same. `semantic-model.md` § returns defines a `return` operation as
+///   exactly "the export yielding a value to its caller", so the audits are
+///   using `returns` for emission-like operations (`createMemo`'s `emission`)
+///   and recording the ordinary synchronous return in `shape` instead. Until
+///   that convention is reconciled with the model, the domain's closures deny
+///   nothing this table can restate.
+/// - **`callbacks`.** `latest`'s summary closes `callbacks: []`, and
+///   `latest(fn)` calls `fn()` directly — which
+///   [`Solid2::callback_owners`]' own cited reading of the runtime says, and
+///   which § callbacks makes an `invoke` in `callbacks`. This crate already
+///   records the divergence as intentional on the audit's side
+///   (`contract_schema_exemptions`: "the normalized contract models it as a
+///   read operation rather than invocation of a caller-supplied callback"),
+///   which is precisely why the closure cannot be read as "invokes nothing".
+/// - **`reads`, `writes`, `invalidates`, `cleanups`, `disposals`.** No
+///   counter-example found, and no positive review performed either. They are
+///   silent because nothing here has read them, which is the only honest
+///   default: the implementation census needs `creates` first
+///   (`phase21/2026-09-03-implementation-census-plan.md` § 4.3) and `reads`
+///   second (§ 4.4), and a domain is added when it is audited, not when it is
+///   convenient.
+///
+/// # Deliberately silent for `creates`
+///
+/// - **`@solidjs/web`'s `render`** publishes `register-delegation`, a `create`
+///   naming `browser-root`. A published operation is the opposite of a
+///   negative row, so there is nothing to deny.
+/// - **`@solidjs/web`'s `hydrate`** *is* closed `creates: []` in
+///   `solidjs-web.json`, and the row is **withheld anyway**. `hydrate`'s rc.3
+///   body reaches `render` on every path — the fast `_$HY.done` return, both
+///   arms of the module-preload continuation, and the ordinary `try`/`finally`
+///   return — and `render` calls `registerDelegatedRoot(element)`
+///   unconditionally before it opens its root, the exact act the sibling
+///   summary models as `register-delegation`. The audit
+///   therefore contradicts itself about two functions in one document, and the
+///   published bytes side with `render`. Granting the row would prove a false
+///   claim; correcting the audit is a re-audit with its own review, recorded in
+///   `docs/precision-backlog.md`.
+/// - **`@solidjs/web`'s `createServerReference`** publishes
+///   `register-reference` and `transform-reference` in both server-function
+///   conditions. It is also not a canonical primitive of this dialect, so it
+///   could not be a row either way.
+/// - **Every export of `solid-js@2.0.0-rc.3` outside its audited document's
+///   ten**, and every `@solidjs/signals` export outside its twelve. The
+///   archive is audited; those exports are not. `createSignal`, `createRoot`,
+///   `untrack`, `onCleanup`, `createContext` and the rest have no row.
+/// - **`isEqual`, `applyRef`, `renderToString`, `renderToStream`,
+///   `httpHeader`/`httpStatus`' non-primitive siblings.** `isEqual`,
+///   `applyRef`, `renderToString` and `renderToStream` close `creates: []`
+///   in the audits but are not canonical primitives of this dialect's
+///   [`TABLE`], so the vocabulary has nothing to key a row on.
+///
+/// # Every condition, or no row
+///
+/// A row exists only when *every* audited document and artifact case that
+/// exports the name closes the domain empty. `clientOnly`, `httpHeader` and
+/// `httpStatus` are each read from two documents — the browser-development
+/// case and the node-server case — and both citations are carried.
+///
+/// One approximation, stated rather than hidden: the audits captured the
+/// `browser/development` and `node/server` conditions of `@solidjs/web`, not
+/// `browser/production`. A consumer resolving to an uncaptured condition of the
+/// *same* tarball receives the row on the strength of the captured ones. The
+/// identity gate binds the archive, not the condition, and closing that gap
+/// needs a per-condition audit — recorded in `docs/precision-backlog.md`.
+const NEGATIVE_ROWS: &[NegativeClaimRow] = &[
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "action",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-c094d35ac3f70f84acaae0d933ed0c4c46071004615d4a1351a11a01bf987552",
+            start_byte: 33507,
+            end_byte: 38878,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createMemo",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-6970e6d02d81c014fd7c2ef7aee46716c95cb9aac16a28e9f8adb95ece54eab1",
+            start_byte: 12806,
+            end_byte: 17314,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createOptimistic",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-92071bb735b571320a76e500e8f0dc47db0f11df19201d2b3931d2da5d763e37",
+            start_byte: 25043,
+            end_byte: 27967,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createOptimisticStore",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-034586f31ead4bb594c03ada1202fb3b439455294d049727cb6f898c65cf5283",
+            start_byte: 6985,
+            end_byte: 10025,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createProjection",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-dc0413a1214db1eaf2875e7ee5b17addfef2043f8d01429f94081d9f41a673e5",
+            start_byte: 38960,
+            end_byte: 44103,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createStore",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-7080e21f5c75fdb8ffd32ef595390c4164a07969282c6a843573230ed36de5f5",
+            start_byte: 17396,
+            end_byte: 23217,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "createTrackedEffect",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-aab0640db7c783a35e1c955cbf19c22197542f3eecb3f89b28433694eb07ff6a",
+            start_byte: 29857,
+            end_byte: 33425,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "flush",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-00fc668bf5acaf07e617a9118eb0ef43a7dc1ba6359be1ea580793a91a76efbe",
+            start_byte: 2598,
+            end_byte: 6903,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "onSettled",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-5a08fc896d6f18c5378c69bc27d5fc1ddaeb013364aff1421330341801111663",
+            start_byte: 10107,
+            end_byte: 12724,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "reconcile",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-97b25908bde1ce8220884836f97f37a42f6719bcf3b723d9de5746955fcc12dd",
+            start_byte: 28049,
+            end_byte: 29775,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/signals",
+        export: "snapshot",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+            summary: "summary-8911cd9f25cc9dc4140432201dd677dbebfb3177847e315e1aa05b9c628dde30",
+            start_byte: 23299,
+            end_byte: 24961,
+        }],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "clientOnly",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+                summary: "summary-33b1f252bf40ccbf4afd30c2d3c9e9cc74f10c3ece12fee903d628e8da7c231e",
+                start_byte: 1987,
+                end_byte: 9470,
+            },
+            AuditedCitation {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
+                summary: "summary-483140acbc18aaa00d3db45337fdd8fd31997eceec74fb9a398e49abc7990ebf",
+                start_byte: 8958,
+                end_byte: 10326,
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "httpHeader",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+                summary: "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+                start_byte: 22024,
+                end_byte: 22535,
+            },
+            AuditedCitation {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
+                summary: "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
+                start_byte: 1875,
+                end_byte: 4783,
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "@solidjs/web",
+        export: "httpStatus",
+        domain: CallClaimDomain::Creates,
+        citations: &[
+            AuditedCitation {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+                summary: "summary-f9d972edede76e2b96c176a3b0f83f6b9ae4f5528398a134a88373baf12ad54f",
+                start_byte: 22024,
+                end_byte: 22535,
+            },
+            AuditedCitation {
+                document: "pkg/contracts/bundled/solid-v2/solidjs-web--web-node-server.json",
+                summary: "summary-0ffbf4d4d8bc911a206487e2fea11778b4de8be1ba653b20a75bc8148856ec37",
+                start_byte: 1875,
+                end_byte: 4783,
+            },
+        ],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "For",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "Loading",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-7e8eaca8531ccab3121be0a039c44b383b80aa9d8c0fa51cca31884efc083149",
+            start_byte: 12271,
+            end_byte: 14398,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "Match",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "Repeat",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "Show",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-782061630d49ccfa837915324fb3915d5acaa9393175694c750d975e49e591c5",
+            start_byte: 6598,
+            end_byte: 12189,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "affects",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-92efacc141c683cc0a3779fa9106ff29f624ed876f3f6d0e0635643dec1d46fd",
+            start_byte: 22614,
+            end_byte: 24478,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "createEffect",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-8ea1870d089429f8bbc554fcea620264e1952f06433f57c07e252b0885b5467d",
+            start_byte: 14480,
+            end_byte: 22532,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "isPending",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-d41bc9d7ea19dd2a6dae7d51199a8448e627d5b6ac99a2eeb20cb02c7799c724",
+            start_byte: 24560,
+            end_byte: 26351,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "latest",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-13d78920672aa68cb9fb09d4b51dafaf4281d67628d73e4ba93f06de39512c40",
+            start_byte: 2366,
+            end_byte: 4224,
+        }],
+    },
+    NegativeClaimRow {
+        package: "solid-js",
+        export: "refresh",
+        domain: CallClaimDomain::Creates,
+        citations: &[AuditedCitation {
+            document: "pkg/contracts/bundled/solid-v2/solid-js.json",
+            summary: "summary-49a501fb15bcd7c7961085bd54009503618b3729e6e49e8d299f0eb90ad9d322",
+            start_byte: 4306,
+            end_byte: 6516,
+        }],
+    },
+];
+
+static NEGATIVE_AUTHORITY: DialectNegativeAuthority = DialectNegativeAuthority {
+    archives: AUDITED_ARCHIVES,
+    rows: NEGATIVE_ROWS,
+};
+
 impl Dialect for Solid2 {
     fn version(&self) -> Version {
         Version::V2
@@ -142,6 +551,12 @@ impl Dialect for Solid2 {
     /// `solid-facts-backend` compiles in for this dialect.
     fn bundled_contract_label(&self) -> &'static str {
         "solid-v2/solid-js.json"
+    }
+
+    /// [`AUDITED_ARCHIVES`] and [`NEGATIVE_ROWS`] — 24 `creates` denials read
+    /// out of the audited rc.3 documents, with the withholdings named there.
+    fn negative_claim_authority(&self) -> &'static DialectNegativeAuthority {
+        &NEGATIVE_AUTHORITY
     }
 
     fn primitive(&self, name: &str) -> Option<Primitive> {
@@ -1262,5 +1677,371 @@ mod tests {
         assert!(Solid2.callback_positions(Primitive::For).is_empty());
         assert!(Solid2.callback_positions(Primitive::Loading).is_empty());
         assert!(Solid2.callback_positions(Primitive::Children).is_empty());
+    }
+
+    /// Repository root, from this crate's manifest directory.
+    fn repository_root() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..")
+            .canonicalize()
+            .unwrap()
+    }
+
+    /// Every audited 2.0 document, as `(repository-relative path, bytes)`.
+    ///
+    /// Enumerated from the directory rather than listed, so a document added
+    /// to the bundle is picked up by the completeness test below instead of
+    /// silently escaping it.
+    fn audited_documents() -> Vec<(String, Vec<u8>)> {
+        let root = repository_root();
+        let directory = root.join("pkg/contracts/bundled/solid-v2");
+        let mut documents = Vec::new();
+        for entry in std::fs::read_dir(&directory).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if !name.ends_with(".json") || name.contains("receipt") || name == "bundle-index.json" {
+                continue;
+            }
+            let bytes = std::fs::read(&path).unwrap();
+            // The crate's review copy must be the same bytes; the runtime copy
+            // is what the analyzer loads, so a row cites that one and this
+            // asserts the review location has not drifted from it.
+            let mirror = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("contracts")
+                .join("solid-v2")
+                .join(&name);
+            assert_eq!(
+                std::fs::read(&mirror).unwrap(),
+                bytes,
+                "review copy of {name} differs from the runtime copy"
+            );
+            documents.push((format!("pkg/contracts/bundled/solid-v2/{name}"), bytes));
+        }
+        documents.sort_by(|left, right| left.0.cmp(&right.0));
+        documents
+    }
+
+    /// Whether one normalized `call` object closes `domain` with an empty
+    /// collection — the fact a negative row restates.
+    fn closes_domain_empty(call: &serde_json::Value, domain: CallClaimDomain) -> bool {
+        let name = domain.wire_name();
+        let items = call[name].as_array();
+        let closed = call["closed"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|entry| entry.as_str() == Some(name));
+        items.is_some_and(|items| items.is_empty()) && closed
+    }
+
+    /// The rows this table deliberately does not carry even though the audited
+    /// documents close the domain for them. Each entry's reason is in
+    /// [`NEGATIVE_ROWS`]' doc comment; this list exists so the completeness
+    /// test below cannot be satisfied by an accidental omission.
+    const WITHHELD: &[(&str, &str, CallClaimDomain)] =
+        &[("@solidjs/web", "hydrate", CallClaimDomain::Creates)];
+
+    /// Every row cites bytes that say what the row says.
+    ///
+    /// This is the test that keeps the table from drifting: it re-reads the
+    /// cited byte range out of the cited document, parses *that slice* as the
+    /// summary object, and re-derives the closure. A row whose citation moved,
+    /// whose document changed, or whose domain is no longer closed there fails
+    /// here rather than in a certification months later.
+    #[test]
+    fn every_negative_row_citation_resolves_to_the_bytes_it_claims() {
+        let root = repository_root();
+        assert!(!NEGATIVE_ROWS.is_empty());
+        for row in NEGATIVE_ROWS {
+            assert!(
+                !row.citations.is_empty(),
+                "{}:{} carries no citation",
+                row.package,
+                row.export
+            );
+            for citation in row.citations {
+                let bytes = std::fs::read(root.join(citation.document)).unwrap();
+                assert!(
+                    citation.start_byte < citation.end_byte && citation.end_byte <= bytes.len(),
+                    "{}:{} cites a range outside {}",
+                    row.package,
+                    row.export,
+                    citation.document
+                );
+                let summary: serde_json::Value =
+                    serde_json::from_slice(&bytes[citation.start_byte..citation.end_byte])
+                        .unwrap_or_else(|error| {
+                            panic!(
+                                "{}:{} cites bytes that are not a summary object in {}: {error}",
+                                row.package, row.export, citation.document
+                            )
+                        });
+                assert!(
+                    closes_domain_empty(&summary["call"], row.domain),
+                    "{}:{} cites {} {}..{}, which does not close {} empty",
+                    row.package,
+                    row.export,
+                    citation.document,
+                    citation.start_byte,
+                    citation.end_byte,
+                    row.domain.wire_name()
+                );
+
+                // The cited range must be the summary the document maps this
+                // export to, in the document the citation names. A range that
+                // parses and closes the domain is not enough: it has to be
+                // *this export's* summary.
+                let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                assert_eq!(
+                    document["package"]["name"].as_str(),
+                    Some(row.package),
+                    "{}:{} cites a document about another package",
+                    row.package,
+                    row.export
+                );
+                let mut bound = false;
+                for entrypoint in document["entrypoints"].as_object().unwrap().values() {
+                    for artifact_case in entrypoint["cases"].as_array().into_iter().flatten() {
+                        if artifact_case["exports"][row.export].as_str() == Some(citation.summary) {
+                            bound = true;
+                        }
+                    }
+                }
+                assert!(
+                    bound,
+                    "{} in {} does not map {} to {}",
+                    row.package, citation.document, row.export, citation.summary
+                );
+                assert_eq!(
+                    document["summaries"][citation.summary], summary,
+                    "{}:{}'s cited byte range is not summary {}",
+                    row.package, row.export, citation.summary
+                );
+            }
+        }
+    }
+
+    /// The table is exactly what the audited documents support, minus the named
+    /// withholdings — derived here rather than trusted.
+    ///
+    /// Both directions matter. A row nobody can derive is a fabricated
+    /// negative claim; a derivable row that is neither shipped nor withheld is
+    /// a silent omission, which is harmless for soundness and corrosive for
+    /// review, because it makes the table's contents a matter of who edited it
+    /// last.
+    #[test]
+    fn the_negative_table_is_derived_from_the_audited_documents() {
+        use std::collections::{BTreeMap, BTreeSet};
+
+        let documents = audited_documents();
+        // (package, export, domain) -> whether every case closes it
+        let mut observed = BTreeMap::<(String, String, CallClaimDomain), bool>::new();
+        for (_, bytes) in &documents {
+            let document: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+            let package = document["package"]["name"].as_str().unwrap().to_owned();
+            for entrypoint in document["entrypoints"].as_object().unwrap().values() {
+                for artifact_case in entrypoint["cases"].as_array().into_iter().flatten() {
+                    for (export, reference) in artifact_case["exports"].as_object().unwrap() {
+                        if Solid2
+                            .primitive(export)
+                            .and_then(|primitive| Solid2.name_of(primitive))
+                            != Some(export.as_str())
+                        {
+                            continue;
+                        }
+                        let summary = &document["summaries"][reference.as_str().unwrap()];
+                        for domain in [
+                            CallClaimDomain::Callbacks,
+                            CallClaimDomain::Reads,
+                            CallClaimDomain::Writes,
+                            CallClaimDomain::Creates,
+                            CallClaimDomain::Invalidates,
+                            CallClaimDomain::Returns,
+                            CallClaimDomain::Cleanups,
+                            CallClaimDomain::Disposals,
+                        ] {
+                            let closed = closes_domain_empty(&summary["call"], domain);
+                            observed
+                                .entry((package.clone(), export.clone(), domain))
+                                .and_modify(|all| *all &= closed)
+                                .or_insert(closed);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Only the domains the table actually admits are compared. Adding a
+        // domain to the table means widening this set deliberately.
+        let admitted: BTreeSet<CallClaimDomain> =
+            NEGATIVE_ROWS.iter().map(|row| row.domain).collect();
+        assert_eq!(
+            admitted,
+            BTreeSet::from([CallClaimDomain::Creates]),
+            "a new domain was added to the table without widening this comparison"
+        );
+
+        let derivable: BTreeSet<(String, String, CallClaimDomain)> = observed
+            .into_iter()
+            .filter(|((_, _, domain), closed)| *closed && admitted.contains(domain))
+            .map(|(key, _)| key)
+            .collect();
+        let shipped: BTreeSet<(String, String, CallClaimDomain)> = NEGATIVE_ROWS
+            .iter()
+            .map(|row| (row.package.to_owned(), row.export.to_owned(), row.domain))
+            .collect();
+        let withheld: BTreeSet<(String, String, CallClaimDomain)> = WITHHELD
+            .iter()
+            .map(|(package, export, domain)| ((*package).to_owned(), (*export).to_owned(), *domain))
+            .collect();
+
+        assert!(
+            shipped.is_disjoint(&withheld),
+            "a row is both shipped and withheld"
+        );
+        assert!(
+            withheld.is_subset(&derivable),
+            "a withholding names a row the documents do not support: {:?}",
+            withheld.difference(&derivable).collect::<Vec<_>>()
+        );
+        let expected: BTreeSet<_> = derivable.difference(&withheld).cloned().collect();
+        assert_eq!(
+            shipped, expected,
+            "the shipped table is not the derivable table minus the withholdings"
+        );
+        assert_eq!(shipped.len(), 24);
+    }
+
+    /// `render` publishes a `create`, so it has no row — and neither does any
+    /// export the audit leaves open. The withheld `hydrate` row is pinned in
+    /// the same place, because a future re-audit that corrects `hydrate` has to
+    /// come through here.
+    #[test]
+    fn exports_that_publish_the_operation_or_are_withheld_stay_silent() {
+        assert!(!Solid2.negative_claim_authority().denies(
+            "@solidjs/web",
+            "render",
+            CallClaimDomain::Creates
+        ));
+        assert!(!Solid2.negative_claim_authority().denies(
+            "@solidjs/web",
+            "hydrate",
+            CallClaimDomain::Creates
+        ));
+        assert!(Solid2.negative_claim_authority().denies(
+            "@solidjs/web",
+            "clientOnly",
+            CallClaimDomain::Creates
+        ));
+
+        // `render`'s summary really does publish the operation, so the silence
+        // above is the audit's answer and not a missing row.
+        let root = repository_root();
+        let bytes =
+            std::fs::read(root.join("pkg/contracts/bundled/solid-v2/solidjs-web.json")).unwrap();
+        let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let summary = document["entrypoints"]["."]["cases"][0]["exports"]["render"]
+            .as_str()
+            .unwrap();
+        assert_eq!(
+            document["summaries"][summary]["call"]["creates"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    /// An export outside the audited document, and one the vocabulary does not
+    /// spell canonically, both answer nothing.
+    #[test]
+    fn unaudited_and_non_canonical_exports_answer_nothing() {
+        let authority = Solid2.negative_claim_authority();
+        // Audited archive, real 2.0 export, no summary in the document.
+        assert!(!authority.denies("solid-js", "createSignal", CallClaimDomain::Creates));
+        assert!(!authority.denies("@solidjs/signals", "createSignal", CallClaimDomain::Creates));
+        // Audited archive, closed in the document, not a canonical primitive.
+        assert!(!authority.denies("@solidjs/signals", "isEqual", CallClaimDomain::Creates));
+        assert!(!authority.denies("@solidjs/web", "applyRef", CallClaimDomain::Creates));
+        // Not an audited archive at all.
+        assert!(!authority.denies("@solidjs/router", "createMemo", CallClaimDomain::Creates));
+        assert!(authority.archives_named("@solidjs/router").next().is_none());
+    }
+
+    /// Every archive tuple is the audited document's own `package` block, all
+    /// four fields.
+    #[test]
+    fn audited_archive_tuples_match_the_documents_package_block() {
+        let documents = audited_documents();
+        for archive in AUDITED_ARCHIVES {
+            let mut seen = 0usize;
+            for (path, bytes) in &documents {
+                let document: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+                if document["package"]["name"].as_str() != Some(archive.name) {
+                    continue;
+                }
+                seen += 1;
+                assert_eq!(
+                    document["package"]["version"].as_str(),
+                    Some(archive.version),
+                    "{path} disagrees about {}'s version",
+                    archive.name
+                );
+                assert_eq!(
+                    document["package"]["integrity"].as_str(),
+                    Some(archive.integrity),
+                    "{path} disagrees about {}'s integrity",
+                    archive.name
+                );
+                assert_eq!(
+                    document["package"]["manifest"]["sha256"].as_str(),
+                    Some(archive.manifest_sha256),
+                    "{path} disagrees about {}'s manifest digest",
+                    archive.name
+                );
+            }
+            assert!(seen > 0, "{} has no audited document", archive.name);
+        }
+
+        // Every audited package in the directory is listed. An archive read
+        // but unlisted would make "never looked" and "found nothing" the same
+        // answer, which is the distinction the list exists for.
+        for (path, bytes) in &documents {
+            let document: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+            let name = document["package"]["name"].as_str().unwrap();
+            assert!(
+                AUDITED_ARCHIVES.iter().any(|archive| archive.name == name),
+                "{path} audits {name}, which the archive list omits"
+            );
+        }
+    }
+
+    /// Rows are sorted, unique, keyed to a listed archive, and spelled
+    /// canonically.
+    #[test]
+    fn negative_rows_are_sorted_unique_and_canonical() {
+        let mut previous: Option<(&str, &str, CallClaimDomain)> = None;
+        for row in NEGATIVE_ROWS {
+            let key = (row.package, row.export, row.domain);
+            if let Some(previous) = previous {
+                assert!(previous < key, "{key:?} is out of order after {previous:?}");
+            }
+            previous = Some(key);
+            assert!(
+                AUDITED_ARCHIVES
+                    .iter()
+                    .any(|archive| archive.name == row.package),
+                "{key:?} names an archive with no audited tuple"
+            );
+            assert_eq!(
+                Solid2
+                    .primitive(row.export)
+                    .and_then(|primitive| Solid2.name_of(primitive)),
+                Some(row.export),
+                "{key:?} is not a canonical 2.0 primitive spelling"
+            );
+        }
     }
 }

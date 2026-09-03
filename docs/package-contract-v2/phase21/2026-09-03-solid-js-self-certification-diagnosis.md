@@ -661,7 +661,11 @@ surface that stand on their own.
 case than `onSettled`.* For `solid-js@1.9.14`'s `dist/solid.js` the generator
 proposes 158 `read` and 22 `owner-requirement` operations where the audited
 bundled contract for byte-identical bytes closes `reads: []` and `creates: []`
-in every one of its 12 summaries and carries no `owner` field. The root cause is
+in every one of its 12 summaries and carries no `owner` field. (`docs/precision-
+backlog.md`'s "Open item, against the audit rather than the verifier" qualifies
+"audited authority" here for `reads` and `creates` specifically — this slice's
+own conclusion is unaffected, but a later slice that wants to *use* these
+closures as an audit needs that qualification read first.) The root cause is
 named and singular: `declaration_path_is_solid_package`
 (`solid-reactive-ir/src/symbols.rs:597-601`) grants dialect primitive identity
 by **filesystem path** inside the defining package, and `OwnerRequirement` /

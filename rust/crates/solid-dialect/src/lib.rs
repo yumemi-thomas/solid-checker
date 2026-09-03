@@ -404,6 +404,263 @@ pub fn primitive_defining_package(package: &str) -> bool {
     })
 }
 
+/// One of the eight **kinded** call claim domains a normalized package
+/// contract publishes.
+///
+/// `throws` is the ninth call claim domain and deliberately has no variant
+/// here. It is the one domain `validate_call_claims` constrains to no
+/// operation kind, so "this export publishes no operation of kind X" has no X
+/// for it: its items are operations already published under another kind and
+/// additionally labelled as able to complete abruptly
+/// (`docs/package-contract-v2/semantic-model.md` § throws). A negative table
+/// keyed on operation kind cannot say anything about it, and the
+/// implementation-census plan § 4.5 records that `throws` is not a census
+/// target under version 1 at all.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum CallClaimDomain {
+    Callbacks,
+    Reads,
+    Writes,
+    Creates,
+    Invalidates,
+    Returns,
+    Cleanups,
+    Disposals,
+}
+
+impl CallClaimDomain {
+    /// The domain's key in a normalized `call` object, and the string that
+    /// appears in that object's `closed` list.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Callbacks => "callbacks",
+            Self::Reads => "reads",
+            Self::Writes => "writes",
+            Self::Creates => "creates",
+            Self::Invalidates => "invalidates",
+            Self::Returns => "returns",
+            Self::Cleanups => "cleanups",
+            Self::Disposals => "disposals",
+        }
+    }
+
+    /// The single `operation.kind` this domain admits.
+    #[must_use]
+    pub const fn operation_kind(self) -> &'static str {
+        match self {
+            Self::Callbacks => "invoke",
+            Self::Reads => "read",
+            Self::Writes => "write",
+            Self::Creates => "create",
+            Self::Invalidates => "invalidate",
+            Self::Returns => "return",
+            Self::Cleanups => "cleanup",
+            Self::Disposals => "dispose",
+        }
+    }
+}
+
+/// The exact published archive one dialect's negative rows were read against.
+///
+/// All four fields are the audited document's own `package` block, and all
+/// four are part of the identity. A name-and-version tuple is strictly weaker
+/// than the evidence on hand and is the first disqualifying objection in
+/// `docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md`: any
+/// registry serving a self-consistent coordinate would otherwise receive the
+/// answer on bytes nobody in this repository ever read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AuditedArchive {
+    /// `package.name`.
+    pub name: &'static str,
+    /// `package.version`.
+    pub version: &'static str,
+    /// `package.integrity` — the Subresource Integrity of the published
+    /// tarball, verbatim (`sha512-…`).
+    pub integrity: &'static str,
+    /// `package.manifest.sha256` — the digest of the archive's own
+    /// `package.json`, verbatim and unprefixed.
+    pub manifest_sha256: &'static str,
+}
+
+/// Exactly which audited bytes one negative row was read from.
+///
+/// The byte range is the *summary object* inside the named document: the unit
+/// that carries both the domain's empty collection and the `closed` list that
+/// closes it. A test re-reads the range and re-derives the closure, so a row
+/// cannot drift from the bytes it cites.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AuditedCitation {
+    /// Repository-relative path of the audited document.
+    pub document: &'static str,
+    /// The summary's id in that document's `summaries` map.
+    pub summary: &'static str,
+    /// First byte of the summary object in the document.
+    pub start_byte: usize,
+    /// One past the last byte of the summary object in the document.
+    pub end_byte: usize,
+}
+
+/// One negative row: the audited contract for this archive publishes **no**
+/// operation of this domain's kind for this export.
+///
+/// Every artifact case and condition of the audited archive that exports the
+/// name must close the domain empty, or the row is absent. Absence is
+/// "not modelled", never "no" — see [`primitive_performs_no_operation`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NegativeClaimRow {
+    /// Must equal the [`AuditedArchive::name`] of the archive this row is
+    /// about; the row is meaningless without the rest of that tuple.
+    pub package: &'static str,
+    /// The audited document's own export key, which is also a canonical
+    /// primitive spelling of the owning dialect.
+    pub export: &'static str,
+    pub domain: CallClaimDomain,
+    /// Every document and condition the row was read from. Never empty.
+    pub citations: &'static [AuditedCitation],
+}
+
+/// One dialect's negative authority: which archives it audited, and what those
+/// audits deny.
+///
+/// A **negative** authority and nothing else. It can refuse to answer and it
+/// can answer "the audit publishes no operation of this kind"; it can never
+/// answer that an operation exists, and it may not be read as closing a domain
+/// on the audited package's *own* certification — see the module-level rules on
+/// [`primitive_performs_no_operation`].
+#[derive(Clone, Copy, Debug)]
+pub struct DialectNegativeAuthority {
+    /// The archives whose audited documents the rows were read from. An
+    /// archive with no row is still listed when it was read: that is what makes
+    /// "this dialect audited these bytes and found nothing to deny" different
+    /// from "this dialect never looked".
+    pub archives: &'static [AuditedArchive],
+    /// Sorted by `(package, export, domain)`; a test pins the order and the
+    /// absence of duplicates.
+    pub rows: &'static [NegativeClaimRow],
+}
+
+impl DialectNegativeAuthority {
+    /// The archives in this authority named `name`.
+    pub fn archives_named(&self, name: &str) -> impl Iterator<Item = &'static AuditedArchive> {
+        self.archives
+            .iter()
+            .filter(move |archive| archive.name == name)
+    }
+
+    /// Whether this authority carries the row for `(package, export, domain)`.
+    #[must_use]
+    pub fn denies(&self, package: &str, export: &str, domain: CallClaimDomain) -> bool {
+        self.rows
+            .iter()
+            .any(|row| row.package == package && row.export == export && row.domain == domain)
+    }
+}
+
+/// The audited archives named `name`, across both dialects.
+///
+/// Returns the identity tuples a caller must compare *field by field* against
+/// an authenticated snapshot before consulting
+/// [`primitive_performs_no_operation`]. The comparison is deliberately the
+/// caller's: it is the side that can name which field disagreed, exactly as
+/// the lock replay in `contract_certification/dependencies.rs` does.
+///
+/// Empty means no dialect audited an archive under this name, which refuses
+/// everything downstream.
+#[must_use]
+pub fn audited_archives(name: &str) -> Vec<&'static AuditedArchive> {
+    if name.is_empty() {
+        return Vec::new();
+    }
+    [Version::V1, Version::V2]
+        .into_iter()
+        .flat_map(|version| {
+            version
+                .dialect()
+                .negative_claim_authority()
+                .archives_named(name)
+        })
+        .collect()
+}
+
+/// Whether `name` is a canonical primitive spelling of some dialect — the name
+/// the dialect's own table round-trips, not an alias and not a near miss.
+#[must_use]
+pub fn canonical_primitive_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    [Version::V1, Version::V2].into_iter().any(|version| {
+        let dialect = version.dialect();
+        dialect
+            .primitive(name)
+            .is_some_and(|primitive| dialect.name_of(primitive) == Some(name))
+    })
+}
+
+/// Whether the audited contract for `archive` publishes **no** operation of
+/// `domain`'s kind for `export`.
+///
+/// # This is a negative authority, and only a census terminator
+///
+/// A `true` answer restates an audit: some dialect read the published bytes of
+/// this exact archive and its audited document closes `domain` empty for
+/// `export` in every artifact case and condition that exports it. It is
+/// admissible in exactly one place — as a **terminator** in an implementation
+/// census of some *other* package's export, where the question is "can this
+/// resolved callee perform the domain's operation" (see
+/// `docs/package-contract-v2/phase21/2026-09-03-implementation-census-plan.md`
+/// § 3.1).
+///
+/// It is **not** admissible to close a domain on the audited package's own
+/// certification. That is the positive dialect axiom
+/// `docs/adr/0005-dialect-axioms-about-the-dialects-own-package.md` defers, and
+/// its objection 5 is fatal there: the demand and the discharge would come from
+/// the same dialect rows. Applied to a callee the objection does not arise,
+/// because the axiom discharges nothing about the export under certification —
+/// see ADR 0007.
+///
+/// # Silence is never "no"
+///
+/// `false` means "this table does not deny it" and never "the export performs
+/// the operation". An archive no dialect audited, an export whose audit leaves
+/// the domain open or nonempty in *any* condition, an export deliberately
+/// withheld, and a domain no dialect has admitted yet all answer `false`.
+///
+/// # Cross-dialect agreement is keyed by the archive, not its name
+///
+/// `solid-js` is an archive **name** both dialects own, at different versions.
+/// The caller has already bound the exact archive tuple — name, version,
+/// integrity and manifest digest — field by field against
+/// [`audited_archives`]; `archive` carries that binding. An authority
+/// participates in the union below only when its own `archives` list contains
+/// this *exact* tuple, never merely a same-named one: two dialects auditing
+/// different bytes under one name never interact, whatever either says about
+/// that name. Among the authorities that do list this archive, the answer is
+/// `true` only when every one of them carries the row; disagreement —
+/// including one authority's silence — is silence.
+#[must_use]
+pub fn primitive_performs_no_operation(
+    archive: &AuditedArchive,
+    export: &str,
+    domain: CallClaimDomain,
+) -> bool {
+    if export.is_empty() || !canonical_primitive_name(export) {
+        return false;
+    }
+    let answers = [Version::V1, Version::V2]
+        .into_iter()
+        .filter_map(|version| {
+            let authority = version.dialect().negative_claim_authority();
+            authority
+                .archives
+                .contains(archive)
+                .then(|| authority.denies(archive.name, export, domain))
+        })
+        .collect::<Vec<_>>();
+    !answers.is_empty() && answers.into_iter().all(|denied| denied)
+}
+
 /// The role a JSX tag plays as a boundary.
 ///
 /// Callers ask for the role, never the name: 1.x spells the async boundary
@@ -1385,6 +1642,18 @@ pub trait Dialect: Sync {
     fn is_async_boundary(&self, tag: &str) -> bool {
         self.boundary_kind(tag) == Some(Boundary::Async)
     }
+
+    /// What this dialect's audits of its own packages **deny**, per exact
+    /// archive identity, per canonical export, per call claim domain.
+    ///
+    /// The one table in this crate whose rows are read out of the checked-in
+    /// audited contracts rather than out of a runtime probe, and the one whose
+    /// rows cite a byte range so a test can re-derive them. It answers a
+    /// question about a *callee* — never about the archive under
+    /// certification. See [`primitive_performs_no_operation`] for the
+    /// admissibility rules and ADR 0007 for why the callee side is sound where
+    /// the self side is not.
+    fn negative_claim_authority(&self) -> &'static DialectNegativeAuthority;
 }
 
 /// A lazily built name → primitive index. One static per dialect.
@@ -1501,6 +1770,30 @@ mod tests {
 
     fn dialects() -> [&'static dyn Dialect; 2] {
         [Version::V1.dialect(), Version::V2.dialect()]
+    }
+
+    /// The single archive some dialect audited under `name`, for tests that
+    /// need the bound tuple `primitive_performs_no_operation` now takes
+    /// rather than a bare name.
+    fn only_audited_archive(name: &str) -> AuditedArchive {
+        let archives = audited_archives(name);
+        assert_eq!(
+            archives.len(),
+            1,
+            "expected exactly one archive audited under {name}"
+        );
+        *archives[0]
+    }
+
+    /// An archive tuple no dialect's authority lists, for tests that need to
+    /// pass a bound archive that must never match.
+    const fn unaudited_archive(name: &'static str) -> AuditedArchive {
+        AuditedArchive {
+            name,
+            version: "0.0.0-unaudited",
+            integrity: "sha512-unaudited",
+            manifest_sha256: "unaudited",
+        }
     }
 
     #[test]
@@ -2775,5 +3068,300 @@ mod tests {
         assert!(!primitive_defining_package("@solidjs/element"));
         assert!(!primitive_defining_package("solid-js-signals"));
         assert!(!primitive_defining_package("my-solid-js"));
+    }
+
+    /// The negative authority is a *negative* authority: it can refuse and it
+    /// can deny, and there is no shape of input that makes it assert an
+    /// operation exists.
+    #[test]
+    fn the_negative_authority_answers_only_denials_and_silence() {
+        let signals = only_audited_archive("@solidjs/signals");
+        let web = only_audited_archive("@solidjs/web");
+
+        // A denial the 2.0 audit carries.
+        assert!(primitive_performs_no_operation(
+            &signals,
+            "createTrackedEffect",
+            CallClaimDomain::Creates
+        ));
+        // `render` publishes the operation; `hydrate` is withheld.
+        assert!(!primitive_performs_no_operation(
+            &web,
+            "render",
+            CallClaimDomain::Creates
+        ));
+        assert!(!primitive_performs_no_operation(
+            &web,
+            "hydrate",
+            CallClaimDomain::Creates
+        ));
+        // Real 2.0 export, audited archive, no audited summary.
+        assert!(!primitive_performs_no_operation(
+            &signals,
+            "createSignal",
+            CallClaimDomain::Creates
+        ));
+        // A domain no dialect admits yet.
+        for domain in [
+            CallClaimDomain::Callbacks,
+            CallClaimDomain::Reads,
+            CallClaimDomain::Writes,
+            CallClaimDomain::Invalidates,
+            CallClaimDomain::Returns,
+            CallClaimDomain::Cleanups,
+            CallClaimDomain::Disposals,
+        ] {
+            assert!(!primitive_performs_no_operation(
+                &signals,
+                "createTrackedEffect",
+                domain
+            ));
+        }
+        // Empty and unaudited inputs.
+        assert!(!primitive_performs_no_operation(
+            &unaudited_archive(""),
+            "createTrackedEffect",
+            CallClaimDomain::Creates
+        ));
+        assert!(!primitive_performs_no_operation(
+            &signals,
+            "",
+            CallClaimDomain::Creates
+        ));
+        assert!(!primitive_performs_no_operation(
+            &unaudited_archive("@solidjs/router"),
+            "createMemo",
+            CallClaimDomain::Creates
+        ));
+    }
+
+    /// The export has to be a canonical dialect spelling, not merely a key the
+    /// audited document happens to close.
+    ///
+    /// `isEqual` is the case that matters: `@solidjs/signals` really does
+    /// export it and its audited summary really does close `creates: []`, but
+    /// no dialect models it, so the census has no primitive identity to
+    /// terminate on and the table must stay silent.
+    #[test]
+    fn a_denial_needs_a_canonical_primitive_spelling() {
+        assert!(canonical_primitive_name("createTrackedEffect"));
+        assert!(canonical_primitive_name("createEffect"));
+        assert!(!canonical_primitive_name("isEqual"));
+        assert!(!canonical_primitive_name("applyRef"));
+        assert!(!canonical_primitive_name(""));
+        // 1.x's `effect` is an alias, not the canonical spelling of
+        // `createRenderEffect`, so it is not a canonical name.
+        assert!(!canonical_primitive_name("effect"));
+        assert!(!primitive_performs_no_operation(
+            &only_audited_archive("@solidjs/signals"),
+            "isEqual",
+            CallClaimDomain::Creates
+        ));
+    }
+
+    /// Solid 1.x denies nothing, and that is a decision with a recorded
+    /// reason, not an unfinished table.
+    #[test]
+    fn solid_1x_carries_no_negative_authority() {
+        let authority = Version::V1.dialect().negative_claim_authority();
+        assert!(authority.archives.is_empty());
+        assert!(authority.rows.is_empty());
+        assert!(authority.archives_named("solid-js").next().is_none());
+        assert!(!authority.denies("solid-js", "createEffect", CallClaimDomain::Creates));
+        // And the shared function is scoped to the *exact* archive tuple: a
+        // hypothetical `solid-js` archive at a version and integrity no
+        // dialect audited must not be answered from 2.0's real
+        // `solid-js@2.0.0-rc.3` rows just because the name matches.
+        assert!(!primitive_performs_no_operation(
+            &unaudited_archive("solid-js"),
+            "createRoot",
+            CallClaimDomain::Creates
+        ));
+    }
+
+    /// `solid-js` is an archive name both dialects own. 2.0's rows answer for
+    /// it only because 1.x lists no `solid-js` archive at all; the moment 1.x
+    /// audits those bytes, agreement becomes a real gate.
+    #[test]
+    fn one_dialect_answers_for_a_shared_archive_name_only_while_the_other_is_absent() {
+        let solid_js = only_audited_archive("solid-js");
+        assert!(primitive_performs_no_operation(
+            &solid_js,
+            "createEffect",
+            CallClaimDomain::Creates
+        ));
+        assert!(
+            Version::V1
+                .dialect()
+                .negative_claim_authority()
+                .archives_named("solid-js")
+                .next()
+                .is_none(),
+            "1.x audits no solid-js archive today, so the case above does not \
+             yet exercise cross-dialect agreement over the same bytes"
+        );
+
+        // The rule itself, pinned against a hand-built pair so it does not
+        // depend on which archives the dialects happen to list today. Two
+        // authorities audit archives that share a NAME but are different
+        // bytes — a different version, integrity and manifest. Matching is by
+        // the exact tuple, so the authority that audited the *other* archive
+        // must never participate, regardless of what its own rows say about
+        // that name.
+        //
+        // Before this tier was archive-keyed, the union below matched by name
+        // alone (`archives_named(name).next()`): any authority that merely
+        // listed an archive called `shared` was pulled in, so
+        // `owns_a_different_archive_of_the_same_name` — silent about the
+        // *different* bytes it actually audited — would have vetoed `denying`
+        // by name, exactly the bug ADR 0007 records: any 1.x archive named
+        // `solid-js` would have vetoed every valid 2.0 row.
+        const ARCHIVE: AuditedArchive = AuditedArchive {
+            name: "shared",
+            version: "1.0.0",
+            integrity: "sha512-x",
+            manifest_sha256: "00",
+        };
+        const OTHER_ARCHIVE_SAME_NAME: AuditedArchive = AuditedArchive {
+            name: "shared",
+            version: "2.0.0",
+            integrity: "sha512-y",
+            manifest_sha256: "11",
+        };
+        const ROW: NegativeClaimRow = NegativeClaimRow {
+            package: "shared",
+            export: "createEffect",
+            domain: CallClaimDomain::Creates,
+            citations: &[],
+        };
+        let denying = DialectNegativeAuthority {
+            archives: &[ARCHIVE],
+            rows: &[ROW],
+        };
+        let silent_about_the_same_archive = DialectNegativeAuthority {
+            archives: &[ARCHIVE],
+            rows: &[],
+        };
+        let owns_a_different_archive_of_the_same_name = DialectNegativeAuthority {
+            archives: &[OTHER_ARCHIVE_SAME_NAME],
+            rows: &[],
+        };
+        let never_looked = DialectNegativeAuthority {
+            archives: &[],
+            rows: &[],
+        };
+        let agree = |authorities: &[&DialectNegativeAuthority], archive: &AuditedArchive| {
+            let answers = authorities
+                .iter()
+                .filter(|authority| authority.archives.contains(archive))
+                .map(|authority| {
+                    authority.denies(archive.name, "createEffect", CallClaimDomain::Creates)
+                })
+                .collect::<Vec<_>>();
+            !answers.is_empty() && answers.into_iter().all(|denied| denied)
+        };
+        assert!(agree(&[&denying, &denying], &ARCHIVE));
+        assert!(agree(&[&denying, &never_looked], &ARCHIVE));
+        assert!(
+            agree(
+                &[&denying, &owns_a_different_archive_of_the_same_name],
+                &ARCHIVE
+            ),
+            "an authority auditing a different archive under the same name must not vote at all"
+        );
+        assert!(
+            !agree(&[&denying, &silent_about_the_same_archive], &ARCHIVE),
+            "silence about the SAME archive is still not agreement"
+        );
+        assert!(!agree(&[&never_looked, &never_looked], &ARCHIVE));
+    }
+
+    /// The identity tuples a caller must bind before consulting the table.
+    #[test]
+    fn audited_archives_are_looked_up_by_name_and_carry_all_four_fields() {
+        let signals = audited_archives("@solidjs/signals");
+        assert_eq!(signals.len(), 1);
+        assert_eq!(signals[0].version, "2.0.0-rc.3");
+        assert!(signals[0].integrity.starts_with("sha512-"));
+        assert_eq!(signals[0].manifest_sha256.len(), 64);
+        assert!(audited_archives("").is_empty());
+        assert!(audited_archives("@solidjs/router").is_empty());
+        assert_eq!(audited_archives("solid-js").len(), 1);
+    }
+
+    /// The domain vocabulary is the eight kinded call claim domains, and
+    /// `throws` is deliberately not one of them.
+    #[test]
+    fn call_claim_domains_name_their_wire_key_and_their_one_operation_kind() {
+        for (domain, wire, kind) in [
+            (CallClaimDomain::Callbacks, "callbacks", "invoke"),
+            (CallClaimDomain::Reads, "reads", "read"),
+            (CallClaimDomain::Writes, "writes", "write"),
+            (CallClaimDomain::Creates, "creates", "create"),
+            (CallClaimDomain::Invalidates, "invalidates", "invalidate"),
+            (CallClaimDomain::Returns, "returns", "return"),
+            (CallClaimDomain::Cleanups, "cleanups", "cleanup"),
+            (CallClaimDomain::Disposals, "disposals", "dispose"),
+        ] {
+            assert_eq!(domain.wire_name(), wire);
+            assert_eq!(domain.operation_kind(), kind);
+        }
+    }
+
+    /// `CallClaimDomain`'s wire name and operation kind are the normalized
+    /// contract's own vocabulary, not a private spelling this crate could
+    /// drift from silently. Pinned directly against the published schema
+    /// rather than against a copy of its enum.
+    #[test]
+    fn call_claim_domain_vocabulary_matches_the_published_schema() {
+        let schema_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("schema/solid-reactivity.schema.json");
+        let schema: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&schema_path).unwrap_or_else(|error| {
+                panic!("{} is not readable: {error}", schema_path.display())
+            }))
+            .expect("valid schema JSON");
+        let call_domain_enum = schema["$defs"]["callDomain"]["enum"]
+            .as_array()
+            .expect("callDomain is an enum")
+            .iter()
+            .map(|value| value.as_str().expect("a string"))
+            .collect::<Vec<_>>();
+        let operation_kind_enum = schema["$defs"]["operation"]["properties"]["kind"]["enum"]
+            .as_array()
+            .expect("operation.kind is an enum")
+            .iter()
+            .map(|value| value.as_str().expect("a string"))
+            .collect::<Vec<_>>();
+
+        for domain in [
+            CallClaimDomain::Callbacks,
+            CallClaimDomain::Reads,
+            CallClaimDomain::Writes,
+            CallClaimDomain::Creates,
+            CallClaimDomain::Invalidates,
+            CallClaimDomain::Returns,
+            CallClaimDomain::Cleanups,
+            CallClaimDomain::Disposals,
+        ] {
+            assert!(
+                call_domain_enum.contains(&domain.wire_name()),
+                "{} is not in the schema's callDomain enum",
+                domain.wire_name()
+            );
+            assert!(
+                operation_kind_enum.contains(&domain.operation_kind()),
+                "{} is not in the schema's operation.kind enum",
+                domain.operation_kind()
+            );
+        }
+        // `throws` is the one domain name the schema carries that
+        // `CallClaimDomain` deliberately omits — it constrains no operation
+        // kind (`semantic-model.md` § "What a closed call domain denies").
+        assert_eq!(call_domain_enum.len(), 9);
+        assert!(call_domain_enum.contains(&"throws"));
     }
 }
